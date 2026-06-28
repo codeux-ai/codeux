@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { DashboardSettings, DashboardSettingsScope, DockerContainer, ProviderId } from "../contracts/app-types.js";
-import type { ExecutionInvocationRecord, ProviderInvocationUsageRecord, TaskRunRecord } from "../contracts/execution-types.js";
+import type { ExecutionInvocationRecord, ProviderInvocationUsageRecord, TaskDispatchStatus, TaskRunRecord } from "../contracts/execution-types.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { QaReviewRepository } from "../repositories/qa-review-repository.js";
@@ -30,6 +30,7 @@ export interface RuntimeStartupRecoveryResult {
   reconciledStructuredInvocationIds: string[];
   reconciledTaskCodingInvocationIds: string[];
   reconciledTaskCodingProviderIds: string[];
+  reconciledTerminalDispatchIds: string[];
   rehydratedSprintRunIds: string[];
   reconciledTaskRunIds: string[];
   reconciledPausedSprintRunIds: string[];
@@ -66,6 +67,7 @@ export class RuntimeStartupRecoveryService {
     const rehydratedSprintRunIds = this.rehydrateDurableProviderSprintRuns();
     const reconciledTaskCodingInvocationIds = await this.reconcileInterruptedTaskCodingInvocations();
     const reconciledTaskCodingProviderIds = this.reconcileOrphanedTaskCodingProviderInvocations();
+    const reconciledTerminalDispatchIds = this.reconcileTerminalTaskRunDispatches();
     const reconciledTaskRunIds = this.reconcileInterruptedTaskRuns();
     const reconciledPausedSprintRunIds = this.reconcileStalePausedSprintRuns();
     const { resumedSprintRunIds, supersededSprintRunIds } = this.resumeRecoverableSprintRuns();
@@ -80,6 +82,7 @@ export class RuntimeStartupRecoveryService {
       || reconciledStructuredInvocationIds.length > 0
       || reconciledTaskCodingInvocationIds.length > 0
       || reconciledTaskCodingProviderIds.length > 0
+      || reconciledTerminalDispatchIds.length > 0
       || rehydratedSprintRunIds.length > 0
       || reconciledTaskRunIds.length > 0
       || reconciledPausedSprintRunIds.length > 0
@@ -96,6 +99,7 @@ export class RuntimeStartupRecoveryService {
         reconciledStructuredInvocations: reconciledStructuredInvocationIds.length,
         reconciledTaskCodingInvocations: reconciledTaskCodingInvocationIds.length,
         reconciledTaskCodingProviders: reconciledTaskCodingProviderIds.length,
+        reconciledTerminalDispatches: reconciledTerminalDispatchIds.length,
         rehydratedSprintRuns: rehydratedSprintRunIds.length,
         reconciledTaskRuns: reconciledTaskRunIds.length,
         reconciledPausedSprintRuns: reconciledPausedSprintRunIds.length,
@@ -114,6 +118,7 @@ export class RuntimeStartupRecoveryService {
       reconciledStructuredInvocationIds,
       reconciledTaskCodingInvocationIds,
       reconciledTaskCodingProviderIds,
+      reconciledTerminalDispatchIds,
       rehydratedSprintRunIds,
       reconciledTaskRunIds,
       reconciledPausedSprintRunIds,
@@ -803,6 +808,56 @@ export class RuntimeStartupRecoveryService {
     }
 
     return reconciledTaskRunIds;
+  }
+
+  private reconcileTerminalTaskRunDispatches(): string[] {
+    const terminalRuns = this.deps.executionRepository.listTaskRunsByStates(["COMPLETED", "FAILED"]);
+    if (terminalRuns.length === 0) {
+      return [];
+    }
+
+    const reconciledAt = new Date().toISOString();
+    const reconciledDispatchIds: string[] = [];
+
+    for (const taskRun of terminalRuns) {
+      if (!taskRun.dispatchId) {
+        continue;
+      }
+      const dispatch = this.deps.executionRepository.getTaskDispatch(taskRun.dispatchId);
+      if (!dispatch) {
+        continue;
+      }
+      if (!dispatch.finishedAt && ACTIVE_DISPATCH_STATUSES.includes(dispatch.status as typeof ACTIVE_DISPATCH_STATUSES[number])) {
+        continue;
+      }
+
+      const expectedStatus: TaskDispatchStatus = taskRun.state === "COMPLETED" ? "completed" : "failed";
+      const expectedErrorMessage = taskRun.state === "COMPLETED"
+        ? null
+        : (dispatch.errorMessage || `Task run ended in ${taskRun.state}`);
+      if (dispatch.status === expectedStatus && dispatch.errorMessage === expectedErrorMessage) {
+        continue;
+      }
+
+      this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
+        status: expectedStatus,
+        startedAt: dispatch.startedAt || taskRun.startedAt || reconciledAt,
+        finishedAt: dispatch.finishedAt || taskRun.finishedAt || reconciledAt,
+        lastHeartbeatAt: reconciledAt,
+        errorMessage: expectedErrorMessage,
+      });
+      this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "task_dispatch_reconciled", "system", {
+        reason: "terminal_task_run_dispatch_status_mismatch",
+        taskRunState: taskRun.state,
+        previousDispatchStatus: dispatch.status,
+        nextDispatchStatus: expectedStatus,
+      }, {
+        sourceEventKey: `startup-recovery:terminal-dispatch:${dispatch.id}:${taskRun.state}`,
+      });
+      reconciledDispatchIds.push(dispatch.id);
+    }
+
+    return reconciledDispatchIds;
   }
 
   private reconcileStalePausedSprintRuns(): string[] {

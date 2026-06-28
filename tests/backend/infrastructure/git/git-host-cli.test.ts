@@ -348,6 +348,7 @@ describe("GithubApiHostCli", () => {
       });
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(fetchMock.mock.calls[0][0]).toContain("/graphql");
+      expect(String(fetchMock.mock.calls[0][1]?.body)).toContain("merged:pullRequests(states:MERGED,first:100");
     });
 
     it("falls back to the REST closed-PR list when GraphQL is unavailable", async () => {

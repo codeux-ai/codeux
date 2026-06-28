@@ -196,11 +196,19 @@ export const filterMergedPrs = (merged: GitMergeStatus[], tracking?: GitTracking
   const defaultBranch = normalizeBranch(tracking.defaultBranch);
   const featureBranch = normalizeBranch(tracking.featureBranch);
   const featurePrefix = normalizeBranch(tracking.featureBranchPrefix);
-  if (!defaultBranch && !featureBranch && !featurePrefix) {
+  const taskPrUrls = new Set(
+    (tracking.taskPrUrls || [])
+      .map((url) => url.trim())
+      .filter(Boolean)
+  );
+  if (!defaultBranch && !featureBranch && !featurePrefix && taskPrUrls.size === 0) {
     return merged;
   }
 
   return merged.filter((pr) => {
+    if (typeof pr.url === "string" && taskPrUrls.has(pr.url.trim())) {
+      return true;
+    }
     const base = normalizeBranch(pr.baseRefName);
     if (!base) {
       return false;

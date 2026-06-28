@@ -56,6 +56,70 @@ afterEach(async () => {
 });
 
 describe("RuntimeStartupRecoveryService", () => {
+  it("repairs stale blocked dispatch rows linked to completed task runs", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Terminal Dispatch Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/terminal-dispatch-recovery",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Terminal Dispatch Recovery Sprint",
+      number: 7,
+      status: "completed",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T07",
+      title: "Completed task with stale dispatch",
+      status: "completed",
+      isMerged: true,
+      mergeIndicator: "MERGED",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "jules",
+      status: "completed",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      executorType: "jules",
+      status: "blocked",
+      errorMessage: "Provider session requires attention before dispatch reconciliation.",
+      startedAt: "2026-06-27T09:57:59.808Z",
+      finishedAt: "2026-06-27T10:50:11.924Z",
+    } as any);
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      dispatchId: dispatch.id,
+      provider: "jules",
+      state: "COMPLETED",
+      startedAt: "2026-06-27T09:57:59.808Z",
+      finishedAt: "2026-06-27T11:05:10.343Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledTerminalDispatchIds).toEqual([dispatch.id]);
+    expect(executionRepository.getTaskDispatch(dispatch.id)).toMatchObject({
+      status: "completed",
+      errorMessage: null,
+    });
+    expect(executionRepository.listTaskRunEvents(taskRun.id).map((event) => event.eventType)).toContain("task_dispatch_reconciled");
+  });
+
   it("fails stale running QA review rows without provider runtime linkage on startup", async () => {
     const {
       projectRepository,
@@ -1371,6 +1435,7 @@ describe("RuntimeStartupRecoveryService", () => {
       reconciledStructuredInvocations: 0,
       reconciledTaskCodingInvocations: 0,
       reconciledTaskCodingProviders: 0,
+      reconciledTerminalDispatches: 0,
       rehydratedSprintRuns: 0,
       reconciledTaskRuns: 0,
       reconciledPausedSprintRuns: 0,

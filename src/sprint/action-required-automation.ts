@@ -71,6 +71,7 @@ const getSemiAutoDisabledReason = (state: string | undefined, settings: Automati
 interface LatestAgentRequest {
   message: string;
   identity: string;
+  index: number;
 }
 
 const toStringField = (value: unknown): string => typeof value === "string" ? value.trim() : "";
@@ -102,7 +103,11 @@ const getActivityMessage = (entry: Record<string, unknown>): string => {
   if (progressDescription.length > 0) {
     return progressDescription;
   }
-  return toStringField(entry.description);
+  const description = toStringField(entry.description);
+  if (description.length > 0) {
+    return description;
+  }
+  return toStringField(entry.preview);
 };
 
 const getLatestAgentRequest = (task: Subtask): LatestAgentRequest => {
@@ -112,16 +117,40 @@ const getLatestAgentRequest = (task: Subtask): LatestAgentRequest => {
     if (isUserOriginatedActivity(entry)) {
       continue;
     }
-    const message = getActivityMessage(entry);
+    const agentMessaged = entry.agentMessaged as Record<string, unknown> | undefined;
+    const message = toStringField(agentMessaged?.agentMessage);
     const identity = getActivityIdentity(entry);
-    if (message.length > 0 || identity.length > 0) {
-      return { message, identity };
+    if (message.length > 0) {
+      return { message, identity, index };
     }
   }
-  return { message: "", identity: "" };
+
+  for (let index = activities.length - 1; index >= 0; index -= 1) {
+    const entry = activities[index] as Record<string, unknown>;
+    if (isUserOriginatedActivity(entry)) {
+      continue;
+    }
+    const message = getActivityMessage(entry);
+    const identity = getActivityIdentity(entry);
+    if (message.length > 0) {
+      return { message, identity, index };
+    }
+  }
+  return { message: "", identity: "", index: -1 };
 };
 
 const normalizeAutomationMessage = (value: string): string => value.replace(/\s+/g, " ").trim();
+
+export const hasUserReplyAfterLatestAgentRequest = (task: Subtask): boolean => {
+  const activities = Array.isArray(task.activities) ? task.activities : [];
+  const latestRequest = getLatestAgentRequest(task);
+  if (latestRequest.index < 0) {
+    return false;
+  }
+  return activities.slice(latestRequest.index + 1).some((entry) =>
+    isUserOriginatedActivity(entry as Record<string, unknown>)
+  );
+};
 
 const buildClarificationDedupKey = (task: Subtask): string => {
   const latestRequest = getLatestAgentRequest(task);
@@ -329,6 +358,18 @@ export const applyActionRequiredAutomation = async (
         const clarificationKey = buildClarificationDedupKey(task);
         const clarificationStateKey = getInterventionStateKey(sessionId, "clarification");
         const nowMs = args.now?.() ?? Date.now();
+        if (hasUserReplyAfterLatestAgentRequest(task)) {
+          task.status = "RUNNING";
+          task.intervention_owner = "AGENT";
+          task.intervention_hint = "Clarification reply has been sent; waiting for Jules to process the latest response.";
+          emitTaskEvent(task, "action_required_user_reply_pending", {
+            sessionId,
+            sessionState: task.session_state || null,
+            clarificationKeyPreview: clarificationKey.slice(0, 200),
+          }, buildInterventionEventSuffix("reply-pending", sessionId, clarificationKey));
+          continue;
+        }
+
         const storedClarification = parseStoredInterventionKey(args.lastAutomatedInterventionKeys?.get(clarificationStateKey));
         if (storedClarification?.key === clarificationKey) {
           const elapsedMs = storedClarification.storedAtMs === null ? 0 : nowMs - storedClarification.storedAtMs;
@@ -353,6 +394,7 @@ export const applyActionRequiredAutomation = async (
             sessionId,
             sessionState: task.session_state || null,
             elapsedMs,
+            hasUserReply: false,
             clarificationKeyPreview: clarificationKey.slice(0, 200),
           }, buildInterventionEventSuffix("duplicate-clarification", sessionId, clarificationKey));
           continue;

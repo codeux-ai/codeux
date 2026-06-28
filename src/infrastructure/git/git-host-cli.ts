@@ -389,7 +389,7 @@ export class GithubApiHostCli implements GitHostCli {
       + `open:pullRequests(states:OPEN,first:50,orderBy:{field:UPDATED_AT,direction:DESC}){nodes{number title url isDraft headRefName baseRefName mergeStateStatus reviewDecision updatedAt comments{totalCount} `
       + `commits(last:1){nodes{commit{statusCheckRollup{state contexts(first:100){nodes{__typename ... on CheckRun{name status conclusion} ... on StatusContext{context state}}}}}}}`
       + `}}`
-      + `merged:pullRequests(states:MERGED,first:50,orderBy:{field:UPDATED_AT,direction:DESC}){nodes{number title url headRefName baseRefName mergedAt mergedBy{login}}}`
+      + `merged:pullRequests(states:MERGED,first:100,orderBy:{field:UPDATED_AT,direction:DESC}){nodes{number title url headRefName baseRefName mergedAt mergedBy{login}}}`
       + `}}`;
     const res = await this.graphql(query, { owner: this.owner, repo: this.repo }, token);
     if (!res?.ok) {
