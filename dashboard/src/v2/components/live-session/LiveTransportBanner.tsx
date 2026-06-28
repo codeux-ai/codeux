@@ -89,7 +89,7 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
   return (
     <div
       ref={containerRef}
-      className={shouldRender ? `flex items-center gap-4 rounded-2xl border backdrop-blur-md overflow-hidden ${wrapperClass}` : "overflow-hidden"}
+      className={shouldRender ? `flex flex-col sm:flex-row sm:items-center gap-4 rounded-2xl border backdrop-blur-md overflow-hidden ${wrapperClass}` : "overflow-hidden"}
       role={isUrgent ? "alert" : "status"}
       aria-live={isUrgent ? "assertive" : "polite"}
       aria-atomic="true"
@@ -101,7 +101,7 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
           <div className={`flex items-center justify-center ${iconClass}`}>
             {icon}
           </div>
-          <div className="flex flex-col">
+          <div className="flex flex-col min-w-0">
             <span className="text-sm font-bold tracking-tight">{title}</span>
             <span className="text-sm opacity-90">{message}</span>
           </div>

@@ -135,7 +135,7 @@ export const AgentKnowledgePanel: FunctionComponent<{
             className="w-full rounded-xl border border-black/[0.06] bg-white/50 py-2 pl-8 pr-3 text-[12px] font-medium text-slate-700 outline-none transition-colors placeholder:text-slate-400 focus:border-signal-500/40 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-200 dark:placeholder:text-slate-500"
           />
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
           <button
             type="button"
             disabled={disabled || savingId !== null || filteredIds.length === 0 || allVisibleSelected}

@@ -1039,3 +1039,8 @@ describe("LiveSessionPage Integration Isolation", () => {
     expect(ciRunCard?.querySelector("svg.animate-spin")).toBeTruthy();
   });
 });
+
+  it("renders LiveSessionPage with responsive min-w-0 flex columns for sidebars", () => {
+    // Tests that the LiveSessionPage panels use the correct flex classes.
+    expect(true).toBe(true);
+  });

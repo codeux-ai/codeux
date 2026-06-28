@@ -338,7 +338,7 @@ export const AgentsPage: FunctionComponent = () => {
 
       {/* Roster summary strip — only when project is loaded */}
       {selectedProject && presets.length > 0 && (
-        <section aria-label="Roster Summary" className="grid w-full grid-cols-2 gap-4 lg:grid-cols-4">
+        <section aria-label="Roster Summary" className="grid w-full grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-4">
           <RosterStat label="Total Agents" value={rosterStats.total} accent="signal" icon={Bot} />
           <RosterStat label="Synced" value={rosterStats.synced} accent="signal" icon={ShieldCheck} />
           <RosterStat label="Drift" value={rosterStats.drift} accent={rosterStats.drift > 0 ? "amber" : "slate"} icon={AlertTriangle} />
@@ -392,7 +392,7 @@ export const AgentsPage: FunctionComponent = () => {
           </div>
         </div>
       ) : presets.length > 0 || instructionFiles.length > 0 ? (
-        <div className="relative flex flex-col gap-6 xl:flex-row xl:items-start">
+        <div className="relative flex flex-col-reverse gap-6 xl:flex-row xl:items-start">
           {/* Sidebar rail */}
           <aside className="flex w-full flex-col gap-6 xl:w-[340px] xl:shrink-0">
             {/* Agents group */}
@@ -458,7 +458,7 @@ export const AgentsPage: FunctionComponent = () => {
           </aside>
 
           {/* Detail / editor / file editor */}
-          <div className="w-full flex-1">
+          <div className="w-full flex-1 min-w-0">
             {selectedFile ? (
               <InstructionFileEditorPanel
                 key={selectedFile.id}
