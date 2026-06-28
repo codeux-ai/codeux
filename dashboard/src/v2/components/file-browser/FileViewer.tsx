@@ -62,33 +62,35 @@ export const FileViewer: FunctionComponent<FileViewerProps> = ({ file, loading, 
   }
 
   return (
-    <Editor
-      height="100%"
-      theme={isDark ? MONACO_DARK_THEME : MONACO_LIGHT_THEME}
-      language={file.language ?? "plaintext"}
-      path={file.path}
-      value={file.content}
-      beforeMount={ensureMonacoConfigured}
-      loading={(
-        <span class="inline-flex items-center gap-2 text-sm text-slate-500">
-          <Loader2 class="h-4 w-4 animate-spin text-signal-500" strokeWidth={2} />
-          Preparing editor…
-        </span>
-      )}
-      options={{
-        readOnly: true,
-        domReadOnly: true,
-        minimap: { enabled: true, scale: 0.8 },
-        fontSize: 13,
-        fontLigatures: true,
-        fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-        smoothScrolling: true,
-        scrollBeyondLastLine: false,
-        renderWhitespace: "selection",
-        lineNumbersMinChars: 3,
-        padding: { top: 16, bottom: 16 },
-        scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
-      }}
-    />
+    <div class="min-w-0 flex-1 h-full w-full">
+      <Editor
+        height="100%"
+        theme={isDark ? MONACO_DARK_THEME : MONACO_LIGHT_THEME}
+        language={file.language ?? "plaintext"}
+        path={file.path}
+        value={file.content}
+        beforeMount={ensureMonacoConfigured}
+        loading={(
+          <span class="inline-flex items-center gap-2 text-sm text-slate-500">
+            <Loader2 class="h-4 w-4 animate-spin text-signal-500" strokeWidth={2} />
+            Preparing editor…
+          </span>
+        )}
+        options={{
+          readOnly: true,
+          domReadOnly: true,
+          minimap: { enabled: true, scale: 0.8 },
+          fontSize: 13,
+          fontLigatures: true,
+          fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+          smoothScrolling: true,
+          scrollBeyondLastLine: false,
+          renderWhitespace: "selection",
+          lineNumbersMinChars: 3,
+          padding: { top: 16, bottom: 16 },
+          scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
+        }}
+      />
+    </div>
   );
 };

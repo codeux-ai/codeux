@@ -357,7 +357,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
             >
                 <div className={collapsible ? "collapsible-content" : ""}>
                     <div className={`relative z-10 space-y-7 ${collapsible ? "px-5 pb-5 pt-0" : "px-7 pb-7 pt-4"}`}>
-                        <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3">
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                             {[
                                 { label: "Active Runs", value: activeSprintRuns.length, accent: "text-signal-500" },
                                 { label: "Active Dispatches", value: activeDispatches.length, accent: "text-slate-700 dark:text-slate-200" },

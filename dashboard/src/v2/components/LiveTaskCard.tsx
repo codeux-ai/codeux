@@ -332,7 +332,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
 
             <div className="relative z-10">
                 {/* Header row */}
-                <div className="flex items-start justify-between gap-4 mb-4">
+                <div className="flex flex-col sm:flex-row items-start justify-between gap-4 mb-4">
                     <div className="flex items-start gap-3.5 min-w-0 flex-1">
                         {/* Status icon blob */}
                         <div
@@ -368,7 +368,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                     </div>
 
                     {/* Right meta column */}
-                    <div className="flex flex-col items-end gap-2 shrink-0">
+                    <div className="flex flex-col items-start sm:items-end gap-2 shrink-0 w-full sm:w-auto">
                         {agentPreset && (
                             <div className="flex items-center gap-1.5">
                                 <AgentSelectAvatarIcon avatarConfig={agentPreset.avatarConfig} seed={agentPreset.name} />

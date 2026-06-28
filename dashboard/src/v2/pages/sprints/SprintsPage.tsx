@@ -808,7 +808,7 @@ export const SprintsPage: FunctionComponent = () => {
 
       {rowMenu && activeRowMenuSprint && createPortal(
         <div
-          className="fixed z-[220]"
+          className="fixed z-[220] max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] overflow-y-auto"
           style={{
             top: `${rowMenu.top}px`,
             left: `${rowMenu.left}px`,

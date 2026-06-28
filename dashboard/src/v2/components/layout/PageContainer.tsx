@@ -1,18 +1,18 @@
 import type { ComponentChildren, FunctionComponent, JSX, Ref } from "preact";
 
-const PAGE_CONTAINER_WIDTH = "max-w-[2400px]";
+const PAGE_CONTAINER_WIDTH = "max-w-[1600px] xl:max-w-[1800px]";
 
 const pageContainerPadding = {
-  overview: "px-4 py-12 md:px-20 md:py-24",
-  standard: "px-4 py-24 md:px-20",
-  section: "px-4 py-16 md:px-20",
-  stats: "px-4 py-20 md:px-20",
-  settings: "px-4 py-16 md:px-8 xl:px-12",
-  agents: "px-4 py-14 md:px-16 lg:px-20",
-  browser: "px-4 py-6 md:px-8",
-  workbench: "px-4 py-12 md:px-20",
-  chat: "px-4 py-12 md:px-20",
-  sprintsEmpty: "px-4 py-12 md:px-20",
+  overview: "px-4 sm:px-6 md:px-8 lg:px-12 xl:px-16 py-12 md:py-24",
+  standard: "px-4 sm:px-6 md:px-8 lg:px-12 xl:px-16 py-24",
+  section: "px-4 sm:px-6 md:px-8 lg:px-12 xl:px-16 py-16",
+  stats: "px-4 sm:px-6 md:px-8 lg:px-12 xl:px-16 py-20",
+  settings: "px-4 sm:px-6 md:px-8 xl:px-12 py-16",
+  agents: "px-4 sm:px-6 md:px-8 lg:px-16 xl:px-20 py-14",
+  browser: "px-4 sm:px-6 md:px-8 py-6",
+  workbench: "px-4 sm:px-6 md:px-8 lg:px-12 xl:px-16 py-12",
+  chat: "px-4 sm:px-6 md:px-8 lg:px-12 xl:px-16 py-12",
+  sprintsEmpty: "px-4 sm:px-6 md:px-8 lg:px-12 xl:px-16 py-12",
   none: "",
 } as const;
 

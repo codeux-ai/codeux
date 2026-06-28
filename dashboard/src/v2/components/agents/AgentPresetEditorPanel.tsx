@@ -425,7 +425,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
 
         {/* ── Sticky header ── */}
         <div className="sticky top-0 z-20 flex flex-col gap-4 border-b border-black/[0.05] bg-white/75 px-6 py-5 backdrop-blur-2xl md:flex-row md:items-center md:justify-between md:px-8 md:py-6 dark:border-white/[0.05] dark:bg-void-800/70">
-          <div className="flex min-w-0 flex-col gap-1.5">
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
             <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">
               <Sparkles className="h-3 w-3" strokeWidth={2.4} />
               Editing Agent
@@ -452,7 +452,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
               {name.trim() || "Unnamed Agent"}
             </h2>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             <span className="hidden font-mono text-[10px] text-slate-400 dark:text-slate-500 md:inline">
               {isMac ? "⌘S" : "Ctrl+S"} to save · Esc to cancel
             </span>

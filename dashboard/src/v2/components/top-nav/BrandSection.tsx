@@ -19,7 +19,7 @@ export const BrandSection: FunctionComponent<BrandSectionProps> = ({ isMobile, o
     }
 
     return (
-        <div className="flex shrink-0 items-center gap-4 md:gap-10">
+        <div className="flex shrink-0 items-center gap-2 sm:gap-4 md:gap-10">
             {isMobile && (
                 <button
                     type="button"

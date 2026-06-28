@@ -51,7 +51,7 @@ export const Inspector: FunctionComponent<{
 
     return (
         <div
-            className="absolute right-0 top-0 bottom-0 w-[300px] z-30
+            className="absolute right-0 top-0 bottom-0 w-full sm:w-[300px] z-30
                        bg-white/80 dark:bg-void-800/80 backdrop-blur-3xl
                        border-l border-black/[0.06] dark:border-white/[0.06]
                        shadow-[-20px_0_60px_rgba(0,0,0,0.08)] dark:shadow-[-20px_0_60px_rgba(0,0,0,0.4)]
@@ -109,7 +109,7 @@ export const Inspector: FunctionComponent<{
                                     <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
                                         style={{ background: (CAT[cn.category] || CAT.context).hex }} />
                                     <span className="sr-only">{(CAT[cn.category] || CAT.context).label}</span>
-                                    <div className="flex-1 min-w-0">
+                                    <div className="flex-1 min-w-0 break-words">
                                         <span className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 font-medium">
                                             {cn.content}
                                         </span>

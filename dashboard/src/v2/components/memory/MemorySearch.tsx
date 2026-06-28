@@ -7,7 +7,7 @@ export const MemorySearch: FunctionComponent = () => {
     const [clearAnnouncement, setClearAnnouncement] = useState("");
 
     return (
-        <div className="relative group w-full sm:w-[280px]">
+        <div className="relative group w-full lg:w-[280px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-signal-500 transition-colors duration-200" />
             <input
                 aria-label="Search memory"

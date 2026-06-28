@@ -29,3 +29,8 @@ By adhering to these rules, the Live page remains a focused, professional worksp
 - Transient elements must handle focus properly.
 - Action buttons (claim, resolve, dismiss, cancel, etc.) must include accessible labels specifying their target item.
 - Animations for spinners must be `motion-safe`.
+
+## Responsive Layouts
+- Live Runtime panels enforce strict boundaries by adding `min-w-0` to large grid columns (e.g., `xl:col-span-8 flex flex-col gap-5 min-w-0`) to prevent blowout.
+- Dense runtime data (like stat grids in ExecutionRuntimePanel and AttentionQueuePanel) switch from 2 columns to 3 or 4 columns at the `sm` or `md` breakpoints to avoid squeezing content.
+- Header actions and connections labels natively `flex-wrap` to handle touch-friendly interactions on phones and constrained layouts without losing controls.

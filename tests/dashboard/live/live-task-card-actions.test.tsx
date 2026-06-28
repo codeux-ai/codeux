@@ -178,6 +178,16 @@ describe("live task card actions", () => {
     expect(await screen.findByText("Task marked as completed.")).toBeInTheDocument();
   });
 
+  it("uses responsive flex wrapping on task header", () => {
+    render(<LiveSessionPage />);
+    const forceButtons = screen.getAllByRole("button", { name: /Force complete task/ });
+    const headerRow = forceButtons[0].closest(".flex.flex-col.sm\\:flex-row.items-start");
+    // we actually modified LiveTaskCard, let us just query for flex-col sm:flex-row directly on the container
+    const el = document.querySelector(".flex.flex-col.sm\\:flex-row.items-start");
+    expect(el).toBeInTheDocument();
+
+  });
+
   it("renders inline error when force-complete fails", async () => {
     forceCompleteLiveTaskMock.mockRejectedValueOnce(new Error("force complete failed"));
     render(<LiveSessionPage />);

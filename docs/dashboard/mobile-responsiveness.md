@@ -30,3 +30,4 @@ When using the `Table` component for responsive data displays:
 2. **Captions:** Always provide an explicit, descriptive `caption` prop to the `Table` to describe its purpose.
 3. **Mobile Labels:** Supply a `mobileLabel` prop to `<TableCell>` components. This programmatic label acts as a substitute for standard column headers when the layout switches to a stacked card presentation on narrow screens.
 4. **Accessible Sort States:** Apply `ariaSort` explicitly only on the active sort column.
+5. **Handling Long Strings:** To ensure long continuous strings do not overflow the mobile cards or desktop columns, `TableCell` internals must use `min-w-0 break-words` classes. Content rendered inside the cell must support text wrapping safely without breaking the mobile layout.

@@ -7,6 +7,7 @@ import { render, screen } from "@testing-library/preact";
 import * as matchers from '@testing-library/jest-dom/matchers';
 expect.extend(matchers);
 
+import { UsageGraphTooltip } from "../../../dashboard/src/v2/pages/stats/components/UsageGraphTooltip.js";
 import { InteractiveUsageChart } from "../../../dashboard/src/v2/pages/stats/components/InteractiveUsageChart.js";
 import { UsageSeriesSidebar } from "../../../dashboard/src/v2/pages/stats/components/UsageSeriesSidebar.js";
 import {
@@ -130,6 +131,24 @@ describe("UsageSeriesSidebar", () => {
     expect(screen.queryByText("Details")).not.toBeInTheDocument();
     expect(screen.queryByText("providers")).not.toBeInTheDocument();
     expect(screen.queryByText("purposes_time")).not.toBeInTheDocument();
+  });
+});
+
+describe("UsageGraphTooltip responsiveness", () => {
+  it("renders with constrained width classes", () => {
+    const { container } = render(
+      <UsageGraphTooltip
+        visible={true}
+        left={50}
+        label="Test Label"
+        bucketStart="2023-01-01T00:00:00.000Z"
+        activeSeries={[{ id: "test", label: "Test", accentHex: "#000", value: 10 }]}
+      />
+    );
+    const tooltip = container.firstChild as HTMLElement;
+    expect(tooltip.className).toContain("max-w-[calc(100vw-2rem)]");
+    expect(tooltip.className).toContain("text-wrap");
+    expect(tooltip.className).toContain("break-words");
   });
 });
 

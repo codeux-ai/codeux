@@ -52,4 +52,14 @@ describe("BranchNameSchemeEditor", () => {
       expect(getCanonicalBranchNameToken(val)).toBe(token);
     }
   });
+  it("applies fluid width responsive classes for mobile layout", () => {
+    const { container } = render(
+      <BranchNameSchemeEditor
+        value="{sprint_id}"
+        onChange={vi.fn()}
+      />
+    );
+    expect(container.firstElementChild?.className).toContain("min-w-0");
+    expect(container.firstElementChild?.className).toContain("w-full");
+  });
 });

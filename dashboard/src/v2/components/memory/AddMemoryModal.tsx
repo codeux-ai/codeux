@@ -41,7 +41,7 @@ export const AddMemoryModal: FunctionComponent<{
             onClick={onClose}>
             <div className="w-full max-w-md cursor-default bg-white dark:bg-void-800 rounded-[1.5rem] p-6 flex flex-col gap-4
                            border border-black/[0.06] dark:border-white/[0.06]
-                           shadow-[0_24px_80px_rgba(0,0,0,0.15)] dark:shadow-[0_24px_80px_rgba(0,0,0,0.5)]"
+                           shadow-[0_24px_80px_rgba(0,0,0,0.15)] dark:shadow-[0_24px_80px_rgba(0,0,0,0.5)] max-h-[calc(100dvh-2rem)] overflow-y-auto"
                 onClick={e => e.stopPropagation()}
                 role="dialog" aria-modal="true" aria-labelledby="add-memory-title">
                 <h3 id="add-memory-title" className="text-lg font-black text-slate-900 dark:text-white font-display">Add Memory</h3>
@@ -57,8 +57,8 @@ export const AddMemoryModal: FunctionComponent<{
                                    focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800
                                    resize-none" />
                 </FieldWrapper>
-                <div className="flex items-center gap-3">
-                    <div className="flex-1">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full">
+                    <div className="w-full sm:flex-1">
                         <FieldWrapper label="Category" htmlFor="memory-category">
                             <select id="memory-category" value={category} onChange={e => setCategory((e.target as HTMLSelectElement).value as MemoryCategory)}
                                 className="w-full px-3 py-2 rounded-lg text-xs font-medium cursor-pointer
@@ -70,7 +70,7 @@ export const AddMemoryModal: FunctionComponent<{
                             </select>
                         </FieldWrapper>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="w-full sm:w-auto flex items-center gap-2">
                         <FieldWrapper label="Strength" htmlFor="memory-strength">
                             <div className="flex items-center gap-2 mt-1">
                                 <span className="text-[10px] font-mono text-slate-400">{Math.round(strength * 100)}%</span>
