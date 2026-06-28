@@ -514,10 +514,10 @@ export const LiveSessionPage: FunctionComponent = () => {
             </div>
 
             {/* ── Main Content Grid ───────────────────────────────────── */}
-            <div ref={contentRef} className="grid grid-cols-1 xl:grid-cols-12 gap-10 xl:gap-16">
+            <div ref={contentRef} className="grid grid-cols-1 xl:grid-cols-12 gap-6 md:gap-10 xl:gap-16">
 
                 {/* Task cards */}
-                <div className="xl:col-span-8 flex flex-col gap-5">
+                <div className="xl:col-span-8 flex flex-col gap-5 min-w-0">
                     {!hasSprintContext && !initialLoadComplete ? (
                         /* Initial load in progress — render nothing to avoid flashing idle placeholder */
                         null
@@ -563,7 +563,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                 </div>
 
                 {/* Sidebar */}
-                <div className="xl:col-span-4 flex flex-col gap-5">
+                <div className="xl:col-span-4 flex flex-col gap-5 min-w-0">
                     <ExecutionTimelineProvider
                         execution={execution}
                         onOrchestrateSprint={handleOrchestrateSprint}

@@ -14,7 +14,7 @@ export const BranchNameSchemeEditor: FunctionComponent<BranchNameSchemeEditorPro
   disabled,
 }) => {
   return (
-    <div className="flex flex-col gap-2 min-w-[320px]">
+    <div className="flex flex-col gap-2 min-w-0 w-full">
       <TextInput
         value={value || ""}
         onChange={onChange}

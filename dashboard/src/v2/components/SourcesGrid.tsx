@@ -51,7 +51,7 @@ export const SourcesGrid: FunctionComponent = () => {
 
             <div
                 ref={containerRef}
-                className="flex flex-wrap justify-center gap-8 md:gap-10 lg:gap-12"
+                className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-8 justify-items-center w-full"
             >
                 {projectsLoading ? (
                     <>

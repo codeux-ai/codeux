@@ -174,7 +174,7 @@ export const LiveConnectionsCard: FunctionComponent<{
       <BorderTrace accentHex="#00E0A0" />
 
       <div className="relative z-10">
-        <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Radio className="h-4 w-4 text-signal-500" strokeWidth={1.5} />
             <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400">Live Connections</span>

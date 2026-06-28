@@ -32,8 +32,8 @@ export const MemoryFilters: FunctionComponent<{
     const selectedAgentPresetId = selectedAgentPresetIdSignal.value;
 
     return (
-        <div className="flex flex-col items-end gap-3.5 shrink-0">
-            <div className="flex items-center gap-2.5" role="tablist">
+        <div className="flex flex-col items-start md:items-end w-full md:w-auto gap-3.5 shrink-0">
+            <div className="flex flex-wrap items-center gap-2.5" role="tablist">
                 {TIER_TABS.map(tab => {
                     const count = tab.key === "short_term"
                         ? (stats.sprint + stats.agent)
@@ -72,7 +72,7 @@ export const MemoryFilters: FunctionComponent<{
                     );
                 })}
             </div>
-            <div className="flex items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-2.5">
                 {/* Sprint selector — only for Short Term */}
                 {activeTier === "short_term" && sprints.length > 0 && (
                     <select
@@ -107,7 +107,7 @@ export const MemoryFilters: FunctionComponent<{
                     </select>
                 )}
             </div>
-            <div className="flex items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-2.5">
                 <button onClick={() => setShowAddModal(true)}
                     className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold
                                bg-signal-500/10 text-signal-500 hover:bg-signal-500/20

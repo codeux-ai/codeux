@@ -39,7 +39,7 @@ export const ChangesList: FunctionComponent<ChangesListProps> = ({ files, select
   }
 
   return (
-    <div class="flex h-full flex-col overflow-y-auto dashboard-scrollbar p-2">
+    <div class="flex min-w-0 h-full flex-col overflow-y-auto dashboard-scrollbar p-2">
       {files.map((change) => {
         const meta = STATUS_META[change.status];
         const { dir, name } = splitPath(change.path);

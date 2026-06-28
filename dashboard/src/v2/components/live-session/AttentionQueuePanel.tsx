@@ -33,7 +33,7 @@ export const AttentionQueuePanel: FunctionComponent = memo(() => {
     // Wrap the Ledger and potentially show summary stats
     return (
         <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
                  {[
                     { label: "Open", value: open, color: "text-status-amber" },
                     { label: "Claimed", value: claimed, color: "text-signal-500" },

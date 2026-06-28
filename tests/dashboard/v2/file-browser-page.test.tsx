@@ -151,7 +151,7 @@ describe("FileBrowserPage", () => {
     const pageRoot = screen.getByTestId("file-browser-page-root");
     expect(pageRoot.className).toContain("px-4");
     expect(pageRoot.className).toContain("py-12");
-    expect(pageRoot.className).toContain("md:px-20");
+    expect(pageRoot.className).toContain("md:px-8");
     expect(screen.getByTestId("file-browser-page-header")).toBeInTheDocument();
     expect(screen.getByText("Sprint File Browser")).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1, name: /Browse and Diff the Sprint Branch/i })).toBeInTheDocument();
@@ -182,7 +182,9 @@ describe("FileBrowserPage", () => {
 
     const mainPanel = screen.getByTestId("file-browser-main-tool-panel");
     expect(mainPanel).toBeInTheDocument();
-    expect(mainPanel.className).toContain("gap-5");
+    expect(mainPanel.className).toContain("grid-cols-1");
+    expect(mainPanel.className).toContain("lg:grid-cols-[340px_minmax(0,1fr)]");
+    expect(mainPanel.className).toContain("lg:h-[calc(100vh-340px)]");
     expect(screen.getByText("Running")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Files" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "Changes" }).length).toBeGreaterThan(0);

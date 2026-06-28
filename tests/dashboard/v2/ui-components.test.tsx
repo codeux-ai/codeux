@@ -506,8 +506,8 @@ describe("UI Components Coverage", () => {
     expect(element).toBeDefined();
     expect(element.className).toContain("px-4");
     expect(element.className).toContain("py-12");
-    expect(element.className).toContain("md:px-20");
-    expect(element.className).not.toContain("px-6");
+    expect(element.className).toContain("md:px-8");
+    expect(element.className).toContain("sm:px-6");
     expect(element.className).not.toContain("py-6");
   });
 });

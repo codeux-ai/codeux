@@ -18,6 +18,7 @@ The browser workbench is a premium, specialized surface inside the Code UX dashb
 ## Layout and Sizing
 - Avoid fixed heights on dynamic content areas like textareas. Use `min-h-[Xrem] w-full` where applicable to ensure contents fit flexibly without breaking layout.
 - The `PreviewWindowChrome` handles multiple states (`fullscreen`, `minimized`, `closed`, `normal`). Each state transition must preserve consistent padding, icon alignment, and layout proportions.
+- Use `grid-cols-1` stacking below breakpoints (e.g. `xl:grid-cols-[minmax(0,1fr)_340px]`) and apply `min-w-0` to flex child structures to gracefully wrap filenames and address bars without causing horizontal body scrolling.
 
 ## Color Semantics
 - **Running / Healthy:** `signal-500`

@@ -264,7 +264,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                           <div>{renderStatusChip(invocation.status)}</div>
 
                         {/* Type */}
-                          <div className="flex">
+                          <div className="flex min-w-0">
 
                           <div className={`${CHIP_CLASS} px-2 py-0.5 text-[10px] font-medium text-slate-500`}>
                             {invocation.type?.replace(/_/g, " ") || "unknown"}
@@ -275,12 +275,12 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                         {/* Model & Duration Row */}
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between lg:contents">
                           {/* Model */}
-                          <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+                          <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300 min-w-0">
 
                           <div className={`rounded-lg p-1.5 ${providerBg} ${providerText}`}>
                             <ProviderIcon className="h-3 w-3" strokeWidth={2.5} />
                           </div>
-                          <span className="truncate">{invocation.model || "—"}</span>
+                          <span className="truncate min-w-0">{invocation.model || "—"}</span>
                           </div>
 
                         {/* Token Stats Row */}

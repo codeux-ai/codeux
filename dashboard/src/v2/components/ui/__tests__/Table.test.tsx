@@ -146,4 +146,24 @@ describe("Table component", () => {
     button.click();
     expect(handleSort).toHaveBeenCalledTimes(1);
   });
+
+  it("handles long continuous strings without breaking mobile layout", () => {
+    const longString = "verylongstringwithoutspacesthatmightoverflowthecontainer".repeat(5);
+
+    render(
+      <Table>
+        <TableBody>
+          <TableRow>
+            <TableCell mobileLabel="Label">{longString}</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    );
+
+    const cell = screen.getByRole("cell");
+    expect(cell).toHaveClass("break-words", "min-w-0");
+
+    const innerContainer = cell.querySelector("div");
+    expect(innerContainer).toHaveClass("break-words", "min-w-0", "flex-1", "lg:contents");
+  });
 });

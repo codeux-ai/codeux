@@ -36,7 +36,7 @@ export const AddMemoryModal: FunctionComponent<{
             onClick={onClose}>
             <div className="w-full max-w-md cursor-default bg-white dark:bg-void-800 rounded-[1.5rem] p-6 flex flex-col gap-4
                            border border-black/[0.06] dark:border-white/[0.06]
-                           shadow-[0_24px_80px_rgba(0,0,0,0.15)] dark:shadow-[0_24px_80px_rgba(0,0,0,0.5)]"
+                           shadow-[0_24px_80px_rgba(0,0,0,0.15)] dark:shadow-[0_24px_80px_rgba(0,0,0,0.5)] max-h-[calc(100dvh-2rem)] overflow-y-auto"
                 onClick={e => e.stopPropagation()}>
                 <h3 className="text-lg font-black text-slate-900 dark:text-white font-display">Add Memory</h3>
                 <textarea value={content} onInput={e => setContent((e.target as HTMLTextAreaElement).value)}
@@ -49,9 +49,9 @@ export const AddMemoryModal: FunctionComponent<{
                                placeholder:text-slate-400 hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors duration-200
                                focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800
                                resize-none" />
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full">
                     <select value={category} onChange={e => setCategory((e.target as HTMLSelectElement).value as MemoryCategory)}
-                        className="flex-1 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer
+                        className="w-full sm:flex-1 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer
                                    bg-black/[0.03] dark:bg-white/[0.03] hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors duration-200
                                    border border-black/[0.06] dark:border-white/[0.06]
                                    text-slate-700 dark:text-slate-300

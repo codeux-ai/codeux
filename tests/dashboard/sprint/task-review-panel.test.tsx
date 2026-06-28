@@ -40,4 +40,12 @@ describe("TaskReviewPanel", () => {
     const reason = screen.getByTestId("qa-error-reason");
     expect(reason).toHaveTextContent("Specific parsing syntax error at line 42");
   });
+
+  it("applies responsive text wrapping classes", () => {
+    render(<TaskReviewPanel task={{ status: "QA_REVIEW_FAILED", qa_review: { error_reason: "Very long reason that needs to wrap" } }} />);
+    const panel = screen.getByTestId("task-review-panel");
+    expect(panel.className).toContain("min-w-0");
+    const reason = screen.getByTestId("qa-error-reason");
+    expect(reason.className).toContain("break-words");
+  });
 });

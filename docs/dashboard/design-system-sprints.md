@@ -18,6 +18,7 @@ This document outlines the design system for the Sprints page and related planni
 
 ### Sprint Ledger (Table/List)
 
+*   **Responsive Ledger Pattern:** Uses the shared `Table` contract with `mobileLabel` mapping for narrow screens. Rows stack gracefully, ensuring that sprint name, status, completion, dates, selection, pin state, and row controls remain discoverable without horizontal scrolling. Row controls and bulk action bars use flexible, touch-friendly layouts that wrap cleanly to prevent text clipping. Fixed-position inline menus (like row actions) use viewport-clamping to remain usable near screen edges.
 *   **Rows & Headers:** Refined row heights, consistent padding, and clear separators. Column headers must align perfectly with their corresponding data.
 *   **Metadata Hierarchy:** Prioritize sprint names and status. Secondary metadata (dates, task counts) should be styled as supporting information (e.g., smaller text, muted colors).
 *   **Interactive Elements:** Row action menus and bulk actions should have clear active/hover states, unified menu padding, and consistent icon scaling.

@@ -155,11 +155,22 @@ describe("TopNav Selectors Accessibility", () => {
         const projectBtn = document.getElementById("project-selector-button");
         const sprintBtn = document.getElementById("sprint-selector-button");
 
+        // Buttons must exist in the document (visibility classes removed for compact layouts)
+        expect(projectBtn).toBeInTheDocument();
+        expect(sprintBtn).toBeInTheDocument();
+
         expect(projectBtn).toHaveAttribute("aria-expanded", "false");
         expect(sprintBtn).toHaveAttribute("aria-expanded", "false");
 
         expect(projectBtn).toHaveAttribute("aria-controls", "project-listbox");
         expect(sprintBtn).toHaveAttribute("aria-controls", "sprint-listbox");
+    });
+
+    it("renders notification menu trigger regardless of viewport width classes", async () => {
+        renderNav();
+        const notifyBtn = screen.getByRole("button", { name: /Notifications/i });
+        expect(notifyBtn).toBeInTheDocument();
+        expect(notifyBtn).toHaveAttribute("aria-haspopup", "menu");
     });
 
     it("can open project dropdown with keyboard", async () => {

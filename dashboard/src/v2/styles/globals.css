@@ -54,6 +54,10 @@
     --accent-focus-ring: var(--accent-primary);
     --text-metadata: #94a3b8; /* slate-400 */
   }
+
+  html, body {
+    min-height: 100dvh;
+  }
 }
 
 @layer utilities {

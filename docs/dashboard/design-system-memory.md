@@ -12,3 +12,9 @@ The Memory UI relies on specific hex colors that match existing app accents:
 - **Decision:** Slate/Alternative `#64748B` -> `r: 100, g: 116, b: 139` (Updated to keep it aligned, or another accent)
 - **Error:** Rose `#F43F5E` -> `r: 244, g: 63, b: 94` (Updated from simple red)
 - **Learning:** Cyan/Teal `#33FFB8` -> `r: 51, g: 255, b: 184`
+
+## Responsive Layout Guidelines
+- **Main Canvas:** Uses dynamic viewport height \`h-[calc(100dvh-12rem)] min-h-[500px]\` to prevent clipping and scrolling issues.
+- **Sidebar & Details:** Stacks to the bottom on mobile (\`h-[50vh]\`) and anchors to the side on desktop.
+- **Filters & Search:** Wraps flex items cleanly using \`flex-wrap\` and takes full width on mobile viewports.
+- **Truncation:** Metadata limits string lengths gracefully utilizing \`truncate\` and \`break-words\` along with \`min-w-0\`.

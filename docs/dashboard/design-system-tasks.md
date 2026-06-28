@@ -33,3 +33,4 @@ The Tasks page and Kanban board should feel like a 'Refined Production Board'. I
 ## 5. General Rules
 *   **Accessibility:** Preserve `focus-visible` styles on all interactive elements. Use `sr-only` text for screen readers where visual data is primarily conveyed via color or icons.
 *   **Motion:** Respect `isReducedMotion` or `prefers-reduced-motion` for hover elevations and transitions.
+*   **Responsiveness:** Use responsive wrapping (`flex-col sm:flex-row`) on headers and footers to ensure labels, metadata, controls, and PR links do not overlap or break layout on narrow viewports.

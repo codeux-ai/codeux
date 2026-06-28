@@ -198,7 +198,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
       className={`group transition-all hover:-translate-y-0.5 focus-within:ring-2 focus-within:ring-signal-500/20 ${rowTone} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""} ${pendingRowClass} hover:bg-[var(--bg-hover-subtle)]`}
       style={{ transitionDuration: duration, transitionTimingFunction: ease }}
     >
-      <TableCell isFirst className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`}>
+      <TableCell isFirst className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`} mobileLabel="Select">
         <button
           type="button"
           onClick={() => onToggleRow(sprint.id)}
@@ -212,7 +212,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
             : <Square className="h-4 w-4" strokeWidth={2.2} />}
         </button>
       </TableCell>
-      <TableCell className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`}>
+      <TableCell className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`} mobileLabel="Pin">
         <button
           type="button"
           onClick={() => onToggleShowcase(sprint)}

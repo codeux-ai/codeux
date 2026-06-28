@@ -94,7 +94,7 @@ export const SettingsPage: FunctionComponent = () => {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_50%_40%_at_110%_110%,rgba(255,184,0,0.025)_0%,transparent_60%)] dark:bg-[radial-gradient(ellipse_50%_40%_at_110%_110%,rgba(255,184,0,0.04)_0%,transparent_60%)]" />
       </div>
 
-      <div ref={headerRef} className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-end">
+      <div ref={headerRef} className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] xl:items-end">
         <div className="flex flex-col gap-5">
           <div className="flex items-center gap-2.5 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 font-mono">
             <Settings className="h-3.5 w-3.5" strokeWidth={2.5} />
@@ -245,7 +245,7 @@ export const SettingsPage: FunctionComponent = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[300px_1fr]">
+      <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[240px_minmax(0,1fr)]">
         <SettingsCategoryRail
           activeCategory={activeCategory}
           filteredCategories={filteredCategories}

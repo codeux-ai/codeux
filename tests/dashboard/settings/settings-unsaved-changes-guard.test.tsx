@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { cleanup, renderHook } from "@testing-library/preact";
+import { cleanup, renderHook, render } from "@testing-library/preact";
+import { UnsavedChangesModal } from "../../../dashboard/src/v2/components/ui/UnsavedChangesModal.js";
 import { useUnsavedChangesGuard } from "../../../dashboard/src/v2/hooks/useUnsavedChangesGuard.js";
 import { getNavigationBlockerCount } from "../../../dashboard/src/v2/router/navigation-blocker.js";
 
@@ -94,5 +95,23 @@ describe("useUnsavedChangesGuard", () => {
     window.history.pushState({}, "", "/memory");
     expect(window.location.pathname).toBe("/memory");
     expect(confirmSpy).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("UnsavedChangesModal rendering", () => {
+  it("renders action buttons with w-full for mobile layouts", () => {
+    const { container } = render(
+      <UnsavedChangesModal
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+        onSave={vi.fn()}
+      />
+    );
+    const buttons = container.querySelectorAll("button");
+    expect(buttons.length).toBeGreaterThan(0);
+    buttons.forEach((btn) => {
+      expect(btn.className).toContain("w-full");
+    });
   });
 });

@@ -16,6 +16,7 @@ Header dropdowns, searches, and related shell controls are standardized to a sin
 
 - **Height Utility:** Use `h-9` or `min-h-[40px]`.
 - **Vertical Padding:** Avoid aggressive internal vertical padding inside flex items; rely on the fixed height `h-9` + `items-center` for perfect centering.
+- **Header Container Container:** The primary nav container uses `min-h-[60px]` instead of fixed `h-[60px]` to allow clustering elements to wrap on constrained viewports if needed.
 
 ### 3. Unified Focus Rings
 All interactive components inside the shell layer must follow exactly the same focus rules.
@@ -24,10 +25,11 @@ All interactive components inside the shell layer must follow exactly the same f
 - **Application:** Applies universally to top-nav dropdowns, global search inputs, sidebar navigation links, tooltips, and notification buttons.
 
 ### 4. Responsiveness and Truncation
-Stable layouts on narrow widths (especially mobile or multi-panel layouts).
+Stable layouts on narrow widths (especially mobile or multi-panel layouts) must maintain access to controls without triggering horizontal overflow.
 
-- **Project & Sprint Menus:** Should enforce strict text truncation using `truncate` and dynamic maximum widths (e.g., `max-w-[140px] md:max-w-[200px]`) rather than letting content dictate unbounded flex-growth.
-- **Search and Telemetry Layout:** Components should gracefully hide text or collapse altogether instead of overflowing the flex container.
+- **Wrapping:** Top-level header layouts should use `flex-wrap md:flex-nowrap` to gracefully wrap clusters on very small viewports instead of hiding them or clipping.
+- **Project & Sprint Menus:** Must remain visible on compact screens. Enforce strict text truncation using `truncate` and responsive maximum widths (e.g., `max-w-[80px] sm:max-w-[140px] md:max-w-[200px]`) rather than letting content dictate unbounded flex-growth.
+- **Search and Telemetry Layout:** Components should gracefully hide text or collapse altogether (e.g. icon-only triggers) instead of overflowing the flex container.
 
 ### 5. Hover and Active Indicators
 - **Interactions:** Hover backgrounds for triggers follow `hover:bg-black/[0.05] dark:hover:bg-white/[0.05]`. Active routes in the Sidebar use the primary `signal-500` marker tone.
