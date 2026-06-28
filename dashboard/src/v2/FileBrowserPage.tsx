@@ -36,6 +36,7 @@ import type {
   FileBrowserTree as FileBrowserTreeType,
 } from "../types.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
+import { PageHeader } from "./components/layout/PageHeader.js";
 import { FileTree } from "./components/file-browser/FileTree.js";
 import { FileViewer } from "./components/file-browser/FileViewer.js";
 import { ChangesList } from "./components/file-browser/ChangesList.js";
@@ -303,26 +304,14 @@ export const FileBrowserPage: FunctionComponent = () => {
 
   return (
     <PageContainer aria-label="File Browser" padding="workbench" className="min-h-full" data-testid="file-browser-page-root">
-      <div class="mb-6 flex flex-wrap items-end justify-between gap-4" data-testid="file-browser-page-header">
-        <div>
-          <div class="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-400">
-            <FolderTree class="h-3.5 w-3.5" strokeWidth={2} />
-            Sprint File Browser
-          </div>
-          <div class="relative overflow-hidden mt-3">
-            <h2 aria-hidden class="absolute -top-10 -left-3 text-[7rem] font-black tracking-tighter text-black/[0.04] dark:text-white/[0.03] pointer-events-none select-none font-display leading-none">
-              FILES
-            </h2>
-            <h1 class="font-display text-5xl font-black tracking-tighter text-slate-900 dark:text-white leading-[0.92] relative z-10 md:text-7xl">
-              Browse and Diff the Sprint Branch.
-            </h1>
-          </div>
-          <p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300 md:text-[15px]">
-            A single containerized snapshot of the active sprint rebuilds automatically as tasks merge. Inspect every file
-            and review what changed versus the default branch — all without leaving the dashboard.
-          </p>
-        </div>
-        <div class="flex items-center gap-2.5">
+      <PageHeader
+        data-testid="file-browser-page-header"
+        className="mb-6"
+        icon={FolderTree}
+        eyebrow="Sprint File Browser"
+        title="Browse & Diff the Sprint Branch"
+        subtitle="A single containerized snapshot of the active sprint rebuilds automatically as tasks merge. Inspect every file and review what changed versus the default branch — all without leaving the dashboard."
+        actions={
           <button
             type="button"
             onClick={() => void refresh()}
@@ -331,8 +320,8 @@ export const FileBrowserPage: FunctionComponent = () => {
             <RefreshCw class={`h-4 w-4 ${loading ? "animate-spin" : ""}`} strokeWidth={2} />
             Refresh
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {error && (
         <div class="mb-5 rounded-2xl border border-status-red/25 bg-status-red/[0.12] px-4 py-3 text-sm text-status-red dark:border-status-red/30 dark:bg-status-red/[0.14]">

@@ -30,6 +30,7 @@ import { LaunchContainerPanel } from "./components/browser/LaunchContainerPanel.
 import { useActionFeedback } from "./hooks/use-action-feedback.js";
 import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
+import { PageHeader } from "./components/layout/PageHeader.js";
 import { getSafeUrl } from "./lib/safe-url.js";
 
 const PREVIEW_MESSAGE_TYPE = "sprint-preview:state";
@@ -379,20 +380,14 @@ export const BrowserPage: FunctionComponent = () => {
 
   return (
     <PageContainer aria-label="Browser" padding="workbench" className="min-h-full" data-testid="browser-page-root">
-      <div className="mb-8 flex flex-col justify-between gap-8 lg:flex-row lg:items-end" data-testid="browser-page-header">
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center gap-2.5 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
-            <Compass className="h-3.5 w-3.5" strokeWidth={2} />
-            Sprint Browser
-          </div>
-          <h1 className="font-display text-5xl font-black leading-[0.92] tracking-tighter text-slate-900 dark:text-white md:text-7xl">
-            Build previews per sprint, isolated by container.
-          </h1>
-          <p className="max-w-3xl text-base leading-relaxed text-slate-500 dark:text-slate-400">
-            Each sprint preview runs from its own exported sprint snapshot and container, bound to a private host port and surfaced through the in-app browser.
-          </p>
-        </div>
-        <div className="flex items-center gap-2.5">
+      <PageHeader
+        data-testid="browser-page-header"
+        className="mb-8"
+        icon={Compass}
+        eyebrow="Sprint Browser"
+        title="Build previews per sprint, isolated by container"
+        subtitle="Each sprint preview runs from its own exported sprint snapshot and container, bound to a private host port and surfaced through the in-app browser."
+        actions={
           <button
             type="button"
             onClick={() => void refreshSessions()}
@@ -401,8 +396,8 @@ export const BrowserPage: FunctionComponent = () => {
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} strokeWidth={2} />
             Refresh
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {error && (
         <div className="mb-5 rounded-2xl border border-status-red/20 bg-status-red/10 px-4 py-3 text-sm text-status-red">

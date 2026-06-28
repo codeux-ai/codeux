@@ -174,7 +174,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
             </a>
 
             {/* Navigation */}
-            <nav ref={navRef} aria-label="Main navigation" className="flex-1 flex flex-col relative z-10 overflow-y-auto pb-28">
+            <nav ref={navRef} aria-label="Main navigation" className="flex-1 flex flex-col relative z-10 overflow-y-auto scrollbar-hide pb-4">
                 <h2 className={`px-8 text-[9px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-[0.16em] mb-3 transition-all duration-500 overflow-hidden ${isMinimized && !isMobile ? 'w-0 h-0 opacity-0 m-0' : 'opacity-100'}`}>
                     Workspace
                 </h2>

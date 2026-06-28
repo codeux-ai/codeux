@@ -39,6 +39,7 @@ import { ListWindowSelector } from "./components/ui/ListWindowSelector.js";
 import { SkeletonCard, SkeletonLoader } from "./components/layout/SkeletonLoader.js";
 import { FilterStrip } from "./components/ui/FilterStrip.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
+import { PageHeader } from "./components/layout/PageHeader.js";
 import { formatSprintDisplay } from "./lib/format-sprint.js";
 import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
 import { KanbanTaskCard } from "./components/tasks/KanbanTaskCard.js";
@@ -735,24 +736,13 @@ export const TasksPage: FunctionComponent = () => {
       className={isTaskScopeReady ? "gap-16" : "gap-10"}
       padding={isTaskScopeReady ? "standard" : "sprintsEmpty"}
     >
-      <div ref={headerRef} className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 md:gap-8">
-        <div className="flex flex-col gap-5">
-          <div className="flex items-center gap-2.5 text-signal-500 font-mono text-[10px] font-bold uppercase tracking-[0.2em]">
-            <ListChecks className="w-3.5 h-3.5" strokeWidth={2.5} />
-            Task Pipeline
-          </div>
-
-          <div className="relative overflow-hidden">
-            <h2 aria-hidden className="absolute -top-10 -left-3 text-[7rem] font-black tracking-tighter text-black/[0.04] dark:text-white/[0.03] pointer-events-none select-none font-display leading-none">
-              FLOW
-            </h2>
-            <h1 className="text-5xl md:text-7xl font-black tracking-tighter text-slate-900 dark:text-white leading-[0.92] font-display relative z-10">
-              Task <br />
-              <span className="text-signal-500">Board.</span>
-            </h1>
-          </div>
-
-          <p className="text-lg text-slate-500 dark:text-slate-500 font-medium max-w-xl mt-1 leading-relaxed">
+      <PageHeader
+        containerRef={headerRef}
+        icon={ListChecks}
+        eyebrow="Task Pipeline"
+        title="Task Board"
+        subtitle={
+          <>
             {selectedProject
               ? taskScopeSprintId
                 ? `Task execution for ${selectedProject.name}, scoped to Sprint ${sprints.find((s: Sprint) => s.id === taskScopeSprintId)?.number ?? "..."}.`
@@ -763,10 +753,10 @@ export const TasksPage: FunctionComponent = () => {
                 Filtered to show {statusFilter !== "all" ? statusFilter.replace("_", " ") : "all"} status and {priorityFilter !== "all" ? priorityFilter : "any"} priority.
               </span>
             )}
-          </p>
-        </div>
-
-        <div className="flex flex-col items-start lg:items-end gap-4 shrink-0 w-full lg:w-auto mt-4 lg:mt-0">
+          </>
+        }
+        actions={
+          <div className="flex flex-col items-start lg:items-end gap-4 shrink-0 w-full lg:w-auto">
           <div className="flex items-center gap-2.5 flex-wrap w-full lg:w-auto">
             {stats.inProgress > 0 && (
               <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-signal-500/[0.08] border border-signal-500/20 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-400">
@@ -805,8 +795,9 @@ export const TasksPage: FunctionComponent = () => {
           >
             {(showComposer || editingTask) ? "Close Composer" : "New Task"}
           </Button>
-        </div>
-      </div>
+          </div>
+        }
+      />
 
       {isTaskScopeReady && (
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 mt-2 sm:-mt-4">

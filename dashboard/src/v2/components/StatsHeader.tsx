@@ -14,6 +14,7 @@ import { formatTime } from "../../lib/time.js";
 import { LivePreviewLink } from "./ui/LivePreviewLink.js";
 import { HumanInterventionBadge } from "./ui/HumanInterventionBadge.js";
 import { getSprintStatusPresentation } from "../lib/sprint-status-presentation.js";
+import { PageHeader } from "./layout/PageHeader.js";
 
 type HeaderView = "stats" | "race" | "dag";
 
@@ -79,48 +80,34 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
     return (
         <>
             {/* ── Page Header ─────────────────────────────────────────── */}
-            <div ref={headerRef} className="flex flex-col lg:flex-row items-start lg:items-end justify-between gap-8">
-                <div className="flex flex-col gap-5">
-                    {/* Eyebrow */}
-                    <div className="flex items-center gap-2.5 font-mono text-[10px] font-bold uppercase tracking-[0.2em]">
+            <PageHeader
+                containerRef={headerRef}
+                as="h2"
+                eyebrow={
+                    <>
                         <Radio className="w-3.5 h-3.5 text-status-red" strokeWidth={2.5} />
                         <span className="text-status-red">Live Session</span>
                         {(liveSprintRun?.sprintNumber ?? pausedInterventionRun?.sprintNumber) != null && (
                             <span className="text-slate-400 ml-1">· Sprint {liveSprintRun?.sprintNumber ?? pausedInterventionRun?.sprintNumber}</span>
                         )}
-                    </div>
-
-                    {/* Hero headline */}
-                    <div className="relative overflow-hidden">
-                        <h2
-                            aria-hidden
-                            className="absolute -top-10 -left-3 text-[7rem] font-black tracking-tighter text-black/[0.04] dark:text-white/[0.03] pointer-events-none select-none font-display leading-none"
-                        >
-                            LIVE
-                        </h2>
-                        <h2 className="text-5xl md:text-7xl font-black tracking-tighter text-slate-900 dark:text-white leading-[0.92] font-display relative z-10">
-                            Sprint <br />
-                            <span className="text-signal-500">Pipeline.</span>
-                        </h2>
-                    </div>
-
-                    <p className="text-lg text-slate-500 dark:text-slate-500 font-medium max-w-xl mt-1 leading-relaxed">
-                        {hasLiveSprint
-                            ? scopedFeatureBranch
-                                ? <>Monitoring <span className="font-mono text-signal-600 dark:text-signal-400">{scopedFeatureBranch}</span> in real-time.</>
-                                : `Monitoring ${liveSprintRun?.sprintName || "the active sprint"} in real-time.`
-                            : showStatusPanel
-                                ? sprintStatusPresentation.detail
-                                : hasSprintContext
-                                    ? "Viewing the latest sprint telemetry snapshot."
-                                    : !initialLoadComplete
-                                        ? "Connecting to orchestrator..."
-                                        : "Waiting for sprint to start."
-                        }
-                    </p>
-                </div>
-
-                {/* Right: pills + view toggle + timestamp */}
+                    </>
+                }
+                title="Sprint Pipeline"
+                subtitle={
+                    hasLiveSprint
+                        ? scopedFeatureBranch
+                            ? <>Monitoring <span className="font-mono text-signal-600 dark:text-signal-400">{scopedFeatureBranch}</span> in real-time.</>
+                            : `Monitoring ${liveSprintRun?.sprintName || "the active sprint"} in real-time.`
+                        : showStatusPanel
+                            ? sprintStatusPresentation.detail
+                            : hasSprintContext
+                                ? "Viewing the latest sprint telemetry snapshot."
+                                : !initialLoadComplete
+                                    ? "Connecting to orchestrator..."
+                                    : "Waiting for sprint to start."
+                }
+                actions={
+                /* Right: pills + view toggle + timestamp */
                 <div className="flex flex-col items-start lg:items-end gap-4 shrink-0">
                     <div className="flex items-center gap-2.5 flex-wrap">
                         <LivePreviewLink session={selectedSession} />
@@ -200,7 +187,8 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
                         </span>
                     )}
                 </div>
-            </div>
+                }
+            />
 
             {showStatusPanel && (
                 <div className="relative overflow-hidden rounded-[1.75rem] border border-status-amber/18 bg-status-amber/8 p-6 shadow-[0_12px_30px_rgba(245,158,11,0.08)]">

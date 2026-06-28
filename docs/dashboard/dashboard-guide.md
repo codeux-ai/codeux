@@ -193,7 +193,8 @@ Legacy runtime:
 
 ### V2 project management
 - Interactive dashboard controls use pointer cursors consistently: enabled buttons, links, tab controls, form toggles, menu/popover triggers, DAG nodes, cards, and dismissible overlays expose a pointer affordance, while disabled controls retain `not-allowed`.
-- V2 pages use the shared `PageContainer` atomic component for page-level layout. Its `2400px` max width matches the `/` overview dashboard and is the single source of truth for page container width across overview, project, sprint, task, live, memory, knowledge, stats, settings, agents, chat, and browser routes.
+- V2 pages use the shared `PageContainer` atomic component for page-level layout. It renders fullscreen (`max-w-none`, no fixed cap) with a consistent horizontal/vertical padding rhythm, and is the single source of truth for page container width across overview, project, sprint, task, live, memory, knowledge, stats, settings, agents, chat, and browser routes.
+- V2 pages render their intro/heading via the shared `PageHeader` atomic component (`components/layout/PageHeader.tsx`): an optional icon + uppercase eyebrow, a unified `text-2xl md:text-3xl` title, an optional subtitle, and optional right-aligned `actions`. This keeps every page's intro section visually consistent — do not hand-roll bespoke page headings.
 - Top-nav project selector persists the active project in sqlite
 - Top-nav sprint selector persists the active sprint for the selected project
 - Top-nav search sits in the left header cluster beside the brand, while the active task counter uses the same compact height as the project, sprint, and worker selectors

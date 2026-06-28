@@ -45,6 +45,7 @@ import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "../../lib/list-windo
 import { ExecutionTimelineProvider } from "../../../hooks/ExecutionTimelineContext.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { PageContainer } from "../../components/layout/PageContainer.js";
+import { PageHeader } from "../../components/layout/PageHeader.js";
 import type { SprintLinkedIssueInput } from "../../types.js";
 
 const ACCENT_CYCLE = ["text-signal-500", "text-ember-500", "text-status-green"] as const;
@@ -378,40 +379,17 @@ export const SprintsPage: FunctionComponent = () => {
       />
 
       <PageContainer aria-label="Sprints" padding={selectedProject ? "standard" : "sprintsEmpty"} className={selectedProject ? "gap-20" : "gap-4"}>
-        <div ref={headerRef} className="flex flex-wrap items-end justify-between gap-8">
-          <div className="flex flex-col gap-5">
-            <div className="flex items-center gap-2.5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-signal-500">
-              <Target className="h-4 w-4" strokeWidth={2.5} />
-              Iteration Cycles
-            </div>
-            <h1 className="font-display text-5xl font-black leading-[0.92] tracking-tighter text-slate-900 dark:text-white md:text-7xl">
-              Active <br />
-              <span className="text-signal-500">Sprints.</span>
-            </h1>
-            <p className="mt-2 max-w-2xl text-lg font-medium leading-relaxed text-slate-500 dark:text-slate-500">
-              {selectedProject
+        <div ref={headerRef} className="flex flex-col gap-5">
+          <PageHeader
+            icon={Target}
+            eyebrow="Iteration Cycles"
+            title="Active Sprints"
+            subtitle={
+              selectedProject
                 ? `Define the sprint once for ${selectedProject.name}. The Planning agent can improve the prompt, plan subtasks, and launch the sprint without manual task entry.`
-                : "Select a project to manage sprint structure."}
-            </p>
-            <ActionFeedbackRegion
-              status={feedback.status}
-              message={feedback.message}
-              onDismiss={clearFeedback}
-              clearError={clearError}
-              className="mt-2"
-            />
-            {selectedProject && (
-              <div className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${
-                planningRoute.available
-                  ? "border-signal-500/20 bg-signal-500/[0.08] text-signal-600 dark:text-signal-300"
-                  : "border-status-red/20 bg-status-red/10 text-status-red"
-              }`}>
-                <Radio className="h-3.5 w-3.5" strokeWidth={2.1} />
-                {planningRoute.available ? `Planning via ${planningRoute.label}` : "No planning worker available"}
-              </div>
-            )}
-          </div>
-
+                : "Select a project to manage sprint structure."
+            }
+            actions={
           <div className="flex flex-wrap items-center gap-2">
             {[
               { label: "Total", value: sortedSprints.length, icon: Target },
@@ -491,6 +469,24 @@ export const SprintsPage: FunctionComponent = () => {
               {(showCreateComposer || editingSprint) ? "Close Composer" : "New Sprint"}
             </button>
           </div>
+            }
+          />
+          <ActionFeedbackRegion
+            status={feedback.status}
+            message={feedback.message}
+            onDismiss={clearFeedback}
+            clearError={clearError}
+          />
+          {selectedProject && (
+            <div className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${
+              planningRoute.available
+                ? "border-signal-500/20 bg-signal-500/[0.08] text-signal-600 dark:text-signal-300"
+                : "border-status-red/20 bg-status-red/10 text-status-red"
+            }`}>
+              <Radio className="h-3.5 w-3.5" strokeWidth={2.1} />
+              {planningRoute.available ? `Planning via ${planningRoute.label}` : "No planning worker available"}
+            </div>
+          )}
         </div>
 
         {selectedProject ? (

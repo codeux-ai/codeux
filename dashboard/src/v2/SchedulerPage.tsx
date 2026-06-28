@@ -16,6 +16,7 @@ import {
   Zap,
 } from "lucide-preact";
 import { PageContainer } from "./components/layout/PageContainer.js";
+import { PageHeader } from "./components/layout/PageHeader.js";
 import { AvantgardeSelect } from "./components/ui/AvantgardeSelect.js";
 import { Button } from "./components/ui/Button.js";
 import { useProjectData } from "./context/project-data.js";
@@ -459,28 +460,13 @@ export const SchedulerPage: FunctionComponent = () => {
 
   return (
     <PageContainer padding="standard" className="gap-8" data-testid="scheduler-page-root">
-      <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-8" data-testid="scheduler-primary-header">
-        <div className="flex flex-col gap-5">
-          <div className="flex items-center gap-2.5 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
-            <CalendarDays className="w-3.5 h-3.5" strokeWidth={2.5} />
-            Runtime Scheduler
-          </div>
-
-          <div className="relative overflow-hidden">
-            <h2 aria-hidden className="absolute -top-10 -left-3 text-[7rem] font-black tracking-tighter text-black/[0.04] dark:text-white/[0.03] pointer-events-none select-none font-display leading-none">
-              TIME
-            </h2>
-            <h1 className="text-5xl md:text-7xl font-black tracking-tighter text-slate-900 dark:text-white leading-[0.92] font-display relative z-10">
-              Schedule <br />
-              <span className="text-signal-500">Events.</span>
-            </h1>
-          </div>
-
-          <p className="text-lg text-slate-500 dark:text-slate-500 font-medium max-w-xl mt-1 leading-relaxed">
-            Calendar control for future sprint starts, quicksprint launches, and timed messages into the project chat agent.
-          </p>
-        </div>
-
+      <PageHeader
+        data-testid="scheduler-primary-header"
+        icon={CalendarDays}
+        eyebrow="Runtime Scheduler"
+        title="Schedule Events"
+        subtitle="Calendar control for future sprint starts, quicksprint launches, and timed messages into the project chat agent."
+        actions={
         <div className="flex max-w-full flex-wrap items-center gap-2 shrink-0">
           <Button
             variant="secondary"
@@ -518,7 +504,8 @@ export const SchedulerPage: FunctionComponent = () => {
             ))}
           </div>
         </div>
-      </header>
+        }
+      />
 
       <section className="grid gap-3 md:grid-cols-3">
         {[

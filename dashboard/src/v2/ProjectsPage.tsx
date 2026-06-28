@@ -26,6 +26,7 @@ import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { useProjectData } from "./context/project-data.js";
 import { SkeletonPanel, SkeletonLoader } from "./components/layout/SkeletonLoader.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
+import { PageHeader } from "./components/layout/PageHeader.js";
 import { startProjectSetup } from "./lib/project-api.js";
 import { fetchProjectInvocations } from "./lib/invocation-api.js";
 import { useToast } from "./components/feedback/ToastProvider.js";
@@ -675,27 +676,12 @@ export const ProjectsPage: FunctionComponent = () => {
                 </div>
 
                 {/* ── Page Header ─────────────────────────────────────── */}
-                <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 md:gap-8">
-                    <div className="flex flex-col gap-3">
-                        {/* Eyebrow */}
-                        <div className="flex items-center gap-2.5 text-ember-500 font-bold tracking-[0.2em] uppercase text-[10px] font-mono">
-                            <FolderOpen className="w-3.5 h-3.5" strokeWidth={2.5} />
-                            Source Repositories
-                        </div>
-
-                        {/* Hero headline */}
-                        <h1 className="text-3xl md:text-4xl font-black tracking-tighter
-                                       text-slate-900 dark:text-white
-                                       leading-[1.05] font-display">
-                            Manage <span className="text-ember-500">Projects.</span>
-                        </h1>
-
-                        <p className="text-sm text-slate-500 dark:text-slate-500 font-medium max-w-md leading-relaxed">
-                            Connected repositories and local directories. Monitor health, tasks, and sprint activity.
-                        </p>
-                    </div>
-
-                    {/* Header right */}
+                <PageHeader
+                    icon={FolderOpen}
+                    eyebrow="Source Repositories"
+                    title="Manage Projects"
+                    subtitle="Connected repositories and local directories. Monitor health, tasks, and sprint activity."
+                    actions={
                     <div className="flex flex-col sm:flex-row md:flex-col items-start sm:items-center md:items-end gap-4 shrink-0">
                         {/* Status pills */}
                         <div className="flex items-center gap-2.5">
@@ -734,7 +720,8 @@ export const ProjectsPage: FunctionComponent = () => {
                             </button>
                         </div>
                     </div>
-                </div>
+                    }
+                />
 
                 {/* ── Filter Tab Strip ────────────────────────────────── */}
                 <div className="flex flex-wrap gap-1 p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl w-fit">

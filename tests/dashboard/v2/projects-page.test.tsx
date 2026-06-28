@@ -188,9 +188,10 @@ describe("ProjectsPage", () => {
 
   it("renders responsive layout classes for the page header", () => {
     const { container } = render(<ProjectsPage />);
-    const headerContainer = container.querySelector(".gap-6.md\\:gap-8");
+    const headerContainer = container.querySelector("header");
     expect(headerContainer).toBeInTheDocument();
-    expect(headerContainer?.className).toContain("flex-col md:flex-row");
+    expect(headerContainer?.className).toContain("flex-col");
+    expect(headerContainer?.className).toContain("sm:flex-row");
   });
 
   it("wraps filter controls and card actions on narrow screens", () => {

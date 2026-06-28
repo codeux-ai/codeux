@@ -61,7 +61,7 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
         });
       }
     }
-  }, [isVisible, isReducedMotion, enterDuration]);
+  }, [isVisible, shouldRender, isReducedMotion, enterDuration]);
 
   let icon = <WifiOff className="w-5 h-5 shrink-0" />;
   let title = "Disconnected";
@@ -89,7 +89,7 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
   return (
     <div
       ref={containerRef}
-      className={shouldRender ? `flex flex-col sm:flex-row sm:items-center gap-4 rounded-2xl border backdrop-blur-md overflow-hidden ${wrapperClass}` : "overflow-hidden"}
+      className={shouldRender ? `flex flex-col sm:flex-row sm:items-center gap-4 rounded-2xl border backdrop-blur-md overflow-hidden ${wrapperClass}` : "overflow-hidden hidden"}
       role={isUrgent ? "alert" : "status"}
       aria-live={isUrgent ? "assertive" : "polite"}
       aria-atomic="true"

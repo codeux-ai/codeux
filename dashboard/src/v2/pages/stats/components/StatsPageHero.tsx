@@ -8,6 +8,7 @@ import type {
   ProjectStatsWindow,
 } from "../../../types.js";
 import { formatDateTime, formatDuration, formatTokens, isValidCustomRange } from "../stats-utils.js";
+import { PageHeader } from "../../../components/layout/PageHeader.js";
 import {
   PANEL_CLASS,
   CHIP_CLASS,
@@ -118,16 +119,12 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
     <section className={`${PANEL_CLASS} rounded-[2.5rem] p-8 md:p-10`}>
       <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
         <div className="max-w-4xl">
-          <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-400">
-            <BarChart3 className="h-3.5 w-3.5" strokeWidth={2.2} />
-            Telemetry Atlas
-          </div>
-          <h1 className="mt-6 text-5xl font-black tracking-[-0.06em] text-slate-900 dark:text-white md:text-7xl">
-            Statistics.
-          </h1>
-          <p className="mt-3 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-            {MODE_DESCRIPTIONS[visualMode]}
-          </p>
+          <PageHeader
+            icon={BarChart3}
+            eyebrow="Telemetry Atlas"
+            title="Statistics"
+            subtitle={MODE_DESCRIPTIONS[visualMode]}
+          />
           <div className="mt-6 flex flex-wrap gap-3">
             <div className={`px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
               {selectedProject?.name || "No project selected"}

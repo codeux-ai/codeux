@@ -1,18 +1,24 @@
 import type { ComponentChildren, FunctionComponent, JSX, Ref } from "preact";
 
-const PAGE_CONTAINER_WIDTH = "max-w-[1600px] xl:max-w-[1800px]";
+// Fullscreen: containers span the full available width with no fixed cap.
+const PAGE_CONTAINER_WIDTH = "max-w-none";
+
+// Consistent horizontal rhythm across every page, with a unified top offset so
+// page intro sections all start at the same distance from the top nav.
+const PAGE_CONTAINER_X = "px-4 sm:px-6 md:px-8 lg:px-12 xl:px-16";
+const PAGE_CONTAINER_Y = "py-10 md:py-14";
 
 const pageContainerPadding = {
-  overview: "px-4 sm:px-6 md:px-8 lg:px-12 xl:px-16 py-12 md:py-24",
-  standard: "px-4 sm:px-6 md:px-8 lg:px-12 xl:px-16 py-24",
-  section: "px-4 sm:px-6 md:px-8 lg:px-12 xl:px-16 py-16",
-  stats: "px-4 sm:px-6 md:px-8 lg:px-12 xl:px-16 py-20",
-  settings: "px-4 sm:px-6 md:px-8 xl:px-12 py-16",
-  agents: "px-4 sm:px-6 md:px-8 lg:px-16 xl:px-20 py-14",
+  overview: `${PAGE_CONTAINER_X} ${PAGE_CONTAINER_Y}`,
+  standard: `${PAGE_CONTAINER_X} ${PAGE_CONTAINER_Y}`,
+  section: `${PAGE_CONTAINER_X} ${PAGE_CONTAINER_Y}`,
+  stats: `${PAGE_CONTAINER_X} ${PAGE_CONTAINER_Y}`,
+  settings: `px-4 sm:px-6 md:px-8 xl:px-12 ${PAGE_CONTAINER_Y}`,
+  agents: `${PAGE_CONTAINER_X} ${PAGE_CONTAINER_Y}`,
   browser: "px-4 sm:px-6 md:px-8 py-6",
-  workbench: "px-4 sm:px-6 md:px-8 lg:px-12 xl:px-16 py-12",
-  chat: "px-4 sm:px-6 md:px-8 lg:px-12 xl:px-16 py-12",
-  sprintsEmpty: "px-4 sm:px-6 md:px-8 lg:px-12 xl:px-16 py-12",
+  workbench: `${PAGE_CONTAINER_X} ${PAGE_CONTAINER_Y}`,
+  chat: `${PAGE_CONTAINER_X} ${PAGE_CONTAINER_Y}`,
+  sprintsEmpty: `${PAGE_CONTAINER_X} ${PAGE_CONTAINER_Y}`,
   none: "",
 } as const;
 

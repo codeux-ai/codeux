@@ -505,7 +505,8 @@ describe("UI Components Coverage", () => {
     const element = container.firstChild as HTMLElement;
     expect(element).toBeDefined();
     expect(element.className).toContain("px-4");
-    expect(element.className).toContain("py-12");
+    expect(element.className).toContain("py-10");
+    expect(element.className).toContain("md:py-14");
     expect(element.className).toContain("md:px-8");
     expect(element.className).toContain("sm:px-6");
     expect(element.className).not.toContain("py-6");
