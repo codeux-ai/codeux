@@ -1,4 +1,5 @@
 import type { ComponentChildren, FunctionComponent } from "preact";
+import { toChildArray } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
@@ -59,7 +60,11 @@ export const SkeletonLoader: FunctionComponent<{
             show ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
           }`}
         >
-          {skeleton || children}
+          {toChildArray(skeleton || children).map((child, index) => (
+            <div key={index} style={{ "--shimmer-delay": `${Math.min(index * 150, 450)}ms` } as React.CSSProperties}>
+              {child}
+            </div>
+          ))}
         </div>
       )}
       {renderChildren && children && (
