@@ -216,8 +216,9 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
                                                         onClick={() => getPendingActionState(pendingActionIds, claimActionId) === "idle" && onClaimAttentionItem(snapshot.projectId!, item.id)}
                                                         {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, claimActionId) === "pending", false)}
                                                         className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-500 transition-colors hover:bg-signal-500/15 aria-disabled:opacity-50"
+                                                        aria-label={"Claim attention item: " + item.title}
                                                     >
-                                                        <Bot className={`h-3 w-3 ${getPendingActionState(pendingActionIds, claimActionId) === "pending" ? "animate-pulse" : ""}`} strokeWidth={2} />
+                                                        <Bot className={`h-3 w-3 ${getPendingActionState(pendingActionIds, claimActionId) === "pending" ? "motion-safe:animate-pulse" : ""}`} strokeWidth={2} />
                                                         {getPendingActionState(pendingActionIds, claimActionId) === "pending" ? "Claiming" : "Claim"}
                                                         {getPendingActionState(pendingActionIds, claimActionId) === "pending" && <span className="sr-only">Claiming...</span>}
                                                     </button>
@@ -228,8 +229,9 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
                                                         onClick={() => getPendingActionState(pendingActionIds, resolveActionId) === "idle" && onResolveAttentionItem(snapshot.projectId!, item.id)}
                                                         {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, resolveActionId) === "pending", false)}
                                                         className="inline-flex items-center gap-1.5 rounded-full border border-status-green/20 bg-status-green/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-status-green transition-colors hover:bg-status-green/15 aria-disabled:opacity-50"
+                                                        aria-label={"Resolve attention item: " + item.title}
                                                     >
-                                                        <CheckCircle2 className={`h-3 w-3 ${getPendingActionState(pendingActionIds, resolveActionId) === "pending" ? "animate-spin" : ""}`} strokeWidth={2} />
+                                                        <CheckCircle2 className={`h-3 w-3 ${getPendingActionState(pendingActionIds, resolveActionId) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} />
                                                         {getPendingActionState(pendingActionIds, resolveActionId) === "pending" ? "Resolving" : "Resolve"}
                                                         {getPendingActionState(pendingActionIds, resolveActionId) === "pending" && <span className="sr-only">Resolving...</span>}
                                                     </button>
@@ -240,8 +242,9 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
                                                         onClick={() => getPendingActionState(pendingActionIds, dismissActionId) === "idle" && onDismissAttentionItem(snapshot.projectId!, item.id)}
                                                         {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, dismissActionId) === "pending", false)}
                                                         className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-black/[0.03] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-black/[0.05] aria-disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:bg-white/[0.05]"
+                                                        aria-label={"Dismiss attention item: " + item.title}
                                                     >
-                                                        <XCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, dismissActionId) === "pending" ? "animate-spin" : ""}`} strokeWidth={2} />
+                                                        <XCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, dismissActionId) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} />
                                                         {getPendingActionState(pendingActionIds, dismissActionId) === "pending" ? "Dismissing" : "Dismiss"}
                                                         {getPendingActionState(pendingActionIds, dismissActionId) === "pending" && <span className="sr-only">Dismissing...</span>}
                                                     </button>

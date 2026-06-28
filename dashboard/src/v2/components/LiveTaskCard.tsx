@@ -70,7 +70,7 @@ export const QuotaCountdown: FunctionComponent<{ errorMessage: string }> = memo(
     }
 
     return (
-        <div className="flex items-center gap-2 text-status-amber">
+        <div className="flex items-center gap-2 text-status-amber" role="status" aria-live="polite">
             <Clock className="w-3 h-3 flex-shrink-0" strokeWidth={2} />
             <span>
                 {remaining <= 0
@@ -350,7 +350,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                                 {/* Status badge */}
                                 <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.14em] ${cfg.bg} ${cfg.text} border ${cfg.border}`}>
                                     <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${cfg.dot}`} />
-                                    {cfg.label}
+                                    <span className="sr-only">Task status: </span>{cfg.label}
                                 </span>
                                 {mergeCfg && taskPhase !== "RUNNING" && taskPhase !== "PENDING" && (
                                     <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.14em] ${mergeCfg.bg} ${mergeCfg.text} border ${mergeCfg.border}`}>

@@ -22,7 +22,7 @@ export const TelemetryStats: FunctionComponent<TelemetryStatsProps> = ({ project
             <div className="flex items-center gap-2 px-2.5">
                 <span className="relative flex h-2 w-2">
                     {runningCount > 0 && (
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                        <span className="absolute inline-flex h-full w-full motion-safe:animate-ping rounded-full bg-emerald-400 opacity-75" />
                     )}
                     <span className={`relative inline-flex h-2 w-2 rounded-full ${runningCount > 0 ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"}`} />
                 </span>

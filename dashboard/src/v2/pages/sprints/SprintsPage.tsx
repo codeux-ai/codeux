@@ -203,6 +203,7 @@ export const SprintsPage: FunctionComponent = () => {
     handleDeleteQuicksprintTemplate,
     feedback,
     clearFeedback,
+    clearError,
     refreshSprints,
     refreshExecution,
     handleSprintToggle,
@@ -474,6 +475,7 @@ export const SprintsPage: FunctionComponent = () => {
             status={feedback.status}
             message={feedback.message}
             onDismiss={clearFeedback}
+            clearError={clearError}
           />
           {selectedProject && (
             <div className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${

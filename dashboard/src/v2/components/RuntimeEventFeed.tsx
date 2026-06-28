@@ -57,7 +57,7 @@ const RuntimeEventFeed: FunctionComponent<{ events?: ExecutionRuntimeEventSummar
     }
 
     return (
-        <div ref={feedRef} className="max-h-64 overflow-y-auto pr-2 dashboard-scrollbar space-y-1" aria-live="polite">
+        <div ref={feedRef} className="max-h-64 overflow-y-auto pr-2 dashboard-scrollbar space-y-1" aria-live="polite" role="log" aria-label="Runtime feed">
             {events.map((event) => {
                 const cfg = getOriginatorCfg(event.originator || "system");
                 const isError = event.eventType.toLowerCase().includes("error") || event.eventType.toLowerCase().includes("fail");

@@ -8,6 +8,7 @@ import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import type { ConfirmDialogOptions } from "../../hooks/use-confirm-dialog.js";
 
 import { Loader2, AlertTriangle } from "lucide-preact";
+import { Overlay } from "./Overlay.js";
 
 function DestructiveConfirmButton({
   onConfirm,
@@ -22,11 +23,12 @@ function DestructiveConfirmButton({
 }) {
   const [isHolding, setIsHolding] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [isShaking, setIsShaking] = useState(false);
   const reducedMotion = useReducedMotion();
 
   const holdDuration = 1000;
   const holdTimerRef = useRef<number | null>(null);
+  const holdButtonRef = useRef<HTMLButtonElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<number | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
@@ -45,7 +47,10 @@ function DestructiveConfirmButton({
     if (isHolding || isLoading) return;
     setIsHolding(true);
     setProgress(0);
-    setIsShaking(false);
+    if (barRef.current) {
+      gsap.killTweensOf(barRef.current);
+      barRef.current.style.width = '0%';
+    }
     startTimeRef.current = performance.now();
 
     const updateProgress = (currentTime: number) => {
@@ -55,6 +60,13 @@ function DestructiveConfirmButton({
       const newProgress = Math.min(100, (elapsed / holdDuration) * 100);
 
       setProgress(newProgress);
+      if (barRef.current) {
+        if (reducedMotion) {
+          barRef.current.style.width = `${newProgress}%`;
+        } else {
+          gsap.to(barRef.current, { width: `${newProgress}%`, duration: 0.12, ease: "power2.out", overwrite: true });
+        }
+      }
 
       if (elapsed < holdDuration) {
         animationFrameRef.current = requestAnimationFrame(updateProgress);
@@ -66,17 +78,28 @@ function DestructiveConfirmButton({
     holdTimerRef.current = window.setTimeout(() => {
       setIsHolding(false);
       setProgress(100);
+      if (barRef.current) {
+        barRef.current.style.width = '100%';
+      }
       onConfirm();
     }, holdDuration);
   };
 
   const cancelHold = () => {
     if (isHolding) {
-      setIsShaking(true);
-      setTimeout(() => setIsShaking(false), 400);
+      if (!reducedMotion && holdButtonRef.current) {
+        gsap.to(holdButtonRef.current, {
+          keyframes: [{ x: -6, duration: 0.05 }, { x: 5, duration: 0.06 }, { x: -4, duration: 0.07 }, { x: 3, duration: 0.06 }, { x: -2, duration: 0.05 }, { x: 0, duration: 0.04 }],
+          ease: "none"
+        });
+      }
     }
     setIsHolding(false);
     setProgress(0);
+    if (barRef.current) {
+      gsap.killTweensOf(barRef.current);
+      barRef.current.style.width = '0%';
+    }
     clearTimers();
     startTimeRef.current = null;
   };
@@ -124,6 +147,7 @@ function DestructiveConfirmButton({
 
   return (
     <button
+      ref={holdButtonRef}
       type="button"
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
@@ -132,7 +156,7 @@ function DestructiveConfirmButton({
       onPointerLeave={handlePointerLeave}
       onPointerCancel={handlePointerCancel}
       onContextMenu={(e) => e.preventDefault()}
-      className={`relative overflow-hidden ${className} ${isShaking && !reducedMotion ? "animate-shake" : ""}`}
+      className={`relative overflow-hidden ${className}`}
       style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
       aria-busy={isLoading}
       aria-live="polite"
@@ -140,8 +164,9 @@ function DestructiveConfirmButton({
     >
       {isHolding && (
         <div
-          className="absolute inset-0 bg-black/20 dark:bg-white/20 origin-left transition-transform duration-100"
-          style={{ transform: `scaleX(${progress / 100})` }}
+          ref={barRef}
+          className="absolute inset-0 bg-black/20 dark:bg-white/20 origin-left"
+          style={{ width: "0%" }}
         />
       )}
 
@@ -158,29 +183,18 @@ interface ConfirmDialogProps {
   options: ConfirmDialogOptions | null;
   onConfirm: () => void | Promise<void>;
   onCancel: () => void;
-  triggerRef?: { current: HTMLElement | null };
 }
 
-export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, triggerRef }: ConfirmDialogProps) {
+export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmDialogProps) {
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [isClosing, setIsClosing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [confirmFlash, setConfirmFlash] = useState(false);
 
-  const backdropRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  const fallbackTriggerRef = useRef<HTMLElement | null>(null);
-  const trapRef = useFocusTrap(shouldRender && !isClosing, { onClose: () => handleClose(onCancel), restoreFocus: false });
+  const trapRef = useFocusTrap(shouldRender && !isClosing, { onClose: () => handleClose(onCancel), restoreFocus: true });
   const reducedMotion = useReducedMotion();
   const gsapTokens = useGsapInteractionTokens();
-
-  const actualTriggerRef = triggerRef || fallbackTriggerRef;
-
-  useLayoutEffect(() => {
-    if (isOpen && !shouldRender) {
-      actualTriggerRef.current = document.activeElement as HTMLElement | null;
-    }
-  }, [isOpen, shouldRender, actualTriggerRef]);
 
   useEffect(() => {
     if (isOpen) {
@@ -193,12 +207,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, triggerRef
 
   useLayoutEffect(() => {
     if (shouldRender && !isClosing) {
-      const d_backdrop = reducedMotion ? 0 : gsapTokens.enterExit.duration;
       const d_card = reducedMotion ? 0 : gsapTokens.enterExit.duration;
-
-      if (backdropRef.current) {
-        gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: MODAL_MOTION.backdrop.ease });
-      }
 
       if (cardRef.current) {
         gsap.fromTo(cardRef.current,
@@ -231,18 +240,9 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, triggerRef
     if (isClosing) {
       const d = reducedMotion ? 0 : gsapTokens.enterExit.duration;
 
-      if (cardRef.current) {
-        gsap.to(cardRef.current, { y: MODAL_MOTION.exit.yEnd, opacity: MODAL_MOTION.exit.opacityEnd, scale: MODAL_MOTION.exit.scaleEnd, filter: MODAL_MOTION.exit.filterEnd, duration: d, ease: gsapTokens.enterExit.ease });
-      }
-
       const onExitComplete = () => {
         setShouldRender(false);
         setIsClosing(false);
-
-        if (actualTriggerRef.current) {
-          actualTriggerRef.current.focus();
-          actualTriggerRef.current = null;
-        }
 
         if (pendingCallback.current) {
           pendingCallback.current();
@@ -250,27 +250,32 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, triggerRef
         }
       };
 
-      if (backdropRef.current) {
-        gsap.to(backdropRef.current, {
-          opacity: 0,
+      if (cardRef.current) {
+        gsap.to(cardRef.current, {
+          y: MODAL_MOTION.exit.yEnd,
+          opacity: MODAL_MOTION.exit.opacityEnd,
+          scale: MODAL_MOTION.exit.scaleEnd,
+          filter: MODAL_MOTION.exit.filterEnd,
           duration: d,
-          delay: reducedMotion ? 0 : 0.05,
+          ease: gsapTokens.enterExit.ease,
           onComplete: onExitComplete
         });
       } else {
         onExitComplete();
       }
     }
-  }, [isClosing, reducedMotion, actualTriggerRef]);
+  }, [isClosing, reducedMotion]);
 
   if (!shouldRender || !options) return null;
 
   const { title, body, confirmLabel = "Confirm", cancelLabel = "Cancel", destructive = false } = options;
 
   return (
-    <div
-      ref={backdropRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-void-900/50 backdrop-blur-sm p-4"
+    <Overlay
+      isOpen={!isClosing}
+      intent="destructive"
+      className="p-4"
+      blur
     >
       <div
         ref={(el) => {
@@ -282,16 +287,18 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, triggerRef
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
-        aria-describedby="confirm-dialog-body"
+        aria-describedby={body ? "confirm-dialog-body" : undefined}
         className="bg-white dark:bg-void-800 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-black/[0.08] dark:border-white/[0.08] flex flex-col"
       >
         <div className="p-6 pb-4">
           <h2 id="confirm-dialog-title" className="text-xl font-semibold text-void-900 dark:text-white">
             {title}
           </h2>
-          <p id="confirm-dialog-body" className="mt-3 text-sm text-void-600 dark:text-void-300">
-            {body}
-          </p>
+          {body && (
+            <p id="confirm-dialog-body" className="mt-3 text-sm text-void-600 dark:text-void-300">
+              {body}
+            </p>
+          )}
           {destructive && (
             <div className="mt-4 p-3 bg-status-red/10 border border-status-red/20 rounded-lg">
               <p className="text-xs font-medium text-status-red">
@@ -330,6 +337,6 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, triggerRef
           )}
         </div>
       </div>
-    </div>
+    </Overlay>
   );
 }

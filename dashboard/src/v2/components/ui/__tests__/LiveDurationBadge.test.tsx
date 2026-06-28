@@ -17,7 +17,12 @@ describe("LiveDurationBadge", () => {
     expect(badge.className).toContain("tabular-nums");
 
     // Ensure the text itself renders.
-    expect(container.textContent).toBe("00:01:05");
+    expect(container.textContent).toBe("Live duration: 00:01:05");
+
+    // Verify sr-only text
+    const srOnly = container.querySelector(".sr-only");
+    expect(srOnly).not.toBeNull();
+    expect(srOnly?.textContent).toBe("Live duration: ");
   });
 
   it("handles empty or null durationText", () => {

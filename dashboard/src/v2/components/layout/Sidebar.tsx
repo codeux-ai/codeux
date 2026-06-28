@@ -143,7 +143,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
         )}
         <aside
             id="primary-navigation"
-            aria-label={isMobile && isOpen ? "Navigation menu" : undefined}
+            aria-label="Primary navigation"
             role={isMobile && isOpen ? "dialog" : undefined}
             aria-modal={isMobile && isOpen ? "true" : undefined}
             tabIndex={-1}

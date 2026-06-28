@@ -437,8 +437,8 @@ describe("AddTaskModal Lifecycle", () => {
       <AddTaskModal {...defaultProps} onSubmit={mockOnSubmit} />
     );
 
-    const sprintSelect = getByLabelText("Sprint");
-    const titleInput = getByLabelText("Title");
+    const sprintSelect = getByLabelText(/Sprint/i);
+    const titleInput = getByLabelText(/Title/i);
 
     fireEvent.input(sprintSelect, { target: { value: "SPR-1" } });
     fireEvent.input(titleInput, { target: { value: "A valid title" } });
@@ -467,8 +467,8 @@ describe("AddTaskModal Lifecycle", () => {
       <AddTaskModal {...defaultProps} onSubmit={mockOnSubmit} />
     );
 
-    const sprintSelect = getByLabelText("Sprint");
-    const titleInput = getByLabelText("Title");
+    const sprintSelect = getByLabelText(/Sprint/i);
+    const titleInput = getByLabelText(/Title/i);
 
     fireEvent.input(sprintSelect, { target: { value: "SPR-1" } });
     fireEvent.input(titleInput, { target: { value: "A valid title" } });
@@ -484,10 +484,10 @@ describe("AddTaskModal Lifecycle", () => {
       expect(getByText("API Error 500")).toBeInTheDocument();
     });
 
-    const errorRegion = getByRole("alert");
+    const errorRegion = getByText("Failed");
     expect(errorRegion).toBeInTheDocument();
 
-    const dismissBtn = getByRole("button", { name: "Dismiss" });
+    const dismissBtn = getByRole("button", { name: "Dismiss error" });
 
     // Explicitly focus it to ensure focus behavior is correctly represented
     dismissBtn.focus();

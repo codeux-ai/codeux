@@ -82,7 +82,7 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
     iconClass = "text-status-red";
     isUrgent = true;
   } else if (transportState === "reconnecting") {
-    icon = <RefreshCcw className="w-5 h-5 shrink-0 animate-spin" />;
+    icon = <RefreshCcw className="w-5 h-5 shrink-0 motion-safe:animate-spin" />;
     title = "Reconnecting";
     message = "Attempting to restore connection...";
     wrapperClass = "bg-status-amber/10 border-status-amber/20 text-status-amber";

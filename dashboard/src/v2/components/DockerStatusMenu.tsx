@@ -197,14 +197,14 @@ export const DockerStatusMenu: FunctionComponent = () => {
                     id={menuId}
                     aria-modal="true"
                     aria-label="Active Docker Containers"
-                    className="absolute right-0 top-full mt-2 w-80 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50 flex flex-col"
+                    className="fixed inset-x-4 top-[72px] md:inset-auto md:absolute md:top-full md:right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50 flex flex-col"
                 >
                     <div className="px-4 py-3 border-b border-black/[0.04] dark:border-white/[0.04] flex items-center justify-between shrink-0">
                         <span className="text-xs font-bold uppercase tracking-[0.1em] text-slate-800 dark:text-slate-200">
                             Docker Containers
                         </span>
                         <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-black/[0.03] dark:bg-white/[0.03]">
-                            <span className={`w-1.5 h-1.5 rounded-full ${clusterNotReady ? "bg-status-amber" : "bg-signal-500 animate-pulse"}`} />
+                            <span className={`w-1.5 h-1.5 rounded-full ${clusterNotReady ? "bg-status-amber" : "bg-signal-500 motion-safe:animate-pulse"}`} />
                             <span className="text-[10px] font-mono font-medium text-slate-500 dark:text-slate-400">
                                 {clusterNotReady ? "Not Ready" : `${activeContainers.length} Active`}
                             </span>

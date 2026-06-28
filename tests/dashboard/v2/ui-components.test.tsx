@@ -98,7 +98,7 @@ describe("UI Components Coverage", () => {
       fireEvent.click(btn);
       fireEvent.click(btn);
 
-      expect(screen.getAllByText("Test message")).toHaveLength(4);
+      expect(screen.getAllByText("Test message")).toHaveLength(8);
       act(() => { vi.advanceTimersByTime(500); });
       vi.useRealTimers();
     });
@@ -122,10 +122,10 @@ describe("UI Components Coverage", () => {
 
       const btn = screen.getByText("Add Error");
       fireEvent.click(btn);
-      expect(screen.getByText("Error message")).toBeInTheDocument();
+      expect(screen.getAllByText("Error message")[0]).toBeInTheDocument();
 
       act(() => { vi.advanceTimersByTime(10000); });
-      expect(screen.getByText("Error message")).toBeInTheDocument();
+      expect(screen.getAllByText("Error message")[0]).toBeInTheDocument();
       vi.useRealTimers();
     });
 

@@ -361,7 +361,7 @@ const DagNode = memo(({ node, dispatch, onNodeClick }: { node: SprintDagNodeMode
                 style={{ backgroundColor: tone.accent, boxShadow: `0 0 18px ${tone.accent}70` }}
               >
                 {(node.phase === "RUNNING" || node.phase === "CODING_COMPLETED") && (
-                  <span className="absolute inset-0 rounded-full bg-current opacity-50 animate-ping" />
+                  <span className="absolute inset-0 rounded-full bg-current opacity-50 motion-safe:animate-ping" />
                 )}
               </div>
             </div>
@@ -586,7 +586,7 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
             </div>
             <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-signal-600 dark:text-signal-300">
-                <span className="h-2 w-2 rounded-full bg-signal-500 animate-pulse" />
+                <span className="h-2 w-2 rounded-full bg-signal-500 motion-safe:animate-pulse" />
                 Running
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-cyan-600 dark:text-cyan-300">

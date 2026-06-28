@@ -316,4 +316,18 @@ describe("KanbanTaskCard Integration", () => {
        expect(indicatorIcon).toHaveAttribute("aria-hidden", "true");
     }
   });
+
+  it("provides accurate drag-and-drop screen-reader guidance", async () => {
+    const { useReducedMotion } = await import("../../../hooks/use-reduced-motion.js");
+    vi.mocked(useReducedMotion).mockReturnValue(false);
+    const { getByText } = render(<KanbanTaskCard viewModel={mockViewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    const kbdGuidance = document.getElementById(`task-card-kbd-${mockViewModel.task.recordId}`);
+    expect(kbdGuidance).toBeInTheDocument();
+    expect(kbdGuidance).toHaveTextContent(/Keyboard reordering is not supported/i);
+  });
+
+  it("provides task titles in action button accessible labels", () => {
+    const { getByRole } = render(<KanbanTaskCard viewModel={mockViewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    expect(getByRole('button', { name: /Edit task TASK-123: Implement new feature/i })).toBeInTheDocument();
+  });
 });

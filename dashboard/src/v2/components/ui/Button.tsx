@@ -5,7 +5,7 @@ import { Check, X, Loader2 } from "lucide-preact";
 import gsap from "gsap";
 import { useActionFeedback } from "../../hooks/use-action-feedback.js";
 import { useMagnetic } from "../../hooks/use-magnetic.js";
-import { useGsapDurations, GSAP_EASINGS, GSAP_INTERACTION_TOKENS, useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { useGsapDurations, GSAP_DURATIONS, GSAP_EASINGS, GSAP_INTERACTION_TOKENS, useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
@@ -61,6 +61,8 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   const contentRef = useRef<HTMLDivElement>(null);
   const iconContainerRef = useRef<HTMLDivElement>(null);
   const fixedWidthRef = useRef<number | null>(null);
+  const labelRef = useRef<HTMLSpanElement>(null);
+  const spinnerRef = useRef<HTMLDivElement>(null);
 
   useMagnetic(buttonRef, contentRef, { enabled: variant === "primary" || variant === "signal" });
 
@@ -76,12 +78,10 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
 
   const previousState = useRef({ isPending, isSuccess, isError });
   useLayoutEffect(() => {
-    if (!iconContainerRef.current) return;
-
     const prev = previousState.current;
 
-    // Only animate if a state has changed
-    if (prev.isPending !== isPending || prev.isSuccess !== isSuccess || prev.isError !== isError) {
+    // Animate original icon container (if any)
+    if (iconContainerRef.current && (prev.isPending !== isPending || prev.isSuccess !== isSuccess || prev.isError !== isError)) {
       const activeIcon = iconContainerRef.current.querySelector('[data-active="true"]');
       if (activeIcon) {
         gsap.fromTo(
@@ -89,6 +89,75 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
           { x: -4, scale: 0.6, opacity: 0 },
           { x: 0, scale: 1, opacity: 1, duration: gsapTokens.controlFeedback.duration, ease: "power2.out", clearProps: "all" }
         );
+      }
+    }
+
+    if (!reducedMotion) {
+      if (isPending && !prev.isPending) {
+        if (labelRef.current && spinnerRef.current) {
+          gsap.to(labelRef.current, { opacity: 0, duration: durations.fast, ease: GSAP_EASINGS.smooth });
+          gsap.fromTo(
+            spinnerRef.current,
+            { opacity: 0, scale: 0.7 },
+            { opacity: 1, scale: 1, duration: durations.fast, ease: GSAP_EASINGS.spring }
+          );
+        }
+      }
+
+      if (isSuccess && !prev.isSuccess) {
+        if (labelRef.current && spinnerRef.current) {
+          gsap.to(labelRef.current, { opacity: 1, duration: durations.fast, ease: GSAP_EASINGS.smooth });
+          gsap.to(spinnerRef.current, { opacity: 0, scale: 0.7, duration: durations.fast, ease: GSAP_EASINGS.smooth });
+        }
+        if (buttonRef.current) {
+          if (gsap.timeline) {
+            const tl = gsap.timeline();
+            tl.to(buttonRef.current, {
+              boxShadow: "0 0 0 6px rgba(var(--accent-primary-rgb), 0.3)",
+              duration: 0.2,
+              ease: "power2.out",
+            }).to(buttonRef.current, {
+              boxShadow: "0 0 0 0px rgba(var(--accent-primary-rgb), 0)",
+              duration: 0.2,
+              ease: "power2.in",
+            });
+          } else {
+             gsap.to(buttonRef.current, {
+              boxShadow: "0 0 0 6px rgba(var(--accent-primary-rgb), 0.3)",
+              duration: 0.2,
+              ease: "power2.out",
+            });
+          }
+        }
+      }
+
+      if (isError && !prev.isError) {
+        if (labelRef.current && spinnerRef.current) {
+          gsap.to(labelRef.current, { opacity: 1, duration: durations.fast, ease: GSAP_EASINGS.smooth });
+          gsap.to(spinnerRef.current, { opacity: 0, scale: 0.7, duration: durations.fast, ease: GSAP_EASINGS.smooth });
+        }
+        if (buttonRef.current) {
+          gsap.to(buttonRef.current, {
+            keyframes: [{ x: -5 }, { x: 4 }, { x: -3 }, { x: 2 }, { x: 0 }],
+            duration: 0.3,
+            ease: "none",
+          });
+        }
+      }
+
+      if (!isPending && !isSuccess && !isError && (prev.isPending || prev.isSuccess || prev.isError)) {
+        // Restore label when returning to idle
+        if (labelRef.current && spinnerRef.current) {
+          gsap.to(labelRef.current, { opacity: 1, duration: durations.fast, ease: GSAP_EASINGS.smooth });
+          gsap.to(spinnerRef.current, { opacity: 0, duration: durations.fast, ease: GSAP_EASINGS.smooth });
+        }
+      }
+    } else {
+      // If reduced motion, just ensure visibility states immediately without animation
+      if (labelRef.current && spinnerRef.current) {
+        labelRef.current.style.opacity = isPending ? "0" : "1";
+        spinnerRef.current.style.opacity = isPending ? "1" : "0";
+        spinnerRef.current.style.transform = isPending ? "scale(1)" : "scale(0.7)";
       }
     }
 
@@ -123,9 +192,10 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   const variantClasses = VARIANTS[variant];
   const sizeClasses = SIZES[size];
 
-  let overrideClasses = "";
+    let overrideClasses = "";
   if (isSuccess) overrideClasses = "!bg-status-green !text-white !border-status-green ring-2 ring-status-green ring-offset-2 ring-offset-white dark:ring-offset-void-900";
   else if (isError) overrideClasses = "!bg-status-red !text-white !border-transparent";
+  if (isPending) overrideClasses += " pointer-events-none";
 
   return (
     <button
@@ -138,27 +208,27 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
       aria-busy={isPending}
       className={`${baseClasses} ${variantClasses} ${sizeClasses} ${overrideClasses} relative overflow-hidden ${className}`}
     >
+
       <div ref={contentRef} className={`flex items-center justify-center gap-2`}>
-        {(Icon || isPending || isSuccess || isError) && (
+        {(Icon || isSuccess || isError) && (
           <div ref={iconContainerRef} className="relative flex items-center justify-center w-4 h-4 shrink-0">
             <div data-active={!isPending && !isSuccess && !isError} className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${isPending || isSuccess || isError ? "scale-0 opacity-0 pointer-events-none" : "scale-100 opacity-100"}`}>
               {Icon && <Icon className="w-4 h-4" aria-hidden="true" />}
             </div>
-
-            <div key={`pending-${feedback.status}`} data-active={isPending} className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${isPending ? "scale-100 opacity-100" : "scale-0 opacity-0 pointer-events-none"}`}>
-              <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-            </div>
-
             <div key={`success-${feedback.status}`} data-active={isSuccess} className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${isSuccess ? "scale-100 opacity-100" : "scale-0 opacity-0 pointer-events-none"}`}>
               <Check className="w-4 h-4" strokeWidth={3} aria-hidden="true" />
             </div>
-
             <div key={`error-${feedback.status}`} data-active={isError} className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${isError ? "scale-100 opacity-100" : "scale-0 opacity-0 pointer-events-none"}`}>
               <X className="w-4 h-4" strokeWidth={3} aria-hidden="true" />
             </div>
           </div>
         )}
-        {children}
+        <div className="relative flex items-center justify-center">
+          <span ref={labelRef} className="flex items-center justify-center gap-2" style={{ opacity: isPending ? 0 : 1 }}>{children}</span>
+          <div ref={spinnerRef} className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ opacity: isPending ? 1 : 0, transform: isPending ? "scale(1)" : "scale(0.7)" }}>
+            <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+          </div>
+        </div>
       </div>
     </button>
   );

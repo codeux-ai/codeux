@@ -29,9 +29,9 @@
 
   @media (prefers-reduced-motion: reduce) {
     :root {
-      --motion-fast: 0.01ms;
-      --motion-standard: 0.01ms;
-      --motion-slow: 0.01ms;
+      --motion-fast: 0.001s;
+      --motion-standard: 0.001s;
+      --motion-slow: 0.001s;
       --transition-hover: none;
       --transition-enter: none;
       --transition-exit: none;
@@ -44,9 +44,9 @@
   }
 
   :root[data-reduced-motion="true"] {
-    --motion-fast: 0.01ms;
-    --motion-standard: 0.01ms;
-    --motion-slow: 0.01ms;
+    --motion-fast: 0.001s;
+    --motion-standard: 0.001s;
+    --motion-slow: 0.001s;
     --transition-hover: none;
     --transition-enter: none;
     --transition-exit: none;

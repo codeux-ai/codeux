@@ -53,9 +53,10 @@ describe("MemoryFilters Accessibility", () => {
             />
         );
 
-        expect(getByRole("combobox", { name: "Select sprint" })).toBeInTheDocument();
-        expect(getByRole("combobox", { name: "Select agent preset" })).toBeInTheDocument();
+        expect(getByRole("combobox", { name: "Filter memory by Sprint" })).toBeInTheDocument();
+        expect(getByRole("combobox", { name: "Filter memory by Agent Preset" })).toBeInTheDocument();
     });
+
     test("tab keyboard navigation works", async () => {
         activeTierSignal.value = "short_term";
         const { getByRole } = render(
@@ -82,6 +83,31 @@ describe("MemoryFilters Accessibility", () => {
         await fireEvent.keyDown(longTermTab, { key: "ArrowLeft", code: "ArrowLeft" });
         expect(activeTierSignal.value).toBe("short_term");
         expect(document.activeElement).toBe(shortTermTab);
+
+        await fireEvent.keyDown(shortTermTab, { key: "End", code: "End" });
+        expect(activeTierSignal.value).toBe("long_term");
+        expect(document.activeElement).toBe(longTermTab);
+
+        await fireEvent.keyDown(longTermTab, { key: "Home", code: "Home" });
+        expect(activeTierSignal.value).toBe("short_term");
+        expect(document.activeElement).toBe(shortTermTab);
     });
 
+    test("Danger mode toggle uses aria-pressed", async () => {
+        const { getByRole } = render(
+            <MemoryFilters
+                stats={{ sprint: 5, agent: 2, project: 10, activeModel: "test", staleEmbeddings: 0 }}
+                sprints={[]}
+                agentPresets={[]}
+                showModels={false}
+                setShowModels={() => {}}
+                setShowAddModal={() => {}}
+                lobotomize={true}
+                handleLobotomizeToggle={() => {}}
+            />
+        );
+
+        const toggleBtn = getByRole("button", { name: "Toggle Danger Delete Mode" });
+        expect(toggleBtn).toHaveAttribute("aria-pressed", "true");
+    });
 });

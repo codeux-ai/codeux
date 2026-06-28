@@ -196,7 +196,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
       ref={bubbleRef}
       onMouseEnter={handleHoverEnter}
       onMouseLeave={handleHoverLeave}
-      className={`group relative flex h-72 w-72 shrink-0 cursor-pointer items-center justify-center perspective-1000 lg:h-80 lg:w-80`}
+      className={`group relative flex h-72 w-72 shrink-0 cursor-pointer items-center justify-center perspective-1000 lg:h-80 lg:w-80 transition-[box-shadow,transform] duration-150 [@media(hover:hover)]:hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)] [@media(hover:hover)]:hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:transform-none`}
     >
       <div
         className={`pointer-events-none absolute inset-0 rounded-[1.75rem] shadow-[0_24px_48px_rgba(0,0,0,0.07)] transition-all duration-700 dark:shadow-[0_24px_48px_rgba(0,0,0,0.5)] ${animationClass} ${isCompleted ? "opacity-80" : ""}`}

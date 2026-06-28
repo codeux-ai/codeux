@@ -2,6 +2,8 @@
  * @vitest-environment jsdom
  */
 import { render, screen } from "@testing-library/preact";
+import * as matchers from "@testing-library/jest-dom/matchers";
+expect.extend(matchers);
 import { describe, expect, it } from "vitest";
 import { TaskRow } from "../../../dashboard/src/v2/components/ui/TaskRow.js";
 import type { Task } from "../../../dashboard/src/v2/types.js";
@@ -42,5 +44,9 @@ describe("TaskRow QA review indicator", () => {
 
     expect(screen.getByLabelText("QA review details")).toBeTruthy();
     expect(screen.getByText("QA")).toBeTruthy();
+
+    const statusElement = document.querySelector('div[aria-live="polite"]');
+    expect(statusElement).toBeInTheDocument();
+    expect(statusElement).toHaveTextContent(/Task T1 status is now coding completed/i);
   });
 });

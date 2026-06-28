@@ -18,6 +18,7 @@ interface PopoverProps {
   onOpenChange: (open: boolean) => void;
   triggerRef?: RefObject<HTMLElement>;
   isTooltip?: boolean;
+  ariaLabel?: string;
 }
 
 export const Popover = ({
@@ -31,6 +32,7 @@ export const Popover = ({
   onOpenChange,
   triggerRef: externalTriggerRef,
   isTooltip = false,
+  ariaLabel,
 }: PopoverProps) => {
   const focusTrapRef = useFocusTrap(!isTooltip && isOpen, { onClose: () => onOpenChange(false), restoreFocus: true });
   const isReducedMotion = useReducedMotion();
@@ -174,11 +176,38 @@ export const Popover = ({
           "aria-haspopup": isTooltip ? ("true" as const) : ("dialog" as const),
           "aria-expanded": isOpen,
           "aria-controls": isOpen ? popoverId : undefined,
+          "aria-label": (children.props as any)["aria-label"],
+          disabled: (children.props as any).disabled,
           onClick: (e: MouseEvent) => {
-            onOpenChange(!isOpen);
+            if (!(children.props as any).disabled) {
+              onOpenChange(!isOpen);
+            }
             (children.props as any).onClick?.(e);
           },
-          ref: externalTriggerRef ? undefined : (localTriggerRef as unknown as any),
+          onKeyDown: (e: KeyboardEvent) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+               if (!externalTriggerRef) {
+                 e.preventDefault();
+                 if (!(children.props as any).disabled) {
+                   onOpenChange(!isOpen);
+                 }
+               }
+            }
+            (children.props as any).onKeyDown?.(e);
+          },
+          ref: (node: any) => {
+            if (externalTriggerRef) {
+              if (typeof externalTriggerRef === 'function') (externalTriggerRef as any)(node);
+              else (externalTriggerRef as any).current = node;
+            } else {
+              (localTriggerRef as any).current = node;
+            }
+            const childRef = (children as any).ref;
+            if (childRef) {
+              if (typeof childRef === 'function') childRef(node);
+              else childRef.current = node;
+            }
+          },
         })
       ) : (
       <button
@@ -186,6 +215,12 @@ export const Popover = ({
         ref={externalTriggerRef ? undefined : localTriggerRef}
         className="inline-flex cursor-pointer text-left"
         onClick={() => onOpenChange(!isOpen)}
+        onKeyDown={(e) => {
+          if (!externalTriggerRef && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            onOpenChange(!isOpen);
+          }
+        }}
         aria-haspopup={isTooltip ? "true" : "dialog"}
         aria-expanded={isOpen}
         aria-controls={isOpen ? popoverId : undefined}
@@ -207,6 +242,7 @@ export const Popover = ({
               }
             }}
             role={isTooltip ? "tooltip" : "dialog"}
+            aria-label={ariaLabel || (!isTooltip ? "Dialog" : undefined)}
             tabIndex={-1}
             className={`fixed z-[9999] bg-white dark:bg-void-800 border border-black/[0.08] dark:border-white/[0.08] shadow-[0_16px_36px_rgba(15,23,42,0.14)] dark:shadow-[0_16px_36px_rgba(0,0,0,0.4)] rounded-2xl p-4 ${!isOpen ? "pointer-events-none" : ""} ${className}`}
             style={{ top: coords.top, left: coords.left }}

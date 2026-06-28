@@ -48,6 +48,7 @@ export const UsageGraphLegend: FunctionComponent<UsageGraphLegendProps> = ({
                   <span className={!active ? "opacity-40 line-through" : ""}>
                     {s.label}
                   </span>
+                  <span className="sr-only">{active ? "Visible" : "Hidden"}</span>
                 </button>
               );
             })}

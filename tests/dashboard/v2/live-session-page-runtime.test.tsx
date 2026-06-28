@@ -1019,6 +1019,12 @@ describe("LiveSessionPage Integration Isolation", () => {
     expect(screen.getByText("Review failing CI logs")).toBeInTheDocument();
     expect(screen.getByText("active 3")).toBeInTheDocument();
     expect(screen.getByText("listening 2")).toBeInTheDocument();
+
+    const tablists = document.querySelectorAll('[role="tablist"]');
+    expect(tablists.length).toBeGreaterThanOrEqual(2);
+    expect(document.querySelector('[role="tablist"][aria-label="Task status filters"]')).toBeInTheDocument();
+    expect(document.querySelector('[role="tablist"][aria-label="View toggle"]')).toBeInTheDocument();
+    expect(document.querySelectorAll('[role="tab"]').length).toBeGreaterThan(5);
     expect(screen.getByText("workers 1")).toBeInTheDocument();
     expect(screen.getByText("manager 1")).toBeInTheDocument();
 

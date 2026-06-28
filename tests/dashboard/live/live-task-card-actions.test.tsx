@@ -14,7 +14,7 @@ const forceCompleteLiveTaskMock = vi.fn();
 vi.mock("gsap", () => ({
   default: {
     to: vi.fn(),
-    fromTo: vi.fn(),
+    fromTo: vi.fn(), timeline: vi.fn(() => ({ to: vi.fn().mockReturnThis() })),
     set: vi.fn(),
     killTweensOf: vi.fn(),
     context: vi.fn((cb?: () => void) => {

@@ -66,7 +66,7 @@ export const HeaderStats: FunctionComponent<{ pageData: ReturnType<typeof import
                 title="Open Tasks"
                 value={String(stats.openTasks)}
                 accent="amber"
-                trend={<div className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_10px_rgba(255,184,0,0.6)] animate-pulse" />}
+                trend={<div className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_10px_rgba(255,184,0,0.6)] motion-safe:animate-pulse" />}
                 description={<span className="text-ember-600 dark:text-ember-500 text-xs font-bold font-mono">{stats.runningTasks} live</span>}
             >
                 <Sparkline points={stats.openTasksTrend} color="#FFB800" />
@@ -90,7 +90,7 @@ export const HeaderStats: FunctionComponent<{ pageData: ReturnType<typeof import
                 trend={
                     <div className="relative w-2 h-2">
                         <div className="w-full h-full rounded-full bg-signal-500 relative z-10 shadow-[0_0_10px_rgba(0,224,160,0.7)]" />
-                        <div className="absolute inset-0 bg-signal-500 rounded-full animate-ping opacity-60" />
+                        <div className="absolute inset-0 bg-signal-500 rounded-full motion-safe:animate-ping opacity-60" />
                     </div>
                 }
                 description={

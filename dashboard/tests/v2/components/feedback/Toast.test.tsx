@@ -76,6 +76,19 @@ describe("Toast", () => {
     expect(screen.getByText("Test error message")).toBeInTheDocument();
   });
 
+  it("includes visually hidden type text and dismiss label", () => {
+    render(
+      <Toast
+        id="2"
+        type="success"
+        message="Test success"
+        onDismiss={() => {}}
+      />
+    );
+    expect(screen.getByText("success")).toHaveClass("sr-only");
+    expect(screen.getByRole("button", { name: "Dismiss toast" })).toBeInTheDocument();
+  });
+
   it("restores focus when a focused dismiss button is clicked", () => {
     const onDismiss = vi.fn();
 

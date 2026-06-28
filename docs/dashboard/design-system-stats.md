@@ -36,3 +36,9 @@ Analytics components draw from `stats-theme.css`, which maps specifically back t
 ### Ledgers & Tables (Telemetry & System)
 *   **Row Interactions**: Rows must rely on global `var(--fill-muted-hover)` patterns rather than arbitrary hardcoded highlights.
 *   **Status Indicators**: Status chips (Completed, Running, Failed, Cancelled) should be distinct and legible, but avoid visually competing with actual data or error states.
+
+### Accessibility Rules
+*   **Charts**: Chart regions must provide accessible names, descriptions, and keyboard-reachable summaries. Provide data-table or text alternatives for usage trends.
+*   **Legends**: Legends and series toggles must expose pressed/selected state and series names via visually hidden text.
+*   **Tables**: Ensure invocation tables preserve header relationships (`scope="col"`).
+*   **Motion**: Respect reduced motion for chart transitions and animated loading states. Provide non-motion status text.

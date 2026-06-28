@@ -429,6 +429,7 @@ export const BrowserPage: FunctionComponent = () => {
             status={browserFeedback.feedback.status}
             message={browserFeedback.feedback.message}
             onDismiss={() => browserFeedback.clearFeedback()}
+            clearError={browserFeedback.clearError}
             retryAction={
               browserFeedback.feedback.status === "error" && browserFeedback.feedback.message?.includes("launch") ? () => handleStart() :
               browserFeedback.feedback.status === "error" && browserFeedback.feedback.message?.includes("rebuild") ? () => handleRebuild() :

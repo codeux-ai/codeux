@@ -8,12 +8,14 @@ import { deleteMemory } from "../../lib/memory-api.js";
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
 import { useInteractionTokens } from "../../lib/motion/index.js";
+import type { MemoryScope } from "../../memory-types.js";
 
 interface MemoryCardProps {
     id: string;
     content: string;
     category: string;
     strength: number;
+    scope?: MemoryScope | string;
     onClick: () => void;
 }
 
@@ -33,6 +35,7 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
     content,
     category,
     strength,
+    scope,
     onClick,
 }) => {
     const cat = CAT[category] || CAT.context;
@@ -60,7 +63,7 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
             role="option"
             tabIndex={0}
             aria-selected={isSelected.value}
-            aria-label={`${cat.label} memory, strength ${Math.round(strength * 100)}%. ${content}`}
+            aria-label={`${cat.label} memory, scope ${scope || 'unknown'}, strength ${Math.round(strength * 100)}%. ${content}`}
             onClick={onClick}
             onMouseEnter={() => { hoveredMemoryIdSignal.value = id; }}
             onMouseLeave={() => { hoveredMemoryIdSignal.value = null; }}
@@ -108,13 +111,13 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
             <p className="text-[13px] text-slate-700 dark:text-slate-300 font-medium leading-relaxed line-clamp-3">
                 {content}
             </p>
+            <span className="sr-only">Press Enter to open details.</span>
 
             <ConfirmDialog
                 isOpen={isConfirmOpen}
                 options={confirmOptions}
                 onConfirm={handleConfirm}
                 onCancel={handleCancel}
-                triggerRef={triggerRef}
             />
         </div>
     );

@@ -31,6 +31,7 @@ describe("RuntimeEventFeed", () => {
         render(<RuntimeEventFeed events={mockEvents} />);
 
         expect(screen.getAllByText("test event").length).toBeGreaterThan(0);
+        expect(document.querySelector('[role="log"][aria-label="Runtime feed"]')).toBeInTheDocument();
         expect(gsap.fromTo).toHaveBeenCalled();
     });
 

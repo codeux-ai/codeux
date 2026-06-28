@@ -33,7 +33,7 @@ export const MemoryFilters: FunctionComponent<{
 
     return (
         <div className="flex flex-col items-start md:items-end w-full md:w-auto gap-3.5 shrink-0">
-            <div className="flex flex-wrap items-center gap-2.5" role="tablist">
+            <div className="flex flex-wrap items-center gap-2.5" role="tablist" aria-label="Memory Tier">
                 {TIER_TABS.map(tab => {
                     const count = tab.key === "short_term"
                         ? (stats.sprint + stats.agent)
@@ -41,6 +41,7 @@ export const MemoryFilters: FunctionComponent<{
                     return (
                         <button
                             key={tab.key}
+                            id={`tab-${tab.key}`}
                             role="tab"
                             aria-selected={activeTier === tab.key}
                             aria-controls="memory-panel"
@@ -52,7 +53,7 @@ export const MemoryFilters: FunctionComponent<{
                             }`}
                             onClick={() => activeTierSignal.value = tab.key}
                             onKeyDown={(e) => {
-                                if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                                if (e.key === "ArrowRight" || e.key === "ArrowLeft" || e.key === "Home" || e.key === "End") {
                                     e.preventDefault();
                                     const currentIndex = TIER_TABS.findIndex(t => t.key === activeTier);
                                     let nextIndex = currentIndex;
@@ -60,6 +61,10 @@ export const MemoryFilters: FunctionComponent<{
                                         nextIndex = (currentIndex + 1) % TIER_TABS.length;
                                     } else if (e.key === "ArrowLeft") {
                                         nextIndex = (currentIndex - 1 + TIER_TABS.length) % TIER_TABS.length;
+                                    } else if (e.key === "Home") {
+                                        nextIndex = 0;
+                                    } else if (e.key === "End") {
+                                        nextIndex = TIER_TABS.length - 1;
                                     }
                                     activeTierSignal.value = TIER_TABS[nextIndex].key;
                                     const nextTab = e.currentTarget.parentElement?.children[nextIndex] as HTMLElement;
@@ -75,40 +80,51 @@ export const MemoryFilters: FunctionComponent<{
             <div className="flex flex-wrap items-center gap-2.5">
                 {/* Sprint selector — only for Short Term */}
                 {activeTier === "short_term" && sprints.length > 0 && (
-                    <select
-                        aria-label="Select sprint"
-                        value={selectedSprintId ?? ""}
-                        onChange={(e) => selectedSprintIdSignal.value = (e.target as HTMLSelectElement).value || undefined}
-                        className="text-[11px] font-mono font-bold px-3 py-1.5 rounded-lg
-                                   bg-black/[0.04] dark:bg-white/[0.04] hover:bg-black/[0.08] dark:hover:bg-white/[0.08] border border-black/[0.08] dark:border-white/[0.08] transition-colors duration-200
-                                   text-slate-600 dark:text-slate-300 cursor-pointer
-                                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900">
-                        {sprints.map(s => (
-                            <option key={s.id} value={s.id}>
-                                Sprint {s.number ?? "?"} — {s.name || s.goal?.slice(0, 40) || s.id.slice(0, 8)}
-                            </option>
-                        ))}
-                    </select>
+                    <div className="flex items-center gap-1.5">
+                        <label htmlFor="sprint-selector" className="sr-only">Filter by Sprint</label>
+                        <select
+                            id="sprint-selector"
+                            aria-label="Filter memory by Sprint"
+                            title="Filter memory by Sprint"
+                            value={selectedSprintId ?? ""}
+                            onChange={(e) => selectedSprintIdSignal.value = (e.target as HTMLSelectElement).value || undefined}
+                            className="text-[11px] font-mono font-bold px-3 py-1.5 rounded-lg
+                                       bg-black/[0.04] dark:bg-white/[0.04] hover:bg-black/[0.08] dark:hover:bg-white/[0.08] border border-black/[0.08] dark:border-white/[0.08] transition-colors duration-200
+                                       text-slate-600 dark:text-slate-300 cursor-pointer
+                                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900">
+                            {sprints.map(s => (
+                                <option key={s.id} value={s.id}>
+                                    Sprint {s.number ?? "?"} — {s.name || s.goal?.slice(0, 40) || s.id.slice(0, 8)}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
                 )}
                 {/* Agent selector — both tiers */}
                 {agentPresets.length > 0 && (
-                    <select
-                        aria-label="Select agent preset"
-                        value={selectedAgentPresetId ?? ""}
-                        onChange={(e) => selectedAgentPresetIdSignal.value = (e.target as HTMLSelectElement).value || undefined}
-                        className="text-[11px] font-mono font-bold px-3 py-1.5 rounded-lg
-                                   bg-black/[0.04] dark:bg-white/[0.04] hover:bg-black/[0.08] dark:hover:bg-white/[0.08] border border-black/[0.08] dark:border-white/[0.08] transition-colors duration-200
-                                   text-slate-600 dark:text-slate-300 cursor-pointer
-                                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900">
-                        <option value="">All Agents</option>
-                        {agentPresets.map(a => (
-                            <option key={a.id} value={a.id}>{a.name}</option>
-                        ))}
-                    </select>
+                    <div className="flex items-center gap-1.5">
+                        <label htmlFor="agent-selector" className="sr-only">Filter by Agent Preset</label>
+                        <select
+                            id="agent-selector"
+                            aria-label="Filter memory by Agent Preset"
+                            title="Filter memory by Agent Preset"
+                            value={selectedAgentPresetId ?? ""}
+                            onChange={(e) => selectedAgentPresetIdSignal.value = (e.target as HTMLSelectElement).value || undefined}
+                            className="text-[11px] font-mono font-bold px-3 py-1.5 rounded-lg
+                                       bg-black/[0.04] dark:bg-white/[0.04] hover:bg-black/[0.08] dark:hover:bg-white/[0.08] border border-black/[0.08] dark:border-white/[0.08] transition-colors duration-200
+                                       text-slate-600 dark:text-slate-300 cursor-pointer
+                                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900">
+                            <option value="">All Agents</option>
+                            {agentPresets.map(a => (
+                                <option key={a.id} value={a.id}>{a.name}</option>
+                            ))}
+                        </select>
+                    </div>
                 )}
             </div>
             <div className="flex flex-wrap items-center gap-2.5">
                 <button onClick={() => setShowAddModal(true)}
+                    aria-label="Add Memory"
                     className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold
                                bg-signal-500/10 text-signal-500 hover:bg-signal-500/20
                                border border-signal-500/20
@@ -117,6 +133,7 @@ export const MemoryFilters: FunctionComponent<{
                     <Plus className="w-3.5 h-3.5" strokeWidth={2.5} /> Add Memory
                 </button>
                 <button aria-pressed={showModels} onClick={() => setShowModels(!showModels)}
+                    aria-label="Toggle models visibility"
                     className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer
                                border transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                                ${showModels
@@ -130,6 +147,7 @@ export const MemoryFilters: FunctionComponent<{
                     )}
                 </button>
                 <button aria-pressed={lobotomize} onClick={handleLobotomizeToggle}
+                    aria-label="Toggle Danger Delete Mode"
                     className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl font-bold text-xs border
                                transition-[background-color,box-shadow,border-color,color] duration-300
                                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
@@ -138,7 +156,7 @@ export const MemoryFilters: FunctionComponent<{
                                    : "bg-black/[0.04] dark:bg-white/[0.04] border-black/[0.08] dark:border-white/[0.08] text-slate-600 dark:text-slate-400 hover:border-status-red/50 hover:text-status-red hover:bg-status-red/[0.04]"
                                }`}>
                     <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2.5} />
-                    {lobotomize ? "Danger: Delete Mode" : "Lobotomize"}
+                    {lobotomize ? "Danger: Delete Mode (Warning: Destructive Action)" : "Lobotomize"}
                 </button>
             </div>
         </div>

@@ -23,6 +23,13 @@ The dashboard's Live page and runtime components follow a distinct visual system
 
 By adhering to these rules, the Live page remains a focused, professional workspace.
 
+## Accessibility Rules
+
+- Event feeds and timelines should use `role="log"` or `role="region"` with clear `aria-label`s.
+- Transient elements must handle focus properly.
+- Action buttons (claim, resolve, dismiss, cancel, etc.) must include accessible labels specifying their target item.
+- Animations for spinners must be `motion-safe`.
+
 ## Responsive Layouts
 - Live Runtime panels enforce strict boundaries by adding `min-w-0` to large grid columns (e.g., `xl:col-span-8 flex flex-col gap-5 min-w-0`) to prevent blowout.
 - Dense runtime data (like stat grids in ExecutionRuntimePanel and AttentionQueuePanel) switch from 2 columns to 3 or 4 columns at the `sm` or `md` breakpoints to avoid squeezing content.

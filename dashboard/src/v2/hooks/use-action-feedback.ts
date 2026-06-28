@@ -6,6 +6,7 @@ export interface ActionFeedbackOptions {
   autoDismiss?: boolean;
   retryAction?: () => void;
   retryLabel?: string;
+  progress?: number;
 }
 
 export interface ActionFeedbackState extends ActionFeedbackOptions {
@@ -62,6 +63,10 @@ export function useActionFeedback(autoDismissMs: number = 5000) {
     setFeedback({ status: "error", message, ...options });
   }, [clearTimer]);
 
+  const clearError = useCallback(() => {
+    setFeedback((prev) => (prev.status === "error" ? { status: "idle", message: null } : prev));
+  }, []);
+
   return {
     feedback,
     setPending,
@@ -69,5 +74,6 @@ export function useActionFeedback(autoDismissMs: number = 5000) {
     setWarning,
     setError,
     clearFeedback,
+    clearError,
   };
 }
