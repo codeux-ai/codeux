@@ -256,7 +256,8 @@ export const ChatPage: FunctionComponent = () => {
             isCompacting={compacting}
           />
 
-          <div id="chat-panel" role="log" aria-label="Message history" ref={messagesRef} className="flex-1 min-h-0 space-y-6 overflow-y-auto px-6 py-6">
+          <div id="chat-panel" role="tabpanel" aria-labelledby="tab-threads" className="flex-1 min-h-0 flex flex-col overflow-y-auto">
+          <div role="log" aria-label="Message history" aria-live={messages.length > 0 && !threadsLoading && !threadMessagesLoading ? "polite" : "off"} aria-atomic="false" aria-relevant="additions" ref={messagesRef} className="flex-1 min-h-0 space-y-6 px-6 py-6">
             {threadsLoading ? (
               <LoadingChat label="Loading conversation" />
             ) : !selectedThread ? (
@@ -296,6 +297,7 @@ export const ChatPage: FunctionComponent = () => {
                 ) : null}
               </>
             )}
+          </div>
           </div>
 
           <div className="shrink-0 border-t border-black/[0.05] p-5 dark:border-white/[0.05]">
@@ -477,7 +479,8 @@ export const ChatPage: FunctionComponent = () => {
           </div>
         </div>
 
-        <div id="chat-panel" role="log" aria-label="Message history" ref={messagesRef} className="flex-1 min-h-0 space-y-6 overflow-y-auto px-6 py-6">
+        <div id="chat-panel" role="tabpanel" aria-labelledby="tab-threads" className="flex-1 min-h-0 flex flex-col overflow-y-auto">
+          <div role="log" aria-label="Message history" aria-live={messages.length > 0 && !threadsLoading && !threadMessagesLoading ? "polite" : "off"} aria-atomic="false" aria-relevant="additions" ref={messagesRef} className="flex-1 min-h-0 space-y-6 px-6 py-6">
           {invocationsLoading ? (
             <LoadingChat label="Loading invocations" />
           ) : !selectedInvocation ? (
@@ -534,6 +537,7 @@ export const ChatPage: FunctionComponent = () => {
               )}
             </>
           )}
+        </div>
         </div>
 
         <div className="shrink-0 border-t border-black/[0.05] p-5 dark:border-white/[0.05]">

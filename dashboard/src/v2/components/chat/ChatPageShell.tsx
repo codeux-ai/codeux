@@ -72,11 +72,26 @@ export const ChatPageShell: FunctionComponent<{
         </div>
 
         <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:justify-end">
-          <div role="tablist" aria-label="Chat Mode" className="flex items-center rounded-full border border-black/[0.06] bg-white/70 p-1 dark:border-white/[0.06] dark:bg-white/[0.03]">
+
+          <div role="tablist" aria-label="Chat Mode" className="flex items-center rounded-full border border-black/[0.06] bg-white/70 p-1 dark:border-white/[0.06] dark:bg-white/[0.03]"
+            onKeyDown={(e) => {
+              if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                e.preventDefault();
+                const newMode = chatMode === "threads" ? "invocations" : "threads";
+                onSetChatMode(newMode);
+                // Also focus the corresponding tab
+                const targetId = newMode === "threads" ? "tab-threads" : "tab-invocations";
+                document.getElementById(targetId)?.focus();
+              }
+            }}
+          >
+
             <button
+              id="tab-threads"
               role="tab"
               aria-selected={chatMode === "threads"}
               aria-controls="chat-panel"
+              tabIndex={chatMode === "threads" ? 0 : -1}
               type="button"
               onClick={() => onSetChatMode("threads")}
               style={{
@@ -93,9 +108,11 @@ export const ChatPageShell: FunctionComponent<{
               Threads
             </button>
             <button
+              id="tab-invocations"
               role="tab"
               aria-selected={chatMode === "invocations"}
               aria-controls="chat-panel"
+              tabIndex={chatMode === "invocations" ? 0 : -1}
               type="button"
               onClick={() => onSetChatMode("invocations")}
               style={{

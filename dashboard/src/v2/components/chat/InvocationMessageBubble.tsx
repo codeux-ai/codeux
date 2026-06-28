@@ -105,6 +105,9 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
       <span className="sr-only">
         From {senderName} at {createdAtLabel}. {displayStatus ? `Status: ${displayStatus}.` : ""} {errorLabel ? `Error: ${errorLabel}.` : ""}
       </span>
+      <span className="sr-only">
+        From {senderName} at {createdAtLabel}. {displayStatus ? `Status: ${displayStatus}.` : ""} {errorLabel ? `Error: ${errorLabel}.` : ""}
+      </span>
       <div className={`flex min-w-0 max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-[760px] items-start w-full gap-3 ${fromUser || fromTool ? "flex-row-reverse" : "flex-row"}`}>
         <div className="mt-1 shrink-0 w-8 h-8 flex items-center justify-center">
           <ChatAvatar
