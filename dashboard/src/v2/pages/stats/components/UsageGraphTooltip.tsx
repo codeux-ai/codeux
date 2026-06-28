@@ -34,6 +34,8 @@ export const UsageGraphTooltip: FunctionComponent<UsageGraphTooltipProps> = ({
 
   return (
     <div
+      role="tooltip"
+      id="usage-chart-tooltip"
       className="pointer-events-none absolute top-3 z-50 w-64 -translate-x-1/2 rounded-[1.25rem] border border-[var(--stats-card-border)] border-t-2 border-t-amber-500/60 bg-[var(--stats-card-bg)] px-5 py-4 shadow-[var(--stats-card-shadow)] backdrop-blur-2xl transition-all duration-200"
       style={{ left: `${Math.min(92, Math.max(8, left))}%` }}
     >

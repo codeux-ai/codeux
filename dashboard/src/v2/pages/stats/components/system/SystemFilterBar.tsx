@@ -86,7 +86,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
         ) : null}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Status filters">
         <div className={`inline-flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
           <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={2.2} />
           Status
@@ -108,7 +108,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
       </div>
 
       {availablePurposes.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Purposes filters">
           <div className={`px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
             Purposes
           </div>
@@ -130,7 +130,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
       ) : null}
 
       {availableProviders.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Providers filters">
           <div className={`px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
             Providers
           </div>
@@ -151,7 +151,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Error Category filters">
         <div className={`inline-flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
           Error Category
         </div>
