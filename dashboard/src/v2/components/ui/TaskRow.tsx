@@ -99,7 +99,7 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
                         {busy ? <><Loader2 aria-hidden="true" className="w-3.5 h-3.5 animate-spin" /><span className="sr-only">Loading</span></> : isRunning ? <Square className="w-3.5 h-3.5" fill="currentColor" /> : <Play className="w-3.5 h-3.5" fill="currentColor" />}
                     </button>
                     <a
-                        href={`/tasks?sprint=${encodeURIComponent(task.sprintId)}`}
+                        href={`/tasks?sprintId=${encodeURIComponent(task.sprintId)}`}
                         className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 rounded-full transition-colors active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
                         title="Configure task"
                         aria-label={`Configure task ${task.id}: ${task.title}`}

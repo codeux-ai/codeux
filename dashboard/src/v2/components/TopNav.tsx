@@ -221,12 +221,10 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
         loading,
     } = useProjectData();
     const projectId = selectedProject?.id || null;
-    const settings = useProjectEffectiveSettings(projectId);
-    const sprintKeyPrefix = settings.data?.settings?.git?.sprintKeyPrefix || "SPR";
+    const { data: effectiveSettings } = useProjectEffectiveSettings(projectId);
+    const sprintKeyPrefix = effectiveSettings?.settings?.git?.sprintKeyPrefix || "SPR";
 
     const { data: sprints, selectedSprintId, selectedSprint, selectSprint, loading: sprintsLoading } = useSprints(selectedProject?.id || null);
-
-    const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
     const browserVisible = !selectedProject || (
         (effectiveSettings?.settings.sprintPreview.enabled ?? true)
         && (effectiveSettings?.settings.sprintPreview.showInAppBrowser ?? true)

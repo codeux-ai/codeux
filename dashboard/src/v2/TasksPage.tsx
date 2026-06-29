@@ -535,16 +535,15 @@ export const TasksPage: FunctionComponent = () => {
 
   const handleSprintScopeSelect = useCallback((sprintId: string | null) => {
     const params = new URLSearchParams(locationSearch);
-    if (params.has("sprint")) {
-      if (sprintId) {
-        params.set("sprint", sprintId);
-      } else {
-        params.delete("sprint");
-      }
-      const nextSearch = params.toString();
-      const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
-      window.history.replaceState(window.history.state, "", nextUrl);
+    if (sprintId) {
+      params.set("sprintId", sprintId);
+    } else {
+      params.delete("sprintId");
     }
+    params.delete("sprint");
+    const nextSearch = params.toString();
+    const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
+    window.history.replaceState(window.history.state, "", nextUrl);
     void selectSprint(sprintId);
   }, [locationSearch, selectSprint]);
 

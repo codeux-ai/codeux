@@ -41,6 +41,7 @@ import { RuntimeEventFeed } from "./components/RuntimeEventFeed.js";
 import { GitCIStatusPanel } from "./components/GitCIStatusPanel.js";
 import { deriveLiveDurationDisplay } from "./lib/live-duration-display.js";
 import { useProjectData } from "./context/project-data.js";
+import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
 import { useReducedMotion } from "./hooks/use-reduced-motion.js";
 import { fetchAgentPresets } from "./lib/agent-preset-api.js";
 import type { AgentPreset } from "./types.js";
@@ -83,6 +84,8 @@ export const LiveSessionPage: FunctionComponent = () => {
     const contentRef = useRef<HTMLDivElement>(null);
     const prefersReducedMotion = useReducedMotion();
     const { selectedProjectId, loading: projectsLoading } = useProjectData();
+    const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProjectId);
+    const sprintKeyPrefix = effectiveSettings?.settings?.git?.sprintKeyPrefix || "SPR";
     const {
         error,
         execution,
@@ -620,6 +623,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                             collapsible
                             defaultOpen={hasSprintContext}
                             invocations={sprintInvocations}
+                            sprintKeyPrefix={sprintKeyPrefix}
                         />
                         <ExecutionTimeline collapsible defaultOpen={hasSprintContext} />
                         <GitCIStatusPanel status={gitStatus} error={gitStatusError} />

@@ -48,6 +48,50 @@ describe("DashboardSnapshotCache", () => {
     });
   });
 
+  describe("lean execution snapshot", () => {
+    const baseSnapshot = () => ({
+      projectId: "p1",
+      projectName: "P1",
+      sprintRuns: [{ id: "r1", status: "running" }],
+      taskDispatches: [],
+      recentEvents: [{ id: "e1" }, { id: "e2" }],
+      recentInvocations: [{ id: "i1" }],
+    });
+
+    it("strips the activity feed from the lean view while the full view keeps it", () => {
+      mockDeps.executionRepository.getProjectExecutionSnapshot.mockReturnValue(baseSnapshot());
+
+      const full = cache.getProjectExecutionSnapshot("p1");
+      const lean = cache.getProjectExecutionSnapshotLean("p1");
+
+      expect(full.recentEvents).toHaveLength(2);
+      expect(full.recentInvocations).toHaveLength(1);
+      expect(lean.recentEvents).toEqual([]);
+      expect(lean.recentInvocations).toEqual([]);
+      // The ledger-relevant data is preserved.
+      expect(lean.sprintRuns).toEqual(full.sprintRuns);
+    });
+
+    it("returns a referentially stable lean view for an unchanged snapshot", () => {
+      mockDeps.executionRepository.getProjectExecutionSnapshot.mockReturnValue(baseSnapshot());
+      const lean1 = cache.getProjectExecutionSnapshotLean("p1");
+      const lean2 = cache.getProjectExecutionSnapshotLean("p1");
+      expect(lean1).toBe(lean2);
+    });
+
+    it("returns the snapshot as-is when there is no feed to strip", () => {
+      mockDeps.executionRepository.getProjectExecutionSnapshot.mockReturnValue({
+        projectId: "p1",
+        sprintRuns: [],
+        recentEvents: [],
+        recentInvocations: [],
+      });
+      const full = cache.getProjectExecutionSnapshot("p1");
+      const lean = cache.getProjectExecutionSnapshotLean("p1");
+      expect(lean).toBe(full);
+    });
+  });
+
   describe("snapshots caching", () => {
     it("caches project snapshots", () => {
       const snap1 = cache.getProjectsSnapshot();

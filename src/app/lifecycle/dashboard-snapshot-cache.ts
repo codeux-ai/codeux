@@ -103,6 +103,11 @@ export class DashboardSnapshotCache {
   private deps: DashboardSnapshotCacheDeps;
 
   private projectExecutionSnapshotCache = new Map<string, { snapshot: ExecutionDashboardSnapshot; expiresAt: number }>();
+  // Memoizes the feed-less view of each cached execution snapshot, keyed by the
+  // snapshot instance so it is invalidated automatically when the snapshot is
+  // rebuilt. Lets the high-frequency `project.execution.updated` channel and the
+  // `/execution` endpoint ship a lean payload while the Live page keeps the feed.
+  private leanExecutionBySnapshot = new WeakMap<ExecutionDashboardSnapshot, ExecutionDashboardSnapshot>();
   private projectStatsSnapshotCache = new Map<string, { snapshot: ReturnType<DashboardSnapshotCacheDeps["executionRepository"]["getProjectStatsSnapshot"]>; expiresAt: number }>();
   private overviewTelemetryCache: { snapshot: ReturnType<DashboardSnapshotCacheDeps["executionRepository"]["getOverviewTelemetrySnapshot"]>; expiresAt: number } | null = null;
   private projectsSnapshotCache: { snapshot: ReturnType<DashboardSnapshotCacheDeps["projectManagementRepository"]["listProjects"]>; expiresAt: number } | null = null;
@@ -168,6 +173,29 @@ export class DashboardSnapshotCache {
       expiresAt: now + DashboardSnapshotCachePolicy.PROJECT_EXECUTION_CACHE_TTL_MS,
     });
     return snapshot;
+  };
+
+  /**
+   * Execution snapshot without the activity feed (`recentEvents` /
+   * `recentInvocations`). The feed is only rendered by the Live and Tasks pages
+   * (which receive it via the live payload); shipping it on the execution channel
+   * to every other page bloats each push to ~0.5MB and makes the snapshot change
+   * — and re-broadcast — several times per second on active sprints. This view
+   * keeps the execution channel lean and, because the feed is what churns most,
+   * lets the realtime publisher de-duplicate the vast majority of pushes.
+   */
+  getProjectExecutionSnapshotLean = (projectId: string): ExecutionDashboardSnapshot => {
+    const full = this.getProjectExecutionSnapshot(projectId);
+    if (full.recentEvents.length === 0 && (full.recentInvocations?.length ?? 0) === 0) {
+      return full;
+    }
+    const cached = this.leanExecutionBySnapshot.get(full);
+    if (cached) {
+      return cached;
+    }
+    const lean: ExecutionDashboardSnapshot = { ...full, recentEvents: [], recentInvocations: [] };
+    this.leanExecutionBySnapshot.set(full, lean);
+    return lean;
   };
 
   getProjectStatsSnapshot = (projectId: string, query: ProjectStatsQuery = { window: "7d" }) => {

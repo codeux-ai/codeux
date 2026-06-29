@@ -242,7 +242,14 @@ export const SchedulerPage: FunctionComponent = () => {
   useEffect(() => {
     if (!selectedProject?.id) return;
     return subscribeToDashboardRealtime([`project:${selectedProject.id}`], (message) => {
-      if (message.type === "event" && message.event.eventType === "project.live.updated") {
+      // The scheduler reflects sprint structure/state, which travels on the
+      // lightweight `project.structure.updated` event delivered to this base
+      // scope. (The heavy `project.live.updated` payload now rides a dedicated
+      // `:live` sub-scope that this page intentionally does not subscribe to.)
+      if (
+        message.type === "snapshot_required"
+        || (message.type === "event" && message.event.eventType === "project.structure.updated")
+      ) {
         void refresh();
       }
     });

@@ -24,7 +24,6 @@ import { LinkedIssueTag } from "../sprint/LinkedIssueTag.js";
 import type { Sprint, SprintStatus } from "../../types.js";
 import type { ExecutionHumanInterventionSummary } from "../../../../../src/contracts/app-types.js";
 import { formatSprintKey, STATUS_LABELS } from "../../lib/sprint-ledger-state.js";
-import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-settings.js";
 import { SprintControls } from "./SprintControls.js";
 import { INTERACTION_TOKENS } from "../../lib/motion/tokens.js";
 import { useResolvedMotionDuration } from "../../hooks/use-reduced-motion.js";
@@ -95,6 +94,7 @@ export interface SprintLedgerRowProps {
   activeRun: { id: string; status: string } | undefined;
   pauseResumeRun: { id: string; status: string } | undefined;
   humanIntervention: ExecutionHumanInterventionSummary | null;
+  sprintKeyPrefix?: string;
   pendingActionIds: Set<string>;
   isAnyBulkPending?: boolean;
   onToggleRow: (id: string) => void;
@@ -116,6 +116,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   activeRun,
   pauseResumeRun,
   humanIntervention,
+  sprintKeyPrefix = "SPR",
   pendingActionIds,
   isAnyBulkPending,
   onToggleRow,
@@ -124,7 +125,6 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   onSprintPauseResume,
   onOpenRowMenu,
 }) => {
-  const settings = useProjectEffectiveSettings(sprint.projectId);
   const [menuOpen, setMenuOpen] = useState(false);
   const checkIconRef = useRef<HTMLSpanElement>(null);
   const isReducedMotion = useReducedMotion();
@@ -146,8 +146,6 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
     }
     prevSelected.current = isSelected;
   }, [isSelected, isReducedMotion]);
-
-  const sprintKeyPrefix = settings.data?.settings?.git?.sprintKeyPrefix || "SPR";
 
   const pendingToggleActionId = activeRun ? `sprint-stop:${activeRun.id}` : `sprint-start:${sprint.id}`;
   const pendingPauseResumeActionId = sprint.status === "paused"
@@ -376,7 +374,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
             sprintName={sprint.name}
           />
           <a
-            href={`/tasks?sprint=${encodeURIComponent(sprint.id)}`}
+            href={`/tasks?sprintId=${encodeURIComponent(sprint.id)}`}
             aria-label={`Open sprint ${sprint.name}`}
             className="inline-flex h-10 min-w-[5rem] flex-1 items-center justify-center gap-2 rounded-xl border border-black/[0.06] bg-white/80 px-4 text-xs font-bold text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white sm:flex-none"
           >

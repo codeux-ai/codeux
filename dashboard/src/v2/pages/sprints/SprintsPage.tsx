@@ -40,7 +40,6 @@ import { ConfirmDialog } from "../../components/ui/ConfirmDialog.js";
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { ActionFeedbackRegion } from "../../components/ui/ActionFeedbackRegion.js";
 import { useSprintsPageData } from "./use-sprints-page-data.js";
-import { useProgressiveList } from "../../hooks/use-progressive-list.js";
 import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "../../lib/list-window.js";
 import { ExecutionTimelineProvider } from "../../../hooks/ExecutionTimelineContext.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
@@ -170,6 +169,7 @@ export const SprintsPage: FunctionComponent = () => {
     showcaseSprints,
     execution,
     nextId,
+    sprintKeyPrefix,
     planningRoute,
     completedCount,
     inWorkCount,
@@ -245,7 +245,6 @@ export const SprintsPage: FunctionComponent = () => {
     ));
   }, [setRowMenu]);
 
-  const progressiveSprints = useProgressiveList(sortedSprints);
   const [listWindow, setListWindow] = useState<ListWindowOption>(DEFAULT_LIST_WINDOW);
 
   useLayoutEffect(() => {
@@ -271,6 +270,32 @@ export const SprintsPage: FunctionComponent = () => {
   useEffect(() => {
     storeSprintGalleryVisibility(showSprintGallery);
   }, [showSprintGallery]);
+
+  // A `?sprintKey=` deep-link (from global search / invocation feed links) seeds
+  // the ledger search once so you land on that sprint. We read it straight from
+  // the URL (tanstack drops the unvalidated param inconsistently) and capture it
+  // a single time, then strip it from the URL so a refresh doesn't stay stuck
+  // filtering to a single sprint — the seeded query stays visible and clearable.
+  const [deepLinkSprintKey] = useState<string | undefined>(() => {
+    if (typeof window === "undefined") {
+      return (searchParams?.sprintKey as string | undefined) || undefined;
+    }
+    return new URLSearchParams(window.location.search).get("sprintKey") || undefined;
+  });
+
+  useEffect(() => {
+    if (!deepLinkSprintKey || typeof window === "undefined") {
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has("sprintKey")) {
+      return;
+    }
+    params.delete("sprintKey");
+    const nextSearch = params.toString();
+    const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
+    window.history.replaceState(window.history.state, "", nextUrl);
+  }, [deepLinkSprintKey]);
 
   useEffect(() => {
     if (!rowMenu) {
@@ -365,6 +390,40 @@ export const SprintsPage: FunctionComponent = () => {
   const handleBulkShowcaseDisable = useCallback((ids: string[]) => {
     void handleBulkToggleShowcase(ids, false);
   }, [handleBulkToggleShowcase]);
+
+  // Stable per-sprint handlers so the memoized SprintLedger does not re-render
+  // on every live-feed execution update (only its data props change identity).
+  const handleEditSprintFromLedger = useCallback((sprint: typeof sortedSprints[number]) => {
+    setEditingSprint(sprint);
+    setLinkedIssues(sprint.linkedIssues || []);
+    setShowCreateComposer(false);
+  }, [setEditingSprint, setShowCreateComposer]);
+
+  const handleExportSprintFromLedger = useCallback((sprint: typeof sortedSprints[number]) => {
+    void handleOpenExport(sprint.id, sprint.name);
+  }, [handleOpenExport]);
+
+  const handleOverridesSprintFromLedger = useCallback((sprint: typeof sortedSprints[number]) => {
+    setOverrideSprint(sprint);
+  }, [setOverrideSprint]);
+
+  const handleMarkCompletedFromLedger = useCallback((sprintId: string) => {
+    void handleMarkCompleted(sprintId);
+  }, [handleMarkCompleted]);
+
+  const handleDeleteSprintFromLedger = useCallback((sprintId: string) => {
+    void requestConfirm({
+      title: "Delete Sprint?",
+      body: "Are you sure you want to delete this sprint? All associated tasks and execution history will be permanently removed.",
+      confirmLabel: "Delete Sprint",
+      cancelLabel: "Cancel",
+      destructive: true,
+    }).then((confirmed) => {
+      if (confirmed) {
+        void handleDeleteSprint(sprintId);
+      }
+    });
+  }, [requestConfirm, handleDeleteSprint]);
 
   return (
     <ExecutionTimelineProvider
@@ -517,6 +576,7 @@ export const SprintsPage: FunctionComponent = () => {
                         sprint={sprint}
                         isEven={index % 2 === 0}
                         accentColor={ACCENT_CYCLE[index % ACCENT_CYCLE.length]}
+                        sprintKeyPrefix={sprintKeyPrefix}
                         primaryBusy={pendingActionIds.has(pendingActionId)}
                         showcaseBusy={pendingActionIds.has(pinActionId)}
                         isPaused={isPaused}
@@ -671,9 +731,10 @@ export const SprintsPage: FunctionComponent = () => {
 
             <div className="rounded-[2.2rem] border border-black/[0.06] bg-white/70 shadow-[0_12px_36px_rgba(15,23,42,0.05)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/62 dark:shadow-[0_14px_40px_rgba(0,0,0,0.22)]">
               <SprintLedger
-                initialQuery={searchParams?.sprintKey as string | undefined}
-                sprints={progressiveSprints}
+                initialQuery={deepLinkSprintKey}
+                sprints={sortedSprints}
                 isLoading={loading}
+                sprintKeyPrefix={sprintKeyPrefix}
                 listWindow={listWindow}
                 onListWindowChange={setListWindow}
                 activeRunsBySprintId={activeRunsBySprintId}
@@ -684,33 +745,11 @@ export const SprintsPage: FunctionComponent = () => {
                 onSprintToggle={handleSprintToggle}
                 onSprintPauseResume={handleSprintPauseResume}
                 onOpenRowMenu={openRowActionsMenu}
-                onEditSprint={(sprint) => {
-                  setEditingSprint(sprint);
-                  setLinkedIssues(sprint.linkedIssues || []);
-                  setShowCreateComposer(false);
-                }}
-                onExportSprint={(sprint) => {
-                  void handleOpenExport(sprint.id, sprint.name);
-                }}
-                onOverridesSprint={(sprint) => {
-                  setOverrideSprint(sprint);
-                }}
-                onMarkCompletedSprint={(sprintId) => {
-                  void handleMarkCompleted(sprintId);
-                }}
-                onDeleteSprint={(sprintId) => {
-                  void requestConfirm({
-                    title: "Delete Sprint?",
-                    body: "Are you sure you want to delete this sprint? All associated tasks and execution history will be permanently removed.",
-                    confirmLabel: "Delete Sprint",
-                    cancelLabel: "Cancel",
-                    destructive: true,
-                  }).then((confirmed) => {
-                    if (confirmed) {
-                      void handleDeleteSprint(sprintId);
-                    }
-                  });
-                }}
+                onEditSprint={handleEditSprintFromLedger}
+                onExportSprint={handleExportSprintFromLedger}
+                onOverridesSprint={handleOverridesSprintFromLedger}
+                onMarkCompletedSprint={handleMarkCompletedFromLedger}
+                onDeleteSprint={handleDeleteSprintFromLedger}
                 onBulkStart={handleBulkStart}
                 onBulkDelete={handleBulkDelete}
                 onBulkShowcaseEnable={handleBulkShowcaseEnable}

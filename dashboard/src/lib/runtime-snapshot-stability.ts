@@ -107,114 +107,119 @@ export function hasActiveExecutionSnapshot(snapshot: ExecutionDashboardSnapshot)
   );
 }
 
+type SprintRun = ExecutionDashboardSnapshot["sprintRuns"][number];
+type TaskDispatch = ExecutionDashboardSnapshot["taskDispatches"][number];
+type Connection = ExecutionDashboardSnapshot["connections"][number];
+type AttentionItem = ExecutionDashboardSnapshot["attentionItems"][number];
+type RecentEvent = ExecutionDashboardSnapshot["recentEvents"][number];
+type RecentInvocation = NonNullable<ExecutionDashboardSnapshot["recentInvocations"]>[number];
+
+const isSprintRunEquivalent = (left: SprintRun, right: SprintRun): boolean => (
+  leftDefined(left, right)
+  && left.id === right.id
+  && left.status === right.status
+  && left.lastHeartbeatAt === right.lastHeartbeatAt
+  && left.finishedAt === right.finishedAt
+  && left.humanIntervention?.title === right.humanIntervention?.title
+  && left.humanIntervention?.reason === right.humanIntervention?.reason
+  && left.humanIntervention?.instructions === right.humanIntervention?.instructions
+);
+
+const isTaskDispatchEquivalent = (left: TaskDispatch, right: TaskDispatch): boolean => (
+  leftDefined(left, right)
+  && left.id === right.id
+  && left.status === right.status
+  && left.taskRunState === right.taskRunState
+  && left.lastHeartbeatAt === right.lastHeartbeatAt
+  && left.finishedAt === right.finishedAt
+  && left.errorMessage === right.errorMessage
+  && left.sessionId === right.sessionId
+  && left.provider === right.provider
+  && left.prUrl === right.prUrl
+  && left.workerBranch === right.workerBranch
+);
+
+const isConnectionEquivalent = (left: Connection, right: Connection): boolean => (
+  leftDefined(left, right)
+  && left.id === right.id
+  && left.status === right.status
+  && left.lastHeartbeatAt === right.lastHeartbeatAt
+  && left.pendingInboxCount === right.pendingInboxCount
+  && left.activeDispatchCount === right.activeDispatchCount
+);
+
+const isAttentionItemEquivalent = (left: AttentionItem, right: AttentionItem): boolean => (
+  leftDefined(left, right)
+  && left.id === right.id
+  && left.status === right.status
+  && left.updatedAt === right.updatedAt
+);
+
+const isRecentEventEquivalent = (left: RecentEvent, right: RecentEvent): boolean => (
+  left?.id === right?.id
+  && left?.createdAt === right?.createdAt
+  && left?.eventType === right?.eventType
+);
+
+const isRecentInvocationEquivalent = (left: RecentInvocation, right: RecentInvocation): boolean => (
+  left?.id === right?.id
+  && left?.status === right?.status
+  && left?.updatedAt === right?.updatedAt
+  && left?.messageCount === right?.messageCount
+  && left?.lastMessageAt === right?.lastMessageAt
+);
+
+function leftDefined<T>(left: T, right: T): boolean {
+  return left != null && right != null;
+}
+
+function areListsEquivalent<T>(
+  left: readonly T[],
+  right: readonly T[],
+  isItemEquivalent: (a: T, b: T) => boolean,
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    if (!isItemEquivalent(left[index], right[index])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Returns `previous` when it is element-wise equivalent to `next`, so that
+ * unchanged sub-collections keep a stable reference. This is what stops the
+ * high-frequency live invocation feed (`recentEvents`) from invalidating
+ * `useMemo`s keyed on unrelated fields like `sprintRuns`.
+ */
+function stabilizeList<T>(
+  previous: readonly T[],
+  next: T[],
+  isItemEquivalent: (a: T, b: T) => boolean,
+): T[] {
+  return areListsEquivalent(previous, next, isItemEquivalent) ? (previous as T[]) : next;
+}
+
 export function areExecutionSnapshotsEquivalent(
   left: ExecutionDashboardSnapshot,
   right: ExecutionDashboardSnapshot,
 ): boolean {
-  if (
-    left.projectId !== right.projectId
-    || left.projectName !== right.projectName
-    || left.sprintRuns.length !== right.sprintRuns.length
-    || left.taskDispatches.length !== right.taskDispatches.length
-    || left.connections.length !== right.connections.length
-    || left.attentionItems.length !== right.attentionItems.length
-    || left.recentEvents.length !== right.recentEvents.length
-    || (left.recentInvocations?.length ?? 0) !== (right.recentInvocations?.length ?? 0)
-  ) {
-    return false;
-  }
-
-  for (let index = 0; index < left.sprintRuns.length; index += 1) {
-    const leftRun = left.sprintRuns[index];
-    const rightRun = right.sprintRuns[index];
-    if (
-      leftRun.id !== rightRun.id
-      || leftRun.status !== rightRun.status
-      || leftRun.lastHeartbeatAt !== rightRun.lastHeartbeatAt
-      || leftRun.finishedAt !== rightRun.finishedAt
-      || leftRun.humanIntervention?.title !== rightRun.humanIntervention?.title
-      || leftRun.humanIntervention?.reason !== rightRun.humanIntervention?.reason
-      || leftRun.humanIntervention?.instructions !== rightRun.humanIntervention?.instructions
-    ) {
-      return false;
-    }
-  }
-
-  for (let index = 0; index < left.taskDispatches.length; index += 1) {
-    const leftDispatch = left.taskDispatches[index];
-    const rightDispatch = right.taskDispatches[index];
-    if (
-      leftDispatch.id !== rightDispatch.id
-      || leftDispatch.status !== rightDispatch.status
-      || leftDispatch.taskRunState !== rightDispatch.taskRunState
-      || leftDispatch.lastHeartbeatAt !== rightDispatch.lastHeartbeatAt
-      || leftDispatch.finishedAt !== rightDispatch.finishedAt
-      || leftDispatch.errorMessage !== rightDispatch.errorMessage
-      || leftDispatch.sessionId !== rightDispatch.sessionId
-      || leftDispatch.provider !== rightDispatch.provider
-      || leftDispatch.prUrl !== rightDispatch.prUrl
-      || leftDispatch.workerBranch !== rightDispatch.workerBranch
-    ) {
-      return false;
-    }
-  }
-
-  for (let index = 0; index < left.connections.length; index += 1) {
-    const leftConnection = left.connections[index];
-    const rightConnection = right.connections[index];
-    if (
-      leftConnection.id !== rightConnection.id
-      || leftConnection.status !== rightConnection.status
-      || leftConnection.lastHeartbeatAt !== rightConnection.lastHeartbeatAt
-      || leftConnection.pendingInboxCount !== rightConnection.pendingInboxCount
-      || leftConnection.activeDispatchCount !== rightConnection.activeDispatchCount
-    ) {
-      return false;
-    }
-  }
-
-  for (let index = 0; index < left.attentionItems.length; index += 1) {
-    const leftItem = left.attentionItems[index];
-    const rightItem = right.attentionItems[index];
-    if (
-      leftItem.id !== rightItem.id
-      || leftItem.status !== rightItem.status
-      || leftItem.updatedAt !== rightItem.updatedAt
-    ) {
-      return false;
-    }
-  }
-
-  for (let index = 0; index < left.recentEvents.length; index += 1) {
-    const leftEvent = left.recentEvents[index];
-    const rightEvent = right.recentEvents[index];
-    if (
-      leftEvent?.id !== rightEvent?.id
-      || leftEvent?.createdAt !== rightEvent?.createdAt
-      || leftEvent?.eventType !== rightEvent?.eventType
-    ) {
-      return false;
-    }
-  }
-
-  const leftInvocations = left.recentInvocations ?? [];
-  const rightInvocations = right.recentInvocations ?? [];
-  for (let index = 0; index < leftInvocations.length; index += 1) {
-    const leftInvocation = leftInvocations[index];
-    const rightInvocation = rightInvocations[index];
-    if (
-      leftInvocation?.id !== rightInvocation?.id
-      || leftInvocation?.status !== rightInvocation?.status
-      || leftInvocation?.updatedAt !== rightInvocation?.updatedAt
-      || leftInvocation?.messageCount !== rightInvocation?.messageCount
-      || leftInvocation?.lastMessageAt !== rightInvocation?.lastMessageAt
-    ) {
-      return false;
-    }
-  }
-
   return (
-    left.primaryAssignedWorker?.workerEndpointId === right.primaryAssignedWorker?.workerEndpointId
+    left.projectId === right.projectId
+    && left.projectName === right.projectName
+    && areListsEquivalent(left.sprintRuns, right.sprintRuns, isSprintRunEquivalent)
+    && areListsEquivalent(left.taskDispatches, right.taskDispatches, isTaskDispatchEquivalent)
+    && areListsEquivalent(left.connections, right.connections, isConnectionEquivalent)
+    && areListsEquivalent(left.attentionItems, right.attentionItems, isAttentionItemEquivalent)
+    && areListsEquivalent(left.recentEvents, right.recentEvents, isRecentEventEquivalent)
+    && areListsEquivalent(left.recentInvocations ?? [], right.recentInvocations ?? [], isRecentInvocationEquivalent)
+    && left.primaryAssignedWorker?.workerEndpointId === right.primaryAssignedWorker?.workerEndpointId
     && left.overflowAssignedWorkers.length === right.overflowAssignedWorkers.length
   );
 }
@@ -223,7 +228,7 @@ export function stabilizeExecutionSnapshot(
   previous: ExecutionDashboardSnapshot,
   next: ExecutionDashboardSnapshot,
 ): ExecutionDashboardSnapshot {
-  if (!hasActiveExecutionSnapshot(previous)) {
+  if (previous === next) {
     return next;
   }
 
@@ -233,7 +238,41 @@ export function stabilizeExecutionSnapshot(
     return next;
   }
 
-  return isEmptyExecutionSnapshot(next) ? previous : next;
+  if (hasActiveExecutionSnapshot(previous) && isEmptyExecutionSnapshot(next)) {
+    return previous;
+  }
+
+  // Reuse stable references for sub-collections that have not semantically
+  // changed. The live invocation feed mutates `recentEvents`/`recentInvocations`
+  // up to several times per second; without this, every such update would hand
+  // a brand-new `sprintRuns`/`connections` array to consumers and re-render the
+  // entire sprint ledger even though nothing relevant to it changed.
+  const result = { ...next };
+  let changed = false;
+
+  const reuse = <K extends keyof ExecutionDashboardSnapshot>(
+    key: K,
+    stabilized: ExecutionDashboardSnapshot[K],
+  ): void => {
+    if (stabilized !== next[key]) {
+      result[key] = stabilized;
+      changed = true;
+    }
+  };
+
+  reuse("sprintRuns", stabilizeList(previous.sprintRuns, next.sprintRuns, isSprintRunEquivalent));
+  reuse("taskDispatches", stabilizeList(previous.taskDispatches, next.taskDispatches, isTaskDispatchEquivalent));
+  reuse("connections", stabilizeList(previous.connections, next.connections, isConnectionEquivalent));
+  reuse("attentionItems", stabilizeList(previous.attentionItems, next.attentionItems, isAttentionItemEquivalent));
+  reuse("recentEvents", stabilizeList(previous.recentEvents, next.recentEvents, isRecentEventEquivalent));
+  if (next.recentInvocations) {
+    reuse(
+      "recentInvocations",
+      stabilizeList(previous.recentInvocations ?? [], next.recentInvocations, isRecentInvocationEquivalent),
+    );
+  }
+
+  return changed ? result : next;
 }
 
 export function stabilizeStatusSnapshot(

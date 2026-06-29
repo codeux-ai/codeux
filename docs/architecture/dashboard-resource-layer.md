@@ -24,13 +24,13 @@ Data fetching is governed by a unified resource layer rather than ad-hoc `useEff
 - The Live page now waits for the resolved sprint scope from the header selection before loading sprint-filtered task data; while that selection is still hydrating, it uses the runtime status `sprint_id` as the fallback scope instead of widening to project-wide "All Sprints".
 - Project status is dynamically derived from `has_active_runs` (active/queued sprint runs or sprints with status `'running'`). If a project has no active runs, its status is mapped to `"idle"` even if the database status column is stale (e.g. from crashed processes or sprint deletions).
 - Sprints only show as `"running"` if their latest sprint run status is `"queued"` or `"running"`. If a sprint run is completed, failed, cancelled, or does not exist, the effective sprint status falls back to `"idle"`.
-- Header telemetry metrics (`TelemetryStats`) filter task counts to only include running and queued tasks belonging to actively running sprints.
+- Header telemetry metrics (`TelemetryStats`) filter task counts to only include running and queued tasks belonging to actively running sprints, and they skip task loading entirely when no sprint is running.
 - Cache invalidation is coordinated through realtime websocket events.
 - Silent websocket/poll refreshes are deduplicated per resource, but a foreground refresh that supersedes an in-flight silent refresh must clear that silent dedupe handle. This prevents navigation or manual refresh from leaving future silent invalidations attached to an already-aborted request. Additionally, if a silent fetch is explicitly aborted, it will clear its own dedupe handle to avoid poisoning subsequent silent refreshes. External abort listeners attached to requests are properly cleaned up upon fetch completion to avoid memory leaks during rapid polling.
 - Direct websocket payload updates (where the event contains the full updated resource) are batched using `requestAnimationFrame`. This coalesces bursts of updates into at most one render per animation frame, preventing the main thread from saturating during high-frequency realtime events.
 - In-flight project-level requests are abort-safe: if a shared project-level request is aborted by its initial caller unmounting, subsequent callers automatically retry instead of inheriting a poisoned aborted promise. Cache entries are populated only from successful, non-aborted fetches.
 - Dashboard API reads are non-cacheable at the HTTP boundary. The shared frontend JSON helper sends `cache: "no-store"` by default, and backend `/api/*`, `/health`, and `/ready` responses carry no-store headers so browser and Electron sessions always request live runtime data.
-- Project effective-settings reads that carry an abort signal are intentionally not globally deduplicated. Settings, Agents, and layout chrome can mount and unmount around the same project at different times, and sharing an abortable request lets one route teardown reject another route's active read. Explicit settings reloads use `cache: "reload"` after save/reset so the page reflects persisted settings instead of a warmed effective-settings payload.
+- Project effective-settings reads are coalesced per project while a request is in flight and then stabilized through the effective-settings cache. This keeps layout chrome, sprint rows, and active pages from starting duplicate `/settings/effective` requests during the same mount burst. Explicit settings reloads use `cache: "reload"` after save/reset so the page reflects persisted settings instead of a warmed effective-settings payload.
 - Dashboard agent preset listing returns existing SQLite presets immediately and schedules markdown/source synchronization in a throttled background task. First-time projects with no presets still await the initial sync so default agents are seeded, while internal planning/MCP callers continue to use the strict `listAgentPresets` path that awaits sync and source decoration.
 
 ## Resource Keys and Cache Invalidation
@@ -60,8 +60,9 @@ Each module exclusively loads the resources it requires. Navigation between modu
 
 ## Progressive List Rendering
 
-Heavy list views, such as the sprint registry or stats ledgers, utilize a progressive list rendering approach (`useProgressiveList`).
+Heavy list views, such as stats ledgers, utilize a progressive list rendering approach (`useProgressiveList`).
 - Lists render an initial lightweight viewport of items.
 - As the user scrolls, an intersection observer triggers progressive unrolling of the remaining items in batches.
 - This prevents main-thread blocking when rendering hundreds of tasks or sprint rows, while still allowing the full dataset to be available for client-side search and sorting.
+- The Sprints page ledger is the exception: it keeps the full sprint collection available to its filter/sort/selection/task-count calculations and relies on its built-in `Show` selector for deterministic row windowing.
 - Heavy lists within complex components, such as the `InvocationsTable`, utilize a simpler `useInvocationsWindow` custom hook to deterministically limit row rendering and lazily append more records on user interaction.

@@ -62,6 +62,43 @@ const DEFAULT_PLANNING_ETA_MS = 180000;
 
 type AddProjectDraft = AddProjectModalSubmission;
 
+function mapsHaveSameContent<V>(
+  prev: Map<string, V>,
+  next: Map<string, V>,
+  isEqualValue: (a: V, b: V) => boolean,
+): boolean {
+  if (prev === next) return true;
+  if (prev.size !== next.size) return false;
+  for (const [key, value] of next) {
+    if (!prev.has(key)) return false;
+    if (!isEqualValue(prev.get(key) as V, value)) return false;
+  }
+  return true;
+}
+
+/**
+ * Keeps a derived map referentially stable across execution-snapshot updates
+ * whose *content* (for the fields we care about) hasn't changed. Sprint runs
+ * heartbeat several times per second on active sprints; without this, every
+ * heartbeat would mint a fresh map and re-render the whole ledger.
+ */
+function useStableMapByContent<V>(
+  map: Map<string, V>,
+  isEqualValue: (a: V, b: V) => boolean,
+): Map<string, V> {
+  const ref = useRef(map);
+  if (ref.current !== map && mapsHaveSameContent(ref.current, map, isEqualValue)) {
+    return ref.current;
+  }
+  ref.current = map;
+  return map;
+}
+
+const isRunSummaryEqual = (
+  a: { id: string; status: string },
+  b: { id: string; status: string },
+): boolean => a.id === b.id && a.status === b.status;
+
 export function useSprintsPageData() {
   const {
     showCreateComposer,
@@ -259,9 +296,12 @@ export function useSprintsPageData() {
     [],
   );
 
-  const actualActiveRunsBySprintId = useMemo(
-    () => buildActualActiveRunsMap(execution.sprintRuns),
-    [execution.sprintRuns],
+  const actualActiveRunsBySprintId = useStableMapByContent(
+    useMemo(
+      () => buildActualActiveRunsMap(execution.sprintRuns),
+      [execution.sprintRuns],
+    ),
+    isRunSummaryEqual,
   );
 
   useEffect(() => {
@@ -288,14 +328,28 @@ export function useSprintsPageData() {
     [actualActiveRunsBySprintId, suppressedRunningSprintIds],
   );
 
-  const pauseResumeRunsBySprintId = useMemo(
-    () => buildPauseResumeRunsMap(execution.sprintRuns),
-    [execution.sprintRuns],
+  const pauseResumeRunsBySprintId = useStableMapByContent(
+    useMemo(
+      () => buildPauseResumeRunsMap(execution.sprintRuns),
+      [execution.sprintRuns],
+    ),
+    isRunSummaryEqual,
   );
 
-  const interventionBySprintId = useMemo(
-    () => getSprintHumanInterventionBySprintId(execution),
-    [execution],
+  const interventionBySprintId = useStableMapByContent(
+    useMemo(
+      // Only `sprintRuns` is read; keying on the whole snapshot would recompute on
+      // every live-feed event (recentEvents/recentInvocations churn).
+      () => getSprintHumanInterventionBySprintId(execution),
+      [execution.sprintRuns], // eslint-disable-line react-hooks/exhaustive-deps
+    ),
+    (a, b) =>
+      a.title === b.title
+      && a.reason === b.reason
+      && a.instructions === b.instructions
+      && a.ownerType === b.ownerType
+      && a.severity === b.severity
+      && a.attentionType === b.attentionType,
   );
 
   const displaySprints = useMemo(
@@ -407,6 +461,7 @@ export function useSprintsPageData() {
     execution,
     loading: sprintsLoading || executionLoading,
     nextId,
+    sprintKeyPrefix,
     planningRoute,
     completedCount,
     inWorkCount,

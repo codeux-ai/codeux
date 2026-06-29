@@ -260,7 +260,8 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
 
   deps.dashboardRealtimeService.setSnapshotLoaders({
     getProjectsSnapshot: cache.getProjectsSnapshot,
-    getProjectExecutionSnapshot: cache.getProjectExecutionSnapshot,
+    // Execution channel is feed-less; the activity feed rides the live payload.
+    getProjectExecutionSnapshot: cache.getProjectExecutionSnapshotLean,
     getProjectStatusSnapshot: (projectId) => deps.projectRuntimeRepository.getProjectLiveStatus(projectId),
     getProjectLiveSnapshot: (projectIdHint) => getProjectLiveSnapshot({
       projectManagementRepository: deps.projectManagementRepository,
@@ -312,7 +313,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     getExecutionSnapshot: () => {
       const projectId = deps.projectManagementRepository.getSelectedProjectId();
       return projectId
-        ? cache.getProjectExecutionSnapshot(projectId)
+        ? cache.getProjectExecutionSnapshotLean(projectId)
         : {
           projectId: null,
           projectName: null,
@@ -327,7 +328,8 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
         };
     },
     getOverviewTelemetrySnapshot: cache.getOverviewTelemetrySnapshot,
-    getProjectExecutionSnapshot: cache.getProjectExecutionSnapshot,
+    // `/api/projects/:id/execution` (sprints/overview/chat) — feed-less.
+    getProjectExecutionSnapshot: cache.getProjectExecutionSnapshotLean,
     getProjectStatsSnapshot: cache.getProjectStatsSnapshot,
     setPreferredWorker: (projectId, input) => {
       requireProject(deps, projectId);

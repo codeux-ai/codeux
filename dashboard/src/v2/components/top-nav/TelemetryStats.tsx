@@ -1,4 +1,5 @@
 import type { FunctionComponent } from "preact";
+import { useMemo } from "preact/hooks";
 import { useProjectTasks } from "../../hooks/use-project-tasks.js";
 import { RollingNumber } from "../ui/RollingNumber.js";
 import type { Sprint, Task } from "../../types.js";
@@ -9,10 +10,15 @@ interface TelemetryStatsProps {
 }
 
 export const TelemetryStats: FunctionComponent<TelemetryStatsProps> = ({ projectId, sprints }) => {
-    const { tasks } = useProjectTasks(projectId, [], sprints, null);
+    const activeSprintIds = useMemo(
+        () => new Set((sprints || []).filter((s) => s.status === "running").map((s) => s.id)),
+        [sprints],
+    );
+    const { tasks } = useProjectTasks(projectId, [], sprints, null, {
+        enabled: activeSprintIds.size > 0,
+    });
 
     const allTasks = tasks || [];
-    const activeSprintIds = new Set((sprints || []).filter((s) => s.status === "running").map((s) => s.id));
     const runningCount = allTasks.filter((t: Task) => t.status === "in_progress" && activeSprintIds.has(t.sprintId)).length;
     const queuedCount = allTasks.filter((t: Task) => t.status === "pending" && activeSprintIds.has(t.sprintId)).length;
 

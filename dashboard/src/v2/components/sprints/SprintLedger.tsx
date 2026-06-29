@@ -1,4 +1,5 @@
 import type { FunctionComponent } from "preact";
+import { memo } from "preact/compat";
 import { useEffect, useMemo, useState, useCallback } from "preact/hooks";
 import {
   ArrowDown,
@@ -40,6 +41,7 @@ export interface SprintLedgerProps {
   initialQuery?: string;
   sprints: Sprint[];
   isLoading?: boolean;
+  sprintKeyPrefix?: string;
   listWindow: ListWindowOption;
   onListWindowChange: (value: ListWindowOption) => void;
   activeRunsBySprintId: Map<string, { id: string; status: string }>;
@@ -61,10 +63,11 @@ export interface SprintLedgerProps {
   onBulkShowcaseDisable: (sprintIds: string[]) => void;
 }
 
-export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
+const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
   initialQuery,
   sprints,
   isLoading,
+  sprintKeyPrefix = "SPR",
   listWindow,
   onListWindowChange,
   activeRunsBySprintId,
@@ -101,13 +104,13 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
   }, [initialQuery]);
 
   const filteredSprints = useMemo(
-    () => filterSprints(sprints, filters),
-    [sprints, filters],
+    () => filterSprints(sprints, filters, sprintKeyPrefix),
+    [sprints, filters, sprintKeyPrefix],
   );
 
   const ledgerSprints = useMemo(
-    () => sortSprints(filteredSprints, sort),
-    [filteredSprints, sort],
+    () => sortSprints(filteredSprints, sort, sprintKeyPrefix),
+    [filteredSprints, sort, sprintKeyPrefix],
   );
 
   const windowedSprints = useMemo(() => {
@@ -439,6 +442,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                   activeRun={activeRunsBySprintId.get(sprint.id)}
                   pauseResumeRun={pauseResumeRunsBySprintId.get(sprint.id)}
                   humanIntervention={actionableInterventionBySprintId.get(sprint.id) || null}
+                  sprintKeyPrefix={sprintKeyPrefix}
                   pendingActionIds={pendingActionIds}
                   isAnyBulkPending={isAnyBulkPending}
                   onToggleRow={handleToggleRow}
@@ -462,3 +466,5 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
     </div>
   );
 };
+
+export const SprintLedger = memo(SprintLedgerComponent);

@@ -204,6 +204,66 @@ describe("DashboardRealtimeService", () => {
     expect(eventTypes).toContain("project.execution.updated");
     expect(eventTypes).toContain("project.live.updated");
   });
+
+  it("routes the heavy live payload to a dedicated `:live` scope, separate from the execution channel", async () => {
+    const { service } = await createService();
+    const scopeByEventType = new Map<string, string>();
+
+    service.setSnapshotLoaders({
+      getProjectsSnapshot: () => ({ projects: [], selectedProjectId: "project-1" }),
+      getProjectExecutionSnapshot: () => ({
+        projectId: "project-1",
+        projectName: "Project 1",
+        sprintRuns: [],
+        taskDispatches: [],
+        connections: [],
+        primaryAssignedWorker: null,
+        overflowAssignedWorkers: [],
+        attentionItems: [],
+        recentEvents: [],
+        updatedAt: "2026-03-30T09:00:00.000Z",
+      }),
+      getProjectStatusSnapshot: () => ({
+        project_id: "project-1",
+        sprint_id: "sprint-1",
+        subtasks: [],
+        timestamp: "2026-03-30T09:00:00.000Z",
+      }),
+      getProjectLiveSnapshot: () => ({
+        projectId: "project-1",
+        selectedSprintId: "sprint-1",
+        status: { project_id: "project-1", sprint_id: "sprint-1", subtasks: [], timestamp: "2026-03-30T09:00:00.000Z" },
+        execution: {
+          projectId: "project-1",
+          projectName: "Project 1",
+          sprintRuns: [],
+          taskDispatches: [],
+          connections: [],
+          primaryAssignedWorker: null,
+          overflowAssignedWorkers: [],
+          attentionItems: [],
+          recentEvents: [],
+          updatedAt: "2026-03-30T09:00:00.000Z",
+        },
+        gitStatus: null,
+        gitStatusError: null,
+        updatedAt: "2026-03-30T09:00:00.000Z",
+      }),
+      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: "2026-03-30T09:00:00.000Z" }),
+    });
+
+    service.subscribe((event) => {
+      scopeByEventType.set(event.eventType, event.scope);
+    });
+
+    service.scheduleProjectExecutionRefresh("project-1", { includeOverview: false });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    // The lean execution channel stays on the shared project scope (sprints/overview/chat),
+    // while the heavy live payload is isolated on its own scope (Live/Tasks only).
+    expect(scopeByEventType.get("project.execution.updated")).toBe("project:project-1");
+    expect(scopeByEventType.get("project.live.updated")).toBe("project:project-1:live");
+  });
 });
 
 describe("DashboardRealtimeService observability", () => {

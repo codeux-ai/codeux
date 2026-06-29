@@ -197,7 +197,7 @@ Legacy runtime:
 - V2 pages render their intro/heading via the shared `PageHeader` atomic component (`components/layout/PageHeader.tsx`): an optional icon + uppercase eyebrow, a unified `text-2xl md:text-3xl` title, an optional subtitle, and optional right-aligned `actions`. This keeps every page's intro section visually consistent — do not hand-roll bespoke page headings.
 - Top-nav project selector persists the active project in sqlite
 - Top-nav sprint selector persists the active sprint for the selected project
-- Top-nav search sits in the left header cluster beside the brand, while the active task counter uses the same compact height as the project, sprint, and worker selectors
+- Top-nav search sits in the left header cluster beside the brand and lazy-loads project tasks only after the search overlay opens; the active task counter uses the same compact height as the project, sprint, and worker selectors
 - Global Search preserves previous results during debounce to avoid layout shift, only polls for container previews when opened, and uses `aria-activedescendant` for keyboard navigation.
 - The Live Sprint Clock card in the Sprint Stats deck now shows a six-tile grid with Finished, Avg Finish, Accumulated, Input, Output, and Cached values, and the token tiles reuse the shared compact formatter from the Stats page.
 - Live runtime pages now use the persisted top-nav sprint selection as the page scope, so the Live view follows the selected sprint from the header menu
@@ -293,6 +293,7 @@ Legacy runtime:
 - The in-page sprint composer collapses into a stacked single-column layout on smaller screens, and both create and edit now use that same inline flow. The Quicksprint panel and the Sprint Composer are mutually exclusive; opening one automatically dismisses the other to maintain focus.
 - The Quicksprint panel separates `Default Templates` from custom templates and includes a purpose selector for built-in template sets. The first shipped built-in purpose is `Fullstack JS App`, which groups six project-agnostic engineering and UI quicksprint templates loaded from `.code-ux/quicksprints/templates` and overrideable from project or home `.code-ux` directories. See [Quicksprint Templates](./quicksprint-templates.md).
 - The refreshed sprint ledger below the showcase renders as a responsive card/table hybrid: mobile rows collapse into touch-friendly sprint cards, desktop keeps sortable table scanning, and the header includes live visible/pinned/active/completed counters.
+- The sprint ledger receives the full project sprint collection for counting, searching, sorting, selection, and task-count/progress accounting; the local `Show` selector is the only row-windowing layer, so large projects do not under-report sprints or task totals during initial render.
 - The desktop ledger table now enforces mirrored per-column width guards (`w-*` + `min-w-*`) with a container-scoped horizontal scroller, preventing header/body overlap at narrow widths while avoiding page-level horizontal overflow.
 - Sprint ledger rows now include dedicated mobile field labels (`Sprint ID`, `Sprint`, `Status`, `Tasks`, `Completion`, `Created`, `Controls`) so narrow viewports keep critical values readable without clipping.
 - Ledger controls include real-time search, dropdown filters for status, showcase, and QA state, page-size selection, a filtered/total counter, and a clear action that resets the full filter set.
@@ -301,7 +302,7 @@ Legacy runtime:
 - Sprint ledger row controls now expose pause/resume in addition to existing start/stop semantics, and each runtime action shows pending/disabled state while the control request is in flight.
 - Sending a chat message now inserts an optimistic invocation row immediately in the invocations rail and reconciles it when the server returns the persisted invocation record.
 - Sortable column headers cycle through unsorted, ascending, and descending for showcasePinned, sprintKey, name, status, tasksCount, completion, and createdAt (default: newest-first)
-- Ledger rows expose: pinned/showcase state, sprint key, review and human-intervention badges, task count, gradient progress, created/updated metadata, a primary start/stop button, an `Open Subtasks` deep link (`/tasks?sprint=<id>`) that navigates to the Tasks page pre-filtered to that sprint, and a compact settings menu for edit/export/showcase/overrides/delete
+- Ledger rows expose: pinned/showcase state, sprint key, review and human-intervention badges, task count, gradient progress, created/updated metadata, a primary start/stop button, an `Open Subtasks` deep link (`/tasks?sprintId=<id>`) that navigates to the Tasks page pre-filtered to that sprint, and a compact settings menu for edit/export/showcase/overrides/delete
 - The sprint page no longer runs a full-page entrance fade on mount, which keeps initial navigation more immediate and avoids perceived flashing
 - The sprint page now uses lighter targeted motion on the heading instead of a full-page fade, keeping navigation more immediate without leaving the page static
 - Sprint composer planning-route overrides now correctly force the selected virtual provider instead of only overriding the model on the project default provider
@@ -716,7 +717,7 @@ To prevent credential and runtime config conflicts, provider configurations enfo
 - The v2 frontend is organized into page-scoped module boundaries (overview, sprints, tasks, stats, live), exclusively loading resources they need.
 - The Sprints page uses a data/action/view-model split: `useSprintsPageData` coordinates state, `useSprintsPageActions` manages side effects and API calls, `useSprintsPageModals` manages transient UI state, and deterministic derived state is extracted into pure view-model helpers (`sprints-page-view-models.ts`).
 - A shared dashboard resource layer manages resource keys, caching, and invalidation, deduplicating fetches and avoiding UI flashing during background updates.
-- Heavy list views use a progressive list strategy (`useProgressiveList`) with an intersection observer to render items in batches and prevent main-thread blocking.
+- Heavy stats ledger views use a progressive list strategy (`useProgressiveList`) with an intersection observer to render items in batches and prevent main-thread blocking. The sprint ledger keeps full sprint data in memory for accurate filtering, sorting, selection, and task totals, then limits visible rows through its `Show` selector.
 - Backend read-model optimizations efficiently project data to support the resource layer while leaving API routes and backend contracts entirely unchanged.
 - Extensionless dashboard routes like `/sprints` are served by the SPA app shell on direct load or refresh. This routing behavior remains consistent even when Code UX itself is running inside a preview container.
 

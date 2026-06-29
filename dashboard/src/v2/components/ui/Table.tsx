@@ -45,25 +45,31 @@ export function TableBody({ children }: { children: ComponentChildren }) {
   useEffect(() => {
     if (isReducedMotion || !tbodyRef.current || hasMounted.current) return;
 
-    // We only want to animate children rows once
+    // Animate the rows in exactly once, when they first appear. We mark
+    // `hasMounted` synchronously here (not in gsap's onComplete): under a live
+    // data stream the parent re-renders faster than the ~350ms animation, so a
+    // deferred flag would let every re-render restart the tween — resetting all
+    // rows to opacity 0 and making the table appear to perpetually reload.
     const rows = tbodyRef.current.querySelectorAll(':scope > [data-table-row]');
     if (rows.length === 0) return;
 
-    const tween = gsap.fromTo(
+    hasMounted.current = true;
+
+    // Animate only the vertical offset — never opacity. gsap writes its tweened
+    // value to the element's inline style, and if the parent re-renders fast
+    // enough to interrupt the tween (live data streams do), an opacity tween can
+    // leave rows stranded at `opacity: 0`, making the table look like it only
+    // ever shows one row. A transform offset can never make a row invisible.
+    gsap.fromTo(
       rows,
-      { opacity: 0, y: 6 },
+      { y: 6 },
       {
-        opacity: 1,
         y: 0,
         stagger: Math.min(25, 200 / rows.length),
         duration: 0.15,
         ease: 'power2.out'
       }
     );
-
-    if (tween && typeof tween.eventCallback === 'function') { tween.eventCallback('onComplete', () => { hasMounted.current = true; }); }
-
-
   }, [children, isReducedMotion]);
 
   return <tbody ref={tbodyRef} className="block lg:table-row-group" role="rowgroup">{children}</tbody>;
