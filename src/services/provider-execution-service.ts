@@ -164,6 +164,14 @@ export class ProviderExecutionService {
         ? new ActivityWriteCoalescer(this.deps.sessionTracking, args.sessionId)
         : null;
 
+      // The telemetry watcher fires every ~1.5s while a run is live, and the handler below mirrors
+      // the full parsed conversation into the invocation by clearing and re-inserting every message.
+      // That is O(turns) synchronous writes per tick — and the conversation only grows — so without
+      // a guard a single long run rewrites the same rows dozens of times, and concurrent sprints
+      // multiply it. Track a cheap signature of what we last persisted and skip the rewrite when the
+      // conversation hasn't changed since the previous tick.
+      let lastPersistedMessagesSignature: string | null = null;
+
       if (!execInvocationId) {
         execInvocationId = this.deps.executionRepository?.createExecutionInvocation({
           projectId: args.projectId,
@@ -323,28 +331,40 @@ export class ProviderExecutionService {
               // just as agentic but were previously collapsed to prompt + final
               // answer. The structured callers parse their result from the
               // returned text, not from these messages, so this is display-only.
-              if (telemetry.conversation && telemetry.conversation.length > 0) {
-                this.deps.executionRepository.clearExecutionInvocationMessages(execInvocationId);
-                for (const turn of telemetry.conversation) {
-                  this.deps.executionRepository.appendExecutionInvocationMessage(
-                    execInvocationId,
-                    conversationTurnToMessage(turn, args.provider, effectiveModel),
-                  );
+              //
+              // Cheap signature of the about-to-be-persisted state. The conversation only grows
+              // within a run, so identical signatures across ticks mean nothing changed and the
+              // O(turns) clear+reinsert below can be skipped entirely.
+              const turnCount = telemetry.conversation?.length ?? 0;
+              const signature = turnCount > 0
+                ? `conv:${turnCount}:${telemetry.transcriptText.length}:${countConversationToolCalls(telemetry.conversation)}`
+                : `text:${args.trackPromptInInvocation !== false ? "p" : ""}:${telemetry.transcriptText.length}`;
+
+              if (signature !== lastPersistedMessagesSignature) {
+                if (telemetry.conversation && telemetry.conversation.length > 0) {
+                  this.deps.executionRepository.clearExecutionInvocationMessages(execInvocationId);
+                  for (const turn of telemetry.conversation) {
+                    this.deps.executionRepository.appendExecutionInvocationMessage(
+                      execInvocationId,
+                      conversationTurnToMessage(turn, args.provider, effectiveModel),
+                    );
+                  }
+                } else {
+                  this.deps.executionRepository.clearExecutionInvocationMessages(execInvocationId);
+                  if (args.trackPromptInInvocation !== false) {
+                    this.deps.executionRepository.appendExecutionInvocationMessage(execInvocationId, {
+                      role: "user",
+                      contentMarkdown: p,
+                    });
+                  }
+                  if (telemetry.transcriptText) {
+                    this.deps.executionRepository.appendExecutionInvocationMessage(execInvocationId, {
+                      role: "assistant",
+                      contentMarkdown: sanitizeInvocationOutputText(telemetry.transcriptText),
+                    });
+                  }
                 }
-              } else {
-                this.deps.executionRepository.clearExecutionInvocationMessages(execInvocationId);
-                if (args.trackPromptInInvocation !== false) {
-                  this.deps.executionRepository.appendExecutionInvocationMessage(execInvocationId, {
-                    role: "user",
-                    contentMarkdown: p,
-                  });
-                }
-                if (telemetry.transcriptText) {
-                  this.deps.executionRepository.appendExecutionInvocationMessage(execInvocationId, {
-                    role: "assistant",
-                    contentMarkdown: sanitizeInvocationOutputText(telemetry.transcriptText),
-                  });
-                }
+                lastPersistedMessagesSignature = signature;
               }
             }
           }

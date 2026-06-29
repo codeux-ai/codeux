@@ -286,11 +286,16 @@ export class WorkspaceManager implements IWorkspaceManager {
 
     await this.withRepoLock(repoPath, async () => {
       await this.assertExactGitWorktreeRoot(repoPath);
-      try {
-        const fetchEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(repoPath, gitAuth ?? {});
-        await runCommandStrict("git", ["fetch", "origin"], repoPath, fetchEnv ?? process.env);
-      } catch {
-        // continue with local refs when origin is unavailable
+      // Only the worker and feature branch tips matter for resolving the start ref, so fetch just
+      // those instead of every ref. A bare `git fetch origin` pulls all refs, which on repos that
+      // have run many sprints means thousands of branches on every task prep. Each branch is fetched
+      // independently so a branch not yet on origin (e.g. the worker branch for a fresh task) does
+      // not abort the others; on any failure we simply fall back to local refs.
+      const fetchEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(repoPath, gitAuth ?? {});
+      const fetchRefs = Array.from(new Set([workerBranch, featureBranch].filter((branch) => Boolean(branch))));
+      for (const branch of fetchRefs) {
+        await runCommandStrict("git", ["fetch", "origin", branch], repoPath, fetchEnv ?? process.env)
+          .catch(() => undefined);
       }
 
       if (resumeSessionId && await this.workspaceExists(workspaceRef) && await this.canResumeExistingWorkspace(workspaceRef, workerBranch)) {
