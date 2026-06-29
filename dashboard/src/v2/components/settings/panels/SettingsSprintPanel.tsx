@@ -134,7 +134,7 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
             }))}
           />
         </Row>
-        <Row label="Auto-close linked issues" description={editableSettings.git.githubMode === "LOCAL" ? "Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete. (Disabled in Local mode)" : "Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete."} badge={getFieldBadge("git.autoCloseLinkedIssues")} last>
+        <Row label="Auto-close linked issues" description={editableSettings.git.githubMode === "LOCAL" ? "Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete. (Disabled in Local mode)" : "Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete."} badge={getFieldBadge("git.autoCloseLinkedIssues")}>
           <Toggle aria-label="Toggle setting"             value={editableSettings.git.githubMode === "LOCAL" ? false : editableSettings.git.autoCloseLinkedIssues}
             disabled={editableSettings.git.githubMode === "LOCAL"}
             onChange={() => updateEditableSettings((current) => ({
@@ -142,6 +142,17 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
               git: {
                 ...current.git,
                 autoCloseLinkedIssues: !current.git.autoCloseLinkedIssues,
+              },
+            }))}
+          />
+        </Row>
+        <Row label="Delete merged branches" description="Delete a worker branch after it merges into the sprint feature branch, and the feature branch after it merges into the default branch, so finished work doesn't leave dead branches behind. (Remote PR merges always delete the branch.)" badge={getFieldBadge("git.deleteMergedBranches")} last>
+          <Toggle aria-label="Toggle setting"             value={editableSettings.git.deleteMergedBranches}
+            onChange={() => updateEditableSettings((current) => ({
+              ...current,
+              git: {
+                ...current.git,
+                deleteMergedBranches: !current.git.deleteMergedBranches,
               },
             }))}
           />

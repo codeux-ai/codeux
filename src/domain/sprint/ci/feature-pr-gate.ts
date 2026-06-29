@@ -1,7 +1,7 @@
 import { evaluateMergeReadiness } from "./feature-pr/merge-readiness-policy.js";
 import { deriveChecksFromCiRuns } from "../../../sprint/ci-status-utils.js";
 import type { GuardrailService } from "../../../services/guardrail-service.js";
-import { findRecoverableWorkerBranch, getCheckedOutRef, mergeBranchLocally, restoreCheckedOutRef } from "../../../infrastructure/git/local-merge.js";
+import { deleteBranchLocally, findRecoverableWorkerBranch, getCheckedOutRef, mergeBranchLocally, restoreCheckedOutRef } from "../../../infrastructure/git/local-merge.js";
 import { buildWorkerBranchPrefix } from "../../../services/cli-workflow-utils.js";
 import { matchMergedPrForTask, matchPrForTask } from "./feature-pr/pr-matcher.js";
 import { attemptAutoMerge } from "./feature-pr/automerge-policy.js";
@@ -40,6 +40,8 @@ export interface CiGateContext {
   featureBranchPrefix: string;
   ciIntelligence: CiIntelligenceSettings;
   githubMode: "REMOTE" | "LOCAL";
+  /** When true, delete a LOCAL-mode worker branch after it merges into the feature branch. */
+  deleteMergedBranches?: boolean;
   gitStatus: GitTrackingStatus | null;
   guardrailService: GuardrailService;
   isJulesApiConfigured: () => boolean;
@@ -224,6 +226,15 @@ export class FeaturePrGateService {
               task.intervention_owner = undefined;
               task.intervention_hint = undefined;
               await context.persistMergedTask(task);
+
+              // Worker branch is now fully contained in the feature branch; drop it so dead
+              // per-task branches do not pile up in the repo.
+              if (context.deleteMergedBranches) {
+                const deleted = await deleteBranchLocally({ repoPath: context.repoPath, branch: workerBranch });
+                if (deleted) {
+                  context.logger?.info(`LOCAL Mode: Deleted merged worker branch ${workerBranch}`);
+                }
+              }
 
               reportText += `- ✅ **Merged locally:** Task \`${task.id}\` — branch \`${workerBranch}\` merged into \`${context.featureBranch}\`.\n`;
             } else {

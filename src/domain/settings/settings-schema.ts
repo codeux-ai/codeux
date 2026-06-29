@@ -224,6 +224,9 @@ const validateGitSettings = (
   if (typeof value.autoCloseLinkedIssues !== "boolean") {
     issues.push({ path: `${path}.autoCloseLinkedIssues`, message: "Expected a boolean" });
   }
+  if (value.deleteMergedBranches !== undefined && typeof value.deleteMergedBranches !== "boolean") {
+    issues.push({ path: `${path}.deleteMergedBranches`, message: "Expected a boolean" });
+  }
   if (typeof value.featureBranchPrefix !== "string") {
     issues.push({ path: `${path}.featureBranchPrefix`, message: "Expected a string" });
   }

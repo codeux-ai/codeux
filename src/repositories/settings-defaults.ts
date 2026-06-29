@@ -421,6 +421,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     defaultBranch: "main",
     autoCreatePr: true,
     autoCloseLinkedIssues: false,
+    deleteMergedBranches: true,
     featureBranchPrefix: "feature/",
     sprintBranchScheme: DEFAULT_SPRINT_BRANCH_SCHEME,
     sprintKeyPrefix: "SPR",

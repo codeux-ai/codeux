@@ -46,6 +46,7 @@ import { JulesSourceResolver } from "../services/jules-source-resolver.js";
 import { RuntimeCleanupService } from "../services/runtime-cleanup-service.js";
 import { RuntimeStartupRecoveryService } from "../services/runtime-startup-recovery-service.js";
 import { DockerAssetPruneService } from "../services/docker-asset-prune-service.js";
+import { BranchReaperService } from "../services/branch-reaper-service.js";
 import { DatabaseMaintenanceService } from "../services/database-maintenance-service.js";
 import { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
 import { AgentPresetSyncService } from "../services/agent-preset-sync-service.js";
@@ -1012,6 +1013,30 @@ export class CodeUxServer {
       ).cleanupOnStartup();
     } catch (error) {
       this.logger.error("Failed to prune stale Docker assets on startup", { error });
+    }
+
+    try {
+      await new BranchReaperService({
+        listProjects: () => this.projectManagementRepository.listProjects().projects.map((project) => ({
+          id: project.id,
+          baseDir: project.baseDir,
+        })),
+        resolveProjectGit: (projectId) => {
+          try {
+            const git = this.settingsRepository.resolveProjectDashboardSettings(projectId).settings.git;
+            return {
+              deleteMergedBranches: git.deleteMergedBranches,
+              defaultBranch: git.defaultBranch,
+              featureBranchPrefix: git.featureBranchPrefix,
+            };
+          } catch {
+            return null;
+          }
+        },
+        logger: this.logger.child({ component: "branch-reaper-service" }),
+      }).reapOnStartup();
+    } catch (error) {
+      this.logger.error("Failed to reap merged branches on startup", { error });
     }
 
     try {

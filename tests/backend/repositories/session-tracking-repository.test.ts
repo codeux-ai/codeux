@@ -210,6 +210,23 @@ describe("SessionTrackingRepository", () => {
     expect(paged.nextPageToken).toBe("1");
   });
 
+  it("batch-inserts activities in order and no-ops on an empty batch", async () => {
+    const repo = await createRepo();
+    repo.createSession({ id: "s1", provider: "jules" });
+
+    repo.appendActivities("s1", []);
+    expect(repo.listAllActivities("s1")).toHaveLength(0);
+
+    repo.appendActivities("s1", [
+      { description: "first", createTime: "2026-06-03T11:00:00.000Z" },
+      { description: "second", createTime: "2026-06-03T11:00:01.000Z", originator: "agent" },
+    ]);
+
+    const activities = repo.listAllActivities("s1");
+    expect(activities.map((a) => a.description)).toEqual(["first", "second"]);
+    expect(activities[1].originator).toBe("agent");
+  });
+
   it("lists sessions", async () => {
     const repo = await createRepo();
     repo.createSession({ id: "s1", provider: "jules", title: "T1" });

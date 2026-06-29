@@ -20,6 +20,7 @@ import type { ProviderId } from "../contracts/app-types.js";
 import type { CreateProviderInvocationUsageInput } from "../contracts/execution-types.js";
 import { sanitizeInvocationOutputText } from "./invocation-output-sanitizer.js";
 import { conversationTurnToMessage } from "./provider-conversation-message-mapper.js";
+import { ActivityWriteCoalescer } from "./activity-write-coalescer.js";
 
 /** Counts tool-call turns in a parsed provider conversation, for tool-call stats. */
 function countConversationToolCalls(conversation: ParsedConversationTurn[] | undefined | null): number {
@@ -156,6 +157,13 @@ export class ProviderExecutionService {
     const runProviderInner = async (p: string, retrySystemMessage?: string, continueSessionId?: string | null): Promise<ProviderRunResult> => {
       const startedAt = new Date().toISOString();
 
+      // Coalesce the per-line streaming activity firehose into batched transactions so concurrent
+      // sprints don't saturate the single thread with one INSERT per output line. Only used when
+      // the caller didn't supply its own onActivity (i.e. when we'd otherwise write per line).
+      const activityCoalescer = (!args.onActivity && this.deps.sessionTracking)
+        ? new ActivityWriteCoalescer(this.deps.sessionTracking, args.sessionId)
+        : null;
+
       if (!execInvocationId) {
         execInvocationId = this.deps.executionRepository?.createExecutionInvocation({
           projectId: args.projectId,
@@ -280,11 +288,8 @@ export class ProviderExecutionService {
         onActivity: (desc: string, originator?: string) => {
           if (args.onActivity) {
             args.onActivity(desc, originator);
-          } else if (this.deps.sessionTracking) {
-            this.deps.sessionTracking.appendActivity(args.sessionId, {
-              description: desc,
-              originator: originator || "system",
-            });
+          } else if (activityCoalescer) {
+            activityCoalescer.push(desc, originator || "system");
           }
         },
         onTelemetry: (telemetry: ProviderUsageTelemetry) => {
@@ -375,9 +380,13 @@ export class ProviderExecutionService {
             durationMs: Date.now() - startedMs,
             error,
           });
+          // Persist buffered streaming activity before the failure unwinds.
+          activityCoalescer?.stop();
           throw error;
         }
       })();
+      // Persist any buffered streaming activity from the completed run before recording usage.
+      activityCoalescer?.stop();
 
       if (invocation && this.deps.executionRepository) {
         const finishedAt = new Date().toISOString();

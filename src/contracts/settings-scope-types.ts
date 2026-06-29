@@ -61,6 +61,7 @@ export interface ProjectGitSettings {
   defaultBranch: string;
   autoCreatePr: boolean;
   autoCloseLinkedIssues: boolean;
+  deleteMergedBranches: boolean;
   featureBranchPrefix: string;
   sprintBranchScheme: string;
   sprintKeyPrefix: string;

@@ -710,6 +710,14 @@ export interface GitSettings {
   defaultBranch: string;
   autoCreatePr: boolean;
   autoCloseLinkedIssues: boolean;
+  /**
+   * Delete a branch once its work has been merged: worker branches after they merge into the
+   * sprint feature branch, and the feature branch after it merges into the default branch. In
+   * REMOTE mode PR merges already delete the remote branch; this primarily controls LOCAL-mode
+   * branch cleanup and is also honoured by the stale-branch reaper, preventing the thousands of
+   * dead sprint branches that otherwise accumulate in long-lived repos.
+   */
+  deleteMergedBranches: boolean;
   featureBranchPrefix: string;
   sprintBranchScheme: string;
   sprintKeyPrefix: string;

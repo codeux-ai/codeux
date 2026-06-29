@@ -40,10 +40,23 @@ export interface SnapshotCheckout {
   fallbackBranch?: string;
 }
 
+/**
+ * Options controlling how a snapshot workspace is seeded.
+ *
+ * `singleBranch` seeds only the checkout branch (a single-ref, full-history bundle) and checks it
+ * out in the same helper container, instead of bundling every ref (`--all`) and fetching all of
+ * them into the volume. Repos that have run many sprints accumulate thousands of worker/feature
+ * branches, so the all-ref seed copies thousands of refs the consumer never needs. Read-only,
+ * single-branch consumers (planning) opt into this for a dramatically cheaper, lower-IO seed.
+ */
+export interface SnapshotWorkspaceOptions {
+  singleBranch?: boolean;
+}
+
 export interface IWorkspaceManager {
   buildWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): string;
   buildWorkspaceRef(repoPath: string, workspaceKey: string, executionMode: CliWorkflowSettings["executionMode"]): string;
-  createSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout): Promise<string>;
+  createSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout, options?: SnapshotWorkspaceOptions): Promise<string>;
   createOrReuseSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout): Promise<string>;
   resolveResumeWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): Promise<string | undefined>;
   resolveCurrentBranch(worktreePath: string): Promise<string | null>;
@@ -147,11 +160,14 @@ export class WorkspaceManager implements IWorkspaceManager {
     return `${WORKSPACE_HANDLE_PREFIX}${volumeName}`;
   }
 
-  async createSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout): Promise<string> {
+  async createSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout, options?: SnapshotWorkspaceOptions): Promise<string> {
     await this.assertExactGitWorktreeRoot(repoPath);
     const workspaceRef = this.buildWorktreePath(repoPath, `${sessionId}-snapshot`, "DOCKER");
     await this.removeWorktree(repoPath, workspaceRef).catch(() => undefined);
     await this.createVolume(workspaceRef);
+    if (options?.singleBranch && await this.trySeedSingleBranchWorkspace(repoPath, workspaceRef, checkout)) {
+      return workspaceRef;
+    }
     await this.seedWorkspaceFromBundle(repoPath, workspaceRef);
     await this.checkoutSnapshotBranch(repoPath, workspaceRef, checkout);
     return workspaceRef;
@@ -585,6 +601,89 @@ export class WorkspaceManager implements IWorkspaceManager {
       return inspected.stdout.trim() === "true";
     } catch {
       return false;
+    }
+  }
+
+  /**
+   * Fast path for read-only single-branch consumers (planning): seed only the resolved checkout
+   * branch with a single-ref bundle and check it out in the same helper container — one container
+   * run instead of an all-ref seed plus a separate checkout container, and a tiny bundle instead of
+   * one carrying every accumulated worker/feature branch. Returns false (so the caller falls back to
+   * the full seed) when no concrete local branch can be resolved.
+   */
+  private async trySeedSingleBranchWorkspace(
+    repoPath: string,
+    worktreePath: string,
+    checkout?: SnapshotCheckout,
+  ): Promise<boolean> {
+    const candidates = [checkout?.branch, checkout?.fallbackBranch]
+      .map((branch) => branch?.trim())
+      .filter((branch): branch is string => Boolean(branch));
+    const requested = candidates.length > 0 ? candidates : [await this.resolveRepoCurrentBranch(repoPath)];
+
+    let resolvedBranch: string | null = null;
+    for (const candidate of requested) {
+      if (candidate && await this.refExists(repoPath, `refs/heads/${candidate}`)) {
+        resolvedBranch = candidate;
+        break;
+      }
+    }
+    if (!resolvedBranch) {
+      return false;
+    }
+
+    const { volumeName } = parseWorkspaceHandle(worktreePath);
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-sbbundle-"));
+    const bundlePath = path.join(tempDir, "repo.bundle");
+    const originUrl = await this.resolveOriginUrl(repoPath);
+    const ownerSpec = getWorkspaceOwnerSpec();
+
+    try {
+      await this.ensurePublicHelperImage(WORKSPACE_HELPER_IMAGE, repoPath, process.env);
+      // Single-ref bundle: full history of just this branch, not every ref in the repo.
+      await runCommandStrict("git", ["bundle", "create", bundlePath, resolvedBranch], repoPath);
+      const initScript = [
+        "set -e",
+        "tmp=$(mktemp)",
+        "cat > \"$tmp\"",
+        "rm -rf /workspace/* /workspace/.[!.]* /workspace/..?* 2>/dev/null || true",
+        "git init /workspace >/dev/null",
+        "git -C /workspace symbolic-ref HEAD refs/heads/code-ux-bootstrap-$$",
+        "git -C /workspace remote add origin \"$tmp\"",
+        "git -C /workspace fetch origin '+refs/*:refs/*' >/dev/null",
+        "rm -f \"$tmp\"",
+        originUrl
+          ? `git -C /workspace remote set-url origin ${shellQuote(originUrl)}`
+          : "git -C /workspace remote remove origin >/dev/null 2>&1 || true",
+        "git -C /workspace config user.name \"${CODE_UX_GIT_USER_NAME:-Code UX}\"",
+        "git -C /workspace config user.email \"${CODE_UX_GIT_USER_EMAIL:-agents@codeux.ai}\"",
+        // Check out the seeded branch in the same container, removing the separate checkout run.
+        `git -C /workspace checkout -B ${shellQuote(resolvedBranch)} ${shellQuote(`refs/heads/${resolvedBranch}`)} >/dev/null`,
+        "mkdir -p /workspace/.code-ux-home",
+        ownerSpec ? `chown -R ${shellQuote(ownerSpec)} /workspace` : null,
+      ].filter((step): step is string => Boolean(step)).join(" && ");
+
+      await runCommandStrict(
+        "docker",
+        [
+          "run",
+          "--rm",
+          "-i",
+          "--mount",
+          `type=volume,source=${volumeName},target=${CONTAINER_WORKSPACE_ROOT}`,
+          "--entrypoint",
+          "sh",
+          WORKSPACE_HELPER_IMAGE,
+          "-lc",
+          initScript,
+        ],
+        repoPath,
+        process.env,
+        { stdinFile: bundlePath },
+      );
+      return true;
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
     }
   }
 

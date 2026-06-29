@@ -147,9 +147,17 @@ Disabling a step is for debugging; in production, leave them all enabled.
   "defaultBranch": "main",
   "featureBranchPrefix": "feature/codeux/",
   "branchScheme": { /* DEFAULT_SPRINT_BRANCH_SCHEME */ },
-  "githubMode": "REMOTE" | "LOCAL"
+  "githubMode": "REMOTE" | "LOCAL",
+  "deleteMergedBranches": true
 }
 ```
+
+`deleteMergedBranches` (default `true`) deletes a branch once its work has merged: worker
+branches after they merge into the sprint feature branch, and the feature branch after it merges
+into the default branch. In REMOTE mode PR merges already delete the remote branch; this primarily
+governs LOCAL-mode cleanup. A startup reaper also removes already-merged Code UX-managed branches
+(`task/…` and `<featureBranchPrefix>…`) so long-lived repos don't accumulate thousands of dead
+branches — only branches fully contained in the default branch are removed.
 
 ## `skills`
 
