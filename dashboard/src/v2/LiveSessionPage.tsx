@@ -343,7 +343,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                 : task;
             const latestDispatch = pickLatestTaskDispatch(task, sprintDispatches);
             const taskIdentity = new Set([taskRuntimeId, task.id, task.record_id].filter(Boolean));
-            const taskInvocations = (execution.recentInvocations ?? []).filter((invocation) => (
+            const taskInvocations = sprintInvocations.filter((invocation) => (
                 (invocation.taskId && taskIdentity.has(invocation.taskId))
                 || (invocation.taskKey && taskIdentity.has(invocation.taskKey))
                 || (latestDispatch?.id && invocation.dispatchId === latestDispatch.id)
@@ -399,7 +399,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                 } : null,
             };
         })
-    ), [execution.recentInvocations, filteredTasks, forceCompleteErrorByTaskId, forceCompletePendingIds, optimisticallyCompletedTaskIds, rerunningIds, sprintDispatches, taskEventsByRecordId, taskTimingMap]);
+    ), [sprintInvocations, filteredTasks, forceCompleteErrorByTaskId, forceCompletePendingIds, optimisticallyCompletedTaskIds, rerunningIds, sprintDispatches, taskEventsByRecordId, taskTimingMap]);
 
     const handleEditTask = (task: Subtask): void => {
         const search = new URLSearchParams();
