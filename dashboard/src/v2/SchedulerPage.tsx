@@ -16,6 +16,7 @@ import {
   Zap,
 } from "lucide-preact";
 import { PageContainer } from "./components/layout/PageContainer.js";
+import { PageHeader } from "./components/layout/PageHeader.js";
 import { AvantgardeSelect } from "./components/ui/AvantgardeSelect.js";
 import { Button } from "./components/ui/Button.js";
 import { useProjectData } from "./context/project-data.js";
@@ -150,6 +151,32 @@ export const SchedulerPage: FunctionComponent = () => {
   const [schedule, setSchedule] = useState<SchedulerCollectionResponse | null>(null);
   const [sprints, setSprints] = useState<SprintRecord[]>([]);
   const [templates, setTemplates] = useState<QuicksprintTemplateRecord[]>([]);
+
+  const [selectedDayIndex, setSelectedDayIndex] = useState<number>(() => {
+    const today = new Date().getDay();
+    return (today + 6) % 7; // 0=Monday, 6=Sunday
+  });
+  const [isMobileView, setIsMobileView] = useState<boolean>(false);
+  const [isTabletView, setIsTabletView] = useState<boolean>(false);
+
+  useEffect(() => {
+    const mobileQuery = window.matchMedia('(max-width: 767px)');
+    const tabletQuery = window.matchMedia('(max-width: 1023px)');
+
+    const updateViews = () => {
+      setIsMobileView(mobileQuery.matches);
+      setIsTabletView(tabletQuery.matches);
+    };
+
+    updateViews();
+    mobileQuery.addEventListener('change', updateViews);
+    tabletQuery.addEventListener('change', updateViews);
+
+    return () => {
+      mobileQuery.removeEventListener('change', updateViews);
+      tabletQuery.removeEventListener('change', updateViews);
+    };
+  }, []);
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<FeedbackState>({ tone: "idle", message: null });
 
@@ -215,7 +242,14 @@ export const SchedulerPage: FunctionComponent = () => {
   useEffect(() => {
     if (!selectedProject?.id) return;
     return subscribeToDashboardRealtime([`project:${selectedProject.id}`], (message) => {
-      if (message.type === "event" && message.event.eventType === "project.live.updated") {
+      // The scheduler reflects sprint structure/state, which travels on the
+      // lightweight `project.structure.updated` event delivered to this base
+      // scope. (The heavy `project.live.updated` payload now rides a dedicated
+      // `:live` sub-scope that this page intentionally does not subscribe to.)
+      if (
+        message.type === "snapshot_required"
+        || (message.type === "event" && message.event.eventType === "project.structure.updated")
+      ) {
         void refresh();
       }
     });
@@ -433,28 +467,13 @@ export const SchedulerPage: FunctionComponent = () => {
 
   return (
     <PageContainer padding="standard" className="gap-8" data-testid="scheduler-page-root">
-      <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-8" data-testid="scheduler-primary-header">
-        <div className="flex flex-col gap-5">
-          <div className="flex items-center gap-2.5 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
-            <CalendarDays className="w-3.5 h-3.5" strokeWidth={2.5} />
-            Runtime Scheduler
-          </div>
-
-          <div className="relative overflow-hidden">
-            <h2 aria-hidden className="absolute -top-10 -left-3 text-[7rem] font-black tracking-tighter text-black/[0.04] dark:text-white/[0.03] pointer-events-none select-none font-display leading-none">
-              TIME
-            </h2>
-            <h1 className="text-5xl md:text-7xl font-black tracking-tighter text-slate-900 dark:text-white leading-[0.92] font-display relative z-10">
-              Schedule <br />
-              <span className="text-signal-500">Events.</span>
-            </h1>
-          </div>
-
-          <p className="text-lg text-slate-500 dark:text-slate-500 font-medium max-w-xl mt-1 leading-relaxed">
-            Calendar control for future sprint starts, quicksprint launches, and timed messages into the project chat agent.
-          </p>
-        </div>
-
+      <PageHeader
+        data-testid="scheduler-primary-header"
+        icon={CalendarDays}
+        eyebrow="Runtime Scheduler"
+        title="Schedule Events"
+        subtitle="Calendar control for future sprint starts, quicksprint launches, and timed messages into the project chat agent."
+        actions={
         <div className="flex max-w-full flex-wrap items-center gap-2 shrink-0">
           <Button
             variant="secondary"
@@ -492,7 +511,8 @@ export const SchedulerPage: FunctionComponent = () => {
             ))}
           </div>
         </div>
-      </header>
+        }
+      />
 
       <section className="grid gap-3 md:grid-cols-3">
         {[
@@ -781,8 +801,44 @@ export const SchedulerPage: FunctionComponent = () => {
             </div>
 
             {view === "calendar" ? (
-              <div className="grid grid-flow-col auto-cols-[minmax(8.75rem,1fr)] gap-3 overflow-x-auto pb-2 dashboard-scrollbar">
-                {weekDays.map((day) => {
+              <>
+                {(isMobileView || (isTabletView && !isMobileView)) && (
+                  <div className="mb-4 flex items-center justify-between rounded-xl border border-black/[0.06] bg-black/[0.02] p-2 dark:border-white/[0.06] dark:bg-white/[0.02]">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDayIndex((prev) => Math.max(0, prev - 1))}
+                      disabled={selectedDayIndex === 0}
+                      className="px-3 py-1.5 text-xs font-bold text-slate-600 rounded-[var(--radius-ui)] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] hover:text-slate-900 hover:bg-[var(--surface-glass-hover)] disabled:opacity-50 disabled:cursor-not-allowed dark:text-slate-300 dark:hover:text-white"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                      {formatDayLabel(weekDays[selectedDayIndex])}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDayIndex((prev) => Math.min(6, prev + 1))}
+                      disabled={selectedDayIndex === 6}
+                      className="px-3 py-1.5 text-xs font-bold text-slate-600 rounded-[var(--radius-ui)] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] hover:text-slate-900 hover:bg-[var(--surface-glass-hover)] disabled:opacity-50 disabled:cursor-not-allowed dark:text-slate-300 dark:hover:text-white"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+                <div className={
+                  isMobileView
+                    ? "grid grid-cols-1 gap-3 pb-2"
+                    : isTabletView
+                      ? "grid grid-cols-3 gap-3 pb-2"
+                      : "grid grid-flow-col auto-cols-[minmax(8.75rem,1fr)] gap-3 overflow-x-auto pb-2 dashboard-scrollbar"
+                }>
+                {weekDays.map((day, index) => {
+                  if (isMobileView && index !== selectedDayIndex) return null;
+                  if (isTabletView && !isMobileView) {
+                    const startIdx = Math.max(0, Math.min(4, selectedDayIndex - 1));
+                    if (index < startIdx || index > startIdx + 2) return null;
+                  }
+
                   const key = startOfDay(day).toISOString();
                   const dayItems = occurrencesByDay.get(key) || [];
                   const selected = key === startOfDay(selectedDate).toISOString();
@@ -836,6 +892,7 @@ export const SchedulerPage: FunctionComponent = () => {
                   );
                 })}
               </div>
+              </>
             ) : (
               <div className="max-h-[46rem] space-y-2 overflow-y-auto pr-1 dashboard-scrollbar">
                 {Array.from({ length: 24 }, (_item, hour) => {

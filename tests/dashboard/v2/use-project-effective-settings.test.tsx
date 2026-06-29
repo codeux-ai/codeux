@@ -65,6 +65,30 @@ describe("useProjectEffectiveSettings", () => {
     expect(result.current.error).toBeNull();
   });
 
+  it("shares one in-flight settings request across concurrent consumers", async () => {
+    let resolveSettings: (settings: typeof MOCK_SETTINGS) => void = () => {};
+    vi.mocked(fetchProjectEffectiveSettings).mockImplementation(() => (
+      new Promise((resolve) => {
+        resolveSettings = resolve;
+      }) as any
+    ));
+
+    const { result } = renderHook(() => [
+      useProjectEffectiveSettings("proj-1"),
+      useProjectEffectiveSettings("proj-1"),
+    ]);
+
+    expect(fetchProjectEffectiveSettings).toHaveBeenCalledTimes(1);
+
+    resolveSettings(MOCK_SETTINGS);
+
+    await waitFor(() => {
+      expect(result.current[0].data).toEqual(MOCK_SETTINGS);
+      expect(result.current[1].data).toEqual(MOCK_SETTINGS);
+    });
+    expect(fetchProjectEffectiveSettings).toHaveBeenCalledTimes(1);
+  });
+
   it("should keep stable reference on unchanged settings", async () => {
     vi.mocked(fetchProjectEffectiveSettings).mockResolvedValue(MOCK_SETTINGS as any);
 

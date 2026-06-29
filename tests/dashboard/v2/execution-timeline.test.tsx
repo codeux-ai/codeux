@@ -100,6 +100,7 @@ describe("ExecutionTimeline", () => {
 
     expect(screen.getByText("Runtime Timeline")).toBeInTheDocument();
     expect(screen.getByText("run completed")).toBeInTheDocument();
+    expect(document.querySelector('[role="region"][aria-label="Runtime Timeline"]')).toBeInTheDocument();
     expect(screen.queryByText("No task run events recorded yet.")).not.toBeInTheDocument();
   });
 

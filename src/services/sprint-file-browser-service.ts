@@ -214,7 +214,7 @@ export class SprintFileBrowserService {
     await this.lifecycle.withSessionLock(`${session.projectId}:${session.sprintId}`, async () => {
       const containerRef = session.containerId || session.containerName || this.buildContainerName(session.projectId, session.sprintId);
       await this.lifecycle.removeContainerIfPresent(containerRef, process.cwd());
-      await runCommandStrict("docker", ["volume", "rm", `code-ux-file-browser-volume-${session.sprintId}`], process.cwd()).catch(() => undefined);
+      await this.removeSprintVolume(session.sprintId);
       this.deps.sprintFileBrowserRepository.deleteSession(sessionId);
     });
   }
@@ -368,6 +368,39 @@ export class SprintFileBrowserService {
     };
   }
 
+  /**
+   * Removes the per-sprint file-browser volume. The volume must live exactly as long as its session
+   * row; every site that deletes a session row must also call this, otherwise the volume is orphaned
+   * forever (it carries no docker label, so it cannot be label-pruned later).
+   */
+  private async removeSprintVolume(sprintId: string): Promise<void> {
+    await runCommandStrict("docker", ["volume", "rm", "-f", `code-ux-file-browser-volume-${sprintId}`], process.cwd()).catch(() => undefined);
+  }
+
+  /**
+   * Removes file-browser volumes that have no backing session row. These accumulate when a session
+   * is dropped without its volume being cleaned (deleted sprints, crashed reconciles, pre-fix leaks).
+   */
+  private async pruneOrphanedVolumes(): Promise<number> {
+    const result = await runCommandStrict("docker", ["volume", "ls", "-q"], process.cwd()).catch(() => null);
+    if (!result?.ok) {
+      return 0;
+    }
+    const prefix = "code-ux-file-browser-volume-";
+    const liveSprintIds = new Set(this.deps.sprintFileBrowserRepository.listSessions().map((session) => session.sprintId));
+    const orphans = result.stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((name) => name.startsWith(prefix) && !liveSprintIds.has(name.slice(prefix.length)));
+    for (const name of orphans) {
+      await runCommandStrict("docker", ["volume", "rm", "-f", name], process.cwd()).catch(() => undefined);
+    }
+    if (orphans.length > 0) {
+      this.deps.logger?.info("Pruned orphaned file browser volumes on startup", { prunedCount: orphans.length });
+    }
+    return orphans.length;
+  }
+
   async cleanupStaleContainersOnStartup(): Promise<void> {
     const containerIds = (await this.listFileBrowserContainers(process.cwd())).map((c) => c.id);
     for (const containerId of containerIds) {
@@ -393,6 +426,8 @@ export class SprintFileBrowserService {
         stoppedCount: containerIds.length,
       });
     }
+
+    await this.pruneOrphanedVolumes();
   }
 
   async reconcileSessions(): Promise<void> {
@@ -405,7 +440,9 @@ export class SprintFileBrowserService {
     for (const session of sessions) {
       const sprint = this.deps.projectManagementRepository.getSprint(session.sprintId);
       if (!sprint) {
-        // Sprint was deleted — drop the orphaned session record.
+        // Sprint was deleted — drop the orphaned session record and remove its volume so it does
+        // not linger forever.
+        await this.removeSprintVolume(session.sprintId);
         this.deps.sprintFileBrowserRepository.deleteSession(session.id);
         continue;
       }
@@ -415,6 +452,7 @@ export class SprintFileBrowserService {
         // forever; recreated on demand if the file browser is opened again.
         const sprintTerminal = sprint.status === "completed" || sprint.status === "failed" || sprint.status === "cancelled";
         if (sprintTerminal && !refreshed.containerId && !refreshed.containerName) {
+          await this.removeSprintVolume(refreshed.sprintId);
           this.deps.sprintFileBrowserRepository.deleteSession(refreshed.id);
         }
         continue;

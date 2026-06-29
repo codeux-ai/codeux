@@ -497,6 +497,182 @@ describe("action-required-automation", () => {
     expect(result2.subtasks[0].intervention_hint).toContain("already answered automatically");
   });
 
+  it("keeps a task running when a user reply already exists after the latest agent clarification", async () => {
+    const sendMessage = vi.fn().mockResolvedValue({});
+    const onTaskEvent = vi.fn();
+    const task = createTask({
+      session_state: "AWAITING_USER_FEEDBACK",
+      activities: [
+        {
+          id: "agent-question",
+          name: "sessions/abc123/activities/agent-question",
+          createTime: "2026-06-28T16:12:29.000Z",
+          originator: "agent",
+          agentMessaged: { agentMessage: "Should I expand beyond the scoped files?" },
+        },
+        {
+          id: "user-reply",
+          name: "sessions/abc123/activities/user-reply",
+          createTime: "2026-06-28T19:30:53.000Z",
+          originator: "user",
+          userMessaged: { userMessage: "Stay strictly within the T07 scope." },
+        },
+        {
+          id: "provider-progress",
+          name: "sessions/abc123/activities/provider-progress",
+          createTime: "2026-06-28T19:31:00.000Z",
+          originator: "agent",
+          progressUpdated: { title: "Provider state still says awaiting feedback" },
+        },
+        {
+          id: "empty-agent-activity",
+          name: "sessions/abc123/activities/empty-agent-activity",
+          createTime: "2026-06-28T19:32:00.000Z",
+          originator: "agent",
+        },
+      ],
+    });
+
+    const result = await applyActionRequiredAutomation([task], {
+      projectId: "p1",
+      sprintGoal: "test goal",
+      automationLevel: "FULL",
+      settings: {
+        autoApprovePlan: true,
+        autoAnswerClarification: true,
+        autoAnswerClarificationMode: "TEMPLATE",
+        autoResumePaused: true,
+        clarificationAnswerTemplate: "template",
+        clarificationCooldownSeconds: 300,
+      },
+      isActionRequiredState: () => true,
+      isJulesApiConfigured: () => true,
+      approveSessionPlan: vi.fn(),
+      sendSessionMessage: sendMessage,
+      onTaskEvent,
+    });
+
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(result.subtasks[0]).toMatchObject({
+      status: "RUNNING",
+      intervention_owner: "AGENT",
+    });
+    expect(result.subtasks[0].intervention_hint).toContain("waiting for Jules to process");
+    expect(onTaskEvent).toHaveBeenCalledWith(expect.objectContaining({
+      eventType: "action_required_user_reply_pending",
+    }));
+  });
+
+  it("keeps an unresolved duplicate clarification blocked after the cooldown expires", async () => {
+    const sendMessage = vi.fn().mockResolvedValue({});
+    const onTaskEvent = vi.fn();
+    const lastAutomatedInterventionKeys = new Map<string, string>();
+    const task = createTask({
+      session_state: "AWAITING_USER_FEEDBACK",
+      activities: [{ agentMessaged: { agentMessage: "Should I use Prisma or raw SQL?" } }],
+    });
+    let now = 1_000;
+
+    const commonArgs = {
+      projectId: "p1",
+      sprintGoal: "test goal",
+      automationLevel: "FULL" as const,
+      settings: {
+        autoApprovePlan: true,
+        autoAnswerClarification: true,
+        autoAnswerClarificationMode: "TEMPLATE" as const,
+        autoResumePaused: true,
+        clarificationAnswerTemplate: "template",
+        clarificationCooldownSeconds: 5,
+      },
+      isActionRequiredState: () => true,
+      isJulesApiConfigured: () => true,
+      approveSessionPlan: vi.fn(),
+      sendSessionMessage: sendMessage,
+      lastAutomatedInterventionKeys,
+      onTaskEvent,
+      now: () => now,
+    };
+
+    const result1 = await applyActionRequiredAutomation([{ ...task }], commonArgs);
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(result1.subtasks[0].status).toBe("RUNNING");
+
+    now += 6_000;
+    const result2 = await applyActionRequiredAutomation([{ ...task }], commonArgs);
+
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(result2.subtasks[0].status).toBe("BLOCKED");
+    expect(result2.subtasks[0].intervention_owner).toBe("HUMAN");
+    expect(result2.subtasks[0].intervention_hint).toContain("manual review");
+    expect(result2.reportText).toContain("Clarification Still Blocked");
+    expect(onTaskEvent).toHaveBeenCalledWith(expect.objectContaining({
+      eventType: "action_required_auto_reply_unresolved",
+    }));
+  });
+
+  it("keeps a duplicate clarification running after a user reply even when the cooldown expires", async () => {
+    const sendMessage = vi.fn().mockResolvedValue({});
+    const lastAutomatedInterventionKeys = new Map<string, string>();
+    const firstTask = createTask({
+      session_state: "AWAITING_USER_FEEDBACK",
+      activities: [
+        {
+          id: "agent-question",
+          createTime: "2026-06-28T13:56:26.000Z",
+          originator: "agent",
+          agentMessaged: { agentMessage: "Should I proceed with these replacements?" },
+        },
+      ],
+    });
+    const repliedTask = createTask({
+      session_state: "AWAITING_USER_FEEDBACK",
+      activities: [
+        {
+          id: "agent-question",
+          createTime: "2026-06-28T13:56:26.000Z",
+          originator: "agent",
+          agentMessaged: { agentMessage: "Should I proceed with these replacements?" },
+        },
+        {
+          id: "user-reply",
+          createTime: "2026-06-28T14:10:03.000Z",
+          originator: "user",
+          userMessaged: { userMessage: "Yes, proceed." },
+        },
+      ],
+    });
+    let now = 1_000;
+    const commonArgs = {
+      projectId: "p1",
+      sprintGoal: "test goal",
+      automationLevel: "FULL" as const,
+      settings: {
+        autoApprovePlan: true,
+        autoAnswerClarification: true,
+        autoAnswerClarificationMode: "TEMPLATE" as const,
+        autoResumePaused: true,
+        clarificationAnswerTemplate: "template",
+        clarificationCooldownSeconds: 5,
+      },
+      isActionRequiredState: () => true,
+      isJulesApiConfigured: () => true,
+      approveSessionPlan: vi.fn(),
+      sendSessionMessage: sendMessage,
+      lastAutomatedInterventionKeys,
+      now: () => now,
+    };
+
+    await applyActionRequiredAutomation([firstTask], commonArgs);
+    now += 60_000;
+    const result = await applyActionRequiredAutomation([repliedTask], commonArgs);
+
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(result.subtasks[0].status).toBe("RUNNING");
+    expect(result.subtasks[0].intervention_owner).toBe("AGENT");
+    expect(result.subtasks[0].intervention_hint).toContain("latest response");
+  });
+
   it("sends auto-reply again when the latest clarification request changes", async () => {
     const sendMessage = vi.fn().mockResolvedValue({});
     const lastAutomatedInterventionKeys = new Map<string, string>();
@@ -551,7 +727,7 @@ describe("action-required-automation", () => {
     expect(result.subtasks[0].status).toBe("RUNNING");
   });
 
-  it("sends auto-reply again when a new silent agent activity arrives", async () => {
+  it("does not send auto-reply again when only a silent agent activity arrives", async () => {
     const sendMessage = vi.fn().mockResolvedValue({});
     const onTaskEvent = vi.fn();
     const lastAutomatedInterventionKeys = new Map<string, string>();
@@ -595,14 +771,13 @@ describe("action-required-automation", () => {
     await applyActionRequiredAutomation([firstTask], commonArgs);
     const result = await applyActionRequiredAutomation([secondTask], commonArgs);
 
-    expect(sendMessage).toHaveBeenCalledTimes(2);
+    expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(result.subtasks[0].status).toBe("RUNNING");
-    expect(result.subtasks[0].intervention_hint).toBeUndefined();
+    expect(result.subtasks[0].intervention_hint).toContain("already answered automatically");
     const autoReplyEventKeys = onTaskEvent.mock.calls
       .map(([event]) => event.sourceEventKey as string)
       .filter((sourceEventKey) => sourceEventKey.includes("auto-replied"));
-    expect(autoReplyEventKeys).toHaveLength(2);
-    expect(new Set(autoReplyEventKeys).size).toBe(2);
+    expect(autoReplyEventKeys).toHaveLength(1);
     expect(autoReplyEventKeys[0]).toMatch(/auto-replied:abc123:[a-f0-9]{16}:/);
   });
 
@@ -612,14 +787,15 @@ describe("action-required-automation", () => {
     const firstTask = createTask({
       session_state: "AWAITING_USER_FEEDBACK",
       activities: [
-        { id: "agent-activity-1", createTime: "2026-06-14T00:54:27.000Z", originator: "agent" },
+        { id: "agent-activity-1", createTime: "2026-06-14T00:54:27.000Z", originator: "agent", preview: "Please clarify the scope." },
       ],
     });
     const secondTask = createTask({
       session_state: "AWAITING_USER_FEEDBACK",
       activities: [
-        { id: "agent-activity-1", createTime: "2026-06-14T00:54:27.000Z", originator: "agent" },
+        { id: "agent-activity-1", createTime: "2026-06-14T00:54:27.000Z", originator: "agent", preview: "Please clarify the scope." },
         { id: "user-reply-1", createTime: "2026-06-14T00:55:22.000Z", originator: "user" },
+        { id: "agent-activity-empty", createTime: "2026-06-14T00:55:33.000Z", originator: "agent" },
       ],
     });
     const commonArgs = {
@@ -646,7 +822,7 @@ describe("action-required-automation", () => {
 
     expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(result.subtasks[0].intervention_owner).toBe("AGENT");
-    expect(result.subtasks[0].intervention_hint).toContain("already answered automatically");
+    expect(result.subtasks[0].intervention_hint).toContain("latest response");
   });
 
   it("skips duplicate paused-session resume nudges for the same paused state", async () => {

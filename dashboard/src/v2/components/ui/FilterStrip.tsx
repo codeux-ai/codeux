@@ -36,6 +36,7 @@ export function FilterStrip<T extends string>({
 
     const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
     const pillRef = useRef<HTMLDivElement>(null);
+    const gradientRef = useRef<HTMLDivElement>(null);
     const isFirstRender = useRef(true);
     const gsapTokens = useGsapInteractionTokens();
   const durations = useGsapDurations();
@@ -58,6 +59,40 @@ export function FilterStrip<T extends string>({
             });
         }
     }, [activeIndex, durations.base, options]);
+
+    useLayoutEffect(() => {
+        const container = listRef.current;
+        const gradient = gradientRef.current;
+        if (!container || !gradient) return;
+
+        const handleScroll = () => {
+            if (container.scrollLeft + container.clientWidth >= container.scrollWidth - 2) {
+                gradient.classList.add("opacity-0");
+                gradient.classList.remove("opacity-100");
+            } else {
+                gradient.classList.add("opacity-100");
+                gradient.classList.remove("opacity-0");
+            }
+        };
+
+        // Initial check
+        if (container.scrollWidth > container.clientWidth) {
+            handleScroll();
+        } else {
+            gradient.classList.add("opacity-0");
+            gradient.classList.remove("opacity-100");
+        }
+
+        container.addEventListener("scroll", handleScroll, { passive: true });
+        // Optional: listen to resize events to update the gradient when the container resizes
+        const resizeObserver = new ResizeObserver(() => handleScroll());
+        resizeObserver.observe(container);
+
+        return () => {
+            container.removeEventListener("scroll", handleScroll);
+            resizeObserver.disconnect();
+        };
+    }, [options]);
 
     const handleKeyDown = (e: KeyboardEvent, index: number) => {
         let newIndex = index;
@@ -84,9 +119,10 @@ export function FilterStrip<T extends string>({
     };
 
     return (
-        <div ref={listRef} className="relative flex gap-1 p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl overflow-x-auto scrollbar-hide max-w-full" role="tablist" aria-label={ariaLabel} aria-labelledby={ariaLabelledBy}>
-            {/* Animated active indicator background */}
-            <div
+        <div className="relative overflow-hidden">
+            <div ref={listRef} className="relative flex gap-1 p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl overflow-x-auto scrollbar-hide touch-pan-x max-w-full" role="tablist" aria-label={ariaLabel} aria-labelledby={ariaLabelledBy}>
+                {/* Animated active indicator background */}
+                <div
                 ref={pillRef}
                 className="absolute top-1 bottom-1 left-0 z-0 rounded-lg pointer-events-none bg-white dark:bg-void-700 shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)] ring-1 ring-black/5 dark:ring-white/10"
             />
@@ -122,17 +158,24 @@ export function FilterStrip<T extends string>({
                 );
             })}
 
-            {showClear && onClear && (
-                <button
-                    type="button"
-                    style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
-                    onClick={onClear}
-                    aria-label={`Clear filters${ariaLabel ? ` for ${ariaLabel}` : ''}`}
-                    className="relative z-10 flex-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 text-xs font-semibold tracking-wide px-3 py-1.5 rounded-lg transition-all overflow-hidden animate-in fade-in zoom-in-95 touch-target ml-1 border-l border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-void-600/50"
-                >
-                    Clear All
-                </button>
-            )}
+                {showClear && onClear && (
+                    <button
+                        type="button"
+                        style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
+                        onClick={onClear}
+                        aria-label={`Clear filters${ariaLabel ? ` for ${ariaLabel}` : ''}`}
+                        className="relative z-10 flex-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 text-xs font-semibold tracking-wide px-3 py-1.5 rounded-lg transition-all overflow-hidden animate-in fade-in zoom-in-95 touch-target ml-1 border-l border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-void-600/50"
+                    >
+                        Clear All
+                    </button>
+                )}
+            </div>
+
+            <div
+                ref={gradientRef}
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-white dark:from-void-800 to-transparent transition-opacity duration-200"
+            />
         </div>
     );
 }

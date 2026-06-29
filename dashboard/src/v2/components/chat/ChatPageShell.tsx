@@ -7,6 +7,7 @@ import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { ActionFeedbackRegion } from "../ui/ActionFeedbackRegion.js";
 import { PageContainer } from "../layout/PageContainer.js";
+import { PageHeader } from "../layout/PageHeader.js";
 
 export const ChatPageShell: FunctionComponent<{
   selectedProject: Source | null;
@@ -55,28 +56,34 @@ export const ChatPageShell: FunctionComponent<{
 
   return (
     <PageContainer padding="chat" className="min-h-0 flex-1 flex flex-col gap-6 lg:gap-8 h-full">
-      <div ref={headerRef} className="shrink-0 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
-            <MessageCircle className="h-3.5 w-3.5" strokeWidth={2.2} />
-            Dashboard Chat
-          </div>
-          <div className="relative overflow-hidden">
-            <div className="pointer-events-none absolute -left-2 -top-8 font-display text-[6rem] font-black leading-none tracking-tighter text-black/[0.04] dark:text-white/[0.03]">
-              CHAT
-            </div>
-            <h1 className="relative z-10 font-display text-5xl font-black tracking-tighter text-slate-900 dark:text-white md:text-7xl">
-              Project <span className="text-signal-500">Conversations.</span>
-            </h1>
-          </div>
-        </div>
-
+      <PageHeader
+        containerRef={headerRef}
+        className="shrink-0"
+        icon={MessageCircle}
+        eyebrow="Dashboard Chat"
+        title="Project Conversations"
+        actions={
         <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:justify-end">
-          <div role="tablist" aria-label="Chat Mode" className="flex items-center rounded-full border border-black/[0.06] bg-white/70 p-1 dark:border-white/[0.06] dark:bg-white/[0.03]">
+
+          <div role="tablist" aria-label="Chat Mode" className="flex items-center rounded-full border border-black/[0.06] bg-white/70 p-1 dark:border-white/[0.06] dark:bg-white/[0.03]"
+            onKeyDown={(e) => {
+              if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                e.preventDefault();
+                const newMode = chatMode === "threads" ? "invocations" : "threads";
+                onSetChatMode(newMode);
+                // Also focus the corresponding tab
+                const targetId = newMode === "threads" ? "tab-threads" : "tab-invocations";
+                document.getElementById(targetId)?.focus();
+              }
+            }}
+          >
+
             <button
+              id="tab-threads"
               role="tab"
               aria-selected={chatMode === "threads"}
               aria-controls="chat-panel"
+              tabIndex={chatMode === "threads" ? 0 : -1}
               type="button"
               onClick={() => onSetChatMode("threads")}
               style={{
@@ -93,9 +100,11 @@ export const ChatPageShell: FunctionComponent<{
               Threads
             </button>
             <button
+              id="tab-invocations"
               role="tab"
               aria-selected={chatMode === "invocations"}
               aria-controls="chat-panel"
+              tabIndex={chatMode === "invocations" ? 0 : -1}
               type="button"
               onClick={() => onSetChatMode("invocations")}
               style={{
@@ -163,7 +172,8 @@ export const ChatPageShell: FunctionComponent<{
             </button>
           )}
         </div>
-      </div>
+        }
+      />
 
       {(error || manualRefreshing) && (
         <div className="shrink-0">

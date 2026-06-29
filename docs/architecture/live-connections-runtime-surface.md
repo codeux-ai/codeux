@@ -22,9 +22,9 @@ The v2 refactor needed a clean split between:
 - live MCP connections as runtime state
 - workers as a subset of live connections
 
-After the `Agents` page was corrected to presets only, live connections still needed a proper home in the dashboard.
+After the `Agents` page was corrected to presets only, live connections still needed a clean execution read model.
 
-That home is now the selected-project execution runtime surface.
+That read model remains the selected-project execution snapshot. The default Live sidebar no longer renders the standalone Live Connections card; it prioritizes invocation and runtime timeline activity while keeping connection summaries available to components and future operations surfaces.
 
 ## Execution Snapshot Shape
 
@@ -65,9 +65,9 @@ This keeps live connection observability in the same payload as:
 
 ## Dashboard Behavior
 
-The v2 live experience now supports a dedicated sidebar-ready live-connections card that shares the execution timeline context and renders as a standalone card in the sidebar.
+The v2 live experience supports a sidebar-ready live-connections card that shares the execution timeline context, but the default `/live` sidebar does not currently mount it.
 
-The execution runtime card no longer embeds live connections, attention items, or the runtime timeline. Those surfaces now live as dedicated sidebar cards, which keeps the runtime panel focused on sprint runs and dispatches.
+The execution runtime card no longer embeds live connections, attention items, or the runtime timeline. Attention and runtime timeline remain dedicated sidebar cards, while the connection card stays available as a reusable component for connection-focused surfaces. This keeps the runtime panel focused on sprint runs and dispatches.
 
 It shows:
 

@@ -62,7 +62,7 @@ export const WorkerPanel: FunctionComponent<{
             <NumberInput aria-label="Max concurrency" aria-description="Maximum number of parallel tasks a worker can handle simultaneously."
               value={settings.workers.maxConcurrency}
               min={1}
-              max={20}
+              max={100}
               onChange={(value) => update({
                 workers: {
                   ...settings.workers,

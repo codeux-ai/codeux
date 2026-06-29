@@ -419,6 +419,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                 onInput={handleSliderChange}
                 onChange={handleSliderChange}
                 onKeyDown={handleSliderKeyDown}
+                aria-describedby="usage-chart-tooltip"
                 aria-valuetext={activeBucket ? `${activeBucket.label}, ${visibleSeries.map(s => `${s.label}: ${s.formatter(s.values[activeIndex] ?? 0)}`).join(', ')}` : 'No bucket focused'}
               />
             </div>

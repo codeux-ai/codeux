@@ -442,7 +442,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
         onBlur={onBlur}
         className={finalTriggerClass}
         disabled={disabled}
-        aria-invalid={ariaInvalid ?? (invalid ? "true" : "false")}
+        aria-invalid={ariaInvalid !== undefined ? ariaInvalid : (invalid ? "true" : "false")}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel}

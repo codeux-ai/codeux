@@ -39,11 +39,19 @@ describe('Motion Utilities', () => {
     });
 
     it('useGsapInteractionTokens returns zeroed durations when reduced motion is enabled', async () => {
-      vi.spyOn(useReducedMotionHook, 'useReducedMotion').mockReturnValue(true);
+      const originalMatchMedia = window.matchMedia;
+      window.matchMedia = vi.fn().mockImplementation(() => ({
+        matches: true,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }));
       const { useGsapInteractionTokens } = await import('../src/v2/lib/motion/constants.js');
       const { result } = renderHook(() => useGsapInteractionTokens());
       expect(result.current.controlFeedback.duration).toBe(0);
       expect(result.current.asyncFeedback.duration).toBe(0);
+      window.matchMedia = originalMatchMedia;
     });
 
     it('useGsapInteractionTokens returns standard durations when reduced motion is disabled', async () => {

@@ -31,5 +31,6 @@ The Tasks page and Kanban board should feel like a 'Refined Production Board'. I
 *   **Validation:** Error states must be visually distinct but non-disruptive, using red accents (`text-red-500`) and clear iconography (AlertCircle) below or beside the field. Ensure text does not cause layout jumping.
 
 ## 5. General Rules
-*   **Accessibility:** Preserve `focus-visible` styles on all interactive elements. Use `sr-only` text for screen readers where visual data is primarily conveyed via color or icons.
+*   **Accessibility:** Preserve `focus-visible` styles on all interactive elements. Use `sr-only` text for screen readers where visual data is primarily conveyed via color or icons. Task cards must use `aria-live="polite"` regions to announce status changes (optimistic, pending, QA review). Keyboard reordering is not currently supported; if draggable elements are pointer-only, this must be explicitly stated in `.sr-only` text. All hover-revealed action controls must become visible and reachable on keyboard focus (`focus-within`).
 *   **Motion:** Respect `isReducedMotion` or `prefers-reduced-motion` for hover elevations and transitions.
+*   **Responsiveness:** Use responsive wrapping (`flex-col sm:flex-row`) on headers and footers to ensure labels, metadata, controls, and PR links do not overlap or break layout on narrow viewports.

@@ -5,6 +5,7 @@ import {
   Search, Loader2, AlertTriangle, Check, Plus, X, Sparkles, BookOpen, Copy,
 } from "lucide-preact";
 import { PageContainer } from "./components/layout/PageContainer.js";
+import { PageHeader } from "./components/layout/PageHeader.js";
 import { useProjectData } from "./context/project-data.js";
 import { listEmbeddingModels } from "./lib/memory-api.js";
 import { fetchAgentPresets } from "./lib/agent-preset-api.js";
@@ -177,31 +178,27 @@ export const KnowledgePage: FunctionComponent = () => {
   return (
     <PageContainer padding="section" className="gap-8">
       {/* Header */}
-      <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-2.5 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
-            <Library className="h-3.5 w-3.5" strokeWidth={2.5} />
-            Knowledge Base
-          </div>
-          <h1 className="font-display text-4xl font-black tracking-tight text-slate-900 dark:text-white">
-            Documents
-          </h1>
-          <p className="max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+      <PageHeader
+        icon={Library}
+        eyebrow="Knowledge Base"
+        title="Documents"
+        subtitle={
+          <>
             Upload specs, docs, and code into a shared library. Each document is embedded once with your
             local model, and agents subscribe to the ones they should know. They retrieve passages on
             demand via <code className="rounded bg-black/[0.05] px-1 py-0.5 font-mono text-[11px] dark:bg-white/[0.06]">search_knowledge</code>.
-          </p>
-          {documents.length > 0 && (
-            <div className="flex flex-wrap items-center gap-4 text-[11px] font-semibold text-slate-400 dark:text-slate-500">
-              <span>{documents.length} document{documents.length === 1 ? "" : "s"}</span>
-              <span>·</span>
-              <span>{readyCount} ready</span>
-              <span>·</span>
-              <span>{totalChunks} embedded chunks</span>
-            </div>
-          )}
-        </div>
-
+            {documents.length > 0 && (
+              <span className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-400 dark:text-slate-500">
+                <span>{documents.length} document{documents.length === 1 ? "" : "s"}</span>
+                <span>·</span>
+                <span>{readyCount} ready</span>
+                <span>·</span>
+                <span>{totalChunks} embedded chunks</span>
+              </span>
+            )}
+          </>
+        }
+        actions={
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -240,7 +237,8 @@ export const KnowledgePage: FunctionComponent = () => {
             From project
           </button>
         </div>
-      </div>
+        }
+      />
 
       {/* Embedding model gate */}
       {modelActive === false && (

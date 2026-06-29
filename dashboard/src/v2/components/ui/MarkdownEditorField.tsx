@@ -85,18 +85,39 @@ export function MarkdownEditorField({
         </span>
         <div className="flex items-center gap-2">
           {toolbarNote}
-          <div role="tablist" aria-label="Markdown Editor Mode" className="flex items-center gap-0.5 rounded-full border border-black/[0.06] bg-white/50 p-0.5 dark:border-white/[0.06] dark:bg-white/[0.03]">
+          <div
+            role="tablist"
+            aria-label="Markdown Editor Mode"
+            className="flex items-center gap-0.5 rounded-full border border-black/[0.06] bg-white/50 p-0.5 dark:border-white/[0.06] dark:bg-white/[0.03]"
+            onKeyDown={(e) => {
+              const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
+              if (!keys.includes(e.key)) return;
+              e.preventDefault();
+              let newMode = mode;
+              if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+                newMode = mode === "write" ? "preview" : "write";
+              } else if (e.key === "Home") {
+                newMode = "write";
+              } else if (e.key === "End") {
+                newMode = "preview";
+              }
+              const tab = e.currentTarget.querySelector<HTMLButtonElement>(`[id="md-tab-${newMode}"]`);
+              tab?.focus();
+              setMode(newMode);
+            }}
+          >
             {(["write", "preview"] as const).map((value_) => {
               const active = mode === value_;
               const Icon = value_ === "write" ? PenLine : Eye;
               return (
                 <button
                   key={value_}
+                  id={`md-tab-${value_}`}
                   type="button"
                   onClick={() => setMode(value_)}
-                  aria-pressed={active}
                   role="tab"
                   aria-selected={active}
+                  tabIndex={active ? 0 : -1}
                   aria-controls={value_ === "write" ? "markdown-editor" : "markdown-preview"}
                   className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 ${
                     active
@@ -104,7 +125,7 @@ export function MarkdownEditorField({
                       : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white"
                   }`}
                 >
-                  <Icon className="h-3 w-3" strokeWidth={2.4} />
+                  <Icon aria-hidden="true" className="h-3 w-3" strokeWidth={2.4} />
                   {value_ === "write" ? "Write" : "Preview"}
                 </button>
               );
@@ -114,7 +135,7 @@ export function MarkdownEditorField({
       </div>
 
       {mode === "write" ? (
-        <div role="tabpanel" id="markdown-editor" className="w-full">
+        <div role="tabpanel" id="markdown-editor" tabIndex={0} aria-labelledby="md-tab-write" className="w-full">
         <textarea
           ref={textareaRef}
           id={id}
@@ -132,7 +153,7 @@ export function MarkdownEditorField({
         />
         </div>
       ) : (
-        <div role="tabpanel" id="markdown-preview" aria-label="Markdown Preview" className="w-full">
+        <div role="tabpanel" id="markdown-preview" aria-labelledby="md-tab-preview" tabIndex={0} aria-label="Markdown Preview" className="w-full">
           {value.trim() ? (
             <div
               className={`overflow-auto px-4 py-3.5 ${minHeightClass} ${MARKDOWN_PROSE_CLASS}`}

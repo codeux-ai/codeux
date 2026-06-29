@@ -196,6 +196,34 @@ describe("SprintsPage Integration Regressions", () => {
     expect(screen.getAllByTitle("Open sprint actions")[0]).toBeInTheDocument();
   });
 
+  it("accounts for the complete sprint collection before ledger row windowing", () => {
+    const sortedSprints = Array.from({ length: 25 }, (_, index) => {
+      const number = index + 1;
+      return {
+        id: `sprint-${number}`,
+        number,
+        slug: `spr-${String(number).padStart(2, "0")}`,
+        name: `Sprint ${number}`,
+        status: number % 3 === 0 ? "completed" : "idle",
+        showcasePinned: number % 4 === 0,
+        tasksCount: number,
+        completion: number % 3 === 0 ? 100 : 0,
+        createdAt: `2026-06-${String(Math.min(number, 28)).padStart(2, "0")}T12:00:00Z`,
+        updatedAt: `2026-06-${String(Math.min(number, 28)).padStart(2, "0")}T12:00:00Z`,
+        projectId: "proj-1",
+      };
+    });
+
+    vi.mocked(useSprintsPageData).mockReturnValue({
+      ...mockBaseData,
+      sortedSprints,
+    } as any);
+
+    render(<SprintsPage />);
+
+    expect(screen.getByLabelText("Showing 25 of 25 sprints")).toBeInTheDocument();
+  });
+
   it("shows disabled reasons on controls and presents destructive confirmation", async () => {
     const handleDeleteSprint = vi.fn();
 

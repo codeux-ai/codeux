@@ -1,4 +1,4 @@
-import { h, ComponentChildren, FunctionComponent } from "preact";
+import { h, ComponentChildren, FunctionComponent, toChildArray, isValidElement, cloneElement } from "preact";
 import { useEffect, useState, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
@@ -57,6 +57,14 @@ export const Modal: FunctionComponent<ModalProps> = ({
             { opacity: 0, scale: 0.95 },
             { opacity: 1, scale: 1, duration, ease: MODAL_MOTION.entry.ease }
           );
+
+          if (!reducedMotion) {
+            gsap.fromTo(
+              cardRef.current.querySelectorAll('[data-modal-region]'),
+              { opacity: 0, y: 6 },
+              { opacity: 1, y: 0, stagger: 0.040, duration: 0.12, ease: 'power2.out', delay: MODAL_MOTION.entry.duration }
+            );
+          }
         }
       });
     } else {
@@ -80,7 +88,7 @@ export const Modal: FunctionComponent<ModalProps> = ({
   if (!shouldRender) return null;
 
   return (
-    <Overlay isOpen={isOpen} onClose={disableBackdropClick ? undefined : onClose} blur exitDuration={150}>
+    <Overlay isOpen={isOpen} onClose={disableBackdropClick ? undefined : onClose} blur exitDuration={150} className="!items-end sm:!items-center pb-4 sm:pb-0">
       <div className="absolute inset-0 bg-slate-900/50 pointer-events-none" />
       <div
         ref={(el) => {
@@ -91,13 +99,18 @@ export const Modal: FunctionComponent<ModalProps> = ({
         aria-modal="true"
         aria-label={ariaLabel || fallbackAriaLabel}
         aria-labelledby={titleId || ariaLabelledBy || ariaLabelledby}
-        aria-describedby={ariaDescribedBy || ariaDescribedby}
+        aria-describedby={ariaDescribedBy || ariaDescribedby || undefined}
         tabIndex={-1}
         inert={!isOpen ? true : undefined}
-        className={`relative z-50 bg-white dark:bg-void-800 rounded-[12px] shadow-lg border border-black/[0.06] dark:border-white/[0.06] outline-none max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto ${className}`}
+        className={`relative z-50 bg-white dark:bg-void-800 rounded-[12px] shadow-lg border border-black/[0.06] dark:border-white/[0.06] outline-none max-w-[calc(100vw-2rem)] max-h-[min(calc(100dvh-2rem),85vh)] overflow-y-auto overscroll-contain ${className}`}
         onClick={(e) => e.stopPropagation()}
       >
-        {children}
+        {toChildArray(children).map((child) => {
+          if (isValidElement(child)) {
+            return cloneElement(child, { 'data-modal-region': true } as any);
+          }
+          return child;
+        })}
       </div>
     </Overlay>
   );

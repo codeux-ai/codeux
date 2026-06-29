@@ -8,6 +8,7 @@ const PURPOSE_LABELS: Record<string, string> = {
   cli_task_coding: "Task Coding",
   cli_task_review: "Task Review",
   cli_qa: "QA Review",
+  qa_review: "QA Review",
   dashboard_reply: "Chat Reply",
   worker_dispatch: "Worker Dispatch",
 };

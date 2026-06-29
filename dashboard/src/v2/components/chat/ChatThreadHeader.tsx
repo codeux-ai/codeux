@@ -55,18 +55,18 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
             {isReplayRequired && (
               <span className="inline-flex items-center gap-1 rounded-sm border border-status-amber/30 bg-status-amber/20 shadow-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-status-amber">
                 <AlertCircle className="h-3 w-3" />
-                Replay Required
+                <span className="sr-only">Status: </span>Replay Required
               </span>
             )}
             {!isReplayRequired && hasActiveSession && (
               <span className="inline-flex items-center gap-1 rounded-sm border border-signal-500/30 bg-signal-500/20 shadow-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-signal-500">
                 <Activity className="h-3 w-3" />
-                Active Session
+                <span className="sr-only">Status: </span>Active Session
               </span>
             )}
             {isNewOrCompacted && !isReplayRequired && (
               <span className="inline-flex items-center gap-1 rounded-sm border border-slate-500/30 bg-slate-500/20 shadow-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-600 dark:border-slate-400/30 dark:text-slate-300">
-                New/Compacted
+                <span className="sr-only">Status: </span>New/Compacted
               </span>
             )}
           </div>

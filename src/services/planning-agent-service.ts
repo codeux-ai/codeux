@@ -529,12 +529,34 @@ export class PlanningAgentService {
     };
     const providerPrompt = buildProviderPrompt(args.rawPrompt, providerSettings.thinkingMode);
     const systemRoutingMessage = `Planning request routed through virtual ${this.getProviderLabel(provider)} worker (model: ${effectiveModel}).`;
+
+    // Reflect the resolved route on the invocation record *before* the snapshot
+    // workspace is provisioned. The invocation was created upstream with the
+    // default virtual-worker provider as a placeholder; correcting it here means
+    // the dashboard shows the real provider/model immediately instead of lagging
+    // behind container startup (which can take tens of seconds) until
+    // executeRequest finally runs.
+    if (args.invocationId) {
+      this.deps.executionRepository?.updateExecutionInvocation(args.invocationId, {
+        provider,
+        model: effectiveModel,
+      });
+    }
+
     let snapshotWorkspace = args.repoPath;
     let cleanupWorkspace: (() => Promise<void>) | undefined;
     if (workflowSettings.executionMode === "DOCKER") {
       snapshotWorkspace = await this.workspaceManager.createSnapshotWorkspace(
         args.repoPath,
-        `planning-${provider}-${Date.now().toString(36)}`,
+        // Append a random suffix so concurrent planning requests never derive the same snapshot
+        // volume name. `Date.now()` alone collides when several sprints plan in the same
+        // millisecond, and they then stomp each other's volume (observed: 2 of 4 concurrent
+        // plannings failing at workspace seed).
+        `planning-${provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`,
+        undefined,
+        // Planning only reads the current tree to draft tasks; it never needs the repo's other
+        // (often thousands of) accumulated branches, so seed just the checkout branch.
+        { singleBranch: true },
       );
       cleanupWorkspace = async () => {
         await this.workspaceManager.removeWorktree(args.repoPath, snapshotWorkspace).catch(() => undefined);

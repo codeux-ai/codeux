@@ -18,6 +18,9 @@ export const sanitizeGit = (
     autoCloseLinkedIssues: typeof gitInput.autoCloseLinkedIssues === "boolean"
       ? gitInput.autoCloseLinkedIssues
       : DEFAULT_DASHBOARD_SETTINGS.git.autoCloseLinkedIssues,
+    deleteMergedBranches: typeof gitInput.deleteMergedBranches === "boolean"
+      ? gitInput.deleteMergedBranches
+      : DEFAULT_DASHBOARD_SETTINGS.git.deleteMergedBranches,
     featureBranchPrefix: typeof gitInput.featureBranchPrefix === "string" && gitInput.featureBranchPrefix.trim().length > 0
       ? gitInput.featureBranchPrefix.trim()
       : DEFAULT_DASHBOARD_SETTINGS.git.featureBranchPrefix,

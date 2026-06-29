@@ -20,11 +20,11 @@ export const TaskExecutionMeta: FunctionComponent<TaskExecutionMetaProps> = memo
     switch (executorType) {
       case "docker_cli":
       case "auto":
-        return <Cpu className="w-3 h-3" strokeWidth={2} />;
+        return <Cpu className="w-3 h-3" strokeWidth={2} aria-hidden="true" />;
       case "jules":
-        return <User className="w-3 h-3" strokeWidth={2} />;
+        return <User className="w-3 h-3" strokeWidth={2} aria-hidden="true" />;
       default:
-        return <Cpu className="w-3 h-3" strokeWidth={2} />;
+        return <Cpu className="w-3 h-3" strokeWidth={2} aria-hidden="true" />;
     }
   };
 

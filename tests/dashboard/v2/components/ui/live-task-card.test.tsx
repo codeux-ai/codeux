@@ -2,9 +2,9 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, within } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/preact";
 import { LiveTaskCard } from "../../../../../dashboard/src/v2/components/LiveTaskCard";
-import type { Subtask } from "../../../../../dashboard/src/types.js";
+import type { ExecutionInvocationRecord, Subtask } from "../../../../../dashboard/src/types.js";
 
 // Mock resize observer and match media
 window.ResizeObserver = vi.fn().mockImplementation(() => ({
@@ -34,6 +34,7 @@ vi.mock("gsap", () => ({
 
 describe("LiveTaskCard", () => {
   beforeEach(() => {
+    cleanup();
     vi.clearAllMocks();
   });
 
@@ -48,6 +49,45 @@ describe("LiveTaskCard", () => {
     prompt: "Test prompt",
     depends_on: [],
     is_independent: true,
+  });
+
+  const getMockInvocation = (overrides: Partial<ExecutionInvocationRecord> = {}): ExecutionInvocationRecord => ({
+    id: "xi-task-1",
+    projectId: "p1",
+    sprintId: "s1",
+    taskId: "test-task",
+    sprintRunId: "sr1",
+    dispatchId: "dispatch-1",
+    taskRunId: "task-run-1",
+    attentionItemId: null,
+    providerInvocationId: "provider-invocation-1",
+    type: "cli_task_coding",
+    status: "running",
+    provider: "codex",
+    model: "gpt-5",
+    systemPrompt: null,
+    startedAt: "2024-01-01T10:00:00.000Z",
+    finishedAt: null,
+    errorMessage: null,
+    lastErrorCategory: null,
+    lastErrorMessage: null,
+    lastRetryAfterIso: null,
+    messageCount: 3,
+    lastMessageAt: "2024-01-01T10:01:00.000Z",
+    invocationSource: "internal",
+    agentPresetId: null,
+    inputTokens: 100,
+    cachedInputTokens: 0,
+    outputTokens: 40,
+    totalTokens: 140,
+    sprintNumber: 1,
+    sprintName: "Sprint 1",
+    sprintSlug: "sprint-1",
+    taskKey: "test-task",
+    taskTitle: "Test Task",
+    createdAt: "2024-01-01T10:00:00.000Z",
+    updatedAt: "2024-01-01T10:01:00.000Z",
+    ...overrides,
   });
 
   it("renders running state properly", () => {
@@ -120,5 +160,31 @@ describe("LiveTaskCard", () => {
     render(<LiveTaskCard task={task} allTasks={[task]} onRerun={vi.fn()} onEdit={vi.fn()} onForceComplete={vi.fn()} isRerunning={false} />);
     expect(screen.getByLabelText("QA review running")).toBeTruthy();
     expect(screen.getByText("QA")).toBeTruthy();
+  });
+
+  it("shows a task-scoped invocation feed with transcript links", () => {
+    const task = getMockTask("RUNNING");
+    const { container } = render(
+      <LiveTaskCard
+        task={task}
+        allTasks={[task]}
+        invocations={[getMockInvocation()]}
+        onRerun={vi.fn()}
+        onEdit={vi.fn()}
+        onForceComplete={vi.fn()}
+        isRerunning={false}
+      />,
+    );
+    const scoped = within(container);
+
+    const toggle = scoped.getByRole("button", { name: "Show invocation feed for task test-task" });
+    expect(toggle).toBeTruthy();
+    fireEvent.click(toggle);
+
+    expect(scoped.getByRole("log", { name: "Invocation feed for task test-task" })).toBeTruthy();
+    expect(scoped.getByText("Task Invocations")).toBeTruthy();
+    expect(scoped.getByText("Task Coding")).toBeTruthy();
+    expect(scoped.getByRole("link", { name: "Open transcript for Task Coding" }).getAttribute("href"))
+      .toBe("/chat?mode=invocations&invocation=xi-task-1");
   });
 });

@@ -26,7 +26,9 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
     const [agentPresets, setAgentPresets] = useState<AgentPreset[]>([]);
 
     const durations = useGsapDurations();
-    const { tasks } = useProjectTasks(projectId, selectedProject ? [selectedProject] : [], sprints, null);
+    const { tasks } = useProjectTasks(projectId, selectedProject ? [selectedProject] : [], sprints, null, {
+        enabled: isSearchOpen,
+    });
     const { sessions } = usePreviewSessions({ projectId: isSearchOpen ? projectId : null, pollInterval: isSearchOpen ? 5000 : 0 });
 
     useEffect(() => {

@@ -6,6 +6,7 @@ import { Info, Copy, Check } from "lucide-preact";
 import { calculatePosition } from "../../lib/positioning/index.js";
 import { MOTION_TOKENS } from "../../lib/motion/tokens.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 
 interface InfoIconPopoverProps {
     className?: string;
@@ -29,6 +30,7 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
     const hasInteractiveContent = items && items.length > 0;
+    const focusTrapRef = useFocusTrap(hasInteractiveContent && isVisible, { onClose: () => setIsVisible(false), restoreFocus: true });
 
     const handleMouseEnter = () => {
         if (leaveTimeout.current) clearTimeout(leaveTimeout.current);
@@ -167,7 +169,14 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
             {isRendered && createPortal(
                 <div
                     id="info-popover-panel"
-                    ref={popoverRef}
+                    ref={(node) => {
+                        // @ts-ignore
+                        popoverRef.current = node;
+                        if (focusTrapRef) {
+                            // @ts-ignore
+                            focusTrapRef.current = node;
+                        }
+                    }}
                     className="fixed z-[9999] p-4 bg-white/90 dark:bg-void-700/90 backdrop-blur-2xl rounded-xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] border border-black/[0.06] dark:border-white/[0.06] w-64"
                     style={{ top: coords.top, left: coords.left }}
                     role={hasInteractiveContent ? "dialog" : "tooltip"}

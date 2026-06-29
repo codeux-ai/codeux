@@ -42,12 +42,12 @@ describe("project-resource-utils - Equality and Stabilization", () => {
         updatedAt: "timestamp-2",
       };
 
-      // stabilizeExecutionSnapshot does not merge nested properties, it only checks if next is empty.
-      // So stabilized === next (if next is not empty).
-      // If we want to test equality logic:
+      // stabilizeExecutionSnapshot reuses the previous reference for any sub-collection
+      // whose contents are semantically unchanged, so memoized consumers keyed on
+      // `sprintRuns` do not recompute when only scalar fields (or the live feed) change.
       const stabilized = stabilizeExecutionSnapshot(prev, next);
-      expect(stabilized).toBe(next);
-      // The updatedAt timestamp should reflect the new one
+      expect(stabilized.sprintRuns).toBe(prev.sprintRuns);
+      // Scalar fields still reflect the newest snapshot.
       expect(stabilized.updatedAt).toBe(next.updatedAt);
 
       // Ultimately, because we preserve references using `stabilize`, equivalence check should pass.
@@ -86,5 +86,43 @@ describe("project-resource-utils - Equality and Stabilization", () => {
       expect(stabilized.sprintRuns).not.toBe(prev.sprintRuns);
       expect(stabilized.sprintRuns[0].status).toBe("completed");
       expect(areExecutionSnapshotsEquivalent(prev, stabilized)).toBe(false);
+    });
+
+    it("preserves sprintRuns reference when only the live invocation feed changes", () => {
+      const sprintRuns = [{ id: "r1", projectId: "p1", sprintId: "s1", status: "running", startedAt: null, completedAt: null, createdAt: "", updatedAt: "" } as any];
+      const base: ExecutionDashboardSnapshot = {
+        projectId: "p1",
+        projectName: "Project 1",
+        sprintRuns,
+        taskDispatches: [],
+        connections: [],
+        primaryAssignedWorker: null,
+        overflowAssignedWorkers: [],
+        attentionItems: [],
+        recentEvents: [{ id: "e1", eventType: "task.started", createdAt: "t1" } as any],
+        recentInvocations: [],
+        updatedAt: "timestamp-1",
+      };
+
+      // A new live-feed event arrives — sprintRuns are untouched but get a fresh array reference,
+      // as they would from a fresh server snapshot.
+      const next: ExecutionDashboardSnapshot = {
+        ...base,
+        sprintRuns: [{ ...sprintRuns[0] }],
+        recentEvents: [
+          { id: "e2", eventType: "task.message", createdAt: "t2" } as any,
+          { id: "e1", eventType: "task.started", createdAt: "t1" } as any,
+        ],
+        updatedAt: "timestamp-2",
+      };
+
+      const stabilized = stabilizeExecutionSnapshot(base, next);
+
+      // The ledger-relevant collection keeps its reference, so memos keyed on it do not recompute...
+      expect(stabilized.sprintRuns).toBe(base.sprintRuns);
+      // ...but the snapshot itself is a new object carrying the new feed events.
+      expect(stabilized).not.toBe(base);
+      expect(stabilized.recentEvents).toBe(next.recentEvents);
+      expect(stabilized.updatedAt).toBe("timestamp-2");
     });
 });

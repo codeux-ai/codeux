@@ -36,6 +36,8 @@ When an invocation or its messages are created/updated, the server emits a proje
 - \`scheduleProjectExecutionRefresh(projectId, { includeOverview: false })\`: Triggered when appending messages to avoid heavy recalculations if only appending content.
 - Burst writes are coalesced in \`ExecutionRepository\` per project on the next tick. If any write in the burst requires overview refresh, the coalesced dispatch escalates to \`includeOverview: true\`.
 
+The Live dashboard consumes invocation records through the same project execution snapshot used for runtime events. `getProjectExecutionSnapshot(projectId)` includes a bounded `recentInvocations` list (currently the latest 24 records) so `/live` can render an invocation feed that updates over the existing `project.live.updated` websocket flow. The page-level feed is intentionally summary-level and scoped to the selected sprint when one is selected: status, provider/model, task/sprint context, message count, timing, tokens, and latest error. Task cards filter the same records by task id/task key plus current dispatch and task-run ids to show local invocation activity on the card. Full invocation messages remain loaded on demand from the Chat invocation view.
+
 ## Startup Recovery
 
 CLI-backed provider invocations now persist their workflow execution mode alongside the session id used to launch the worker.
@@ -58,4 +60,3 @@ When a provider's global concurrency limit is reached, ready tasks are deferred 
 1. The task status remains `PENDING` in memory, allowing the task to be rescheduled and retried on subsequent sprint cycles.
 2. A `task_run` record is created or updated to have a `state` of `"PENDING"`, and a linked `task_dispatch` is created with a status of `"queued"`.
 3. A durable event of type `"provider_concurrency_wait"` is appended to the `task_run_events` table carrying the `provider`, `currentCount`, and `limit` in its payload. This allows the dashboard to display the slot waiting status and show the usage (e.g., `2/2` waiting for slot) without inventing run-failure or code-execution attempts.
-

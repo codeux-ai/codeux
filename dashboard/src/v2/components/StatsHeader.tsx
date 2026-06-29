@@ -14,6 +14,7 @@ import { formatTime } from "../../lib/time.js";
 import { LivePreviewLink } from "./ui/LivePreviewLink.js";
 import { HumanInterventionBadge } from "./ui/HumanInterventionBadge.js";
 import { getSprintStatusPresentation } from "../lib/sprint-status-presentation.js";
+import { PageHeader } from "./layout/PageHeader.js";
 
 type HeaderView = "stats" | "race" | "dag";
 
@@ -79,58 +80,50 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
     return (
         <>
             {/* ── Page Header ─────────────────────────────────────────── */}
-            <div ref={headerRef} className="flex flex-col lg:flex-row items-start lg:items-end justify-between gap-8">
-                <div className="flex flex-col gap-5">
-                    {/* Eyebrow */}
-                    <div className="flex items-center gap-2.5 font-mono text-[10px] font-bold uppercase tracking-[0.2em]">
+            <PageHeader
+                containerRef={headerRef}
+                as="h2"
+                eyebrow={
+                    <>
                         <Radio className="w-3.5 h-3.5 text-status-red" strokeWidth={2.5} />
                         <span className="text-status-red">Live Session</span>
                         {(liveSprintRun?.sprintNumber ?? pausedInterventionRun?.sprintNumber) != null && (
                             <span className="text-slate-400 ml-1">· Sprint {liveSprintRun?.sprintNumber ?? pausedInterventionRun?.sprintNumber}</span>
                         )}
-                    </div>
-
-                    {/* Hero headline */}
-                    <div className="relative overflow-hidden">
-                        <h2
-                            aria-hidden
-                            className="absolute -top-10 -left-3 text-[7rem] font-black tracking-tighter text-black/[0.04] dark:text-white/[0.03] pointer-events-none select-none font-display leading-none"
-                        >
-                            LIVE
-                        </h2>
-                        <h2 className="text-5xl md:text-7xl font-black tracking-tighter text-slate-900 dark:text-white leading-[0.92] font-display relative z-10">
-                            Sprint <br />
-                            <span className="text-signal-500">Pipeline.</span>
-                        </h2>
-                    </div>
-
-                    <p className="text-lg text-slate-500 dark:text-slate-500 font-medium max-w-xl mt-1 leading-relaxed">
-                        {hasLiveSprint
-                            ? scopedFeatureBranch
-                                ? <>Monitoring <span className="font-mono text-signal-600 dark:text-signal-400">{scopedFeatureBranch}</span> in real-time.</>
-                                : `Monitoring ${liveSprintRun?.sprintName || "the active sprint"} in real-time.`
-                            : showStatusPanel
-                                ? sprintStatusPresentation.detail
-                                : hasSprintContext
-                                    ? "Viewing the latest sprint telemetry snapshot."
-                                    : !initialLoadComplete
-                                        ? "Connecting to orchestrator..."
-                                        : "Waiting for sprint to start."
-                        }
-                    </p>
-                </div>
-
-                {/* Right: pills + view toggle + timestamp */}
+                    </>
+                }
+                title="Sprint Pipeline"
+                subtitle={
+                    hasLiveSprint
+                        ? scopedFeatureBranch
+                            ? <>Monitoring <span className="font-mono text-signal-600 dark:text-signal-400">{scopedFeatureBranch}</span> in real-time.</>
+                            : `Monitoring ${liveSprintRun?.sprintName || "the active sprint"} in real-time.`
+                        : showStatusPanel
+                            ? sprintStatusPresentation.detail
+                            : hasSprintContext
+                                ? "Viewing the latest sprint telemetry snapshot."
+                                : !initialLoadComplete
+                                    ? "Connecting to orchestrator..."
+                                    : "Waiting for sprint to start."
+                }
+                actions={
+                /* Right: pills + view toggle + timestamp */
                 <div className="flex flex-col items-start lg:items-end gap-4 shrink-0">
                     <div className="flex items-center gap-2.5 flex-wrap">
                         <LivePreviewLink session={selectedSession} />
                         {/* ── View Toggle ─────────────────────────────── */}
-                        <div className="flex gap-0.5 p-0.5 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl backdrop-blur-md">
+                        <div className="flex gap-0.5 p-0.5 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl backdrop-blur-md" role="tablist" aria-label="View toggle">
                             <button
                                 type="button"
                                 ref={btnStatsRef}
                                 onClick={() => setHeaderView("stats")}
-                                aria-pressed={headerView === "stats"}
+                                role="tab"
+                                aria-selected={headerView === "stats"}
+                                tabIndex={headerView === "stats" ? 0 : -1}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); setHeaderView("race"); btnRaceRef.current?.focus(); }
+                                    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); setHeaderView("dag"); btnDagRef.current?.focus(); }
+                                }}
                                 className={`flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-[10px] font-bold uppercase tracking-[0.14em] transition-all duration-300 ${headerView === "stats" ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_2px_10px_rgba(0,0,0,0.08)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.3)]" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"}`}
                             >
                                 <BarChart3 className="w-3 h-3" strokeWidth={2} />
@@ -140,7 +133,13 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
                                 type="button"
                                 ref={btnRaceRef}
                                 onClick={() => setHeaderView("race")}
-                                aria-pressed={headerView === "race"}
+                                role="tab"
+                                aria-selected={headerView === "race"}
+                                tabIndex={headerView === "race" ? 0 : -1}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); setHeaderView("dag"); btnDagRef.current?.focus(); }
+                                    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); setHeaderView("stats"); btnStatsRef.current?.focus(); }
+                                }}
                                 className={`flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-[10px] font-bold uppercase tracking-[0.14em] transition-all duration-300 ${headerView === "race" ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_2px_10px_rgba(0,0,0,0.08)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.3)]" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"}`}
                             >
                                 <Ship className="w-3 h-3" strokeWidth={2} />
@@ -150,7 +149,13 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
                                 type="button"
                                 ref={btnDagRef}
                                 onClick={() => setHeaderView("dag")}
-                                aria-pressed={headerView === "dag"}
+                                role="tab"
+                                aria-selected={headerView === "dag"}
+                                tabIndex={headerView === "dag" ? 0 : -1}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); setHeaderView("stats"); btnStatsRef.current?.focus(); }
+                                    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); setHeaderView("race"); btnRaceRef.current?.focus(); }
+                                }}
                                 className={`flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-[10px] font-bold uppercase tracking-[0.14em] transition-all duration-300 ${headerView === "dag" ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_2px_10px_rgba(0,0,0,0.08)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.3)]" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"}`}
                             >
                                 <Workflow className="w-3 h-3" strokeWidth={2} />
@@ -160,7 +165,7 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
 
                         <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] rounded-full border flex items-center gap-2.5 backdrop-blur-md ${hasLiveSprint ? "bg-signal-500/10 dark:bg-signal-500/10 text-signal-600 dark:text-signal-400 border-signal-500/25 dark:border-signal-500/25 shadow-[0_0_20px_rgba(0,224,160,0.08)]" : showStatusPanel ? "bg-status-amber/10 text-status-amber border-status-amber/25" : "bg-black/10 dark:bg-white/10 text-slate-500 border-black/25 dark:border-white/25"}`}>
                             <span className={`w-2 h-2 rounded-full relative ${hasLiveSprint ? "bg-signal-500" : showStatusPanel ? "bg-status-amber" : "bg-slate-400"}`}>
-                                {hasLiveSprint && <span className="absolute inset-0 rounded-full animate-ping bg-signal-400 opacity-60" />}
+                                {hasLiveSprint && <span className="absolute inset-0 rounded-full motion-safe:animate-ping bg-signal-400 opacity-60" />}
                             </span>
                             {hasLiveSprint ? `${visibleStats.running} Running` : showStatusPanel ? sprintStatusPresentation.statusLabel : hasSprintContext ? "Snapshot loaded" : !initialLoadComplete ? "Connecting" : "Waiting"}
                         </div>
@@ -170,7 +175,7 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
                         {visibleStats.failed > 0 && (
                             <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] rounded-full bg-status-red/10 text-status-red border border-status-red/25 flex items-center gap-2.5 backdrop-blur-md">
                                 <span className="w-2 h-2 rounded-full bg-status-red relative">
-                                    <span className="absolute inset-0 rounded-full animate-ping bg-status-red opacity-50" />
+                                    <span className="absolute inset-0 rounded-full motion-safe:animate-ping bg-status-red opacity-50" />
                                 </span>
                                 {visibleStats.failed} Failed
                             </div>
@@ -182,7 +187,8 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
                         </span>
                     )}
                 </div>
-            </div>
+                }
+            />
 
             {showStatusPanel && (
                 <div className="relative overflow-hidden rounded-[1.75rem] border border-status-amber/18 bg-status-amber/8 p-6 shadow-[0_12px_30px_rgba(245,158,11,0.08)]">

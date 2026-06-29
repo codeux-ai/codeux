@@ -148,6 +148,7 @@ The v2 settings page exposes:
 - AI routing console with global/worker anchors, provider-instance counts, enabled-provider counts, and route totals
 - global default instance and model
 - worker default instance and model
+- worker max concurrency, defaulting to `100` parallel worker-dispatched tasks with an editor range of `1` to `100`
 - base provider instance defaults for model, thinking mode, weight, enabled state, and concurrency (with wait loops optionally bounded by `maxWaitMs` and cancellable via `AbortSignal`)
 - invocation route profile and strategy
 - per-route provider-instance subset selection

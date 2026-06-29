@@ -1,15 +1,14 @@
-import { useLayoutEffect, useState, useMemo } from "preact/hooks";
+import { useLayoutEffect, useState, useMemo, useRef } from "preact/hooks";
 import type { RefObject } from "preact";
-import { useReducedMotionSafe } from "./useReducedMotionSafe.js";
+import gsap from "gsap";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { GSAP_DURATIONS } from "./constants.js";
-import { MOTION_TOKENS } from "./tokens.js";
 
 interface IndicatorStyle {
     transform: string;
     width?: string;
     height?: string;
     opacity: number;
-    transition?: string;
 }
 
 interface UseAnimatedActiveIndicatorResult {
@@ -41,12 +40,14 @@ export function useAnimatedActiveIndicator(
         opacity: 0,
     });
     const [isReady, setIsReady] = useState(false);
+    const proxyRef = useRef({ offset: 0, size: 0, opacity: 0 });
+    const prefersReducedMotion = useReducedMotion();
 
     useLayoutEffect(() => {
         const container = containerRef.current;
         if (!container) return;
 
-        const measure = () => {
+        const measure = (isResize: boolean = false) => {
             const children = Array.from(container.querySelectorAll<HTMLElement>(childSelector));
             const activeChild = children[activeIndex];
 
@@ -55,13 +56,23 @@ export function useAnimatedActiveIndicator(
                 const offset = orientation === 'horizontal' ? activeChild.offsetLeft : activeChild.offsetTop;
                 const size = orientation === 'horizontal' ? activeChild.offsetWidth : activeChild.offsetHeight;
 
-                setLayout({
-                    offset,
-                    size,
-                    opacity: 1,
-                });
-                setIsReady(true);
+                if (isResize || prefersReducedMotion) {
+                    gsap.set(proxyRef.current, { offset, size, opacity: 1 });
+                    setLayout({ offset, size, opacity: 1 });
+                    setIsReady(true);
+                } else {
+                    gsap.to(proxyRef.current, {
+                        offset,
+                        size,
+                        opacity: 1,
+                        duration: GSAP_DURATIONS.base,
+                        ease: "elastic.out(1, 0.75)",
+                        onUpdate: () => setLayout({ ...proxyRef.current })
+                    });
+                    setIsReady(true);
+                }
             } else {
+                gsap.set(proxyRef.current, { opacity: 0 });
                 setLayout(prev => ({ ...prev, opacity: 0 }));
             }
         };
@@ -71,12 +82,12 @@ export function useAnimatedActiveIndicator(
 
         // Optional: Measure on fonts loaded in case they change layout
         if (typeof document !== 'undefined') {
-            document.fonts?.ready.then(measure);
+            document.fonts?.ready.then(() => measure(true));
         }
 
         // Measure on window resize or when elements inside change size
         const observer = new ResizeObserver(() => {
-            measure();
+            measure(true);
         });
 
         observer.observe(container);
@@ -106,21 +117,8 @@ export function useAnimatedActiveIndicator(
         } as IndicatorStyle;
     }, [layout, orientation]);
 
-    const motionStyle = useReducedMotionSafe<IndicatorStyle>(
-        {
-            ...baseStyle,
-            transition: isReady
-                ? `transform ${GSAP_DURATIONS.base}s ${MOTION_TOKENS.easing.standard}, width ${GSAP_DURATIONS.base}s ${MOTION_TOKENS.easing.standard}, height ${GSAP_DURATIONS.base}s ${MOTION_TOKENS.easing.standard}`
-                : 'none'
-        },
-        {
-            ...baseStyle,
-            transition: 'none'
-        }
-    );
-
     return {
-        style: motionStyle,
+        style: baseStyle,
         isReady
     };
 }

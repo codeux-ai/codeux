@@ -124,6 +124,7 @@ export function useLiveSessionActions(
             title: "Claim Attention Item",
             body: "Claim this attention item for the assigned project worker?",
             confirmLabel: "Claim",
+            tone: "default",
         });
         if (!confirmed) {
             return;
@@ -141,6 +142,7 @@ export function useLiveSessionActions(
             title: "Resolve Attention Item",
             body: "Resolve this attention item and remove it from the active queue?",
             confirmLabel: "Resolve",
+            tone: "success",
         });
         if (!confirmed) {
             return;
@@ -159,6 +161,7 @@ export function useLiveSessionActions(
             title: "Dismiss Attention Item",
             body: "Dismiss this attention item from the active queue?",
             confirmLabel: "Dismiss",
+            tone: "neutral",
         });
         if (!confirmed) {
             return;

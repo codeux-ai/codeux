@@ -230,6 +230,7 @@ export class CycleRunner {
         featureBranchPrefix: args.featureBranchPrefix,
         ciIntelligence: args.ciIntelligence,
         githubMode: args.githubMode,
+        deleteMergedBranches: dashboardSettings.git.deleteMergedBranches,
         gitStatus,
         guardrailService: this.deps.guardrailService,
         isJulesApiConfigured: this.deps.isJulesApiConfigured,

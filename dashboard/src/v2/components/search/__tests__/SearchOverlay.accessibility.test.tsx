@@ -105,9 +105,7 @@ describe("SearchOverlay Accessibility", () => {
                 results={{ sprints: [], tasks: [], agents: [], containers: [] }}
             />
         );
-        // Since we removed the "Searching..." text from the hidden status region when isLoading is true,
-        // it will be empty instead. The main loading spinner UI now provides the status.
-        expect(statusRegion.textContent).toBe("");
+        expect(statusRegion.textContent).toBe("Searching...");
 
         // Rerender with results
         rerender(

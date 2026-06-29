@@ -67,6 +67,7 @@ export async function getProjectLiveSnapshot(
         overflowAssignedWorkers: [],
         attentionItems: [],
         recentEvents: [],
+        recentInvocations: [],
         updatedAt: null,
       },
       gitStatus: null,
@@ -128,7 +129,8 @@ export async function getProjectLiveSnapshot(
     (execution.taskDispatches?.length || 0) +
     (execution.connections?.length || 0) +
     (execution.attentionItems?.length || 0) +
-    (execution.recentEvents?.length || 0);
+    (execution.recentEvents?.length || 0) +
+    (execution.recentInvocations?.length || 0);
   const statusSubtaskCount = status.subtasks?.length || 0;
 
   const snapshot: ProjectLiveDashboardSnapshot = {

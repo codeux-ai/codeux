@@ -47,6 +47,7 @@ export const Drawer: FunctionComponent<DrawerProps> = ({
   });
 
   const hasAccessibleName = ariaLabel || ariaLabelledBy || ariaLabelledby;
+  const fallbackAriaLabel = !hasAccessibleName ? "Drawer" : undefined;
 
   const isRight = position === "right";
   const alignmentClass = isRight ? "right-0" : "left-0";
@@ -128,12 +129,12 @@ export const Drawer: FunctionComponent<DrawerProps> = ({
         ref={containerRef}
         role="dialog"
         aria-modal="true"
-        aria-label={ariaLabel }
+        aria-label={ariaLabel || fallbackAriaLabel}
         aria-labelledby={ariaLabelledBy || ariaLabelledby}
-        aria-describedby={ariaDescribedBy || ariaDescribedby}
+        aria-describedby={ariaDescribedBy || ariaDescribedby || undefined}
         tabIndex={-1}
         inert={!isOpen ? true : undefined}
-        className={`fixed top-0 bottom-0 ${alignmentClass} z-50 w-[calc(100vw-2rem)] sm:w-full max-w-md bg-white dark:bg-void-800 rounded-[12px] shadow-lg border-x border-black/[0.06] dark:border-white/[0.06] outline-none h-[100dvh] overflow-y-auto ${className}`}
+        className={`fixed top-0 bottom-0 ${alignmentClass} z-50 w-full max-w-sm sm:max-w-md bg-white dark:bg-void-800 rounded-[12px] shadow-lg border-x border-black/[0.06] dark:border-white/[0.06] outline-none h-dvh max-h-dvh pb-4 overflow-y-auto ${className}`}
         onClick={(e) => e.stopPropagation()}
       >
         {children}

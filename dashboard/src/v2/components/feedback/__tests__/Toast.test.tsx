@@ -57,12 +57,14 @@ describe("Toast System", () => {
     fireEvent.click(addError);
 
     await waitFor(() => {
-      expect(screen.getByText("Success msg")).toBeInTheDocument();
-      expect(screen.getByText("Error msg")).toBeInTheDocument();
+      expect(screen.getAllByText("Success msg").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Error msg").length).toBeGreaterThan(0);
     });
 
-    const successToast = screen.getByText("Success msg").closest('div.pointer-events-auto');
-    const errorToast = screen.getByText("Error msg").closest('div.pointer-events-auto');
+    const successToast = document.querySelector('div.pointer-events-auto p')?.closest('div.pointer-events-auto');
+    const errorToast = Array.from(document.querySelectorAll('div.pointer-events-auto p'))
+      .find((node) => node.textContent === "Error msg")
+      ?.closest('div.pointer-events-auto');
 
     // Ensure the individual toasts themselves don't have redundant roles
     expect(successToast).not.toHaveAttribute('role');
@@ -85,7 +87,7 @@ describe("Toast System", () => {
     fireEvent.click(btn);
 
     await waitFor(() => {
-      expect(screen.getByText("Error msg")).toBeInTheDocument();
+      expect(screen.getAllByText("Error msg").length).toBeGreaterThan(0);
     });
 
     const retryBtn = screen.getByText("Retry");
@@ -106,7 +108,7 @@ describe("Toast System", () => {
     fireEvent.click(btn);
 
     await waitFor(() => {
-      expect(screen.getByText("Success msg")).toBeInTheDocument();
+      expect(screen.getAllByText("Success msg").length).toBeGreaterThan(0);
     });
 
     const dismissBtn = screen.getByLabelText("Dismiss toast");

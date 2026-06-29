@@ -12,6 +12,8 @@ The dashboard's Live page and runtime components follow a distinct visual system
    - We avoid heavy glassmorphism (`backdrop-blur-2xl`), large shadows, and colored gradient backgrounds.
 3. **No Heavy Effects**: Decorative animations and SVGs like `WaveFluid` or `BorderTrace` are removed from the live runtime. State changes (active, paused, idle, error) are communicated through restrained visual cues (e.g., standard status color dots, labels, or badges) rather than intense background shifts.
 4. **Accessible Status Language**: Information density is balanced. Event feeds, idle states, error banners, and attention ledgers have distinct, well-spaced empty/loading/error treatments that don't compete with active controls.
+5. **High-Trust Queue Rows**: Attention queue, invocation feed, sprint run, dispatch, and connection rows use the same compact row language: `text-xs` primary labels, `text-[10px]` mono metadata, rounded-right rows, and a narrow left rail colored by severity or status.
+6. **Runtime-First Hierarchy**: Execution Runtime panels present compact summary tiles first, then bounded Sprint Runs and Dispatch Queue sections with status chips, clear empty states, and scroll-contained lists.
 
 ## Operational State Hierarchy
 
@@ -22,3 +24,25 @@ The dashboard's Live page and runtime components follow a distinct visual system
 - **Stopped**: A stable final state reflecting the completed execution.
 
 By adhering to these rules, the Live page remains a focused, professional workspace.
+
+## Accessibility Rules
+
+- Event feeds and timelines should use `role="log"` or `role="region"` with clear `aria-label`s.
+- Transient elements must handle focus properly.
+- Action buttons (claim, resolve, dismiss, cancel, etc.) must include accessible labels specifying their target item.
+- Runtime confirmation dialogs are portaled to `document.body`, use a viewport-fixed overlay, restore focus with `preventScroll`, and should not focus `document.body` when the originating action disappears after a resolve/dismiss mutation.
+- Confirmation dialogs must preserve strong dark-mode contrast: title/body copy should use near-white slate tones on `void` surfaces, and toned header panels should remain readable without relying on low-opacity text.
+- Attention item resolve confirmations use the success tone; dismiss confirmations use the neutral tone so operators can distinguish completion from clearing noise.
+- Popover triggers should let the shared `Popover` own open/close toggling; child trigger handlers must not toggle the same state a second time.
+- Dropdown menu content may wrap menu items in layout containers; nested `role="menuitem"` descendants are still enhanced for keyboard behavior and staggered entrance animation.
+- Animations for spinners must be `motion-safe`.
+
+## Sidebar Row Rails
+- The left rail is the primary distinction marker for dense sidebar feeds. Use `border-l-2` on compact rows rather than large icons, tall cards, or heavy colored backgrounds.
+- Success/completed/online states use green, active/running/listening states use signal, queued/pending/paused/cancel-requested states use amber, and failed/blocked/cancelled states use red.
+- Row containers should stay quiet (`bg-black/[0.015]` or `dark:bg-white/[0.015]`) with a subtle state hover. Avoid gradients and oversized type in sidebar feeds.
+
+## Responsive Layouts
+- Live Runtime panels enforce strict boundaries by adding `min-w-0` to large grid columns (e.g., `xl:col-span-8 flex flex-col gap-5 min-w-0`) to prevent blowout.
+- Dense runtime data (like stat grids in ExecutionRuntimePanel and AttentionQueuePanel) switch from 2 columns to 3 or 4 columns at the `sm` or `md` breakpoints to avoid squeezing content.
+- Header actions and connections labels natively `flex-wrap` to handle touch-friendly interactions on phones and constrained layouts without losing controls.

@@ -1,4 +1,5 @@
 import type { FunctionComponent, ComponentProps } from "preact";
+import { useId } from "preact/hooks";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 export interface SelectProps extends ComponentProps<"select"> {
@@ -28,17 +29,25 @@ export const Select: FunctionComponent<SelectProps> = ({
   ...props
 }) => {
   const tokens = useInteractionTokens();
-  const generatedId = id || (props.name ? `select-${props.name}` : undefined);
+  const uniqueId = useId();
+  const generatedId = id || (props.name ? `select-${props.name}` : uniqueId);
   const errorId = errorText ? `${generatedId}-error` : undefined;
   const helperId = helperText ? `${generatedId}-helper` : undefined;
+
+  const describedBy = [
+    errorText ? errorId : helperText ? helperId : undefined,
+    ariaDescribedBy
+  ].filter(Boolean).join(" ") || undefined;
+
+  const errorMessage = [errorId, ariaErrorMessage].filter(Boolean).join(" ") || undefined;
 
   return (
     <div className="flex flex-col gap-1.5">
       <select
         id={generatedId}
-        aria-invalid={ariaInvalid !== undefined ? ariaInvalid : (!!errorText || undefined)}
-        aria-errormessage={ariaErrorMessage || errorId}
-        aria-describedby={ariaDescribedBy || helperId}
+        aria-invalid={ariaInvalid !== undefined ? ariaInvalid : (errorText ? "true" : undefined)}
+        aria-errormessage={errorMessage}
+        aria-describedby={describedBy}
         aria-required={ariaRequired}
         style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease, ...(typeof style === "object" ? style : {}) }}
         disabled={disabled}

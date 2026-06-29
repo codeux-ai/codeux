@@ -8,6 +8,7 @@ import {
   restoreCheckedOutRef,
   mergeBranchLocally,
   findRecoverableWorkerBranch,
+  deleteBranchLocally,
 } from "../../../../src/infrastructure/git/local-merge.js";
 
 async function git(repo: string, ...args: string[]) {
@@ -218,5 +219,28 @@ describe("findRecoverableWorkerBranch", () => {
     });
 
     expect(found).toBe(`${prefix}new`);
+  });
+
+  describe("deleteBranchLocally", () => {
+    it("deletes an existing branch", async () => {
+      await git(repo, "branch", "throwaway");
+      const deleted = await deleteBranchLocally({ repoPath: repo, branch: "throwaway" });
+      expect(deleted).toBe(true);
+      const list = (await git(repo, "branch", "--format=%(refname:short)")).stdout;
+      expect(list).not.toContain("throwaway");
+    });
+
+    it("refuses to delete the currently checked-out branch", async () => {
+      const current = (await git(repo, "symbolic-ref", "--short", "HEAD")).stdout.trim();
+      const deleted = await deleteBranchLocally({ repoPath: repo, branch: current });
+      expect(deleted).toBe(false);
+      const list = (await git(repo, "branch", "--format=%(refname:short)")).stdout;
+      expect(list).toContain(current);
+    });
+
+    it("returns false for a non-existent branch without throwing", async () => {
+      const deleted = await deleteBranchLocally({ repoPath: repo, branch: "does-not-exist" });
+      expect(deleted).toBe(false);
+    });
   });
 });

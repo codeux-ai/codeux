@@ -20,6 +20,7 @@ import { fetchAgentPresets } from "./lib/agent-preset-api.js";
 import { prepareMemoryGraph, type MemNode, type Edge, type GraphMetadata, CLUSTER } from "./lib/memory-graph.js";
 import type { SprintRecord, AgentPreset } from "./types.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
+import { PageHeader } from "./components/layout/PageHeader.js";
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 
@@ -725,41 +726,25 @@ export const MemoryPage: FunctionComponent = () => {
             </div>
 
             {/* ── Header ──────────────────────────────────────────────── */}
-            <div ref={headerRef} className="flex flex-col md:flex-row items-start md:items-end justify-between gap-6">
-                <div className="flex flex-col gap-4">
-                    <div className="flex items-center gap-2.5 text-signal-500 font-mono text-[10px] font-bold uppercase tracking-[0.2em]">
-                        <Brain className="w-3.5 h-3.5" strokeWidth={2.5} />
-                        Neural Memory
-                    </div>
-                    <div className="relative overflow-hidden">
-                        <h2 aria-hidden
-                            className="absolute -top-10 -left-3 text-[7rem] font-black tracking-tighter
-                                       text-black/[0.04] dark:text-white/[0.03]
-                                       pointer-events-none select-none font-display leading-none">
-                            MEM
-                        </h2>
-                        <h1 className="text-5xl md:text-7xl font-black tracking-tighter text-slate-900 dark:text-white leading-[0.92] font-display relative z-10">
-                            Memory <br />
-                            <span className="text-signal-500">Map.</span>
-                        </h1>
-                    </div>
-                    <p className="text-base text-slate-500 font-medium max-w-lg leading-relaxed">
-                        Explore the neural landscape of your agents' persistent memory.
-                        Click nodes to inspect. Scroll to zoom. Drag to pan.
-                    </p>
-                </div>
-
-                <MemoryFilters
-                    stats={stats}
-                    sprints={sprints}
-                    agentPresets={agentPresets}
-                    showModels={showModels}
-                    setShowModels={setShowModels}
-                    setShowAddModal={setShowAddModal}
-                    lobotomize={lobotomize}
-                    handleLobotomizeToggle={handleLobotomizeToggle}
-                />
-            </div>
+            <PageHeader
+                containerRef={headerRef}
+                icon={Brain}
+                eyebrow="Neural Memory"
+                title="Memory Map"
+                subtitle="Explore the neural landscape of your agents' persistent memory. Click nodes to inspect. Scroll to zoom. Drag to pan."
+                actions={
+                    <MemoryFilters
+                        stats={stats}
+                        sprints={sprints}
+                        agentPresets={agentPresets}
+                        showModels={showModels}
+                        setShowModels={setShowModels}
+                        setShowAddModal={setShowAddModal}
+                        lobotomize={lobotomize}
+                        handleLobotomizeToggle={handleLobotomizeToggle}
+                    />
+                }
+            />
 
             {/* ── Model Management ────────────────────────────────────── */}
             {showModels && (
@@ -852,11 +837,7 @@ export const MemoryPage: FunctionComponent = () => {
 
             {/* ── Neural Canvas ───────────────────────────────────────── */}
             <div
-                className="flex w-full overflow-hidden rounded-[2rem]
-                           bg-white/50 dark:bg-void-800/40 backdrop-blur-2xl
-                           border border-black/[0.05] dark:border-white/[0.05]
-                           shadow-[0_8px_48px_rgba(0,0,0,0.06)] dark:shadow-[0_8px_48px_rgba(0,0,0,0.4)]"
-                style={{ height: "max(600px, calc(100vh - 440px))" }}
+                className="flex flex-col lg:flex-row w-full overflow-hidden rounded-[2rem] bg-white/50 dark:bg-void-800/40 backdrop-blur-2xl border border-black/[0.05] dark:border-white/[0.05] shadow-[0_8px_48px_rgba(0,0,0,0.06)] dark:shadow-[0_8px_48px_rgba(0,0,0,0.4)] h-[calc(100dvh-12rem)] min-h-[500px]"
             >
                 <div ref={wrapRef} className="flex-1 relative overflow-hidden">
                     <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />

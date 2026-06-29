@@ -451,7 +451,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
           />
         </Row>
         <Row label="Max concurrency" description="Maximum number of worker-dispatched tasks running at once." badge={getFieldBadge("workers.maxConcurrency")}>
-          <NumberInput value={editableSettings.workers.maxConcurrency} min={1} max={20} onChange={(value) => updateEditableSettings((current) => ({
+          <NumberInput value={editableSettings.workers.maxConcurrency} min={1} max={100} onChange={(value) => updateEditableSettings((current) => ({
             ...current,
             workers: { ...current.workers, maxConcurrency: value },
           }))} />
@@ -515,7 +515,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                     {providerSupportsModelSelection(provider.provider) ? provider.model : "Managed by provider"}
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
                     <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Weight</div>
                     <div className="mt-1 text-sm font-black text-slate-900 dark:text-white">{provider.weight}</div>
@@ -868,7 +868,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                           {supportsModel ? effectiveModel : "Managed by provider"}
                         </div>
                       </div>
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                         <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
                           <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Weight</div>
                           <div className="mt-1 text-sm font-black text-slate-900 dark:text-white">{effectiveWeight}</div>

@@ -700,3 +700,8 @@ export function isClaudeConversationNotFoundError(result: CommandResult): boolea
   const text = `${result.stdout}\n${result.stderr}`.toLowerCase();
   return text.includes("no conversation found");
 }
+
+export function isOpenCodeSessionNotFoundError(result: CommandResult): boolean {
+  const text = `${result.stdout}\n${result.stderr}`.toLowerCase();
+  return text.includes("session not found");
+}

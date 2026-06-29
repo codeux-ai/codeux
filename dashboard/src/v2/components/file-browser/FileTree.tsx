@@ -27,7 +27,7 @@ const TreeNodeRow: FunctionComponent<NodeRendererProps<FileBrowserTreeNode>> = (
           node.select();
         }
       }}
-      class={`group flex h-full items-center gap-1.5 rounded-lg pr-2 text-[13px] transition-colors cursor-pointer ${
+      class={`group flex min-w-0 h-full items-center gap-1.5 rounded-lg pr-2 text-[13px] transition-colors cursor-pointer ${
         isSelected
           ? "bg-signal-500/[0.14] text-slate-900 ring-1 ring-inset ring-signal-500/25 dark:text-white"
           : "text-slate-600 hover:bg-black/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.05]"

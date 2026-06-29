@@ -3,6 +3,7 @@ import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { Bot, Plus, Target, X, Save, AlertCircle } from "lucide-preact";
 import { Tooltip } from "./Tooltip.js";
+import { FieldWrapper } from "../forms/FieldWrapper.js";
 import type { Sprint, Task, TaskExecutorType, TaskPriority, TaskStatus } from "../../types.js";
 import { useTaskComposerState, type TaskDraft } from "../../lib/task-composer-state.js";
 import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
@@ -71,7 +72,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
     return () => ctx.revert();
   }, [initialTask?.recordId, reducedMotion]);
 
-  const { feedback, setPending, setSuccess, setError, clearFeedback } = useActionFeedback();
+  const { feedback, setPending, setSuccess, setError, clearFeedback, clearError } = useActionFeedback();
 
   const handleSubmit = async (event: Event) => {
     event.preventDefault();
@@ -155,13 +156,12 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
           </div>
 
           <div data-composer-stagger className="mt-8 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-              <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">Sprint</div>
+            <FieldWrapper label="Sprint" required error={state.sprintIdError} forceTouch={state.touchedFields.sprintId || state.hasAttemptedSubmit}>
               <select
                 value={state.sprintId}
                 onInput={(event) => state.setSprintId((event.target as HTMLSelectElement).value)}
                 onBlur={() => state.setFieldTouched('sprintId')}
-                className={`w-full bg-transparent text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-lg px-1 py-0.5 -ml-1 border ${(state.hasAttemptedSubmit || state.touchedFields.sprintId) && !state.isSprintIdValid ? 'border-red-500' : 'border-transparent'}`} aria-invalid={!state.isSprintIdValid ? "true" : "false"} aria-describedby={((state.hasAttemptedSubmit || state.touchedFields.sprintId) && state.sprintIdError) ? "task-composer-sprint-error" : undefined}
+                className="w-full bg-transparent text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-lg px-1 py-0.5 -ml-1 border border-transparent"
                 required
               >
                 <option value="" disabled>Select sprint</option>
@@ -169,15 +169,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                   <option key={sprint.id} value={sprint.id}>{sprint.name}</option>
                 ))}
               </select>
-              <div className="min-h-[1.5rem] mt-1">
-                {(state.hasAttemptedSubmit || state.touchedFields.sprintId) && state.sprintIdError && (
-                  <div id="task-composer-sprint-error" className="flex items-center gap-1.5 text-xs text-red-500 font-medium">
-                    <AlertCircle className="w-3.5 h-3.5" />
-                    {state.sprintIdError}
-                  </div>
-                )}
-              </div>
-            </div>
+            </FieldWrapper>
 
             <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
               <div className="flex items-center gap-2 mb-2">
@@ -205,35 +197,21 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
             </div>
           </div>
 
-          <label data-composer-stagger className="mt-8 block space-y-2">
-            <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Task Title</span>
-            <input
-              ref={titleInputRef}
-              type="text"
-              value={state.title}
-              onInput={(event) => state.setTitle((event.target as HTMLInputElement).value)}
-              onBlur={() => state.setFieldTouched('title')}
-              placeholder="Fix navigation layout shift"
-              className={`w-full border-0 border-b-2 bg-transparent pb-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:border-signal-500 dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem] ${(state.hasAttemptedSubmit || state.touchedFields.title) && !state.isTitleValid ? 'border-red-500' : 'border-black/[0.08] dark:border-white/[0.08]'}`} aria-invalid={!state.isTitleValid ? "true" : "false"} aria-describedby={((state.hasAttemptedSubmit || state.touchedFields.title) && state.titleError) ? "task-composer-title-error" : undefined}
-              required
-              autoFocus
-            />
-            <div
-              className="grid transition-all duration-200 ease-out mt-1"
-              style={{
-                gridTemplateRows: ((state.hasAttemptedSubmit || state.touchedFields.title) && state.titleError) ? '1fr' : '0fr',
-                opacity: ((state.hasAttemptedSubmit || state.touchedFields.title) && state.titleError) ? 1 : 0
-              }}
-              aria-live="assertive"
-            >
-              <div className="overflow-hidden">
-                <div id="task-composer-title-error" className="flex items-center gap-1.5 text-xs text-red-500 font-medium pt-1">
-                      <AlertCircle className="w-4 h-4" />
-                      {state.titleError}
-                    </div>
-              </div>
-            </div>
-          </label>
+          <div data-composer-stagger className="mt-8 block space-y-2">
+            <FieldWrapper label="Task Title" required error={state.titleError} forceTouch={state.touchedFields.title || state.hasAttemptedSubmit}>
+              <input
+                ref={titleInputRef}
+                type="text"
+                value={state.title}
+                onInput={(event) => state.setTitle((event.target as HTMLInputElement).value)}
+                onBlur={() => state.setFieldTouched('title')}
+                placeholder="Fix navigation layout shift"
+                className="w-full border-0 border-b-2 bg-transparent pb-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:border-signal-500 dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem] border-black/[0.08] dark:border-white/[0.08]"
+                required
+                autoFocus
+              />
+            </FieldWrapper>
+          </div>
 
           <div data-composer-stagger className="mt-8 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -242,59 +220,27 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
 
             <div className="grid gap-4 xl:grid-cols-2">
               <div className="flex flex-col">
-                <div className={`rounded-[1.7rem] border bg-black/[0.025] dark:bg-white/[0.03] transition-colors ${(state.hasAttemptedSubmit || state.touchedFields.description) && !state.isDescriptionValid ? 'border-red-500' : 'border-black/[0.07] dark:border-white/[0.08]'}`}>
+                <FieldWrapper label="Description" error={state.descriptionError} forceTouch={state.touchedFields.description || state.hasAttemptedSubmit}>
                   <textarea
                     value={state.description}
                     onInput={(event) => state.setDescription((event.target as HTMLTextAreaElement).value)}
                     onBlur={() => state.setFieldTouched('description')}
                     placeholder="Summarize the intent and outcome."
-                    className="min-h-[160px] w-full resize-none rounded-[1.7rem] bg-transparent px-4 py-4 text-sm leading-relaxed text-slate-700 outline-none placeholder:text-slate-300 focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:text-slate-300 dark:placeholder:text-slate-600 sm:px-5"
-                    aria-invalid={!state.isDescriptionValid ? "true" : "false"} aria-describedby={((state.hasAttemptedSubmit || state.touchedFields.description) && state.descriptionError) ? "task-composer-description-error" : undefined}
+                    className="min-h-[160px] w-full resize-none rounded-[1.7rem] bg-transparent border border-black/[0.07] dark:border-white/[0.08] px-4 py-4 text-sm leading-relaxed text-slate-700 outline-none placeholder:text-slate-300 focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:text-slate-300 dark:placeholder:text-slate-600 sm:px-5"
                   />
-                </div>
-                <div
-                  className="grid transition-all duration-200 ease-out mt-1 ml-4"
-                  style={{
-                    gridTemplateRows: ((state.hasAttemptedSubmit || state.touchedFields.description) && state.descriptionError) ? '1fr' : '0fr',
-                    opacity: ((state.hasAttemptedSubmit || state.touchedFields.description) && state.descriptionError) ? 1 : 0
-                  }}
-                  aria-live="assertive"
-                >
-                  <div className="overflow-hidden">
-                    <div id="task-composer-description-error" className="flex items-center gap-1.5 text-xs text-red-500 font-medium pt-1">
-                      <AlertCircle className="w-4 h-4" />
-                      {state.descriptionError}
-                    </div>
-                  </div>
-                </div>
+                </FieldWrapper>
               </div>
 
               <div className="flex flex-col">
-                <div className={`rounded-[1.7rem] border bg-black/[0.025] dark:bg-white/[0.03] transition-colors ${(state.hasAttemptedSubmit || state.touchedFields.promptMarkdown) && !state.isPromptMarkdownValid ? 'border-red-500' : 'border-black/[0.07] dark:border-white/[0.08]'}`}>
+                <FieldWrapper label="Execution Prompt" error={state.promptMarkdownError} forceTouch={state.touchedFields.promptMarkdown || state.hasAttemptedSubmit}>
                   <textarea
                     value={state.promptMarkdown}
                     onInput={(event) => state.setPromptMarkdown((event.target as HTMLTextAreaElement).value)}
                     onBlur={() => state.setFieldTouched('promptMarkdown')}
                     placeholder="Detailed markdown instructions for the agent."
-                    className="min-h-[160px] w-full resize-none rounded-[1.7rem] bg-transparent px-4 py-4 text-sm leading-relaxed font-mono text-slate-700 outline-none placeholder:text-slate-300 focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:text-slate-300 dark:placeholder:text-slate-600 sm:px-5"
-                    aria-invalid={!state.isPromptMarkdownValid ? "true" : "false"} aria-describedby={((state.hasAttemptedSubmit || state.touchedFields.promptMarkdown) && state.promptMarkdownError) ? "task-composer-prompt-error" : undefined}
+                    className="min-h-[160px] w-full resize-none rounded-[1.7rem] bg-transparent border border-black/[0.07] dark:border-white/[0.08] px-4 py-4 font-mono text-sm leading-relaxed text-slate-700 outline-none placeholder:text-slate-300 focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:text-slate-300 dark:placeholder:text-slate-600 sm:px-5"
                   />
-                </div>
-                <div
-                  className="grid transition-all duration-200 ease-out mt-1 ml-4"
-                  style={{
-                    gridTemplateRows: ((state.hasAttemptedSubmit || state.touchedFields.promptMarkdown) && state.promptMarkdownError) ? '1fr' : '0fr',
-                    opacity: ((state.hasAttemptedSubmit || state.touchedFields.promptMarkdown) && state.promptMarkdownError) ? 1 : 0
-                  }}
-                  aria-live="assertive"
-                >
-                  <div className="overflow-hidden">
-                    <div id="task-composer-prompt-error" className="flex items-center gap-1.5 text-xs text-red-500 font-medium pt-1">
-                      <AlertCircle className="w-4 h-4" />
-                      {state.promptMarkdownError}
-                    </div>
-                  </div>
-                </div>
+                </FieldWrapper>
               </div>
             </div>
           </div>
@@ -418,7 +364,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
           </div>
 
           <div data-composer-stagger className="mt-auto flex flex-col gap-3 pt-2">
-            <ActionFeedbackRegion status={feedback.status} message={feedback.message} onDismiss={clearFeedback} autoDismiss={feedback.autoDismiss} retryAction={feedback.retryAction} retryLabel={feedback.retryLabel} />
+            <ActionFeedbackRegion status={feedback.status} message={feedback.message} onDismiss={clearFeedback} clearError={clearError} autoDismiss={feedback.autoDismiss} retryAction={feedback.retryAction} retryLabel={feedback.retryLabel} />
             <Tooltip
               content={!state.isValid ? "Please fix the validation errors before submitting." : null}
               position="top"

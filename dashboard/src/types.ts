@@ -85,6 +85,10 @@ import type {
   SystemProviderCredentialSettings,
   SystemSettings,
 } from "../../src/contracts/settings-scope-types.js";
+import type {
+  ExecutionInvocationRecord,
+  ExecutionInvocationMessageRecord,
+} from "../../src/contracts/invocation-types.js";
 
 export type {
   JulesActivity,
@@ -170,6 +174,11 @@ export type {
   SprintSettingsOverride,
   SystemProviderCredentialSettings,
   SystemSettings,
+};
+
+export type {
+  ExecutionInvocationRecord,
+  ExecutionInvocationMessageRecord,
 };
 
 /**

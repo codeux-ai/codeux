@@ -5,7 +5,7 @@ import { getLiveActionDisplayProps, getPendingActionState } from "../lib/live-se
 import gsap from "gsap";
 import { useReducedMotion, useResolvedMotionDuration } from "../hooks/use-reduced-motion.js";
 import { INTERACTION_TOKENS } from "../lib/motion/tokens.js";
-import { Bot, CheckCircle2, ChevronDown, XCircle } from "lucide-preact";
+import { AlertTriangle, Bot, CheckCircle2, ChevronDown, XCircle } from "lucide-preact";
 import { renderMarkdown } from "../../lib/markdown.js";
 import { formatTime } from "../../lib/time.js";
 import { MARKDOWN_PROSE_CLASS } from "./ui/MarkdownEditorField.js";
@@ -49,10 +49,11 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
     const duration = useResolvedMotionDuration(parseFloat(INTERACTION_TOKENS.enterExit.duration) / 1000);
     const attentionItems = snapshot?.attentionItems || [];
 
-    const { openCount, claimedCount } = useMemo(() => {
+    const { openCount, claimedCount, urgentCount } = useMemo(() => {
         return {
             openCount: attentionItems.filter((item) => item.status === "open").length,
             claimedCount: attentionItems.filter((item) => item.status === "claimed").length,
+            urgentCount: attentionItems.filter((item) => item.severity === "critical" || item.severity === "high").length,
         };
     }, [attentionItems, attentionItems.length]);
 
@@ -91,15 +92,21 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
 
     const header = (
         <>
-            <div className="flex items-center gap-2.5">
+            <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+                <AlertTriangle className="h-4 w-4 text-status-amber" strokeWidth={1.5} />
                 <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Attention Queue</span>
                 <div className="flex flex-wrap items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em]">
-                    <span className="rounded-full border border-status-amber/20 bg-status-amber/10 px-2 py-1 text-status-amber">
+                    <span className="rounded-md bg-status-amber/10 px-2 py-0.5 font-mono text-status-amber">
                         open {openCount}
                     </span>
-                    <span className="rounded-full border border-signal-500/20 bg-signal-500/10 px-2 py-1 text-signal-500">
+                    <span className="rounded-md bg-signal-500/10 px-2 py-0.5 font-mono text-signal-500">
                         claimed {claimedCount}
                     </span>
+                    {urgentCount > 0 && (
+                        <span className="rounded-md bg-status-red/10 px-2 py-0.5 font-mono text-status-red">
+                            urgent {urgentCount}
+                        </span>
+                    )}
                 </div>
             </div>
             {collapsible && (
@@ -122,7 +129,7 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
                     aria-expanded={open}
                     aria-controls={contentId}
                     onClick={() => setOpen(!open)}
-                    className="relative z-10 flex w-full items-center justify-between gap-4 p-5 transition-colors duration-200 hover:bg-black/[0.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:hover:bg-white/[0.01] dark:focus-visible:ring-offset-void-800"
+                    className="relative z-10 flex w-full items-center justify-between gap-4 p-5 text-left transition-colors duration-200 hover:bg-black/[0.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:hover:bg-white/[0.01] dark:focus-visible:ring-offset-void-800"
                 >
                     {header}
                 </button>
@@ -136,11 +143,19 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
                 <div id={contentId} className={`${collapsible ? "collapsible-content" : ""}`}>
                     <div className="relative z-10 px-5 pb-5 pt-0">
                         {attentionItems.length === 0 ? (
-                            <p className="text-[11px] font-mono text-slate-400 dark:text-slate-600">
-                                No active blockers are waiting in the project attention queue.
-                            </p>
+                            <div className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 dark:border-white/[0.04] dark:bg-white/[0.015]">
+                                <div className="flex items-start gap-3">
+                                    <span className="mt-0.5 h-2 w-2 rounded-full bg-status-green shadow-[0_0_0_4px_rgba(0,171,132,0.10)]" />
+                                    <div>
+                                        <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Queue clear</p>
+                                        <p className="mt-1 text-[11px] font-mono leading-relaxed text-slate-400 dark:text-slate-500">
+                                            No active blockers are waiting in the project attention queue.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
                         ) : (
-                            <div ref={listRef} className="max-h-80 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar">
+                            <div ref={listRef} className="max-h-96 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar" role="list" aria-label="Active attention items">
                                 {visibleAttentionItems.map((item) => {
                                     const assignedWorkerLabel = item.assignedWorkerEndpointId
                                         ? workersByEndpointId.get(item.assignedWorkerEndpointId) || item.assignedWorkerEndpointId
@@ -160,64 +175,73 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
                                     return (
                                         <div
                                             key={item.id}
-                                            className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 dark:border-white/[0.04] dark:bg-white/[0.015]"
+                                            role="listitem"
+                                            className="group/row relative overflow-hidden rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 transition-colors hover:border-status-amber/25 hover:bg-status-amber/[0.035] dark:border-white/[0.04] dark:bg-white/[0.015]"
                                         >
+                                            <div className={`absolute inset-y-0 left-0 w-0.5 ${
+                                                item.severity === "critical" || item.severity === "high"
+                                                    ? "bg-status-red"
+                                                    : item.severity === "medium"
+                                                        ? "bg-status-amber"
+                                                        : "bg-signal-500"
+                                            }`} />
                                             <div className="flex items-start justify-between gap-3">
-                                                <div className="min-w-0">
+                                                <div className="min-w-0 pl-1.5">
                                                     <div className="flex flex-wrap items-center gap-2">
-                                                        <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                                        <span className="min-w-0 max-w-full truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
                                                             {item.title}
                                                         </span>
-                                                        <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${
+                                                        <span className={`rounded-md border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${
                                                             ATTENTION_SEVERITY_TONE[item.severity] || ATTENTION_SEVERITY_TONE.medium
                                                         }`}>
                                                             {item.severity}
                                                         </span>
-                                                        <span className="rounded-full border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
+                                                        <span className="rounded-md border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
                                                             {ATTENTION_TYPE_LABELS[item.attentionType] || item.attentionType.replace(/_/g, " ")}
                                                         </span>
                                                     </div>
-                                                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
+                                                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-mono text-slate-400">
                                                         <span className={ATTENTION_STATUS_TONE[item.status] || "text-slate-400"}>
                                                             {item.status}
                                                         </span>
-                                                        <span>·</span>
+                                                        <span className="text-slate-300 dark:text-slate-700">/</span>
                                                         <span>{ATTENTION_OWNER_LABELS[item.ownerType] || item.ownerType}</span>
-                                                        <span>·</span>
+                                                        <span className="text-slate-300 dark:text-slate-700">/</span>
                                                         <span>{assignedWorkerLabel}</span>
                                                         {shortenRuntimeId(item.taskId) && (
                                                             <>
-                                                                <span>·</span>
+                                                                <span className="text-slate-300 dark:text-slate-700">/</span>
                                                                 <span>task {shortenRuntimeId(item.taskId)}</span>
                                                             </>
                                                         )}
                                                         {shortenRuntimeId(item.dispatchId) && (
                                                             <>
-                                                                <span>·</span>
+                                                                <span className="text-slate-300 dark:text-slate-700">/</span>
                                                                 <span>dispatch {shortenRuntimeId(item.dispatchId)}</span>
                                                             </>
                                                         )}
                                                     </div>
                                                 </div>
-                                                <div className="text-right text-[10px] font-mono text-slate-400">
+                                                <div className="shrink-0 text-right text-[10px] font-mono text-slate-400">
                                                     {formatTime(item.updatedAt)}
                                                 </div>
                                             </div>
 
                                             <div
-                                                className={`mt-3 line-clamp-3 text-[11px] leading-relaxed prose-p:my-0 ${MARKDOWN_PROSE_CLASS}`}
+                                                className={`mt-2 line-clamp-2 text-[11px] leading-relaxed text-slate-500 prose-p:my-0 dark:text-slate-400 ${MARKDOWN_PROSE_CLASS}`}
                                                 dangerouslySetInnerHTML={{ __html: renderMarkdown(item.summaryMarkdown || "No summary provided.") }}
                                             />
 
-                                            <div className="mt-3 flex flex-wrap gap-2">
+                                            <div className="mt-3 flex flex-wrap gap-2 border-t border-black/[0.04] pt-2 dark:border-white/[0.04]">
                                                 {canClaim && snapshot.projectId && (
                                                     <button
                                                         type="button"
                                                         onClick={() => getPendingActionState(pendingActionIds, claimActionId) === "idle" && onClaimAttentionItem(snapshot.projectId!, item.id)}
                                                         {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, claimActionId) === "pending", false)}
-                                                        className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-500 transition-colors hover:bg-signal-500/15 aria-disabled:opacity-50"
+                                                        className="inline-flex items-center gap-1.5 rounded-md border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/15 aria-disabled:opacity-50 dark:text-signal-400"
+                                                        aria-label={"Claim attention item: " + item.title}
                                                     >
-                                                        <Bot className={`h-3 w-3 ${getPendingActionState(pendingActionIds, claimActionId) === "pending" ? "animate-pulse" : ""}`} strokeWidth={2} />
+                                                        <Bot className={`h-3 w-3 ${getPendingActionState(pendingActionIds, claimActionId) === "pending" ? "motion-safe:animate-pulse" : ""}`} strokeWidth={2} />
                                                         {getPendingActionState(pendingActionIds, claimActionId) === "pending" ? "Claiming" : "Claim"}
                                                         {getPendingActionState(pendingActionIds, claimActionId) === "pending" && <span className="sr-only">Claiming...</span>}
                                                     </button>
@@ -227,9 +251,10 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
                                                         type="button"
                                                         onClick={() => getPendingActionState(pendingActionIds, resolveActionId) === "idle" && onResolveAttentionItem(snapshot.projectId!, item.id)}
                                                         {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, resolveActionId) === "pending", false)}
-                                                        className="inline-flex items-center gap-1.5 rounded-full border border-status-green/20 bg-status-green/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-status-green transition-colors hover:bg-status-green/15 aria-disabled:opacity-50"
+                                                        className="inline-flex items-center gap-1.5 rounded-md border border-status-green/20 bg-status-green/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-green transition-colors hover:bg-status-green/15 aria-disabled:opacity-50"
+                                                        aria-label={"Resolve attention item: " + item.title}
                                                     >
-                                                        <CheckCircle2 className={`h-3 w-3 ${getPendingActionState(pendingActionIds, resolveActionId) === "pending" ? "animate-spin" : ""}`} strokeWidth={2} />
+                                                        <CheckCircle2 className={`h-3 w-3 ${getPendingActionState(pendingActionIds, resolveActionId) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} />
                                                         {getPendingActionState(pendingActionIds, resolveActionId) === "pending" ? "Resolving" : "Resolve"}
                                                         {getPendingActionState(pendingActionIds, resolveActionId) === "pending" && <span className="sr-only">Resolving...</span>}
                                                     </button>
@@ -239,9 +264,10 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
                                                         type="button"
                                                         onClick={() => getPendingActionState(pendingActionIds, dismissActionId) === "idle" && onDismissAttentionItem(snapshot.projectId!, item.id)}
                                                         {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, dismissActionId) === "pending", false)}
-                                                        className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-black/[0.03] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-black/[0.05] aria-disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:bg-white/[0.05]"
+                                                        className="inline-flex items-center gap-1.5 rounded-md border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:bg-black/[0.035] aria-disabled:opacity-50 dark:border-white/[0.06] dark:text-slate-400 dark:hover:bg-white/[0.04]"
+                                                        aria-label={"Dismiss attention item: " + item.title}
                                                     >
-                                                        <XCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, dismissActionId) === "pending" ? "animate-spin" : ""}`} strokeWidth={2} />
+                                                        <XCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, dismissActionId) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} />
                                                         {getPendingActionState(pendingActionIds, dismissActionId) === "pending" ? "Dismissing" : "Dismiss"}
                                                         {getPendingActionState(pendingActionIds, dismissActionId) === "pending" && <span className="sr-only">Dismissing...</span>}
                                                     </button>

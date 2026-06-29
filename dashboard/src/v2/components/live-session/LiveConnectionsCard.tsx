@@ -174,7 +174,7 @@ export const LiveConnectionsCard: FunctionComponent<{
       <BorderTrace accentHex="#00E0A0" />
 
       <div className="relative z-10">
-        <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Radio className="h-4 w-4 text-signal-500" strokeWidth={1.5} />
             <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400">Live Connections</span>
@@ -206,7 +206,7 @@ export const LiveConnectionsCard: FunctionComponent<{
             No listeners or workers are connected to the selected project yet.
           </p>
         ) : (
-          <div className="dashboard-scrollbar max-h-[30rem] space-y-2 overflow-y-auto pr-1" aria-live="polite">
+          <div className="dashboard-scrollbar max-h-[30rem] space-y-2 overflow-y-auto pr-1" aria-live="polite" aria-label="Live connections feed">
             {snapshot.connections.map((connection) => (
               <ConnectionRow key={connection.id} connection={connection} />
             ))}

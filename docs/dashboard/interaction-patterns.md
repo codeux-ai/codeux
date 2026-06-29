@@ -68,3 +68,11 @@ All standard overlays (Dialog, DropdownMenu, Popover, Tooltip, ConfirmDialog) ad
 1. **Transitions:** Overlays must use the `enterExit` or `controlFeedback` tokens (via `useInteractionTokens()` or `useGsapInteractionTokens()`) rather than hardcoded durations (e.g., `150ms`). These hooks ensure that `prefers-reduced-motion` settings automatically disable CSS transitions or set GSAP durations to 0.
 2. **Focus Restoration:** Dialogs, DropdownMenus, and Popovers must reliably restore focus to the element that triggered them when they close. This relies on caching the `document.activeElement` during the `isOpen` state change and using `.focus({ preventScroll: true })` after closing to prevent unexpected page jumps.
 3. **Menu Keyboard Navigation:** Dropdown menus and lists utilizing arrow key navigation should use standard roles (e.g., `role="menuitem"`) and ensure their querying logic explicitly ignores `disabled` or `aria-disabled="true"` elements to ensure users do not become trapped on non-interactive items.
+4. **Focus Trapping:** Active focus traps must gracefully handle empty containers or containers with dynamically hidden content. If no valid focusable descendants exist, the container itself receives focus. Traps must filter out hidden, disabled, inert, or `aria-hidden="true"` elements when calculating focus boundaries. Furthermore, if the original trigger is removed from the DOM, focus safely falls back to the document body.
+
+## Menu & Popover Keyboard Expectations
+DropdownMenus and Popovers are expected to be fully keyboard accessible:
+- Triggers cloned into these components preserve caller's `ref`, `onClick`, `onKeyDown`, `aria-label`, and disabled behavior while augmenting `aria-haspopup`, `aria-expanded`, and `aria-controls`.
+- Menus open via `Enter`, `Space`, `ArrowDown`, or `ArrowUp`. Opening via `ArrowDown`, `Enter`, or `Space` focuses the first item, while `ArrowUp` focuses the last item.
+- Arrow navigation inside the menu works in a looping fashion (ArrowDown goes down, ArrowUp goes up) and skips disabled items. `Home` and `End` keys jump to the first and last enabled items respectively.
+- Popovers that act as dialogs trap focus inside themselves. Popovers acting as tooltips do not trap focus. Both close on `Escape` and restore focus to their trigger.

@@ -116,7 +116,7 @@ describe("Browser Preview Accessibility", () => {
     vi.clearAllMocks();
   });
 
-  it("renders live regions for status announcements", async () => {
+  it("renders live regions for status announcements", () => {
     const { container } = render(
       <ProjectDataProvider>
         <BrowserPage />
@@ -132,14 +132,8 @@ describe("Browser Preview Accessibility", () => {
     }
     vi.runAllTimers();
 
-    await waitFor(() => {
-        const liveRegion = container.querySelector('[aria-live="polite"]');
-        let hasRegion = false;
-        if (liveRegion && liveRegion.classList.contains("sr-only")) {
-           hasRegion = true;
-        }
-        expect(hasRegion || !liveRegion).toBe(true);
-    });
+    const liveRegion = container.querySelector('[aria-live="polite"]');
+    expect(liveRegion).toBeInTheDocument();
   });
 
   it("assigns accurate aria-labels to disruptive actions", async () => {

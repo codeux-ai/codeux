@@ -37,9 +37,7 @@ interface SidebarProps {
 
 export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onClose }) => {
     const sidebarRef = useRef<HTMLElement>(null);
-    const overlayRef = useRef<HTMLDivElement>(null);
     const navRef = useRef<HTMLDivElement>(null);
-    const triggerRef = useRef<HTMLElement | null>(null);
     const [brandActive, setBrandActive] = useState(false);
     const { selectedProject } = useProjectData();
     const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
@@ -103,37 +101,11 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
     }, [isMobile, prefersReducedMotion]);
 
     useEffect(() => {
-        if (isMobile) {
-            const animDuration = prefersReducedMotion ? 0 : 0.4;
-            const overlayDuration = prefersReducedMotion ? 0 : 0.3;
-
-            if (isOpen) {
-                triggerRef.current = document.activeElement as HTMLElement;
-                gsap.to(sidebarRef.current, { x: 0, opacity: 1, duration: animDuration, ease: "power3.out" });
-                if (overlayRef.current) {
-                    gsap.to(overlayRef.current, { opacity: 1, duration: overlayDuration, ease: "power2.out", display: "block" });
-                }
-                setTimeout(() => {
-                    const firstFocusable = sidebarRef.current?.querySelector<HTMLElement>('a[href], button:not([disabled])');
-                    firstFocusable?.focus();
-                }, 420);
-            } else {
-                gsap.to(sidebarRef.current, { x: "-100%", opacity: 0, duration: animDuration, ease: "power3.in" });
-                if (overlayRef.current) {
-                    gsap.to(overlayRef.current, { opacity: 0, duration: overlayDuration, ease: "power2.in", display: "none" });
-                }
-                setTimeout(() => {
-                    triggerRef.current?.focus();
-                }, 420);
-            }
-        } else {
+        if (!isMobile) {
             // Reset transforms if returning to desktop
             gsap.set(sidebarRef.current, { x: 0, opacity: 1 });
-            if (overlayRef.current) {
-                gsap.set(overlayRef.current, { display: "none", opacity: 0 });
-            }
         }
-    }, [isMobile, isOpen, prefersReducedMotion]);
+    }, [isMobile, isOpen]);
 
     // Auto-minimize on click outside (Desktop only)
     useEffect(() => {
@@ -164,22 +136,21 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
         <>
         {isMobile && (
             <div
-                ref={overlayRef}
-                className="fixed inset-0 bg-black/50 z-40 hidden cursor-pointer backdrop-blur-sm"
+                className={`fixed inset-0 bg-black/40 backdrop-blur-sm z-40 transition-opacity duration-300 lg:hidden ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
                 aria-hidden="true"
                 onClick={onClose}
             />
         )}
         <aside
             id="primary-navigation"
-            aria-label="Primary Navigation"
-            role={isMobile ? "dialog" : undefined}
-            aria-modal={isMobile ? "true" : undefined}
+            aria-label="Primary navigation"
+            role={isMobile && isOpen ? "dialog" : undefined}
+            aria-modal={isMobile && isOpen ? "true" : undefined}
             tabIndex={-1}
             ref={(el) => { (sidebarRef as any).current = el; (trapRef as any).current = el; }}
-            className={`${isMobile ? 'h-[100dvh]' : 'h-full'} shrink-0 border-r border-black/[0.06] dark:border-white/[0.06] bg-[#F9F8F4]/80 dark:bg-void-900/80 backdrop-blur-xl flex flex-col justify-between py-8 z-50 transition-all duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${
+            className={`${isMobile ? 'h-dvh' : 'h-full'} shrink-0 border-r border-black/[0.06] dark:border-white/[0.06] bg-[#F9F8F4]/80 dark:bg-void-900/80 backdrop-blur-xl flex flex-col justify-between pt-8 pb-[max(2rem,env(safe-area-inset-bottom))] z-50 transition-all duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${
                 isMobile 
-                    ? 'fixed left-0 top-0 w-[260px] -translate-x-full opacity-0 shadow-2xl bg-[#F9F8F4] dark:bg-void-900 overflow-y-auto overflow-x-hidden'
+                    ? `fixed left-0 top-0 w-[260px] shadow-2xl bg-[#F9F8F4] dark:bg-void-900 overflow-y-auto overflow-x-hidden transition-transform duration-300 ease-out ${isOpen ? 'translate-x-0' : '-translate-x-full'}`
                     : (isMinimized ? 'relative w-[88px]' : 'relative w-[260px]')
             }`}
         >
@@ -203,7 +174,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
             </a>
 
             {/* Navigation */}
-            <nav ref={navRef} className="flex-1 flex flex-col relative z-10">
+            <nav ref={navRef} aria-label="Main navigation" className="flex-1 flex flex-col relative z-10 overflow-y-auto scrollbar-hide pb-4">
                 <h2 className={`px-8 text-[9px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-[0.16em] mb-3 transition-all duration-500 overflow-hidden ${isMinimized && !isMobile ? 'w-0 h-0 opacity-0 m-0' : 'opacity-100'}`}>
                     Workspace
                 </h2>
@@ -254,8 +225,8 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                         </span>
                     </div>
                     {isMinimized && !isMobile && (
-                        <div aria-hidden="true" className="absolute left-[calc(100%+16px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-white/95 dark:bg-void-800/95 backdrop-blur-xl border border-black/[0.08] dark:border-white/[0.08] text-slate-800 dark:text-slate-100 text-xs font-bold tracking-wide rounded-2xl opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 pointer-events-none shadow-2xl z-[100] whitespace-nowrap flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 rounded-full bg-slate-500/80"></span>
+                        <div aria-hidden="true" className="absolute left-[calc(100%+16px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-white/95 dark:bg-void-800/95 backdrop-blur-xl border border-black/[0.08] dark:border-white/[0.08] text-slate-800 dark:text-slate-100 text-xs font-bold tracking-wide rounded-2xl opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-focus-visible:opacity-100 group-focus-visible:translate-x-0 transition-all duration-300 pointer-events-none shadow-2xl z-[100] max-w-[calc(100vw-6rem)] text-wrap break-words whitespace-normal flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-500/80 shrink-0"></span>
                             Settings
                         </div>
                     )}
@@ -280,8 +251,8 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                         </div>
                         
                         {isMinimized && (
-                            <div aria-hidden="true" className="absolute left-[calc(100%+16px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-white/95 dark:bg-void-800/95 backdrop-blur-xl border border-black/[0.08] dark:border-white/[0.08] text-slate-800 dark:text-slate-100 text-xs font-bold tracking-wide rounded-2xl opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 pointer-events-none shadow-2xl z-[100] whitespace-nowrap flex items-center gap-2">
-                                <span className="w-1.5 h-1.5 rounded-full bg-slate-500/80"></span>
+                            <div aria-hidden="true" className="absolute left-[calc(100%+16px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-white/95 dark:bg-void-800/95 backdrop-blur-xl border border-black/[0.08] dark:border-white/[0.08] text-slate-800 dark:text-slate-100 text-xs font-bold tracking-wide rounded-2xl opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-focus-visible:opacity-100 group-focus-visible:translate-x-0 transition-all duration-300 pointer-events-none shadow-2xl z-[100] max-w-[calc(100vw-6rem)] text-wrap break-words whitespace-normal flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-500/80 shrink-0"></span>
                                 Expand
                             </div>
                         )}

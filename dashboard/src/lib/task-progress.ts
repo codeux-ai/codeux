@@ -197,6 +197,10 @@ export function getLiveTaskProgressPhase(args: LiveTaskProgressPhaseArgs): TaskP
     }
   }
 
+  if (args.task.status === "COMPLETED" || isMergeSettled(args.task)) {
+    return getTaskProgressPhase(args.task);
+  }
+
   const initialRawStatus = resolveTerminalExecutionPhase(args.dispatch, args.runtimeTerminalPhase)
     ?? args.task.status
     ?? "PENDING";

@@ -1,5 +1,7 @@
 import { h, createContext, type FunctionComponent, type ComponentChildren } from "preact";
-import { useState, useCallback, useMemo, useContext, useEffect } from "preact/hooks";
+import { useState, useCallback, useMemo, useContext, useEffect, useRef, useLayoutEffect } from "preact/hooks";
+import gsap from "gsap";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { Toast, type ToastProps } from "./Toast.js";
 
 type ToastMessage = Omit<ToastProps, "onDismiss" | "isDismissing">;
@@ -21,6 +23,10 @@ export const useToast = () => {
 };
 
 export const ToastProvider: FunctionComponent<{ children: ComponentChildren }> = ({ children }) => {
+  const toastRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const prevPositions = useRef<Map<string, number>>(new Map());
+  const reducedMotion = useReducedMotion();
+
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [dismissingIds, setDismissingIds] = useState<Set<string>>(new Set());
 
@@ -44,6 +50,10 @@ export const ToastProvider: FunctionComponent<{ children: ComponentChildren }> =
   }, []);
 
   const removeToast = useCallback((id: string) => {
+    toastRefs.current.forEach((el, key) => {
+      prevPositions.current.set(key, el.getBoundingClientRect().top);
+    });
+
     setToasts((prev) => prev.filter((t) => t.id !== id));
     setDismissingIds((prev) => {
       if (!prev.has(id)) return prev;
@@ -52,6 +62,21 @@ export const ToastProvider: FunctionComponent<{ children: ComponentChildren }> =
       return next;
     });
   }, []);
+
+  useLayoutEffect(() => {
+    toastRefs.current.forEach((el, id) => {
+      if (prevPositions.current.has(id)) {
+        const prevTop = prevPositions.current.get(id)!;
+        const currentTop = el.getBoundingClientRect().top;
+        const delta = prevTop - currentTop;
+
+        if (delta !== 0 && !reducedMotion) {
+          gsap.fromTo(el, { y: delta }, { y: 0, duration: 0.25, ease: 'power2.out' });
+        }
+      }
+    });
+    prevPositions.current.clear();
+  }, [toasts, reducedMotion]);
 
   const requestDismiss = useCallback((id: string) => {
     setDismissingIds((prev) => new Set(prev).add(id));
@@ -62,24 +87,42 @@ export const ToastProvider: FunctionComponent<{ children: ComponentChildren }> =
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div role="status" aria-live="polite" className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
+      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
         {toasts.filter(t => t.type !== 'error').map((toast) => (
           <Toast
             key={toast.id}
             {...toast}
             onDismiss={removeToast}
             isDismissing={dismissingIds.has(toast.id)}
+            toastRef={(el) => {
+              if (el) toastRefs.current.set(toast.id, el);
+              else toastRefs.current.delete(toast.id);
+            }}
           />
         ))}
       </div>
-      <div role="alert" aria-live="assertive" className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
+      <div className="fixed bottom-4 left-4 z-[100] flex flex-col gap-2 pointer-events-none">
         {toasts.filter(t => t.type === 'error').map((toast) => (
           <Toast
             key={toast.id}
             {...toast}
             onDismiss={removeToast}
             isDismissing={dismissingIds.has(toast.id)}
+            toastRef={(el) => {
+              if (el) toastRefs.current.set(toast.id, el);
+              else toastRefs.current.delete(toast.id);
+            }}
           />
+        ))}
+      </div>
+      <div role="status" aria-live="polite" className="sr-only">
+        {toasts.filter(t => t.type !== 'error').map((toast) => (
+          <div key={toast.id}>{toast.message}</div>
+        ))}
+      </div>
+      <div role="alert" aria-live="assertive" className="sr-only">
+        {toasts.filter(t => t.type === 'error').map((toast) => (
+          <div key={toast.id}>{toast.message}</div>
         ))}
       </div>
     </ToastContext.Provider>

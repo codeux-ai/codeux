@@ -27,6 +27,11 @@ describe("TaskExecutionMeta", () => {
     // Check that we have 3 chips
     const chips = container.querySelectorAll(".flex.items-center.gap-1\\.5");
     expect(chips.length).toBe(3);
+
+    // Verify explicit accessible text
+    expect(getByText("Duration:")).toBeTruthy();
+    expect(getByText("Executor:")).toBeTruthy();
+    expect(getByText("Mode:")).toBeTruthy();
   });
 
   it("renders gracefully with missing time", () => {

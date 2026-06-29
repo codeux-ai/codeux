@@ -29,7 +29,7 @@ export function useMemoryPageData(
     });
     const [graphData, setGraphData] = useState<{ graph: GraphMetadata; map: EmbeddingMapResult | null } | null>(null);
 
-    const { feedback, setWarning, setSuccess, setError, clearFeedback, setPending } = useActionFeedback(5000);
+    const { feedback, setWarning, setSuccess, setError, clearFeedback, clearError, setPending } = useActionFeedback(5000);
     const removeTimers = useRef<Record<string, number>>({});
 
     const addMemory = useCallback(async (input: CreateMemoryInput, pid: string) => {
@@ -169,9 +169,10 @@ export function useMemoryPageData(
             addMemory,
             removeMemory,
             feedback,
-            clearFeedback
+            clearFeedback,
+            clearError
         };
-    }, [addMemory, removeMemory, feedback, clearFeedback]);
+    }, [addMemory, removeMemory, feedback, clearFeedback, clearError]);
 
     const loadData = useCallback(async () => {
         if (!pid || !enabled) return;

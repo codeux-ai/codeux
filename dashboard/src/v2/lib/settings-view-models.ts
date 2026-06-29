@@ -122,6 +122,7 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
     defaultBranch: settings.git.defaultBranch,
     autoCreatePr: settings.git.autoCreatePr,
     autoCloseLinkedIssues: settings.git.autoCloseLinkedIssues,
+    deleteMergedBranches: settings.git.deleteMergedBranches,
     featureBranchPrefix: settings.git.featureBranchPrefix,
     sprintBranchScheme: settings.git.sprintBranchScheme,
     sprintKeyPrefix: settings.git.sprintKeyPrefix,

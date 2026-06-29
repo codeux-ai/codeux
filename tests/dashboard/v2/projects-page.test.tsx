@@ -116,6 +116,37 @@ describe("ProjectsPage", () => {
     } as any);
   });
 
+  it("truncates long metadata accurately without overflowing the card constraints", () => {
+    vi.mocked(useProjectData).mockReturnValue({
+      projects: [{
+        ...createProject(),
+        name: "A very very long project name that should definitely be truncated with line clamp",
+        repoUrl: "https://github.com/acme/a-very-very-long-project-name-that-should-definitely-be-truncated-with-line-clamp.git",
+        defaultBranch: "a-very-very-long-branch-name-that-should-definitely-be-truncated"
+      }],
+      selectedProjectId: "project-1",
+      loading: false,
+      error: null,
+      refreshProjects: vi.fn(),
+      selectProject: selectProjectMock,
+      createProject: createProjectMock,
+      updateProject: vi.fn(),
+      deleteProject: deleteProjectMock,
+      selectedProject: createProject(),
+    } as any);
+    render(<ProjectsPage />);
+
+    // Assert that the title exists and is using the line clamp class for truncation
+    const title = screen.getByText("A very very long project name that should definitely be truncated with line clamp");
+    expect(title).toBeInTheDocument();
+    expect(title.className).toContain("line-clamp-2");
+
+    // Check that long urls are in a flexible container (min-w-0 for ellipsis truncation)
+    const urlText = screen.getByText("https://github.com/acme/a-very-very-long-project-name-that-should-definitely-be-truncated-with-line-clamp.git");
+    const containerRow = urlText.closest(".min-w-0");
+    expect(containerRow).toBeInTheDocument();
+  });
+
   it("renders repository metadata, project settings, and isolated quick actions", () => {
     render(<ProjectsPage />);
 
@@ -153,5 +184,39 @@ describe("ProjectsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Add Project/i }));
 
     expect(screen.getByTestId("add-project-modal")).toBeInTheDocument();
+  });
+
+  it("renders responsive layout classes for the page header", () => {
+    const { container } = render(<ProjectsPage />);
+    const headerContainer = container.querySelector("header");
+    expect(headerContainer).toBeInTheDocument();
+    expect(headerContainer?.className).toContain("flex-col");
+    expect(headerContainer?.className).toContain("sm:flex-row");
+  });
+
+  it("wraps filter controls and card actions on narrow screens", () => {
+    const { container } = render(<ProjectsPage />);
+
+    // Filter controls
+    const filterBtn = screen.getByText("All");
+    const filterContainer = filterBtn.closest(".flex-wrap");
+    expect(filterContainer).toBeInTheDocument();
+
+    // Card actions
+    const selectBtn = screen.getByRole("button", { name: /Widget Service is selected/i });
+    const actionsContainer = selectBtn.closest(".flex-wrap");
+    expect(actionsContainer).toBeInTheDocument();
+  });
+
+  it("stacks the setup dialog actions for mobile heights", () => {
+    render(<ProjectsPage />);
+
+    // Open setup dialog
+    fireEvent.click(screen.getByRole("button", { name: /Setup project/i }));
+
+    // Setup dialog should open and render the Cancel button
+    const cancelBtn = screen.getByRole("button", { name: /Cancel/i });
+    const actionsContainer = cancelBtn.closest(".flex-col-reverse");
+    expect(actionsContainer).toBeInTheDocument();
   });
 });

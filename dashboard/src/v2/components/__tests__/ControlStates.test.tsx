@@ -5,6 +5,18 @@ import { Button } from "../ui/Button.js";
 import { Input } from "../ui/Input.js";
 import { Select } from "../ui/Select.js";
 import { Toggle } from "../ui/Toggle.js";
+import * as matchers from "@testing-library/jest-dom/matchers";
+
+expect.extend(matchers);
+
+vi.mock("gsap", () => ({
+    default: {
+        fromTo: vi.fn(),
+        to: vi.fn(),
+        set: vi.fn(),
+        timeline: vi.fn(() => ({ to: vi.fn().mockReturnThis() })),
+    },
+}));
 
 test('controls handle aria-invalid and disabled attributes', () => {
     const { container: btnContainer } = render(<Button disabled>Test</Button>);

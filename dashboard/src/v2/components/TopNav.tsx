@@ -221,12 +221,10 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
         loading,
     } = useProjectData();
     const projectId = selectedProject?.id || null;
-    const settings = useProjectEffectiveSettings(projectId);
-    const sprintKeyPrefix = settings.data?.settings?.git?.sprintKeyPrefix || "SPR";
+    const { data: effectiveSettings } = useProjectEffectiveSettings(projectId);
+    const sprintKeyPrefix = effectiveSettings?.settings?.git?.sprintKeyPrefix || "SPR";
 
     const { data: sprints, selectedSprintId, selectedSprint, selectSprint, loading: sprintsLoading } = useSprints(selectedProject?.id || null);
-
-    const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
     const browserVisible = !selectedProject || (
         (effectiveSettings?.settings.sprintPreview.enabled ?? true)
         && (effectiveSettings?.settings.sprintPreview.showInAppBrowser ?? true)
@@ -293,21 +291,21 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
         <header
             ref={navRef}
             data-glass
-            className="sticky top-0 z-50 flex items-center justify-between w-full h-[60px] px-8 md:px-12 bg-[#F9F8F4]/90 dark:bg-void-900/90 backdrop-blur-xl border-b border-black/[0.06] dark:border-white/[0.06]"
+            className="sticky top-0 z-50 flex items-center justify-between flex-wrap md:flex-nowrap gap-y-2 w-full min-h-[60px] py-2 md:py-0 px-4 sm:px-6 md:px-12 bg-[#F9F8F4]/90 dark:bg-void-900/90 backdrop-blur-xl border-b border-black/[0.06] dark:border-white/[0.06]"
         >
             <a href="#main-content" id="skip-link" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-white dark:focus:bg-void-800 focus:text-signal-600 dark:focus:text-signal-400 focus:rounded-lg focus:shadow-lg focus:text-sm focus:font-semibold">
                 Skip to main content
             </a>
             <nav aria-label="Primary navigation" className="contents">
-            <div className="flex items-center gap-4 md:gap-10 flex-1 min-w-0">
+            <div className="flex items-center gap-2 sm:gap-4 md:gap-10 flex-1 min-w-0">
                 <BrandSection isMobile={isMobile} onMenuToggle={onMenuToggle} hideLogo={hideLogo} isMobileMenuOpen={isMobileMenuOpen} />
 
                 <GlobalSearch projectId={projectId} selectedProject={selectedProject} sprints={sprints} />
             </div>
 
-            <div className="flex items-center gap-1 sm:gap-3 shrink-0">
+            <div className="flex items-center gap-1 sm:gap-2 md:gap-3 shrink-0 flex-wrap justify-end">
                 {/* Project Selector */}
-                <div className="relative hidden md:block" ref={dropdownRef} onKeyDown={projectKb.onContainerKeyDown}>
+                <div className="relative" ref={dropdownRef} onKeyDown={projectKb.onContainerKeyDown}>
                     <button
                         ref={projectKb.toggleRef}
                         onKeyDown={projectKb.onToggleKeyDown}
@@ -323,7 +321,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                         className="flex h-9 items-center gap-2.5 rounded-xl border border-black/[0.06] bg-black/[0.04] px-3.5 py-0 transition-all group hover:border-black/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.06] dark:bg-white/[0.04] dark:hover:border-white/[0.08]"
                     >
                         <StatusDot status={selectedProject?.status || "idle"} />
-                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono truncate max-w-[140px] md:max-w-[200px]">
+                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono truncate max-w-[80px] sm:max-w-[140px] md:max-w-[200px]">
                             {projectSwitchBusy ? "Switching..." : (selectedProject?.name || (loading ? "Loading..." : "Select Project"))}
                         </span>
                         <ChevronDown aria-hidden="true" className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${dropdownOpen ? 'rotate-180' : ''}`} />
@@ -331,7 +329,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
                     {/* Project Dropdown */}
                     {dropdownOpen && (
-                        <div id="project-listbox" role="listbox" aria-label="Project list" className="absolute right-0 top-full mt-2 w-56 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden z-50">
+                        <div id="project-listbox" role="listbox" aria-label="Project list" className="fixed inset-x-4 top-[72px] md:inset-auto md:absolute md:top-full md:right-0 mt-2 min-w-[12rem] w-56 max-w-[calc(100vw-2rem)] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden z-50">
                             <div className="px-3 pt-3 pb-1.5">
                                 <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Projects</span>
                             </div>
@@ -350,7 +348,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                 />
                                 <span id="project-filter-desc" className="sr-only">Use arrow keys to navigate options.</span>
                             </div>
-                            <div className="max-h-64 overflow-y-auto dropdown-scrollbar">
+                            <div className="max-h-[calc(100dvh-5rem)] overflow-y-auto dropdown-scrollbar">
                             {filteredProjects.length === 0 && (
                                 <div className="px-3 py-4 text-center text-sm text-slate-500 dark:text-slate-400">
                                     No projects found.
@@ -413,7 +411,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
                 {/* Sprint Selector */}
                 {selectedProject && (
-                    <div className="relative hidden md:block" ref={sprintDropdownRef} onKeyDown={sprintKb.onContainerKeyDown}>
+                    <div className="relative" ref={sprintDropdownRef} onKeyDown={sprintKb.onContainerKeyDown}>
                         <button
                             ref={sprintKb.toggleRef}
                             onKeyDown={sprintKb.onToggleKeyDown}
@@ -441,7 +439,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                             {selectedSprint && (
                                 <StatusDot status={selectedSprint.status} />
                             )}
-                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono truncate max-w-[120px] md:max-w-[180px]">
+                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono truncate max-w-[60px] sm:max-w-[120px] md:max-w-[180px]">
                                 {sprintSwitchBusy ? "Switching..." : (sprintsLoading ? "Loading..." : formatSprintDisplay(selectedSprint, sprintKeyPrefix))}
                             </span>
                             {sprints.length > 0 && (
@@ -451,7 +449,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
                         {/* Sprint Dropdown */}
                         {sprintDropdownOpen && sprints.length > 0 && (
-                            <div id="sprint-listbox" role="listbox" aria-label="Sprint list" className="absolute right-0 top-full mt-2 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden z-50" style={{ minWidth: Math.max(sprintDropdownWidth, 224) + 'px' }}>
+                            <div id="sprint-listbox" role="listbox" aria-label="Sprint list" className="fixed inset-x-4 top-[72px] md:inset-auto md:absolute md:top-full md:right-0 mt-2 max-w-[calc(100vw-2rem)] min-w-[10rem] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden z-50" style={{ minWidth: Math.max(sprintDropdownWidth, 224) + 'px' }}>
                                 <div className="px-3 pt-3 pb-1.5">
                                     <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Sprint Scope</span>
                                 </div>
@@ -470,7 +468,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                     />
                                     <span id="sprint-filter-desc" className="sr-only">Use arrow keys to navigate options.</span>
                                 </div>
-                                <div className="max-h-64 overflow-y-auto dropdown-scrollbar">
+                                <div className="max-h-[calc(100dvh-5rem)] overflow-y-auto dropdown-scrollbar">
                                 {filteredSprints.length === 0 && !sprintFilter.toLowerCase().includes('all') && (
                                     <div className="px-3 py-4 text-center text-sm text-slate-500 dark:text-slate-400">
                                         No sprints found.
@@ -539,7 +537,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
                 <TelemetryStats projectId={projectId} sprints={sprints} />
 
-                <div className="w-px h-5 bg-black/10 dark:bg-white/10 hidden md:block" />
+                <div className="w-px h-5 bg-black/10 dark:bg-white/10 hidden sm:block" />
 
                 {/* Docker Status */}
                 <DockerStatusMenu />
@@ -548,7 +546,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
                 {/* Notifications */}
                 <div
-                    className="relative hidden md:inline-block"
+                    className="relative inline-block"
                     ref={notificationContainerRef}
                     onMouseEnter={handleNotificationMouseEnter}
                     onMouseLeave={handleNotificationMouseLeave}

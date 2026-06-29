@@ -10,6 +10,7 @@ import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 import { Button } from "./Button.js";
 import { Modal } from "./Modal.js";
+import { FieldWrapper } from "../forms/FieldWrapper.js";
 
 interface TaskDraft {
   sprintId: string;
@@ -59,7 +60,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   const [priority, setPriority] = useState<TaskPriority>(initialTask?.priority || "medium");
   const [executorType, setExecutorType] = useState<TaskExecutorType>(initialTask?.executorType || "auto");
   const [dependsOnTaskIds, setDependsOnTaskIds] = useState<string[]>(initialTask?.dependsOnTaskIds || []);
-  const { feedback, setPending, setSuccess, setError, clearFeedback } = useActionFeedback();
+  const { feedback, setPending, setSuccess, setError, clearFeedback, clearError } = useActionFeedback();
 
   const reducedMotion = useReducedMotion();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -194,19 +195,17 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
           </div>
 
           <form ref={fieldsRef} onSubmit={handleSubmit} className="flex flex-col gap-6">
-            <ActionFeedbackRegion status={feedback.status} message={feedback.message} onDismiss={clearFeedback} autoDismiss={feedback.autoDismiss} retryAction={feedback.retryAction} retryLabel={feedback.retryLabel} />
+            <ActionFeedbackRegion status={feedback.status} message={feedback.message} onDismiss={clearFeedback} clearError={clearError} autoDismiss={feedback.autoDismiss} retryAction={feedback.retryAction} retryLabel={feedback.retryLabel} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div className="group/field">
-                <label htmlFor="add-task-sprint" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Sprint</label>
+              <FieldWrapper label="Sprint" required error={validationErrors.sprintId} forceTouch={touched.sprintId}>
                 <select
                   id="add-task-sprint"
                   value={sprintId}
                   onInput={(event) => {
                     setSprintId((event.target as HTMLSelectElement).value);
-                    if (feedback.status === "error") clearFeedback();
+                    if (feedback.status === "error") clearError();
                   }}
-                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500" aria-invalid={!!validationErrors.sprintId && touched.sprintId ? "true" : "false"}
-                  aria-describedby={validationErrors.sprintId && touched.sprintId ? "task-sprint-error" : undefined}
+                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500"
                   onBlur={() => setTouched(prev => ({ ...prev, sprintId: true }))}
                   required
                 >
@@ -215,29 +214,23 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                     <option key={sprint.id} value={sprint.id}>{sprint.name}</option>
                   ))}
                 </select>
-                {validationErrors.sprintId && touched.sprintId && <div id="task-sprint-error" className="text-xs text-red-500 mt-1 font-medium">{validationErrors.sprintId}</div>}
-              </div>
+              </FieldWrapper>
 
-              <div className="group/field">
-                <label htmlFor="add-task-title" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Title</label>
+              <FieldWrapper label="Title" required error={validationErrors.title} forceTouch={touched.title}>
                 <input
                   id="add-task-title"
                   type="text"
                   value={title}
-                  aria-invalid={!!validationErrors.title && touched.title ? "true" : "false"}
-                  aria-describedby={validationErrors.title && touched.title ? "task-title-error" : undefined}
                   onInput={(event) => {
                     setTitle((event.target as HTMLInputElement).value);
-                    if (feedback.status === "error") clearFeedback();
+                    if (feedback.status === "error") clearError();
                   }}
                   className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500"
                   placeholder="Define the task scope"
                   required
                   onBlur={() => setTouched(prev => ({ ...prev, title: true }))}
-
                 />
-                {validationErrors.title && touched.title && <div id="task-title-error" className="text-xs text-red-500 mt-1 font-medium">{validationErrors.title}</div>}
-              </div>
+              </FieldWrapper>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -306,8 +299,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               </div>
             </fieldset>
 
-            <div className="group/field">
-              <label htmlFor="add-task-description" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Description</label>
+            <FieldWrapper label="Description">
               <textarea
                 id="add-task-description"
                 value={description}
@@ -315,10 +307,9 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                 className="mt-2.5 w-full min-h-[110px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500 resize-none"
                 placeholder="Summarize the intent and outcome."
               />
-            </div>
+            </FieldWrapper>
 
-            <div className="group/field">
-              <label htmlFor="add-task-prompt" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Execution Prompt</label>
+            <FieldWrapper label="Execution Prompt">
               <textarea
                 id="add-task-prompt"
                 value={promptMarkdown}
@@ -326,7 +317,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                 className="mt-2.5 w-full min-h-[150px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500 resize-none font-mono"
                 placeholder="Detailed markdown instructions for the agent."
               />
-            </div>
+            </FieldWrapper>
 
             <fieldset>
               <div className="flex items-center justify-between mb-3">

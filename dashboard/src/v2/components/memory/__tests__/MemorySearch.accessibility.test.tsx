@@ -28,7 +28,7 @@ describe("MemorySearch Accessibility", () => {
         expect(getByText("Esc")).toBeInTheDocument();
     });
 
-    test("ESC key clears search and blurs input", async () => {
+    test("ESC key clears search and keeps input focused", async () => {
         searchQuerySignal.value = "test search";
         const { getByRole } = render(<MemorySearch />);
         const input = getByRole("textbox", { name: "Search memory" });
@@ -38,7 +38,17 @@ describe("MemorySearch Accessibility", () => {
         await fireEvent.keyDown(input, { key: "Escape", code: "Escape" });
 
         expect(searchQuerySignal.value).toBe("");
-        expect(document.activeElement).not.toBe(input);
+        expect(document.activeElement).toBe(input);
     });
 
+    test("ESC key clears search and makes polite announcement", async () => {
+        searchQuerySignal.value = "test search";
+        const { getByRole, getByText } = render(<MemorySearch />);
+        const input = getByRole("textbox", { name: "Search memory" });
+        input.focus();
+
+        await fireEvent.keyDown(input, { key: "Escape", code: "Escape" });
+
+        expect(getByText("Search cleared")).toBeInTheDocument();
+    });
 });

@@ -29,6 +29,12 @@ describe("SprintCell", () => {
     expect(screen.getByText("5")).toBeDefined();
   });
 
+  it("links to tasks with the canonical sprintId query parameter", () => {
+    render(<SprintCell sprint={defaultSprint} isEven={true} accentColor="text-blue-500" />);
+
+    expect(screen.getByText("View Tasks").closest("a")?.getAttribute("href")).toBe("/tasks?sprintId=sprint-1");
+  });
+
   it("calls onMarkCompleted when menu action is clicked", async () => {
     const onMarkCompleted = vi.fn();
     render(

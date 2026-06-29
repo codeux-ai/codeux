@@ -1,3 +1,5 @@
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import gsap from "gsap";
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
 import {
@@ -13,7 +15,7 @@ import {
   MoreVertical,
   Square,
 } from "lucide-preact";
-import { useState } from "preact/hooks";
+import { useState, useRef, useEffect } from "preact/hooks";
 import { HumanInterventionBadge } from "../ui/HumanInterventionBadge.js";
 import { SprintReviewBadge } from "./SprintReviewBadge.js";
 import { SprintActionMenu } from "./SprintActionMenu.js";
@@ -22,7 +24,6 @@ import { LinkedIssueTag } from "../sprint/LinkedIssueTag.js";
 import type { Sprint, SprintStatus } from "../../types.js";
 import type { ExecutionHumanInterventionSummary } from "../../../../../src/contracts/app-types.js";
 import { formatSprintKey, STATUS_LABELS } from "../../lib/sprint-ledger-state.js";
-import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-settings.js";
 import { SprintControls } from "./SprintControls.js";
 import { INTERACTION_TOKENS } from "../../lib/motion/tokens.js";
 import { useResolvedMotionDuration } from "../../hooks/use-reduced-motion.js";
@@ -93,6 +94,7 @@ export interface SprintLedgerRowProps {
   activeRun: { id: string; status: string } | undefined;
   pauseResumeRun: { id: string; status: string } | undefined;
   humanIntervention: ExecutionHumanInterventionSummary | null;
+  sprintKeyPrefix?: string;
   pendingActionIds: Set<string>;
   isAnyBulkPending?: boolean;
   onToggleRow: (id: string) => void;
@@ -114,6 +116,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   activeRun,
   pauseResumeRun,
   humanIntervention,
+  sprintKeyPrefix = "SPR",
   pendingActionIds,
   isAnyBulkPending,
   onToggleRow,
@@ -122,9 +125,27 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   onSprintPauseResume,
   onOpenRowMenu,
 }) => {
-  const settings = useProjectEffectiveSettings(sprint.projectId);
   const [menuOpen, setMenuOpen] = useState(false);
-  const sprintKeyPrefix = settings.data?.settings?.git?.sprintKeyPrefix || "SPR";
+  const checkIconRef = useRef<HTMLSpanElement>(null);
+  const isReducedMotion = useReducedMotion();
+  const prevSelected = useRef(isSelected);
+
+  useEffect(() => {
+    if (isReducedMotion || !checkIconRef.current) {
+      prevSelected.current = isSelected;
+      return;
+    }
+
+    if (isSelected && !prevSelected.current) {
+      // Transitioned from false to true
+      gsap.fromTo(
+        checkIconRef.current,
+        { scale: 0 },
+        { scale: 1, duration: 0.15, ease: 'back.out(2)' }
+      );
+    }
+    prevSelected.current = isSelected;
+  }, [isSelected, isReducedMotion]);
 
   const pendingToggleActionId = activeRun ? `sprint-stop:${activeRun.id}` : `sprint-start:${sprint.id}`;
   const pendingPauseResumeActionId = sprint.status === "paused"
@@ -195,10 +216,10 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
 
   return (
     <TableRow
-      className={`group transition-all hover:-translate-y-0.5 focus-within:ring-2 focus-within:ring-signal-500/20 ${rowTone} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""} ${pendingRowClass} hover:bg-[var(--bg-hover-subtle)]`}
+      className={`group transition-all focus-within:ring-2 focus-within:ring-signal-500/20 ${rowTone} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""} ${pendingRowClass} hover:bg-[var(--bg-hover-subtle)] transition-[box-shadow,transform] duration-150 [@media(hover:hover)]:hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)] [@media(hover:hover)]:hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:transform-none`}
       style={{ transitionDuration: duration, transitionTimingFunction: ease }}
     >
-      <TableCell isFirst className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`}>
+      <TableCell isFirst className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`} mobileLabel="Select">
         <button
           type="button"
           onClick={() => onToggleRow(sprint.id)}
@@ -208,11 +229,11 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           aria-label={isSelected ? `Deselect sprint ${sprint.name}` : `Select sprint ${sprint.name}`}
         >
           {isSelected
-            ? <CheckSquare className="h-4 w-4 text-signal-500" strokeWidth={2.2} />
+            ? <span ref={checkIconRef} className="flex"><CheckSquare className="h-4 w-4 text-signal-500" strokeWidth={2.2} /></span>
             : <Square className="h-4 w-4" strokeWidth={2.2} />}
         </button>
       </TableCell>
-      <TableCell className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`}>
+      <TableCell className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`} mobileLabel="Pin">
         <button
           type="button"
           onClick={() => onToggleShowcase(sprint)}
@@ -353,7 +374,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
             sprintName={sprint.name}
           />
           <a
-            href={`/tasks?sprint=${encodeURIComponent(sprint.id)}`}
+            href={`/tasks?sprintId=${encodeURIComponent(sprint.id)}`}
             aria-label={`Open sprint ${sprint.name}`}
             className="inline-flex h-10 min-w-[5rem] flex-1 items-center justify-center gap-2 rounded-xl border border-black/[0.06] bg-white/80 px-4 text-xs font-bold text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white sm:flex-none"
           >

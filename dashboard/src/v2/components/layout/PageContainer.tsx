@@ -1,18 +1,24 @@
 import type { ComponentChildren, FunctionComponent, JSX, Ref } from "preact";
 
-const PAGE_CONTAINER_WIDTH = "max-w-[2400px]";
+// Fullscreen: containers span the full available width with no fixed cap.
+const PAGE_CONTAINER_WIDTH = "max-w-none";
+
+// Consistent horizontal rhythm across every page, with a unified top offset so
+// page intro sections all start at the same distance from the top nav.
+const PAGE_CONTAINER_X = "px-4 sm:px-6 md:px-8 lg:px-12 xl:px-16";
+const PAGE_CONTAINER_Y = "py-10 md:py-14";
 
 const pageContainerPadding = {
-  overview: "px-4 py-12 md:px-20 md:py-24",
-  standard: "px-4 py-24 md:px-20",
-  section: "px-4 py-16 md:px-20",
-  stats: "px-4 py-20 md:px-20",
-  settings: "px-4 py-16 md:px-8 xl:px-12",
-  agents: "px-4 py-14 md:px-16 lg:px-20",
-  browser: "px-4 py-6 md:px-8",
-  workbench: "px-4 py-12 md:px-20",
-  chat: "px-4 py-12 md:px-20",
-  sprintsEmpty: "px-4 py-12 md:px-20",
+  overview: `${PAGE_CONTAINER_X} ${PAGE_CONTAINER_Y}`,
+  standard: `${PAGE_CONTAINER_X} ${PAGE_CONTAINER_Y}`,
+  section: `${PAGE_CONTAINER_X} ${PAGE_CONTAINER_Y}`,
+  stats: `${PAGE_CONTAINER_X} ${PAGE_CONTAINER_Y}`,
+  settings: `px-4 sm:px-6 md:px-8 xl:px-12 ${PAGE_CONTAINER_Y}`,
+  agents: `${PAGE_CONTAINER_X} ${PAGE_CONTAINER_Y}`,
+  browser: "px-4 sm:px-6 md:px-8 py-6",
+  workbench: `${PAGE_CONTAINER_X} ${PAGE_CONTAINER_Y}`,
+  chat: `${PAGE_CONTAINER_X} ${PAGE_CONTAINER_Y}`,
+  sprintsEmpty: `${PAGE_CONTAINER_X} ${PAGE_CONTAINER_Y}`,
   none: "",
 } as const;
 
@@ -23,6 +29,8 @@ type PageContainerProps = Omit<JSX.HTMLAttributes<HTMLElement>, "ref"> & {
   className?: string;
   containerRef?: Ref<HTMLElement>;
   padding?: PageContainerPadding;
+  as?: "div" | "main";
+  id?: string;
 };
 
 export const PageContainer: FunctionComponent<PageContainerProps> = ({
@@ -30,19 +38,22 @@ export const PageContainer: FunctionComponent<PageContainerProps> = ({
   className = "",
   containerRef,
   padding = "standard",
+  as = "div",
   ...props
 }) => {
   const classes = [
-    "relative z-10 mx-auto flex w-full flex-col animate-in fade-in duration-200",
+    "relative z-10 mx-auto flex w-full flex-col animate-in fade-in duration-200 motion-reduce:animate-none",
     PAGE_CONTAINER_WIDTH,
     pageContainerPadding[padding],
     className,
   ].filter(Boolean).join(" ");
 
+  const Component = as;
+
   return (
-    <main id="main-content" tabIndex={-1} {...props} ref={containerRef} className={classes}>
+    <Component {...props} ref={containerRef as any} className={classes}>
       {children}
-    </main>
+    </Component>
   );
 };
 

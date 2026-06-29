@@ -5,6 +5,7 @@ import { buildTaskRunKey, extractTaskRunKeyFromTitle } from "../../services/task
 import type { ProviderInvocationUsageRecord } from "../../contracts/execution-types.js";
 import { applyPendingTaskRuntimeReset } from "../../domain/sprint/task-reset-state.js";
 import { isCompletedTaskSettled } from "../../domain/sprint/task-merge-state.js";
+import { hasUserReplyAfterLatestAgentRequest } from "../action-required-automation.js";
 import {
   extractProviderErrorCategory,
   isQuotaCooldownActive,
@@ -37,6 +38,7 @@ const extractGitMetrics = (session: JulesSession): Record<string, unknown> | nul
 const mapSessionStateToTaskRunState = (
   sessionState: string | undefined,
   isActionRequiredState: SessionSyncDependencies["isActionRequiredState"],
+  actionRequiredReplyPending = false,
 ): TaskRunState => {
   if (sessionState === "COMPLETED") {
     return "COMPLETED";
@@ -51,9 +53,23 @@ const mapSessionStateToTaskRunState = (
     return "QUOTA";
   }
   if (isActionRequiredState(sessionState)) {
-    return "BLOCKED";
+    return actionRequiredReplyPending ? "RUNNING" : "BLOCKED";
   }
   return "RUNNING";
+};
+
+const hasSubmittedReplyForActionRequiredState = (
+  task: Subtask,
+  sessionState: string | undefined,
+  activities: JulesActivity[] | undefined,
+): boolean => {
+  if (sessionState !== "AWAITING_USER_FEEDBACK") {
+    return false;
+  }
+  return hasUserReplyAfterLatestAgentRequest({
+    ...task,
+    activities: activities ?? task.activities,
+  });
 };
 
 const mapTaskRunStateToDispatchStatus = (state: TaskRunState): TaskDispatchStatus => {
@@ -219,6 +235,16 @@ const resolvePrUrl = (session: JulesSession): string | null => {
   return typeof url === "string" && url.trim().length > 0 ? url : null;
 };
 
+const resolveTaskSessionId = (task: Subtask): string | null => {
+  if (typeof task.session_id === "string" && task.session_id.trim().length > 0) {
+    return task.session_id.replace(/^sessions\//, "");
+  }
+  if (typeof task.session_name === "string" && task.session_name.trim().length > 0) {
+    return task.session_name.replace(/^sessions\//, "");
+  }
+  return null;
+};
+
 const syncExecutionRunState = async (
   deps: SessionSyncDependencies,
   task: Subtask,
@@ -229,9 +255,44 @@ const syncExecutionRunState = async (
     return;
   }
 
-  const taskRun = deps.executionRepository.getLatestTaskRun(task.record_id, deps.sprintRunId);
+  let taskRun = deps.executionRepository.getLatestTaskRun(task.record_id, deps.sprintRunId);
   if (!taskRun) {
-    return;
+    const sessionId = deps.extractSessionId(session) || deps.resolveSessionName(session)?.replace(/^sessions\//, "") || null;
+    const persistedTaskRun = sessionId
+      ? deps.executionRepository.getLatestTaskRunBySessionId(sessionId)
+      : deps.executionRepository.getLatestTaskRun(task.record_id);
+
+    if (
+      persistedTaskRun
+      && persistedTaskRun.projectId === task.project_id
+      && persistedTaskRun.sprintId === task.sprint_id
+      && persistedTaskRun.taskId === task.record_id
+    ) {
+      taskRun = deps.executionRepository.reassignTaskRunSprintRun(persistedTaskRun.id, deps.sprintRunId);
+      if (taskRun.dispatchId) {
+        deps.executionRepository.reassignTaskDispatchSprintRun(taskRun.dispatchId, deps.sprintRunId);
+      }
+      const usage = sessionId
+        ? deps.executionRepository.getLatestProviderInvocationUsageBySession(sessionId, "task_coding")
+        : null;
+      if (usage) {
+        deps.executionRepository.associateProviderInvocationRuntime(usage.id, {
+          sprintRunId: deps.sprintRunId,
+          dispatchId: taskRun.dispatchId,
+          taskRunId: taskRun.id,
+        });
+      }
+      deps.executionRepository.appendTaskRunEvent(taskRun.id, "task_run_rehydrated", "system", {
+        reason: "session_sync_resumed_sprint_run",
+        previousSprintRunId: persistedTaskRun.sprintRunId,
+        sprintRunId: deps.sprintRunId,
+        sessionId,
+      }, {
+        sourceEventKey: `session-sync:rehydrate:${taskRun.id}:${deps.sprintRunId}`,
+      });
+    } else {
+      return;
+    }
   }
 
   const wasTerminal = taskRun.state === "COMPLETED" || taskRun.state === "FAILED";
@@ -239,7 +300,8 @@ const syncExecutionRunState = async (
     ? deps.executionRepository.getTaskDispatch(taskRun.dispatchId)
     : null;
   const wasDispatchTerminal = !currentDispatch || currentDispatch.finishedAt !== null;
-  const nextRunState = mapSessionStateToTaskRunState(session.state, deps.isActionRequiredState);
+  const actionRequiredReplyPending = hasSubmittedReplyForActionRequiredState(task, session.state, activities);
+  const nextRunState = mapSessionStateToTaskRunState(session.state, deps.isActionRequiredState, actionRequiredReplyPending);
   // A provider session can come back to life after it had finished — e.g. a
   // Jules session continued with QA follow-up work, or a task that was rerun.
   // When that happens the local run is terminal but the remote session is
@@ -252,6 +314,19 @@ const syncExecutionRunState = async (
     && (nextRunState === "RUNNING" || nextRunState === "BLOCKED");
 
   if (wasTerminal && wasDispatchTerminal && !sessionReactivated) {
+    if (currentDispatch && taskRun.dispatchId) {
+      const expectedStatus = mapTaskRunStateToDispatchStatus(taskRun.state);
+      const expectedErrorMessage = resolveDispatchErrorMessage(currentDispatch.errorMessage, taskRun.state, session.state);
+      if (currentDispatch.status !== expectedStatus || currentDispatch.errorMessage !== expectedErrorMessage) {
+        deps.executionRepository.updateTaskDispatch(taskRun.dispatchId, {
+          status: expectedStatus,
+          startedAt: currentDispatch.startedAt || taskRun.startedAt || new Date().toISOString(),
+          finishedAt: currentDispatch.finishedAt || taskRun.finishedAt || new Date().toISOString(),
+          lastHeartbeatAt: new Date().toISOString(),
+          errorMessage: expectedErrorMessage,
+        });
+      }
+    }
     return;
   }
 
@@ -323,6 +398,7 @@ const syncExecutionRunState = async (
   deps.executionRepository.appendTaskRunEvent(taskRun.id, "session_state_synced", "provider", {
     sessionState: session.state || null,
     taskRunState: nextRunState,
+    actionRequiredReplyPending,
     provider,
     sessionId,
     sessionName,
@@ -430,6 +506,37 @@ export const runSessionSyncStep = async (
     const runKey = extractTaskRunKeyFromTitle(session.title);
     if (runKey && !sessionMap.has(runKey)) {
       sessionMap.set(runKey, session);
+    }
+  }
+
+  if (deps.getSession) {
+    for (const task of subtasks) {
+      const expectedRunKey = buildTaskRunKey(context.repoPath, context.sprintNumber, task.id);
+      const sessionId = resolveTaskSessionId(task);
+      if (!sessionId) {
+        continue;
+      }
+      const snapshotMatch = sessionMap.get(expectedRunKey);
+      const snapshotSessionId = snapshotMatch
+        ? (deps.extractSessionId(snapshotMatch) || deps.resolveSessionName(snapshotMatch)?.replace(/^sessions\//, "") || null)
+        : null;
+      const snapshotIsTerminal = snapshotMatch?.state === "COMPLETED" || snapshotMatch?.state === "FAILED";
+      if (snapshotSessionId === sessionId && snapshotIsTerminal) {
+        continue;
+      }
+      try {
+        const session = await deps.getSession(sessionId);
+        const runKey = extractTaskRunKeyFromTitle(session.title);
+        if (!runKey || runKey === expectedRunKey) {
+          sessionMap.set(expectedRunKey, session);
+          sessions.push(session);
+        }
+      } catch {
+        deps.logger.warn("Could not fetch recorded task session missing from session snapshot", {
+          taskId: task.record_id || task.id,
+          sessionId,
+        });
+      }
     }
   }
 
@@ -559,7 +666,12 @@ export const runSessionSyncStep = async (
     // rerun or continued. A merged task is never reactivated. This lets a live
     // re-run surface as RUNNING instead of staying stuck on "completed", while
     // genuinely-done (merged) tasks are left untouched.
-    const liveRunState = mapSessionStateToTaskRunState(match.state, deps.isActionRequiredState);
+    const actionRequiredReplyPending = hasSubmittedReplyForActionRequiredState(
+      task,
+      match.state,
+      sessionName ? activitiesMap.get(sessionName) : undefined,
+    );
+    const liveRunState = mapSessionStateToTaskRunState(match.state, deps.isActionRequiredState, actionRequiredReplyPending);
     const reactivated = !task.is_merged && (liveRunState === "RUNNING" || liveRunState === "BLOCKED");
     if (task.status === "COMPLETED" && !reactivated && isCompletedTaskSettled(task, { githubMode: context.githubMode })) {
       continue;
@@ -659,7 +771,7 @@ export const runSessionSyncStep = async (
     }
 
     if (deps.isActionRequiredState(match.state)) {
-      task.status = "BLOCKED";
+      task.status = actionRequiredReplyPending ? "RUNNING" : "BLOCKED";
       continue;
     }
 

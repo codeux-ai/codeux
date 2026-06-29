@@ -205,6 +205,47 @@ export class SessionTrackingRepository {
     };
   }
 
+  /**
+   * Batch-insert provider activities in a single transaction. Provider streaming produces a high
+   * rate of activity lines; writing each as its own synchronous statement floods the main thread
+   * and WAL under concurrent sprints. Coalescing a burst into one transaction collapses that into a
+   * single fsync and a fraction of the per-statement overhead. Order is preserved by the caller's
+   * `createTime` stamps. No-ops on an empty batch.
+   */
+  appendActivities(
+    sessionId: string,
+    items: Array<{ originator?: string; description: string; payload?: unknown; createTime?: string }>
+  ): void {
+    if (items.length === 0) {
+      return;
+    }
+    const statement = this.db.prepare(`
+      INSERT INTO provider_activities (session_id, activity_id, create_time, originator, description, payload)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    const normalizedSessionId = toSessionId(sessionId);
+    const insertAll = this.db.prepare("BEGIN");
+    const commit = this.db.prepare("COMMIT");
+    const rollback = this.db.prepare("ROLLBACK");
+    insertAll.run();
+    try {
+      for (const input of items) {
+        statement.run(
+          normalizedSessionId,
+          randomUUID(),
+          input.createTime || new Date().toISOString(),
+          input.originator ?? "system",
+          input.description,
+          input.payload === undefined ? null : JSON.stringify(input.payload)
+        );
+      }
+      commit.run();
+    } catch (error) {
+      rollback.run();
+      throw error;
+    }
+  }
+
   getSession(sessionId: string): JulesSession | null {
     const row = this.getSessionRow(sessionId);
     return row ? this.rowToSession(row) : null;

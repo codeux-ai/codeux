@@ -42,6 +42,9 @@ export function openSqliteDatabase(dbPath: string): DatabaseSync {
         PRAGMA journal_mode = WAL;
         PRAGMA synchronous = NORMAL;
         PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS};
+        PRAGMA temp_store = MEMORY;
+        PRAGMA cache_size = -16000;
+        PRAGMA mmap_size = 268435456;
       `);
       return db;
     } catch (error) {

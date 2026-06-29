@@ -121,7 +121,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   });
   const [isImproving, setIsImproving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { feedback: actionFeedback, setPending, setSuccess, setError, clearFeedback } = useActionFeedback();
+  const { feedback: actionFeedback, setPending, setSuccess, setError, clearFeedback, clearError } = useActionFeedback();
   const [touchedName, setTouchedName] = useState(false);
   const [touchedGoal, setTouchedGoal] = useState(false);
   const reducedMotion = useReducedMotion();
@@ -539,7 +539,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
       >
         <div className="border-b border-black/[0.06] p-6 dark:border-white/[0.06] sm:p-8 lg:p-10 xl:border-b-0 xl:border-r">
           <div data-composer-stagger className="mb-8">
-            <ActionFeedbackRegion status={actionFeedback.status} message={actionFeedback.message} onDismiss={clearFeedback} autoDismiss={actionFeedback.autoDismiss} retryAction={actionFeedback.retryAction} retryLabel={actionFeedback.retryLabel} />
+            <ActionFeedbackRegion status={actionFeedback.status} message={actionFeedback.message} onDismiss={clearFeedback} clearError={clearError} autoDismiss={actionFeedback.autoDismiss} retryAction={actionFeedback.retryAction} retryLabel={actionFeedback.retryLabel} />
           </div>
           <div data-composer-stagger className="flex items-start justify-between gap-4">
             <div className="space-y-4">

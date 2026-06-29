@@ -1,6 +1,6 @@
 import { runCompletionStep } from "../../../sprint/steps/completion-step.js";
 import type { SprintAgentArgs } from "../../../sprint/sprint-types.js";
-import { getCheckedOutRef, mergeBranchLocally, restoreCheckedOutRef } from "../../../infrastructure/git/local-merge.js";
+import { deleteBranchLocally, getCheckedOutRef, mergeBranchLocally, restoreCheckedOutRef } from "../../../infrastructure/git/local-merge.js";
 import { determineNextState, WatchLoopState } from "./watch-loop-state-machine.js";
 import type { Subtask,
   AutomationInterventionsSettings,
@@ -635,6 +635,19 @@ export class WatchLoopRunner {
 
           if (mainMerge.ok) {
             report += `- ✅ **Merged locally:** Sprint feature branch \`${defaultFeatureBranch}\` merged into default branch \`${defaultBranch}\`.\n`;
+            // The sprint's work is now on the default branch; drop the feature branch so finished
+            // sprints don't leave dead branches behind (HEAD was already restored above, so this
+            // never deletes the branch the user is on).
+            const deleteMergedBranches = this.deps.getDashboardSettings({
+              projectId: scopedExecutionContext.project.id,
+              sprintId: scopedExecutionContext.sprint.id,
+            }).git.deleteMergedBranches;
+            if (deleteMergedBranches) {
+              const deleted = await deleteBranchLocally({ repoPath, branch: defaultFeatureBranch });
+              if (deleted) {
+                this.deps.logger.info(`LOCAL Mode: Deleted merged feature branch ${defaultFeatureBranch}`);
+              }
+            }
             resolveMainMergeAttentionItems(
               this.deps.projectAttentionService,
               scopedExecutionContext.project.id,

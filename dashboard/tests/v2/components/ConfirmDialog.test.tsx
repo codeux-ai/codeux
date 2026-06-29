@@ -1,6 +1,7 @@
 /** @jsx h */
 // @vitest-environment jsdom
 import { h } from "preact";
+import { useState } from "preact/hooks";
 import { render, screen, fireEvent, cleanup, act } from "@testing-library/preact";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { ConfirmDialog } from "../../../src/v2/components/ui/ConfirmDialog.js";
@@ -102,6 +103,50 @@ describe("ConfirmDialog", () => {
     );
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(handleCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("omits aria-describedby when body is empty", () => {
+    const noBodyOptions = { ...defaultOptions, body: "" };
+    const { container } = render(
+      <ConfirmDialog isOpen={true} options={noBodyOptions} onConfirm={vi.fn()} onCancel={vi.fn()} />
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.hasAttribute("aria-describedby")).toBe(false);
+    expect(container.querySelector("#confirm-dialog-body")).toBeNull();
+  });
+
+  it("sets initial focus to the cancel button", async () => {
+    vi.useFakeTimers();
+    render(<ConfirmDialog isOpen={true} options={defaultOptions} onConfirm={vi.fn()} onCancel={vi.fn()} />);
+    await vi.advanceTimersByTimeAsync(200); // Allow trap to run
+    const cancelBtn = screen.getByRole("button", { name: "Cancel" });
+    expect(document.activeElement).toBe(cancelBtn);
+  });
+
+  it("returns focus to opener on close", async () => {
+    vi.useFakeTimers();
+    const TestComponent = () => {
+      const [isOpen, setIsOpen] = useState(false);
+      return (
+        <div>
+          <button onClick={() => setIsOpen(true)}>Open</button>
+          <ConfirmDialog isOpen={isOpen} options={defaultOptions} onConfirm={vi.fn()} onCancel={() => setIsOpen(false)} />
+        </div>
+      );
+    };
+    render(<TestComponent />);
+    const openBtn = screen.getByText("Open");
+    openBtn.focus();
+    fireEvent.click(openBtn);
+    await vi.advanceTimersByTimeAsync(200);
+
+    const cancelBtn = screen.getByRole("button", { name: "Cancel" });
+    expect(document.activeElement).toBe(cancelBtn);
+
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(document.activeElement).toBe(openBtn);
   });
 });
 

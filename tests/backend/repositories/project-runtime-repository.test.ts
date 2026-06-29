@@ -241,6 +241,89 @@ describe("ProjectRuntimeRepository", () => {
     expect(runRows).toEqual([]);
   });
 
+  it("does not reopen a completed provider run when stale dashboard status is running with completed session evidence", async () => {
+    const { storage, projectRepository, runtimeRepository, executionRepository } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Completed CI Project",
+      sourceType: "local",
+      sourceRef: "/workspace/completed-ci",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Completed CI Sprint",
+      number: 24,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T10",
+      title: "Remove React type leakage",
+      promptMarkdown: "Remove React type leakage.",
+      status: "coding_completed",
+      isIndependent: true,
+      mergeIndicator: "CI",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      provider: "jules",
+      state: "COMPLETED",
+      sessionId: "completed-session",
+      sessionName: "sessions/completed-session",
+      workerBranch: "fix/preact-type-consistency-completed-session",
+      prUrl: "https://github.com/numnx/codeuxweb/pull/256",
+      startedAt: "2026-06-28T07:51:10.011Z",
+      finishedAt: "2026-06-28T08:27:38.000Z",
+    });
+
+    runtimeRepository.syncDashboardStatus({
+      project_id: project.id,
+      sprint_id: sprint.id,
+      sprint_number: 24,
+      subtasks: [
+        {
+          id: "T10",
+          record_id: task.id,
+          title: task.title,
+          prompt: task.promptMarkdown,
+          depends_on: [],
+          is_independent: true,
+          status: "RUNNING",
+          session_state: "COMPLETED",
+          session_id: "completed-session",
+          session_name: "sessions/completed-session",
+          provider: "jules",
+          worker_branch: "fix/preact-type-consistency-completed-session",
+          pr_url: "https://github.com/numnx/codeuxweb/pull/256",
+          merge_indicator: "CI",
+        },
+      ],
+      reportText: "Task is waiting on CI.",
+    });
+
+    expect(projectRepository.getTask(task.id)?.status).toBe("coding_completed");
+    const runRows = storage.getDatabase().getRawDatabase().prepare(`
+      SELECT state, session_id, pr_url, finished_at
+      FROM task_runs
+      WHERE task_id = ?
+      ORDER BY rowid DESC
+    `).all(task.id) as Array<{ state: string; session_id: string | null; pr_url: string | null; finished_at: string | null }>;
+    expect(runRows).toHaveLength(1);
+    expect(runRows[0]).toMatchObject({
+      state: "COMPLETED",
+      session_id: "completed-session",
+      pr_url: "https://github.com/numnx/codeuxweb/pull/256",
+      finished_at: "2026-06-28T08:27:38.000Z",
+    });
+  });
+
   it("does not create a new task_run every cycle for a guardrail-blocked task (idempotent terminal sync)", async () => {
     const { projectRepository, runtimeRepository, storage } = await createRepositories();
 

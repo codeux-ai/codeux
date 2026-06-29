@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/preact";
+import { cleanup, render, screen } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 
 import { SprintLedger } from "../SprintLedger.js";
@@ -11,6 +11,10 @@ import { SprintLedgerBulkActions } from "../SprintLedgerBulkActions.js";
 import type { Sprint } from "../../../types.js";
 
 expect.extend(matchers);
+
+afterEach(() => {
+  cleanup();
+});
 
 const mockSprint: Sprint = {
   date: "2023-01-01T00:00:00.000Z",
@@ -138,7 +142,7 @@ describe("SprintLedger Accessibility", () => {
     const activeCell = createdBtn.closest("th");
     expect(activeCell).toHaveAttribute("aria-sort", "descending");
 
-    const nameBtns = screen.getAllByRole("button", { name: /Sort by Sprint, currently sorted/i });
+    const nameBtns = screen.getAllByRole("button", { name: /Sort by Sprint, currently unsorted/i });
     const inactiveCell = nameBtns[0].closest("th");
     expect(inactiveCell).not.toHaveAttribute("aria-sort");
   });
@@ -283,7 +287,7 @@ describe("SprintLedger Accessibility", () => {
     await vi.waitFor(() => expect(screen.getByText(/1 of 1 selected/i)).toBeInTheDocument());
 
     // Click bulk delete
-    const bulkDeleteBtns = screen.getAllByRole("button", { name: /^Delete$/i });
+    const bulkDeleteBtns = screen.getAllByRole("button", { name: /^Delete selected sprints$/i });
     const bulkDeleteBtn = bulkDeleteBtns[0];
     await user.click(bulkDeleteBtn);
 
@@ -348,7 +352,18 @@ describe("SprintLedger Accessibility", () => {
     const idLabels = screen.getAllByText("Sprint ID");
     const idLabel = idLabels.find(el => el.classList.contains('lg:hidden'));
     expect(idLabel).toBeInTheDocument();
-    expect(idLabel).toHaveClass("lg:hidden");
+
+    const selectLabels = screen.getAllByText("Select");
+    expect(selectLabels.find(el => el.classList.contains('lg:hidden'))).toBeInTheDocument();
+
+    const pinLabels = screen.getAllByText("Pin");
+    expect(pinLabels.find(el => el.classList.contains('lg:hidden'))).toBeInTheDocument();
+
+    const controlsLabels = screen.getAllByText("Controls");
+    expect(controlsLabels.find(el => el.classList.contains('lg:hidden'))).toBeInTheDocument();
+
+    const statusLabels = screen.getAllByText("Status");
+    expect(statusLabels.find(el => el.classList.contains('lg:hidden'))).toBeInTheDocument();
   });
 });
 

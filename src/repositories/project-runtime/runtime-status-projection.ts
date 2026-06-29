@@ -90,6 +90,32 @@ export function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" ? value as Record<string, unknown> : undefined;
 }
 
+function isMergeSettled(row: TaskRow): boolean {
+  return row.merge_indicator === "MERGED"
+    || row.merge_indicator === "AUTOMERGE"
+    || toBoolean(row.is_merged);
+}
+
+function resolveProjectedTaskStatus(row: TaskRow, run?: TaskRunRow): Subtask["status"] {
+  if (row.status === "completed" || isMergeSettled(row)) {
+    return "COMPLETED";
+  }
+
+  if (row.status === "coding_completed") {
+    return "CODING_COMPLETED";
+  }
+
+  if (row.status === "QA_REVIEW_FAILED") {
+    return "QA_REVIEW_FAILED";
+  }
+
+  if (run?.state && run.state !== "COMPLETED") {
+    return run.state;
+  }
+
+  return mapPlanningStatusToRuntimeStatus(row.status);
+}
+
 export class RuntimeStatusProjection {
   constructor(
     private readonly storage: AppDbStorage,
@@ -108,6 +134,7 @@ export class RuntimeStatusProjection {
 
     const subtasks: Subtask[] = tasks.map((task) => {
       const run = latestRuns.get(task.row.id);
+      const merged = isMergeSettled(task.row);
       return {
         record_id: task.row.id,
         project_id: task.row.project_id,
@@ -116,9 +143,7 @@ export class RuntimeStatusProjection {
         title: task.row.title,
         prompt: task.row.prompt_markdown || task.row.description || "",
         depends_on: task.dependsOnTaskIds.map((dependencyId) => taskKeyByRecordId.get(dependencyId) || dependencyId),
-        status: run?.state && run.state !== "COMPLETED"
-          ? run.state
-          : mapPlanningStatusToRuntimeStatus(task.row.status),
+        status: resolveProjectedTaskStatus(task.row, run),
         session_id: run?.session_id || undefined,
         session_name: run?.session_name || undefined,
         provider: run?.provider ? run.provider as Subtask["provider"] : undefined,
@@ -128,9 +153,7 @@ export class RuntimeStatusProjection {
         activities: recentActivitiesByTaskId.get(task.row.id),
         is_independent: toBoolean(task.row.is_independent),
         latestReview: task.latestReview,
-        is_merged: task.row.merge_indicator === "MERGED"
-          || task.row.merge_indicator === "AUTOMERGE"
-          || toBoolean(task.row.is_merged),
+        is_merged: merged,
         merge_indicator: toMergeIndicator(task.row.merge_indicator),
       };
     });

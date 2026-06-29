@@ -26,6 +26,7 @@ import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { useProjectData } from "./context/project-data.js";
 import { SkeletonPanel, SkeletonLoader } from "./components/layout/SkeletonLoader.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
+import { PageHeader } from "./components/layout/PageHeader.js";
 import { startProjectSetup } from "./lib/project-api.js";
 import { fetchProjectInvocations } from "./lib/invocation-api.js";
 import { useToast } from "./components/feedback/ToastProvider.js";
@@ -80,7 +81,7 @@ const MetaRow: FunctionComponent<{
         <span aria-hidden="true" className="-translate-y-[3px] flex-1 border-b border-dotted border-black/[0.14] dark:border-white/[0.14]" />
         <span
             title={isEmpty ? undefined : value}
-            className={`max-w-[58%] shrink truncate text-[12px] leading-snug ${mono ? "font-mono" : "font-semibold"} ${
+            className={`min-w-0 max-w-[58%] shrink truncate text-[12px] leading-snug ${mono ? "font-mono" : "font-semibold"} ${
                 isEmpty ? "italic text-slate-300 dark:text-slate-600" : "text-slate-800 dark:text-slate-100"
             }`}
         >
@@ -288,7 +289,7 @@ const ProjectCard: FunctionComponent<{
                             <span className="relative">{source.name.slice(0, 1).toUpperCase()}</span>
                         </div>
                         <div className="min-w-0 flex-1">
-                            <h3 className="truncate font-display text-lg font-black leading-tight tracking-tight text-slate-900 dark:text-white">
+                            <h3 className="line-clamp-2 font-display text-lg font-black leading-tight tracking-tight text-slate-900 dark:text-white">
                                 {source.name}
                             </h3>
                             <div className="mt-0.5 truncate font-mono text-[10px] tracking-wide text-slate-400 dark:text-slate-500">
@@ -334,7 +335,7 @@ const ProjectCard: FunctionComponent<{
                     </div>
 
                     {/* Stats band */}
-                    <div className="grid grid-cols-3 divide-x divide-black/[0.06] border-y border-black/[0.06] py-2 dark:divide-white/[0.07] dark:border-white/[0.07]">
+                    <div className="grid grid-cols-[repeat(3,minmax(0,1fr))] divide-x divide-black/[0.06] border-y border-black/[0.06] py-2 dark:divide-white/[0.07] dark:border-white/[0.07]">
                         <StatTile label="Sprints" value={source.sprintsCount} />
                         <StatTile label="Open" value={source.openTasks} />
                         <StatTile label="Done" value={source.completedTasks} accent={completion === 100 && totalTasks > 0} />
@@ -355,7 +356,7 @@ const ProjectCard: FunctionComponent<{
                     </div>
 
                     {/* Actions — select toggle + compact icon toolbar */}
-                    <div className="mt-auto flex items-center gap-2">
+                    <div className="mt-auto flex flex-wrap items-center gap-2">
                         <button
                             type="button"
                             onClick={(event) => { event.stopPropagation(); onSelect(); }}
@@ -675,28 +676,13 @@ export const ProjectsPage: FunctionComponent = () => {
                 </div>
 
                 {/* ── Page Header ─────────────────────────────────────── */}
-                <div className="flex items-end justify-between gap-8">
-                    <div className="flex flex-col gap-3">
-                        {/* Eyebrow */}
-                        <div className="flex items-center gap-2.5 text-ember-500 font-bold tracking-[0.2em] uppercase text-[10px] font-mono">
-                            <FolderOpen className="w-3.5 h-3.5" strokeWidth={2.5} />
-                            Source Repositories
-                        </div>
-
-                        {/* Hero headline */}
-                        <h1 className="text-3xl md:text-4xl font-black tracking-tighter
-                                       text-slate-900 dark:text-white
-                                       leading-[1.05] font-display">
-                            Manage <span className="text-ember-500">Projects.</span>
-                        </h1>
-
-                        <p className="text-sm text-slate-500 dark:text-slate-500 font-medium max-w-md leading-relaxed">
-                            Connected repositories and local directories. Monitor health, tasks, and sprint activity.
-                        </p>
-                    </div>
-
-                    {/* Header right */}
-                    <div className="flex flex-col items-end gap-4 shrink-0">
+                <PageHeader
+                    icon={FolderOpen}
+                    eyebrow="Source Repositories"
+                    title="Manage Projects"
+                    subtitle="Connected repositories and local directories. Monitor health, tasks, and sprint activity."
+                    actions={
+                    <div className="flex flex-col sm:flex-row md:flex-col items-start sm:items-center md:items-end gap-4 shrink-0">
                         {/* Status pills */}
                         <div className="flex items-center gap-2.5">
                             {runningCount > 0 && (
@@ -734,10 +720,11 @@ export const ProjectsPage: FunctionComponent = () => {
                             </button>
                         </div>
                     </div>
-                </div>
+                    }
+                />
 
                 {/* ── Filter Tab Strip ────────────────────────────────── */}
-                <div className="-mt-4 flex gap-1 p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl w-fit">
+                <div className="flex flex-wrap gap-1 p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl w-fit">
                     {(['All', 'Running', 'Idle', 'Failed'] as Filter[]).map(f => (
                         <button
                             key={f}
@@ -775,7 +762,7 @@ export const ProjectsPage: FunctionComponent = () => {
                         )}
                     >
                     {!loading ? (
-                        <div className="col-start-1 row-start-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-5">
+                        <div className="col-start-1 row-start-1 grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-5">
                             {filtered.map(source => (
                                 <div key={source.id} className="project-card-entry h-full">
                                     <ProjectCard
@@ -821,56 +808,58 @@ export const ProjectsPage: FunctionComponent = () => {
             )}
             {activeSetupProject && (
                 <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/55 px-6 backdrop-blur-xl" role="dialog" aria-modal="true" aria-labelledby="setup-project-title">
-                    <div className="w-full max-w-xl rounded-[2rem] border border-black/[0.06] bg-white p-6 shadow-[0_40px_90px_rgba(0,0,0,0.28)] dark:border-white/[0.08] dark:bg-void-800">
-                        <div className="flex items-start justify-between gap-4">
-                            <div>
-                                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-ember-500">
-                                    <Bot className="h-4 w-4" />
-                                    Project Setup Agent
+                    <div className="flex flex-col max-h-[calc(100vh-2rem)] w-full max-w-xl rounded-[2rem] border border-black/[0.06] bg-white p-4 sm:p-6 shadow-[0_40px_90px_rgba(0,0,0,0.28)] dark:border-white/[0.08] dark:bg-void-800">
+                        <div className="overflow-y-auto pr-2 -mr-2">
+                            <div className="flex items-start justify-between gap-4">
+                                <div>
+                                    <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-ember-500">
+                                        <Bot className="h-4 w-4" />
+                                        Project Setup Agent
+                                    </div>
+                                    <h2 id="setup-project-title" className="mt-3 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+                                        Setup {activeSetupProject.name}
+                                    </h2>
                                 </div>
-                                <h2 id="setup-project-title" className="mt-3 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white">
-                                    Setup {activeSetupProject.name}
-                                </h2>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setSetupProjectId(null)}
-                                disabled={isActiveSetupRunning}
-                                className="rounded-full bg-black/[0.05] px-3 py-2 text-xs font-bold text-slate-500 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white/[0.06] dark:text-slate-300 dark:hover:text-white"
-                            >
-                                Close
-                            </button>
-                        </div>
-                        <div className="mt-5 grid gap-2 sm:grid-cols-2">
-                            {([
-                                { key: "agents", label: "Agents", description: "Specialists and routing." },
-                                { key: "quicksprints", label: "Quicksprints", description: "Sprint templates." },
-                                { key: "previewScript", label: "Preview Script", description: "Container startup." },
-                                { key: "ci", label: "CI", description: "Basic checks." },
-                            ] as const).map((option) => (
                                 <button
-                                    key={option.key}
                                     type="button"
-                                    onClick={() => setSetupOptions(prev => ({ ...prev, [option.key]: !prev[option.key] }))}
+                                    onClick={() => setSetupProjectId(null)}
                                     disabled={isActiveSetupRunning}
-                                    className={`rounded-2xl border p-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
-                                        setupOptions[option.key]
-                                            ? "border-ember-500/35 bg-ember-500/[0.08] text-slate-900 dark:text-white"
-                                            : "border-black/[0.06] bg-black/[0.025] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-400"
-                                    }`}
-                                    aria-pressed={setupOptions[option.key]}
+                                    className="rounded-full bg-black/[0.05] px-3 py-2 text-xs font-bold text-slate-500 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white/[0.06] dark:text-slate-300 dark:hover:text-white"
                                 >
-                                    <span className="block text-xs font-black uppercase tracking-[0.14em]">{option.label}</span>
-                                    <span className="mt-1 block text-xs font-medium opacity-75">{option.description}</span>
+                                    Close
                                 </button>
-                            ))}
-                        </div>
-                        {setupError && (
-                            <div className="mt-4 rounded-2xl bg-status-red/[0.08] p-3 text-sm font-semibold text-status-red" role="alert">
-                                {setupError}
                             </div>
-                        )}
-                        <div className="mt-6 flex items-center justify-end gap-3">
+                            <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                                {([
+                                    { key: "agents", label: "Agents", description: "Specialists and routing." },
+                                    { key: "quicksprints", label: "Quicksprints", description: "Sprint templates." },
+                                    { key: "previewScript", label: "Preview Script", description: "Container startup." },
+                                    { key: "ci", label: "CI", description: "Basic checks." },
+                                ] as const).map((option) => (
+                                    <button
+                                        key={option.key}
+                                        type="button"
+                                        onClick={() => setSetupOptions(prev => ({ ...prev, [option.key]: !prev[option.key] }))}
+                                        disabled={isActiveSetupRunning}
+                                        className={`rounded-2xl border p-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
+                                            setupOptions[option.key]
+                                                ? "border-ember-500/35 bg-ember-500/[0.08] text-slate-900 dark:text-white"
+                                                : "border-black/[0.06] bg-black/[0.025] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-400"
+                                        }`}
+                                        aria-pressed={setupOptions[option.key]}
+                                    >
+                                        <span className="block text-xs font-black uppercase tracking-[0.14em]">{option.label}</span>
+                                        <span className="mt-1 block text-xs font-medium opacity-75">{option.description}</span>
+                                    </button>
+                                ))}
+                            </div>
+                            {setupError && (
+                                <div className="mt-4 rounded-2xl bg-status-red/[0.08] p-3 text-sm font-semibold text-status-red" role="alert">
+                                    {setupError}
+                                </div>
+                            )}
+                        </div>
+                        <div className="mt-6 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-3 shrink-0 pt-2 border-t border-black/[0.06] dark:border-white/[0.08]">
                             <button
                                 type="button"
                                 onClick={() => setSetupProjectId(null)}
@@ -883,7 +872,7 @@ export const ProjectsPage: FunctionComponent = () => {
                                 type="button"
                                 onClick={() => { void handleRunSetup(); }}
                                 disabled={isActiveSetupRunning}
-                                className="flex items-center gap-2 rounded-2xl bg-ember-500 px-5 py-3 text-sm font-black text-void-900 shadow-[0_4px_20px_rgba(255,184,0,0.24)] transition-all hover:bg-ember-400 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+                                className="flex items-center justify-center gap-2 rounded-2xl bg-ember-500 px-5 py-3 text-sm font-black text-void-900 shadow-[0_4px_20px_rgba(255,184,0,0.24)] transition-all hover:bg-ember-400 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
                             >
                                 {isActiveSetupRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
                                 {isActiveSetupRunning ? "Setting up..." : "Setup Project"}

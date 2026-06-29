@@ -91,7 +91,7 @@ pnpm run typecheck:dashboard
 - Status helpers
 - UI tests that only need DOM events and markup assertions should use `@vitest-environment happy-dom` to reduce environment startup cost
 - Page-shell tests should focus on page-level state and mock expensive visual children instead of importing full chart/editor stacks
-- Live page regression coverage should explicitly assert sidebar composition (`Live Connections`, `Git / CI / PR`, `Attention Queue`, `Runtime Timeline`, `Execution Runtime`) and order, while asserting removed cards (`Latest Activity`, `Protocol`) stay absent and the Live Connections header counts include listener, worker, and manager/dashboard state.
+- Live page regression coverage should explicitly assert sidebar composition (`Invocation Feed`, `Runtime Timeline`, `Git / CI / PR`, `Attention Queue`, `Execution Runtime`) and order, while asserting removed cards (`Latest Activity`, `Protocol`, `Live Connections`) stay absent from the default Live sidebar.
 - Live sidebar Git CI coverage should include at least one active CI run and assert both the status text (for example `IN_PROGRESS`) and an active indicator query (`.animate-spin`) so CI-state rendering regressions are detected quickly.
 
 - Interaction behavior tests should verify pointer cursors, focus management, overlay dismissibility, and reduced-motion states for animated components.

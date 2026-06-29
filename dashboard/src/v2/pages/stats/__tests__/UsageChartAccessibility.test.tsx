@@ -91,9 +91,12 @@ describe("UsageChartAccessibility", () => {
     const slider = screen.getByLabelText(/Explore chart data across time/i);
     expect(slider).toBeInTheDocument();
 
+    expect(slider).toHaveAttribute('aria-describedby', 'usage-chart-tooltip');
+
     fireEvent.input(slider, { target: { value: '1' } });
 
     expect(slider).toHaveAttribute('aria-valuetext', expect.stringContaining('Jan 2'));
+    expect(document.getElementById('usage-chart-tooltip')).toBeInTheDocument();
 
     // Zoom by pressing enter
     fireEvent.keyDown(slider, { key: "Enter" });

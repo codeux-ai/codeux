@@ -22,9 +22,9 @@ export const ModelCard: FunctionComponent<{
                    border border-black/[0.06] dark:border-white/[0.06]
                    shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.2)]">
         <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-1 items-center gap-2 min-w-0">
                 <HardDrive className="w-4 h-4 text-signal-500" strokeWidth={2} />
-                <span className="text-sm font-bold text-slate-800 dark:text-white">{model.displayName}</span>
+                <span className="text-sm font-bold text-slate-800 dark:text-white truncate block min-w-0">{model.displayName}</span>
             </div>
             {model.active && (
                 <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-signal-500 bg-signal-500/10 px-2 py-0.5 rounded-full">Active</span>
@@ -48,7 +48,7 @@ export const ModelCard: FunctionComponent<{
                 </span>
             </div>
         )}
-        <div className="flex items-center gap-2 pt-1">
+        <div className="flex flex-wrap items-center gap-2 pt-1">
             {!model.downloaded && !model.downloading && (
                 <button onClick={() => onDownload(model.id)}
                     disabled={model.downloading || reembedding}

@@ -2,6 +2,17 @@
 import { expect, test, vi } from "vitest";
 import { render, fireEvent, waitFor } from "@testing-library/preact";
 import { Button } from "../ui/Button.js";
+import * as matchers from "@testing-library/jest-dom/matchers";
+
+expect.extend(matchers);
+
+vi.mock("gsap", () => ({
+    default: {
+        fromTo: vi.fn(),
+        to: vi.fn(),
+        timeline: vi.fn(() => ({ to: vi.fn().mockReturnThis() })),
+    },
+}));
 
 test('button locks width during loading and renders spinner', async () => {
     // Mock the offsetWidth for the ref

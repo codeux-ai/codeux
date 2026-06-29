@@ -1,25 +1,37 @@
 .kanban-card {
-  transition: box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1), scale 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--card-shadow-idle, 0 1px 3px rgba(0,0,0,0.08));
+  transform: translateY(0);
+  transition: box-shadow 150ms cubic-bezier(0.2,0,0,1), transform 150ms cubic-bezier(0.2,0,0,1);
   cursor: grab;
 }
-.kanban-card:hover {
-  scale: 1.02;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+@media (hover: hover) {
+  .kanban-card:hover {
+    box-shadow: 0 6px 16px rgba(0,0,0,0.16);
+    transform: translateY(-2px);
+  }
 }
-.kanban-card:active:not(.kanban-card-reduced-motion) {
-  scale: 0.98;
+@media (prefers-reduced-motion: reduce) {
+  .kanban-card, .kanban-card:hover {
+    transition: none;
+    transform: none;
+  }
 }
 .kanban-card:focus-visible {
   outline: none;
   box-shadow: var(--v2-shadow-premium), 0 0 0 4px rgba(0, 224, 160, 0.4);
 }
 
-.kanban-card.is-dragging {
-  opacity: 0.5;
-  scale: 1.02;
-  box-shadow: 0 20px 40px rgba(0,0,0,0.2);
-  outline: 2px solid rgba(0, 224, 160, 1);
-  cursor: grabbing;
+.kanban-card--dragging {
+  opacity: 0.45;
+  filter: blur(0.5px);
+  transform: scale(1.03);
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kanban-card--dragging {
+    filter: none;
+    transform: none;
+  }
 }
 .kanban-card-reduced-motion {
   transition: none !important;

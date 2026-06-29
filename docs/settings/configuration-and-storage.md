@@ -80,6 +80,9 @@ Runtime resolution:
 - Docker provider runs interrupted by Code UX process shutdown keep their provider usage rows running when the spawner exits from a restart signal; startup recovery then resumes or fails them based on whether the labeled backing container still exists.
 - startup recovery now also requeues task-level CLI follow-up runs that were left in `in_progress` after QA/repair `Fix` work lost its backing container, so the orchestrator can start the container again instead of leaving the sprint stuck after a server restart.
 - startup recovery treats Jules task sessions as durable remote runtime. If Code UX restarts after a sprint run or task dispatch was incorrectly terminalized while the sprint itself is still active, recovery rehydrates one sprint run, reattaches active Jules task runs/dispatches/provider invocation rows to it, and resumes the watch loop instead of failing the sessions.
+- startup recovery also reconciles dispatch rows linked to terminal task runs. If a task run is already `COMPLETED` or `FAILED` but its dispatch still says blocked/failed/running from an older recovery path, Code UX rewrites the dispatch to the terminal status so live dashboards do not show stale error indicators for completed work.
+- Jules sessions that still report `AWAITING_USER_FEEDBACK` are kept locally `running` when the recent activity transcript shows a user reply after the latest agent clarification request. This clears stale blocked dispatch errors and attention indicators while Code UX waits for Jules to process the submitted reply.
+- session sync uses the shared bounded Jules session snapshot for normal polling, but directly fetches any recorded task session missing from that snapshot or present only as a stale nonterminal snapshot copy. Older long-running sprints can otherwise keep local task runs marked `running` after Jules already completed the session and opened a PR.
 - When Code UX has to create a missing feature branch, it prefers `origin/<defaultBranch>` over the local `<defaultBranch>` ref when the remote-tracking base branch exists.
 - `main` is only the final fallback when no sprint, project, or system base branch is configured. Normal sprint and task flows use the resolved `git.defaultBranch` value from settings and project metadata.
 - the old global `/api/settings` contract is removed in favor of explicit scoped endpoints
@@ -240,7 +243,7 @@ Dashboard behavior:
 - `autoAnswerClarification` (default `false`): auto-answer `AWAITING_USER_FEEDBACK` sessions in `SEMI_AUTO`
 - `autoResumePaused` (default `false`): auto-send resume nudge for `PAUSED` sessions in `SEMI_AUTO`
 - `clarificationAnswerTemplate`: default response body used for clarification auto-replies
-- `clarificationCooldownSeconds` (default `300`): retained for compatibility, but clarification dedupe now keys off the latest clarification content and Jules activity identity instead of elapsed time; once Code UX starts answering a specific clarification request, repeated cycles skip starting or sending another answer for the same question until Jules emits a different clarification prompt or a new non-user activity
+- `clarificationCooldownSeconds` (default `300`): retained as the unresolved-clarification escalation window, while clarification dedupe keys off the latest clarification content and Jules activity identity. Once Code UX starts answering a specific clarification request, repeated cycles skip starting or sending another answer for the same question until Jules emits a different clarification prompt or a new non-user activity. If a user reply exists after the latest Jules request, cooldown escalation is suppressed so the task stays agent-owned while Jules processes the response.
 - when `autoAnswerClarificationMode = WORKER`, Code UX now composes the clarification-answer prompt from the editable `Project manager` agent preset instead of prepending worker instructions
 - worker-routed clarification prompts now include a dedicated Jules clarification section so the latest explicit `agentMessaged.agentMessage` is passed through when available instead of only broad sprint context
 - worker-routed clarification replies normalize CLI provider envelopes before sending the answer to Jules; if package-manager/bootstrap logs surround a `{ "response": "..." }` provider envelope, only the `response` body is sent and stored as the assistant reply
@@ -364,6 +367,9 @@ Preview runtime notes:
 - `virtualWorkerProvider` (default `codex`)
   - allowed values: `gemini`, `codex`, `claude-code`
   - Jules is intentionally excluded from worker mode; virtual workers are CLI-only
+- `maxConcurrency` (default `100`)
+  - caps how many worker-dispatched tasks can run in parallel for the selected scope
+  - settings editors allow values from `1` through `100`
 - Dashboard worker-runtime editors now expose only the virtual-worker provider and worker-model override controls because connected MCP worker mode has been removed.
 - In the dashboard, these controls are exposed in the active v2 settings page under `Sprint Engine -> Worker Runtime`
 
@@ -397,6 +403,7 @@ Container execution notes:
 - completed tasks with no recorded worker branch or PR URL are treated as already settled for dependency unlocks and sprint finalization; only tasks with merge evidence enter the feature-merge wait path.
 - when `featurePrAutoMergeMode = "WHEN_GREEN"` but a matched feature PR has no checks, Code UX inspects local `.github/workflows/*.yml` files and skips CI waiting only when it can confidently determine that no `pull_request` or `pull_request_target` workflow applies to that PR base branch.
 - feature PR review blocking treats `CHANGES_REQUESTED` as authoritative and no longer blocks solely because GitHub reports incidental PR comments while `reviewDecision` is empty. This avoids Jules bot introduction comments holding otherwise merge-ready task PRs.
+- remote GitHub polling keeps recorded task PR URLs in scope for merged-PR filtering and asks GraphQL for the maximum merged-PR page size, so older merged task PRs can still settle their tasks instead of falling back to an endless merge-required state.
 - `waitForJulesCiAutofix` (default `false`): when enabled with `featurePrAutoMergeMode = "WHEN_GREEN"`, completed tasks stay in work status while feature PR checks are pending/failed so Jules can apply CI autofix before merge.
 - `julesCiAutofixMaxRetries` (default `3`, clamped to `0..20`): max Jules CI autofix notify attempts before escalation to intervention (`FULL -> AGENT`, `SEMI_AUTO/ALWAYS_ASK -> HUMAN`) with explicit task IDs, PR links, and failed check names.
 - `featurePrAutoMergeMode` (default `"ALWAYS"`):

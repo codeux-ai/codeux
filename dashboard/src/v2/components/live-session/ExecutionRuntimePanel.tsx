@@ -24,6 +24,16 @@ export const statusTone = (value: string | null): string => {
     return "text-slate-400";
 };
 
+export const statusRailTone = (value: string | null): string => {
+    if (!value) return "border-l-slate-400";
+    const n = value.toUpperCase();
+    if (n === "SUCCESS" || n === "COMPLETED" || n === "MERGED" || n === "ONLINE") return "border-l-status-green";
+    if (n === "RUNNING" || n === "CLAIMED" || n === "LISTENING") return "border-l-signal-500";
+    if (n === "IN_PROGRESS" || n === "QUEUED" || n === "PENDING" || n === "QUOTA" || n === "PAUSED" || n === "CANCEL_REQUESTED") return "border-l-status-amber";
+    if (n === "FAILURE" || n === "FAILED" || n === "ERROR" || n === "CANCELLED" || n === "BLOCKED") return "border-l-status-red";
+    return "border-l-slate-400";
+};
+
 const EXECUTOR_LABELS: Record<string, string> = {
     docker_cli: "CLI",
     jules: "Jules",
@@ -157,7 +167,7 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                                 {visibleConnections.map((connection) => (
                                     <div
                                         key={connection.id}
-                                        className="rounded-xl border border-black/[0.04] bg-white/55 p-3 dark:border-white/[0.04] dark:bg-void-900/30"
+                                        className={`rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] bg-black/[0.015] p-3 pl-3 transition-colors hover:border-signal-500/25 hover:bg-signal-500/[0.035] dark:border-white/[0.04] dark:bg-white/[0.015] ${statusRailTone(connection.status)}`}
                                     >
                                         <div className="flex items-start justify-between gap-3">
                                             <div className="min-w-0">
@@ -165,11 +175,11 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                                                     <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
                                                         {connection.displayName}
                                                     </span>
-                                                    <span className="rounded-full border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
+                                                    <span className="rounded-md border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
                                                         {CONNECTION_ROLE_LABELS[connection.role] || connection.role}
                                                     </span>
                                                     {connection.listenMode && (
-                                                        <span className="rounded-full border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-signal-500">
+                                                        <span className="rounded-md border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-signal-500">
                                                             Listening
                                                         </span>
                                                     )}
@@ -220,16 +230,16 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                                         </div>
 
                                         <div className="mt-3 flex flex-wrap gap-2 text-[9px] font-bold uppercase tracking-[0.14em]">
-                                            <span className="rounded-full border border-black/[0.05] px-2 py-1 text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
+                                            <span className="rounded-md border border-black/[0.05] px-2 py-0.5 text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
                                                 inbox {connection.pendingInboxCount}
                                             </span>
-                                            <span className="rounded-full border border-black/[0.05] px-2 py-1 text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
+                                            <span className="rounded-md border border-black/[0.05] px-2 py-0.5 text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
                                                 dispatch {connection.activeDispatchCount}
                                             </span>
-                                            <span className="rounded-full border border-black/[0.05] px-2 py-1 text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
+                                            <span className="rounded-md border border-black/[0.05] px-2 py-0.5 text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
                                                 threads {connection.threadCount}
                                             </span>
-                                            <span className="rounded-full border border-black/[0.05] px-2 py-1 text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
+                                            <span className="rounded-md border border-black/[0.05] px-2 py-0.5 text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
                                                 runs {connection.tasksRunCount}
                                             </span>
                                         </div>
@@ -241,7 +251,7 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                                                         {connection.labels.slice(0, 4).map((label) => (
                                                             <span
                                                                 key={label}
-                                                                className="rounded-full border border-ember-500/20 bg-ember-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-ember-500"
+                                                                className="rounded-md border border-ember-500/20 bg-ember-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-ember-500"
                                                             >
                                                                 {label}
                                                             </span>
@@ -288,6 +298,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
     } = useExecutionTimeline();
 
     const [open, setOpen] = useState(defaultOpen);
+    const contentId = useId();
     if (!snapshot) return null;
     const activeSprintRuns = useMemo(() => snapshot.sprintRuns.filter((run) => run.status === "running" || run.status === "queued"), [snapshot.sprintRuns, snapshot.sprintRuns.length]);
     const activeDispatches = useMemo(() => snapshot.taskDispatches.filter((dispatch) => (
@@ -309,6 +320,10 @@ export const ExecutionRuntimePanel: FunctionComponent<{
 
     const visibleSprintRuns = useMemo(() => snapshot.sprintRuns.slice(0, 4), [snapshot.sprintRuns, snapshot.sprintRuns.length]);
     const visibleTaskDispatches = useMemo(() => snapshot.taskDispatches.slice(0, 8), [snapshot.taskDispatches, snapshot.taskDispatches.length]);
+    const blockedAttentionCount = useMemo(
+        () => snapshot.attentionItems.filter((item) => item.status === "open" || item.status === "claimed").length,
+        [snapshot.attentionItems, snapshot.attentionItems.length],
+    );
 
     return (
         <div className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800">
@@ -319,18 +334,25 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                 <button
                     type="button"
                     aria-expanded={open}
-                    aria-controls="execution-runtime-panel-content"
+                    aria-controls={contentId}
                     onClick={() => setOpen((current) => !current)}
                     className="relative z-10 flex w-full items-center justify-between gap-4 p-5 text-left transition-colors duration-200 hover:bg-black/[0.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:hover:bg-white/[0.01] dark:focus-visible:ring-offset-void-800"
                 >
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2.5">
                         <Workflow className="h-4 w-4 text-signal-500" strokeWidth={1.5} />
                         <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Execution Runtime</span>
-                        {activeSprintRuns.length > 0 && (
-                            <span className="rounded-md bg-signal-500/10 px-2 py-0.5 text-[9px] font-mono font-bold text-signal-500">
-                                {activeSprintRuns.length} active
-                            </span>
-                        )}
+                        <div className="flex flex-wrap items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em]">
+                            {activeSprintRuns.length > 0 && (
+                                <span className="rounded-md bg-signal-500/10 px-2 py-0.5 font-mono text-signal-500">
+                                    active {activeSprintRuns.length}
+                                </span>
+                            )}
+                            {blockedAttentionCount > 0 && (
+                                <span className="rounded-md bg-status-amber/10 px-2 py-0.5 font-mono text-status-amber">
+                                    attention {blockedAttentionCount}
+                                </span>
+                            )}
+                        </div>
                     </div>
                     <ChevronDown
                         className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-300 ${open ? "rotate-0" : "-rotate-90"}`}
@@ -338,26 +360,21 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                     />
                 </button>
             ) : (
-                <div className="relative z-10 flex items-center justify-between gap-4 px-7 pt-7">
-                    <div className="flex items-center gap-2.5">
+                <div className="relative z-10 flex items-center justify-between gap-4 px-6 pt-6">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2.5">
                         <Workflow className="h-4 w-4 text-signal-500" strokeWidth={1.5} />
                         <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Execution Runtime</span>
-                        {activeSprintRuns.length > 0 && (
-                            <span className="rounded-md bg-signal-500/10 px-2 py-0.5 text-[9px] font-mono font-bold text-signal-500">
-                                {activeSprintRuns.length} active
-                            </span>
-                        )}
                     </div>
                 </div>
             )}
 
             <div
                 className={collapsible ? `collapsible-section ${open ? "open" : ""}` : ""}
-                id="execution-runtime-panel-content"
+                id={contentId}
             >
                 <div className={collapsible ? "collapsible-content" : ""}>
-                    <div className={`relative z-10 space-y-7 ${collapsible ? "px-5 pb-5 pt-0" : "px-7 pb-7 pt-4"}`}>
-                        <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3">
+                    <div className={`relative z-10 space-y-5 ${collapsible ? "px-5 pb-5 pt-0" : "px-5 pb-5 pt-0"}`}>
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                             {[
                                 { label: "Active Runs", value: activeSprintRuns.length, accent: "text-signal-500" },
                                 { label: "Active Dispatches", value: activeDispatches.length, accent: "text-slate-700 dark:text-slate-200" },
@@ -368,25 +385,25 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                             ].map(({ label, value, accent }) => (
                                 <div
                                     key={label}
-                                    className="rounded-xl border border-black/[0.04] bg-white/55 px-3 py-2.5 shadow-[0_1px_0_rgba(255,255,255,0.35)] dark:border-white/[0.06] dark:bg-void-900/30 dark:shadow-none"
+                                    className="rounded-xl border border-black/[0.04] bg-white/55 px-3 py-2 dark:border-white/[0.06] dark:bg-void-900/30"
                                 >
                                     <div className={`text-[9px] font-bold uppercase tracking-[0.14em] ${accent}`}>{label}</div>
-                                    <div className={`mt-1 font-mono text-xl font-black leading-none tracking-tighter ${accent}`}>{value}</div>
+                                    <div className={`mt-1 font-mono text-lg font-black leading-none ${accent}`}>{value}</div>
                                 </div>
                             ))}
                         </div>
 
-                        <div>
-                            <div className="mb-3 flex items-center justify-between gap-3">
+                        <section aria-label="Sprint runs">
+                            <div className="mb-3 flex items-center justify-between gap-3 border-b border-black/[0.04] pb-2 dark:border-white/[0.05]">
                                 <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Sprint Runs</span>
-                                <span className="text-[9px] font-mono text-slate-400">{snapshot.sprintRuns.length} total</span>
+                                <span className="rounded-md border border-black/[0.05] bg-black/[0.02] px-2 py-0.5 text-[9px] font-mono text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.025]">{snapshot.sprintRuns.length} total</span>
                             </div>
                             {snapshot.sprintRuns.length === 0 ? (
-                                <p className="text-[11px] font-mono text-slate-400 dark:text-slate-600">No sprint runs recorded for the selected project.</p>
+                                <div className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 text-[11px] font-mono text-slate-400 dark:border-white/[0.04] dark:bg-white/[0.015] dark:text-slate-500">No sprint runs recorded for the selected project.</div>
                             ) : (
                                 <div className="space-y-2">
                                     {visibleSprintRuns.map((run) => (
-                                        <div key={run.id} className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 dark:border-white/[0.04] dark:bg-white/[0.015]">
+                                        <div key={run.id} className={`rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] bg-black/[0.015] p-3 pl-3 transition-colors hover:border-signal-500/25 hover:bg-signal-500/[0.035] dark:border-white/[0.04] dark:bg-white/[0.015] ${statusRailTone(run.status)}`}>
                                             <div className="flex items-center justify-between gap-3">
                                                 <div className="min-w-0">
                                                     <div className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
@@ -414,8 +431,8 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                         type="button"
                                                         onClick={() => getPendingActionState(pendingActionIds, `sprint-start:${run.sprintId}`) === "idle" && onOrchestrateSprint(run.projectId, run.sprintId)}
                                                         {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, `sprint-start:${run.sprintId}`) === "pending", false)}
-                                                        className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-500 transition-colors hover:bg-signal-500/15 aria-disabled:opacity-50"
-                                                    >
+                                                        className="inline-flex items-center gap-1.5 rounded-md border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/15 aria-disabled:opacity-50 dark:text-signal-400"
+                                                        >
                                                         <Play className="h-3 w-3" strokeWidth={2} />
                                                         {getPendingActionState(pendingActionIds, `sprint-start:${run.sprintId}`) === "pending" ? "Starting" : (run.status === "paused" ? "Resume" : "Run Again")}
                                                         {getPendingActionState(pendingActionIds, `sprint-start:${run.sprintId}`) === "pending" && <span className="sr-only">Starting...</span>}
@@ -426,7 +443,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                         type="button"
                                                         onClick={() => getPendingActionState(pendingActionIds, `sprint-pause:${run.id}`) === "idle" && onPauseSprintRun(run.id)}
                                                         {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, `sprint-pause:${run.id}`) === "pending", false)}
-                                                        className="inline-flex items-center gap-1.5 rounded-full border border-status-amber/20 bg-status-amber/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-status-amber transition-colors hover:bg-status-amber/15 aria-disabled:opacity-50"
+                                                        className="inline-flex items-center gap-1.5 rounded-md border border-status-amber/20 bg-status-amber/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-amber transition-colors hover:bg-status-amber/15 aria-disabled:opacity-50"
                                                     >
                                                         <PauseCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, `sprint-pause:${run.id}`) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} />
                                                         {getPendingActionState(pendingActionIds, `sprint-pause:${run.id}`) === "pending" ? "Pausing" : "Pause"}
@@ -438,8 +455,8 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                         type="button"
                                                         onClick={() => getPendingActionState(pendingActionIds, `sprint-cancel:${run.id}`) === "idle" && onCancelSprintRun(run.id)}
                                                         {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, `sprint-cancel:${run.id}`) === "pending", false)}
-                                                        className="inline-flex items-center gap-1.5 rounded-full border border-status-red/20 bg-status-red/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-status-red transition-colors hover:bg-status-red/15 aria-disabled:opacity-50"
-                                                    >
+                                                        className="inline-flex items-center gap-1.5 rounded-md border border-status-red/20 bg-status-red/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/15 aria-disabled:opacity-50"
+                                                        >
                                                         <XCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, `sprint-cancel:${run.id}`) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} />
                                                         {getPendingActionState(pendingActionIds, `sprint-cancel:${run.id}`) === "pending" ? "Cancelling" : "Cancel"}
                                                         {getPendingActionState(pendingActionIds, `sprint-cancel:${run.id}`) === "pending" && <span className="sr-only">Cancelling...</span>}
@@ -447,7 +464,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                 )}
                                                 {run.status === "cancel_requested" && (
                                                     <>
-                                                        <div className="inline-flex items-center gap-1.5 rounded-full border border-status-amber/20 bg-status-amber/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-status-amber">
+                                                        <div className="inline-flex items-center gap-1.5 rounded-md border border-status-amber/20 bg-status-amber/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-amber">
                                                             <Clock className="h-3 w-3" strokeWidth={2} />
                                                             Stop Pending
                                                         </div>
@@ -455,8 +472,8 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                             type="button"
                                                             onClick={() => getPendingActionState(pendingActionIds, `sprint-force-cancel:${run.id}`) === "idle" && onForceCancelSprintRun(run.id)}
                                                             {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, `sprint-force-cancel:${run.id}`) === "pending", false)}
-                                                            className="inline-flex items-center gap-1.5 rounded-full border border-status-red/20 bg-status-red/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-status-red transition-colors hover:bg-status-red/15 aria-disabled:opacity-50"
-                                                        >
+                                                            className="inline-flex items-center gap-1.5 rounded-md border border-status-red/20 bg-status-red/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/15 aria-disabled:opacity-50"
+                                                            >
                                                             <XCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, `sprint-force-cancel:${run.id}`) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} />
                                                             {getPendingActionState(pendingActionIds, `sprint-force-cancel:${run.id}`) === "pending" ? "Force Cancelling" : "Force Cancel"}
                                                             {getPendingActionState(pendingActionIds, `sprint-force-cancel:${run.id}`) === "pending" && <span className="sr-only">Force Cancelling...</span>}
@@ -481,7 +498,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                                     ? "Stopped automatically"
                                                                     : "Human intervention needed"}
                                                             </div>
-                                                            <div className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-100">
+                                                            <div className="mt-1 text-xs font-semibold text-slate-700 dark:text-slate-300">
                                                                 {run.humanIntervention.title}
                                                             </div>
                                                         </div>
@@ -501,24 +518,24 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                     ))}
                                 </div>
                             )}
-                        </div>
+                        </section>
 
-                        <div>
-                            <div className="mb-3 flex items-center justify-between gap-3">
+                        <section aria-label="Dispatch queue">
+                            <div className="mb-3 flex items-center justify-between gap-3 border-b border-black/[0.04] pb-2 dark:border-white/[0.05]">
                                 <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Dispatch Queue</span>
-                                <span className="text-[9px] font-mono text-slate-400">{snapshot.taskDispatches.length} total</span>
+                                <span className="rounded-md border border-black/[0.05] bg-black/[0.02] px-2 py-0.5 text-[9px] font-mono text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.025]">{snapshot.taskDispatches.length} total</span>
                             </div>
                             {snapshot.taskDispatches.length === 0 ? (
-                                <p className="text-[11px] font-mono text-slate-400 dark:text-slate-600">No task dispatches yet.</p>
+                                <div className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 text-[11px] font-mono text-slate-400 dark:border-white/[0.04] dark:bg-white/[0.015] dark:text-slate-500">No task dispatches yet.</div>
                             ) : (
-                                <div className="max-h-72 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar">
+                                <div className="max-h-80 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar">
                                     {visibleTaskDispatches.map((dispatch) => {
                                         const dispatchEvents = snapshot.recentEvents.filter(
                                             (e) => e.dispatchId === dispatch.id || (e.taskRunId && e.taskRunId === dispatch.taskRunId)
                                         );
                                         const activeCap = findActiveConcurrencyWait(dispatchEvents, dispatch.status);
                                         return (
-                                            <div key={dispatch.id} className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 dark:border-white/[0.04] dark:bg-white/[0.015]">
+                                            <div key={dispatch.id} className={`rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] bg-black/[0.015] p-3 pl-3 transition-colors hover:border-signal-500/25 hover:bg-signal-500/[0.035] dark:border-white/[0.04] dark:bg-white/[0.015] ${statusRailTone(activeCap ? "PENDING" : dispatch.status)}`}>
                                                 <div className="flex items-start justify-between gap-3">
                                                     <div className="min-w-0">
                                                         <div className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
@@ -570,9 +587,10 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                     <button
                                                         type="button"
                                                         onClick={() => getPendingActionState(pendingActionIds, `dispatch-cancel:${dispatch.id}`) === "idle" && onCancelTaskDispatch(dispatch.id)}
+                                                        aria-label={"Cancel dispatch " + dispatch.id}
                                                         {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, `dispatch-cancel:${dispatch.id}`) === "pending", false)}
-                                                        className="inline-flex items-center gap-1.5 rounded-full border border-status-red/20 bg-status-red/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-status-red transition-colors hover:bg-status-red/15 aria-disabled:opacity-50"
-                                                    >
+                                                        className="inline-flex items-center gap-1.5 rounded-md border border-status-red/20 bg-status-red/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/15 aria-disabled:opacity-50"
+                                                        >
                                                         <XCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, `dispatch-cancel:${dispatch.id}`) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} />
                                                         {getPendingActionState(pendingActionIds, `dispatch-cancel:${dispatch.id}`) === "pending" ? "Cancelling" : "Cancel"}
                                                         {getPendingActionState(pendingActionIds, `dispatch-cancel:${dispatch.id}`) === "pending" && <span className="sr-only">Cancelling...</span>}
@@ -580,16 +598,17 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                 )}
                                                 {dispatch.status === "cancel_requested" && (
                                                     <>
-                                                        <div className="inline-flex items-center gap-1.5 rounded-full border border-status-amber/20 bg-status-amber/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-status-amber">
+                                                        <div className="inline-flex items-center gap-1.5 rounded-md border border-status-amber/20 bg-status-amber/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-amber">
                                                             <Clock className="h-3 w-3" strokeWidth={2} />
                                                             Stop Pending
                                                         </div>
                                                         <button
                                                             type="button"
                                                             onClick={() => getPendingActionState(pendingActionIds, `dispatch-force-cancel:${dispatch.id}`) === "idle" && onForceCancelTaskDispatch(dispatch.id)}
+                                                            aria-label={"Force cancel dispatch " + dispatch.id}
                                                             {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, `dispatch-force-cancel:${dispatch.id}`) === "pending", false)}
-                                                            className="inline-flex items-center gap-1.5 rounded-full border border-status-red/20 bg-status-red/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-status-red transition-colors hover:bg-status-red/15 aria-disabled:opacity-50"
-                                                        >
+                                                            className="inline-flex items-center gap-1.5 rounded-md border border-status-red/20 bg-status-red/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/15 aria-disabled:opacity-50"
+                                                            >
                                                             <XCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, `dispatch-force-cancel:${dispatch.id}`) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} />
                                                             {getPendingActionState(pendingActionIds, `dispatch-force-cancel:${dispatch.id}`) === "pending" ? "Force Cancelling" : "Force Cancel"}
                                                             {getPendingActionState(pendingActionIds, `dispatch-force-cancel:${dispatch.id}`) === "pending" && <span className="sr-only">Force Cancelling...</span>}
@@ -600,9 +619,10 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                     <button
                                                         type="button"
                                                         onClick={() => getPendingActionState(pendingActionIds, `dispatch-retry:${dispatch.id}`) === "idle" && onRetryTaskDispatch(dispatch.id)}
+                                                        aria-label={"Retry dispatch " + dispatch.id}
                                                         {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, `dispatch-retry:${dispatch.id}`) === "pending", false)}
-                                                        className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-500 transition-colors hover:bg-signal-500/15 aria-disabled:opacity-50"
-                                                    >
+                                                        className="inline-flex items-center gap-1.5 rounded-md border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/15 aria-disabled:opacity-50 dark:text-signal-400"
+                                                        >
                                                         <RotateCcw className={`h-3 w-3 ${getPendingActionState(pendingActionIds, `dispatch-retry:${dispatch.id}`) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} />
                                                         {getPendingActionState(pendingActionIds, `dispatch-retry:${dispatch.id}`) === "pending" ? "Retrying" : "Retry"}
                                                         {getPendingActionState(pendingActionIds, `dispatch-retry:${dispatch.id}`) === "pending" && <span className="sr-only">Retrying...</span>}
@@ -614,7 +634,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                 })}
                                 </div>
                             )}
-                        </div>
+                        </section>
                     </div>
                 </div>
             </div>

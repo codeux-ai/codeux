@@ -12,6 +12,9 @@ vi.mock('../../../../src/repositories/execution/execution-task-dispatches-query.
 vi.mock('../../../../src/repositories/execution/execution-runtime-events-query.js', () => ({
   queryExecutionRuntimeEvents: vi.fn(() => [])
 }));
+vi.mock('../../../../src/repositories/execution/execution-invocations-query.js', () => ({
+  queryExecutionInvocations: vi.fn(() => [])
+}));
 vi.mock('../../../../src/repositories/execution/execution-human-intervention-query.js', () => ({
   buildHumanInterventionSummaryBySprintRun: vi.fn(() => new Map()),
   listActiveAttentionRowsForProject: vi.fn(() => [])
@@ -86,5 +89,25 @@ describe('queryProjectExecutionSnapshot', () => {
       [],
       expect.any(String)
     );
+  });
+
+  it('should include bounded recent invocations in the execution snapshot', async () => {
+    const { queryExecutionInvocations } = await import('../../../../src/repositories/execution/execution-invocations-query.js');
+    const invocation = {
+      id: 'xi-live',
+      projectId: 'proj-1',
+      type: 'cli_task_coding',
+      status: 'running',
+      messageCount: 2,
+      startedAt: '2024-01-01T10:00:00.000Z',
+      createdAt: '2024-01-01T10:00:00.000Z',
+      updatedAt: '2024-01-01T10:01:00.000Z',
+    };
+    (queryExecutionInvocations as any).mockReturnValueOnce([invocation]);
+
+    const snapshot = queryProjectExecutionSnapshot(mockDb as DatabaseAdapter, mockStorage, 'proj-1', mockDeps);
+
+    expect(queryExecutionInvocations).toHaveBeenCalledWith(mockDb, { projectId: 'proj-1', limit: 24 });
+    expect(snapshot.recentInvocations).toEqual([invocation]);
   });
 });

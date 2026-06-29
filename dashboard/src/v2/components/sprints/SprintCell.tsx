@@ -24,7 +24,6 @@ import { BorderTrace } from "../ui/BorderTrace.js";
 import { HumanInterventionBadge } from "../ui/HumanInterventionBadge.js";
 import { SprintReviewBadge } from "./SprintReviewBadge.js";
 import { SprintActionMenu } from "./SprintActionMenu.js";
-import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-settings.js";
 import { DropdownMenu } from "../ui/DropdownMenu.js";
 import { getSprintStatusPresentation } from "../../lib/sprint-status-presentation.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
@@ -61,6 +60,7 @@ interface SprintCellProps {
   sprint: Sprint;
   isEven: boolean;
   accentColor: string;
+  sprintKeyPrefix?: string;
   primaryBusy?: boolean;
   showcaseBusy?: boolean;
   isPaused?: boolean;
@@ -94,6 +94,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   sprint,
   isEven,
   accentColor,
+  sprintKeyPrefix = "SPR",
   primaryBusy = false,
   showcaseBusy = false,
   isPaused = false,
@@ -109,9 +110,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   onToggleShowcase,
   onMarkCompleted,
 }) => {
-  const settings = useProjectEffectiveSettings(sprint.projectId);
   const reducedMotion = useReducedMotion();
-  const sprintKeyPrefix = settings.data?.settings?.git?.sprintKeyPrefix || "SPR";
 
   const bubbleRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -196,7 +195,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
       ref={bubbleRef}
       onMouseEnter={handleHoverEnter}
       onMouseLeave={handleHoverLeave}
-      className={`group relative flex h-72 w-72 shrink-0 cursor-pointer items-center justify-center perspective-1000 lg:h-80 lg:w-80`}
+      className={`group relative flex h-72 w-72 shrink-0 cursor-pointer items-center justify-center perspective-1000 lg:h-80 lg:w-80 transition-[box-shadow,transform] duration-150 [@media(hover:hover)]:hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)] [@media(hover:hover)]:hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:transform-none`}
     >
       <div
         className={`pointer-events-none absolute inset-0 rounded-[1.75rem] shadow-[0_24px_48px_rgba(0,0,0,0.07)] transition-all duration-700 dark:shadow-[0_24px_48px_rgba(0,0,0,0.5)] ${animationClass} ${isCompleted ? "opacity-80" : ""}`}
@@ -334,7 +333,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
               : <Play className={`h-3.5 w-3.5 ${primaryBusy ? "animate-pulse" : ""}`} fill="currentColor" />}
           </button>
           <a
-            href={`/tasks?sprint=${encodeURIComponent(sprint.id)}`}
+            href={`/tasks?sprintId=${encodeURIComponent(sprint.id)}`}
             onClick={(event: MouseEvent) => event.stopPropagation()}
             className="touch-target inline-flex h-9 items-center gap-1.5 rounded-full bg-slate-900 px-5 text-[10px] font-bold uppercase tracking-[0.14em] text-white shadow-[0_4px_12px_rgba(0,0,0,0.15)] transition-all hover:opacity-85 dark:bg-white dark:text-void-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
           >
@@ -364,7 +363,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
                 onPrimaryAction={onPrimaryAction}
                 onPauseResume={onPauseResume}
                 onAddTasks={onAddTasks}
-                viewTasksHref={`/tasks?sprint=${encodeURIComponent(sprint.id)}`}
+                viewTasksHref={`/tasks?sprintId=${encodeURIComponent(sprint.id)}`}
                 onEdit={onEdit}
                 onExport={onExport}
                 onToggleShowcase={onToggleShowcase}

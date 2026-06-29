@@ -22,7 +22,7 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
         <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-signal-500/0 via-signal-500/[0.03] to-signal-500/0 dark:via-signal-500/[0.05] opacity-0 group-hover:opacity-100 transition-opacity duration-400 -z-10 rounded-xl" />
         <div aria-hidden="true" className="absolute inset-y-1 inset-x-0 bg-white/50 dark:bg-void-700/40 opacity-0 group-hover:opacity-100 transition-all duration-300 -z-10 rounded-xl" />
 
-        <div className="flex-1 grid grid-cols-12 gap-3 md:gap-5 items-center min-w-0">
+        <div className="flex-1 flex flex-col md:grid md:grid-cols-12 gap-3 md:gap-5 items-start md:items-center min-w-0">
             {/* ID */}
             <div className="hidden md:block col-span-1 font-mono text-[10px] font-bold text-slate-500 dark:text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors">
                 #{task.id.split('-')[0].substring(0, 4)}
@@ -43,7 +43,7 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
             {/* Source */}
             <div className="hidden lg:flex col-span-2 items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-400 min-w-0">
                 <FolderGit2 className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 group-hover:text-signal-600 dark:group-hover:text-signal-400 transition-colors shrink-0" strokeWidth={2} />
-                <span className="truncate group-hover:text-slate-800 dark:group-hover:text-slate-200 transition-colors font-mono">{task.source}</span>
+                <span className="sr-only">Source: </span><span className="truncate group-hover:text-slate-800 dark:group-hover:text-slate-200 transition-colors font-mono">{task.source}</span>
             </div>
 
             {/* Status */}
@@ -63,6 +63,7 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
                 )}
                 {task.status === 'pending' && <Circle className="w-4 h-4 text-slate-500 dark:text-slate-400" strokeWidth={2} aria-hidden="true" />}
 
+                <div aria-live="polite" className="sr-only">Task {task.id} status is now {task.status.replace('_', ' ')}</div>
                 <span className={`text-[9px] md:text-[10px] font-bold uppercase tracking-[0.14em] transition-colors duration-300 ease-in-out ${
                     task.status === 'completed'   ? 'text-status-green dark:text-status-green' :
                     task.status === 'coding_completed' ? 'text-cyan-700 dark:text-cyan-500' :
@@ -74,20 +75,20 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
             </div>
 
             {/* Time / Actions */}
-            <div className="hidden sm:flex col-span-2 items-center justify-end h-full relative overflow-hidden">
-                <div className="flex items-center gap-2 absolute right-0 transition-all duration-300 opacity-100 group-hover:opacity-0 group-hover:translate-x-3">
+            <div className="flex md:col-span-2 items-center justify-end h-full relative overflow-hidden w-full md:w-auto mt-2 md:mt-0">
+                <div className="flex items-center gap-2 md:absolute md:right-0 transition-all duration-300 md:opacity-100 md:group-hover:opacity-0 md:group-hover:translate-x-3">
                     <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" strokeWidth={2} aria-hidden="true" />
                     <span className="sr-only">Duration: </span>
                     <span className="text-xs font-mono text-slate-500 dark:text-slate-400">{task.time}</span>
                 </div>
 
                 {/* Quick actions */}
-                <div className="flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-xl rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] absolute right-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-[opacity,transform] duration-200 origin-right motion-safe:scale-95 motion-safe:group-hover:scale-100 motion-safe:group-focus-within:scale-100">
+                <div className="flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-xl rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] md:absolute md:right-0 opacity-100 md:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-[opacity,transform] duration-200 origin-right motion-safe:scale-95 motion-safe:group-hover:scale-100 motion-safe:group-focus-within:scale-100">
                     <button
                         type="button"
-                        className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-full transition-colors active:scale-95"
+                        className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-full transition-colors active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
                         title={isRunning ? "Stop task" : "Rerun task"}
-                        aria-label={`${isRunning ? "Stop" : "Rerun"} task ${task.id}`}
+                        aria-label={`${isRunning ? "Stop" : "Rerun"} task ${task.id}: ${task.title}`}
                         aria-busy={busy}
                         disabled={busy || !onPlayStop}
                         onClick={(event) => {
@@ -98,19 +99,19 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
                         {busy ? <><Loader2 aria-hidden="true" className="w-3.5 h-3.5 animate-spin" /><span className="sr-only">Loading</span></> : isRunning ? <Square className="w-3.5 h-3.5" fill="currentColor" /> : <Play className="w-3.5 h-3.5" fill="currentColor" />}
                     </button>
                     <a
-                        href={`/tasks?sprint=${encodeURIComponent(task.sprintId)}`}
-                        className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 rounded-full transition-colors active:scale-95"
+                        href={`/tasks?sprintId=${encodeURIComponent(task.sprintId)}`}
+                        className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 rounded-full transition-colors active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
                         title="Configure task"
-                        aria-label={`Configure task ${task.id}`}
+                        aria-label={`Configure task ${task.id}: ${task.title}`}
                         onClick={(event: MouseEvent) => event.stopPropagation()}
                     >
                         <Settings className="w-3.5 h-3.5" />
                     </a>
                     <a
                         href="/live"
-                        className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-emerald-700 dark:hover:text-status-green bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 rounded-full transition-colors active:scale-95"
+                        className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-emerald-700 dark:hover:text-status-green bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 rounded-full transition-colors active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
                         title="Open live session"
-                        aria-label={`Open live session for task ${task.id}`}
+                        aria-label={`Open live session for task ${task.id}: ${task.title}`}
                         onClick={(event: MouseEvent) => event.stopPropagation()}
                     >
                         <Maximize2 className="w-3.5 h-3.5" />

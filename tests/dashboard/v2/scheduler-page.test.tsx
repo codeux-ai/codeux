@@ -132,8 +132,8 @@ describe("SchedulerPage", () => {
 
     const pageRoot = screen.getByTestId("scheduler-page-root");
     expect(pageRoot.className).toContain("px-4");
-    expect(pageRoot.className).toContain("py-24");
-    expect(pageRoot.className).toContain("md:px-20");
+    expect(pageRoot.className).toContain("py-10");
+    expect(pageRoot.className).toContain("md:px-8");
     expect(screen.getByTestId("scheduler-primary-header")).toBeInTheDocument();
     const calendarPanel = screen.getByTestId("scheduler-calendar-panel");
     const formPanel = screen.getByTestId("scheduler-form-panel");
@@ -142,8 +142,7 @@ describe("SchedulerPage", () => {
     expect(formPanel.className).toContain("bg-white/70");
     expect(formPanel.className).toContain("dark:bg-void-800/60");
 
-    expect(screen.getByRole("heading", { level: 1, name: /Schedule/i })).toBeInTheDocument();
-    expect(screen.getByText("Events.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: /Schedule Events/i })).toBeInTheDocument();
 
     // Verify stats
     expect(screen.getByText("Active entries")).toBeInTheDocument();

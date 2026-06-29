@@ -11,6 +11,7 @@ interface OverlayProps {
   className?: string;
   blur?: boolean;
   exitDuration?: number;
+  intent?: "default" | "destructive";
 }
 
 export const Overlay: FunctionComponent<OverlayProps> = ({
@@ -20,6 +21,7 @@ export const Overlay: FunctionComponent<OverlayProps> = ({
   className = "",
   blur = true,
   exitDuration, // deprecated
+  intent = "default",
 }) => {
   const reducedMotion = useReducedMotion();
   const cssTokens = useInteractionTokens();
@@ -39,10 +41,10 @@ export const Overlay: FunctionComponent<OverlayProps> = ({
       setVisible(false);
       const timer = setTimeout(() => {
         setShouldRender(false);
-      }, reducedMotion ? 0 : gsapTokens.enterExit.duration * 1000);
+      }, reducedMotion ? 0 : (intent === "destructive" ? 300 : gsapTokens.enterExit.duration * 1000));
       return () => clearTimeout(timer);
     }
-  }, [isOpen, reducedMotion, gsapTokens.enterExit.duration]);
+  }, [isOpen, reducedMotion, gsapTokens.enterExit.duration, intent]);
 
   if (!shouldRender) return null;
 
@@ -51,7 +53,7 @@ export const Overlay: FunctionComponent<OverlayProps> = ({
       className={`fixed inset-0 z-40 flex items-center justify-center ${className}`}
       style={{
         opacity: visible ? 1 : 0,
-        transition: reducedMotion ? 'none' : `opacity ${cssTokens.enterExit.duration} ${cssTokens.enterExit.ease}`,
+        transition: reducedMotion ? 'none' : `opacity ${intent === "destructive" ? "300ms cubic-bezier(0.4, 0, 1, 1)" : `${cssTokens.enterExit.duration} ${cssTokens.enterExit.ease}`}`,
       }}
     >
       <div

@@ -733,6 +733,506 @@ describe("runSessionSyncStep", () => {
     });
   });
 
+  it("fetches a recorded task session directly when it is missing from the bounded session snapshot", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-missing-snapshot-"));
+    tempDirs.push(dir);
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "Missing Snapshot Session Project",
+      sourceType: "local",
+      sourceRef: "/tmp/codeuxweb",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 24",
+      number: 24,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T10",
+      title: "Remove React type leakage",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "jules",
+      status: "completed",
+      startedAt: "2026-06-28T07:51:10.011Z",
+      finishedAt: "2026-06-28T19:53:39.456Z",
+    } as any);
+    const run = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "jules",
+      state: "RUNNING",
+      sessionId: "missing-snapshot-session",
+      sessionName: "sessions/missing-snapshot-session",
+      workerBranch: "fix/preact-type-consistency-missing-snapshot-session",
+      prUrl: "https://github.com/numnx/codeuxweb/pull/256",
+      startedAt: "2026-06-28T07:51:10.011Z",
+    });
+
+    const subtasks: Subtask[] = [
+      {
+        id: "T10",
+        record_id: task.id,
+        project_id: project.id,
+        sprint_id: sprint.id,
+        title: task.title,
+        prompt: task.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "RUNNING",
+        session_id: "missing-snapshot-session",
+        session_name: "sessions/missing-snapshot-session",
+        provider: "jules",
+        worker_branch: "fix/preact-type-consistency-missing-snapshot-session",
+        pr_url: "https://github.com/numnx/codeuxweb/pull/256",
+      },
+    ];
+
+    const getSession = vi.fn().mockResolvedValue({
+      id: "missing-snapshot-session",
+      name: "sessions/missing-snapshot-session",
+      title: "Sprint 24: [run:codeuxweb/s24/t10] [T10] Remove React type leakage",
+      state: "COMPLETED",
+      provider: "jules",
+      prompt: "Remove React type leakage",
+      outputs: [
+        {
+          pullRequest: {
+            url: "https://github.com/numnx/codeuxweb/pull/256",
+            workerBranch: "fix/preact-type-consistency-missing-snapshot-session",
+          },
+        },
+      ],
+    });
+
+    const result = await runSessionSyncStep(
+      subtasks,
+      {
+        listSessions: vi.fn().mockResolvedValue({ sessions: [] }),
+        resolveSessionName: (session: { name?: string }) => session.name,
+        extractSessionId: (session: { id?: string }) => session.id,
+        fetchRecentActivities: vi.fn().mockResolvedValue([]),
+        getSession,
+        listAllActivities: vi.fn().mockResolvedValue([]),
+        isActionRequiredState: vi.fn().mockReturnValue(false),
+        executionRepository,
+        projectManagementRepository: projectRepository,
+        sprintRunId: sprintRun.id,
+        logger: { warn: vi.fn() },
+      },
+      false,
+      { repoPath: "/tmp/codeuxweb", sprintNumber: 24 }
+    );
+
+    expect(getSession).toHaveBeenCalledWith("missing-snapshot-session");
+    expect(result.subtasks[0]?.status).toBe("CODING_COMPLETED");
+    expect(executionRepository.getTaskRun(run.id)).toMatchObject({
+      state: "COMPLETED",
+      prUrl: "https://github.com/numnx/codeuxweb/pull/256",
+      workerBranch: "fix/preact-type-consistency-missing-snapshot-session",
+    });
+    expect(projectRepository.getTask(task.id)?.status).toBe("coding_completed");
+  });
+
+  it("prefers a recorded task session over a stale snapshot session for the same task key", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-recorded-session-"));
+    tempDirs.push(dir);
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "Recorded Session Project",
+      sourceType: "local",
+      sourceRef: "/tmp/codeuxweb",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 24",
+      number: 24,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T14",
+      title: "Correct delete confirmation failure handling",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "jules",
+      status: "completed",
+      startedAt: "2026-06-28T08:10:00.000Z",
+      finishedAt: "2026-06-28T09:03:15.000Z",
+    } as any);
+    const run = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "jules",
+      state: "RUNNING",
+      sessionId: "recorded-completed-session",
+      sessionName: "sessions/recorded-completed-session",
+      workerBranch: "fix-delete-confirmation-dialog-recorded-completed-session",
+      prUrl: "https://github.com/numnx/codeuxweb/pull/262",
+      startedAt: "2026-06-28T08:10:00.000Z",
+    });
+
+    const subtasks: Subtask[] = [
+      {
+        id: "T14",
+        record_id: task.id,
+        project_id: project.id,
+        sprint_id: sprint.id,
+        title: task.title,
+        prompt: task.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "RUNNING",
+        session_id: "recorded-completed-session",
+        session_name: "sessions/recorded-completed-session",
+        provider: "jules",
+        worker_branch: "fix-delete-confirmation-dialog-recorded-completed-session",
+        pr_url: "https://github.com/numnx/codeuxweb/pull/262",
+      },
+    ];
+
+    const getSession = vi.fn().mockResolvedValue({
+      id: "recorded-completed-session",
+      name: "sessions/recorded-completed-session",
+      title: "Sprint 24: [run:codeuxweb/s24/t14] [T14] Correct delete confirmation failure handling",
+      state: "COMPLETED",
+      provider: "jules",
+      prompt: "Fix delete confirmation failure handling",
+      outputs: [
+        {
+          pullRequest: {
+            url: "https://github.com/numnx/codeuxweb/pull/262",
+            workerBranch: "fix-delete-confirmation-dialog-recorded-completed-session",
+          },
+        },
+      ],
+    });
+
+    const result = await runSessionSyncStep(
+      subtasks,
+      {
+        listSessions: vi.fn().mockResolvedValue({
+          sessions: [
+            {
+              id: "stale-running-session",
+              name: "sessions/stale-running-session",
+              title: "Sprint 24: [run:codeuxweb/s24/t14] [T14] Correct delete confirmation failure handling",
+              state: "RUNNING",
+              provider: "jules",
+              prompt: "Old duplicate session",
+            },
+          ],
+        }),
+        resolveSessionName: (session: { name?: string }) => session.name,
+        extractSessionId: (session: { id?: string }) => session.id,
+        fetchRecentActivities: vi.fn().mockResolvedValue([]),
+        getSession,
+        listAllActivities: vi.fn().mockResolvedValue([]),
+        isActionRequiredState: vi.fn().mockReturnValue(false),
+        executionRepository,
+        projectManagementRepository: projectRepository,
+        sprintRunId: sprintRun.id,
+        logger: { warn: vi.fn() },
+      },
+      false,
+      { repoPath: "/tmp/codeuxweb", sprintNumber: 24 }
+    );
+
+    expect(getSession).toHaveBeenCalledWith("recorded-completed-session");
+    expect(result.subtasks[0]?.session_id).toBe("recorded-completed-session");
+    expect(result.subtasks[0]?.status).toBe("CODING_COMPLETED");
+    expect(executionRepository.getTaskRun(run.id)).toMatchObject({
+      state: "COMPLETED",
+      sessionId: "recorded-completed-session",
+      prUrl: "https://github.com/numnx/codeuxweb/pull/262",
+    });
+    expect(projectRepository.getTask(task.id)?.status).toBe("coding_completed");
+  });
+
+  it("refreshes a recorded task session directly when the snapshot has a stale nonterminal copy", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-stale-snapshot-"));
+    tempDirs.push(dir);
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "Stale Snapshot Project",
+      sourceType: "local",
+      sourceRef: "/tmp/codeuxweb",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 24",
+      number: 24,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T10",
+      title: "Remove React type leakage",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const run = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      provider: "jules",
+      state: "RUNNING",
+      sessionId: "stale-snapshot-session",
+      sessionName: "sessions/stale-snapshot-session",
+      startedAt: "2026-06-28T07:51:10.011Z",
+    });
+
+    const getSession = vi.fn().mockResolvedValue({
+      id: "stale-snapshot-session",
+      name: "sessions/stale-snapshot-session",
+      title: "Sprint 24: [run:codeuxweb/s24/t10] [T10] Remove React type leakage",
+      state: "COMPLETED",
+      provider: "jules",
+      prompt: "Remove React type leakage",
+      outputs: [
+        {
+          pullRequest: {
+            url: "https://github.com/numnx/codeuxweb/pull/256",
+            workerBranch: "fix/preact-type-consistency-stale-snapshot-session",
+          },
+        },
+      ],
+    });
+
+    const result = await runSessionSyncStep(
+      [
+        {
+          id: "T10",
+          record_id: task.id,
+          project_id: project.id,
+          sprint_id: sprint.id,
+          title: task.title,
+          prompt: task.promptMarkdown,
+          depends_on: [],
+          is_independent: true,
+          status: "RUNNING",
+          session_id: "stale-snapshot-session",
+          session_name: "sessions/stale-snapshot-session",
+          provider: "jules",
+        },
+      ],
+      {
+        listSessions: vi.fn().mockResolvedValue({
+          sessions: [
+            {
+              id: "stale-snapshot-session",
+              name: "sessions/stale-snapshot-session",
+              title: "Sprint 24: [run:codeuxweb/s24/t10] [T10] Remove React type leakage",
+              state: "IN_PROGRESS",
+              provider: "jules",
+              prompt: "Stale cached state",
+            },
+          ],
+        }),
+        resolveSessionName: (session: { name?: string }) => session.name,
+        extractSessionId: (session: { id?: string }) => session.id,
+        fetchRecentActivities: vi.fn().mockResolvedValue([]),
+        getSession,
+        listAllActivities: vi.fn().mockResolvedValue([]),
+        isActionRequiredState: vi.fn().mockReturnValue(false),
+        executionRepository,
+        projectManagementRepository: projectRepository,
+        sprintRunId: sprintRun.id,
+        logger: { warn: vi.fn() },
+      },
+      false,
+      { repoPath: "/tmp/codeuxweb", sprintNumber: 24 }
+    );
+
+    expect(getSession).toHaveBeenCalledWith("stale-snapshot-session");
+    expect(result.subtasks[0]?.status).toBe("CODING_COMPLETED");
+    expect(executionRepository.getTaskRun(run.id)?.state).toBe("COMPLETED");
+    expect(projectRepository.getTask(task.id)?.status).toBe("coding_completed");
+  });
+
+  it("keeps an awaiting-feedback Jules session running after the latest agent request has a user reply", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-reply-"));
+    tempDirs.push(dir);
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "Session Reply Project",
+      sourceType: "local",
+      sourceRef: "/tmp/my-repo",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Session Reply Sprint",
+      number: 8,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T07",
+      title: "Wait for clarification reply",
+      status: "pending",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "jules",
+      status: "blocked",
+      errorMessage: "Provider session requires attention: AWAITING_USER_FEEDBACK",
+      startedAt: "2026-06-28T16:00:00.000Z",
+      finishedAt: "2026-06-28T16:10:00.000Z",
+    } as any);
+    const run = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "jules",
+      state: "BLOCKED",
+      startedAt: "2026-06-28T16:00:00.000Z",
+      finishedAt: "2026-06-28T16:10:00.000Z",
+    });
+
+    const subtasks: Subtask[] = [
+      {
+        id: "T07",
+        record_id: task.id,
+        project_id: project.id,
+        sprint_id: sprint.id,
+        title: task.title,
+        prompt: task.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "BLOCKED",
+      },
+    ];
+
+    const result = await runSessionSyncStep(
+      subtasks,
+      {
+        listSessions: vi.fn().mockResolvedValue({
+          sessions: [
+            {
+              id: "reply-session",
+              name: "sessions/reply-session",
+              title: "Sprint 8: [run:my-repo/s8/t07] [T07] Wait for clarification reply",
+              state: "AWAITING_USER_FEEDBACK",
+              provider: "jules",
+              prompt: "Resolve the scoped loop.",
+            },
+          ],
+        }),
+        resolveSessionName: (session: { name?: string }) => session.name,
+        extractSessionId: (session: { id?: string }) => session.id,
+        fetchRecentActivities: vi.fn().mockResolvedValue([
+          {
+            id: "agent-question",
+            name: "sessions/reply-session/activities/agent-question",
+            createTime: "2026-06-28T16:12:29.000Z",
+            originator: "agent",
+            kind: "agent_message",
+            preview: "Should I expand beyond the scoped files?",
+          },
+          {
+            id: "user-reply",
+            name: "sessions/reply-session/activities/user-reply",
+            createTime: "2026-06-28T19:30:53.000Z",
+            originator: "user",
+            kind: "user_message",
+            preview: "Stay strictly within the T07 scope.",
+          },
+          {
+            id: "provider-progress",
+            name: "sessions/reply-session/activities/provider-progress",
+            createTime: "2026-06-28T19:31:00.000Z",
+            originator: "agent",
+            kind: "activity",
+          },
+        ]),
+        isActionRequiredState: (state?: string) => state === "AWAITING_USER_FEEDBACK",
+        executionRepository,
+        projectManagementRepository: projectRepository,
+        sprintRunId: sprintRun.id,
+        logger: { warn: vi.fn() },
+        julesUsage: {
+          syncLiveInvocation: vi.fn().mockResolvedValue(undefined),
+        },
+      },
+      false,
+      { repoPath: "/tmp/my-repo", sprintNumber: 8 }
+    );
+
+    const updatedRun = executionRepository.getTaskRun(run.id);
+    const updatedDispatch = executionRepository.getTaskDispatch(dispatch.id);
+    const updatedTask = projectRepository.getTask(task.id);
+    const events = executionRepository.listTaskRunEvents(run.id);
+
+    expect(result.subtasks[0]?.status).toBe("RUNNING");
+    expect(updatedRun).toMatchObject({
+      state: "RUNNING",
+      finishedAt: null,
+      durationMs: null,
+    });
+    expect(updatedDispatch).toMatchObject({
+      status: "running",
+      finishedAt: null,
+      errorMessage: null,
+    });
+    expect(updatedTask?.status).toBe("in_progress");
+    expect(events[0]?.payload).toMatchObject({
+      sessionState: "AWAITING_USER_FEEDBACK",
+      taskRunState: "RUNNING",
+      actionRequiredReplyPending: true,
+    });
+  });
+
   it("preserves the first terminal finishedAt during later completed-session syncs", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-"));
     tempDirs.push(dir);
@@ -1383,5 +1883,245 @@ describe("runSessionSyncStep", () => {
 
     expect(getLatestTaskRun).toHaveBeenCalledWith("task-terminal-record", "sprint-run-123");
     expect(fetchRecentActivities).not.toHaveBeenCalled();
+  });
+
+  it("repairs a stale blocked dispatch when the linked task run is already completed", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-terminal-dispatch-"));
+    tempDirs.push(dir);
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "Terminal Dispatch Project",
+      sourceType: "local",
+      sourceRef: "/tmp/my-repo",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Terminal Dispatch Sprint",
+      number: 9,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T07",
+      title: "Completed but stale dispatch",
+      status: "completed",
+      isMerged: true,
+      mergeIndicator: "MERGED",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "jules",
+      status: "blocked",
+      errorMessage: "Provider session requires attention before dispatch reconciliation.",
+      startedAt: "2026-06-27T09:57:59.808Z",
+      finishedAt: "2026-06-27T10:50:11.924Z",
+    } as any);
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "jules",
+      state: "COMPLETED",
+      sessionId: "completed-session",
+      sessionName: "sessions/completed-session",
+      startedAt: "2026-06-27T09:57:59.808Z",
+      finishedAt: "2026-06-27T11:05:10.343Z",
+    });
+
+    const subtasks: Subtask[] = [
+      {
+        id: "T07",
+        record_id: task.id,
+        project_id: project.id,
+        sprint_id: sprint.id,
+        title: task.title,
+        prompt: task.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "COMPLETED",
+        is_merged: true,
+        merge_indicator: "MERGED",
+      },
+    ];
+
+    await runSessionSyncStep(
+      subtasks,
+      {
+        listSessions: vi.fn().mockResolvedValue({
+          sessions: [
+            {
+              id: "completed-session",
+              name: "sessions/completed-session",
+              title: "Sprint 9: [run:my-repo/s9/t07] [T07] Completed but stale dispatch",
+              state: "COMPLETED",
+              provider: "jules",
+              prompt: "Finished task",
+            },
+          ],
+        }),
+        resolveSessionName: (session: { name?: string }) => session.name,
+        extractSessionId: (session: { id?: string }) => session.id,
+        fetchRecentActivities: vi.fn().mockResolvedValue([]),
+        isActionRequiredState: vi.fn().mockReturnValue(false),
+        executionRepository,
+        projectManagementRepository: projectRepository,
+        sprintRunId: sprintRun.id,
+        logger: { warn: vi.fn() },
+      },
+      false,
+      { repoPath: "/tmp/my-repo", sprintNumber: 9 }
+    );
+
+    expect(executionRepository.getTaskDispatch(dispatch.id)).toMatchObject({
+      status: "completed",
+      errorMessage: null,
+    });
+  });
+
+  it("reattaches a persisted Jules task run to a resumed sprint run before syncing state", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-resume-"));
+    tempDirs.push(dir);
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "Session Sync Resume",
+      sourceType: "local",
+      sourceRef: "/tmp/codeux",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 28",
+      number: 28,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T02",
+      title: "Resume stale Jules run",
+      status: "pending",
+    });
+    const pausedRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "paused",
+    });
+    const resumedRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: pausedRun.id,
+      executorType: "jules",
+      status: "blocked",
+      errorMessage: "Provider session requires attention: AWAITING_USER_FEEDBACK",
+      startedAt: "2026-06-28T14:00:00.000Z",
+      finishedAt: "2026-06-28T14:12:00.000Z",
+    } as any);
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: pausedRun.id,
+      dispatchId: dispatch.id,
+      provider: "jules",
+      mode: "jules",
+      sessionId: "resumed-jules-session",
+      sessionName: "sessions/resumed-jules-session",
+      state: "BLOCKED",
+      startedAt: "2026-06-28T14:00:00.000Z",
+    });
+    const usage = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: pausedRun.id,
+      dispatchId: dispatch.id,
+      taskRunId: taskRun.id,
+      sessionId: "resumed-jules-session",
+      provider: "jules",
+      purpose: "task_coding",
+      status: "running",
+    });
+
+    const subtasks: Subtask[] = [
+      {
+        id: "T02",
+        record_id: task.id,
+        project_id: project.id,
+        sprint_id: sprint.id,
+        title: task.title,
+        prompt: task.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "BLOCKED",
+      },
+    ];
+
+    const result = await runSessionSyncStep(
+      subtasks,
+      {
+        listSessions: vi.fn().mockResolvedValue({
+          sessions: [
+            {
+              id: "resumed-jules-session",
+              name: "sessions/resumed-jules-session",
+              title: "Sprint 28: [run:codeux/s28/t02] [T02] Resume stale Jules run",
+              state: "COMPLETED",
+              provider: "jules",
+              prompt: "Finish the task",
+            },
+          ],
+        }),
+        resolveSessionName: (session: { name?: string }) => session.name,
+        extractSessionId: (session: { id?: string }) => session.id,
+        fetchRecentActivities: vi.fn().mockResolvedValue([]),
+        listAllActivities: vi.fn().mockResolvedValue([]),
+        getSession: vi.fn().mockResolvedValue({ id: "resumed-jules-session", prompt: "Finish the task" }),
+        isActionRequiredState: vi.fn().mockReturnValue(false),
+        executionRepository,
+        projectManagementRepository: projectRepository,
+        sprintRunId: resumedRun.id,
+        logger: { warn: vi.fn() },
+        julesUsage: {
+          calculateAndSaveUsageForTask: vi.fn().mockResolvedValue(undefined),
+          syncLiveInvocation: vi.fn().mockResolvedValue(undefined),
+        },
+      },
+      true,
+      { repoPath: "/tmp/codeux", sprintNumber: 28 }
+    );
+
+    const updatedRun = executionRepository.getTaskRun(taskRun.id);
+    const updatedDispatch = executionRepository.getTaskDispatch(dispatch.id);
+    const updatedUsage = executionRepository.getProviderInvocationUsage(usage.id);
+    const updatedTask = projectRepository.getTask(task.id);
+
+    expect(result.subtasks[0]?.status).toBe("CODING_COMPLETED");
+    expect(updatedRun?.sprintRunId).toBe(resumedRun.id);
+    expect(updatedRun?.state).toBe("COMPLETED");
+    expect(updatedDispatch?.sprintRunId).toBe(resumedRun.id);
+    expect(updatedDispatch?.status).toBe("completed");
+    expect(updatedDispatch?.errorMessage).toBeNull();
+    expect(updatedUsage?.sprintRunId).toBe(resumedRun.id);
+    expect(updatedUsage?.taskRunId).toBe(taskRun.id);
+    expect(updatedUsage?.status).toBe("completed");
+    expect(updatedTask?.status).toBe("coding_completed");
   });
 });

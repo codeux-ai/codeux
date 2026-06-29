@@ -2,6 +2,7 @@ import { DatabaseAdapter as Database } from "../db/database-adapter.js";
 import { AppDbStorage } from "../app-db-storage.js";
 import { queryExecutionSprintRuns } from "./execution-sprint-runs-query.js";
 import { queryExecutionTaskDispatches } from "./execution-task-dispatches-query.js";
+import { queryExecutionInvocations } from "./execution-invocations-query.js";
 import { queryExecutionRuntimeEvents } from "./execution-runtime-events-query.js";
 import { buildHumanInterventionSummaryBySprintRun, listActiveAttentionRowsForProject } from "./execution-human-intervention-query.js";
 import { withWallTime } from "./execution-usage-query.js";
@@ -34,6 +35,7 @@ export function queryProjectExecutionSnapshot(
   const { sprintRuns, expandedSprintRunIds } = queryExecutionSprintRuns(db, projectId);
   const taskDispatches = queryExecutionTaskDispatches(db, storage, projectId, expandedSprintRunIds);
   const runtimeEvents = queryExecutionRuntimeEvents(db, storage, projectId, expandedSprintRunIds);
+  const recentInvocations = queryExecutionInvocations(db, { projectId, limit: 24 });
 
   const activeAttentionItems = listActiveAttentionRowsForProject(db, projectId);
   const humanInterventionBySprintRunId = buildHumanInterventionSummaryBySprintRun(
@@ -68,6 +70,7 @@ export function queryProjectExecutionSnapshot(
     overflowAssignedWorkers: [],
     attentionItems: [],
     recentEvents: runtimeEvents.map((row) => mapExecutionRuntimeEventSummaryRow(row)),
+    recentInvocations,
     updatedAt: new Date().toISOString(),
   };
 }

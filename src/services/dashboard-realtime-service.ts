@@ -493,7 +493,11 @@ const task = (async () => {
         lastPublishedAt: this.projectLivePublishedAt.get(projectId) ?? 0,
         minIntervalMs: PROJECT_LIVE_MIN_INTERVAL_MS,
         scopeType: "project",
-        scopeId: projectId,
+        // Dedicated sub-scope so the heavy live payload (~0.5MB, status+execution
+        // +git+activity feed) is delivered ONLY to clients that render it (Live and
+        // Tasks pages). Pages on the plain `project:<id>` scope (sprints, overview,
+        // chat) no longer receive — or have to parse — these frames.
+        scopeId: `${projectId}:live`,
         eventType: "project.live.updated",
         entityType: "project_live",
         entityId: projectId,

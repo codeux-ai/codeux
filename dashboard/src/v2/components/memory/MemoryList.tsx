@@ -8,7 +8,7 @@ import gsap from "gsap";
 import { GSAP_INTERACTION_TOKENS } from "../../lib/motion/constants.js";
 import { useComputed } from "@preact/signals";
 import { MemoryCard } from "./MemoryCard.js";
-import { searchQuerySignal, activeMemoryIdSignal, memoryMutationsSignal } from "./memoryState.js";
+import { searchQuerySignal, activeMemoryIdSignal, memoryMutationsSignal, activeTierSignal } from "./memoryState.js";
 import type { MemNode } from "../../lib/memory-graph.js";
 
 export const MemoryList: FunctionComponent<{
@@ -131,8 +131,10 @@ export const MemoryList: FunctionComponent<{
         );
     }
 
+    const activeTier = useComputed(() => activeTierSignal.value);
+
     return (
-        <div id="memory-panel" className="flex flex-col gap-3 h-full overflow-y-auto dashboard-scrollbar p-2" role="listbox">
+        <div id="memory-panel" aria-labelledby={`tab-${activeTier.value}`} className="flex flex-col gap-3 h-full overflow-y-auto dashboard-scrollbar p-2" role="listbox" aria-label="Memory List">
             <div className="sr-only" aria-live="polite" aria-atomic="true">
                 {renderedNodes.length} memories found
             </div>
@@ -146,6 +148,7 @@ export const MemoryList: FunctionComponent<{
                     status={memoryMutationsSignal.value.feedback?.status || "idle"}
                     message={memoryMutationsSignal.value.feedback?.message}
                     onDismiss={memoryMutationsSignal.value.clearFeedback}
+                    clearError={memoryMutationsSignal.value.clearError}
                     retryAction={memoryMutationsSignal.value.feedback?.retryAction}
                     retryLabel={memoryMutationsSignal.value.feedback?.retryLabel}
                 />
@@ -159,6 +162,7 @@ export const MemoryList: FunctionComponent<{
                             content={node.content}
                             category={node.category}
                             strength={node.strength}
+                            scope={node.scope}
                             onClick={() => onSelectNode(index)}
                         />
                     </div>

@@ -74,6 +74,20 @@ function toPersistedTaskRunState(status: TaskRunState): Exclude<TaskRunState, "C
   return status;
 }
 
+function shouldPreserveCompletedSessionState(existing: TaskRunRow | null, subtask: Subtask): boolean {
+  if (!existing || existing.state !== "COMPLETED" || subtask.status !== "RUNNING") {
+    return false;
+  }
+  if (subtask.session_state !== "COMPLETED") {
+    return false;
+  }
+  return Boolean(
+    nonEmptyString(subtask.pr_url)
+    || nonEmptyString(subtask.worker_branch)
+    || nonEmptyString(subtask.merge_indicator),
+  );
+}
+
 export class ProjectRuntimeRepository {
   private readonly db: DatabaseAdapter;
   private readonly runtimeContextStore: RuntimeContextStore;
@@ -138,7 +152,12 @@ export class ProjectRuntimeRepository {
         const scopedSubtask = artifactScope === "foreign"
           ? this.stripRuntimeArtifacts(subtask)
           : subtask;
-        const runtimeState = scopedSubtask.status || "PENDING";
+        const candidateRun = artifactScope === "foreign"
+          ? null
+          : this.findCandidateRun(mappedTask.row.id, scopedSubtask);
+        const runtimeState = shouldPreserveCompletedSessionState(candidateRun, scopedSubtask)
+          ? "CODING_COMPLETED"
+          : (scopedSubtask.status || "PENDING");
         if (artifactScope !== "foreign") {
           if (runtimeState === "RUNNING") {
             hasRunning = true;
@@ -180,7 +199,7 @@ export class ProjectRuntimeRepository {
         );
 
         if (artifactScope !== "foreign") {
-          this.syncTaskRun(mappedTask.row, scopedSubtask, now);
+          this.syncTaskRun(mappedTask.row, scopedSubtask, now, candidateRun, runtimeState);
         }
       }
 
@@ -408,11 +427,20 @@ export class ProjectRuntimeRepository {
     return null;
   }
 
-  private syncTaskRun(task: TaskRow, subtask: Subtask, now: string): void {
-    const runtimeState = subtask.status || "PENDING";
+  private syncTaskRun(
+    task: TaskRow,
+    subtask: Subtask,
+    now: string,
+    candidateRun?: TaskRunRow | null,
+    effectiveRuntimeState?: TaskRunState,
+  ): void {
+    const runtimeState = effectiveRuntimeState || subtask.status || "PENDING";
     const persistedRunState = toPersistedTaskRunState(runtimeState);
-    const existing = this.findCandidateRun(task.id, subtask);
-    const signature = subtaskSignature(subtask);
+    const existing = candidateRun === undefined ? this.findCandidateRun(task.id, subtask) : candidateRun;
+    const signature = subtaskSignature({
+      ...subtask,
+      status: runtimeState,
+    });
 
     if (!existing) {
       if (!this.shouldCreateTaskRun(subtask)) {

@@ -40,10 +40,23 @@ export interface SnapshotCheckout {
   fallbackBranch?: string;
 }
 
+/**
+ * Options controlling how a snapshot workspace is seeded.
+ *
+ * `singleBranch` seeds only the checkout branch (a single-ref, full-history bundle) and checks it
+ * out in the same helper container, instead of bundling every ref (`--all`) and fetching all of
+ * them into the volume. Repos that have run many sprints accumulate thousands of worker/feature
+ * branches, so the all-ref seed copies thousands of refs the consumer never needs. Read-only,
+ * single-branch consumers (planning) opt into this for a dramatically cheaper, lower-IO seed.
+ */
+export interface SnapshotWorkspaceOptions {
+  singleBranch?: boolean;
+}
+
 export interface IWorkspaceManager {
   buildWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): string;
   buildWorkspaceRef(repoPath: string, workspaceKey: string, executionMode: CliWorkflowSettings["executionMode"]): string;
-  createSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout): Promise<string>;
+  createSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout, options?: SnapshotWorkspaceOptions): Promise<string>;
   createOrReuseSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout): Promise<string>;
   resolveResumeWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): Promise<string | undefined>;
   resolveCurrentBranch(worktreePath: string): Promise<string | null>;
@@ -147,13 +160,20 @@ export class WorkspaceManager implements IWorkspaceManager {
     return `${WORKSPACE_HANDLE_PREFIX}${volumeName}`;
   }
 
-  async createSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout): Promise<string> {
+  async createSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout, options?: SnapshotWorkspaceOptions): Promise<string> {
     await this.assertExactGitWorktreeRoot(repoPath);
     const workspaceRef = this.buildWorktreePath(repoPath, `${sessionId}-snapshot`, "DOCKER");
     await this.removeWorktree(repoPath, workspaceRef).catch(() => undefined);
     await this.createVolume(workspaceRef);
-    await this.seedWorkspaceFromBundle(repoPath, workspaceRef);
-    await this.checkoutSnapshotBranch(repoPath, workspaceRef, checkout);
+    if (options?.singleBranch && await this.trySeedSingleBranchWorkspace(repoPath, workspaceRef, checkout)) {
+      return workspaceRef;
+    }
+    await this.seedAndCheckoutVolume(
+      repoPath,
+      workspaceRef,
+      await this.snapshotSeedBranches(repoPath, checkout),
+      () => this.checkoutSnapshotBranch(repoPath, workspaceRef, checkout),
+    );
     return workspaceRef;
   }
 
@@ -164,9 +184,23 @@ export class WorkspaceManager implements IWorkspaceManager {
       return workspaceRef;
     }
     await this.createVolume(workspaceRef);
-    await this.seedWorkspaceFromBundle(repoPath, workspaceRef);
-    await this.checkoutSnapshotBranch(repoPath, workspaceRef, checkout);
+    await this.seedAndCheckoutVolume(
+      repoPath,
+      workspaceRef,
+      await this.snapshotSeedBranches(repoPath, checkout),
+      () => this.checkoutSnapshotBranch(repoPath, workspaceRef, checkout),
+    );
     return workspaceRef;
+  }
+
+  /**
+   * Candidate branches whose refs a snapshot seed must carry so {@link checkoutSnapshotBranch} can
+   * resolve its checkout: the requested branch, its fallback, and the repository's current HEAD
+   * branch (the no-explicit-branch fallback). The full-seed fallback in {@link seedAndCheckoutVolume}
+   * still covers the rare HEAD-detached / arbitrary-SHA case.
+   */
+  private async snapshotSeedBranches(repoPath: string, checkout?: SnapshotCheckout): Promise<Array<string | null | undefined>> {
+    return [checkout?.branch, checkout?.fallbackBranch, await this.resolveRepoCurrentBranch(repoPath)];
   }
 
   /**
@@ -270,11 +304,16 @@ export class WorkspaceManager implements IWorkspaceManager {
 
     await this.withRepoLock(repoPath, async () => {
       await this.assertExactGitWorktreeRoot(repoPath);
-      try {
-        const fetchEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(repoPath, gitAuth ?? {});
-        await runCommandStrict("git", ["fetch", "origin"], repoPath, fetchEnv ?? process.env);
-      } catch {
-        // continue with local refs when origin is unavailable
+      // Only the worker and feature branch tips matter for resolving the start ref, so fetch just
+      // those instead of every ref. A bare `git fetch origin` pulls all refs, which on repos that
+      // have run many sprints means thousands of branches on every task prep. Each branch is fetched
+      // independently so a branch not yet on origin (e.g. the worker branch for a fresh task) does
+      // not abort the others; on any failure we simply fall back to local refs.
+      const fetchEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(repoPath, gitAuth ?? {});
+      const fetchRefs = Array.from(new Set([workerBranch, featureBranch].filter((branch) => Boolean(branch))));
+      for (const branch of fetchRefs) {
+        await runCommandStrict("git", ["fetch", "origin", branch], repoPath, fetchEnv ?? process.env)
+          .catch(() => undefined);
       }
 
       if (resumeSessionId && await this.workspaceExists(workspaceRef) && await this.canResumeExistingWorkspace(workspaceRef, workerBranch)) {
@@ -291,8 +330,11 @@ export class WorkspaceManager implements IWorkspaceManager {
       await this.removeWorktree(repoPath, workspaceRef).catch(() => undefined);
       if (isWorkspaceHandle(workspaceRef)) {
         await this.createVolume(workspaceRef);
-        await this.seedWorkspaceFromBundle(repoPath, workspaceRef);
-        await this.runWorkspaceCommand(workspaceRef, "git", ["checkout", "-B", workerBranch, startRef]);
+        // Coding tasks only need the worker and feature branches to resolve the start ref; seed just
+        // those instead of every accumulated branch (falls back to the full seed if a ref is missing).
+        await this.seedAndCheckoutVolume(repoPath, workspaceRef, [workerBranch, featureBranch], async () => {
+          await this.runWorkspaceCommand(workspaceRef, "git", ["checkout", "-B", workerBranch, startRef]);
+        });
       } else {
         await fs.mkdir(path.dirname(workspaceRef), { recursive: true });
         try {
@@ -588,7 +630,149 @@ export class WorkspaceManager implements IWorkspaceManager {
     }
   }
 
-  private async seedWorkspaceFromBundle(repoPath: string, worktreePath: string): Promise<void> {
+  /**
+   * Fast path for read-only single-branch consumers (planning): seed only the resolved checkout
+   * branch with a single-ref bundle and check it out in the same helper container — one container
+   * run instead of an all-ref seed plus a separate checkout container, and a tiny bundle instead of
+   * one carrying every accumulated worker/feature branch. Returns false (so the caller falls back to
+   * the full seed) when no concrete local branch can be resolved.
+   */
+  private async trySeedSingleBranchWorkspace(
+    repoPath: string,
+    worktreePath: string,
+    checkout?: SnapshotCheckout,
+  ): Promise<boolean> {
+    const candidates = [checkout?.branch, checkout?.fallbackBranch]
+      .map((branch) => branch?.trim())
+      .filter((branch): branch is string => Boolean(branch));
+    const requested = candidates.length > 0 ? candidates : [await this.resolveRepoCurrentBranch(repoPath)];
+
+    let resolvedBranch: string | null = null;
+    for (const candidate of requested) {
+      if (candidate && await this.refExists(repoPath, `refs/heads/${candidate}`)) {
+        resolvedBranch = candidate;
+        break;
+      }
+    }
+    if (!resolvedBranch) {
+      return false;
+    }
+
+    const { volumeName } = parseWorkspaceHandle(worktreePath);
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-sbbundle-"));
+    const bundlePath = path.join(tempDir, "repo.bundle");
+    const originUrl = await this.resolveOriginUrl(repoPath);
+    const ownerSpec = getWorkspaceOwnerSpec();
+
+    try {
+      await this.ensurePublicHelperImage(WORKSPACE_HELPER_IMAGE, repoPath, process.env);
+      // Single-ref bundle: full history of just this branch, not every ref in the repo.
+      await runCommandStrict("git", ["bundle", "create", bundlePath, resolvedBranch], repoPath);
+      const initScript = [
+        "set -e",
+        "tmp=$(mktemp)",
+        "cat > \"$tmp\"",
+        "rm -rf /workspace/* /workspace/.[!.]* /workspace/..?* 2>/dev/null || true",
+        "git init /workspace >/dev/null",
+        "git -C /workspace symbolic-ref HEAD refs/heads/code-ux-bootstrap-$$",
+        "git -C /workspace remote add origin \"$tmp\"",
+        "git -C /workspace fetch origin '+refs/*:refs/*' >/dev/null",
+        "rm -f \"$tmp\"",
+        originUrl
+          ? `git -C /workspace remote set-url origin ${shellQuote(originUrl)}`
+          : "git -C /workspace remote remove origin >/dev/null 2>&1 || true",
+        "git -C /workspace config user.name \"${CODE_UX_GIT_USER_NAME:-Code UX}\"",
+        "git -C /workspace config user.email \"${CODE_UX_GIT_USER_EMAIL:-agents@codeux.ai}\"",
+        // Check out the seeded branch in the same container, removing the separate checkout run.
+        `git -C /workspace checkout -B ${shellQuote(resolvedBranch)} ${shellQuote(`refs/heads/${resolvedBranch}`)} >/dev/null`,
+        "mkdir -p /workspace/.code-ux-home",
+        ownerSpec ? `chown -R ${shellQuote(ownerSpec)} /workspace` : null,
+      ].filter((step): step is string => Boolean(step)).join(" && ");
+
+      await runCommandStrict(
+        "docker",
+        [
+          "run",
+          "--rm",
+          "-i",
+          "--mount",
+          `type=volume,source=${volumeName},target=${CONTAINER_WORKSPACE_ROOT}`,
+          "--entrypoint",
+          "sh",
+          WORKSPACE_HELPER_IMAGE,
+          "-lc",
+          initScript,
+        ],
+        repoPath,
+        process.env,
+        { stdinFile: bundlePath },
+      );
+      return true;
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+
+  /**
+   * Returns the subset of `refs/heads/<b>` and `refs/remotes/origin/<b>` that actually exist on the
+   * host for each candidate branch — the exact refs a targeted seed must carry so the volume can
+   * later check out either the local or origin-tracking form of those branches.
+   */
+  private async resolveExistingSeedRefs(repoPath: string, branches: Array<string | null | undefined>): Promise<string[]> {
+    const refs: string[] = [];
+    const seen = new Set<string>();
+    for (const branch of branches) {
+      const name = branch?.trim();
+      if (!name) {
+        continue;
+      }
+      for (const ref of [`refs/heads/${name}`, `refs/remotes/origin/${name}`]) {
+        if (!seen.has(ref) && await this.refExists(repoPath, ref)) {
+          seen.add(ref);
+          refs.push(ref);
+        }
+      }
+    }
+    return refs;
+  }
+
+  /**
+   * Seeds a workspace volume with only the refs the given branches need, then runs `checkout`. If
+   * the targeted seed misses a ref the checkout requires (the checkout throws), the volume is
+   * re-seeded with every ref and the checkout retried once — so this is never less correct than the
+   * full seed, just cheaper in the common case. Re-seeding fully resets the volume (the init script
+   * wipes `/workspace` and re-inits), so the retry starts clean.
+   */
+  private async seedAndCheckoutVolume(
+    repoPath: string,
+    worktreePath: string,
+    branches: Array<string | null | undefined>,
+    checkout: () => Promise<void>,
+  ): Promise<void> {
+    const seedRefs = await this.resolveExistingSeedRefs(repoPath, branches);
+    if (seedRefs.length === 0) {
+      await this.seedWorkspaceFromBundle(repoPath, worktreePath);
+      await checkout();
+      return;
+    }
+    await this.seedWorkspaceFromBundle(repoPath, worktreePath, seedRefs);
+    try {
+      await checkout();
+    } catch {
+      await this.seedWorkspaceFromBundle(repoPath, worktreePath);
+      await checkout();
+    }
+  }
+
+  /**
+   * Seeds the workspace volume from a host git bundle. By default it bundles every ref (`--all`),
+   * which on repos that have run many sprints copies thousands of accumulated branches the consumer
+   * never needs. Pass `seedRefs` (concrete refs that exist on the host) to bundle only those — the
+   * caller is responsible for including every ref its checkout will consult. The volume's
+   * `+refs/*:refs/*` fetch preserves the full ref path, so both `refs/heads/x` and
+   * `refs/remotes/origin/x` resolve afterwards exactly as with the full seed.
+   */
+  private async seedWorkspaceFromBundle(repoPath: string, worktreePath: string, seedRefs?: string[]): Promise<void> {
     const { volumeName } = parseWorkspaceHandle(worktreePath);
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-bundle-"));
     const bundlePath = path.join(tempDir, "repo.bundle");
@@ -597,7 +781,8 @@ export class WorkspaceManager implements IWorkspaceManager {
 
     try {
       await this.ensurePublicHelperImage(WORKSPACE_HELPER_IMAGE, repoPath, process.env);
-      await runCommandStrict("git", ["bundle", "create", bundlePath, "--all"], repoPath);
+      const bundleRefArgs = seedRefs && seedRefs.length > 0 ? seedRefs : ["--all"];
+      await runCommandStrict("git", ["bundle", "create", bundlePath, ...bundleRefArgs], repoPath);
       const initScript = [
         "set -e",
         "tmp=$(mktemp)",

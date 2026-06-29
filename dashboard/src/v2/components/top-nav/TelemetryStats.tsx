@@ -1,4 +1,5 @@
 import type { FunctionComponent } from "preact";
+import { useMemo } from "preact/hooks";
 import { useProjectTasks } from "../../hooks/use-project-tasks.js";
 import { RollingNumber } from "../ui/RollingNumber.js";
 import type { Sprint, Task } from "../../types.js";
@@ -9,10 +10,15 @@ interface TelemetryStatsProps {
 }
 
 export const TelemetryStats: FunctionComponent<TelemetryStatsProps> = ({ projectId, sprints }) => {
-    const { tasks } = useProjectTasks(projectId, [], sprints, null);
+    const activeSprintIds = useMemo(
+        () => new Set((sprints || []).filter((s) => s.status === "running").map((s) => s.id)),
+        [sprints],
+    );
+    const { tasks } = useProjectTasks(projectId, [], sprints, null, {
+        enabled: activeSprintIds.size > 0,
+    });
 
     const allTasks = tasks || [];
-    const activeSprintIds = new Set((sprints || []).filter((s) => s.status === "running").map((s) => s.id));
     const runningCount = allTasks.filter((t: Task) => t.status === "in_progress" && activeSprintIds.has(t.sprintId)).length;
     const queuedCount = allTasks.filter((t: Task) => t.status === "pending" && activeSprintIds.has(t.sprintId)).length;
 
@@ -22,7 +28,7 @@ export const TelemetryStats: FunctionComponent<TelemetryStatsProps> = ({ project
             <div className="flex items-center gap-2 px-2.5">
                 <span className="relative flex h-2 w-2">
                     {runningCount > 0 && (
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                        <span className="absolute inline-flex h-full w-full motion-safe:animate-ping rounded-full bg-emerald-400 opacity-75" />
                     )}
                     <span className={`relative inline-flex h-2 w-2 rounded-full ${runningCount > 0 ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"}`} />
                 </span>

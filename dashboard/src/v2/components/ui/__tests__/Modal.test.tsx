@@ -29,4 +29,14 @@ describe("Modal", () => {
     expect(dialog.getAttribute("aria-label")).toBeNull();
     expect(dialog.getAttribute("aria-labelledby")).toBe("title-id");
   });
+
+  test("omits aria-describedby when not provided", () => {
+    render(
+      <Modal isOpen={true} onClose={() => {}}>
+        <div>Content</div>
+      </Modal>
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.hasAttribute("aria-describedby")).toBe(false);
+  });
 });

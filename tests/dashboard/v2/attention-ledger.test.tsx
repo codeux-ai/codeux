@@ -86,7 +86,7 @@ describe("AttentionLedger", () => {
         expect(screen.getByText("open 1")).toBeInTheDocument();
         expect(screen.getByText("claimed 1")).toBeInTheDocument();
         expect(screen.getByText("First summary")).toBeInTheDocument();
-        expect(screen.getByRole("button", { name: "Claim" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Claim attention item: Wait" })).toBeInTheDocument();
         expect(screen.queryByRole("button", { name: /Attention Queue/i })).toBeNull();
     });
 
@@ -100,13 +100,13 @@ describe("AttentionLedger", () => {
 
         render(<AttentionLedger />);
 
-        expect(screen.getByRole("button", { name: /Claiming/ })).toBeInTheDocument();
-        expect(screen.getByRole("button", { name: /Resolving/ })).toBeInTheDocument();
-        expect(screen.getByRole("button", { name: /Dismissing/ })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /Claim attention item: Wait/i })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /Resolve attention item: Wait/i })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /Dismiss attention item: Wait/i })).toBeInTheDocument();
 
-        expect(screen.getByRole("button", { name: /Claiming/ })).toHaveAttribute("aria-disabled", "true");
-        expect(screen.getByRole("button", { name: /Resolving/ })).toHaveAttribute("aria-disabled", "true");
-        expect(screen.getByRole("button", { name: /Dismissing/ })).toHaveAttribute("aria-disabled", "true");
+        expect(screen.getByRole("button", { name: /Claim attention item: Wait/i })).toHaveAttribute("aria-disabled", "true");
+        expect(screen.getByRole("button", { name: /Resolve attention item: Wait/i })).toHaveAttribute("aria-disabled", "true");
+        expect(screen.getByRole("button", { name: /Dismiss attention item: Wait/i })).toHaveAttribute("aria-disabled", "true");
     });
 
     it("renders a collapsible header when requested", () => {

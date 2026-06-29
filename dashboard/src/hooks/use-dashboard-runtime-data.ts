@@ -22,6 +22,7 @@ const EMPTY_EXECUTION: ExecutionDashboardSnapshot = {
   overflowAssignedWorkers: [],
   attentionItems: [],
   recentEvents: [],
+  recentInvocations: [],
   updatedAt: null,
 };
 
@@ -108,7 +109,9 @@ export const useDashboardRuntimeData = (projectIdHint: string | null = null, ena
     fetchResource: fetchResourceWithProjectExtraction,
     isEqual,
     realtime: activeProjectId ? {
-      scopes: [`project:${activeProjectId}`],
+      // Dedicated sub-scope: the heavy live payload is delivered only here, so
+      // pages on the plain `project:<id>` scope never receive these ~0.5MB frames.
+      scopes: [`project:${activeProjectId}:live`],
       eventType: "project.live.updated",
       updateDirectlyFromEvent: true,
     } : undefined,

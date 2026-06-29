@@ -65,6 +65,24 @@ describe("Global Search", () => {
     });
 
     describe("GlobalSearch Component", () => {
+        it("defers task loading until search is opened", async () => {
+            render(<GlobalSearch projectId="p1" selectedProject={{ id: "p1", name: "Project 1" } as any} sprints={[]} />);
+
+            expect(useProjectTasks).toHaveBeenLastCalledWith("p1", [expect.objectContaining({ id: "p1" })], [], null, {
+                enabled: false,
+            });
+
+            const searchButton = screen.getByText("Search...").closest("button");
+            expect(searchButton).not.toBeNull();
+            fireEvent.click(searchButton!);
+
+            await waitFor(() => {
+                expect(useProjectTasks).toHaveBeenLastCalledWith("p1", [expect.objectContaining({ id: "p1" })], [], null, {
+                    enabled: true,
+                });
+            });
+        });
+
         it("opens search overlay when Cmd+K is pressed", async () => {
             render(<GlobalSearch projectId="p1" selectedProject={null} sprints={[]} />);
 

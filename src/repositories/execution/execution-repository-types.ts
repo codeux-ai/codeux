@@ -26,6 +26,9 @@ export interface ExecutionTaskDispatchSummaryRow {
   task_id: string;
   task_key: string;
   task_title: string;
+  task_status: string;
+  task_is_merged: number | string;
+  task_merge_indicator: string | null;
   status: string;
   executor_type: string;
   priority: number | string;

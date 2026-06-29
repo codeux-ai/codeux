@@ -1,5 +1,6 @@
 import type { InstructionTemplateId } from "../instructions/instruction-template-catalog.js";
 import type { ProviderInvocationPurpose, TokenUsageSource } from "./execution-types.js";
+import type { ExecutionInvocationRecord } from "./invocation-types.js";
 import type { MemorySettings } from "./memory-types.js";
 
 export interface JulesSource {
@@ -360,6 +361,8 @@ export interface ExecutionDashboardSnapshot {
   overflowAssignedWorkers: ExecutionAssignedWorkerSummary[];
   attentionItems: ExecutionAttentionItemSummary[];
   recentEvents: ExecutionRuntimeEventSummary[];
+  /** Recent project invocation records used by the Live page invocation feed. */
+  recentInvocations?: ExecutionInvocationRecord[];
   updatedAt: string | null;
 }
 
@@ -707,6 +710,14 @@ export interface GitSettings {
   defaultBranch: string;
   autoCreatePr: boolean;
   autoCloseLinkedIssues: boolean;
+  /**
+   * Delete a branch once its work has been merged: worker branches after they merge into the
+   * sprint feature branch, and the feature branch after it merges into the default branch. In
+   * REMOTE mode PR merges already delete the remote branch; this primarily controls LOCAL-mode
+   * branch cleanup and is also honoured by the stale-branch reaper, preventing the thousands of
+   * dead sprint branches that otherwise accumulate in long-lived repos.
+   */
+  deleteMergedBranches: boolean;
   featureBranchPrefix: string;
   sprintBranchScheme: string;
   sprintKeyPrefix: string;

@@ -240,5 +240,23 @@ describe("git-status-policy", () => {
       const res = filterMergedPrs(prs, { scope: "REPOSITORY", featureBranchPrefix: "prefix-" });
       expect(res.map(p => p.number)).toEqual([4]);
     });
+
+    it("keeps known task PR URLs even when the merged PR is outside the branch filter", () => {
+      const staleTaskPr: GitMergeStatus = {
+        number: 9,
+        baseRefName: "older-feature",
+        title: "stale task PR",
+        url: "https://example.com/pull/9",
+        headRefName: "worker/T1",
+        mergedAt: "now",
+        mergedBy: "a",
+      };
+      const res = filterMergedPrs([...prs, staleTaskPr], {
+        scope: "FEATURE_PR_CI",
+        featureBranch: "current-feature",
+        taskPrUrls: ["https://example.com/pull/9"],
+      });
+      expect(res.map(p => p.number)).toEqual([9]);
+    });
   });
 });

@@ -112,6 +112,8 @@ Host execution writes the generated config to `.code-ux/tmp/opencode-config-<ses
 
 OpenCode JSON retry continuation uses native OpenCode session ids only when the CLI reports one in JSON events such as `session.created` or `session.status`. If a retry only has Code UX's logical session id, Code UX invokes `opencode run --continue` instead of `opencode run --session <logical-id>` so OpenCode resumes the latest session without raising `Session not found`.
 
+If OpenCode rejects a real native session id with `Session not found`, Code UX retries once in the same preserved workspace without `--session` or `--continue`. This keeps the failed worktree available while letting OpenCode create a fresh local session instead of failing the task solely because its session store no longer contains the prior id.
+
 ## Dashboard Surface
 
 The v2 Integrations page exposes OpenCode-specific setup panels:

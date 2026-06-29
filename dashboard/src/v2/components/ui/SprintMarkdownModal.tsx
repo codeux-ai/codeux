@@ -145,9 +145,9 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
     >
       <div
         ref={cardRef}
-        className="relative flex flex-col sm:flex-row w-[calc(100vw-2rem)] sm:w-full max-w-5xl max-h-[calc(100dvh-2rem)] cursor-default overflow-hidden sm:overflow-y-auto rounded-[2.5rem] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)]"
+        className="relative flex flex-col md:flex-row w-[calc(100vw-2rem)] sm:w-full max-w-5xl max-h-[calc(100dvh-2rem)] cursor-default overflow-hidden rounded-[2.5rem] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)]"
       >
-        <div className="relative hidden sm:flex w-56 shrink-0 bg-void-900 dark:bg-void-950 flex-col justify-between p-8 overflow-hidden">
+        <div className="relative flex w-full md:w-48 lg:w-56 shrink-0 bg-void-900 dark:bg-void-950 flex-row md:flex-col overflow-x-auto overflow-y-auto justify-between p-8">
           <span className="absolute -top-2 -left-4 text-[7.5rem] font-black text-white/[0.035] font-display leading-none pointer-events-none select-none tracking-tighter">
             {mode === "import" ? "LOAD" : "SAVE"}
           </span>
@@ -168,7 +168,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
           </div>
         </div>
 
-        <div className="flex-1 bg-white/98 dark:bg-void-800/98 p-8 flex flex-col">
+        <div className="flex-1 min-w-0 overflow-y-auto bg-white/98 dark:bg-void-800/98 p-8 flex flex-col">
           <div className="flex items-start justify-between mb-8">
             <div>
               <h2 className="text-[2rem] font-black text-slate-900 dark:text-white tracking-tight font-display leading-none">

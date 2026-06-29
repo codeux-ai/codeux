@@ -421,6 +421,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     defaultBranch: "main",
     autoCreatePr: true,
     autoCloseLinkedIssues: false,
+    deleteMergedBranches: true,
     featureBranchPrefix: "feature/",
     sprintBranchScheme: DEFAULT_SPRINT_BRANCH_SCHEME,
     sprintKeyPrefix: "SPR",
@@ -523,7 +524,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     executionMode: "VIRTUAL",
     virtualWorkerProvider: DEFAULT_PROVIDER_CONFIG_IDS.codex,
     model: "gpt-5.5",
-    maxConcurrency: 1,
+    maxConcurrency: 100,
     timeoutSeconds: 300,
   },
   agents: {

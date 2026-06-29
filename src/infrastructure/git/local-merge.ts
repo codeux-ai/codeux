@@ -123,6 +123,37 @@ export async function findRecoverableWorkerBranch(args: {
  * tree per merge. This matters because the host repo is the user's own working
  * directory; the orchestrator must not silently leave it on a different branch.
  */
+/**
+ * Deletes a local branch after its work has been merged. Never deletes the branch that is currently
+ * checked out (git refuses anyway) and swallows errors — branch cleanup is best-effort and must
+ * never fail a merge. Returns true when the branch was removed.
+ */
+export async function deleteBranchLocally(args: {
+  repoPath: string;
+  branch: string;
+  runner?: LocalMergeRunner;
+}): Promise<boolean> {
+  const branch = args.branch.trim();
+  if (!branch) {
+    return false;
+  }
+  const runner = args.runner ?? defaultRunner;
+  try {
+    const current = await runner("git", ["rev-parse", "--abbrev-ref", "HEAD"], args.repoPath);
+    if (current.stdout.trim() === branch) {
+      return false;
+    }
+  } catch {
+    // If HEAD cannot be resolved, fall through and let the delete attempt decide.
+  }
+  try {
+    await runner("git", ["branch", "-D", branch], args.repoPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function mergeBranchLocally(args: {
   repoPath: string;
   targetBranch: string;

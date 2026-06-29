@@ -6,6 +6,28 @@ import { TaskComposer } from "../TaskComposer.js";
 import * as matchers from '@testing-library/jest-dom/matchers';
 expect.extend(matchers);
 
+vi.mock("gsap", () => ({
+  default: {
+    context: (cb: () => void) => {
+      cb();
+      return { revert: vi.fn() };
+    },
+    fromTo: vi.fn(),
+    killTweensOf: vi.fn(),
+    set: vi.fn(),
+    timeline: vi.fn(() => {
+      const timeline = {
+        fromTo: vi.fn(() => timeline),
+        to: vi.fn(() => timeline),
+      };
+      return timeline;
+    }),
+    to: vi.fn((target, options) => {
+      options?.onComplete?.();
+    }),
+  },
+}));
+
 describe("TaskComposer Accessibility", () => {
   const dummySprints = [{ id: "1", name: "Sprint 1", repositoryId: "r1", sprintMarkdownId: "m1", status: "active", createdAt: "now", updatedAt: "now" }];
   const dummyTasks: any[] = [

@@ -3,6 +3,25 @@ import { useEffect, useRef } from "preact/hooks";
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+function getVisibleFocusableElements(container: HTMLElement): HTMLElement[] {
+  const elements = Array.from(
+    container.querySelectorAll(FOCUSABLE_SELECTOR)
+  ) as HTMLElement[];
+
+  return elements.filter((el) => {
+    if (el.hasAttribute("disabled")) return false;
+    if (el.getAttribute("aria-hidden") === "true") return false;
+    if (el.hasAttribute("inert")) return false;
+
+    // jsdom doesn't fully support computed styles in the same way, but it's good practice
+    const style = window.getComputedStyle(el);
+    if (style.display === "none" || style.visibility === "hidden") return false;
+
+    return true;
+  });
+}
+
+
 export interface FocusTrapOptions {
   onClose?: () => void;
   initialFocusRef?: { current: HTMLElement | null };
@@ -36,16 +55,20 @@ export function useFocusTrap(
       if (!containerRef.current) return;
 
       if (initialFocusRef?.current) {
-        initialFocusRef.current.focus();
+        initialFocusRef.current.focus({ preventScroll: true });
         return;
       }
 
       const autoFocusTarget = containerRef.current.querySelector("[autofocus]") as HTMLElement | null;
-      const focusableElements = Array.from(
-        containerRef.current.querySelectorAll(FOCUSABLE_SELECTOR)
-      ) as HTMLElement[];
+      const focusableElements = getVisibleFocusableElements(containerRef.current);
       const initialTarget = autoFocusTarget ?? focusableElements[0];
-      initialTarget?.focus();
+
+      if (initialTarget) {
+        initialTarget.focus({ preventScroll: true });
+      } else {
+        containerRef.current.tabIndex = -1;
+        containerRef.current.focus({ preventScroll: true });
+      }
     }, 50);
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -59,12 +82,12 @@ export function useFocusTrap(
       if (event.key === "Tab") {
         if (!containerRef.current) return;
 
-        const focusableElements = Array.from(
-          containerRef.current.querySelectorAll(FOCUSABLE_SELECTOR)
-        ) as HTMLElement[];
+        const focusableElements = getVisibleFocusableElements(containerRef.current);
 
         if (focusableElements.length === 0) {
           event.preventDefault();
+          containerRef.current.tabIndex = -1;
+          containerRef.current.focus({ preventScroll: true });
           return;
         }
 
@@ -74,16 +97,16 @@ export function useFocusTrap(
         // If focus escapes the modal, force it back
         if (!containerRef.current.contains(document.activeElement)) {
           event.preventDefault();
-          first.focus();
+          first.focus({ preventScroll: true });
           return;
         }
 
         if (event.shiftKey && document.activeElement === first) {
           event.preventDefault();
-          last.focus();
+          last.focus({ preventScroll: true });
         } else if (!event.shiftKey && document.activeElement === last) {
           event.preventDefault();
-          first.focus();
+          first.focus({ preventScroll: true });
         }
       }
     };
@@ -98,7 +121,7 @@ export function useFocusTrap(
         const trigger = triggerRef.current;
         window.setTimeout(() => {
           if (trigger.isConnected) {
-            trigger.focus();
+            trigger.focus({ preventScroll: true });
           }
         }, 0);
       }

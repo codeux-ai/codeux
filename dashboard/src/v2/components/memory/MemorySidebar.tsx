@@ -26,8 +26,8 @@ const MemorySidebar = ({ nodes, onSelectNode }: MemorySidebarProps) => {
 
   return (
     <div
-      className={`relative h-full bg-void-900 border-l border-void-700 transition-all duration-300 ease-in-out flex flex-col ${
-        isExpanded ? "w-80" : "w-0"
+      className={`relative w-full lg:h-full bg-void-900 lg:border-l lg:border-t-0 border-t border-void-700 transition-all duration-300 ease-in-out flex flex-col ${
+        isExpanded ? "h-[50vh] lg:w-80" : "h-0 lg:w-0"
       }`}
     >
       <style>
@@ -45,18 +45,18 @@ const MemorySidebar = ({ nodes, onSelectNode }: MemorySidebarProps) => {
       {/* Toggle Button */}
       <button
         onClick={toggleSidebar}
-        className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 flex h-10 w-5 items-center justify-center bg-void-800 border border-void-700 rounded-full text-void-300 hover:text-signal-500 hover:border-signal-500 transition-colors shadow-md focus:outline-none focus:ring-2 focus:ring-signal-500"
+        className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 lg:left-0 lg:top-1/2 lg:-translate-y-1/2 lg:-translate-x-1/2 z-10 flex h-5 w-10 lg:h-10 lg:w-5 items-center justify-center bg-void-800 border border-void-700 rounded-full text-void-300 hover:text-signal-500 hover:border-signal-500 transition-colors shadow-md focus:outline-none focus:ring-2 focus:ring-signal-500"
         aria-label={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
         aria-expanded={isExpanded}
       >
-        <span className="animate-pulse-arrow flex items-center justify-center">
+        <span className="animate-pulse-arrow flex items-center justify-center rotate-90 lg:rotate-0">
           {isExpanded ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
         </span>
       </button>
 
       {/* Content Area */}
       <div
-        className={`w-80 flex-1 flex flex-col transition-opacity duration-300 ${
+        className={`w-full lg:w-80 flex-1 flex flex-col transition-opacity duration-300 ${
           isExpanded ? "opacity-100" : "opacity-0 pointer-events-none overflow-hidden"
         }`}
       >

@@ -25,7 +25,8 @@ import { CollapsiblePanel } from "./components/ui/CollapsiblePanel.js";
 import { ExecutionTimelineProvider } from "../hooks/ExecutionTimelineContext.js";
 import { ExecutionTimeline } from "./components/ExecutionTimeline.js";
 import { AttentionLedger } from "./components/AttentionLedger.js";
-import { ConnectionRuntimePanel, ExecutionRuntimePanel } from "./components/live-session/ExecutionRuntimePanel.js";
+import { ExecutionRuntimePanel } from "./components/live-session/ExecutionRuntimePanel.js";
+import { InvocationFeedPanel } from "./components/live-session/InvocationFeedPanel.js";
 import { StatsHeader } from "./components/StatsHeader.js";
 import { IdleRuntimeState } from "./components/ui/IdleRuntimeState.js";
 import { SkeletonPanel } from "./components/layout/SkeletonLoader.js";
@@ -40,6 +41,7 @@ import { RuntimeEventFeed } from "./components/RuntimeEventFeed.js";
 import { GitCIStatusPanel } from "./components/GitCIStatusPanel.js";
 import { deriveLiveDurationDisplay } from "./lib/live-duration-display.js";
 import { useProjectData } from "./context/project-data.js";
+import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
 import { useReducedMotion } from "./hooks/use-reduced-motion.js";
 import { fetchAgentPresets } from "./lib/agent-preset-api.js";
 import type { AgentPreset } from "./types.js";
@@ -82,6 +84,8 @@ export const LiveSessionPage: FunctionComponent = () => {
     const contentRef = useRef<HTMLDivElement>(null);
     const prefersReducedMotion = useReducedMotion();
     const { selectedProjectId, loading: projectsLoading } = useProjectData();
+    const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProjectId);
+    const sprintKeyPrefix = effectiveSettings?.settings?.git?.sprintKeyPrefix || "SPR";
     const {
         error,
         execution,
@@ -120,7 +124,7 @@ export const LiveSessionPage: FunctionComponent = () => {
     }, [selectedProjectId]);
 
     const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
-    const { feedback, setPending, setSuccess, setError, clearFeedback } = useActionFeedback();
+    const { feedback, setPending, setSuccess, setError, clearFeedback, clearError } = useActionFeedback();
 
     const {
         rerunningIds,
@@ -209,6 +213,16 @@ export const LiveSessionPage: FunctionComponent = () => {
             ? execution.sprintRuns.filter((r) => r.sprintId === sprintScopeId)
             : execution.sprintRuns;
     }, [execution.sprintRuns, sprintScopeId, sprintScopeReady]);
+
+    const sprintInvocations = useMemo(() => {
+        if (!sprintScopeReady) {
+            return [];
+        }
+        const invocations = execution.recentInvocations ?? [];
+        return sprintScopeId
+            ? invocations.filter((invocation) => invocation.sprintId === sprintScopeId)
+            : invocations;
+    }, [execution.recentInvocations, sprintScopeId, sprintScopeReady]);
 
     const visibleTasksWithLiveActivities = useMemo(() => (
         tasksWithLiveActivities.map((task) => projectLiveTask(task, sprintDispatches, sprintEvents))
@@ -328,6 +342,13 @@ export const LiveSessionPage: FunctionComponent = () => {
                 ? { ...task, status: "COMPLETED" as const }
                 : task;
             const latestDispatch = pickLatestTaskDispatch(task, sprintDispatches);
+            const taskIdentity = new Set([taskRuntimeId, task.id, task.record_id].filter(Boolean));
+            const taskInvocations = sprintInvocations.filter((invocation) => (
+                (invocation.taskId && taskIdentity.has(invocation.taskId))
+                || (invocation.taskKey && taskIdentity.has(invocation.taskKey))
+                || (latestDispatch?.id && invocation.dispatchId === latestDispatch.id)
+                || (latestDispatch?.taskRunId && invocation.taskRunId === latestDispatch.taskRunId)
+            ));
             const taskEvents = (task.record_id && taskEventsByRecordId.byRecordId.get(task.record_id))
                 || taskEventsByRecordId.byTaskKey.get(task.id)
                 || EMPTY_RUNTIME_EVENTS;
@@ -366,6 +387,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                 phase: taskPhase,
                 taskTiming: taskTimingMap.get(taskRuntimeId) || taskTimingMap.get(task.id) || null,
                 events: taskEvents,
+                invocations: taskInvocations,
                 isRerunning: rerunningIds.has(taskRuntimeId),
                 isForceCompleting: forceCompletePendingIds.has(taskRuntimeId),
                 forceCompleteError: forceCompleteErrorByTaskId.get(taskRuntimeId) || null,
@@ -377,7 +399,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                 } : null,
             };
         })
-    ), [filteredTasks, forceCompleteErrorByTaskId, forceCompletePendingIds, optimisticallyCompletedTaskIds, rerunningIds, sprintDispatches, taskEventsByRecordId, taskTimingMap]);
+    ), [sprintInvocations, filteredTasks, forceCompleteErrorByTaskId, forceCompletePendingIds, optimisticallyCompletedTaskIds, rerunningIds, sprintDispatches, taskEventsByRecordId, taskTimingMap]);
 
     const handleEditTask = (task: Subtask): void => {
         const search = new URLSearchParams();
@@ -439,7 +461,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                 error={error}
             />
 
-            <ActionFeedbackRegion status={feedback.status} message={feedback.message} onDismiss={clearFeedback} />
+            <ActionFeedbackRegion status={feedback.status} message={feedback.message} onDismiss={clearFeedback} clearError={clearError} />
 
             <StatsHeader
                 headerView={headerView}
@@ -488,12 +510,30 @@ export const LiveSessionPage: FunctionComponent = () => {
             <SectionDivider label="Task Pipeline" />
 
             {/* ── Filter Strip ────────────────────────────────────────── */}
-            <div className="-mt-8 flex gap-1 p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl w-fit">
-                {TASK_FILTERS.map((filter) => (
+            <div className="-mt-8 flex gap-1 p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl w-fit" role="tablist" aria-label="Task status filters">
+                {TASK_FILTERS.map((filter, index) => (
                     <button
                         key={filter}
+                        role="tab"
+                        aria-selected={activeFilter === filter}
+                        tabIndex={activeFilter === filter ? 0 : -1}
                         onClick={() => setFilter(filter)}
-                        aria-pressed={activeFilter === filter}
+                        onKeyDown={(e) => {
+                            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                                e.preventDefault();
+                                const nextFilter = TASK_FILTERS[(index + 1) % TASK_FILTERS.length];
+                                setFilter(nextFilter);
+                                const nextTab = e.currentTarget.parentElement?.children[(index + 1) % TASK_FILTERS.length] as HTMLElement;
+                                nextTab?.focus();
+                            } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                                e.preventDefault();
+                                const prevIndex = index - 1 < 0 ? TASK_FILTERS.length - 1 : index - 1;
+                                const prevFilter = TASK_FILTERS[prevIndex];
+                                setFilter(prevFilter);
+                                const prevTab = e.currentTarget.parentElement?.children[prevIndex] as HTMLElement;
+                                prevTab?.focus();
+                            }
+                        }}
                         className={`text-xs font-semibold tracking-wide px-4 py-1.5 rounded-lg
                                    transition-all duration-200 flex items-center gap-2
                                    ${activeFilter === filter
@@ -514,10 +554,10 @@ export const LiveSessionPage: FunctionComponent = () => {
             </div>
 
             {/* ── Main Content Grid ───────────────────────────────────── */}
-            <div ref={contentRef} className="grid grid-cols-1 xl:grid-cols-12 gap-10 xl:gap-16">
+            <div ref={contentRef} className="grid grid-cols-1 xl:grid-cols-12 gap-6 md:gap-10 xl:gap-16">
 
                 {/* Task cards */}
-                <div className="xl:col-span-8 flex flex-col gap-5">
+                <div className="xl:col-span-8 flex flex-col gap-5 min-w-0">
                     {!hasSprintContext && !initialLoadComplete ? (
                         /* Initial load in progress — render nothing to avoid flashing idle placeholder */
                         null
@@ -541,7 +581,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                             </div>
                         </div>
                     ) : (
-                        taskCardItems.map(({ key, task, phase, taskTiming, events, isRerunning, isForceCompleting, forceCompleteError, dispatchInfo }) => (
+                        taskCardItems.map(({ key, task, phase, taskTiming, events, invocations, isRerunning, isForceCompleting, forceCompleteError, dispatchInfo }) => (
                             <LiveTaskCard
                                 key={key}
                                 task={task}
@@ -549,6 +589,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                                 phase={phase}
                                 taskTiming={taskTiming}
                                 events={events}
+                                invocations={invocations}
                                 onRerun={handleRerun}
                                 onEdit={handleEditTask}
                                 onForceComplete={handleForceCompleteTask}
@@ -563,7 +604,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                 </div>
 
                 {/* Sidebar */}
-                <div className="xl:col-span-4 flex flex-col gap-5">
+                <div className="xl:col-span-4 flex flex-col gap-5 min-w-0">
                     <ExecutionTimelineProvider
                         execution={execution}
                         onOrchestrateSprint={handleOrchestrateSprint}
@@ -578,10 +619,15 @@ export const LiveSessionPage: FunctionComponent = () => {
                         onDismissAttentionItem={handleDismissAttentionItem}
                         pendingActionIds={pendingActionIds}
                     >
-                        <ConnectionRuntimePanel />
+                        <InvocationFeedPanel
+                            collapsible
+                            defaultOpen={hasSprintContext}
+                            invocations={sprintInvocations}
+                            sprintKeyPrefix={sprintKeyPrefix}
+                        />
+                        <ExecutionTimeline collapsible defaultOpen={hasSprintContext} />
                         <GitCIStatusPanel status={gitStatus} error={gitStatusError} />
                         <AttentionLedger collapsible defaultOpen={hasSprintContext} />
-                        <ExecutionTimeline collapsible defaultOpen={hasSprintContext} />
                         <ExecutionRuntimePanel
                             collapsible
                             defaultOpen={hasSprintContext}

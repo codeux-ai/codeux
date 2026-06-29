@@ -105,7 +105,10 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
       <span className="sr-only">
         From {senderName} at {createdAtLabel}. {displayStatus ? `Status: ${displayStatus}.` : ""} {errorLabel ? `Error: ${errorLabel}.` : ""}
       </span>
-      <div className={`flex max-w-[760px] items-start w-full gap-3 ${fromUser || fromTool ? "flex-row-reverse" : "flex-row"}`}>
+      <span className="sr-only">
+        From {senderName} at {createdAtLabel}. {displayStatus ? `Status: ${displayStatus}.` : ""} {errorLabel ? `Error: ${errorLabel}.` : ""}
+      </span>
+      <div className={`flex min-w-0 max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-[760px] items-start w-full gap-3 ${fromUser || fromTool ? "flex-row-reverse" : "flex-row"}`}>
         <div className="mt-1 shrink-0 w-8 h-8 flex items-center justify-center">
           <ChatAvatar
             role={role}
@@ -150,7 +153,7 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
           </div>
 
           {/* Message Body */}
-          <div className="prose prose-sm max-w-none text-[14px] leading-7 text-slate-800 dark:text-slate-200 prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit break-words overflow-wrap-anywhere min-w-0"
+          <div className="prose prose-sm max-w-none text-[14px] leading-7 text-slate-800 dark:text-slate-200 prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit prose-pre:overflow-x-auto prose-code:overflow-x-auto break-words overflow-wrap-anywhere min-w-0"
             dangerouslySetInnerHTML={{
               __html: renderMarkdown(sanitizeInvocationOutputText(message.contentMarkdown || "*(No message content)*")),
             }}

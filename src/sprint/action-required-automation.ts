@@ -71,6 +71,7 @@ const getSemiAutoDisabledReason = (state: string | undefined, settings: Automati
 interface LatestAgentRequest {
   message: string;
   identity: string;
+  index: number;
 }
 
 const toStringField = (value: unknown): string => typeof value === "string" ? value.trim() : "";
@@ -102,7 +103,11 @@ const getActivityMessage = (entry: Record<string, unknown>): string => {
   if (progressDescription.length > 0) {
     return progressDescription;
   }
-  return toStringField(entry.description);
+  const description = toStringField(entry.description);
+  if (description.length > 0) {
+    return description;
+  }
+  return toStringField(entry.preview);
 };
 
 const getLatestAgentRequest = (task: Subtask): LatestAgentRequest => {
@@ -112,16 +117,40 @@ const getLatestAgentRequest = (task: Subtask): LatestAgentRequest => {
     if (isUserOriginatedActivity(entry)) {
       continue;
     }
-    const message = getActivityMessage(entry);
+    const agentMessaged = entry.agentMessaged as Record<string, unknown> | undefined;
+    const message = toStringField(agentMessaged?.agentMessage);
     const identity = getActivityIdentity(entry);
-    if (message.length > 0 || identity.length > 0) {
-      return { message, identity };
+    if (message.length > 0) {
+      return { message, identity, index };
     }
   }
-  return { message: "", identity: "" };
+
+  for (let index = activities.length - 1; index >= 0; index -= 1) {
+    const entry = activities[index] as Record<string, unknown>;
+    if (isUserOriginatedActivity(entry)) {
+      continue;
+    }
+    const message = getActivityMessage(entry);
+    const identity = getActivityIdentity(entry);
+    if (message.length > 0) {
+      return { message, identity, index };
+    }
+  }
+  return { message: "", identity: "", index: -1 };
 };
 
 const normalizeAutomationMessage = (value: string): string => value.replace(/\s+/g, " ").trim();
+
+export const hasUserReplyAfterLatestAgentRequest = (task: Subtask): boolean => {
+  const activities = Array.isArray(task.activities) ? task.activities : [];
+  const latestRequest = getLatestAgentRequest(task);
+  if (latestRequest.index < 0) {
+    return false;
+  }
+  return activities.slice(latestRequest.index + 1).some((entry) =>
+    isUserOriginatedActivity(entry as Record<string, unknown>)
+  );
+};
 
 const buildClarificationDedupKey = (task: Subtask): string => {
   const latestRequest = getLatestAgentRequest(task);
@@ -145,6 +174,38 @@ const buildInterventionEventSuffix = (kind: string, sessionId: string, dedupKey:
 };
 
 const getInterventionStateKey = (sessionId: string, state: "clarification" | "paused"): string => `${state}:${sessionId}`;
+
+interface StoredInterventionKey {
+  key: string;
+  storedAtMs: number | null;
+}
+
+const parseStoredInterventionKey = (value: string | undefined): StoredInterventionKey | null => {
+  if (!value) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(value) as { key?: unknown; storedAtMs?: unknown };
+    if (typeof parsed.key === "string") {
+      return {
+        key: parsed.key,
+        storedAtMs: typeof parsed.storedAtMs === "number" && Number.isFinite(parsed.storedAtMs)
+          ? parsed.storedAtMs
+          : null,
+      };
+    }
+  } catch {
+    // Older in-memory callers stored the raw key string.
+  }
+  return { key: value, storedAtMs: null };
+};
+
+const serializeStoredInterventionKey = (key: string, storedAtMs: number): string => JSON.stringify({ key, storedAtMs });
+
+const resolveClarificationCooldownMs = (settings: AutomationInterventionsSettings): number => {
+  const seconds = Number(settings.clarificationCooldownSeconds);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 300_000;
+};
 
 const buildClarificationAutoReply = (task: Subtask, template: string): string => {
   const latestPrompt = getLatestAgentRequest(task).message;
@@ -208,6 +269,7 @@ export interface ApplyActionRequiredAutomationArgs {
     payload: Record<string, unknown>;
   }) => void;
   lastAutomatedInterventionKeys?: Map<string, string>;
+  now?: () => number;
 }
 
 export const applyActionRequiredAutomation = async (
@@ -295,20 +357,50 @@ export const applyActionRequiredAutomation = async (
       if (task.session_state === "AWAITING_USER_FEEDBACK") {
         const clarificationKey = buildClarificationDedupKey(task);
         const clarificationStateKey = getInterventionStateKey(sessionId, "clarification");
-        const storedClarificationKey = args.lastAutomatedInterventionKeys?.get(clarificationStateKey);
-        if (storedClarificationKey === clarificationKey) {
+        const nowMs = args.now?.() ?? Date.now();
+        if (hasUserReplyAfterLatestAgentRequest(task)) {
+          task.status = "RUNNING";
+          task.intervention_owner = "AGENT";
+          task.intervention_hint = "Clarification reply has been sent; waiting for Jules to process the latest response.";
+          emitTaskEvent(task, "action_required_user_reply_pending", {
+            sessionId,
+            sessionState: task.session_state || null,
+            clarificationKeyPreview: clarificationKey.slice(0, 200),
+          }, buildInterventionEventSuffix("reply-pending", sessionId, clarificationKey));
+          continue;
+        }
+
+        const storedClarification = parseStoredInterventionKey(args.lastAutomatedInterventionKeys?.get(clarificationStateKey));
+        if (storedClarification?.key === clarificationKey) {
+          const elapsedMs = storedClarification.storedAtMs === null ? 0 : nowMs - storedClarification.storedAtMs;
+          if (elapsedMs >= resolveClarificationCooldownMs(args.settings)) {
+            task.status = "BLOCKED";
+            task.intervention_owner = "HUMAN";
+            task.intervention_hint = "Automatic clarification reply did not clear the Jules waiting state; manual review is required.";
+            emitTaskEvent(task, "action_required_auto_reply_unresolved", {
+              sessionId,
+              sessionState: task.session_state || null,
+              elapsedMs,
+              clarificationKeyPreview: clarificationKey.slice(0, 200),
+            }, buildInterventionEventSuffix("unresolved-clarification", sessionId, clarificationKey));
+            reportText += `⚠️ **Clarification Still Blocked:** Task \`${task.id}\` remained waiting after an automated reply.\n`;
+            continue;
+          }
+
           task.status = "RUNNING";
           task.intervention_owner = "AGENT";
           task.intervention_hint = "Latest clarification request was already answered automatically; waiting for Jules to resume.";
           emitTaskEvent(task, "action_required_auto_reply_skipped_duplicate", {
             sessionId,
             sessionState: task.session_state || null,
+            elapsedMs,
+            hasUserReply: false,
             clarificationKeyPreview: clarificationKey.slice(0, 200),
           }, buildInterventionEventSuffix("duplicate-clarification", sessionId, clarificationKey));
           continue;
         }
 
-        args.lastAutomatedInterventionKeys?.set(clarificationStateKey, clarificationKey);
+        args.lastAutomatedInterventionKeys?.set(clarificationStateKey, serializeStoredInterventionKey(clarificationKey, nowMs));
 
         let reply: string;
         if (args.settings.autoAnswerClarificationMode === "WORKER" && args.generateWorkerClarificationReply) {
@@ -373,8 +465,9 @@ export const applyActionRequiredAutomation = async (
       if (task.session_state === "AWAITING_USER_FEEDBACK") {
         const clarificationStateKey = getInterventionStateKey(sessionId, "clarification");
         const clarificationKey = buildClarificationDedupKey(task);
-        if (args.lastAutomatedInterventionKeys?.get(clarificationStateKey) === clarificationKey) {
-          args.lastAutomatedInterventionKeys.delete(clarificationStateKey);
+        const storedClarification = parseStoredInterventionKey(args.lastAutomatedInterventionKeys?.get(clarificationStateKey));
+        if (storedClarification?.key === clarificationKey) {
+          args.lastAutomatedInterventionKeys?.delete(clarificationStateKey);
         }
       }
       reportText += `⚠️ **Auto-Intervention Failed:** Task \`${task.id}\` could not be unblocked automatically.\n`;

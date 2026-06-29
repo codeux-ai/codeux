@@ -263,9 +263,28 @@ const DagNode = memo(({ node, dispatch, onNodeClick }: { node: SprintDagNodeMode
   const mergeLabel = getMergeLabel(node.task);
   const phaseLabel = node.phase === "CODING_COMPLETED" ? "Coding Done" : tone.label;
 
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const [tooltipSide, setTooltipSide] = useState<"right" | "left">("right");
+  const [isHovered, setIsHovered] = useState(false);
+
+  useLayoutEffect(() => {
+    if (isHovered && tooltipRef.current) {
+      const rect = tooltipRef.current.getBoundingClientRect();
+      if (rect.right > window.innerWidth - 16) {
+        setTooltipSide("left");
+      }
+    } else if (!isHovered) {
+      setTooltipSide("right");
+    }
+  }, [isHovered]);
+
   return (
     <div
       className={`group/dag-node pointer-events-auto absolute z-10 cursor-pointer hover:z-50 focus-within:z-50 ${tone.glow} ${tone.dim}`} onClick={() => onNodeClick?.(node)}
+      onPointerEnter={() => setIsHovered(true)}
+      onPointerLeave={() => setIsHovered(false)}
+      onFocus={() => setIsHovered(true)}
+      onBlur={() => setIsHovered(false)}
       style={{
         left: `${node.x}px`,
         top: `${node.y}px`,
@@ -290,7 +309,8 @@ const DagNode = memo(({ node, dispatch, onNodeClick }: { node: SprintDagNodeMode
         )}
 
         <div
-          className="pointer-events-none absolute left-[calc(100%+14px)] top-0 z-50 w-[22rem] max-w-[calc(100vw-2rem)] translate-x-2 scale-[0.98] overflow-hidden rounded-[1.45rem] border border-black/[0.08] bg-white/98 p-4 text-slate-700 opacity-0 drop-shadow-[0_18px_34px_rgba(15,23,42,0.18)] backdrop-blur-sm transition-all duration-180 ease-out group-hover/dag-node:pointer-events-auto group-hover/dag-node:translate-x-0 group-hover/dag-node:scale-100 group-hover/dag-node:opacity-100 group-focus-within/dag-node:pointer-events-auto group-focus-within/dag-node:translate-x-0 group-focus-within/dag-node:scale-100 group-focus-within/dag-node:opacity-100 dark:border-white/[0.09] dark:bg-void-800/98 dark:text-slate-200 dark:drop-shadow-[0_22px_44px_rgba(0,0,0,0.42)]"
+          ref={tooltipRef}
+          className={`pointer-events-none absolute ${tooltipSide === "right" ? "left-[calc(100%+14px)]" : "right-[calc(100%+14px)] left-auto"} top-0 z-50 w-[22rem] max-w-[calc(100vw-2rem)] ${tooltipSide === "right" ? "translate-x-2" : "-translate-x-2"} scale-[0.98] overflow-hidden rounded-[1.45rem] border border-black/[0.08] bg-white/98 p-4 text-slate-700 opacity-0 drop-shadow-[0_18px_34px_rgba(15,23,42,0.18)] backdrop-blur-sm transition-all duration-180 ease-out group-hover/dag-node:pointer-events-auto group-hover/dag-node:translate-x-0 group-hover/dag-node:scale-100 group-hover/dag-node:opacity-100 group-focus-within/dag-node:pointer-events-auto group-focus-within/dag-node:translate-x-0 group-focus-within/dag-node:scale-100 group-focus-within/dag-node:opacity-100 dark:border-white/[0.09] dark:bg-void-800/98 dark:text-slate-200 dark:drop-shadow-[0_22px_44px_rgba(0,0,0,0.42)]`}
           role="tooltip"
         >
           {renderDagNodeTooltipContent(node)}
@@ -341,7 +361,7 @@ const DagNode = memo(({ node, dispatch, onNodeClick }: { node: SprintDagNodeMode
                 style={{ backgroundColor: tone.accent, boxShadow: `0 0 18px ${tone.accent}70` }}
               >
                 {(node.phase === "RUNNING" || node.phase === "CODING_COMPLETED") && (
-                  <span className="absolute inset-0 rounded-full bg-current opacity-50 animate-ping" />
+                  <span className="absolute inset-0 rounded-full bg-current opacity-50 motion-safe:animate-ping" />
                 )}
               </div>
             </div>
@@ -566,7 +586,7 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
             </div>
             <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-signal-600 dark:text-signal-300">
-                <span className="h-2 w-2 rounded-full bg-signal-500 animate-pulse" />
+                <span className="h-2 w-2 rounded-full bg-signal-500 motion-safe:animate-pulse" />
                 Running
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-cyan-600 dark:text-cyan-300">
