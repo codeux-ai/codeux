@@ -217,6 +217,33 @@ describe("ProviderExecutionService", () => {
     );
   });
 
+  it("skips the message rewrite when a telemetry tick repeats the same conversation", async () => {
+    const sameConversation = [
+      { kind: "user", text: "Do the task." },
+      { kind: "assistant", text: "Working..." },
+    ];
+    const grownConversation = [
+      ...sameConversation,
+      { kind: "tool_call", text: "", toolName: "read_file", toolCallId: "c1", toolArguments: "{}" },
+    ];
+    providerRunner.runProvider.mockImplementation(async (opts: any) => {
+      const tick = (conversation: any[], transcriptText: string) => opts.onTelemetry({
+        ...mockResult.usageTelemetry,
+        transcriptText,
+        conversation,
+      });
+      tick(sameConversation, "abc");   // first state — should write
+      tick(sameConversation, "abc");   // identical — should be skipped
+      tick(grownConversation, "abcd"); // changed — should write again
+      return mockResult;
+    });
+
+    await service.executeProvider(defaultArgs);
+
+    // Two distinct states persisted (the duplicate middle tick was skipped), not three.
+    expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledTimes(2);
+  });
+
   it("allows structured callers to defer invocation completion and assistant transcript writes", async () => {
     const textMockResult = { ...mockResult, text: "text output" };
     providerRunner.runProviderForText.mockResolvedValue(textMockResult);
