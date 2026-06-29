@@ -211,6 +211,16 @@ export const LiveSessionPage: FunctionComponent = () => {
             : execution.sprintRuns;
     }, [execution.sprintRuns, sprintScopeId, sprintScopeReady]);
 
+    const sprintInvocations = useMemo(() => {
+        if (!sprintScopeReady) {
+            return [];
+        }
+        const invocations = execution.recentInvocations ?? [];
+        return sprintScopeId
+            ? invocations.filter((invocation) => invocation.sprintId === sprintScopeId)
+            : invocations;
+    }, [execution.recentInvocations, sprintScopeId, sprintScopeReady]);
+
     const visibleTasksWithLiveActivities = useMemo(() => (
         tasksWithLiveActivities.map((task) => projectLiveTask(task, sprintDispatches, sprintEvents))
     ), [sprintDispatches, sprintEvents, tasksWithLiveActivities]);
@@ -606,7 +616,11 @@ export const LiveSessionPage: FunctionComponent = () => {
                         onDismissAttentionItem={handleDismissAttentionItem}
                         pendingActionIds={pendingActionIds}
                     >
-                        <InvocationFeedPanel collapsible defaultOpen={hasSprintContext} />
+                        <InvocationFeedPanel
+                            collapsible
+                            defaultOpen={hasSprintContext}
+                            invocations={sprintInvocations}
+                        />
                         <ExecutionTimeline collapsible defaultOpen={hasSprintContext} />
                         <GitCIStatusPanel status={gitStatus} error={gitStatusError} />
                         <AttentionLedger collapsible defaultOpen={hasSprintContext} />

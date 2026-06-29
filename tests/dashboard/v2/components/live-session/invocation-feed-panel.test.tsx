@@ -123,4 +123,21 @@ describe("InvocationFeedPanel", () => {
 
     expect(screen.getByText("No invocation records yet.")).toBeInTheDocument();
   });
+
+  it("renders explicitly scoped invocations instead of the full snapshot list", () => {
+    vi.mocked(useExecutionTimeline).mockReturnValue({
+      execution: createSnapshot([
+        createInvocation({ id: "xi-raw", provider: "raw-provider" }),
+      ]),
+    } as never);
+
+    render(<InvocationFeedPanel invocations={[
+      createInvocation({ id: "xi-scoped", provider: "scoped-provider" }),
+    ]} />);
+
+    expect(screen.getByText("scoped-provider")).toBeInTheDocument();
+    expect(screen.queryByText("raw-provider")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open transcript for Task Coding" }))
+      .toHaveAttribute("href", "/chat?mode=invocations&invocation=xi-scoped");
+  });
 });

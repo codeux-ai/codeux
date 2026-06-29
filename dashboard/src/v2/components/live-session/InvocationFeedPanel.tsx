@@ -104,10 +104,12 @@ const InvocationFeedRow: FunctionComponent<{
 export const InvocationFeedPanel: FunctionComponent<{
   collapsible?: boolean;
   defaultOpen?: boolean;
+  invocations?: ExecutionInvocationRecord[];
   sprintKeyPrefix?: string;
 }> = memo(({
   collapsible = false,
   defaultOpen = true,
+  invocations: scopedInvocations,
   sprintKeyPrefix = "SPR",
 }) => {
   const { execution: snapshot } = useExecutionTimeline();
@@ -115,8 +117,8 @@ export const InvocationFeedPanel: FunctionComponent<{
   const contentId = useId();
 
   const invocations = useMemo(
-    () => snapshot?.recentInvocations ?? [],
-    [snapshot?.recentInvocations],
+    () => scopedInvocations ?? snapshot?.recentInvocations ?? [],
+    [scopedInvocations, snapshot?.recentInvocations],
   );
 
   const runningCount = useMemo(

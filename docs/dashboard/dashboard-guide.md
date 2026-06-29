@@ -417,6 +417,7 @@ Legacy runtime:
 - The selected-project execution snapshot now keeps the full task-dispatch and task-run event history for the active or most recent sprint run, so completed tasks in Live view keep their runtime feed and stage timings visible even after later tasks start
 - The execution runtime panel can now start or resume sprint orchestration, pause or cancel sprint runs, cancel queued dispatches, and retry terminal dispatches
 - The Live sidebar now renders `Invocation Feed`, `Runtime Timeline`, `Git / CI / PR`, `Attention Queue`, and `Execution Runtime` as separate standalone cards under the shared execution timeline context, with the invocation feed first and runtime timeline second while keeping the execution runtime card focused on runs and dispatches
+- The Live sidebar invocation feed is scoped to the selected sprint when a sprint is selected, while still falling back to project-wide recent invocations when no sprint context exists
 - The Live page now keeps the Git/CI/PR card in a dedicated `GitCIStatusPanel` component so the page shell stays focused on wiring runtime state, controls, and layout
 - Live task stats, filter counts, the active filtered task list, and per-card runtime payloads are memoized from the selected project's runtime snapshot so high-frequency realtime updates do not repeatedly recompute unchanged projections
 - Live task cards, the DAG, and timing summaries now render from the same projected task model:
