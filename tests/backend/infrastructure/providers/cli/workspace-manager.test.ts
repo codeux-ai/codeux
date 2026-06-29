@@ -198,6 +198,85 @@ describe("WorkspaceManager", () => {
     ]);
   });
 
+  it("seeds only the requested branch refs instead of every ref", async () => {
+    vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
+      if (args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        return { ok: true, stdout: "/repo/project\n", stderr: "" } as any;
+      }
+      if (args[0] === "docker" && args[1] === "volume" && args[2] === "inspect") {
+        throw new Error("missing");
+      }
+      if (args[0] === "git" && args[1] === "remote") {
+        return { ok: true, stdout: "git@github.com:example/repo.git\n", stderr: "" } as any;
+      }
+      if (args[0] === "show-ref" && args.includes("refs/remotes/origin/feature/task-1")) {
+        return { ok: true, stdout: "", stderr: "" } as any;
+      }
+      if (args[0] === "show-ref") {
+        throw new Error("missing ref");
+      }
+      return { ok: true, stdout: "", stderr: "" } as any;
+    });
+
+    await manager.createSnapshotWorkspace("/repo/project", "session-1", { branch: "feature/task-1" });
+
+    const bundlePath = path.join("/tmp/code-ux-bundle-123", "repo.bundle");
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "git",
+      ["bundle", "create", bundlePath, "refs/remotes/origin/feature/task-1"],
+      "/repo/project",
+    );
+    expect(runCommandStrict).not.toHaveBeenCalledWith(
+      "git",
+      ["bundle", "create", bundlePath, "--all"],
+      "/repo/project",
+    );
+  });
+
+  it("falls back to a full seed when the targeted checkout fails", async () => {
+    let checkoutAttempts = 0;
+    vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
+      if (args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        return { ok: true, stdout: "/repo/project\n", stderr: "" } as any;
+      }
+      if (args[0] === "git" && args[1] === "remote") {
+        return { ok: true, stdout: "git@github.com:example/repo.git\n", stderr: "" } as any;
+      }
+      if (args[0] === "show-ref" && args.includes("refs/heads/feature/task-1")) {
+        return { ok: true, stdout: "", stderr: "" } as any;
+      }
+      if (args[0] === "show-ref") {
+        throw new Error("missing ref");
+      }
+      // The in-volume checkout (docker run --entrypoint git ... checkout) fails the first time,
+      // which should trigger a full re-seed + retry.
+      if (command === "docker" && args.includes("--entrypoint") && args.includes("checkout")) {
+        checkoutAttempts += 1;
+        if (checkoutAttempts === 1) {
+          throw new Error("checkout failed: missing object");
+        }
+        return { ok: true, stdout: "", stderr: "" } as any;
+      }
+      return { ok: true, stdout: "", stderr: "" } as any;
+    });
+
+    await manager.createSnapshotWorkspace("/repo/project", "session-1", { branch: "feature/task-1" });
+
+    const bundlePath = path.join("/tmp/code-ux-bundle-123", "repo.bundle");
+    // First a targeted seed, then a full (--all) re-seed after the checkout failure.
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "git",
+      ["bundle", "create", bundlePath, "refs/heads/feature/task-1"],
+      "/repo/project",
+    );
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "git",
+      ["bundle", "create", bundlePath, "--all"],
+      "/repo/project",
+    );
+    expect(checkoutAttempts).toBe(2);
+  });
+
   it("falls back to the repository HEAD branch when no snapshot branch is requested", async () => {
     vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
       if (args[0] === "rev-parse" && args[1] === "--show-toplevel") {
