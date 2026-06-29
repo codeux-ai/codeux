@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, useMemo, useCallback } fr
 import gsap from "gsap";
 import {
     Clock, ChevronDown, ChevronRight, Eye, EyeOff,
-    FileText, RotateCcw, GitPullRequest, ExternalLink, Timer, CheckCheck, PencilLine,
+    FileText, RotateCcw, GitPullRequest, ExternalLink, Timer, CheckCheck, PencilLine, Cpu, MessageSquareText,
 } from "lucide-preact";
 
 
@@ -12,7 +12,8 @@ import { MARKDOWN_PROSE_CLASS } from "./ui/MarkdownEditorField.js";
 import { TaskStagePills } from "./SprintStatsDeck.js";
 import { RuntimeEventFeed } from "./RuntimeEventFeed.js";
 import { renderMarkdown } from "../../lib/markdown.js";
-import type { Subtask, ExecutionRuntimeEventSummary } from "../../types.js";
+import { formatTime } from "../../lib/time.js";
+import type { Subtask, ExecutionRuntimeEventSummary, ExecutionInvocationRecord } from "../../types.js";
 import {
     MERGE_INDICATOR_CFG,
     getTaskCfg,
@@ -29,6 +30,7 @@ import { useReducedMotion } from "../hooks/use-reduced-motion.js";
 import { AgentSelectAvatarIcon } from "./agents/AgentSelectAvatarIcon.js";
 import { SprintReviewBadge } from "./sprints/SprintReviewBadge.js";
 import { getSafeUrl } from "../lib/safe-url.js";
+import { formatInvocationDuration, formatInvocationPurpose } from "./chat/invocation-display.js";
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 
@@ -140,6 +142,7 @@ export interface LiveTaskCardProps {
     phase?: TaskProgressPhase | null;
     taskTiming?: LiveTaskTimingSummary | null;
     events?: ExecutionRuntimeEventSummary[];
+    invocations?: ExecutionInvocationRecord[];
     onRerun: (id: string, options?: RerunOptions) => void;
     onEdit: (task: Subtask) => void;
     onForceComplete: (task: Subtask) => void;
@@ -155,12 +158,106 @@ export interface LiveTaskCardProps {
     agentPreset?: { name: string; avatarConfig?: import("../types.js").AgentAvatarConfig } | null;
 }
 
+const INVOCATION_STATUS_DOT: Record<string, string> = {
+    running: "bg-signal-500 shadow-[0_0_8px_rgba(0,224,160,0.55)]",
+    completed: "bg-status-green",
+    failed: "bg-status-red shadow-[0_0_8px_rgba(227,0,15,0.35)]",
+    cancelled: "bg-slate-400",
+    paused: "bg-status-amber shadow-[0_0_8px_rgba(245,158,11,0.35)]",
+};
+
+const INVOCATION_STATUS_TEXT: Record<string, string> = {
+    running: "text-signal-500",
+    completed: "text-status-green",
+    failed: "text-status-red",
+    cancelled: "text-slate-400",
+    paused: "text-status-amber",
+};
+
+const buildInvocationHref = (invocationId: string): string => (
+    `/chat?mode=invocations&invocation=${encodeURIComponent(invocationId)}`
+);
+
+const shortenInvocationId = (value: string): string => value.slice(0, 8);
+
+const TaskInvocationRow: FunctionComponent<{ invocation: ExecutionInvocationRecord }> = memo(({ invocation }) => {
+    const purposeLabel = formatInvocationPurpose(invocation.type);
+    const activityAt = invocation.lastMessageAt || invocation.updatedAt || invocation.startedAt || invocation.createdAt;
+    const duration = formatInvocationDuration(invocation.startedAt || invocation.createdAt, invocation.finishedAt);
+    const tokenTotal = invocation.totalTokens ?? ((invocation.inputTokens ?? 0) + (invocation.outputTokens ?? 0));
+    const statusDot = INVOCATION_STATUS_DOT[invocation.status] || "bg-slate-400";
+    const statusText = INVOCATION_STATUS_TEXT[invocation.status] || "text-slate-500";
+
+    return (
+        <div className="rounded-xl border border-black/[0.04] bg-white/60 p-3 dark:border-white/[0.05] dark:bg-void-900/25">
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <div className="flex min-w-0 items-center gap-2">
+                        <span className={`h-2 w-2 shrink-0 rounded-full ${statusDot} ${invocation.status === "running" ? "animate-pulse" : ""}`} />
+                        <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
+                            {purposeLabel}
+                        </span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
+                        <span>{invocation.provider || "provider pending"}</span>
+                        <span>·</span>
+                        <span>{invocation.model || "model pending"}</span>
+                        <span>·</span>
+                        <span>{shortenInvocationId(invocation.id)}</span>
+                    </div>
+                </div>
+                <div className="shrink-0 text-right">
+                    <div className={`text-[10px] font-bold uppercase tracking-[0.14em] ${statusText}`}>
+                        {invocation.status}
+                    </div>
+                    <div className="mt-1 text-[10px] font-mono text-slate-400">
+                        {formatTime(activityAt)}
+                    </div>
+                </div>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1 rounded-md border border-black/[0.05] px-2 py-0.5 text-[10px] font-mono text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
+                    <MessageSquareText className="h-3 w-3" strokeWidth={2} />
+                    {invocation.messageCount}
+                </span>
+                {duration && (
+                    <span className="inline-flex items-center gap-1 rounded-md border border-black/[0.05] px-2 py-0.5 text-[10px] font-mono text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
+                        <Timer className="h-3 w-3" strokeWidth={2} />
+                        {duration}
+                    </span>
+                )}
+                {tokenTotal > 0 && (
+                    <span className="rounded-md border border-black/[0.05] px-2 py-0.5 text-[10px] font-mono text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
+                        {tokenTotal.toLocaleString()} tok
+                    </span>
+                )}
+                <a
+                    href={buildInvocationHref(invocation.id)}
+                    aria-label={`Open transcript for ${purposeLabel}`}
+                    className="inline-flex items-center gap-1 rounded-md border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:text-signal-400 dark:focus-visible:ring-offset-void-800"
+                >
+                    <ExternalLink className="h-3 w-3" strokeWidth={2} />
+                    Transcript
+                </a>
+            </div>
+
+            {invocation.lastErrorMessage && (
+                <p className="mt-2 line-clamp-2 text-[11px] leading-relaxed text-status-red">
+                    {invocation.lastErrorMessage}
+                </p>
+            )}
+        </div>
+    );
+});
+
 const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     task,
     allTasks,
     phase,
     taskTiming,
     events,
+    invocations = [],
     onRerun,
     onEdit,
     onForceComplete,
@@ -172,23 +269,26 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
 }) => {
     const [expanded, setExpanded] = useState(false);
     const [showFeed, setShowFeed] = useState(false);
+    const [showInvocations, setShowInvocations] = useState(false);
     const [showRerunModal, setShowRerunModal] = useState(false);
     const cardRef = useRef<HTMLDivElement>(null);
 
     const previewRef = useRef<HTMLDivElement>(null);
     const promptRef = useRef<HTMLDivElement>(null);
     const feedRef = useRef<HTMLDivElement>(null);
+    const invocationRef = useRef<HTMLDivElement>(null);
     const chevronRef = useRef<SVGSVGElement>(null);
     const flareRef = useRef<HTMLDivElement>(null);
     const prefersReducedMotion = useReducedMotion();
     const isMounted = useRef(false);
 
-    const isPreviewVisible = !expanded && !showFeed;
+    const isPreviewVisible = !expanded && !showFeed && !showInvocations;
 
     const taskPhase = phase ?? getTaskProgressPhase(task);
     const cfg = getTaskCfg(taskPhase);
     const StatusIcon = cfg.icon;
     const hasEventFeed = Boolean(events && events.length > 0);
+    const hasInvocations = invocations.length > 0;
     const mergeCfg = task.merge_indicator ? MERGE_INDICATOR_CFG[task.merge_indicator] : null;
     const sessionLabel = (task.session_id || task.session_name || "").replace(/^sessions\//, "");
 
@@ -222,11 +322,19 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     const handleToggleFeed = useCallback(() => {
         setShowFeed(prev => !prev);
         setExpanded(false);
+        setShowInvocations(false);
+    }, []);
+
+    const handleToggleInvocations = useCallback(() => {
+        setShowInvocations(prev => !prev);
+        setExpanded(false);
+        setShowFeed(false);
     }, []);
 
     const handleToggleExpand = useCallback(() => {
         setExpanded(prev => !prev);
         setShowFeed(false);
+        setShowInvocations(false);
     }, []);
 
     const previousTaskPhase = useRef(taskPhase);
@@ -266,6 +374,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
             gsap.set(previewRef.current, { height: isPreviewVisible ? "auto" : 0, opacity: isPreviewVisible ? 1 : 0 });
             gsap.set(promptRef.current, { height: expanded ? "auto" : 0, opacity: expanded ? 1 : 0 });
             gsap.set(feedRef.current, { height: showFeed ? "auto" : 0, opacity: showFeed ? 1 : 0 });
+            gsap.set(invocationRef.current, { height: showInvocations ? "auto" : 0, opacity: showInvocations ? 1 : 0 });
             gsap.set(chevronRef.current, { rotation: expanded ? 90 : 0 });
             isMounted.current = true;
             return;
@@ -293,7 +402,13 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
         } else {
             gsap.to(feedRef.current, { height: 0, opacity: 0, duration, ease });
         }
-    }, [expanded, showFeed, isPreviewVisible]);
+
+        if (showInvocations) {
+            gsap.to(invocationRef.current, { height: "auto", opacity: 1, duration, ease });
+        } else {
+            gsap.to(invocationRef.current, { height: 0, opacity: 0, duration, ease });
+        }
+    }, [expanded, showFeed, showInvocations, isPreviewVisible]);
 
     return (
         <div
@@ -424,6 +539,30 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                     </div>
                 </div>
 
+                {/* Task invocation feed */}
+                <div ref={invocationRef} className="overflow-hidden">
+                    <div className="mb-5 p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.04]">
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                                <Cpu className="w-3.5 h-3.5 text-signal-500" strokeWidth={2} />
+                                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Task Invocations</span>
+                            </div>
+                            <span className="text-[9px] font-mono text-slate-400">{invocations.length} total</span>
+                        </div>
+                        <div
+                            role="log"
+                            aria-label={`Invocation feed for task ${task.id}`}
+                            aria-live="polite"
+                            aria-relevant="additions text"
+                            className="max-h-80 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar"
+                        >
+                            {invocations.map((invocation) => (
+                                <TaskInvocationRow key={invocation.id} invocation={invocation} />
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
                 {/* Live session feed */}
                 <div ref={feedRef} className="overflow-hidden">
                     <div className="mb-5 p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.04]">
@@ -448,8 +587,24 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                 )}
 
                 {/* Action bar */}
-                <div className={`flex flex-wrap items-center justify-between gap-2 pt-4 border-t border-black/[0.04] dark:border-white/[0.04] transition-opacity duration-200 ${expanded || showFeed ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100 group-focus-within:opacity-100'}`}>
+                <div className={`flex flex-wrap items-center justify-between gap-2 pt-4 border-t border-black/[0.04] dark:border-white/[0.04] transition-opacity duration-200 ${expanded || showFeed || showInvocations ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100 group-focus-within:opacity-100'}`}>
                     <div className="flex flex-wrap items-center gap-2">
+                        {hasInvocations && (
+                            <button
+                                type="button"
+                                onClick={handleToggleInvocations}
+                                aria-label={`${showInvocations ? 'Hide' : 'Show'} invocation feed for task ${task.id}`}
+                                className={`flex items-center gap-1.5 px-3 py-2.5 min-h-[44px] rounded-xl text-[10px] font-bold uppercase tracking-[0.1em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800
+                                           transition-all duration-200 border
+                                           ${showInvocations
+                                               ? 'bg-signal-500/10 text-signal-500 border-signal-500/20 shadow-[0_0_12px_rgba(0,224,160,0.08)]'
+                                               : 'bg-black/[0.03] dark:bg-white/[0.03] text-slate-400 border-transparent hover:text-signal-500 hover:border-signal-500/15'
+                                           }`}
+                            >
+                                {showInvocations ? <EyeOff className="w-3 h-3" strokeWidth={2} /> : <Cpu className="w-3 h-3" strokeWidth={2} />}
+                                {showInvocations ? "Hide Invocations" : `Invocations ${invocations.length}`}
+                            </button>
+                        )}
                         {hasEventFeed && (
                             <button
                                 type="button"

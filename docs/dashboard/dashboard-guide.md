@@ -411,6 +411,7 @@ Legacy runtime:
 - Rerun confirmation now warns when the selected task, or the selected downstream reset chain, already merged code; operators can use the **Undo the Git merge** checkbox to programmatically revert the merge commit in the feature branch before restarting the task cleanly.
 - Reruns now reuse the same dispatch model as normal dashboard orchestration instead of bypassing execution state
 - Task cards now open a DB-backed runtime feed sourced from `task_run_events`
+- Task cards now expose a task-scoped invocation feed sourced from the Live snapshot's `recentInvocations`, matching by task, dispatch, and task-run identity and linking each row to the full Chat invocation transcript
 - The runtime feed now includes direct CLI stage events, action-required and protocol events, sprint-run lifecycle events, and CI/merge-gate state changes in addition to provider session activity
 - `recentEvents` is now a unified runtime timeline spanning both `task_run_events` and `sprint_run_events`
 - The selected-project execution snapshot now keeps the full task-dispatch and task-run event history for the active or most recent sprint run, so completed tasks in Live view keep their runtime feed and stage timings visible even after later tasks start

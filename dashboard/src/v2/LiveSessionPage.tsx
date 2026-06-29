@@ -329,6 +329,13 @@ export const LiveSessionPage: FunctionComponent = () => {
                 ? { ...task, status: "COMPLETED" as const }
                 : task;
             const latestDispatch = pickLatestTaskDispatch(task, sprintDispatches);
+            const taskIdentity = new Set([taskRuntimeId, task.id, task.record_id].filter(Boolean));
+            const taskInvocations = (execution.recentInvocations ?? []).filter((invocation) => (
+                (invocation.taskId && taskIdentity.has(invocation.taskId))
+                || (invocation.taskKey && taskIdentity.has(invocation.taskKey))
+                || (latestDispatch?.id && invocation.dispatchId === latestDispatch.id)
+                || (latestDispatch?.taskRunId && invocation.taskRunId === latestDispatch.taskRunId)
+            ));
             const taskEvents = (task.record_id && taskEventsByRecordId.byRecordId.get(task.record_id))
                 || taskEventsByRecordId.byTaskKey.get(task.id)
                 || EMPTY_RUNTIME_EVENTS;
@@ -367,6 +374,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                 phase: taskPhase,
                 taskTiming: taskTimingMap.get(taskRuntimeId) || taskTimingMap.get(task.id) || null,
                 events: taskEvents,
+                invocations: taskInvocations,
                 isRerunning: rerunningIds.has(taskRuntimeId),
                 isForceCompleting: forceCompletePendingIds.has(taskRuntimeId),
                 forceCompleteError: forceCompleteErrorByTaskId.get(taskRuntimeId) || null,
@@ -378,7 +386,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                 } : null,
             };
         })
-    ), [filteredTasks, forceCompleteErrorByTaskId, forceCompletePendingIds, optimisticallyCompletedTaskIds, rerunningIds, sprintDispatches, taskEventsByRecordId, taskTimingMap]);
+    ), [execution.recentInvocations, filteredTasks, forceCompleteErrorByTaskId, forceCompletePendingIds, optimisticallyCompletedTaskIds, rerunningIds, sprintDispatches, taskEventsByRecordId, taskTimingMap]);
 
     const handleEditTask = (task: Subtask): void => {
         const search = new URLSearchParams();
@@ -560,7 +568,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                             </div>
                         </div>
                     ) : (
-                        taskCardItems.map(({ key, task, phase, taskTiming, events, isRerunning, isForceCompleting, forceCompleteError, dispatchInfo }) => (
+                        taskCardItems.map(({ key, task, phase, taskTiming, events, invocations, isRerunning, isForceCompleting, forceCompleteError, dispatchInfo }) => (
                             <LiveTaskCard
                                 key={key}
                                 task={task}
@@ -568,6 +576,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                                 phase={phase}
                                 taskTiming={taskTiming}
                                 events={events}
+                                invocations={invocations}
                                 onRerun={handleRerun}
                                 onEdit={handleEditTask}
                                 onForceComplete={handleForceCompleteTask}

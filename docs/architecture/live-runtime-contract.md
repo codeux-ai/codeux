@@ -33,7 +33,7 @@ The top-level fields within `ProjectLiveDashboardSnapshot` are explicitly owned 
 - **`execution`**:
   - **Owned By:** `ExecutionRepository` (assembled via `getProjectExecutionSnapshot`)
   - **Mutated:** When sprint runs are dispatched, worker states change, attention items are created/claimed, invocation records/messages are written, or chat threads progress.
-  - **Live Invocation Feed:** The execution projection includes a bounded `recentInvocations` list from `execution_invocations`. The Live page renders this beside the runtime feed so operators can watch provider invocations start, receive messages, complete, fail, or pause without switching pages. Full transcripts remain linked through the Chat invocation view.
+  - **Live Invocation Feed:** The execution projection includes a bounded `recentInvocations` list from `execution_invocations`. The Live page renders this beside the runtime feed so operators can watch provider invocations start, receive messages, complete, fail, or pause without switching pages. Task cards also derive task-scoped invocation feeds from this same list using task, dispatch, and task-run identity. Full transcripts remain linked through the Chat invocation view.
 - **`gitStatus` / `gitStatusError`**:
   - **Owned By:** The external git/system environment.
   - **Mutated:** Dynamically tracked when local branches, origin synchronization, or pending PRs change.
