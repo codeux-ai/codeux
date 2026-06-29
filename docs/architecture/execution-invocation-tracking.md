@@ -44,7 +44,9 @@ CLI-backed provider invocations now persist their workflow execution mode alongs
 
 On Code UX restart, runtime recovery reconciles any still-`running` CLI provider invocations before the dashboard rehydrates:
 - tracked background CLI sessions recovered from `session-tracking.db` are marked failed because the original owning process exited
+- session recovery covers every local CLI provider (`gemini`, `codex`, `claude-code`, `qwen-code`, `opencode`, and `antigravity`) so dashboard session state does not stay `RUNNING` for a provider whose owning process is gone
 - Docker-backed invocations are checked against active Docker containers using the `code-ux.session-id` label; if no active container remains, the provider invocation and linked execution invocation are failed and annotated with a recovery message
+- stale task-coding execution audit rows also close their linked `session-tracking.db` session when startup recovery reconciles the provider invocation, so the live dashboard does not keep showing a recovered container run as still running
 
 This prevents stale `qa_review` or worker invocations from remaining indefinitely `running` after the underlying container or host process has already exited.
 

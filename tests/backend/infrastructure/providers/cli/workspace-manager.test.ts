@@ -338,6 +338,75 @@ describe("WorkspaceManager", () => {
     expect(bootstrapCall?.[1].join(" ")).not.toContain("C:\\Users\\pierr\\AppData\\Local\\Temp");
   });
 
+  it("seeds Docker prepare worktrees with origin-tracking refs for worker and feature branches", async () => {
+    vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
+      if (command === "git" && args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        return { ok: true, stdout: "/repo/project\n", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "remote" && args[1] === "get-url") {
+        return { ok: true, stdout: "https://github.com/example/project.git\n", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "fetch") {
+        return { ok: true, stdout: "", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "show-ref") {
+        if (args.includes("refs/remotes/origin/feature/task-1")
+          || args.includes("refs/remotes/origin/feature/sprint-1")) {
+          return { ok: true, stdout: "", stderr: "" } as any;
+        }
+        throw new Error("missing ref");
+      }
+      if (command === "docker" && args[0] === "volume" && args[1] === "inspect") {
+        throw new Error("missing");
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0, signal: null } as any;
+    });
+
+    await manager.prepareWorktree(
+      "/repo/project",
+      "docker-volume://code-ux-project-abcd1234ef56-session-1",
+      "feature/task-1",
+      "feature/sprint-1",
+    );
+
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "git",
+      ["fetch", "origin", "+refs/heads/feature/task-1:refs/remotes/origin/feature/task-1"],
+      "/repo/project",
+      expect.anything(),
+    );
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "git",
+      ["fetch", "origin", "+refs/heads/feature/sprint-1:refs/remotes/origin/feature/sprint-1"],
+      "/repo/project",
+      expect.anything(),
+    );
+    const bundlePath = path.join("/tmp/code-ux-bundle-123", "repo.bundle");
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "git",
+      [
+        "bundle",
+        "create",
+        bundlePath,
+        "refs/remotes/origin/feature/task-1",
+        "refs/remotes/origin/feature/sprint-1",
+      ],
+      "/repo/project",
+    );
+    const checkoutCall = vi.mocked(runCommandStrict).mock.calls.find((call) =>
+      call[0] === "docker"
+      && call[1].includes("--entrypoint")
+      && call[1].includes("git")
+      && call[1].includes("checkout")
+    );
+    expect(checkoutCall?.[1].slice(-4)).toEqual([
+      "checkout",
+      "-B",
+      "feature/task-1",
+      "origin/feature/task-1",
+    ]);
+  });
+
   it("builds workspace guidance with in-volume path checks", async () => {
     vi.mocked(runCommandStrict).mockResolvedValue({ ok: true, stdout: "exists\n", stderr: "" } as any);
 

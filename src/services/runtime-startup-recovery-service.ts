@@ -360,6 +360,15 @@ export class RuntimeStartupRecoveryService {
           durationMs: calculateInvocationDurationMs(providerInvocation, reconciledAt),
         });
       }
+      if (providerInvocation?.sessionId) {
+        this.deps.sessionTracking.updateSession(providerInvocation.sessionId, {
+          state: resolution.status === "completed" ? "COMPLETED" : "FAILED",
+        });
+        this.deps.sessionTracking.appendActivity(providerInvocation.sessionId, {
+          originator: "system",
+          description: resolution.message,
+        });
+      }
 
       reconciledInvocationIds.push(invocation.id);
     }

@@ -37,6 +37,7 @@ import {
   hasMergeStateChanges,
   hasActiveCiFixAttentionAttempt,
   shouldEscalateFeatureMergeConflict,
+  collectActiveHumanMergeConflictEscalationTaskIds,
   collectActiveWorkerMergeConflictTaskIds,
   snapshotTaskState,
   resolveCiStatusCacheTtlMs,
@@ -319,6 +320,11 @@ export class CycleRunner {
     }
 
     const activeWorkerMergeConflictTaskIds = collectActiveWorkerMergeConflictTaskIds(activeProjectAttentionItems);
+    const activeHumanMergeConflictEscalationTaskIds = collectActiveHumanMergeConflictEscalationTaskIds(activeProjectAttentionItems);
+    const activeMergeConflictTaskIds = new Set([
+      ...activeWorkerMergeConflictTaskIds,
+      ...activeHumanMergeConflictEscalationTaskIds,
+    ]);
 
     const protocolResult = await runProtocolStep(subtasks, {
       featureBranch: args.defaultFeatureBranch,
@@ -331,7 +337,7 @@ export class CycleRunner {
         task,
         args,
         gitStatus,
-        activeWorkerMergeConflictTaskIds,
+        activeMergeConflictTaskIds,
         this.mergeConflictDebouncer,
       ),
       renderInstruction: (templateId, variables) => this.deps.renderInstruction(templateId, variables, args.repoPath),
@@ -339,7 +345,15 @@ export class CycleRunner {
         appendTaskEvent(task, eventType, payload, sourceEventKey);
       },
     });
-    this.stateCoordinator.syncProtocolAttentionItems(subtasks, protocolResult, args, gitStatus, activeWorkerMergeConflictTaskIds, this.mergeConflictDebouncer);
+    this.stateCoordinator.syncProtocolAttentionItems(
+      subtasks,
+      protocolResult,
+      args,
+      gitStatus,
+      activeMergeConflictTaskIds,
+      activeHumanMergeConflictEscalationTaskIds,
+      this.mergeConflictDebouncer,
+    );
 
     const statusTable = args.loopSteps.statusTable ? runStatusTableStep(subtasks) : "";
 

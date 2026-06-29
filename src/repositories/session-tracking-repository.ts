@@ -52,6 +52,17 @@ interface CliSessionWorkspaceTarget {
   state: string;
 }
 
+const TRACKED_CLI_PROVIDERS: Array<Exclude<ProviderId, "jules">> = [
+  "gemini",
+  "codex",
+  "claude-code",
+  "qwen-code",
+  "opencode",
+  "antigravity",
+];
+
+const TRACKED_CLI_PROVIDER_SQL = TRACKED_CLI_PROVIDERS.map((provider) => `'${provider}'`).join(", ");
+
 export interface CreateTrackedSessionInput {
   id: string;
   provider: ProviderId;
@@ -272,7 +283,7 @@ export class SessionTrackingRepository {
         repo_path AS repoPath,
         update_time AS updateTime
       FROM provider_sessions
-      WHERE provider IN ('gemini', 'codex', 'claude-code', 'qwen-code')
+      WHERE provider IN (${TRACKED_CLI_PROVIDER_SQL})
         AND id LIKE 'cli-%'
       ORDER BY update_time DESC
     `).all() as unknown as TrackedCliSessionRow[];
@@ -388,7 +399,7 @@ export class SessionTrackingRepository {
       SELECT id
       FROM provider_sessions
       WHERE state = 'RUNNING'
-        AND provider IN ('gemini', 'codex', 'claude-code', 'qwen-code')
+        AND provider IN (${TRACKED_CLI_PROVIDER_SQL})
         AND id LIKE 'cli-%'
       ORDER BY create_time ASC
     `).all() as unknown as SessionIdRow[];

@@ -125,4 +125,9 @@ export class GuardrailService {
   reset(taskId: string): void {
     this.repo.reset(taskId);
   }
+
+  /** Clears one guardrail counter for a task after a human handles that specific blocker. */
+  resetPurpose(taskId: string, purpose: GuardrailLedgerPurpose): void {
+    this.repo.resetPurpose(taskId, purpose);
+  }
 }

@@ -45,6 +45,7 @@ import { ExecutionControlService } from "../services/execution-control-service.j
 import { JulesSourceResolver } from "../services/jules-source-resolver.js";
 import { RuntimeCleanupService } from "../services/runtime-cleanup-service.js";
 import { RuntimeStartupRecoveryService } from "../services/runtime-startup-recovery-service.js";
+import type { GuardrailService } from "../services/guardrail-service.js";
 import { DockerAssetPruneService } from "../services/docker-asset-prune-service.js";
 import { BranchReaperService } from "../services/branch-reaper-service.js";
 import { DatabaseMaintenanceService } from "../services/database-maintenance-service.js";
@@ -142,6 +143,7 @@ export class CodeUxServer {
   private sprintFileBrowserService: SprintFileBrowserService;
   private agentPresetSyncService: AgentPresetSyncService;
   private executionRepository: ExecutionRepository;
+  private guardrailService: GuardrailService;
   private sprintMarkdownService: SprintMarkdownService;
   private sprintIssueService: SprintIssueService;
   private virtualWorkerService: VirtualWorkerService;
@@ -203,6 +205,7 @@ export class CodeUxServer {
     this.agentPresetRepository = deps.agentPresetRepository;
     this.agentPresetSyncService = deps.agentPresetSyncService;
     this.executionRepository = deps.executionRepository;
+    this.guardrailService = deps.guardrailService;
     this.sprintPreviewRepository = deps.sprintPreviewRepository;
     this.sprintPreviewService = deps.sprintPreviewService;
     this.sprintFileBrowserService = deps.sprintFileBrowserService;
@@ -1066,6 +1069,7 @@ export class CodeUxServer {
         projectWorkerAssignmentRepository: this.projectWorkerAssignmentRepository,
         projectWorkerAssignmentService: this.projectWorkerAssignmentService,
         projectAttentionRepository: this.projectAttentionRepository,
+        guardrailService: this.guardrailService,
         agentPresetRepository: this.agentPresetRepository,
         agentPresetSyncService: this.agentPresetSyncService,
         knowledgeService: this.knowledgeService,

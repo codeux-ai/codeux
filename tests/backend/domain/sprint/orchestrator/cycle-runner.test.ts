@@ -428,6 +428,104 @@ describe("CycleRunner attention sync", () => {
     ]));
   });
 
+  it("does not reopen worker merge_conflict attention while a human escalation is active", async () => {
+    const deps = buildDeps();
+    const runner = new CycleRunner(deps);
+    vi.mocked(deps.sprintExecutionStateService.loadSubtasks).mockResolvedValue([
+      {
+        id: "T1",
+        record_id: "task-1",
+        title: "Conflict task",
+        prompt: "Resolve the API handler changes safely.",
+        depends_on: [],
+        is_independent: true,
+        status: "CODING_COMPLETED",
+        is_merged: false,
+        merge_indicator: "MERGE_CONFLICT",
+        worker_branch: "worker/T1",
+        pr_url: "https://example.com/pr/101",
+      },
+    ] as any);
+    vi.mocked(deps.projectAttentionService.listActiveProjectItems).mockReturnValue([
+      {
+        id: "attention-human-1",
+        projectId: "project-1",
+        sprintId: "sprint-1",
+        taskId: "task-1",
+        sprintRunId: "run-1",
+        dispatchId: null,
+        attentionType: "human_escalation_required",
+        severity: "high",
+        ownerType: "human",
+        status: "open",
+        assignedWorkerEndpointId: null,
+        title: "Human escalation required: Merge conflict for T1",
+        summaryMarkdown: "Virtual worker failed before a provider invocation could start.",
+        payload: {
+          sourceAttentionItemId: "attention-worker-1",
+          sourceAttentionType: "merge_conflict",
+        },
+        openedAt: "2026-03-15T08:00:00.000Z",
+        claimedAt: null,
+        resolvedAt: null,
+        updatedAt: "2026-03-15T08:00:00.000Z",
+      },
+    ]);
+    deps.getCiStatusForScope = vi.fn().mockResolvedValue({
+      available: true,
+      openPullRequests: [],
+      ciRuns: [],
+      mergedPullRequests: [],
+    });
+
+    const result = await runner.run({
+      action: "status",
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: DEFAULT_DASHBOARD_SETTINGS.automationInterventions,
+      executionContext: {
+        project: { id: "project-1", name: "Project 1" } as any,
+        sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+        sprintNumber: 1,
+        repoPath: "/repo/project-1",
+        featureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+      },
+      repoPath: "/repo/project-1",
+      defaultFeatureBranch: "feature/sprint-1",
+      retryFailed: false,
+      loopSteps: {
+        loadSubtasks: true,
+        sessionSync: false,
+        statusDerivation: false,
+        startReadyTasks: false,
+        statusTable: false,
+        mergeProtocol: true,
+        actionRequiredProtocol: true,
+        watchLoopIntervalSeconds: 2,
+      } as any,
+      ciIntelligence: {
+        ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
+        enabled: false,
+        resolveMergeConflicts: true,
+      },
+      githubMode: "REMOTE",
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      sprintRunId: "run-1",
+    });
+
+    expect(result.workerEscalatedMergeConflictTasks).toHaveLength(1);
+    expect(deps.projectAttentionService.openItems).not.toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ attentionType: "merge_conflict" })]),
+    );
+    expect(deps.projectAttentionService.resolveItems).toHaveBeenCalledWith(expect.arrayContaining([
+      {
+        filter: { projectId: "project-1", taskId: "task-1", attentionTypes: ["merge_required", "merge_conflict"] },
+        resolution: { status: "resolved", reason: "merge_conflict_human_escalation_active" },
+      },
+    ]));
+  });
+
   it("escalates auto-merge conflict failures to worker-owned merge_conflict attention", async () => {
     const deps = buildDeps();
     const runner = new CycleRunner(deps);

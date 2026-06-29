@@ -26,7 +26,8 @@ function makeRepo(initial: Record<string, number> = {}) {
       return total;
     }),
     reset: vi.fn(),
-  } as unknown as GuardrailRepository & { record: any; getCount: any; getTotal: any; reset: any };
+    resetPurpose: vi.fn(),
+  } as unknown as GuardrailRepository & { record: any; getCount: any; getTotal: any; reset: any; resetPurpose: any };
 }
 
 const settings = (overrides: Partial<GuardrailSettings> = {}): GuardrailSettings => ({
@@ -93,5 +94,7 @@ describe("GuardrailService.record / reset", () => {
     expect(repo.record).toHaveBeenCalledWith({ projectId: "proj-1", taskId: "t1", purpose: "task_coding" });
     service.reset("t1");
     expect(repo.reset).toHaveBeenCalledWith("t1");
+    service.resetPurpose("t1", "merge_conflict");
+    expect(repo.resetPurpose).toHaveBeenCalledWith("t1", "merge_conflict");
   });
 });

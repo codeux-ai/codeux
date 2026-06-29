@@ -28,6 +28,13 @@ describe("SessionTrackingRepository", () => {
       title: "Sprint 1: [01] test",
     });
     repo.createSession({
+      id: "cli-opencode-running",
+      provider: "opencode",
+      state: "RUNNING",
+      prompt: "prompt",
+      title: "Sprint 1: [01b] test",
+    });
+    repo.createSession({
       id: "cli-codex-completed",
       provider: "codex",
       state: "COMPLETED",
@@ -44,9 +51,11 @@ describe("SessionTrackingRepository", () => {
 
     const recovery = repo.recoverInterruptedCliSessions();
 
-    expect(recovery.recoveredCount).toBe(1);
+    expect(recovery.recoveredCount).toBe(2);
     expect(recovery.sessionIds).toContain("cli-gemini-running");
+    expect(recovery.sessionIds).toContain("cli-opencode-running");
     expect(repo.getSession("cli-gemini-running")?.state).toBe("FAILED");
+    expect(repo.getSession("cli-opencode-running")?.state).toBe("FAILED");
     expect(repo.getSession("cli-codex-completed")?.state).toBe("COMPLETED");
     expect(repo.getSession("jules-running")?.state).toBe("RUNNING");
 
