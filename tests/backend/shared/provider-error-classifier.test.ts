@@ -2,8 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   classifyProviderError,
   computeResetAfterFromClockTime,
-  isTransientCodexTransportError,
   isClaudeConversationNotFoundError,
+  isOpenCodeSessionNotFoundError,
+  isTransientCodexTransportError,
   extractProviderErrorCategory,
   extractRetryAfterIso,
   resultHasSilentQuotaSignal,
@@ -693,5 +694,22 @@ describe("isClaudeConversationNotFoundError", () => {
   it("returns false for unrelated errors", () => {
     const result = makeResult("Usage limit exceeded", "");
     expect(isClaudeConversationNotFoundError(result)).toBe(false);
+  });
+});
+
+describe("isOpenCodeSessionNotFoundError", () => {
+  it("returns true for session not found in stdout", () => {
+    const result = makeResult("\u001b[91m\u001b[1mError: \u001b[0mSession not found", "");
+    expect(isOpenCodeSessionNotFoundError(result)).toBe(true);
+  });
+
+  it("returns true for session not found in stderr", () => {
+    const result = makeResult("", "OpenCode failed: Error: Session not found");
+    expect(isOpenCodeSessionNotFoundError(result)).toBe(true);
+  });
+
+  it("returns false for unrelated errors", () => {
+    const result = makeResult("", "Provider authentication failed");
+    expect(isOpenCodeSessionNotFoundError(result)).toBe(false);
   });
 });

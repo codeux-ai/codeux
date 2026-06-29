@@ -542,6 +542,53 @@ describe("ProviderRunner", () => {
     }));
   });
 
+  it("retries OpenCode with a fresh session when the saved native session is missing", async () => {
+    const onActivity = vi.fn();
+    dockerRunner.runProviderInDocker
+      .mockResolvedValueOnce({
+        ok: false,
+        stdout: "",
+        stderr: "OpenCode failed: Error: Session not found",
+        code: 1,
+        signal: null,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        stdout: "provider stdout",
+        stderr: "",
+        code: 0,
+        signal: null,
+      });
+
+    const result = await runner.runProvider({
+      provider: "opencode",
+      prompt: "retry json",
+      cwd: "/repo",
+      model: "anthropic/claude-sonnet-4-5",
+      apiKey: "sk-open-test",
+      sessionId: "planning-opencode-logical",
+      continueSessionId: "ses_19151020bffeNmMNdnhmFM3fA5",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(dockerRunner.runProviderInDocker).toHaveBeenCalledTimes(2);
+    expect(dockerRunner.runProviderInDocker).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      command: "opencode",
+      args: ["run", "--session", "ses_19151020bffeNmMNdnhmFM3fA5", "--format", "json", "--dir", "/workspace", "--model", "anthropic/claude-sonnet-4-5", "retry json"],
+    }));
+    expect(dockerRunner.runProviderInDocker).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      command: "opencode",
+      args: ["run", "--format", "json", "--dir", "/workspace", "--model", "anthropic/claude-sonnet-4-5", "retry json"],
+    }));
+    expect(onActivity).toHaveBeenCalledWith(
+      "OpenCode could not resume the previous session (session not found). Retrying once with a fresh session...",
+      "provider",
+    );
+  });
+
   it("continues the last OpenCode session when only the logical Code UX session id is available", async () => {
     const result = await runner.runProvider({
       provider: "opencode",

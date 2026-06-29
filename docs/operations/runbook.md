@@ -204,6 +204,7 @@ Checks:
 Transient provider failures are classified and managed in `src/shared/providers/provider-error-classifier.ts`. These shared helpers encapsulate the operational meaning of failures such as:
 - **Codex transport errors**: Disconnections or channel closures (e.g., "stream disconnected before completion", "channel closed").
 - **Claude missing conversations**: Attempts to resume a non-existent session resulting in "no conversation found".
+- **OpenCode missing sessions**: Attempts to resume a removed native session resulting in "Session not found"; Code UX retries once as a fresh OpenCode session in the same workspace.
 - **Silent quota signals**: Provider tools (like Antigravity) failing due to capacity limits without explicit failure output.
 
 ## Recovery Techniques

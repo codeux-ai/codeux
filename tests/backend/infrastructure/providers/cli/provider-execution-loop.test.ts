@@ -12,7 +12,9 @@ describe("ProviderExecutionLoop", () => {
     trackingOnActivity: vi.fn(),
     isTransientCodexTransportError: vi.fn().mockReturnValue(false),
     isClaudeConversationNotFoundError: vi.fn().mockReturnValue(false),
+    isOpenCodeSessionNotFoundError: vi.fn().mockReturnValue(false),
     buildFreshClaudeSpec: vi.fn().mockReturnValue({ command: "fresh", args: ["freshArg"] }),
+    buildFreshOpenCodeSpec: vi.fn().mockReturnValue({ command: "opencode", args: ["run", "--format", "json", "--dir", "/workspace", "freshArg"] }),
     readAntigravityDiagnostics: vi.fn().mockResolvedValue(null),
   });
 
@@ -70,6 +72,27 @@ describe("ProviderExecutionLoop", () => {
     expect(runCmd).toHaveBeenCalledTimes(2);
     expect(runCmd).toHaveBeenNthCalledWith(2, "fresh", ["freshArg"]);
     expect(opts.trackingOnActivity).toHaveBeenCalledWith("Claude Code could not resume the previous conversation (no conversation found). Retrying once with a fresh session...", "provider");
+  });
+
+  it("retries OpenCode with a fresh session when the native session is not found", async () => {
+    const runCmd = vi.fn()
+      .mockResolvedValueOnce({ ok: false, stdout: "", stderr: "Error: Session not found" })
+      .mockResolvedValueOnce({ ok: true, stdout: "ok", stderr: "" });
+    const isOpenCodeSessionNotFoundError = vi.fn().mockReturnValue(true);
+
+    const opts: ProviderExecutionLoopOptions = {
+      ...getDefaultOptions(),
+      provider: "opencode",
+      continueSession: true,
+      runCmd,
+      isOpenCodeSessionNotFoundError,
+    };
+
+    const result = await runProviderExecutionLoop(opts);
+    expect(result.ok).toBe(true);
+    expect(runCmd).toHaveBeenCalledTimes(2);
+    expect(runCmd).toHaveBeenNthCalledWith(2, "opencode", ["run", "--format", "json", "--dir", "/workspace", "freshArg"]);
+    expect(opts.trackingOnActivity).toHaveBeenCalledWith("OpenCode could not resume the previous session (session not found). Retrying once with a fresh session...", "provider");
   });
 
   it("demotes Antigravity run to failure when diagnostics indicate an error", async () => {

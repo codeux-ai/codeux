@@ -12,7 +12,9 @@ export interface ProviderExecutionLoopOptions {
   trackingOnActivity: (desc: string, originator?: string) => void;
   isTransientCodexTransportError: (result: CommandResult) => boolean;
   isClaudeConversationNotFoundError: (result: CommandResult) => boolean;
+  isOpenCodeSessionNotFoundError: (result: CommandResult) => boolean;
   buildFreshClaudeSpec: () => { command: string; args: string[] };
+  buildFreshOpenCodeSpec: () => { command: string; args: string[] };
   readAntigravityDiagnostics: () => Promise<string | null>;
 }
 
@@ -25,7 +27,9 @@ export async function runProviderExecutionLoop(options: ProviderExecutionLoopOpt
     trackingOnActivity,
     isTransientCodexTransportError,
     isClaudeConversationNotFoundError,
+    isOpenCodeSessionNotFoundError,
     buildFreshClaudeSpec,
+    buildFreshOpenCodeSpec,
     readAntigravityDiagnostics,
   } = options;
 
@@ -45,6 +49,17 @@ export async function runProviderExecutionLoop(options: ProviderExecutionLoopOpt
   if (!result.ok && provider === "claude-code" && continueSession && isClaudeConversationNotFoundError(result)) {
     trackingOnActivity("Claude Code could not resume the previous conversation (no conversation found). Retrying once with a fresh session...", "provider");
     const freshSpec = buildFreshClaudeSpec();
+    command = freshSpec.command;
+    args = freshSpec.args;
+    result = await runCmd(command, args);
+  }
+
+  // `opencode run --session <id>` fails with "Session not found" if the native
+  // session was removed from OpenCode's local store. Preserve the workspace and
+  // retry once as a new OpenCode session instead of failing the task immediately.
+  if (!result.ok && provider === "opencode" && continueSession && isOpenCodeSessionNotFoundError(result)) {
+    trackingOnActivity("OpenCode could not resume the previous session (session not found). Retrying once with a fresh session...", "provider");
+    const freshSpec = buildFreshOpenCodeSpec();
     command = freshSpec.command;
     args = freshSpec.args;
     result = await runCmd(command, args);

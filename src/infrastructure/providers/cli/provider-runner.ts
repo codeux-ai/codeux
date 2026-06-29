@@ -15,7 +15,11 @@ import * as pathPosix from "path/posix";
 import { randomUUID } from "crypto";
 import { getRepoCodeUxPath } from "../../../shared/config/code-ux-paths.js";
 import { runProviderExecutionLoop } from "./provider-execution-loop.js";
-import { isTransientCodexTransportError, isClaudeConversationNotFoundError } from "../../../shared/providers/provider-error-classifier.js";
+import {
+  isClaudeConversationNotFoundError,
+  isOpenCodeSessionNotFoundError,
+  isTransientCodexTransportError,
+} from "../../../shared/providers/provider-error-classifier.js";
 import {
   CONTAINER_RUNTIME_HOME,
   CONTAINER_WORKSPACE_ROOT,
@@ -392,6 +396,22 @@ export class ProviderRunner implements IProviderRunner {
           antigravityLogPath,
         );
       };
+      const buildFreshOpenCodeSpec = () => {
+        return this.buildCommandSpec(
+          provider,
+          runModel,
+          prompt,
+          workflowSettings.executionMode === "DOCKER" ? CONTAINER_WORKSPACE_ROOT : cwd,
+          input.codexOutputPath,
+          null,
+          false,
+          hasMcpConfig,
+          input.qwenAuthMode,
+          input.qwenProtocol,
+          codexProviderArgs,
+          antigravityLogPath,
+        );
+      };
       const readAntigravityDiagnostics = async () => {
         return await this.readAntigravityDiagnostics(cwd, antigravityLogPath!, workflowSettings.executionMode);
       };
@@ -410,7 +430,9 @@ export class ProviderRunner implements IProviderRunner {
         trackingOnActivity,
         isTransientCodexTransportError,
         isClaudeConversationNotFoundError,
+        isOpenCodeSessionNotFoundError,
         buildFreshClaudeSpec,
+        buildFreshOpenCodeSpec,
         readAntigravityDiagnostics,
       });
 
@@ -427,7 +449,10 @@ export class ProviderRunner implements IProviderRunner {
         ? await readQwenLogData(cwd, workflowSettings.executionMode, sessionId, startedMs, this.dockerRunner)
         : null;
 
-      let resolvedNativeSessionId = nativeSessionId;
+      const usedOpenCodeNativeSession = provider === "opencode" && args.includes("--session");
+      let resolvedNativeSessionId = provider === "opencode" && !usedOpenCodeNativeSession
+        ? null
+        : nativeSessionId;
       if (provider === "antigravity" && !resolvedNativeSessionId && antigravityLogPath) {
         resolvedNativeSessionId = await parseAntigravityConversationId(cwd, antigravityLogPath, workflowSettings.executionMode, this.dockerRunner);
       }
