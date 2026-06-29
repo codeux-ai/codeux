@@ -34,7 +34,7 @@
     "provenance": true
   },
   "scripts": {
-    "build": "tsc --incremental --tsBuildInfoFile .cache/tsc/server-build.tsbuildinfo && tsc -p dashboard/tsconfig.json --noEmit --incremental --tsBuildInfoFile .cache/tsc/dashboard.tsbuildinfo && vite build",
+    "build": "node scripts/build.mjs",
     "prepack": "pnpm run build",
     "start": "node dist/index.js",
     "dev": "node --import ./scripts/tsnode-register.mjs src/index.ts",
