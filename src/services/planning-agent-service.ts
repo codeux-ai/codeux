@@ -548,7 +548,11 @@ export class PlanningAgentService {
     if (workflowSettings.executionMode === "DOCKER") {
       snapshotWorkspace = await this.workspaceManager.createSnapshotWorkspace(
         args.repoPath,
-        `planning-${provider}-${Date.now().toString(36)}`,
+        // Append a random suffix so concurrent planning requests never derive the same snapshot
+        // volume name. `Date.now()` alone collides when several sprints plan in the same
+        // millisecond, and they then stomp each other's volume (observed: 2 of 4 concurrent
+        // plannings failing at workspace seed).
+        `planning-${provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`,
         undefined,
         // Planning only reads the current tree to draft tasks; it never needs the repo's other
         // (often thousands of) accumulated branches, so seed just the checkout branch.
