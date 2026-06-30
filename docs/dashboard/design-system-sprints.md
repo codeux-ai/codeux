@@ -40,3 +40,10 @@ This document outlines the design system for the Sprints page and related planni
 
 *   **Shared Menu Styling:** Consistent padding, icon scale, and hover tones across all dropdowns and action menus.
 *   **Accessibility:** Clear keyboard focus states and distinct disabled treatments (e.g., visual dimming combined with descriptive tooltips or explicit disabled attributes).
+
+## Sprint Page Async Action Pattern
+
+All asynchronous sprint actions (such as starting, pausing, toggling showcase state, or marking as complete) MUST use the shared `SprintPageActionRunner`. This ensures:
+*   **Preventing Duplicate Submissions:** Automatically filters out actions that are already pending using `pendingActionIds`.
+*   **Optimistic UI:** Safely applies and reverts optimistic visual statuses.
+*   **Error Handling and Cleanup:** Centralizes `try/catch/finally` blocks, ensuring data grids refresh (via `refresh()` and `refreshExecution()`) before surfaces display errors via `setError`, keeping the system state perfectly aligned with backend truth.
