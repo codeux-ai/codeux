@@ -24,6 +24,10 @@ This document outlines the design system for the Sprints page and related planni
 *   **Interactive Elements:** Row action menus and bulk actions should have clear active/hover states, unified menu padding, and consistent icon scaling.
 *   **Badges & Indicators:** Status badges, linked issue tags, and progress indicators should use consistent border radii, padding, and semantic color schemes.
 
+### Sprint Action State Management
+
+*   **Async Operations:** For dashboard v2 asynchronous sprint actions (like starting, pausing, toggling showcase, or completing sprints), use the shared `SprintPageActionRunner` to handle pending states, optimistic UI updates, and data refresh cycles, preventing duplicated async state management.
+
 ### Quicksprint Panel
 
 *   The panel should present templates clearly with a balanced layout.

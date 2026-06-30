@@ -27,8 +27,10 @@ All interactive components inside the shell layer must follow exactly the same f
 ### 4. Responsiveness and Truncation
 Stable layouts on narrow widths (especially mobile or multi-panel layouts) must maintain access to controls without triggering horizontal overflow.
 
-- **Wrapping:** Top-level header layouts should use `flex-wrap md:flex-nowrap` to gracefully wrap clusters on very small viewports instead of hiding them or clipping.
-- **Project & Sprint Menus:** Must remain visible on compact screens. Enforce strict text truncation using `truncate` and responsive maximum widths (e.g., `max-w-[80px] sm:max-w-[140px] md:max-w-[200px]`) rather than letting content dictate unbounded flex-growth.
+- **Wrapping:** Top-level header layouts should use `flex-wrap md:flex-nowrap` to gracefully wrap clusters on very small viewports instead of hiding them or clipping. To safely reflow UI headers and action button rows in narrow responsive containers (like flyouts), use `flex flex-wrap` alongside `shrink-0` on fixed elements to prevent horizontal overflow.
+- **Dropdown Anchoring:** Dropdowns (e.g., project and sprint selectors) must use layout-aware positioning (such as `absolute top-full` inside a `relative` wrapper) instead of fixed top pixel coordinates so they anchor below the button regardless of header wrapping.
+- **Scroll Ownership:** For bounded responsive UI panels (like top-nav flyouts) with scrolling content, use a root container with `flex flex-col overflow-hidden` and a dynamic max height (e.g., `max-h-[calc(100dvh-5rem)]`), and assign `flex-1 min-h-0 overflow-y-auto` to the internal content container to manage scroll ownership without double scrollbars.
+- **Project & Sprint Menus:** Must remain visible on compact screens. Enforce strict text truncation using `truncate` and responsive maximum widths (e.g., `max-w-[80px] sm:max-w-[140px] md:max-w-[200px]`) rather than letting content dictate unbounded flex-growth. Compact action clusters should use `min-w-0` to allow safe text truncation without shrinking icon buttons (which should retain `shrink-0`).
 - **Search and Telemetry Layout:** Components should gracefully hide text or collapse altogether (e.g. icon-only triggers) instead of overflowing the flex container.
 
 ### 5. Hover and Active Indicators
