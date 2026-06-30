@@ -19,6 +19,7 @@ When using shared overlay components (`Modal`, `Dialog`, `Drawer`, `Notification
 3.  **Command Palettes & Positioning (e.g., `SearchOverlay`)**:
     *   Anchored positioning should fall back to a centered, screen-relative mobile command surface if the available space below the anchor is too small (e.g., `< 300px` available) or if the viewport is narrow (e.g., `< 768px`).
     *   Ensure focus return and keyboard navigation work correctly regardless of the layout fallback mode.
+    *   Top-nav dropdowns (e.g., project and sprint selectors) must use layout-aware positioning (such as `absolute top-full`) instead of fixed top coordinates, ensuring they remain anchored below the button and wrap cleanly without overlapping if the header height changes. Compact action clusters should use `min-w-0` to allow text truncation and wrap safely without clipping or hiding primary controls.
 
 4.  **Notification Panels**:
     *   Flyout menus and notification surfaces should be collision-aware with width and max-height constraints (e.g., `max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-5rem)]`) so they remain fully visible from the top nav at tablet widths without clipping.
