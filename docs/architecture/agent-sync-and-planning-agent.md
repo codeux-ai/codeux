@@ -146,7 +146,7 @@ Behavior:
 6. The setup prompt requires repository discovery across assistant instruction markdown, documentation, dependency manifests, package scripts, source layout, preview/runtime configuration, and existing CI files.
 7. The provider returns strict JSON containing selected artifacts.
 8. Code UX writes agents through `AgentPresetSyncService`, quicksprints through `QuicksprintService`, preview startup to `.code-ux/browser/start-preview.sh`, and CI files to the returned GitHub/GitLab paths.
-9. Agent routing is updated so the setup agent is the planning default and generated worker specialists become the task-coding orchestrator roster.
+9. Agent routing preserves the existing Planning agent default and updates generated worker specialists into the task-coding orchestrator roster.
 
 The base-template handoff is fail-soft: if a user intentionally deleted a built-in default role, project setup continues with the remaining templates rather than recreating the deleted role implicitly. Template injection is conditional by artifact category, so disabling agents, quicksprints, or preview generation also omits that category's template context from the provider prompt.
 
