@@ -219,6 +219,7 @@ const getEnabledProviders = (
   settings: DashboardSettings,
   input: ResolveProviderForInvocationInput,
   providers: Record<ProviderConfigId, ProviderSettings>,
+  routePrimary: { manualProvider: ProviderConfigId | null; agentProviderConfigId: ProviderConfigId | null },
 ): ProviderConfigId[] => {
   const route = settings.aiProvider.invocationRouting?.[input.invocation] || DEFAULT_INVOCATION_ROUTING[input.invocation];
   // The allowed-provider pool only constrains WEIGHTED/AGENT selection. Under MANUAL
@@ -226,28 +227,49 @@ const getEnabledProviders = (
   // ignored — otherwise a manual provider left out of the pool gets filtered away
   // and routing silently falls back to the first enabled provider. The Models UI
   // mirrors this by locking the pool ("Locked to primary") when strategy is MANUAL.
-  const allowedProviders = route.strategy !== "MANUAL" && route.allowedProviders.length > 0
-    ? new Set(route.allowedProviders)
-    : null;
+  //
   const providerPool = input.providerPool ? new Set(input.providerPool) : null;
+  const filterWith = (allowedProviders: Set<ProviderConfigId> | null): ProviderConfigId[] => (
+    Object.entries(providers)
+      .filter(([providerConfigId, provider]) => {
+        if (!provider.enabled) {
+          return false;
+        }
+        if (settings.git.githubMode === "LOCAL" && provider.provider === "jules") {
+          return false;
+        }
+        if (allowedProviders && !allowedProviders.has(providerConfigId) && route.provider !== providerConfigId) {
+          return false;
+        }
+        if (providerPool && !providerPool.has(provider.provider)) {
+          return false;
+        }
+        return true;
+      })
+      .map(([providerConfigId]) => providerConfigId)
+  );
 
-  return Object.entries(providers)
-    .filter(([providerConfigId, provider]) => {
-      if (!provider.enabled) {
-        return false;
-      }
-      if (settings.git.githubMode === "LOCAL" && provider.provider === "jules") {
-        return false;
-      }
-      if (allowedProviders && !allowedProviders.has(providerConfigId) && route.provider !== providerConfigId) {
-        return false;
-      }
-      if (providerPool && !providerPool.has(provider.provider)) {
-        return false;
-      }
-      return true;
-    })
-    .map(([providerConfigId]) => providerConfigId);
+  if (route.strategy === "MANUAL") {
+    return filterWith(null);
+  }
+  if (route.allowedProviders.length > 0) {
+    return filterWith(new Set(route.allowedProviders));
+  }
+
+  // A WEIGHTED/AGENT route with an *empty* pool must fail closed, not open. Treating an
+  // empty selection as "no filter" let weighted distribution fan out across every enabled
+  // provider instance — including the gemini/codex/claude-code/antigravity/jules instances
+  // that ship enabled by default — so providers the user never pinned would silently run.
+  // Instead, restrict an empty pool to the route's explicitly-designated providers: its
+  // primary (manual/inherited) provider, plus the agent-selected provider under AGENT.
+  const failClosed = filterWith(new Set(
+    [routePrimary.manualProvider, routePrimary.agentProviderConfigId]
+      .filter((providerConfigId): providerConfigId is ProviderConfigId => Boolean(providerConfigId)),
+  ));
+  // If none of the designated providers are eligible (e.g. the primary is the
+  // LOCAL-disabled jules), fall back to the full enabled set so routing still resolves a
+  // provider rather than dead-ending in the emergency fallback.
+  return failClosed.length > 0 ? failClosed : filterWith(null);
 };
 
 export class ManualRoutingStrategy implements ProviderRoutingStrategy {
@@ -306,7 +328,10 @@ export const resolveProviderForInvocation = (
   const strategy = resolveInvocationStrategy(settings, input.invocation);
   const base = buildRouteProviders(settings, input.invocation, input.agentProvider);
   const manualProvider = base.manualProvider;
-  const enabledProviders = getEnabledProviders(settings, input, base.providers);
+  const enabledProviders = getEnabledProviders(settings, input, base.providers, {
+    manualProvider,
+    agentProviderConfigId: base.agentProviderConfigId,
+  });
   const context: RoutingDecisionContext = {
     strategy,
     manualProvider,
