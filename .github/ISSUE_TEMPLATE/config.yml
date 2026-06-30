@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Questions & discussion
+    url: https://github.com/codeux-ai/codeux/discussions
+    about: Ask questions, share ideas, and discuss usage with the community.
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/codeux-ai/codeux/security/advisories/new
+    about: Please report security issues privately — do not open a public issue.
+  - name: 📖 Documentation
+    url: https://github.com/codeux-ai/codeux/tree/main/docs
+    about: Read the docs before filing — your answer may already be there.

@@ -1,0 +1,84 @@
+name: 🐞 Bug report
+description: Report a problem with Code UX
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug! Please search
+        [existing issues](https://github.com/codeux-ai/codeux/issues) first to avoid duplicates.
+
+        ⚠️ **Do not report security vulnerabilities here.** See our
+        [Security Policy](https://github.com/codeux-ai/codeux/security/policy) instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear and concise description of the bug.
+      placeholder: When I dispatch a sprint to provider X, …
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Minimal, deterministic steps so we can reproduce it.
+      placeholder: |
+        1. Start the dashboard with `pnpm run dev`
+        2. Create a sprint targeting …
+        3. Observe …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen instead?
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface?
+      description: Where did you hit this?
+      options:
+        - CLI / server (`codeux`)
+        - Dashboard (web UI on :4444)
+        - Electron desktop app
+        - MCP server (stdio / HTTPS gateway)
+        - Other / not sure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Code UX version
+      description: Output of `codeux --version`, the npm version, or the desktop build number.
+      placeholder: e.g. 0.8.5
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS + version, Node version (`node -v`), Docker version, and provider in use.
+      placeholder: e.g. macOS 14.5, Node 22.5.0, Docker 27.0, provider = Claude Code
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Paste any relevant log output or stack traces. This is automatically formatted as code, so no backticks needed. **Redact any secrets or provider keys.**
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmations
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I reproduced this on the latest released version.
+          required: true
+        - label: I removed any secrets/keys from the details above.
+          required: true
