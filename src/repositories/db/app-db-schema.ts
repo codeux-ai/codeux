@@ -647,4 +647,10 @@ CREATE TABLE IF NOT EXISTS scheduler_entries (
         updated_at TEXT NOT NULL,
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
       );
+
+CREATE INDEX IF NOT EXISTS idx_provider_invocations_provider_status ON provider_invocations (provider, status);
+CREATE INDEX IF NOT EXISTS idx_task_dispatches_project_executor_status_priority ON task_dispatches (project_id, executor_type, status, priority);
+CREATE INDEX IF NOT EXISTS idx_task_runs_task_sprint_session ON task_runs (task_id, sprint_run_id, session_id);
+CREATE INDEX IF NOT EXISTS idx_project_attention_items_project_owner_status ON project_attention_items (project_id, owner_type, status);
+CREATE INDEX IF NOT EXISTS idx_execution_invocations_provider_invocation ON execution_invocations (provider_invocation_id);
 `;
