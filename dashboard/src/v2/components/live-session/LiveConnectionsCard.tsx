@@ -91,7 +91,7 @@ const ConnectionRow: FunctionComponent<{ connection: ExecutionDashboardSnapshot[
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
             <span>{connection.transport}</span>
             {connection.model ? <span>· {connection.model}</span> : null}
-            <span className="truncate">· {connection.connectionKey}</span>
+            <span className="truncate break-all">· {connection.connectionKey}</span>
           </div>
 
           {(connection.machineName || connection.platform || connection.arch || connection.localExecutionRuntime) && (
@@ -206,7 +206,7 @@ export const LiveConnectionsCard: FunctionComponent<{
             No listeners or workers are connected to the selected project yet.
           </p>
         ) : (
-          <div className="dashboard-scrollbar max-h-[30rem] space-y-2 overflow-y-auto pr-1" aria-live="polite" aria-label="Live connections feed">
+          <div className="dashboard-scrollbar max-h-[50dvh] sm:max-h-[30rem] space-y-2 overflow-y-auto pr-1" aria-live="polite" aria-label="Live connections feed">
             {snapshot.connections.map((connection) => (
               <ConnectionRow key={connection.id} connection={connection} />
             ))}

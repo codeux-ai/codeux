@@ -44,7 +44,7 @@ export const AttentionQueuePanel: FunctionComponent = memo(() => {
                     { label: "Resolved", value: resolved, color: "text-status-green" },
                     { label: "Cleared", value: dismissed, color: "text-slate-500" }
                  ].map(stat => (
-                     <div key={stat.label} className="rounded-xl border border-black/[0.04] bg-white/55 px-3 py-2 dark:border-white/[0.06] dark:bg-void-900/30">
+                     <div key={stat.label} className="rounded-xl border border-black/[0.04] bg-white/55 px-3 py-2 dark:border-white/[0.06] dark:bg-void-900/30 min-w-0">
                          <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{stat.label}</div>
                          <div className={`mt-1 font-mono text-lg font-black leading-none ${stat.color}`}>{stat.value}</div>
                      </div>
