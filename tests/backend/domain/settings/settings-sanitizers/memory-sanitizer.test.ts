@@ -23,6 +23,42 @@ describe("sanitizeMemory", () => {
     expect(result.embeddingModel).toBeNull();
   });
 
+  it("accepts external embedding provider configuration", () => {
+    const result = sanitizeMemory({
+      memory: {
+        embeddingProvider: "external_api",
+        embeddingModel: "custom-embedding-model",
+        externalEmbedding: {
+          baseUrl: " https://embeddings.example/v1/embeddings ",
+          apiKey: " key ",
+          model: " custom-embedding-model ",
+          dimensions: 768,
+        },
+      },
+    } as any);
+
+    expect(result.embeddingProvider).toBe("external_api");
+    expect(result.embeddingModel).toBe("custom-embedding-model");
+    expect(result.externalEmbedding).toEqual({
+      baseUrl: "https://embeddings.example/v1/embeddings",
+      apiKey: "key",
+      model: "custom-embedding-model",
+      dimensions: 768,
+    });
+  });
+
+  it("normalizes remediation controls", () => {
+    const result = sanitizeMemory({
+      memory: {
+        remediationMode: "ai",
+        remediationMaxPromotions: 500,
+      },
+    } as any);
+
+    expect(result.remediationMode).toBe("ai");
+    expect(result.remediationMaxPromotions).toBe(100);
+  });
+
   it("clamps promotionThreshold to [0, 1]", () => {
     expect(sanitizeMemory({ memory: { promotionThreshold: 1.5 } } as any).promotionThreshold).toBe(1);
     expect(sanitizeMemory({ memory: { promotionThreshold: -0.5 } } as any).promotionThreshold).toBe(0);

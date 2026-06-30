@@ -91,6 +91,9 @@ import type {
 } from "../../../src/contracts/project-management-types.js";
 import type {
   CreateSchedulerEntryInput,
+  MemoryRemediationScheduleResponse,
+  MemoryRemediationScheduleSettings,
+  MemoryRemediationScheduleCadence,
   SchedulerCollectionResponse,
   SchedulerEntryRecord,
   SchedulerOccurrence,
@@ -277,6 +280,9 @@ export type {
   CustomMcpTransport,
   McpToolToggle,
   CreateSchedulerEntryInput,
+  MemoryRemediationScheduleResponse,
+  MemoryRemediationScheduleSettings,
+  MemoryRemediationScheduleCadence,
   SchedulerCollectionResponse,
   SchedulerEntryRecord,
   SchedulerOccurrence,

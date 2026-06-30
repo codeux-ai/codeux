@@ -297,11 +297,14 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
   const routeResolvedDefault = routeResolvedDefaultId
     ? editableSettings.aiProvider.providers[routeResolvedDefaultId] ?? null
     : null;
-  const routePool = isManualStrategy && routeResolvedDefaultId
-    ? [routeResolvedDefaultId]
-    : activeRoute.allowedProviders.length > 0
-      ? activeRoute.allowedProviders.filter((providerConfigId) => editableSettings.aiProvider.providers[providerConfigId])
-      : providerEntries.map(([providerConfigId]) => providerConfigId);
+  // An empty pool no longer fans out to every instance: weighted/agent routes fail closed
+  // to the route's primary (see getEnabledProviders in provider-routing.ts), so an empty
+  // selection resolves to the same single instance as a manual route.
+  const routePool = activeRoute.allowedProviders.length > 0
+    ? activeRoute.allowedProviders.filter((providerConfigId) => editableSettings.aiProvider.providers[providerConfigId])
+    : routeResolvedDefaultId
+      ? [routeResolvedDefaultId]
+      : [];
   const allowedPoolEntries = isManualStrategy
     ? providerEntries.filter(([providerConfigId]) => providerConfigId === routeResolvedDefaultId)
     : providerEntries;
@@ -591,7 +594,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                   : route.profile === "WORKER"
                     ? workerProviderSettings
                     : globalProviderSettings;
-                const poolCount = route.allowedProviders.length || providerEntries.length;
+                const poolCount = route.allowedProviders.length || 1;
                 const overridesCount = Object.keys(route.providers).length;
                 return (
                   <button
@@ -747,15 +750,16 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                   {isManualStrategy
                     ? "Locked to primary (manual)"
                     : activeRoute.allowedProviders.length === 0
-                      ? "Using all configured instances"
+                      ? "Falls back to primary"
                       : `${activeRoute.allowedProviders.length} pinned`}
                 </div>
               </div>
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                 {allowedPoolEntries.map(([providerConfigId, provider]) => {
                   const active = isManualStrategy
-                    || activeRoute.allowedProviders.length === 0
-                    || activeRoute.allowedProviders.includes(providerConfigId);
+                    || (activeRoute.allowedProviders.length === 0
+                      ? providerConfigId === routeResolvedDefaultId
+                      : activeRoute.allowedProviders.includes(providerConfigId));
                   const available = eligibleProviderConfigIds.includes(providerConfigId);
                   return (
                     <button

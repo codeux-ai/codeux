@@ -133,7 +133,7 @@ export const MemoryFilters: FunctionComponent<{
                     <Plus className="w-3.5 h-3.5" strokeWidth={2.5} /> Add Memory
                 </button>
                 <button aria-pressed={showModels} onClick={() => setShowModels(!showModels)}
-                    aria-label="Toggle models visibility"
+                    aria-label="Toggle embedding model catalog"
                     className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer
                                border transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                                ${showModels
@@ -141,7 +141,7 @@ export const MemoryFilters: FunctionComponent<{
                                    : "bg-black/[0.04] dark:bg-white/[0.04] border-black/[0.06] dark:border-white/[0.06] text-slate-500 hover:bg-black/[0.08] dark:hover:bg-white/[0.08] hover:text-slate-900 dark:hover:text-white"
                                }`}>
                     <HardDrive className="w-3.5 h-3.5" strokeWidth={2} />
-                    Models
+                    Model Catalog
                     {stats.activeModel && (
                         <span className="w-1.5 h-1.5 rounded-full bg-signal-500" />
                     )}

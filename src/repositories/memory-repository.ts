@@ -14,6 +14,16 @@ import type {
   EmbeddingRecord,
   EmbeddingModelId,
   EmbeddingModelStatus,
+  MemoryClaimEvidenceLink,
+  MemoryClaimRecord,
+  MemoryClaimStatus,
+  MemoryClaimSourceType,
+  MemoryClaimEvidenceSupport,
+  CreateMemoryClaimInput,
+  UpdateMemoryClaimInput,
+  AddMemoryClaimEvidenceInput,
+  MemoryClearTier,
+  MemoryClearResult,
 } from "../contracts/memory-types.js";
 
 interface MemoryRow {
@@ -52,6 +62,32 @@ interface EmbeddingModelRow {
 
 interface CountRow {
   count: number;
+}
+
+interface MemoryClaimRow {
+  id: string;
+  project_id: string;
+  claim: string;
+  fingerprint: string;
+  category: string;
+  confidence: number;
+  durability: number;
+  status: string;
+  tags_json: string;
+  applies_to_paths_json: string;
+  source_type: string;
+  source_memory_id: string | null;
+  supersedes_claim_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface MemoryClaimEvidenceRow {
+  claim_id: string;
+  memory_id: string;
+  support_type: string;
+  weight: number;
+  created_at: string;
 }
 
 export class MemoryRepository {
@@ -398,6 +434,53 @@ export class MemoryRepository {
     `).run(projectId, sprintId);
   }
 
+  /**
+   * Bulk-clear memory data by tier, optionally scoped to a single project.
+   * Omitting `projectId` clears system-wide (across every project).
+   *
+   * - short_term: sprint + legacy agent scoped memories only (claims are long-term).
+   * - long_term:  project-scoped memories + every memory claim and its evidence.
+   * - all:        every memory, claim, and evidence row (the full memory database).
+   */
+  clearMemories(tier: MemoryClearTier, projectId?: string): MemoryClearResult {
+    try {
+      const projectClause = projectId ? " AND project_id = ?" : "";
+      const projectParam = projectId ? [projectId] : [];
+      // Evidence references claims by project; scope evidence to the project's claims.
+      const evidenceSql = projectId
+        ? "DELETE FROM memory_claim_evidence WHERE claim_id IN (SELECT id FROM memory_claims WHERE project_id = ?)"
+        : "DELETE FROM memory_claim_evidence";
+
+      return this.db.transaction(() => {
+        let memories = 0;
+        let claims = 0;
+        let evidence = 0;
+
+        if (tier === "short_term") {
+          memories = this.db
+            .prepare(`DELETE FROM memories WHERE scope IN ('sprint', 'agent')${projectClause}`)
+            .run(...projectParam).changes;
+        } else if (tier === "long_term") {
+          evidence = this.db.prepare(evidenceSql).run(...projectParam).changes;
+          claims = this.db.prepare(`DELETE FROM memory_claims WHERE 1 = 1${projectClause}`).run(...projectParam).changes;
+          memories = this.db
+            .prepare(`DELETE FROM memories WHERE scope = 'project'${projectClause}`)
+            .run(...projectParam).changes;
+        } else {
+          evidence = this.db.prepare(evidenceSql).run(...projectParam).changes;
+          claims = this.db.prepare(`DELETE FROM memory_claims WHERE 1 = 1${projectClause}`).run(...projectParam).changes;
+          memories = this.db.prepare(`DELETE FROM memories WHERE 1 = 1${projectClause}`).run(...projectParam).changes;
+        }
+
+        return { memories, claims, evidence };
+      });
+    } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      this.logger.error("Operation failed", { error, projectId, tier });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
+  }
+
   createPromotedMemory(
     projectId: string,
     sourceMemory: MemoryRecord,
@@ -448,6 +531,225 @@ export class MemoryRepository {
     );
 
     return this.mapRow(row);
+  }
+
+  createPromotedClaimMemory(
+    projectId: string,
+    sourceMemory: MemoryRecord,
+    claim: string,
+    claimId: string,
+    reason: string,
+    strength: number,
+  ): MemoryRecord {
+    const now = new Date().toISOString();
+    const id = randomUUID();
+    const source: MemorySource = { type: "promotion", originType: "memory_claim", originId: claimId };
+
+    const row: MemoryRow = {
+      id,
+      project_id: projectId,
+      scope: "project",
+      sprint_id: null,
+      agent_preset_id: sourceMemory.agentPresetId,
+      content: claim.trim(),
+      category: sourceMemory.category,
+      strength: clamp01(strength),
+      source_json: JSON.stringify(source),
+      embedding_model: null,
+      embedding_dimension: null,
+      embedding_blob: null,
+      promoted_from_id: sourceMemory.id,
+      promotion_reason: reason,
+      created_at: now,
+      updated_at: now,
+    };
+
+    this.db.prepare(`
+      INSERT INTO memories (
+        id, project_id, scope, sprint_id, agent_preset_id,
+        content, category, strength, source_json,
+        promoted_from_id, promotion_reason,
+        created_at, updated_at
+      ) VALUES (?, ?, 'project', NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      row.id,
+      row.project_id,
+      row.agent_preset_id,
+      row.content,
+      row.category,
+      row.strength,
+      row.source_json,
+      row.promoted_from_id,
+      row.promotion_reason,
+      row.created_at,
+      row.updated_at,
+    );
+
+    return this.mapRow(row);
+  }
+
+  createMemoryClaim(projectId: string, input: CreateMemoryClaimInput): MemoryClaimRecord {
+    try {
+      requireRecord(this.db.prepare("SELECT id FROM projects WHERE id = ?").get(projectId), "Project", projectId);
+      const now = new Date().toISOString();
+      const id = randomUUID();
+      const claim = input.claim.trim();
+      if (!claim) {
+        throw new RepositoryError("Memory claim content is required");
+      }
+      const row: MemoryClaimRow = {
+        id,
+        project_id: projectId,
+        claim,
+        fingerprint: normalizeClaimFingerprint(claim),
+        category: input.category,
+        confidence: clamp01(input.confidence),
+        durability: clamp01(input.durability),
+        status: "active",
+        tags_json: JSON.stringify(normalizeStringArray(input.tags || [])),
+        applies_to_paths_json: JSON.stringify(normalizeStringArray(input.appliesToPaths || [])),
+        source_type: input.sourceType || "promotion",
+        source_memory_id: input.sourceMemoryId || null,
+        supersedes_claim_id: input.supersedesClaimId || null,
+        created_at: now,
+        updated_at: now,
+      };
+
+      this.db.prepare(`
+        INSERT INTO memory_claims (
+          id, project_id, claim, fingerprint, category, confidence, durability, status,
+          tags_json, applies_to_paths_json, source_type, source_memory_id, supersedes_claim_id,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        row.id,
+        row.project_id,
+        row.claim,
+        row.fingerprint,
+        row.category,
+        row.confidence,
+        row.durability,
+        row.status,
+        row.tags_json,
+        row.applies_to_paths_json,
+        row.source_type,
+        row.source_memory_id,
+        row.supersedes_claim_id,
+        row.created_at,
+        row.updated_at,
+      );
+
+      return this.mapClaimRow(row);
+    } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      this.logger.error("Operation failed", { error, projectId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
+  }
+
+  getMemoryClaim(claimId: string): MemoryClaimRecord | null {
+    const row = this.db.prepare("SELECT * FROM memory_claims WHERE id = ?").get(claimId) as MemoryClaimRow | undefined;
+    return row ? this.mapClaimRow(row) : null;
+  }
+
+  findActiveMemoryClaimByFingerprint(projectId: string, claim: string): MemoryClaimRecord | null {
+    const row = this.db.prepare(`
+      SELECT * FROM memory_claims
+      WHERE project_id = ? AND fingerprint = ? AND status = 'active'
+      LIMIT 1
+    `).get(projectId, normalizeClaimFingerprint(claim)) as MemoryClaimRow | undefined;
+    return row ? this.mapClaimRow(row) : null;
+  }
+
+  listMemoryClaims(
+    projectId: string,
+    options: { status?: MemoryClaimStatus; category?: MemoryCategory; limit?: number } = {},
+  ): MemoryClaimRecord[] {
+    let sql = "SELECT * FROM memory_claims WHERE project_id = ?";
+    const params: Array<string | number> = [projectId];
+
+    if (options.status) {
+      sql += " AND status = ?";
+      params.push(options.status);
+    }
+    if (options.category) {
+      sql += " AND category = ?";
+      params.push(options.category);
+    }
+
+    sql += " ORDER BY updated_at DESC LIMIT ?";
+    params.push(options.limit ?? 200);
+
+    const rows = this.db.prepare(sql).all(...params) as unknown as MemoryClaimRow[];
+    return rows.map((row) => this.mapClaimRow(row));
+  }
+
+  updateMemoryClaim(claimId: string, input: UpdateMemoryClaimInput): MemoryClaimRecord {
+    try {
+      const current = requireRecord(this.getMemoryClaim(claimId), "Memory claim", claimId);
+      const now = new Date().toISOString();
+      const claim = input.claim?.trim() ?? current.claim;
+      if (!claim) {
+        throw new RepositoryError("Memory claim content is required");
+      }
+      const tags = input.tags ? normalizeStringArray(input.tags) : current.tags;
+      const appliesToPaths = input.appliesToPaths ? normalizeStringArray(input.appliesToPaths) : current.appliesToPaths;
+
+      this.db.prepare(`
+        UPDATE memory_claims
+        SET claim = ?, fingerprint = ?, category = ?, confidence = ?, durability = ?,
+            status = ?, tags_json = ?, applies_to_paths_json = ?, supersedes_claim_id = ?, updated_at = ?
+        WHERE id = ?
+      `).run(
+        claim,
+        normalizeClaimFingerprint(claim),
+        input.category ?? current.category,
+        input.confidence === undefined ? current.confidence : clamp01(input.confidence),
+        input.durability === undefined ? current.durability : clamp01(input.durability),
+        input.status ?? current.status,
+        JSON.stringify(tags),
+        JSON.stringify(appliesToPaths),
+        input.supersedesClaimId === undefined ? current.supersedesClaimId : input.supersedesClaimId,
+        now,
+        claimId,
+      );
+
+      return requireRecord(this.getMemoryClaim(claimId), "Memory claim", claimId);
+    } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      this.logger.error("Operation failed", { error, claimId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
+  }
+
+  addMemoryClaimEvidence(input: AddMemoryClaimEvidenceInput): MemoryClaimEvidenceLink {
+    const now = new Date().toISOString();
+    const row: MemoryClaimEvidenceRow = {
+      claim_id: input.claimId,
+      memory_id: input.memoryId,
+      support_type: input.supportType || "supports",
+      weight: clamp01(input.weight ?? 1),
+      created_at: now,
+    };
+
+    this.db.prepare(`
+      INSERT INTO memory_claim_evidence (claim_id, memory_id, support_type, weight, created_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(claim_id, memory_id) DO UPDATE SET
+        support_type = excluded.support_type,
+        weight = excluded.weight
+    `).run(row.claim_id, row.memory_id, row.support_type, row.weight, row.created_at);
+
+    return this.mapEvidenceRow(row);
+  }
+
+  listMemoryClaimEvidence(claimId: string): MemoryClaimEvidenceLink[] {
+    const rows = this.db.prepare(`
+      SELECT * FROM memory_claim_evidence
+      WHERE claim_id = ?
+      ORDER BY weight DESC, created_at ASC
+    `).all(claimId) as unknown as MemoryClaimEvidenceRow[];
+    return rows.map((row) => this.mapEvidenceRow(row));
   }
 
   // --- Embedding model status ---
@@ -542,6 +844,36 @@ export class MemoryRepository {
     };
   }
 
+  private mapClaimRow(row: MemoryClaimRow): MemoryClaimRecord {
+    return {
+      id: row.id,
+      projectId: row.project_id,
+      claim: row.claim,
+      fingerprint: row.fingerprint,
+      category: row.category as MemoryCategory,
+      confidence: row.confidence,
+      durability: row.durability,
+      status: row.status as MemoryClaimStatus,
+      tags: parseStringArray(row.tags_json),
+      appliesToPaths: parseStringArray(row.applies_to_paths_json),
+      sourceType: row.source_type as MemoryClaimSourceType,
+      sourceMemoryId: row.source_memory_id,
+      supersedesClaimId: row.supersedes_claim_id,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  private mapEvidenceRow(row: MemoryClaimEvidenceRow): MemoryClaimEvidenceLink {
+    return {
+      claimId: row.claim_id,
+      memoryId: row.memory_id,
+      supportType: row.support_type as MemoryClaimEvidenceSupport,
+      weight: row.weight,
+      createdAt: row.created_at,
+    };
+  }
+
   private parseSource(json: string): MemorySource {
     try {
       const parsed = JSON.parse(json) as MemorySource;
@@ -553,4 +885,33 @@ export class MemoryRepository {
   }
 
 
+}
+
+function clamp01(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
+}
+
+function normalizeStringArray(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort();
+}
+
+function parseStringArray(json: string): string[] {
+  try {
+    const parsed = JSON.parse(json) as unknown;
+    if (Array.isArray(parsed)) {
+      return normalizeStringArray(parsed.filter((value): value is string => typeof value === "string"));
+    }
+  } catch {
+    // ignore malformed stored metadata
+  }
+  return [];
+}
+
+function normalizeClaimFingerprint(claim: string): string {
+  return claim
+    .trim()
+    .toLowerCase()
+    .replace(/[`"'.,;:!?()[\]{}]/g, "")
+    .replace(/\s+/g, " ");
 }

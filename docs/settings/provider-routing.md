@@ -75,6 +75,7 @@ Manual route selection is authoritative for that route. If a route sets `provide
 - `qa_review`: completion-time quality assurance reviews that can request follow-up fixes
 - `ci_fix`: worker-owned CI repair runs
 - `merge_conflict`: worker-owned merge-conflict repair runs
+- `remediation`: memory curation runs, including optional AI post-sprint promotion review and scheduled long-term memory cleanup
 
 ## Resolution Rules
 
@@ -114,6 +115,7 @@ To prevent conflicting generated runtime configuration and credential leakage, C
 - `qa_review` uses `WORKER`
 - `ci_fix` uses `WORKER`
 - `merge_conflict` uses `WORKER`
+- `remediation` uses `WORKER`
 
 That means:
 - task coding uses the strategy stored on the `task_coding` route
@@ -138,6 +140,8 @@ Provider-cap queueing is not a task creation failure. It must not increment the 
   - virtual planning provider/model resolution
 - `src/services/virtual-worker-service.ts`
   - CI fix and merge-conflict worker-owned repair flows
+- `src/services/memory-remediation-service.ts`
+  - post-sprint memory curation and scheduled long-term memory cleanup
 - `src/services/cli-workflow/pipeline/prepare-stage.ts`
 - `src/services/cli-workflow/pipeline/execute-provider-stage.ts`
   - consume explicit per-run provider settings instead of implicitly borrowing worker model overrides

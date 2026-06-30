@@ -262,6 +262,7 @@ export function createCoreDependencies(
     memoryRepository,
     embeddingService,
     logger.child({ component: "memory-service" }),
+    (projectId) => resolveEffectiveDashboardSettings(settingsRepository, projectId).settings.memory,
   );
   const memoryPromotionService = new MemoryPromotionService(
     memoryService,

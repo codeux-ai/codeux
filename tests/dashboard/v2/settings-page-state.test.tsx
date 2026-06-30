@@ -5,6 +5,7 @@ import { useSettingsPageState } from "../../../dashboard/src/v2/hooks/use-settin
 import { CATEGORIES, CATEGORY_SEARCH_HINTS } from "../../../dashboard/src/v2/components/settings/SettingsCategoryRail.js";
 import { applyEffectiveProjectSettings } from "../../../dashboard/src/v2/lib/settings-view-models.js";
 import * as settingsApi from "../../../dashboard/src/v2/lib/settings-api.js";
+import * as memoryApi from "../../../dashboard/src/v2/lib/memory-api.js";
 import * as agentPresetApi from "../../../dashboard/src/v2/lib/agent-preset-api.js";
 import * as dashboardApi from "../../../dashboard/src/lib/api/dashboard-api.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
@@ -350,6 +351,35 @@ describe("useSettingsPageState", () => {
     await act(async () => {
       await result.current.handleDeleteProject();
     });
+  });
+
+  it("handles clearing project memory by tier", async () => {
+    const mockClearProject = vi.spyOn(memoryApi, "clearProjectMemories")
+      .mockResolvedValue({ memories: 2, claims: 1, evidence: 1 });
+    const { result } = renderHook(() => useSettingsPageState(CATEGORIES, CATEGORY_SEARCH_HINTS));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.handleClearMemory("project", "long_term");
+    });
+
+    expect(mockClearProject).toHaveBeenCalledWith("proj-1", "long_term");
+    expect(result.current.memoryClearBusy).toBeNull();
+    expect(result.current.saveMessage).toContain("Long-term");
+  });
+
+  it("handles clearing system-wide memory by tier", async () => {
+    const mockClearSystem = vi.spyOn(memoryApi, "clearSystemMemories")
+      .mockResolvedValue({ memories: 5, claims: 0, evidence: 0 });
+    const { result } = renderHook(() => useSettingsPageState(CATEGORIES, CATEGORY_SEARCH_HINTS));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.handleClearMemory("system", "all");
+    });
+
+    expect(mockClearSystem).toHaveBeenCalledWith("all");
+    expect(result.current.saveMessage).toContain("system-wide");
   });
 
   it("handles reset database", async () => {

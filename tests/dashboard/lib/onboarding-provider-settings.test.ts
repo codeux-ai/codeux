@@ -75,11 +75,11 @@ describe("onboarding-provider-settings", () => {
           instructionTemplates: {},
           qualityAssurance: { enabled: false, maxTaskReviewRuns: 2, maxSprintReviewRuns: 3, exhaustionPolicy: "STOP", taskCompletion: { strategy: "ALWAYS" }, sprintCompletion: { strategy: "ALWAYS" }, completedTaskWithoutPr: { strategy: "CREATE_PR" } }
         },
-        guardrails: { onLimitAction: "WARN", defaultLimitOverrides: [], limitOverrides: [], jobConfigOverrides: [], jobs: { task_coding: {}, ci_fix: {}, merge_conflict: {}, clarification_reply: {}, planning: {} } },
+        guardrails: { onLimitAction: "WARN", defaultLimitOverrides: [], limitOverrides: [], jobConfigOverrides: [], jobs: { task_coding: {}, ci_fix: {}, merge_conflict: {}, clarification_reply: {}, planning: {}, remediation: {} } },
         skills: [],
         mcpTools: [],
         customMcpServers: [],
-        memory: { enabled: true, embeddingModel: null, autoCaptureSprint: true, autoCaptureAgent: true, autoPromote: false, promotionThreshold: 5, maxSprintMemories: 10, maxProjectMemories: 20, mapMaxEdgesPerNode: 5, workerLearningsInstruction: "" }
+        memory: { enabled: true, embeddingModel: null, externalEmbedding: { baseUrl: "", apiKey: "", model: "", dimensions: null }, autoCaptureSprint: true, autoCaptureAgent: true, autoPromote: false, promotionThreshold: 5, maxSprintMemories: 10, maxProjectMemories: 20, mapMaxEdgesPerNode: 5, workerLearningsInstruction: "" }
       },
       mcpTools: [],
       customMcpServers: []

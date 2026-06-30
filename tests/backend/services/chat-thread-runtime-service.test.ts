@@ -94,6 +94,50 @@ describe("ChatThreadRuntimeService", () => {
     });
   });
 
+  it("folds a provider instance's customModel into the executed model so local-redirect instances do not hit the real subscription", async () => {
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-cm", threadId: "t1", bodyMarkdown: "hello" });
+    deps.connectionChatRepository.getThread.mockReturnValue({
+      id: "t1",
+      connectionId: null,
+      runtimeState: {},
+    });
+    deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+    // "Claude Local"-style instance: model stays "default" but a customModel/customBaseUrl
+    // redirect points it at a local LM server. The runner keys off `model`, so the route's
+    // customModel must be folded into the executed model — otherwise it runs as the default
+    // (real) Claude model.
+    deps.taskService.resolveInvocationProvider.mockReturnValue({
+      provider: "claude-code",
+      providerConfigId: "claude-code-local",
+      providers: {
+        "claude-code-local": {
+          provider: "claude-code",
+          model: "default",
+          apiKey: "sk-lm-key",
+          thinkingMode: "HIGH",
+          mountAuth: false,
+          authPath: "~/.claude",
+          customBaseUrl: "http://192.168.0.38:1234",
+          customModel: "google/gemma-4-26b-a4b-qat",
+        },
+      },
+    });
+    deps.connectionChatRepository.listMessages.mockReturnValue([]);
+    deps.executionRepository.createExecutionInvocation.mockReturnValue({ id: "exec-cm" });
+    deps.chatManagementActionService.processManagementAction.mockResolvedValue({ replyMarkdown: "local reply", action: null, approvalRequired: false });
+
+    await service.postMessage("p1", { bodyMarkdown: "hello" });
+
+    expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "claude-code",
+        model: "google/gemma-4-26b-a4b-qat",
+        customModel: "google/gemma-4-26b-a4b-qat",
+        customBaseUrl: "http://192.168.0.38:1234",
+      })
+    );
+  });
+
   it("continues with continueSessionId if same provider using chatManagementActionService", async () => {
     deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-3", threadId: "t1", bodyMarkdown: "hello" });
     deps.connectionChatRepository.getThread.mockReturnValue({

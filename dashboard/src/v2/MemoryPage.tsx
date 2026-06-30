@@ -748,22 +748,39 @@ export const MemoryPage: FunctionComponent = () => {
 
             {/* ── Model Management ────────────────────────────────────── */}
             {showModels && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {models.map((model: EmbeddingModelWithStatus) => (
-                        <ModelCard key={model.id} model={model}
-                            onDownload={handleDownloadModel}
-                            onSelect={handleSelectModelWithStats}
-                            onDelete={handleDeleteModel}
-                            onReembed={handleReembed}
-                            reembedding={!!reembed?.active}
-                            staleCount={stats.staleEmbeddings} />
-                    ))}
-                    {models.length === 0 && (
-                        <p className="text-sm text-slate-400 font-medium col-span-2 text-center py-8">
-                            Loading embedding models…
-                        </p>
-                    )}
-                </div>
+                <section aria-labelledby="embedding-model-catalog-title" className="space-y-3">
+                    <div className="flex flex-wrap items-end justify-between gap-2">
+                        <div>
+                            <h2 id="embedding-model-catalog-title" className="text-sm font-bold text-slate-800 dark:text-white">
+                                Embedding model catalog
+                            </h2>
+                            <p className="text-[11px] text-slate-500">
+                                Download compatible ONNX models for local memory search.
+                            </p>
+                        </div>
+                        {models.length > 0 && (
+                            <span className="text-[10px] font-mono text-slate-400">
+                                {models.length} available
+                            </span>
+                        )}
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {models.map((model: EmbeddingModelWithStatus) => (
+                            <ModelCard key={model.id} model={model}
+                                onDownload={handleDownloadModel}
+                                onSelect={handleSelectModelWithStats}
+                                onDelete={handleDeleteModel}
+                                onReembed={handleReembed}
+                                reembedding={!!reembed?.active}
+                                staleCount={stats.staleEmbeddings} />
+                        ))}
+                        {models.length === 0 && (
+                            <p className="text-sm text-slate-400 font-medium col-span-2 text-center py-8">
+                                Loading embedding models…
+                            </p>
+                        )}
+                    </div>
+                </section>
             )}
 
             {/* ── Re-embed banner ─────────────────────────────────────── */}

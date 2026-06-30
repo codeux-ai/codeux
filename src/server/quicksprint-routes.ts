@@ -109,7 +109,6 @@ export function registerQuicksprintRoutes(router: Express, deps: DashboardDepend
       return;
     }
     const ac = new AbortController();
-    res.on("close", () => { if (!res.writableFinished) ac.abort(); });
     const sprint = await deps.quicksprintService.executeQuicksprint(projectId, parseQuicksprintExecutionInput(req.body), ac.signal);
     res.status(201).json(sprint);
   }));

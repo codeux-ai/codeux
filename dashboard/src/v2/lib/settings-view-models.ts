@@ -29,7 +29,10 @@ import {
   VIRTUAL_WORKER_PROVIDERS,
 } from "../../../../src/repositories/settings-defaults.js";
 
-const cloneMemorySettings = (memory: ProjectSettings["memory"]): ProjectSettings["memory"] => ({ ...memory });
+const cloneMemorySettings = (memory: ProjectSettings["memory"]): ProjectSettings["memory"] => ({
+  ...memory,
+  externalEmbedding: { ...memory.externalEmbedding },
+});
 
 const cloneJiraSettings = (jira: SystemSettings["integrations"]["jira"]): SystemSettings["integrations"]["jira"] => ({ ...jira });
 

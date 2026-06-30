@@ -90,7 +90,8 @@ export type InvocationRoutingId =
   | "clarification_reply"
   | "qa_review"
   | "ci_fix"
-  | "merge_conflict";
+  | "merge_conflict"
+  | "remediation";
 export type CliExecutionMode = "DOCKER" | "HOST";
 export type FeaturePrAutoMergeMode = "OFF" | "CREATE_PR" | "WHEN_GREEN" | "ALWAYS";
 export type WorkerExecutionMode = "VIRTUAL";
@@ -764,7 +765,8 @@ export type GuardrailJobType =
   | "ci_fix"
   | "merge_conflict"
   | "clarification_reply"
-  | "planning";
+  | "planning"
+  | "remediation";
 
 /** What happens when a task hits an invocation cap for a given job type. */
 export type GuardrailOnLimitAction =

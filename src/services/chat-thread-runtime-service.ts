@@ -9,6 +9,7 @@ import type { IProviderRunner } from "../infrastructure/providers/cli/provider-r
 import type { Logger } from "../shared/logging/logger.js";
 import type { ConversationCompactionSummary, CreateDashboardConversationMessageInput, ConversationThreadRecord, ConversationMessageRecord, ConversationRuntimeState, UpdateConversationThreadRouteInput } from "../contracts/connection-chat-types.js";
 import { buildProviderPrompt } from "./cli-workflow-utils.js";
+import { resolveEffectiveModel } from "./provider-execution-service.js";
 import {
   buildChatCompactionPrompt,
   buildChatContinuationPrompt,
@@ -255,7 +256,21 @@ export class ChatThreadRuntimeService {
     if (!project) return;
 
     const provider = route.providerId!;
-    const model = route.model!;
+    // Fold the instance's customModel into the model exactly like the coding path
+    // (ProviderExecutionService.executeProvider). The low-level runner keys off `model`
+    // alone and ignores `customModel`, so without this a "Claude Local"-style instance
+    // (customModel/customBaseUrl pointing at a local LM server) would run as `model=default`
+    // and hit the real Anthropic subscription instead of the configured local endpoint.
+    const model = resolveEffectiveModel({
+      provider,
+      model: route.model!,
+      customModel: route.customModel,
+      qwenAuthMode: route.qwenAuthMode,
+      qwenModelId: route.qwenModelId,
+      openCodeAuthMode: route.openCodeAuthMode,
+      openCodeProviderId: route.openCodeProviderId,
+      openCodeModelId: route.openCodeModelId,
+    });
     const apiKey = route.apiKey!;
     const thinkingMode = route.thinkingMode;
     const dashboardSettings = this.deps.getDashboardSettings({ projectId });
@@ -380,6 +395,7 @@ export class ChatThreadRuntimeService {
       providerMountAuth: route.providerMountAuth,
       providerAuthPath: route.providerAuthPath,
       customBaseUrl: route.customBaseUrl,
+      customModel: route.customModel,
       sessionId: thread.id,
       continueSessionId,
       settings: dashboardSettings,
@@ -460,7 +476,19 @@ export class ChatThreadRuntimeService {
     route: ThreadRouteResolution,
   ): Promise<ConversationCompactionSummary> {
     const provider = route.providerId!;
-    const model = route.model!;
+    // Fold customModel into the model so a local-redirect instance (customModel/customBaseUrl)
+    // compacts against its configured endpoint rather than the real subscription. The runner
+    // keys off `model` and ignores the separate `customModel` field.
+    const model = resolveEffectiveModel({
+      provider,
+      model: route.model!,
+      customModel: route.customModel,
+      qwenAuthMode: route.qwenAuthMode,
+      qwenModelId: route.qwenModelId,
+      openCodeAuthMode: route.openCodeAuthMode,
+      openCodeProviderId: route.openCodeProviderId,
+      openCodeModelId: route.openCodeModelId,
+    });
     const apiKey = route.apiKey!;
     const thinkingMode = route.thinkingMode;
     const dashboardSettings = this.deps.getDashboardSettings({ projectId });

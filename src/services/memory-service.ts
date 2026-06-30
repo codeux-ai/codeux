@@ -6,7 +6,11 @@ import type {
   UpdateMemoryInput,
   MemorySearchQuery,
   MemorySearchResult,
+  MemoryClaimSearchResult,
   EmbeddingModelId,
+  MemorySettings,
+  MemoryClearTier,
+  MemoryClearResult,
 } from "../contracts/memory-types.js";
 import { MemoryRepository } from "../repositories/memory-repository.js";
 import { EmbeddingService } from "./embedding-service.js";
@@ -19,6 +23,14 @@ import { cosineSimilarity, bufferToFloat32, float32ToBuffer } from "./embedding-
 const VALID_CATEGORIES = new Set<MemoryCategory>([
   "architecture", "codebase", "context", "preferences", "patterns", "decision", "error", "learning",
 ]);
+
+export function isCiFailureMemoryContent(category: MemoryCategory, content: string): boolean {
+  if (category !== "error") {
+    return false;
+  }
+  return /\b(ci|continuous integration|github actions?|workflow|check run|status check|build|test suite|pipeline)\b[\s\S]{0,80}\b(fail|failed|failing|failure|red|broken)\b/i.test(content)
+    || /\b(fail|failed|failing|failure|red|broken)\b[\s\S]{0,80}\b(ci|continuous integration|github actions?|workflow|check run|status check|build|test suite|pipeline)\b/i.test(content);
+}
 
 function parseCategory(header: string): MemoryCategory {
   const name = header.trim().toLowerCase();
@@ -77,16 +89,31 @@ export class MemoryService {
   private readonly memoryRepository: MemoryRepository;
   private readonly embeddingService: EmbeddingService;
   private readonly logger: Logger;
+  private readonly getMemorySettings?: (projectId: string) => MemorySettings;
   private reembedProgress: ReembedProgress | null = null;
 
   constructor(
     memoryRepository: MemoryRepository,
     embeddingService: EmbeddingService,
     logger: Logger,
+    getMemorySettings?: (projectId: string) => MemorySettings,
   ) {
     this.memoryRepository = memoryRepository;
     this.embeddingService = embeddingService;
     this.logger = logger;
+    this.getMemorySettings = getMemorySettings;
+  }
+
+  private configureEmbeddingProvider(projectId: string): void {
+    const settings = this.getMemorySettings?.(projectId);
+    if (!settings) {
+      return;
+    }
+    if (settings.embeddingProvider === "external_api") {
+      this.embeddingService.configureExternal(settings.externalEmbedding);
+      return;
+    }
+    this.embeddingService.useInAppEmbeddings();
   }
 
   async captureMemoriesFromWorktree(
@@ -121,7 +148,9 @@ export class MemoryService {
       return 0;
     }
 
-    const inputs: CreateMemoryInput[] = entries.map((entry) => ({
+    const inputs: CreateMemoryInput[] = entries
+      .filter((entry) => !isCiFailureMemoryContent(entry.category, entry.content))
+      .map((entry) => ({
       scope: "sprint",
       sprintId,
       agentPresetId,
@@ -134,6 +163,9 @@ export class MemoryService {
         originId,
       },
     }));
+    if (inputs.length === 0) {
+      return 0;
+    }
 
     try {
       const records = await this.createMemories(projectId, inputs);
@@ -145,6 +177,7 @@ export class MemoryService {
   }
 
   async createMemory(projectId: string, input: CreateMemoryInput): Promise<MemoryRecord> {
+    this.configureEmbeddingProvider(projectId);
     const record = this.memoryRepository.createMemory(projectId, input);
 
     // Async: compute embedding if model is loaded
@@ -162,6 +195,7 @@ export class MemoryService {
   }
 
   async createMemories(projectId: string, inputs: CreateMemoryInput[]): Promise<MemoryRecord[]> {
+    this.configureEmbeddingProvider(projectId);
     const records = this.memoryRepository.createMemories(projectId, inputs);
 
     // Async: compute embedding if model is loaded
@@ -197,6 +231,14 @@ export class MemoryService {
     this.memoryRepository.deleteMemory(memoryId);
   }
 
+  /**
+   * Bulk-clear memory data by tier. Omitting `projectId` clears system-wide.
+   * See {@link MemoryRepository.clearMemories} for tier semantics.
+   */
+  clearMemories(tier: MemoryClearTier, projectId?: string): MemoryClearResult {
+    return this.memoryRepository.clearMemories(tier, projectId);
+  }
+
   listByProject(projectId: string, scope?: MemoryScope, limit?: number): MemoryRecord[] {
     return this.memoryRepository.listByProject(projectId, scope, limit);
   }
@@ -220,18 +262,15 @@ export class MemoryService {
   }
 
   async search(query: MemorySearchQuery): Promise<MemorySearchResult[]> {
+    this.configureEmbeddingProvider(query.projectId);
     const modelId = this.embeddingService.getLoadedModelId();
     if (!modelId) {
       return [];
     }
 
-    const dimension = this.embeddingService.getDimension();
-    if (!dimension) {
-      return [];
-    }
-
     // Embed query
     const queryEmbedding = await this.embeddingService.embed(query.query);
+    const dimension = queryEmbedding.length;
 
     // Load candidate embeddings
     const candidates = this.memoryRepository.loadEmbeddingsForScope(
@@ -262,6 +301,9 @@ export class MemoryService {
 
     // Fetch full records in batch
     const topIds = topK.map((item) => item.id);
+    if (topIds.length === 0) {
+      return [];
+    }
     const memories = this.memoryRepository.getMemories(topIds);
 
     // Map memories back to ranked results
@@ -281,10 +323,46 @@ export class MemoryService {
     return results;
   }
 
+  async searchClaims(query: Omit<MemorySearchQuery, "scope" | "sprintId" | "agentPresetId" | "category">): Promise<MemoryClaimSearchResult[]> {
+    const memoryResults = await this.search({
+      ...query,
+      scope: "project",
+      limit: Math.max(query.limit ?? 20, 50),
+    });
+    const claimResults: MemoryClaimSearchResult[] = [];
+    const seenClaimIds = new Set<string>();
+
+    for (const result of memoryResults) {
+      const claimId = result.memory.source.originType === "memory_claim"
+        ? result.memory.source.originId
+        : null;
+      if (!claimId || seenClaimIds.has(claimId)) {
+        continue;
+      }
+      const claim = this.memoryRepository.getMemoryClaim(claimId);
+      if (!claim || claim.status !== "active") {
+        continue;
+      }
+      seenClaimIds.add(claim.id);
+      claimResults.push({
+        claim,
+        similarity: result.similarity,
+        evidenceCount: this.memoryRepository.listMemoryClaimEvidence(claim.id).length,
+        supportingMemory: result.memory,
+      });
+      if (claimResults.length >= (query.limit ?? 20)) {
+        break;
+      }
+    }
+
+    return claimResults;
+  }
+
   async reembedProject(
     projectId: string,
     onProgress?: (completed: number, total: number) => void,
   ): Promise<number> {
+    this.configureEmbeddingProvider(projectId);
     if (!this.embeddingService.isLoaded()) {
       throw new Error("No embedding model loaded");
     }
@@ -315,6 +393,7 @@ export class MemoryService {
   }
 
   startReembedProject(projectId: string): void {
+    this.configureEmbeddingProvider(projectId);
     if (!this.embeddingService.isLoaded()) {
       throw new Error("No embedding model loaded");
     }
@@ -373,6 +452,7 @@ export class MemoryService {
   }
 
   countStaleEmbeddings(projectId: string): number {
+    this.configureEmbeddingProvider(projectId);
     const modelId = this.embeddingService.getLoadedModelId();
     if (!modelId) return 0;
     return this.memoryRepository.countStaleEmbeddings(projectId, modelId);
@@ -385,6 +465,7 @@ export class MemoryService {
     agentPresetId?: string,
     topKPerNode = 3,
   ): EmbeddingMapResult {
+    this.configureEmbeddingProvider(projectId);
     const modelId = this.embeddingService.getLoadedModelId();
     if (!modelId) {
       return { nodes: [], edges: [], hasEmbeddings: false };
@@ -562,11 +643,12 @@ export class MemoryService {
   }
 
   public async triggerEmbedding(record: MemoryRecord): Promise<void> {
+    this.configureEmbeddingProvider(record.projectId);
     const modelId = this.embeddingService.getLoadedModelId();
-    const dimension = this.embeddingService.getDimension();
-    if (!modelId || !dimension) return;
+    if (!modelId) return;
 
     const embedding = await this.embeddingService.embed(record.content);
+    const dimension = embedding.length;
     const blob = float32ToBuffer(embedding);
     this.memoryRepository.saveEmbedding(record.id, modelId, dimension, blob);
   }

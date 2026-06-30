@@ -528,44 +528,13 @@ export class CycleRunner {
     args: CycleRunnerArgs,
     settings: ReturnType<SprintOrchestratorDependencies["getDashboardSettings"]>,
   ): Promise<void> {
-    const memoryService = this.deps.memoryService;
-    if (!memoryService || !settings?.memory?.enabled || !settings?.memory?.autoCaptureSprint) return;
-
-    const memoryInputs: CreateMemoryInput[] = [];
-    for (const task of subtasks) {
-      if (task.merge_indicator !== "CI") continue;
-      const prev = preGateStates.get(task.id);
-      if (prev && prev.mergeIndicator === "CI") continue; // already known
-
-      const content = `CI failure detected for task ${task.id} — ${task.title}. Branch: ${task.worker_branch || "unknown"}. PR: ${task.pr_url || "none"}.`;
-
-      memoryInputs.push({
-        scope: "sprint",
-        sprintId: args.executionContext.sprint.id,
-        agentPresetId: args.planningAgentPresetId ?? null,
-        content,
-        category: "error",
-        strength: 0.7,
-        source: {
-          type: "auto_capture",
-          originType: "ci_failure",
-          originId: task.record_id || task.id,
-        },
-      });
-    }
-
-    if (memoryInputs.length > 0) {
-      try {
-        await memoryService.createMemoriesBatch(args.executionContext.project.id, memoryInputs);
-      } catch (error) {
-        this.deps.logger.warn("Failed to auto-capture task memory", {
-          projectId: args.executionContext.project.id,
-          sprintId: args.executionContext.sprint.id,
-          sprintRunId: args.sprintRunId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
+    void subtasks;
+    void preGateStates;
+    void args;
+    void settings;
+    // CI failures are operationally noisy and are tracked through task/CI events,
+    // not short-term knowledge. Keeping them out of memory prevents remediation
+    // from spending provider time cleaning transient build failures later.
   }
 
   /**

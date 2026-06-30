@@ -660,8 +660,35 @@ const validateMemory = (
     return;
   }
   if (typeof value.enabled !== "boolean") issues.push({ path: `${path}.enabled`, message: "Expected a boolean" });
-  if (value.embeddingModel !== null && (typeof value.embeddingModel !== "string" || !EMBEDDING_MODEL_IDS.includes(value.embeddingModel as EmbeddingModelId))) {
+  if (value.embeddingProvider !== "in_app" && value.embeddingProvider !== "external_api") {
+    issues.push({ path: `${path}.embeddingProvider`, message: "Expected in_app or external_api" });
+  }
+  if (value.embeddingModel !== null && typeof value.embeddingModel !== "string") {
+    issues.push({ path: `${path}.embeddingModel`, message: "Expected null or a model id string" });
+  } else if (value.embeddingProvider !== "external_api" && value.embeddingModel !== null && !EMBEDDING_MODEL_IDS.includes(value.embeddingModel as EmbeddingModelId as any)) {
     issues.push({ path: `${path}.embeddingModel`, message: `Expected null or one of: ${EMBEDDING_MODEL_IDS.join(", ")}` });
+  }
+  if (!isRecord(value.externalEmbedding)) {
+    issues.push({ path: `${path}.externalEmbedding`, message: "Expected an object" });
+  } else {
+    if (typeof value.externalEmbedding.baseUrl !== "string") {
+      issues.push({ path: `${path}.externalEmbedding.baseUrl`, message: "Expected a string" });
+    }
+    if (typeof value.externalEmbedding.apiKey !== "string") {
+      issues.push({ path: `${path}.externalEmbedding.apiKey`, message: "Expected a string" });
+    }
+    if (typeof value.externalEmbedding.model !== "string") {
+      issues.push({ path: `${path}.externalEmbedding.model`, message: "Expected a string" });
+    }
+    if (value.externalEmbedding.dimensions !== null && typeof value.externalEmbedding.dimensions !== "number") {
+      issues.push({ path: `${path}.externalEmbedding.dimensions`, message: "Expected null or a number" });
+    }
+  }
+  if (value.remediationMode !== "off" && value.remediationMode !== "deterministic" && value.remediationMode !== "ai") {
+    issues.push({ path: `${path}.remediationMode`, message: "Expected off, deterministic, or ai" });
+  }
+  if (typeof value.remediationMaxPromotions !== "number") {
+    issues.push({ path: `${path}.remediationMaxPromotions`, message: "Expected a number" });
   }
   if (typeof value.autoCaptureSprint !== "boolean") issues.push({ path: `${path}.autoCaptureSprint`, message: "Expected a boolean" });
   if (typeof value.autoCaptureAgent !== "boolean") issues.push({ path: `${path}.autoCaptureAgent`, message: "Expected a boolean" });
