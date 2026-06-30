@@ -29,6 +29,20 @@ import {
   VIRTUAL_WORKER_PROVIDERS,
 } from "../../../../src/repositories/settings-defaults.js";
 
+const cloneMemorySettings = (memory: ProjectSettings["memory"]): ProjectSettings["memory"] => ({ ...memory });
+
+const cloneJiraSettings = (jira: SystemSettings["integrations"]["jira"]): SystemSettings["integrations"]["jira"] => ({ ...jira });
+
+const cloneQualityAssuranceSettings = (qa: ProjectSettings["agents"]["qualityAssurance"]): ProjectSettings["agents"]["qualityAssurance"] => ({
+  enabled: qa.enabled,
+  maxTaskReviewRuns: qa.maxTaskReviewRuns,
+  maxSprintReviewRuns: qa.maxSprintReviewRuns,
+  exhaustionPolicy: qa.exhaustionPolicy,
+  taskCompletion: { ...qa.taskCompletion },
+  sprintCompletion: { ...qa.sprintCompletion },
+  completedTaskWithoutPr: { ...qa.completedTaskWithoutPr },
+});
+
 const cloneSkills = (skills: SkillToggle[]): SkillToggle[] => skills.map((skill) => ({ ...skill }));
 const cloneMcpTools = (tools: McpToolToggle[]): McpToolToggle[] => tools.map((tool) => ({ ...tool }));
 const cloneCustomMcpServers = (servers: CustomMcpServer[] = []): CustomMcpServer[] => servers.map((server) => ({
@@ -36,6 +50,15 @@ const cloneCustomMcpServers = (servers: CustomMcpServer[] = []): CustomMcpServer
   headers: server.headers ? { ...server.headers } : undefined,
   providers: server.providers ? [...server.providers] : undefined,
 }));
+const cloneProjectAiProviderSettings = (
+  aiProvider: ProjectSettings["aiProvider"],
+): ProjectSettings["aiProvider"] => ({
+  provider: aiProvider.provider,
+  strategy: aiProvider.strategy,
+  providers: cloneProjectProviders(aiProvider.providers),
+  invocationRouting: cloneInvocationRouting(aiProvider.invocationRouting),
+});
+
 const cloneProjectProviders = (
   providers: ProjectSettings["aiProvider"]["providers"],
 ): ProjectSettings["aiProvider"]["providers"] => (
@@ -96,25 +119,7 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
   automationInterventions: {
     ...settings.automationInterventions,
   },
-  aiProvider: {
-    provider: settings.aiProvider.provider,
-    strategy: settings.aiProvider.strategy,
-    providers: Object.fromEntries(
-      Object.entries(settings.aiProvider.providers).map(([providerConfigId, provider]) => [
-        providerConfigId,
-        {
-          provider: provider.provider,
-          name: provider.name,
-          enabled: provider.enabled,
-          model: provider.model,
-          weight: provider.weight,
-          thinkingMode: provider.thinkingMode,
-          maxConcurrentTasks: provider.maxConcurrentTasks,
-        },
-      ]),
-    ),
-    invocationRouting: cloneInvocationRouting(settings.aiProvider.invocationRouting),
-  },
+  aiProvider: cloneProjectAiProviderSettings(settings.aiProvider),
   git: {
     githubMode: settings.git.githubMode,
     githubToken: settings.git.githubToken,
@@ -127,7 +132,7 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
     sprintBranchScheme: settings.git.sprintBranchScheme,
     sprintKeyPrefix: settings.git.sprintKeyPrefix,
   },
-  jira: { ...settings.jira },
+  jira: cloneJiraSettings(settings.jira),
   ciIntelligence: {
     ...settings.ciIntelligence,
   },
@@ -148,20 +153,12 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
     saveToProjectDirectory: settings.agents.saveToProjectDirectory,
     routing: cloneAgentRouting(settings.agents.routing),
     instructionTemplates: { ...settings.agents.instructionTemplates },
-    qualityAssurance: {
-      enabled: settings.agents.qualityAssurance.enabled,
-      maxTaskReviewRuns: settings.agents.qualityAssurance.maxTaskReviewRuns,
-      maxSprintReviewRuns: settings.agents.qualityAssurance.maxSprintReviewRuns,
-      exhaustionPolicy: settings.agents.qualityAssurance.exhaustionPolicy,
-      taskCompletion: { ...settings.agents.qualityAssurance.taskCompletion },
-      sprintCompletion: { ...settings.agents.qualityAssurance.sprintCompletion },
-      completedTaskWithoutPr: { ...settings.agents.qualityAssurance.completedTaskWithoutPr },
-    },
+    qualityAssurance: cloneQualityAssuranceSettings(settings.agents.qualityAssurance),
   },
   skills: cloneSkills(settings.skills),
   mcpTools: cloneMcpTools(settings.mcpTools),
   customMcpServers: cloneCustomMcpServers(settings.customMcpServers),
-  memory: { ...settings.memory },
+  memory: cloneMemorySettings(settings.memory),
 });
 
 export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings => ({
@@ -170,16 +167,11 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
   automationInterventions: {
     ...settings.automationInterventions,
   },
-  aiProvider: {
-    provider: settings.aiProvider.provider,
-    strategy: settings.aiProvider.strategy,
-    providers: cloneProjectProviders(settings.aiProvider.providers),
-    invocationRouting: cloneInvocationRouting(settings.aiProvider.invocationRouting),
-  },
+  aiProvider: cloneProjectAiProviderSettings(settings.aiProvider),
   git: {
     ...settings.git,
   },
-  jira: { ...settings.jira },
+  jira: cloneJiraSettings(settings.jira),
   ciIntelligence: {
     ...settings.ciIntelligence,
   },
@@ -200,20 +192,12 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
     saveToProjectDirectory: settings.agents.saveToProjectDirectory,
     routing: cloneAgentRouting(settings.agents.routing),
     instructionTemplates: { ...settings.agents.instructionTemplates },
-    qualityAssurance: {
-      enabled: settings.agents.qualityAssurance.enabled,
-      maxTaskReviewRuns: settings.agents.qualityAssurance.maxTaskReviewRuns,
-      maxSprintReviewRuns: settings.agents.qualityAssurance.maxSprintReviewRuns,
-      exhaustionPolicy: settings.agents.qualityAssurance.exhaustionPolicy,
-      taskCompletion: { ...settings.agents.qualityAssurance.taskCompletion },
-      sprintCompletion: { ...settings.agents.qualityAssurance.sprintCompletion },
-      completedTaskWithoutPr: { ...settings.agents.qualityAssurance.completedTaskWithoutPr },
-    },
+    qualityAssurance: cloneQualityAssuranceSettings(settings.agents.qualityAssurance),
   },
   skills: cloneSkills(settings.skills),
   mcpTools: settings.mcpTools ? cloneMcpTools(settings.mcpTools) : undefined,
   customMcpServers: settings.customMcpServers ? cloneCustomMcpServers(settings.customMcpServers) : undefined,
-  memory: { ...settings.memory },
+  memory: cloneMemorySettings(settings.memory),
 });
 
 export const cloneSystemSettings = (settings: SystemSettings): SystemSettings => ({
@@ -222,7 +206,7 @@ export const cloneSystemSettings = (settings: SystemSettings): SystemSettings =>
   },
   integrations: {
     ...settings.integrations,
-    jira: settings.integrations.jira ? { ...settings.integrations.jira } : defaultJiraSettings(),
+    jira: settings.integrations.jira ? cloneJiraSettings(settings.integrations.jira) : defaultJiraSettings(),
     providers: cloneIntegrationProviders(settings.integrations.providers),
   },
   defaults: cloneProjectSettings(settings.defaults),
