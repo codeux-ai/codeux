@@ -225,4 +225,108 @@ describe("useSystemViewData", () => {
     expect(result.current.errorsByCategory.rateLimit).toBe(1);
     expect(result.current.errorsByCategory.cancelled).toBe(1);
   });
+
+  it("suppresses stale responses using AbortController", async () => {
+    let resolveFirstRequest: any;
+    let resolveSecondRequest: any;
+
+    const promise1 = new Promise((resolve) => {
+      resolveFirstRequest = resolve;
+    });
+    const promise2 = new Promise((resolve) => {
+      resolveSecondRequest = resolve;
+    });
+
+    (mockedFetchProjectInvocations as any)
+      .mockReturnValueOnce(promise1)
+      .mockReturnValueOnce(promise2);
+
+    const { result } = renderHook(() => useSystemViewData("project-1"));
+
+    // First request is pending. Trigger a search change to cause a second request.
+    act(() => {
+      result.current.setSearch("new search");
+    });
+
+    // The second request is now pending, and the first request's AbortController should have aborted it.
+    // However, since we mock fetchProjectInvocations, we just resolve the first one and verify it's ignored.
+
+    const abortError = new Error("aborted");
+    abortError.name = "AbortError";
+
+    await act(async () => {
+      // Simulate fetch rejecting due to abort
+      try {
+        resolveFirstRequest(Promise.reject(abortError));
+      } catch (e) {}
+
+      resolveSecondRequest({
+        items: [
+          createInvocation({ id: "inv-second", status: "completed", type: "analysis", provider: "gemini" })
+        ],
+        totalCount: 1,
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.invocations).toHaveLength(1);
+    expect(result.current.invocations[0].id).toBe("inv-second");
+    expect(result.current.error).toBeNull(); // AbortError shouldn't set error
+  });
+
+  it("resets page to 0 on filter, search, or sort change", async () => {
+    (mockedFetchProjectInvocations as any).mockResolvedValue({
+      items: [],
+      totalCount: 0,
+    });
+
+    const { result } = renderHook(() => useSystemViewData("project-1"));
+
+    act(() => {
+      result.current.setPage(2);
+    });
+
+    expect(result.current.page).toBe(2);
+
+    act(() => {
+      result.current.setSearch("reset");
+    });
+
+    expect(result.current.page).toBe(0);
+
+    act(() => {
+      result.current.setPage(5);
+    });
+
+    expect(result.current.page).toBe(5);
+
+    act(() => {
+      result.current.setFilters({ status: ["failed"], purpose: [], provider: [] });
+    });
+
+    expect(result.current.page).toBe(0);
+  });
+
+  it("uses legacy fallback logic correctly when missing server summary", async () => {
+    (mockedFetchProjectInvocations as any).mockResolvedValue([
+      createInvocation({ id: "inv-leg-1", type: "git_push", status: "completed", finishedAt: "2026-06-01T10:05:00.000Z" }),
+      createInvocation({ id: "inv-leg-2", type: "jira_sync", status: "failed", errorMessage: "fail" }),
+    ]);
+
+    const { result } = renderHook(() => useSystemViewData("project-1"));
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.invocations).toHaveLength(2);
+    expect(result.current.summaryMetrics.totalInvocations).toBe(2);
+    expect(result.current.summaryMetrics.completedCount).toBe(1);
+    expect(result.current.summaryMetrics.failedCount).toBe(1);
+    expect(result.current.externalApiMetrics.git.calls).toBe(1);
+    expect(result.current.externalApiMetrics.jira.calls).toBe(1);
+  });
 });

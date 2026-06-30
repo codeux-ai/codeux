@@ -88,6 +88,313 @@ const getDurationMs = (record: ExecutionInvocationRecord): number => {
   return Math.max(0, finishedAtMs - startedAtMs);
 };
 
+
+function computeLegacyFilteredInvocations(
+  allInvocations: ExecutionInvocationRecord[],
+  filters: SystemFilters,
+  search: string,
+  sort: SystemSort
+): ExecutionInvocationRecord[] {
+  const normalizedSearch = normalizeText(search);
+
+  const filtered = allInvocations.filter((record) => {
+    if (filters.status.length > 0 && !filters.status.includes(record.status)) {
+      return false;
+    }
+
+    const purposeValue = (record.type || "").trim();
+    if (filters.purpose.length > 0 && !filters.purpose.includes(purposeValue)) {
+      return false;
+    }
+
+    const providerValue = (record.provider || "").trim();
+    if (filters.provider.length > 0 && !filters.provider.includes(providerValue)) {
+      return false;
+    }
+
+    if (filters.errorCategories && filters.errorCategories.length > 0) {
+      const msg = (record.lastErrorMessage || "").toLowerCase();
+      let matched = false;
+      for (const cat of filters.errorCategories) {
+        if (cat === "timeout" && msg.includes("timeout")) matched = true;
+        else if (cat === "rateLimit" && (msg.includes("rate") || msg.includes("429"))) matched = true;
+        else if (cat === "modelError" && msg.includes("model")) matched = true;
+        else if (cat === "apiError" && (msg.includes("api") || msg.includes("http"))) matched = true;
+        else if (cat === "cancelled" && (msg.includes("cancel") || record.status === "cancelled")) matched = true;
+      }
+      if (!matched) return false;
+    }
+
+    if (normalizedSearch.length === 0) {
+      return true;
+    }
+
+    const searchTarget = [
+      record.id,
+      record.model,
+      record.type,
+      record.taskTitle,
+      record.lastErrorMessage,
+      record.errorMessage,
+    ].map(normalizeText).join(" ");
+
+    return searchTarget.includes(normalizedSearch);
+  });
+
+  const sorted = [...filtered].sort((left, right) => {
+    const direction = sort.dir === "asc" ? 1 : -1;
+
+    let leftValue = 0;
+    let rightValue = 0;
+
+    switch (sort.key) {
+      case "startedAt":
+        leftValue = getTimestampMs(left.startedAt);
+        rightValue = getTimestampMs(right.startedAt);
+        break;
+      case "totalTokens":
+        leftValue = getNumericValue(left.totalTokens);
+        rightValue = getNumericValue(right.totalTokens);
+        break;
+      case "durationMs":
+        leftValue = left.finishedAt ? Date.parse(left.finishedAt) - Date.parse(left.startedAt) : 0;
+        rightValue = right.finishedAt ? Date.parse(right.finishedAt) - Date.parse(right.startedAt) : 0;
+        leftValue = Number.isFinite(leftValue) ? leftValue : 0;
+        rightValue = Number.isFinite(rightValue) ? rightValue : 0;
+        break;
+      case "inputTokens":
+        leftValue = getNumericValue(left.inputTokens);
+        rightValue = getNumericValue(right.inputTokens);
+        break;
+      case "outputTokens":
+        leftValue = getNumericValue(left.outputTokens);
+        rightValue = getNumericValue(right.outputTokens);
+        break;
+      default:
+        break;
+    }
+
+    const delta = leftValue - rightValue;
+    if (delta !== 0) {
+      return delta * direction;
+    }
+
+    return left.id.localeCompare(right.id) * direction;
+  });
+
+  return sorted;
+}
+
+function computeLegacySummaryMetrics(filteredInvocations: ExecutionInvocationRecord[]): SystemSummaryMetrics {
+  const totalInvocations = filteredInvocations.length;
+  let runningCount = 0;
+  let failedCount = 0;
+  let completedCount = 0;
+  let cancelledCount = 0;
+  let pausedCount = 0;
+  let totalTokens = 0;
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let totalCachedTokens = 0;
+  let durationTotal = 0;
+  const durations: number[] = [];
+
+  for (const record of filteredInvocations) {
+    if (record.status === "running") {
+      runningCount += 1;
+    } else if (record.status === "failed") {
+      failedCount += 1;
+    } else if (record.status === "completed") {
+      completedCount += 1;
+    } else if (record.status === "cancelled") {
+      cancelledCount += 1;
+    } else if (record.status === "paused") {
+      pausedCount += 1;
+    }
+
+    totalTokens += getNumericValue(record.totalTokens);
+    totalInputTokens += getNumericValue(record.inputTokens);
+    totalOutputTokens += getNumericValue(record.outputTokens);
+    totalCachedTokens += getNumericValue(record.cachedInputTokens);
+
+    if (record.finishedAt !== null) {
+      const durationMs = getDurationMs(record);
+      durationTotal += durationMs;
+      durations.push(durationMs);
+    }
+  }
+
+  durations.sort((left, right) => left - right);
+  const finishedCount = durations.length;
+  const p95DurationMs = finishedCount > 0
+    ? durations[Math.min(finishedCount - 1, Math.max(0, Math.ceil(0.95 * finishedCount) - 1))]!
+    : 0;
+  const decidedCount = completedCount + failedCount + cancelledCount;
+  const cacheDenominator = totalInputTokens + totalCachedTokens;
+
+  return {
+    totalInvocations,
+    runningCount,
+    failedCount,
+    completedCount,
+    cancelledCount,
+    pausedCount,
+    errorRate: failedCount / Math.max(1, totalInvocations),
+    successRate: decidedCount > 0 ? completedCount / decidedCount : null,
+    totalTokens,
+    totalInputTokens,
+    totalOutputTokens,
+    totalCachedTokens,
+    cacheHitRate: cacheDenominator > 0 ? totalCachedTokens / cacheDenominator : null,
+    avgDurationMs: finishedCount > 0 ? durationTotal / finishedCount : 0,
+    p95DurationMs,
+  };
+}
+
+function computeLegacyAvailablePurposes(allInvocations: ExecutionInvocationRecord[]): string[] {
+  const purposes = new Set<string>();
+  for (const record of allInvocations) {
+    const purpose = (record.type || "").trim();
+    if (purpose) {
+      purposes.add(purpose);
+    }
+  }
+  return Array.from(purposes).sort((left, right) => left.localeCompare(right));
+}
+
+function computeLegacyAvailableProviders(allInvocations: ExecutionInvocationRecord[]): string[] {
+  const providers = new Set<string>();
+  for (const record of allInvocations) {
+    const provider = (record.provider || "").trim();
+    if (provider) {
+      providers.add(provider);
+    }
+  }
+  return Array.from(providers).sort((left, right) => left.localeCompare(right));
+}
+
+function computeLegacyExternalApiMetrics(allInvocations: ExecutionInvocationRecord[]): ExternalApiMetrics {
+  const metrics: ExternalApiMetrics = {
+    git: { calls: 0, avgDurationMs: 0 },
+    jules: { calls: 0, avgDurationMs: 0 },
+    jira: { calls: 0, avgDurationMs: 0 },
+    other: { calls: 0, avgDurationMs: 0 },
+  };
+
+  const totals = { git: 0, jules: 0, jira: 0, other: 0 };
+  const finishedCounts = { git: 0, jules: 0, jira: 0, other: 0 };
+
+  for (const record of allInvocations) {
+    const type = (record.type || "").toLowerCase();
+    const purpose = ((record as any).purpose || "").toLowerCase();
+    const provider = (record.provider || "").toLowerCase();
+    const isModel = type === "coding" || type === "planning" || type === "qa";
+
+    let category: keyof ExternalApiMetrics | null = null;
+
+    if (type.includes("git") || purpose.includes("git")) {
+      category = "git";
+    } else if (provider === "jules" || type.includes("jules")) {
+      category = "jules";
+    } else if (type.includes("jira") || purpose.includes("jira")) {
+      category = "jira";
+    } else if (!isModel) {
+      category = "other";
+    }
+
+    if (category) {
+      metrics[category].calls += 1;
+      if (record.finishedAt) {
+        totals[category] += getDurationMs(record);
+        finishedCounts[category] += 1;
+      }
+    }
+  }
+
+  for (const key of ["git", "jules", "jira", "other"] as const) {
+    if (finishedCounts[key] > 0) {
+      metrics[key].avgDurationMs = totals[key] / finishedCounts[key];
+    }
+  }
+
+  return metrics;
+}
+
+function computeLegacyErrorsByCategory(allInvocations: ExecutionInvocationRecord[]): ErrorsByCategory {
+  const counts: ErrorsByCategory = {
+    timeout: 0,
+    rateLimit: 0,
+    apiError: 0,
+    modelError: 0,
+    cancelled: 0,
+    other: 0,
+  };
+
+  for (const record of allInvocations) {
+    if (record.status === "failed" || record.status === "cancelled") {
+      const msg = (record.lastErrorMessage || "").toLowerCase();
+
+      if (msg.includes("timeout")) counts.timeout += 1;
+      else if (msg.includes("rate") || msg.includes("429")) counts.rateLimit += 1;
+      else if (msg.includes("model")) counts.modelError += 1;
+      else if (msg.includes("api") || msg.includes("http")) counts.apiError += 1;
+      else if (msg.includes("cancel") || record.status === "cancelled") counts.cancelled += 1;
+      else counts.other += 1;
+    }
+  }
+
+  return counts;
+}
+
+function computeLegacySprintStateSummary(allInvocations: ExecutionInvocationRecord[]): SprintStateSummary {
+  const sprintMap = new Map<string, { statusCounts: Record<string, number> }>();
+  let totalTasks = 0;
+  let runningTasks = 0;
+  let blockedTasks = 0;
+
+  for (const record of allInvocations) {
+    const sprintId = record.sprintId || (record as any).projectRunId || "";
+
+    if (!sprintMap.has(sprintId)) {
+      sprintMap.set(sprintId, { statusCounts: {} });
+    }
+
+    const sprintData = sprintMap.get(sprintId)!;
+    sprintData.statusCounts[record.status] = (sprintData.statusCounts[record.status] || 0) + 1;
+
+    totalTasks += 1;
+    if (record.status === "running") runningTasks += 1;
+    if (record.status === "paused") blockedTasks += 1;
+  }
+
+  let activeSprints = 0;
+  let completedSprints = 0;
+  let failedSprints = 0;
+
+  for (const [sprintId, data] of sprintMap.entries()) {
+    if (!sprintId) continue;
+
+    const counts = data.statusCounts;
+    const totalInSprint = Object.values(counts).reduce((sum, c) => sum + c, 0);
+
+    if (counts["running"] > 0) activeSprints += 1;
+    if (counts["failed"] > 0) failedSprints += 1;
+    if (counts["completed"] === totalInSprint && totalInSprint > 0) completedSprints += 1;
+  }
+
+  const uniqueSprintCount = Array.from(sprintMap.keys()).filter(id => id !== "").length;
+
+  return {
+    totalSprints: uniqueSprintCount,
+    activeSprints,
+    completedSprints,
+    failedSprints,
+    totalTasks,
+    runningTasks,
+    blockedTasks,
+  };
+}
+
 export function useSystemViewData(projectId: string) {
   const [allInvocations, setAllInvocations] = useState<ExecutionInvocationRecord[]>([]);
   const [serverTotalCount, setServerTotalCount] = useState<number | null>(null);
@@ -125,10 +432,10 @@ export function useSystemViewData(projectId: string) {
       return;
     }
 
-    let active = true;
-
     setLoading(true);
     setError(null);
+
+    const controller = new AbortController();
 
     const query: ProjectInvocationsQuery = {
       limit: pageSize,
@@ -142,15 +449,17 @@ export function useSystemViewData(projectId: string) {
       errorCategories: filters.errorCategories && filters.errorCategories.length > 0 ? filters.errorCategories : undefined,
     };
 
-    void fetchProjectInvocations(projectId, query)
+    void fetchProjectInvocations(projectId, query, { signal: controller.signal })
       .then((response: ExecutionInvocationRecord[] | ProjectInvocationsQueryResult) => {
-        if (!active) {
-          return;
-        }
         if (Array.isArray(response)) {
           setAllInvocations(response);
           setServerTotalCount(null);
           setServerSummary(null);
+          setServerAvailablePurposes(null);
+          setServerAvailableProviders(null);
+          setServerExtMetrics(null);
+          setServerSprintSummary(null);
+          setServerErrorsByCategory(null);
         } else {
           setAllInvocations(response.items);
           setServerTotalCount(response.totalCount);
@@ -176,337 +485,58 @@ export function useSystemViewData(projectId: string) {
             setServerErrorsByCategory(null);
           }
         }
+        setLoading(false);
       })
       .catch((fetchError: unknown) => {
-        if (!active) {
+        if (fetchError instanceof Error && fetchError.name === "AbortError") {
           return;
         }
         setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
-      })
-      .finally(() => {
-        if (active) {
-          setLoading(false);
-        }
+        setLoading(false);
       });
 
     return () => {
-      active = false;
+      controller.abort();
     };
   }, [projectId, refreshKey, page, search, sort, filters]);
 
   const filteredInvocations = useMemo(() => {
     if (serverTotalCount !== null) {
-
       return allInvocations;
     }
-
-    const normalizedSearch = normalizeText(search);
-
-    const filtered = allInvocations.filter((record) => {
-      if (filters.status.length > 0 && !filters.status.includes(record.status)) {
-        return false;
-      }
-
-      const purposeValue = (record.type || "").trim();
-      if (filters.purpose.length > 0 && !filters.purpose.includes(purposeValue)) {
-        return false;
-      }
-
-      const providerValue = (record.provider || "").trim();
-      if (filters.provider.length > 0 && !filters.provider.includes(providerValue)) {
-        return false;
-      }
-
-      if (filters.errorCategories && filters.errorCategories.length > 0) {
-        const msg = (record.lastErrorMessage || "").toLowerCase();
-        let matched = false;
-        for (const cat of filters.errorCategories) {
-          if (cat === "timeout" && msg.includes("timeout")) matched = true;
-          else if (cat === "rateLimit" && (msg.includes("rate") || msg.includes("429"))) matched = true;
-          else if (cat === "modelError" && msg.includes("model")) matched = true;
-          else if (cat === "apiError" && (msg.includes("api") || msg.includes("http"))) matched = true;
-          else if (cat === "cancelled" && (msg.includes("cancel") || record.status === "cancelled")) matched = true;
-        }
-        if (!matched) return false;
-      }
-
-      if (normalizedSearch.length === 0) {
-        return true;
-      }
-
-      const searchTarget = [
-        record.id,
-        record.model,
-        record.type,
-        record.taskTitle,
-        record.lastErrorMessage,
-        record.errorMessage,
-      ].map(normalizeText).join(" ");
-
-      return searchTarget.includes(normalizedSearch);
-    });
-
-    const sorted = [...filtered].sort((left, right) => {
-      const direction = sort.dir === "asc" ? 1 : -1;
-
-      let leftValue = 0;
-      let rightValue = 0;
-
-      switch (sort.key) {
-        case "startedAt":
-          leftValue = getTimestampMs(left.startedAt);
-          rightValue = getTimestampMs(right.startedAt);
-          break;
-        case "totalTokens":
-          leftValue = getNumericValue(left.totalTokens);
-          rightValue = getNumericValue(right.totalTokens);
-          break;
-        case "durationMs":
-          leftValue = left.finishedAt ? Date.parse(left.finishedAt) - Date.parse(left.startedAt) : 0;
-          rightValue = right.finishedAt ? Date.parse(right.finishedAt) - Date.parse(right.startedAt) : 0;
-          leftValue = Number.isFinite(leftValue) ? leftValue : 0;
-          rightValue = Number.isFinite(rightValue) ? rightValue : 0;
-          break;
-        case "inputTokens":
-          leftValue = getNumericValue(left.inputTokens);
-          rightValue = getNumericValue(right.inputTokens);
-          break;
-        case "outputTokens":
-          leftValue = getNumericValue(left.outputTokens);
-          rightValue = getNumericValue(right.outputTokens);
-          break;
-        default:
-          break;
-      }
-
-      const delta = leftValue - rightValue;
-      if (delta !== 0) {
-        return delta * direction;
-      }
-
-      return left.id.localeCompare(right.id) * direction;
-    });
-
-    return sorted;
+    return computeLegacyFilteredInvocations(allInvocations, filters, search, sort);
   }, [allInvocations, filters, search, sort, serverTotalCount]);
 
   const summaryMetrics = useMemo<SystemSummaryMetrics>(() => {
     if (serverSummary) {
       return serverSummary;
     }
-
-    const totalInvocations = filteredInvocations.length;
-    let runningCount = 0;
-    let failedCount = 0;
-    let completedCount = 0;
-    let cancelledCount = 0;
-    let pausedCount = 0;
-    let totalTokens = 0;
-    let totalInputTokens = 0;
-    let totalOutputTokens = 0;
-    let totalCachedTokens = 0;
-    let durationTotal = 0;
-    const durations: number[] = [];
-
-    for (const record of filteredInvocations) {
-      if (record.status === "running") {
-        runningCount += 1;
-      } else if (record.status === "failed") {
-        failedCount += 1;
-      } else if (record.status === "completed") {
-        completedCount += 1;
-      } else if (record.status === "cancelled") {
-        cancelledCount += 1;
-      } else if (record.status === "paused") {
-        pausedCount += 1;
-      }
-
-      totalTokens += getNumericValue(record.totalTokens);
-      totalInputTokens += getNumericValue(record.inputTokens);
-      totalOutputTokens += getNumericValue(record.outputTokens);
-      totalCachedTokens += getNumericValue(record.cachedInputTokens);
-
-      if (record.finishedAt !== null) {
-        const durationMs = getDurationMs(record);
-        durationTotal += durationMs;
-        durations.push(durationMs);
-      }
-    }
-
-    durations.sort((left, right) => left - right);
-    const finishedCount = durations.length;
-    const p95DurationMs = finishedCount > 0
-      ? durations[Math.min(finishedCount - 1, Math.max(0, Math.ceil(0.95 * finishedCount) - 1))]!
-      : 0;
-    const decidedCount = completedCount + failedCount + cancelledCount;
-    const cacheDenominator = totalInputTokens + totalCachedTokens;
-
-    return {
-      totalInvocations,
-      runningCount,
-      failedCount,
-      completedCount,
-      cancelledCount,
-      pausedCount,
-      errorRate: failedCount / Math.max(1, totalInvocations),
-      successRate: decidedCount > 0 ? completedCount / decidedCount : null,
-      totalTokens,
-      totalInputTokens,
-      totalOutputTokens,
-      totalCachedTokens,
-      cacheHitRate: cacheDenominator > 0 ? totalCachedTokens / cacheDenominator : null,
-      avgDurationMs: finishedCount > 0 ? durationTotal / finishedCount : 0,
-      p95DurationMs,
-    };
+    return computeLegacySummaryMetrics(filteredInvocations);
   }, [filteredInvocations, serverSummary]);
 
   const availablePurposes = useMemo(() => {
     if (serverAvailablePurposes) return serverAvailablePurposes;
-    const purposes = new Set<string>();
-    for (const record of allInvocations) {
-      const purpose = (record.type || "").trim();
-      if (purpose) {
-        purposes.add(purpose);
-      }
-    }
-    return Array.from(purposes).sort((left, right) => left.localeCompare(right));
+    return computeLegacyAvailablePurposes(allInvocations);
   }, [allInvocations, serverAvailablePurposes]);
 
   const externalApiMetrics = useMemo<ExternalApiMetrics>(() => {
     if (serverExtMetrics) return serverExtMetrics;
-    const metrics: ExternalApiMetrics = {
-      git: { calls: 0, avgDurationMs: 0 },
-      jules: { calls: 0, avgDurationMs: 0 },
-      jira: { calls: 0, avgDurationMs: 0 },
-      other: { calls: 0, avgDurationMs: 0 },
-    };
-
-    const totals = { git: 0, jules: 0, jira: 0, other: 0 };
-    const finishedCounts = { git: 0, jules: 0, jira: 0, other: 0 };
-
-    for (const record of allInvocations) {
-      const type = (record.type || "").toLowerCase();
-      const purpose = ((record as any).purpose || "").toLowerCase();
-      const provider = (record.provider || "").toLowerCase();
-      const isModel = type === "coding" || type === "planning" || type === "qa";
-
-      let category: keyof ExternalApiMetrics | null = null;
-
-      if (type.includes("git") || purpose.includes("git")) {
-        category = "git";
-      } else if (provider === "jules" || type.includes("jules")) {
-        category = "jules";
-      } else if (type.includes("jira") || purpose.includes("jira")) {
-        category = "jira";
-      } else if (!isModel) {
-        category = "other";
-      }
-
-      if (category) {
-        metrics[category].calls += 1;
-        if (record.finishedAt) {
-          totals[category] += getDurationMs(record);
-          finishedCounts[category] += 1;
-        }
-      }
-    }
-
-    for (const key of ["git", "jules", "jira", "other"] as const) {
-      if (finishedCounts[key] > 0) {
-        metrics[key].avgDurationMs = totals[key] / finishedCounts[key];
-      }
-    }
-
-    return metrics;
+    return computeLegacyExternalApiMetrics(allInvocations);
   }, [allInvocations, serverExtMetrics]);
 
   const sprintStateSummary = useMemo<SprintStateSummary>(() => {
     if (serverSprintSummary) return serverSprintSummary;
-    const sprintMap = new Map<string, { statusCounts: Record<string, number> }>();
-    let totalTasks = 0;
-    let runningTasks = 0;
-    let blockedTasks = 0;
-
-    for (const record of allInvocations) {
-      const sprintId = record.sprintId || (record as any).projectRunId || "";
-
-      if (!sprintMap.has(sprintId)) {
-        sprintMap.set(sprintId, { statusCounts: {} });
-      }
-
-      const sprintData = sprintMap.get(sprintId)!;
-      sprintData.statusCounts[record.status] = (sprintData.statusCounts[record.status] || 0) + 1;
-
-      totalTasks += 1;
-      if (record.status === "running") runningTasks += 1;
-      if (record.status === "paused") blockedTasks += 1;
-    }
-
-    let activeSprints = 0;
-    let completedSprints = 0;
-    let failedSprints = 0;
-
-    for (const [sprintId, data] of sprintMap.entries()) {
-      if (!sprintId) continue;
-
-      const counts = data.statusCounts;
-      const totalInSprint = Object.values(counts).reduce((sum, c) => sum + c, 0);
-
-      if (counts["running"] > 0) activeSprints += 1;
-      if (counts["failed"] > 0) failedSprints += 1;
-      if (counts["completed"] === totalInSprint && totalInSprint > 0) completedSprints += 1;
-    }
-
-    const uniqueSprintCount = Array.from(sprintMap.keys()).filter(id => id !== "").length;
-
-    return {
-      totalSprints: uniqueSprintCount,
-      activeSprints,
-      completedSprints,
-      failedSprints,
-      totalTasks,
-      runningTasks,
-      blockedTasks,
-    };
+    return computeLegacySprintStateSummary(allInvocations);
   }, [allInvocations, serverSprintSummary]);
 
   const errorsByCategory = useMemo<ErrorsByCategory>(() => {
     if (serverErrorsByCategory) return serverErrorsByCategory;
-    const counts: ErrorsByCategory = {
-      timeout: 0,
-      rateLimit: 0,
-      apiError: 0,
-      modelError: 0,
-      cancelled: 0,
-      other: 0,
-    };
-
-    for (const record of allInvocations) {
-      if (record.status === "failed" || record.status === "cancelled") {
-        const msg = (record.lastErrorMessage || "").toLowerCase();
-
-        if (msg.includes("timeout")) counts.timeout += 1;
-        else if (msg.includes("rate") || msg.includes("429")) counts.rateLimit += 1;
-        else if (msg.includes("model")) counts.modelError += 1;
-        else if (msg.includes("api") || msg.includes("http")) counts.apiError += 1;
-        else if (msg.includes("cancel") || record.status === "cancelled") counts.cancelled += 1;
-        else counts.other += 1;
-      }
-    }
-
-    return counts;
+    return computeLegacyErrorsByCategory(allInvocations);
   }, [allInvocations, serverErrorsByCategory]);
 
   const availableProviders = useMemo(() => {
     if (serverAvailableProviders) return serverAvailableProviders;
-    const providers = new Set<string>();
-    for (const record of allInvocations) {
-      const provider = (record.provider || "").trim();
-      if (provider) {
-        providers.add(provider);
-      }
-    }
-    return Array.from(providers).sort((left, right) => left.localeCompare(right));
+    return computeLegacyAvailableProviders(allInvocations);
   }, [allInvocations, serverAvailableProviders]);
 
   const refetch = useCallback(() => {
