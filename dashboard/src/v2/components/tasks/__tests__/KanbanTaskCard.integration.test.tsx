@@ -333,4 +333,38 @@ describe("KanbanTaskCard Integration", () => {
     const { getByRole } = render(<KanbanTaskCard viewModel={mockViewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
     expect(getByRole('button', { name: /Edit task TASK-123: Implement new feature/i })).toBeInTheDocument();
   });
+
+  it("prevents long metadata strings from overflowing the card horizontally", () => {
+    const overflowViewModel: TaskCardViewModel = {
+      ...mockViewModel,
+      task: {
+        ...mockViewModel.task,
+        title: "A very long task title that could potentially blow out the card width if not wrapped correctly with pr-12 or break-words",
+        source: "very-long-repository-name/very-long-branch-name/very-long-file-name.ts",
+        assignee: "Very Long Assignee Name That Might Break Layout",
+      },
+      sessionId: "sess_verylongsessionidentifiertesting1234567890",
+    };
+    const longAgentPresetName = "Very Long Agent Preset Name Testing Limits";
+
+    const { container } = render(
+      <KanbanTaskCard
+        viewModel={overflowViewModel}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        agentPresetName={longAgentPresetName}
+      />
+    );
+
+    const title = container.querySelector("h4");
+    expect(title).toHaveClass("break-words");
+    expect(title).toHaveClass("pr-12");
+
+    const sourceSpan = container.querySelector('.font-mono.truncate');
+    expect(sourceSpan).toHaveClass('min-w-0');
+
+    const actionsContainer = container.querySelector('.absolute.top-3.right-3');
+    expect(actionsContainer).toHaveClass('[@media(any-pointer:coarse)]:opacity-100');
+  });
+
 });

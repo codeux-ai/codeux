@@ -843,7 +843,6 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                             )}
 
 
-
                             </form>
                     </div>
                     {/* Actions */}

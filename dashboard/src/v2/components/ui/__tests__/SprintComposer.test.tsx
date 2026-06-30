@@ -87,6 +87,15 @@ describe("SprintComposer", () => {
     expect(input).toHaveClass("animate-form-shake");
   });
 
+  it("handles very long sprint names and goals without throwing layout errors", async () => {
+    renderWithContext(<SprintComposer {...defaultProps} />);
+    const input = screen.getByRole("textbox", { name: "Sprint Name" });
+    const goalInput = screen.getByPlaceholderText(/Describe the outcome/);
+    fireEvent.input(input, { target: { value: "A very long sprint name ".repeat(20) } });
+    fireEvent.input(goalInput, { target: { value: "A very long sprint goal ".repeat(50) } });
+    expect(screen.getByRole("button", { name: "Plan ahead with AI" })).toBeInTheDocument();
+  });
+
   it("shows retry failure and prompt-improve pending states", async () => {
     const improvePromptMock = vi.fn().mockRejectedValue(new Error("Network failure"));
     renderWithContext(<SprintComposer {...defaultProps} onImprovePrompt={improvePromptMock} />);

@@ -732,6 +732,7 @@ To prevent credential and runtime config conflicts, provider configurations enfo
 
 The dashboard relies on consistent interaction primitives across all v2 views:
 
+- **Chat Layout**: The chat page fluidly adapts from a stacked mobile view (with a bounded height rail) to a two-column tablet/desktop view. Mode tabs and action rows wrap natively (`flex-wrap`) on small screens, and all deeply nested message content (tool calls, code blocks) enforce horizontal scroll (`overflow-x-auto` and `min-w-0`) rather than expanding the page horizontally.
 - **Data Views**: The Sprint Ledger maintains robust selection scope by pruning selections when filters change to prevent hidden bulk actions. Sort states explicitly surface unsorted, ascending, and descending affordances, and row actions clearly differentiate between deletion, pinning, and execution pending states without relying solely on opacity reductions.
 - **Cursor Affordance**: All interactive controls (buttons, links, tab controls, form toggles, menu/popover triggers, DAG nodes, cards, and dismissible overlays) explicitly use a pointer cursor. Disabled controls retain `cursor-not-allowed` or default arrow cursors.
 - **Async Feedback & Loading**: Active states (like waiting for CI, running tasks, or loading large datasets) use visual indicators like spinners or pulsing dots.
