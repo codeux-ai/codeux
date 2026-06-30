@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll } from "vitest";
-import { validateSafeRepoName, validateSafeClonePath, validateNonEmptyDir } from "../../../../src/utils/path-validator.js";
+import { validateSafeRepoName, validateSafeClonePath, validateNonEmptyDir, assertSafePathSegment } from "../../../../src/utils/path-validator.js";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as fs from "node:fs";
@@ -38,6 +38,39 @@ describe("validateSafeRepoName", () => {
   it("rejects invalid characters", () => {
     expect(() => validateSafeRepoName("my repo")).toThrow();
     expect(() => validateSafeRepoName("repo$name")).toThrow();
+  });
+});
+
+describe("assertSafePathSegment", () => {
+  it("accepts typical provider config ids", () => {
+    expect(() => assertSafePathSegment("claude-code")).not.toThrow();
+    expect(() => assertSafePathSegment("gemini-1a2b3c4d")).not.toThrow();
+    expect(() => assertSafePathSegment("codex")).not.toThrow();
+    expect(() => assertSafePathSegment("opencode.v2_test")).not.toThrow();
+    expect(assertSafePathSegment("codex")).toBe("codex");
+  });
+
+  it("rejects empty / whitespace segments", () => {
+    expect(() => assertSafePathSegment("")).toThrow();
+    expect(() => assertSafePathSegment("   ")).toThrow();
+  });
+
+  it("rejects path separators and traversal", () => {
+    expect(() => assertSafePathSegment("../../etc")).toThrow(/traversal|separator/);
+    expect(() => assertSafePathSegment("codex/../../tmp")).toThrow();
+    expect(() => assertSafePathSegment("a\\b")).toThrow(/separator/);
+    expect(() => assertSafePathSegment("codex-..")).toThrow(/traversal/);
+  });
+
+  it("rejects control characters and leading hyphen", () => {
+    expect(() => assertSafePathSegment("codex\x00x")).toThrow(/control/);
+    expect(() => assertSafePathSegment("-rf")).toThrow(/hyphen/);
+  });
+
+  it("rejects characters outside the safe set", () => {
+    expect(() => assertSafePathSegment("codex name")).toThrow();
+    expect(() => assertSafePathSegment("codex$name")).toThrow();
+    expect(() => assertSafePathSegment("co:dex")).toThrow();
   });
 });
 

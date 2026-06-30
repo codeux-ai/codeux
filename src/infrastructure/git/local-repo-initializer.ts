@@ -25,29 +25,31 @@ function buildSeedReadme(projectName: string): string {
  * @param projectName - Optional human-readable name used as the README title.
  */
 export async function initLocalRepo(dirPath: string, defaultBranch = "main", projectName?: string): Promise<void> {
-  validateSafeClonePath(dirPath);
-  validateNonEmptyDir(dirPath);
+  // Use the sanitized, resolved path returned by the validator for every
+  // subsequent filesystem / git operation rather than the raw input.
+  const safeDir = validateSafeClonePath(dirPath);
+  validateNonEmptyDir(safeDir);
   try {
-    fs.mkdirSync(dirPath, { recursive: true });
+    fs.mkdirSync(safeDir, { recursive: true });
 
     // 1. Initialize the repository
     try {
-      await runCommandStrict("git", ["init", `--initial-branch=${defaultBranch}`], dirPath);
+      await runCommandStrict("git", ["init", `--initial-branch=${defaultBranch}`], safeDir);
     } catch (error) {
       // Fallback for git versions < 2.28 which do not support --initial-branch
-      await runCommandStrict("git", ["init"], dirPath);
-      await runCommandStrict("git", ["checkout", "-b", defaultBranch], dirPath);
+      await runCommandStrict("git", ["init"], safeDir);
+      await runCommandStrict("git", ["checkout", "-b", defaultBranch], safeDir);
     }
 
     // 2. Configure local user for this repository only
-    await runCommandStrict("git", ["config", "user.email", "code-ux@local"], dirPath);
-    await runCommandStrict("git", ["config", "user.name", "Code UX"], dirPath);
+    await runCommandStrict("git", ["config", "user.email", "code-ux@local"], safeDir);
+    await runCommandStrict("git", ["config", "user.name", "Code UX"], safeDir);
 
     // 3. Seed a README so the initial commit has real tracked content.
-    fs.writeFileSync(path.join(dirPath, "README.md"), buildSeedReadme(projectName ?? path.basename(dirPath)));
-    await runCommandStrict("git", ["add", "README.md"], dirPath);
-    await runCommandStrict("git", ["commit", "-m", "Initial commit"], dirPath);
+    fs.writeFileSync(path.join(safeDir, "README.md"), buildSeedReadme(projectName ?? path.basename(safeDir)));
+    await runCommandStrict("git", ["add", "README.md"], safeDir);
+    await runCommandStrict("git", ["commit", "-m", "Initial commit"], safeDir);
   } catch (cause: any) {
-    throw new Error(`Failed to initialize local repo at ${dirPath}: ${cause.message}`);
+    throw new Error(`Failed to initialize local repo at ${safeDir}: ${cause.message}`);
   }
 }

@@ -319,9 +319,15 @@ export class CommandRunner {
     } = options;
 
     return new Promise((resolve) => {
+      // shell:false (explicit) — the command and its arguments are passed
+      // directly to execvp without any shell interpretation, so argument values
+      // (including any derived from the environment) cannot be parsed as shell
+      // syntax. The executable name and args are resolved by the command-spec
+      // layer, never assembled from raw user-supplied strings.
       const child = spawn(resolvedCommand.command, resolvedCommand.args, {
         cwd,
         env,
+        shell: false,
         stdio: [stdinFile ? "pipe" : "ignore", "pipe", "pipe"],
       });
 
@@ -607,9 +613,12 @@ export class CommandRunner {
         return;
       }
       const pathApi = this.getHostPathApi(candidate);
-      const mountPath = fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()
-        ? candidate
-        : pathApi.dirname(candidate);
+      // Normalize (collapse any "." / ".." segments) before touching the
+      // filesystem so the path that is stat'd is the canonical one.
+      const normalizedCandidate = pathApi.normalize(candidate);
+      const mountPath = fs.existsSync(normalizedCandidate) && fs.statSync(normalizedCandidate).isDirectory()
+        ? normalizedCandidate
+        : pathApi.dirname(normalizedCandidate);
       const resolvedMountPath = this.resolveHostPath(mountPath);
       const mountKey = this.getPathIdentity(resolvedMountPath);
       if (seen.has(mountKey) || !fs.existsSync(resolvedMountPath)) {

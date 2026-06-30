@@ -191,5 +191,16 @@ describe("EmbeddingTokenizer", () => {
       const result = tokenizer.encode("passage: hello");
       expect([...result.inputIds]).toEqual([0n, 6n, 7n, 4n, 2n]);
     });
+
+    it("tokenizes a very long whitespace-free token in bounded time (DoS guard)", () => {
+      // Without the per-segment length cap, the Viterbi DP allocates arrays
+      // sized to the whole word and runs O(n * maxTokenLength), so this would
+      // hang / OOM. With the cap it stays linear and fast.
+      const huge = "a".repeat(500_000);
+      const start = Date.now();
+      const result = tokenizer.encode(huge);
+      expect(Date.now() - start).toBeLessThan(2000);
+      expect(result.inputIds.length).toBeGreaterThan(0);
+    });
   });
 });

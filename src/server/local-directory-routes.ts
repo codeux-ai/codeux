@@ -7,8 +7,17 @@ import { asyncRoute } from "./route-utils.js";
 import { parseTrimmedString } from "./request-parsers.js";
 import { expandHomePath } from "../shared/config/home-path.js";
 
-async function isPathAllowed(targetPath: string): Promise<boolean> {
-  let realTargetPath;
+/**
+ * Resolves `targetPath` to its canonical real path and confirms it lives inside
+ * one of the allowed roots (home, cwd, or configured browser roots). Returns the
+ * vetted real path on success, or null if it falls outside every allowed root.
+ *
+ * Returning the resolved path (rather than a boolean) lets callers run all
+ * subsequent filesystem operations against the value that was actually checked,
+ * closing the gap between the allow-list check and the FS access.
+ */
+async function resolveAllowedPath(targetPath: string): Promise<string | null> {
+  let realTargetPath: string;
   try {
     realTargetPath = await fs.realpath(targetPath);
   } catch (err) {
@@ -30,9 +39,11 @@ async function isPathAllowed(targetPath: string): Promise<boolean> {
 
   const resolvedAllowedRoots = await Promise.all(allowedRoots);
 
-  return resolvedAllowedRoots.some((root) => {
+  const allowed = resolvedAllowedRoots.some((root) => {
     return realTargetPath === root || realTargetPath.startsWith(root + path.sep) || realTargetPath.startsWith(root + "/");
   });
+
+  return allowed ? realTargetPath : null;
 }
 
 export function registerLocalDirectoryRoutes(router: Express): void {
@@ -41,14 +52,17 @@ export function registerLocalDirectoryRoutes(router: Express): void {
       const requestedPath = parseTrimmedString(req.query.path) || os.homedir();
       const resolvedPath = path.resolve(expandHomePath(requestedPath));
 
-      if (!(await isPathAllowed(resolvedPath))) {
+      // safePath is the canonical real path that passed the allow-list check;
+      // every filesystem operation below uses it, never the raw request input.
+      const safePath = await resolveAllowedPath(resolvedPath);
+      if (!safePath) {
         res.status(403).json({ error: "Access denied" });
         return;
       }
 
       let stat;
       try {
-        stat = await fs.stat(resolvedPath);
+        stat = await fs.stat(safePath);
       } catch (err: any) {
         if (err.code === "ENOENT") {
            res.status(400).json({ error: "Path does not exist" });
@@ -65,7 +79,7 @@ export function registerLocalDirectoryRoutes(router: Express): void {
 
       let entries;
       try {
-        entries = await fs.readdir(resolvedPath, { withFileTypes: true });
+        entries = await fs.readdir(safePath, { withFileTypes: true });
       } catch (err: any) {
         res.status(403).json({ error: "Access denied" });
         return;
@@ -75,13 +89,13 @@ export function registerLocalDirectoryRoutes(router: Express): void {
         .filter((entry) => entry.isDirectory())
         .map((entry) => ({
           name: entry.name,
-          path: path.join(resolvedPath, entry.name),
+          path: path.join(safePath, entry.name),
         }))
         .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
-      const rootPath = path.parse(resolvedPath).root;
+      const rootPath = path.parse(safePath).root;
       const response: LocalDirectoryBrowserResponse = {
-        currentPath: resolvedPath,
-        parentPath: resolvedPath === rootPath ? null : path.dirname(resolvedPath),
+        currentPath: safePath,
+        parentPath: safePath === rootPath ? null : path.dirname(safePath),
         rootPath,
         homePath: os.homedir(),
         directories,

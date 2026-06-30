@@ -283,13 +283,32 @@ export class EmbeddingTokenizer {
     const words = text.split(/\s+/).filter(Boolean);
 
     for (const word of words) {
-      ids.push(...this.tokenizeUnigramSegment(`▁${word}`));
+      const segmentIds = this.tokenizeUnigramSegment(`▁${word}`);
+      // Append element-wise: spreading a large array into push() args can
+      // overflow the call-stack argument limit for adversarially long inputs.
+      for (const id of segmentIds) ids.push(id);
     }
 
     return ids;
   }
 
+  // Upper bound on the length of a single segment fed to the Viterbi DP below.
+  // The DP is O(segment.length * maxTokenLength) and allocates arrays sized to
+  // the segment, so a whitespace-free megastring (possible with adversarial
+  // input) would blow up memory and CPU. Real subword tokens are tiny; any
+  // segment longer than this is split into fixed windows before tokenizing.
+  private static readonly MAX_SEGMENT_CHARS = 1024;
+
   private tokenizeUnigramSegment(segment: string): number[] {
+    if (segment.length > EmbeddingTokenizer.MAX_SEGMENT_CHARS) {
+      const chunked: number[] = [];
+      for (let offset = 0; offset < segment.length; offset += EmbeddingTokenizer.MAX_SEGMENT_CHARS) {
+        const part = this.tokenizeUnigramSegment(segment.slice(offset, offset + EmbeddingTokenizer.MAX_SEGMENT_CHARS));
+        for (const id of part) chunked.push(id);
+      }
+      return chunked;
+    }
+
     const unknownPenalty = -100;
     const bestScores = new Array<number>(segment.length + 1).fill(-Infinity);
     const bestPieces = new Array<{ id: number; start: number } | null>(segment.length + 1).fill(null);

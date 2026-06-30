@@ -34,6 +34,52 @@ describe("KnowledgeIngestionService", () => {
       expect(result.text).not.toContain("<p>");
     });
 
+    it("decodes HTML entities exactly once (no double-unescaping)", async () => {
+      const result = await service.extractText({
+        fileName: "entities.html",
+        mimeType: "text/html",
+        buffer: Buffer.from("<p>A &amp;lt; B &amp; C &lt;tag&gt;</p>"),
+      });
+      // &amp;lt; must decode to the literal text "&lt;", NOT to "<".
+      expect(result.text).toContain("A &lt; B & C <tag>");
+      expect(result.text).not.toContain("A < B");
+    });
+
+    it("drops unterminated raw-text elements without leaking their content", async () => {
+      const result = await service.extractText({
+        fileName: "broken.html",
+        mimeType: "text/html",
+        buffer: Buffer.from("<p>Visible</p><script>secret(); /* never closed"),
+      });
+      expect(result.text).toContain("Visible");
+      expect(result.text).not.toContain("secret()");
+    });
+
+    it("ignores '>' inside HTML comments", async () => {
+      const result = await service.extractText({
+        fileName: "comment.html",
+        mimeType: "text/html",
+        buffer: Buffer.from("<p>Before<!-- a > b --><span>After</span></p>"),
+      });
+      expect(result.text).toContain("Before");
+      expect(result.text).toContain("After");
+      expect(result.text).not.toContain("a > b");
+    });
+
+    it("strips adversarial markup in linear time (ReDoS guard)", async () => {
+      // Many unclosed `<script` tags would force quadratic backtracking in the
+      // old regex stripper. This must complete near-instantly.
+      const malicious = `<script`.repeat(200_000);
+      const start = Date.now();
+      const result = await service.extractText({
+        fileName: "evil.html",
+        mimeType: "text/html",
+        buffer: Buffer.from(`<p>ok</p>${malicious}`),
+      });
+      expect(Date.now() - start).toBeLessThan(2000);
+      expect(result.text).toContain("ok");
+    });
+
     it("rejects unsupported binary content", async () => {
       const binary = Buffer.from([0x00, 0x01, 0x02, 0xff, 0x00, 0xfe]);
       await expect(
@@ -87,6 +133,14 @@ describe("KnowledgeIngestionService", () => {
       const summary = service.summarize("x".repeat(400), "Title");
       expect(summary.length).toBeLessThanOrEqual(160);
       expect(summary.endsWith("…")).toBe(true);
+    });
+
+    it("handles a pathological bracket-heavy line in linear time (ReDoS guard)", () => {
+      const malicious = "[".repeat(200_000);
+      const start = Date.now();
+      const summary = service.summarize(malicious, "Title");
+      expect(Date.now() - start).toBeLessThan(1000);
+      expect(summary.length).toBeLessThanOrEqual(160);
     });
   });
 });
