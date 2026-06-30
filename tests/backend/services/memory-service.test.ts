@@ -145,7 +145,7 @@ describe("MemoryService", () => {
   });
 
   describe("captureMemoriesFromContent", () => {
-    it("captures CI failure learnings with low strength and CI source metadata", async () => {
+    it("does not auto-capture CI failure learnings as short-term memory", async () => {
       mockRepo.createMemories.mockReturnValue([makeMemoryRecord({ id: "ci-memory" })]);
       mockEmbeddingService.isLoaded.mockReturnValue(false);
 
@@ -157,13 +157,8 @@ describe("MemoryService", () => {
         "task-run-1",
       );
 
-      expect(count).toBe(1);
-      expect(mockRepo.createMemories).toHaveBeenCalledWith("proj-1", [
-        expect.objectContaining({
-          strength: 0.35,
-          source: expect.objectContaining({ originType: "ci_failure_learning" }),
-        }),
-      ]);
+      expect(count).toBe(0);
+      expect(mockRepo.createMemories).not.toHaveBeenCalled();
     });
   });
 

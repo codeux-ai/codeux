@@ -145,21 +145,24 @@ export class MemoryService {
       return 0;
     }
 
-    const inputs: CreateMemoryInput[] = entries.map((entry) => ({
+    const inputs: CreateMemoryInput[] = entries
+      .filter((entry) => !isCiFailureMemoryContent(entry.category, entry.content))
+      .map((entry) => ({
       scope: "sprint",
       sprintId,
       agentPresetId,
       content: entry.content,
       category: entry.category,
-      strength: isCiFailureMemoryContent(entry.category, entry.content) ? 0.35 : 0.6,
+      strength: 0.6,
       source: {
         type: "auto_capture",
-        originType: isCiFailureMemoryContent(entry.category, entry.content)
-          ? "ci_failure_learning"
-          : "worker_learnings_file",
+        originType: "worker_learnings_file",
         originId,
       },
     }));
+    if (inputs.length === 0) {
+      return 0;
+    }
 
     try {
       const records = await this.createMemories(projectId, inputs);

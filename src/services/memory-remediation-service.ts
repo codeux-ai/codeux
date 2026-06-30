@@ -7,6 +7,7 @@ import type { MemoryService } from "./memory-service.js";
 import { isCiFailureMemoryContent } from "./memory-service.js";
 import type { TaskService } from "./task-service.js";
 import type { StructuredAgentRequestService } from "./structured-agent-request-service.js";
+import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import { buildProviderPrompt } from "./cli-workflow-utils.js";
 import { DEFAULT_CLI_WORKFLOW_SETTINGS } from "./cli-workflow-utils.js";
 
@@ -15,6 +16,7 @@ interface MemoryRemediationDeps {
   memoryService: MemoryService;
   taskService: TaskService;
   structuredAgentRequestService: StructuredAgentRequestService;
+  executionRepository?: Pick<ExecutionRepository, "createExecutionInvocation" | "appendExecutionInvocationMessage">;
   guardrailService?: GuardrailService;
   getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings;
   getGithubToken?: () => string | undefined;
@@ -43,20 +45,45 @@ export class MemoryRemediationService {
     mode?: Exclude<MemorySettings["remediationMode"], "off">;
   }): Promise<{ mode: "deterministic" | "ai"; deleted: number; reviewed: number; aiUsed: boolean; skippedReason?: string }> {
     const settings = this.deps.getDashboardSettings({ projectId: args.projectId });
+    const mode = args.mode || (settings.memory.remediationMode === "ai" ? "ai" : "deterministic");
     if (!settings.memory.enabled) {
-      return { mode: args.mode || "deterministic", deleted: 0, reviewed: 0, aiUsed: false, skippedReason: "disabled" };
+      if (mode === "ai") {
+        this.recordSkippedAiInvocation({
+          projectId: args.projectId,
+          skippedReason: "disabled",
+          summary: "AI long-term memory remediation was skipped because memory is disabled.",
+        });
+      }
+      return { mode, deleted: 0, reviewed: 0, aiUsed: false, skippedReason: "disabled" };
     }
 
-    const mode = args.mode || (settings.memory.remediationMode === "ai" ? "ai" : "deterministic");
     const memories = this.deps.memoryService.listByProject(args.projectId, "project", settings.memory.maxProjectMemories);
     const cleanupCandidates = this.findLongTermCleanupCandidates(memories);
     let selectedIds = cleanupCandidates.map((candidate) => candidate.id);
     let aiUsed = false;
 
+    if (mode === "ai" && cleanupCandidates.length === 0) {
+      this.recordSkippedAiInvocation({
+        projectId: args.projectId,
+        skippedReason: "no_candidates",
+        reviewedCount: memories.length,
+        candidateCount: 0,
+        summary: "AI long-term memory remediation found no deterministic cleanup candidates to review.",
+      });
+      return { mode, deleted: 0, reviewed: memories.length, aiUsed: false, skippedReason: "no_candidates" };
+    }
+
     if (mode === "ai" && cleanupCandidates.length > 0) {
       const guardrailKey = `long-term-memory-remediation:${args.projectId}`;
       const guardrail = this.deps.guardrailService?.evaluate({ projectId: args.projectId }, guardrailKey, "remediation") ?? null;
       if (guardrail && !guardrail.allowed && guardrail.action !== "WARN_ONLY") {
+        this.recordSkippedAiInvocation({
+          projectId: args.projectId,
+          skippedReason: `guardrail:${guardrail.count}/${guardrail.cap}`,
+          reviewedCount: memories.length,
+          candidateCount: cleanupCandidates.length,
+          summary: `AI long-term memory remediation was blocked by the remediation guardrail (${guardrail.count}/${guardrail.cap}).`,
+        });
         return { mode, deleted: 0, reviewed: memories.length, aiUsed: false, skippedReason: `guardrail:${guardrail.count}/${guardrail.cap}` };
       }
       this.deps.guardrailService?.record({ projectId: args.projectId }, guardrailKey, "remediation");
@@ -91,6 +118,15 @@ export class MemoryRemediationService {
     const memorySettings = settings.memory;
 
     if (!memorySettings.enabled || memorySettings.remediationMode === "off") {
+      if (memorySettings.remediationMode === "ai") {
+        this.recordSkippedAiInvocation({
+          projectId: args.projectId,
+          sprintId: args.sprintId,
+          sprintRunId: args.sprintRunId || null,
+          skippedReason: "disabled",
+          summary: "AI sprint memory remediation was skipped because memory is disabled.",
+        });
+      }
       return { mode: memorySettings.remediationMode, promoted: [], candidateCount: 0, aiUsed: false, skippedReason: "disabled" };
     }
 
@@ -100,6 +136,19 @@ export class MemoryRemediationService {
       .slice(0, memorySettings.remediationMaxPromotions);
 
     if (eligible.length === 0) {
+      if (memorySettings.remediationMode === "ai") {
+        this.recordSkippedAiInvocation({
+          projectId: args.projectId,
+          sprintId: args.sprintId,
+          sprintRunId: args.sprintRunId || null,
+          skippedReason: "no_candidates",
+          candidateCount: candidates.length,
+          eligibleCount: 0,
+          summary: candidates.length === 0
+            ? "AI sprint memory remediation found no promotion candidates to review."
+            : "AI sprint memory remediation found no promotion candidates that met the configured threshold.",
+        });
+      }
       return { mode: memorySettings.remediationMode, promoted: [], candidateCount: candidates.length, aiUsed: false, skippedReason: "no_candidates" };
     }
 
@@ -115,6 +164,15 @@ export class MemoryRemediationService {
     const guardrailKey = `memory-remediation:${args.sprintRunId || args.sprintId}`;
     const guardrail = this.deps.guardrailService?.evaluate(scope, guardrailKey, "remediation") ?? null;
     if (guardrail && !guardrail.allowed && guardrail.action !== "WARN_ONLY") {
+      this.recordSkippedAiInvocation({
+        projectId: args.projectId,
+        sprintId: args.sprintId,
+        sprintRunId: args.sprintRunId || null,
+        skippedReason: `guardrail:${guardrail.count}/${guardrail.cap}`,
+        candidateCount: candidates.length,
+        eligibleCount: eligible.length,
+        summary: `AI sprint memory remediation was blocked by the remediation guardrail (${guardrail.count}/${guardrail.cap}).`,
+      });
       return {
         mode: "ai",
         promoted: [],
@@ -238,6 +296,59 @@ export class MemoryRemediationService {
       maxRetries: workflowSettings.maxParsingRetries,
     });
     return result.parsed;
+  }
+
+  private recordSkippedAiInvocation(args: {
+    projectId: string;
+    sprintId?: string | null;
+    sprintRunId?: string | null;
+    skippedReason: string;
+    summary: string;
+    reviewedCount?: number;
+    candidateCount?: number;
+    eligibleCount?: number;
+  }): void {
+    const executionRepository = this.deps.executionRepository;
+    if (!executionRepository) return;
+
+    try {
+      const now = new Date().toISOString();
+      const invocation = executionRepository.createExecutionInvocation({
+        projectId: args.projectId,
+        sprintId: args.sprintId || null,
+        sprintRunId: args.sprintRunId || null,
+        skipValidation: true,
+        type: "remediation",
+        status: "completed",
+        startedAt: now,
+        finishedAt: now,
+        errorMessage: null,
+      });
+      executionRepository.appendExecutionInvocationMessage(invocation.id, {
+        role: "system",
+        contentMarkdown: [
+          args.summary,
+          "",
+          `Skipped reason: \`${args.skippedReason}\`.`,
+        ].join("\n"),
+        metadata: {
+          mode: "ai",
+          remediationSkipped: true,
+          skippedReason: args.skippedReason,
+          reviewedCount: args.reviewedCount ?? null,
+          candidateCount: args.candidateCount ?? null,
+          eligibleCount: args.eligibleCount ?? null,
+        },
+      });
+    } catch (error) {
+      this.deps.logger.warn("Failed to record skipped AI memory remediation invocation", {
+        projectId: args.projectId,
+        sprintId: args.sprintId,
+        sprintRunId: args.sprintRunId,
+        skippedReason: args.skippedReason,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private async runAiLongTermRemediation(args: {

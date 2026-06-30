@@ -76,4 +76,6 @@ Due entries execute through existing production paths:
 - chat entries call `ChatThreadRuntimeService.postMessage`
 - memory remediation entries call `MemoryRemediationService.remediateLongTermMemories`
 
+AI memory remediation entries create a `remediation` invocation record even when no cleanup candidates are found; in that case the invocation is completed with a skipped reason instead of dispatching an empty provider request.
+
 After a successful run, the service advances `nextRunAt` from the scheduled occurrence time. One-time entries move to `completed`; recurring entries stay `scheduled` until their count or end date/time is exhausted. Failed entries move to `failed` with `lastError` for operator visibility.

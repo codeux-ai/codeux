@@ -172,6 +172,7 @@ export function createSprintDependencies(
     memoryService: coreDeps.memoryService,
     taskService,
     structuredAgentRequestService,
+    executionRepository,
     guardrailService: coreDeps.guardrailService,
     getDashboardSettings: resolveDashboardSettings,
     getGithubToken: () => context.getEffectiveGithubToken(),

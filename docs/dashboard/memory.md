@@ -56,9 +56,9 @@ When a sprint completes, Code UX can run memory remediation according to `memory
 The remediation guardrail job type is `remediation`, so runaway review loops are capped by the same guardrail system as planning, CI fix, and merge-conflict repair.
 
 CI-failure learnings are treated specially:
-- auto-captured CI/check/build failure memories are stored at lower strength (`0.35`)
-- they are tagged with `source.originType = "ci_failure_learning"`
-- promotion analysis excludes them even if their text would otherwise score highly
+- CI/check/build failures are not automatically written into short-term sprint memory from the CI merge gate or worker learnings ingestion.
+- CI-looking memories that are manually captured or imported are excluded from promotion analysis even if their text would otherwise score highly.
+- AI remediation records a completed `remediation` execution invocation even when no candidates are eligible for provider review, so scheduled and post-sprint remediation attempts remain visible in the invocation history.
 
 ## Long-Term Remediation
 
@@ -67,6 +67,7 @@ The Scheduler page can run project-scoped long-term memory remediation. Determin
 - exact duplicate project memories, keeping the strongest and most recently updated copy
 
 AI mode routes cleanup candidates through the `remediation` invocation route before deletion.
+If deterministic prefiltering finds no cleanup candidates, Code UX records a completed skipped `remediation` invocation instead of dispatching an empty provider request.
 
 ## UI Updates and Accessibility
 - Added keyboard-accessible clear search functionality to `MemorySearch.tsx` (supports clearing via `Escape` and a dedicated clear button with an explicit `<kbd>Esc</kbd>` visual affordance).

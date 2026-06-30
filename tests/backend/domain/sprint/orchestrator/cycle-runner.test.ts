@@ -897,14 +897,10 @@ describe("CycleRunner attention sync", () => {
     });
   });
 
-  it("captures CI failure memory with importance of 0.7", async () => {
+  it("does not auto-capture CI failures as short-term memory", async () => {
     const deps = buildDeps();
     const mockMemoryService = {
       createMemoriesBatch: vi.fn().mockResolvedValue([]),
-      createMemoriesBatch: vi.fn().mockResolvedValue([]),
-      createMemoriesBatch: vi.fn().mockResolvedValue([]),
-      createMemoriesBatch: vi.fn().mockResolvedValue([]),
-    createMemoriesBatch: vi.fn().mockResolvedValue([]),
       search: vi.fn(),
     };
     deps.memoryService = mockMemoryService as any;
@@ -975,15 +971,7 @@ describe("CycleRunner attention sync", () => {
       } as any
     );
 
-    // Give the unawaited promise returned by createMemory inside catch block a chance to resolve.
-
-
-    expect(mockMemoryService.createMemoriesBatch).toHaveBeenCalledWith("project-1", [expect.objectContaining({
-      category: "error",
-      strength: 0.7,
-      content: expect.stringContaining("CI failure detected for task T1"),
-      source: expect.objectContaining({ originType: "ci_failure" }),
-    })]);
+    expect(mockMemoryService.createMemoriesBatch).not.toHaveBeenCalled();
   });
 
   it("does not capture CI failure memory if settings are disabled", async () => {
