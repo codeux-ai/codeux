@@ -81,6 +81,7 @@ export const NotificationPanel: FunctionComponent<{
     <div
       ref={panelRef}
       aria-label="Notifications Panel"
+      tabIndex={-1}
       className="fixed inset-x-4 top-[72px] sm:inset-auto sm:absolute sm:top-full sm:right-0 mt-2 w-[23rem] max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-5rem)] overflow-y-auto overflow-x-hidden rounded-2xl border border-black/[0.08] dark:border-white/[0.08] bg-white/95 shadow-2xl backdrop-blur-2xl dark:bg-void-800/95 z-50 flex flex-col"
     >
       <div className="sr-only" aria-live="polite" aria-atomic="true">
@@ -176,8 +177,7 @@ export const NotificationPanel: FunctionComponent<{
                           type="button"
                           onClick={(e) => {
                             if (document.activeElement === e.currentTarget) {
-                              const fallback = document.querySelector('[role="main"]') || document.body;
-                              (fallback as HTMLElement).focus();
+                              panelRef.current?.focus();
                               (e.currentTarget as HTMLElement).blur();
                             }
                             onMarkRead(notification.id);
@@ -193,8 +193,7 @@ export const NotificationPanel: FunctionComponent<{
                           type="button"
                           onClick={(e) => {
                             if (document.activeElement === e.currentTarget) {
-                              const fallback = document.querySelector('[role="main"]') || document.body;
-                              (fallback as HTMLElement).focus();
+                              panelRef.current?.focus();
                               (e.currentTarget as HTMLElement).blur();
                             }
                             onDismiss(notification.id);

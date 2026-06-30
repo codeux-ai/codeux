@@ -487,7 +487,7 @@ describe("AddTaskModal Lifecycle", () => {
     const errorRegion = getByText("Failed");
     expect(errorRegion).toBeInTheDocument();
 
-    const dismissBtn = getByRole("button", { name: "Dismiss error" });
+    const dismissBtn = getByRole("button", { name: "Clear error" });
 
     // Explicitly focus it to ensure focus behavior is correctly represented
     dismissBtn.focus();
