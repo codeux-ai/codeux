@@ -58,6 +58,7 @@ export const sanitizeGuardrails = (
     merge_conflict: DEFAULT_GUARDRAILS.jobs.merge_conflict.cap,
     clarification_reply: LEGACY_CLARIFICATION_RETRY_CAP,
     planning: DEFAULT_GUARDRAILS.jobs.planning.cap,
+    remediation: DEFAULT_GUARDRAILS.jobs.remediation.cap,
   };
 
   const jobs = GUARDRAIL_JOB_TYPES.reduce((acc, jobType) => {

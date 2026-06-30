@@ -119,6 +119,27 @@ describe("Terminal Routes", () => {
     expect(mockSocket.destroy).toHaveBeenCalled();
   });
 
+  it("rejects a path-traversal providerConfigId before any filesystem access", async () => {
+    // A directly-supplied (valid) providerId bypasses the providerConfigId
+    // lookup, so without validation the traversal value would reach the
+    // destructive credential fs.rm/mkdir/cp. The handler must 400 first.
+    const response = await request(app)
+      .post("/api/terminal/start")
+      .send({ providerId: "codex", providerConfigId: "../../../../tmp/evil" });
+
+    expect(response.status).toBe(400);
+    expect(String(response.body.error)).toMatch(/providerConfigId/i);
+  });
+
+  it("rejects a providerConfigId containing path separators", async () => {
+    const response = await request(app)
+      .post("/api/terminal/start")
+      .send({ providerId: "claude-code", providerConfigId: "codex/../../secrets" });
+
+    expect(response.status).toBe(400);
+    expect(String(response.body.error)).toMatch(/providerConfigId/i);
+  });
+
   it("should close the socket when receiving oversized frames", async () => {
     vi.useFakeTimers();
 

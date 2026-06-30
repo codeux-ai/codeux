@@ -1,3 +1,7 @@
+// Keys that must never be writable through a dotted path, since assigning to
+// them can pollute the prototype chain of every object in the process.
+const UNSAFE_PATH_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
 export class SettingsPathUpdater {
   /**
    * Patches a nested property in an object given a dotted path.
@@ -14,7 +18,7 @@ export class SettingsPathUpdater {
 
     const parts = path.split('.');
     for (const part of parts) {
-      if (part === '__proto__' || part === 'constructor' || part === 'prototype') {
+      if (UNSAFE_PATH_KEYS.has(part)) {
         throw new Error(`Invalid path part: ${part}`);
       }
     }
@@ -24,10 +28,14 @@ export class SettingsPathUpdater {
 
     for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i];
-      if (current[part] === undefined || current[part] === null) {
+      // Only treat own properties as existing nodes — never descend into an
+      // inherited prototype property — and clone as we go so the input is left
+      // untouched.
+      const existing = Object.prototype.hasOwnProperty.call(current, part) ? current[part] : undefined;
+      if (existing === undefined || existing === null) {
         current[part] = {};
-      } else if (typeof current[part] === 'object') {
-        current[part] = Array.isArray(current[part]) ? [...current[part]] : { ...current[part] };
+      } else if (typeof existing === 'object') {
+        current[part] = Array.isArray(existing) ? [...existing] : { ...existing };
       } else {
         throw new Error(`Cannot traverse through primitive at path: ${parts.slice(0, i + 1).join('.')}`);
       }

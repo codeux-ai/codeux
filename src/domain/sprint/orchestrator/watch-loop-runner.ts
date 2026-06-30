@@ -13,6 +13,7 @@ import type { Subtask,
  } from "../../../contracts/app-types.js";
 import type { InstructionTemplateId } from "../../../instructions/instruction-template-catalog.js";
 import type { MemoryPromotionService } from "../../../services/memory-promotion-service.js";
+import type { MemoryRemediationService } from "../../../services/memory-remediation-service.js";
 import type { QualityAssuranceService } from "../../../services/quality-assurance-service.js";
 import type { Logger } from "../../../shared/logging/logger.js";
 import type { ExecutionRepository } from "../../../repositories/execution-repository.js";
@@ -45,6 +46,7 @@ export interface WatchLoopDependencies {
   updateLastStatus: (status: DashboardStatusSnapshot) => void;
   resolvePlanningAgentPresetId?: (projectId: string) => Promise<string | undefined>;
   memoryPromotionService?: MemoryPromotionService;
+  memoryRemediationService?: MemoryRemediationService;
   qualityAssuranceService?: QualityAssuranceService;
   sprintIssueService?: SprintIssueService;
   executionRepository: WatchLoopExecutionDependencies;
@@ -279,17 +281,45 @@ export class WatchLoopRunner {
     return fullReport;
   }
 
-  private triggerAutoPromote(projectId: string, sprintId: string): void {
+  private triggerMemoryRemediation(args: {
+    projectId: string;
+    sprintId: string;
+    sprintRunId: string;
+    repoPath: string;
+    sprintName: string;
+    sprintGoal: string;
+  }): void {
+    const remediationService = this.deps.memoryRemediationService;
+    const settings = this.deps.getDashboardSettings({ projectId: args.projectId, sprintId: args.sprintId });
+    if (!settings.memory?.enabled || settings.memory.remediationMode === "off") return;
+
+    if (remediationService) {
+      remediationService.remediateSprintMemories(args).then((result) => {
+        this.deps.executionRepository.appendSprintRunEvent(args.sprintRunId, "memory_remediation_completed", "system", {
+          mode: result.mode,
+          aiUsed: result.aiUsed,
+          promotedCount: result.promoted.length,
+          candidateCount: result.candidateCount,
+          skippedReason: result.skippedReason,
+        }, {
+          sourceEventKey: `memory-remediation:${args.sprintRunId}`,
+        });
+      }).catch((err) => {
+        this.deps.logger.warn("Failed to remediate sprint memories", {
+          projectId: args.projectId,
+          sprintId: args.sprintId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+      return;
+    }
+
     const promotionService = this.deps.memoryPromotionService;
-    if (!promotionService) return;
-
-    const settings = this.deps.getDashboardSettings({ projectId, sprintId });
-    if (!settings.memory?.enabled || !settings.memory.autoPromote) return;
-
-    promotionService.autoPromoteFromSprint(projectId, sprintId, settings.memory).catch((err) => {
+    if (!promotionService || !settings.memory.autoPromote) return;
+    promotionService.autoPromoteFromSprint(args.projectId, args.sprintId, settings.memory).catch((err) => {
       this.deps.logger.warn("Failed to auto-promote sprint memories", {
-        projectId,
-        sprintId,
+        projectId: args.projectId,
+        sprintId: args.sprintId,
         error: err instanceof Error ? err.message : String(err),
       });
     });
@@ -748,7 +778,14 @@ export class WatchLoopRunner {
           ["merge_required", "merge_conflict"],
           "sprint_completed",
         );
-        this.triggerAutoPromote(scopedExecutionContext.project.id, scopedExecutionContext.sprint.id);
+        this.triggerMemoryRemediation({
+          projectId: scopedExecutionContext.project.id,
+          sprintId: scopedExecutionContext.sprint.id,
+          sprintRunId,
+          repoPath,
+          sprintName: scopedExecutionContext.sprint.name,
+          sprintGoal: scopedExecutionContext.sprint.goal,
+        });
         const issueCloseOutcome = await this.deps.sprintIssueService?.closeLinkedIssues(
           scopedExecutionContext.project.id,
           scopedExecutionContext.sprint.id,

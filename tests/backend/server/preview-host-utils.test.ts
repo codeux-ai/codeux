@@ -3,10 +3,14 @@ import { describe, it, expect } from "vitest";
 import {
   buildPreviewBridgeScript,
   buildPreviewProxyRequestHeaders,
+  buildPreviewStandbyHtml,
+  escapeHtml,
+  escapeJsonForScript,
   mergePreviewCorsHeaders,
   rewritePreviewLocationHeader,
 } from "../../../src/server/preview-host-utils.js";
 import type { Request } from "express";
+import type { SprintPreviewSession } from "../../../src/contracts/app-types.js";
 
 describe("preview-host-utils", () => {
   describe("buildPreviewProxyRequestHeaders", () => {
@@ -140,6 +144,70 @@ describe("preview-host-utils", () => {
       expect(writtenHeaders["set-cookie"]).toEqual(["secret=1"]);
       expect(writtenHeaders["Content-Security-Policy"]).toBeUndefined();
       expect(writtenHeaders["X-Frame-Options"]).toBeUndefined();
+    });
+  });
+
+  describe("escapeHtml", () => {
+    it("escapes HTML-significant characters", () => {
+      expect(escapeHtml(`<script>alert('x')&"`)).toBe("&lt;script&gt;alert(&#39;x&#39;)&amp;&quot;");
+    });
+
+    it("coerces null/undefined to an empty string", () => {
+      expect(escapeHtml(null)).toBe("");
+      expect(escapeHtml(undefined)).toBe("");
+    });
+  });
+
+  describe("escapeJsonForScript", () => {
+    it("prevents </script> breakout while preserving the decoded value", () => {
+      const payload = "/p</script><script>alert(1)</script>";
+      const encoded = escapeJsonForScript(payload);
+      expect(encoded).not.toContain("</script>");
+      expect(encoded).not.toContain("<");
+      expect(encoded).not.toContain(">");
+      // The encoded literal still parses back to the original string.
+      expect(JSON.parse(encoded)).toBe(payload);
+    });
+
+    it("escapes ampersands and line separators", () => {
+      const encoded = escapeJsonForScript("a&b c d");
+      expect(encoded).toContain("\\u0026");
+      expect(encoded).toContain("\\u2028");
+      expect(encoded).toContain("\\u2029");
+      expect(JSON.parse(encoded)).toBe("a&b c d");
+    });
+  });
+
+  describe("buildPreviewStandbyHtml", () => {
+    const session = {
+      id: "s1",
+      sprintId: "sp1",
+      projectId: "pr1",
+      sprintName: "My Sprint",
+      status: "stopped",
+      containerName: "cn",
+      hostPort: null,
+      lastError: null,
+    } as unknown as SprintPreviewSession;
+
+    it("escapes a malicious requested path in both HTML and script contexts", () => {
+      const req = {
+        originalUrl: "/x</script><script>alert(1)</script>",
+        url: "/x",
+        headers: { host: "preview-s1.localhost:4444" },
+      } as unknown as Request;
+
+      const html = buildPreviewStandbyHtml({ req, session, reason: "<img src=x onerror=alert(1)>" });
+
+      // No raw closing-script breakout, and the attacker markup is neutralized
+      // in the HTML body (escaped to entities).
+      expect(html).not.toContain("<script>alert(1)</script>");
+      expect(html).not.toContain("<img src=x onerror=alert(1)>");
+      expect(html).toContain("&lt;img src=x onerror=alert(1)&gt;");
+      // The only <script> tags present are the page's own inline controllers.
+      const scriptOpens = html.match(/<script\b/g) || [];
+      const scriptCloses = html.match(/<\/script>/g) || [];
+      expect(scriptOpens.length).toBe(scriptCloses.length);
     });
   });
 

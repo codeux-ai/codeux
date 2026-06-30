@@ -47,6 +47,7 @@ export const INVOCATION_ROUTING_IDS: InvocationRoutingId[] = [
   "qa_review",
   "ci_fix",
   "merge_conflict",
+  "remediation",
 ];
 export const CLI_EXECUTION_MODES: CliExecutionMode[] = ["DOCKER", "HOST"];
 export const FEATURE_PR_AUTOMERGE_MODES: FeaturePrAutoMergeMode[] = ["OFF", "CREATE_PR", "WHEN_GREEN", "ALWAYS"];
@@ -199,6 +200,7 @@ export const GUARDRAIL_JOB_TYPES: GuardrailJobType[] = [
   "merge_conflict",
   "clarification_reply",
   "planning",
+  "remediation",
 ];
 export const GUARDRAIL_ON_LIMIT_ACTIONS: GuardrailOnLimitAction[] = [
   "BLOCK_AND_ESCALATE",
@@ -371,6 +373,13 @@ export const DEFAULT_INVOCATION_ROUTING: Record<InvocationRoutingId, InvocationR
     allowedProviders: [],
     providers: {},
   },
+  remediation: {
+    profile: "WORKER",
+    strategy: "MANUAL",
+    provider: null,
+    allowedProviders: [],
+    providers: {},
+  },
 };
 
 export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
@@ -412,6 +421,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
       qa_review: { ...DEFAULT_INVOCATION_ROUTING.qa_review, allowedProviders: [], providers: {} },
       ci_fix: { ...DEFAULT_INVOCATION_ROUTING.ci_fix, allowedProviders: [], providers: {} },
       merge_conflict: { ...DEFAULT_INVOCATION_ROUTING.merge_conflict, allowedProviders: [], providers: {} },
+      remediation: { ...DEFAULT_INVOCATION_ROUTING.remediation, allowedProviders: [], providers: {} },
     },
   },
   git: {
@@ -456,6 +466,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
       merge_conflict: { cap: 3, onLimit: "BLOCK_AND_ESCALATE" },
       clarification_reply: { cap: 3, onLimit: "STOP_AND_WAIT" },
       planning: { cap: 5, onLimit: "BLOCK_AND_ESCALATE" },
+      remediation: { cap: 2, onLimit: "BLOCK_AND_ESCALATE" },
     },
   },
   sprintLoopSteps: {
@@ -566,11 +577,20 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   customMcpServers: [],
   memory: {
     enabled: true,
+    embeddingProvider: "in_app",
     embeddingModel: null,
+    externalEmbedding: {
+      baseUrl: "https://api.openai.com/v1/embeddings",
+      apiKey: "",
+      model: "text-embedding-3-small",
+      dimensions: null,
+    },
     autoCaptureSprint: true,
     autoCaptureAgent: true,
     autoPromote: false,
     promotionThreshold: 0.7,
+    remediationMode: "deterministic",
+    remediationMaxPromotions: 12,
     maxSprintMemories: 200,
     maxProjectMemories: 1000,
     mapMaxEdgesPerNode: 3,

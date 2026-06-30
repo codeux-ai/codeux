@@ -37,16 +37,41 @@ export function validateSafeClonePath(requestedDir: string, allowedRoot?: string
   return resolved;
 }
 
+/**
+ * Validates that a string is safe to use as a single path segment (e.g. a
+ * directory name derived from a user-supplied identifier). Rejects path
+ * separators, traversal sequences, control characters, leading hyphens (to
+ * avoid being parsed as a CLI option), and anything outside a conservative
+ * filesystem-safe character set. Returns the segment unchanged on success.
+ *
+ * Use this before joining attacker-influenced identifiers into a filesystem
+ * path, so the resulting path cannot escape its intended parent directory.
+ */
+export function assertSafePathSegment(segment: string, label = "identifier"): string {
+  if (!segment || segment.trim() === "") throw new Error(`${label} cannot be empty`);
+  if (segment.includes("/") || segment.includes("\\")) throw new Error(`${label} cannot contain path separators`);
+  if (segment.includes("..")) throw new Error(`${label} cannot contain path traversal sequences`);
+  if (/[\x00-\x1F]/.test(segment)) throw new Error(`${label} cannot contain control characters`);
+  if (segment === "." || segment === "..") throw new Error(`Invalid ${label}`);
+  if (segment.startsWith("-")) throw new Error(`${label} cannot start with a hyphen`);
+  if (!/^[A-Za-z0-9._-]+$/.test(segment)) throw new Error(`${label} contains invalid characters`);
+  return segment;
+}
+
 export function validateNonEmptyDir(targetPath: string): void {
-  if (fs.existsSync(targetPath)) {
-    const stats = fs.statSync(targetPath);
+  // Normalize to an absolute path before any filesystem access so the checks
+  // operate on a single canonical location (and so untrusted relative inputs
+  // can't be interpreted against an unexpected cwd).
+  const resolved = path.resolve(targetPath);
+  if (fs.existsSync(resolved)) {
+    const stats = fs.statSync(resolved);
     if (stats.isDirectory()) {
-      const files = fs.readdirSync(targetPath);
+      const files = fs.readdirSync(resolved);
       if (files.length > 0) {
-        throw new Error(`Target directory already exists and is not empty: ${targetPath}`);
+        throw new Error(`Target directory already exists and is not empty: ${resolved}`);
       }
     } else {
-      throw new Error(`Target path exists and is not a directory: ${targetPath}`);
+      throw new Error(`Target path exists and is not a directory: ${resolved}`);
     }
   }
 }

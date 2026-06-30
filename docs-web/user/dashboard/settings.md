@@ -68,8 +68,18 @@ If a hint is detected, the panel offers a one-click **Use detected value** butto
 
 A separate **Connections** panel lists active MCP client connections to this project — display name, role, transport, capabilities, last activity. From here you can rename connections or set the *preferred worker* for the project.
 
-## Reset database
+## Danger zone
 
-At the bottom of System scope is a **Reset database** action that wipes all Code UX state (projects, sprints, tasks, memories, runs) and returns to a clean install. **This is irreversible.** It is gated behind two confirmations and a typed-name match.
+The **Danger zone** category groups the destructive, irreversible actions. Each is gated behind a confirmation dialog.
+
+- **Delete project** — permanently removes the selected project and all of its tasks, sprints, memories, and context history.
+- **Project memory** (shown when a project is selected) — clears that project's stored memory by tier:
+  - *Short-term* — per-sprint, per-agent working memories only (long-term knowledge is kept).
+  - *Long-term* — promoted project memories plus all memory claims and evidence (short-term is kept).
+  - *All memory* — the project's entire memory database (every memory, claim, and evidence record).
+- **System memory** (System scope) — the same three tiers, but applied across **every** project at once.
+- **Reset database** (System scope) — wipes all Code UX state (projects, sprints, tasks, memories, runs) and returns to a clean install.
+
+Clearing memory removes the stored vectors along with the rows; downloaded embedding models are left untouched. All of these actions are **irreversible**.
 
 For the full schema, see [Settings reference](../../developer/settings-reference.md).

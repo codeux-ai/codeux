@@ -2,6 +2,10 @@ import { AppConfig } from "../../config/app-config.js";
 import { ServerContext } from "../dependency-factory.js";
 import { CoreDependencies } from "./core-factory.js";
 import { CliWorkflowService } from "../../services/cli-workflow-service.js";
+import { MemoryRemediationService } from "../../services/memory-remediation-service.js";
+import { ProviderExecutionService } from "../../services/provider-execution-service.js";
+import { StructuredAgentRequestService } from "../../services/structured-agent-request-service.js";
+import { StructuredProviderResponseService } from "../../services/structured-provider-response-service.js";
 import { TaskService } from "../../services/task-service.js";
 import { SprintExecutionStateService } from "../../services/sprint-execution-state-service.js";
 import { SprintTaskDispatchService } from "../../services/sprint-task-dispatch-service.js";
@@ -26,6 +30,7 @@ export interface SprintDependencies {
   virtualWorkerService: VirtualWorkerService;
   workerInboxReplyService: WorkerInboxReplyService;
   qualityAssuranceService: QualityAssuranceService;
+  memoryRemediationService: MemoryRemediationService;
   sprintOrchestrator: SprintOrchestrator;
 }
 
@@ -89,6 +94,25 @@ export function createSprintDependencies(
     logger: logger.child({ component: "cli-workflow-service" }),
   });
 
+  const providerExecutionService = new ProviderExecutionService({
+    executionRepository,
+    sessionTracking,
+    providerRunner: coreDeps.providerRunner,
+    providerConcurrencyService: coreDeps.providerConcurrencyService,
+    logger: logger.child({ component: "provider-execution-service" }),
+    getGithubToken: () => context.getEffectiveGithubToken(),
+  });
+  const structuredProviderResponseService = new StructuredProviderResponseService({
+    providerExecutionService,
+    executionRepository,
+    logger: logger.child({ component: "structured-provider-response-service" }),
+  });
+  const structuredAgentRequestService = new StructuredAgentRequestService({
+    executionRepository,
+    structuredProviderResponseService,
+    logger: logger.child({ component: "structured-agent-request-service" }),
+  });
+
   const taskService = new TaskService({
     julesApi,
     agentPresetSyncService,
@@ -139,7 +163,20 @@ export function createSprintDependencies(
     sendSessionMessage: (sessionId, prompt) => julesApi.sendSessionMessage(sessionId, prompt),
     logger: logger.child({ component: "quality-assurance-service" }),
     memoryService: coreDeps.memoryService,
+    structuredAgentRequestService,
     dockerService: new DockerService(),
+  });
+
+  const memoryRemediationService = new MemoryRemediationService({
+    memoryPromotionService: coreDeps.memoryPromotionService,
+    memoryService: coreDeps.memoryService,
+    taskService,
+    structuredAgentRequestService,
+    executionRepository,
+    guardrailService: coreDeps.guardrailService,
+    getDashboardSettings: resolveDashboardSettings,
+    getGithubToken: () => context.getEffectiveGithubToken(),
+    logger: logger.child({ component: "memory-remediation-service" }),
   });
 
   const virtualWorkerService = new VirtualWorkerService({
@@ -253,6 +290,7 @@ export function createSprintDependencies(
     logger: logger.child({ component: "sprint-orchestrator" }),
     memoryService: coreDeps.memoryService,
     memoryPromotionService: coreDeps.memoryPromotionService,
+    memoryRemediationService,
     providerConcurrencyService: coreDeps.providerConcurrencyService,
     qualityAssuranceService,
     sprintIssueService: coreDeps.sprintIssueService,
@@ -277,6 +315,7 @@ export function createSprintDependencies(
     virtualWorkerService,
     workerInboxReplyService,
     qualityAssuranceService,
+    memoryRemediationService,
     sprintOrchestrator,
   };
 }

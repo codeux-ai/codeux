@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import * as fs from "fs";
 import { EmbeddingModelManager } from "../../../src/services/embedding-model-manager.js";
+import { EMBEDDING_MODEL_CATALOG } from "../../../src/services/embedding-model-catalog.js";
 
 vi.mock("fs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("fs")>();
@@ -95,7 +96,7 @@ describe("EmbeddingModelManager", () => {
       mockEmbeddingService.isModelDownloaded.mockReturnValue(false);
 
       const statuses = manager.getStatuses();
-      expect(statuses).toHaveLength(2); // bge-small + qwen3
+      expect(statuses).toHaveLength(Object.keys(EMBEDDING_MODEL_CATALOG).length);
       expect(statuses.every((s) => !s.downloaded)).toBe(true);
     });
 

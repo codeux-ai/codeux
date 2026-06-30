@@ -184,7 +184,11 @@ export class KnowledgeIngestionService {
       firstContent = line;
       break;
     }
-    const base = firstContent || firstHeading || title;
+    // Bound the input before regex work: the summary is capped at 160 chars, so
+    // a single very long line can't add value but could trigger quadratic-time
+    // backtracking in the markdown-link regex below. Slicing first makes this
+    // linear regardless of document size.
+    const base = (firstContent || firstHeading || title).slice(0, 1024);
     const clean = base
       .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
       .replace(/[*_`>#]/g, "")
@@ -237,18 +241,98 @@ function toHeadedBlocks(text: string): HeadedBlock[] {
   return blocks;
 }
 
+const HTML_ENTITY_MAP: Record<string, string> = {
+  "&nbsp;": " ",
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#39;": "'",
+};
+
+// Closing tags that mark a block boundary and become a newline in extracted text.
+const HTML_BLOCK_CLOSE_TAGS = new Set([
+  "p", "div", "section", "article", "li", "tr", "br",
+  "h1", "h2", "h3", "h4", "h5", "h6",
+]);
+
+// Elements whose entire body is dropped (their text content is never displayed).
+const HTML_RAW_TEXT_TAGS = new Set(["script", "style"]);
+
+/**
+ * Decodes the small fixed set of HTML entities we care about in a single pass.
+ * Doing it in one pass (rather than chained per-entity replaces) avoids the
+ * double-unescaping bug where `&amp;lt;` would otherwise decode to `<`.
+ */
+function decodeBasicHtmlEntities(text: string): string {
+  return text.replace(/&(?:nbsp|amp|lt|gt|quot|#39);/g, (match) => HTML_ENTITY_MAP[match] ?? match);
+}
+
+/** Extracts the lowercased tag name and whether it is a closing tag from raw `<...>` contents. */
+function parseHtmlTagName(rawTag: string): { name: string; closing: boolean } | null {
+  let body = rawTag.trim();
+  if (body.startsWith("!")) return null; // comments / doctype — treated as droppable markup
+  const closing = body.startsWith("/");
+  if (closing) body = body.slice(1).trimStart();
+  const match = body.match(/^[a-zA-Z][a-zA-Z0-9:-]*/);
+  if (!match) return null;
+  return { name: match[0].toLowerCase(), closing };
+}
+
+/**
+ * Removes HTML markup and returns readable text. Implemented as a single
+ * left-to-right scan (no regex over the full document) so it runs in linear
+ * time and cannot exhibit the quadratic / catastrophic backtracking behaviour
+ * of the previous regex-based stripper on adversarial markup (e.g. many
+ * unclosed `<script` tags or `[`-heavy text). HTML comments are skipped as a
+ * unit so a `>` inside a comment can't terminate it early.
+ */
 function stripHtml(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<\/(p|div|section|article|li|h[1-6]|tr|br)>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
+  const n = html.length;
+  const lower = html.toLowerCase();
+  let out = "";
+  let i = 0;
+
+  while (i < n) {
+    const lt = html.indexOf("<", i);
+    if (lt === -1) {
+      out += html.slice(i);
+      break;
+    }
+    out += html.slice(i, lt);
+
+    // Comments: consume up to the matching "-->" so an embedded ">" is ignored.
+    if (lower.startsWith("<!--", lt)) {
+      const end = lower.indexOf("-->", lt + 4);
+      if (end === -1) break; // unterminated comment — drop the remainder
+      i = end + 3;
+      continue;
+    }
+
+    const gt = html.indexOf(">", lt + 1);
+    if (gt === -1) break; // unterminated tag — drop the remainder rather than leak markup
+
+    const parsed = parseHtmlTagName(html.slice(lt + 1, gt));
+
+    if (parsed && !parsed.closing && HTML_RAW_TEXT_TAGS.has(parsed.name)) {
+      // Drop the entire raw-text element body up to its closing tag.
+      const closeIdx = lower.indexOf(`</${parsed.name}`, gt + 1);
+      out += " ";
+      if (closeIdx === -1) break; // no closing tag — drop the remainder
+      const closeGt = html.indexOf(">", closeIdx);
+      i = closeGt === -1 ? n : closeGt + 1;
+      continue;
+    }
+
+    if (parsed && parsed.closing && HTML_BLOCK_CLOSE_TAGS.has(parsed.name)) {
+      out += "\n";
+    } else {
+      out += " ";
+    }
+    i = gt + 1;
+  }
+
+  return decodeBasicHtmlEntities(out)
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n");
 }

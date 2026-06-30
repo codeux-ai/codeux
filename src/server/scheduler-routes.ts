@@ -2,7 +2,7 @@ import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute, syncRoute } from "./route-utils.js";
 import { requireTrimmedString } from "./request-parsers.js";
-import type { CreateSchedulerEntryInput, UpdateSchedulerEntryInput } from "../contracts/scheduler-types.js";
+import type { CreateSchedulerEntryInput, MemoryRemediationScheduleSettings, UpdateSchedulerEntryInput } from "../contracts/scheduler-types.js";
 
 function defaultScheduleWindow(): { from: string; to: string } {
   const now = new Date();
@@ -48,6 +48,27 @@ export function registerSchedulerRoutes(app: Express, deps: DashboardDependencie
       req.body as CreateSchedulerEntryInput,
     );
     res.status(201).json(entry);
+  }));
+
+  app.get("/api/projects/:projectId/scheduler/memory-remediation", syncRoute((req, res) => {
+    if (!deps.schedulerService) {
+      res.status(404).json({ error: "Scheduler service is not enabled." });
+      return;
+    }
+    res.json(deps.schedulerService.getMemoryRemediationSchedule(
+      requireTrimmedString(req.params.projectId, "projectId"),
+    ));
+  }));
+
+  app.put("/api/projects/:projectId/scheduler/memory-remediation", syncRoute((req, res) => {
+    if (!deps.schedulerService) {
+      res.status(404).json({ error: "Scheduler service is not enabled." });
+      return;
+    }
+    res.json(deps.schedulerService.setMemoryRemediationSchedule(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      req.body as MemoryRemediationScheduleSettings,
+    ));
   }));
 
   app.patch("/api/scheduler/:entryId", syncRoute((req, res) => {

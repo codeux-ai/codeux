@@ -42,3 +42,9 @@ Analytics components draw from `stats-theme.css`, which maps specifically back t
 *   **Legends**: Legends and series toggles must expose pressed/selected state and series names via visually hidden text.
 *   **Tables**: Ensure invocation tables preserve header relationships (`scope="col"`).
 *   **Motion**: Respect reduced motion for chart transitions and animated loading states. Provide non-motion status text.
+
+## Data & State Management
+
+*   **Server-Driven Metrics**: Always prefer using server-provided metrics, totals, and available filter lists (like purposes and providers) when fetching data over computing them on the client. This ensures the dashboard accurately reflects system state even when paginated.
+*   **Request Cancellation**: Active network requests must be cancellable (e.g., using `AbortController`) to support fast query, filter, and sort state changes without race conditions or overwriting new data with stale responses.
+*   **Legacy Fallbacks**: If an endpoint supports a legacy unpaginated array response, isolate the client-side filtering, sorting, and aggregation calculations into dedicated standalone legacy helper functions, ensuring they only run if server aggregates are explicitly missing.

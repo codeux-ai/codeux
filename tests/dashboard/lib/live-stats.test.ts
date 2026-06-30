@@ -1310,4 +1310,47 @@ describe("live stats timing model", () => {
       cachedInputTokens: 0,
     });
   });
+
+  it("buildLiveTaskTimingSummaries returns exact same result as per-task calls", () => {
+    const tasks = [
+      makeTask({ id: "t1", status: "PENDING", record_id: "rec1" }),
+      makeTask({ id: "t2", status: "RUNNING", record_id: "rec2" }),
+      makeTask({ id: "t3", status: "COMPLETED", record_id: "rec3" }),
+      makeTask({ id: "t4", status: "COMPLETED", record_id: "rec4", worker_branch: "branch1" }),
+    ];
+    const dispatches = [
+      makeDispatch({ id: "d1", taskId: "rec1", taskKey: "t1", status: "completed", queuedAt: "2026-03-19T10:00:00.000Z", startedAt: "2026-03-19T10:01:00.000Z", finishedAt: "2026-03-19T10:05:00.000Z" }),
+      makeDispatch({ id: "d1-retry", taskId: "rec1", taskKey: "t1", status: "running", queuedAt: "2026-03-19T10:06:00.000Z", startedAt: "2026-03-19T10:07:00.000Z" }),
+      makeDispatch({ id: "d2", taskId: "rec2", taskKey: "t2", status: "running", queuedAt: "2026-03-19T10:02:00.000Z", startedAt: "2026-03-19T10:03:00.000Z" }),
+      makeDispatch({ id: "d3", taskId: "rec3", taskKey: "t3", status: "completed", queuedAt: "2026-03-19T10:00:00.000Z", startedAt: "2026-03-19T10:01:00.000Z", finishedAt: "2026-03-19T10:02:00.000Z" }),
+      makeDispatch({ id: "d4", taskId: "rec4", taskKey: "t4", status: "completed", queuedAt: "2026-03-19T10:00:00.000Z", startedAt: "2026-03-19T10:01:00.000Z", finishedAt: "2026-03-19T10:05:00.000Z" }),
+    ];
+    const events = [
+      makeEvent({ id: "e1", taskId: "rec1", dispatchId: "d1", eventType: "run_completed", createdAt: "2026-03-19T10:05:00.000Z" }),
+      makeEvent({ id: "e1-r", taskId: "rec1", dispatchId: "d1-retry", eventType: "cli_ci_running", createdAt: "2026-03-19T10:08:00.000Z" }),
+      makeEvent({ id: "e2", taskId: "rec2", dispatchId: "d2", eventType: "heartbeat", createdAt: "2026-03-19T10:04:00.000Z" }),
+      makeEvent({ id: "e3", taskId: "rec3", dispatchId: "d3", eventType: "run_completed", createdAt: "2026-03-19T10:02:00.000Z" }),
+      makeEvent({ id: "e4-1", taskId: "rec4", dispatchId: "d4", eventType: "cli_git_no_changes", createdAt: "2026-03-19T10:03:00.000Z" }),
+      makeEvent({ id: "e4-2", taskId: "rec4", dispatchId: "d4", eventType: "run_completed", createdAt: "2026-03-19T10:05:00.000Z" }),
+      makeEvent({ id: "e5", taskId: "rec99", dispatchId: "d99", eventType: "heartbeat", createdAt: "2026-03-19T10:04:00.000Z" }),
+    ];
+
+    const nowIso = "2026-03-19T10:10:00.000Z";
+
+    const bulkResults = buildLiveTaskTimingSummaries({
+      tasks,
+      dispatches,
+      events,
+      nowIso
+    });
+
+    const individualResults = tasks.map(task => buildLiveTaskTimingSummary({
+      task,
+      dispatches,
+      events,
+      nowIso
+    }));
+
+    expect(bulkResults).toEqual(individualResults);
+  });
 });

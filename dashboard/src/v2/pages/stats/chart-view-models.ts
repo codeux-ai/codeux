@@ -121,6 +121,19 @@ export function calculateChartMetrics(visibleBuckets: ExecutionUsageBucketSummar
   };
 }
 
+export function calculateHoverRect(
+  index: number,
+  x: number,
+  xPositions: number[],
+  width: number,
+  padding: number
+): { startX: number; endX: number; rectWidth: number } {
+  const startX = index === 0 ? padding : (xPositions[index - 1]! + x) / 2;
+  const endX = index === xPositions.length - 1 ? width - padding : (x + xPositions[index + 1]!) / 2;
+  const rectWidth = Math.max(8, endX - startX);
+  return { startX, endX, rectWidth };
+}
+
 export function getTooltipState(
   visibleBuckets: ExecutionUsageBucketSummary[],
   chartData: NormalizedChartSeries[],

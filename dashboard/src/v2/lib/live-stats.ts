@@ -14,6 +14,8 @@ import {
   findLatestTerminalTaskSignal,
   getTaskEventsForLiveTask,
   pickLatestTaskDispatch,
+  buildIndexedExecutionHistory,
+  type IndexedExecutionHistory,
 } from "./live-task-runtime.js";
 
 export const LIVE_TASK_STAGE_ORDER = ["queued", "coding", "ci", "qa", "autofix", "merge"] as const;
@@ -448,10 +450,11 @@ export function buildLiveTaskTimingSummary(args: {
   dispatches: ExecutionTaskDispatchSummary[];
   events: ExecutionRuntimeEventSummary[];
   nowIso?: string;
+  index?: IndexedExecutionHistory;
 }): LiveTaskTimingSummary {
   const nowIso = args.nowIso || new Date().toISOString();
-  const dispatch = pickLatestTaskDispatch(args.task, args.dispatches);
-  const taskEvents = getTaskEventsForLiveTask(args.task, dispatch, args.events);
+  const dispatch = pickLatestTaskDispatch(args.task, args.dispatches, args.index);
+  const taskEvents = getTaskEventsForLiveTask(args.task, dispatch, args.events, args.index);
   const terminalEvent = findLatestTerminalTaskSignal(taskEvents);
   const phase = getLiveTaskProgressPhase({
     task: args.task,
@@ -587,11 +590,14 @@ export function buildLiveTaskTimingSummaries(args: {
       events: args.events,
     };
 
+  const index = buildIndexedExecutionHistory(scopedHistory.dispatches, scopedHistory.events);
+
   return args.tasks.map((task) => buildLiveTaskTimingSummary({
     task,
     dispatches: scopedHistory.dispatches,
     events: scopedHistory.events,
     nowIso: args.nowIso,
+    index,
   }));
 }
 

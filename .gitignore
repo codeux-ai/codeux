@@ -35,3 +35,7 @@ logs/openai/
 # Local scratch files
 /test-*
 /tmp*
+
+# This is a pnpm-only project — never commit an npm lockfile (ungoverned by pnpm overrides)
+package-lock.json
+**/package-lock.json

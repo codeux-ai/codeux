@@ -177,4 +177,94 @@ describe("SettingsActions", () => {
     expect(res.approvalRequired).toBe(true);
     expect(settingsRepository.resetProjectSettings).not.toHaveBeenCalled();
   });
+
+  const confirm = async (action: string, payload: Record<string, unknown>) => {
+    await actions.handleSettingsAction({ domain: "settings", action, payload } as any);
+    return actions.handleSettingsAction({ domain: "settings", action, payload: { ...payload, approval: { confirmed: true } }, approval: { confirmed: true } } as any);
+  };
+
+  describe("read actions", () => {
+    it("returns the project override", async () => {
+      const res = await actions.handleSettingsAction({ domain: "settings", action: "get_project_override", payload: { projectId: "proj-1" } });
+      expect(settingsRepository.getProjectSettings).toHaveBeenCalledWith("proj-1");
+      expect((res.result as any).override).toEqual({ automationLevel: "SEMI_AUTO" });
+    });
+
+    it("resolves project effective settings", async () => {
+      const res = await actions.handleSettingsAction({ domain: "settings", action: "resolve_project_effective", payload: { projectId: "proj-1" } });
+      expect(settingsRepository.resolveProjectDashboardSettings).toHaveBeenCalledWith("proj-1");
+      expect((res.result as any).settings).toEqual({ settings: { level: "resolved_project" } });
+    });
+
+    it("returns the sprint override", async () => {
+      const res = await actions.handleSettingsAction({ domain: "settings", action: "get_sprint_override", payload: { sprintId: "sprint-1" } });
+      expect(settingsRepository.getSprintSettings).toHaveBeenCalledWith("sprint-1");
+      expect((res.result as any).override).toEqual({ automationLevel: "MANUAL" });
+    });
+
+    it("resolves sprint effective settings", async () => {
+      const res = await actions.handleSettingsAction({ domain: "settings", action: "resolve_sprint_effective", payload: { projectId: "proj-1", sprintId: "sprint-1" } });
+      expect(settingsRepository.resolveSprintDashboardSettings).toHaveBeenCalledWith("proj-1", "sprint-1");
+      expect((res.result as any).settings).toEqual({ settings: { level: "resolved_sprint" } });
+    });
+
+    it("throws when a required string is missing", async () => {
+      await expect(
+        actions.handleSettingsAction({ domain: "settings", action: "get_project_override", payload: {} }),
+      ).rejects.toThrow(/projectId is required/);
+    });
+  });
+
+  describe("remaining mutations (after confirmation)", () => {
+    it("replaces project settings", async () => {
+      const res = await confirm("replace_project_settings", { projectId: "proj-1", settings: { automationLevel: "FULL" } });
+      expect(settingsRepository.saveProjectSettings).toHaveBeenCalledWith("proj-1", { automationLevel: "FULL" });
+      expect((res.result as any).settings).toEqual({ automationLevel: "FULL" });
+    });
+
+    it("replaces sprint settings using resolved project settings as the base", async () => {
+      const res = await confirm("replace_sprint_settings", { projectId: "proj-1", sprintId: "sprint-1", settings: { automationLevel: "MANUAL" } });
+      expect(settingsRepository.getProjectResolvedSettings).toHaveBeenCalledWith("proj-1");
+      expect(settingsRepository.saveSprintSettings).toHaveBeenCalledWith("sprint-1", {}, { automationLevel: "MANUAL" });
+      expect((res.result as any).settings).toEqual({ automationLevel: "MANUAL" });
+    });
+
+    it("patches a sprint setting", async () => {
+      const res = await confirm("patch_sprint_setting", { projectId: "proj-1", sprintId: "sprint-1", path: "automationLevel", value: "SEMI_AUTO" });
+      expect(settingsRepository.saveSprintSettings).toHaveBeenCalled();
+      expect((res.result as any).settings).toBeDefined();
+    });
+
+    it("resets sprint settings", async () => {
+      const res = await confirm("reset_sprint_settings", { sprintId: "sprint-1" });
+      expect(settingsRepository.resetSprintSettings).toHaveBeenCalledWith("sprint-1");
+      expect((res.result as any).success).toBe(true);
+    });
+  });
+
+  describe("validation", () => {
+    it("rejects replace_system_settings without a settings object", async () => {
+      await expect(
+        actions.handleSettingsAction({ domain: "settings", action: "replace_system_settings", payload: {} }),
+      ).rejects.toThrow(/settings object is required/);
+    });
+
+    it("rejects replace_project_settings without a settings object", async () => {
+      await expect(
+        actions.handleSettingsAction({ domain: "settings", action: "replace_project_settings", payload: { projectId: "p" } }),
+      ).rejects.toThrow(/settings object is required/);
+    });
+
+    it("rejects replace_sprint_settings without a settings object", async () => {
+      await expect(
+        actions.handleSettingsAction({ domain: "settings", action: "replace_sprint_settings", payload: { projectId: "p", sprintId: "s" } }),
+      ).rejects.toThrow(/settings object is required/);
+    });
+
+    it("throws on an unknown settings action", async () => {
+      await expect(
+        actions.handleSettingsAction({ domain: "settings", action: "frobnicate", payload: {} } as any),
+      ).rejects.toThrow(/Unknown settings action: frobnicate/);
+    });
+  });
 });

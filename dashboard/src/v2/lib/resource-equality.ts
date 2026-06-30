@@ -86,13 +86,11 @@ export function isEqualProjectsResponse(prev: ProjectsResponse, next: ProjectsRe
 export function stabilizeProjectsResponse(prev: ProjectsResponse, next: ProjectsResponse): ProjectsResponse {
   if (prev === next) return prev;
 
+  const prevMap = new Map(prev.projects.map(p => [p.id, p]));
   let projectsChanged = false;
-  const newProjects = next.projects.map((nextProject, i) => {
-    // If lengths differ, prev.projects[i] might be undefined, but we're mostly
-    // trying to stabilize when array sizes match or when items align.
-    // To be safe, we try to match by ID instead of purely by index, but index is okay
-    // since `isEqualProjectsResponse` checks order. Let's just find by ID to be robust.
-    const prevProject = prev.projects.find(p => p.id === nextProject.id);
+
+  const newProjects = next.projects.map(nextProject => {
+    const prevProject = prevMap.get(nextProject.id);
     if (prevProject && isEqualProject(prevProject, nextProject)) {
       return prevProject;
     }

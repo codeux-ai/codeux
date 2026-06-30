@@ -37,6 +37,7 @@ import { MergeConflictDebouncer } from "../domain/sprint/ci/merge-conflict-debou
 import type { ResolvePullRequestResult } from "../services/git-status-service.js";
 import type { MemoryService } from "../services/memory-service.js";
 import type { MemoryPromotionService } from "../services/memory-promotion-service.js";
+import type { MemoryRemediationService } from "../services/memory-remediation-service.js";
 import type { ProviderConcurrencyService } from "../services/provider-concurrency-service.js";
 import type { QualityAssuranceService } from "../services/quality-assurance-service.js";
 import type { TaskService } from "../services/task-service.js";
@@ -114,6 +115,7 @@ export interface SprintOrchestratorDependencies {
   logger: Logger;
   memoryService: MemoryService;
   memoryPromotionService: MemoryPromotionService;
+  memoryRemediationService?: MemoryRemediationService;
   providerConcurrencyService: ProviderConcurrencyService;
   qualityAssuranceService?: QualityAssuranceService;
 

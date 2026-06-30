@@ -55,12 +55,13 @@ describe("MemoryService - search", () => {
     expect(mockEmbeddingService.embed).not.toHaveBeenCalled();
   });
 
-  it("should return empty array when embedding dimension is unknown", async () => {
+  it("should infer search dimension from the query embedding", async () => {
     mockEmbeddingService.getDimension?.mockReturnValue(0);
+    mockMemoryRepository.loadEmbeddingsForScope?.mockReturnValue([]);
 
     const result = await memoryService.search({ query: "test", projectId });
     expect(result).toEqual([]);
-    expect(mockEmbeddingService.embed).not.toHaveBeenCalled();
+    expect(mockEmbeddingService.embed).toHaveBeenCalledWith("test");
   });
 
   it("should skip candidate embeddings whose dimension does not match the model dimension", async () => {

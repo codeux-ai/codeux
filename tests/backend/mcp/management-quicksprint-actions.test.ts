@@ -111,4 +111,100 @@ describe("QuicksprintActions", () => {
       submitMode: "plan_only",
     });
   });
+
+  it("gets a template by id", async () => {
+    vi.mocked(quicksprintService.getTemplate).mockResolvedValue({ id: "t1" } as any);
+    const result = await actions.handleQuicksprintAction(makeArgs("get_template", { projectId: "p1", templateId: "t1" }));
+    expect(quicksprintService.getTemplate).toHaveBeenCalledWith("p1", "t1");
+    expect(result.result).toEqual({ template: { id: "t1" } });
+  });
+
+  it("throws when a template is not found", async () => {
+    vi.mocked(quicksprintService.getTemplate).mockResolvedValue(null as any);
+    await expect(
+      actions.handleQuicksprintAction(makeArgs("get_template", { projectId: "p1", templateId: "missing" })),
+    ).rejects.toThrow(/Template not found: missing/);
+  });
+
+  it("creates a template including the optional fields", async () => {
+    vi.mocked(quicksprintService.createCustomTemplate).mockResolvedValue({ id: "t1" } as any);
+    await actions.handleQuicksprintAction(makeArgs("create_template", {
+      projectId: "p1",
+      name: "N",
+      description: "D",
+      icon: "I",
+      category: "C",
+      agentInstructionMarkdown: "MD",
+      categoryColor: "#fff",
+      defaultTaskCount: 3.9,
+      agentPresetId: "preset-1",
+    }));
+    expect(quicksprintService.createCustomTemplate).toHaveBeenCalledWith("p1", {
+      name: "N",
+      description: "D",
+      icon: "I",
+      category: "C",
+      agentInstructionMarkdown: "MD",
+      categoryColor: "#fff",
+      defaultTaskCount: 3,
+      agentPresetId: "preset-1",
+    });
+  });
+
+  it("rejects template creation that is missing required fields", async () => {
+    await expect(
+      actions.handleQuicksprintAction(makeArgs("create_template", { projectId: "p1", name: "N" })),
+    ).rejects.toThrow(/description is required/);
+  });
+
+  it("updates a template with only the provided string and count fields", async () => {
+    vi.mocked(quicksprintService.updateCustomTemplate).mockResolvedValue({ id: "t1" } as any);
+    await actions.handleQuicksprintAction(makeArgs("update_template", {
+      projectId: "p1",
+      templateId: "t1",
+      name: "New Name",
+      description: "  ", // blank → ignored
+      defaultTaskCount: 7,
+    }));
+    expect(quicksprintService.updateCustomTemplate).toHaveBeenCalledWith("p1", "t1", {
+      name: "New Name",
+      defaultTaskCount: 7,
+    });
+  });
+
+  it("passes through all execution overrides and an explicit submit mode", async () => {
+    vi.mocked(quicksprintService.executeQuicksprint).mockResolvedValue({ id: "s1" } as any);
+    await actions.handleQuicksprintAction(makeArgs("execute", {
+      projectId: "p1",
+      templateId: "t1",
+      submitMode: "plan_and_start",
+      routeOverride: "route",
+      modelOverride: "model",
+      agentPresetId: "preset",
+      additionalPrompt: "prompt",
+      planningOverrides: { foo: "bar" },
+    }));
+    expect(quicksprintService.executeQuicksprint).toHaveBeenCalledWith("p1", {
+      templateId: "t1",
+      taskCount: 5,
+      submitMode: "plan_and_start",
+      routeOverride: "route",
+      modelOverride: "model",
+      agentPresetId: "preset",
+      additionalPrompt: "prompt",
+      planningOverrides: { foo: "bar" },
+    });
+  });
+
+  it("falls back to the default task count when the value is unparseable", async () => {
+    vi.mocked(quicksprintService.executeQuicksprint).mockResolvedValue({ id: "s1" } as any);
+    await actions.handleQuicksprintAction(makeArgs("execute", { projectId: "p1", templateId: "t1", taskCount: "not-a-number" }));
+    expect(quicksprintService.executeQuicksprint).toHaveBeenCalledWith("p1", expect.objectContaining({ taskCount: 5 }));
+  });
+
+  it("throws for an unknown quicksprint action", async () => {
+    await expect(
+      actions.handleQuicksprintAction(makeArgs("frobnicate", { projectId: "p1" })),
+    ).rejects.toThrow(/Unknown quicksprint action: frobnicate/);
+  });
 });

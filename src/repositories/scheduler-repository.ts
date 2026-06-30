@@ -5,6 +5,7 @@ import { EntityNotFoundError, requireRecord, toNumber, ValidationError } from ".
 import type {
   CreateSchedulerEntryInput,
   ScheduleChatTarget,
+  ScheduleMemoryRemediationTarget,
   ScheduleQuicksprintTarget,
   ScheduleRecurrenceRule,
   SchedulerEntryRecord,
@@ -38,6 +39,7 @@ interface PersistedTargetPayload {
   sprintTarget?: ScheduleSprintTarget;
   quicksprintTarget?: ScheduleQuicksprintTarget;
   chatTarget?: ScheduleChatTarget;
+  memoryRemediationTarget?: ScheduleMemoryRemediationTarget;
 }
 
 export class SchedulerRepository {
@@ -130,6 +132,7 @@ export class SchedulerRepository {
       sprintTarget: isTargetTypeChanged ? input.sprintTarget : (input.sprintTarget ?? current.sprintTarget),
       quicksprintTarget: isTargetTypeChanged ? input.quicksprintTarget : (input.quicksprintTarget ?? current.quicksprintTarget),
       chatTarget: isTargetTypeChanged ? input.chatTarget : (input.chatTarget ?? current.chatTarget),
+      memoryRemediationTarget: isTargetTypeChanged ? input.memoryRemediationTarget : (input.memoryRemediationTarget ?? current.memoryRemediationTarget),
       scheduledFor: input.scheduledFor ?? current.scheduledFor,
     });
     const nextScheduledFor = input.scheduledFor
@@ -248,6 +251,15 @@ export class SchedulerRepository {
       };
     }
 
+    if (targetType === "memory_remediation") {
+      return {
+        memoryRemediationTarget: {
+          mode: input.memoryRemediationTarget?.mode === "ai" ? "ai" : "deterministic",
+          source: input.memoryRemediationTarget?.source === "memory_settings" ? "memory_settings" : "scheduler",
+        },
+      };
+    }
+
     const bodyMarkdown = input.chatTarget?.bodyMarkdown?.trim();
     if (!bodyMarkdown) {
       throw new ValidationError("chatTarget.bodyMarkdown is required.");
@@ -272,6 +284,9 @@ export class SchedulerRepository {
     }
     if (targetType === "quicksprint") {
       return "Scheduled quicksprint";
+    }
+    if (targetType === "memory_remediation") {
+      return "Scheduled memory remediation";
     }
     return target.chatTarget?.title || "Scheduled chat message";
   }
@@ -303,6 +318,7 @@ export class SchedulerRepository {
       sprintTarget: target.sprintTarget,
       quicksprintTarget: target.quicksprintTarget,
       chatTarget: target.chatTarget,
+      memoryRemediationTarget: target.memoryRemediationTarget,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };

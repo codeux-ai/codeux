@@ -7,6 +7,7 @@ import { correlationIdMiddleware } from "../shared/logging/correlation-id.js";
 import { applyDashboardSecurityHeaders, isHostileBrowserOrigin } from "./dashboard-security.js";
 import { createPreviewHostMiddleware } from "./preview-host-middleware.js";
 import { parsePreviewSessionIdFromHost } from "./preview-host-utils.js";
+import { createHttpRateLimiter } from "../shared/http/rate-limit.js";
 import type { DashboardServerOptions } from "./dashboard-server.js";
 
 function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
@@ -120,6 +121,10 @@ export const applyDashboardPostRouteMiddleware = (
   const builtDashboardDir = path.join(path.resolve(dashboardDir), "dist");
   const staticDir = fs.existsSync(builtDashboardDir) ? builtDashboardDir : path.resolve(dashboardDir);
 
+  // Rate-limit the static asset + SPA-fallback handlers below. These perform
+  // filesystem reads (express.static / res.sendFile) on every request; the
+  // limiter caps abusive floods while staying well above any real page load.
+  app.use(createHttpRateLimiter());
   app.use(express.static(staticDir, {
     setHeaders: (res, filePath) => {
       // Vite emits content-hashed, immutable bundles under /assets (e.g. index-3f9a2c1b.js).

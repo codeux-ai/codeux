@@ -94,6 +94,10 @@ export class ProjectAttentionService {
     );
   }
 
+  listProjectIdsWithOpenWorkerAttention(): string[] {
+    return this.projectAttentionRepository.listProjectIdsWithOpenWorkerAttention();
+  }
+
   listActiveProjectItems(projectId: string): ProjectAttentionItemRecord[] {
     return this.projectAttentionRepository.listProjectAttentionItems(projectId, {
       statuses: ["open", "claimed"],

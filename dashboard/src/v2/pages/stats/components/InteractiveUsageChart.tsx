@@ -28,6 +28,7 @@ import {
   calculateChartMetrics,
   getTooltipState,
   groupChartSeries,
+  calculateHoverRect,
 } from '../chart-view-models.js';
 import { UsageGraphHeader } from './UsageGraphHeader.js';
 import { UsageFilterMenu } from './UsageFilterMenu.js';
@@ -85,7 +86,7 @@ export const InteractiveUsageChart: FunctionComponent<{
   const isReducedMotion = useReducedMotion();
   const buckets = stats.buckets;
 
-  const dimensionsRef = useRef({ width: 1200, height: 256 });
+  const [dimensions, setDimensions] = useState({ width: 1200, height: 256 });
   const statsRef = useRef(stats);
   const viewStartRef = useRef(zoomRange?.start ?? 0);
   const viewEndRef = useRef(zoomRange?.end ?? Math.max(0, buckets.length - 1));
@@ -107,88 +108,15 @@ export const InteractiveUsageChart: FunctionComponent<{
   visibleBucketsRef.current = visibleBuckets;
 
   const chartData = useMemo(() => {
-    return normalizeChartSeries(stats.chartSeries, visibleBuckets, viewStart, dimensionsRef.current.width, dimensionsRef.current.height, padding);
-  }, [stats.chartSeries, visibleBuckets, viewStart, padding]); // Intentionally omitting dimensions to prevent React re-renders
+    return normalizeChartSeries(stats.chartSeries, visibleBuckets, viewStart, dimensions.width, dimensions.height, padding);
+  }, [stats.chartSeries, visibleBuckets, viewStart, dimensions.width, dimensions.height, padding]);
 
   useLayoutEffect(() => {
     if (!svgContainerRef.current || typeof ResizeObserver === 'undefined') return;
 
-    const updateChartDOM = (width: number, height: number) => {
-      const svg = svgContainerRef.current?.querySelector('svg');
-      if (!svg) return;
-      svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-
-      const newChartData = normalizeChartSeries(
-        statsRef.current.chartSeries,
-        visibleBucketsRef.current,
-        viewStartRef.current,
-        width,
-        height,
-        padding
-      );
-      const newXPositions = newChartData[0]?.points.map((p) => p.x) ?? [];
-
-      const gridLines = svg.querySelectorAll('[data-grid-line]');
-      gridLines.forEach((line, index) => {
-        line.setAttribute('x2', String(width - padding));
-        line.setAttribute('y1', String(padding + ((height - padding * 2) / 4) * index));
-        line.setAttribute('y2', String(padding + ((height - padding * 2) / 4) * index));
-      });
-
-      const areas = svg.querySelectorAll('[data-chart-area]');
-      areas.forEach((area) => {
-        const seriesId = area.getAttribute('data-series-id');
-        const series = newChartData.find(s => s.id === seriesId);
-        if (series) area.setAttribute('d', series.areaPath);
-      });
-
-      const paths = svg.querySelectorAll('[data-chart-path]');
-      paths.forEach((path) => {
-        const seriesId = path.getAttribute('data-series-id');
-        const series = newChartData.find(s => s.id === seriesId);
-        if (series) path.setAttribute('d', series.path);
-      });
-
-      const hoverLine = svg.querySelector('[data-hover-line]');
-      if (hoverLine && hoveredIndexRef.current !== null && newXPositions[hoveredIndexRef.current]) {
-        hoverLine.setAttribute('x1', String(newXPositions[hoveredIndexRef.current]));
-        hoverLine.setAttribute('x2', String(newXPositions[hoveredIndexRef.current]));
-        hoverLine.setAttribute('y2', String(height - padding));
-      }
-
-      const points = svg.querySelectorAll('[data-chart-point]');
-      points.forEach((point) => {
-        const seriesId = point.getAttribute('data-series-id');
-        const index = parseInt(point.getAttribute('data-point-index') || '0', 10);
-        const series = newChartData.find(s => s.id === seriesId);
-        if (series && series.points[index]) {
-          point.setAttribute('cx', String(series.points[index].x));
-          point.setAttribute('cy', String(series.points[index].y));
-        }
-      });
-
-      const hoverRects = svg.querySelectorAll('[data-hover-rect]');
-      hoverRects.forEach((rect) => {
-        const index = parseInt(rect.getAttribute('data-rect-index') || '0', 10);
-        const x = newXPositions[index];
-        if (x === undefined) return;
-        const startX = index === 0 ? padding : (newXPositions[index - 1]! + x) / 2;
-        const endX = index === newXPositions.length - 1 ? width - padding : (x + newXPositions[index + 1]!) / 2;
-        const rectWidth = Math.max(8, endX - startX);
-        rect.setAttribute('x', String(startX));
-        rect.setAttribute('width', String(rectWidth));
-        rect.setAttribute('height', String(height - padding * 2));
-      });
-
-      const axisLabels = svg.querySelectorAll('[data-axis-label]');
-      axisLabels.forEach((label) => {
-        const index = parseInt(label.getAttribute('data-label-index') || '0', 10);
-        if (newXPositions[index] !== undefined) {
-          label.setAttribute('x', String(newXPositions[index]));
-          label.setAttribute('y', String(height - 8));
-        }
-      });
-    };
+    let rafId: number | null = null;
+    let prevWidth = 1200;
+    let prevHeight = 256;
 
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
@@ -196,21 +124,26 @@ export const InteractiveUsageChart: FunctionComponent<{
         const newWidth = entry.contentRect.width;
         const newHeight = Math.max(256, entry.contentRect.height);
 
-        // Only update if dimensions actually changed
-        if (dimensionsRef.current.width !== newWidth || dimensionsRef.current.height !== newHeight) {
-          dimensionsRef.current = { width: newWidth, height: newHeight };
-          // Update DOM directly bypassing React render loop
-          requestAnimationFrame(() => updateChartDOM(newWidth, newHeight));
+        if (prevWidth !== newWidth || prevHeight !== newHeight) {
+          prevWidth = newWidth;
+          prevHeight = newHeight;
+          if (rafId !== null) cancelAnimationFrame(rafId);
+          rafId = requestAnimationFrame(() => {
+            setDimensions({ width: newWidth, height: newHeight });
+          });
         }
       }
     });
 
     observer.observe(svgContainerRef.current);
 
-    return () => observer.disconnect();
-  }, [padding]); // Add dependencies as needed, though refs are mutable
+    return () => {
+      observer.disconnect();
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
+  }, []);
 
-  const { width, height } = dimensionsRef.current;
+  const { width, height } = dimensions;
 
   const seriesGroups = useMemo(() => groupChartSeries(stats.chartSeries), [stats.chartSeries]);
   const activeSeriesCount = Object.values(enabledSeries).filter(Boolean).length;
@@ -541,9 +474,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                     ))
                   ))}
                   {xPositions.map((x, index) => {
-                    const startX = index === 0 ? padding : (xPositions[index - 1]! + x) / 2;
-                    const endX = index === xPositions.length - 1 ? width - padding : (x + xPositions[index + 1]!) / 2;
-                    const rectWidth = Math.max(8, endX - startX);
+                    const { startX, rectWidth } = calculateHoverRect(index, x, xPositions, width, padding);
                     const absoluteIndex = viewStart + index;
                     return (
                       <rect

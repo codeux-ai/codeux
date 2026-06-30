@@ -21,6 +21,23 @@ export function escapeHtml(value: string | null | undefined): string {
     .replaceAll("'", "&#39;");
 }
 
+/**
+ * Serializes a value to JSON that is safe to embed inside an inline `<script>`
+ * block. Plain `JSON.stringify` does not escape `</script>`, `<!--`, or the
+ * U+2028/U+2029 line separators, so a string containing `</script>` would break
+ * out of the script context (XSS). Escaping `<`, `>`, `&` and the line
+ * separators to their `\uXXXX` forms keeps the decoded JS value identical while
+ * making script-context breakout impossible.
+ */
+export function escapeJsonForScript(value: unknown): string {
+  return JSON.stringify(value ?? null)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
 export function parsePreviewSessionIdFromHost(hostHeader: string | undefined): string | null {
   const rawHost = String(hostHeader || "").trim().toLowerCase();
   if (!rawHost) {
@@ -549,7 +566,7 @@ export function buildPreviewStandbyHtml(args: {
   </main>
   <script>
     (() => {
-      const requestedPath = ${JSON.stringify(requestedPath)};
+      const requestedPath = ${escapeJsonForScript(requestedPath)};
       const statusNode = document.getElementById("status");
       const startButton = document.getElementById("start");
       const rebuildButton = document.getElementById("rebuild");

@@ -118,6 +118,27 @@ describe("queryProjectStatsSnapshot - Duration Aggregation Bounding", () => {
     expect(smallSnapshot.duration.avgMs).toBe(100);
     expect(smallSnapshot.duration.p50Ms).toBe(100);
 
+    // Edge case: Using injected maxDurationSamples
+    adapter.exec("DELETE FROM provider_invocations");
+    adapter.transaction(() => {
+      const stmt = adapter.prepare("INSERT INTO provider_invocations (project_id, provider, model, duration_ms, started_at) VALUES (?, ?, ?, ?, ?)");
+      for (let i = 0; i < 50; i++) {
+        // all identical timestamps to test deterministic ordering fallback
+        stmt.run("proj-1", "anthropic", "claude-3-opus", 200, `2023-01-01T12:00:00Z`);
+      }
+      return "done";
+    });
+
+    const customDepsMock: ProjectStatsQueryDependencies = {
+      ...depsMock,
+      maxDurationSamples: 10,
+    };
+    const customSnapshot = queryProjectStatsSnapshot(adapter as any, "proj-1", "all", customDepsMock);
+
+    // We inserted 50 rows. With a cap of 10, we should run the aggregate query and get sampleCount=50
+    expect(customSnapshot.duration.sampleCount).toBe(50);
+    expect(customSnapshot.duration.avgMs).toBe(200);
+
     // Edge case: Empty dataset
     adapter.exec("DELETE FROM provider_invocations");
     const emptySnapshot = queryProjectStatsSnapshot(adapter as any, "proj-1", "all", depsMock);

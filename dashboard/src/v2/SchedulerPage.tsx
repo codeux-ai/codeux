@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
 import {
   CalendarDays,
+  Brain,
   Check,
   Clock3,
   MessageCircle,
@@ -78,6 +79,14 @@ const TARGET_OPTIONS: Array<{
     activeClassName: "border-violet-500/35 bg-violet-500/10 shadow-[0_12px_34px_rgba(139,92,246,0.13)]",
     chipClassName: "bg-violet-500/12 text-violet-600 dark:text-violet-400",
   },
+  {
+    value: "memory_remediation",
+    label: "Memory",
+    icon: Brain,
+    tone: "text-signal-500",
+    activeClassName: "border-signal-500/35 bg-signal-500/10 shadow-[0_12px_34px_rgba(0,224,160,0.13)]",
+    chipClassName: "bg-signal-500/12 text-signal-600 dark:text-signal-400",
+  },
 ];
 
 const targetOptionByType = new Map(TARGET_OPTIONS.map((option) => [option.value, option]));
@@ -115,7 +124,7 @@ const formatTimeLabel = (iso: string): string => (
 );
 
 const targetLabel = (targetType: ScheduleTargetType): string => (
-  targetType === "sprint" ? "Sprint" : targetType === "quicksprint" ? "Quicksprint" : "Chat"
+  targetType === "sprint" ? "Sprint" : targetType === "quicksprint" ? "Quicksprint" : targetType === "memory_remediation" ? "Memory" : "Chat"
 );
 
 const recurrenceSummary = (recurrence: ScheduleRecurrenceRule): string => {
@@ -192,6 +201,7 @@ export const SchedulerPage: FunctionComponent = () => {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [taskCount, setTaskCount] = useState(5);
   const [chatMessage, setChatMessage] = useState("");
+  const [memoryRemediationMode, setMemoryRemediationMode] = useState<"deterministic" | "ai">("deterministic");
   const [repeatEnabled, setRepeatEnabled] = useState(false);
   const [frequency, setFrequency] = useState<ScheduleRecurrenceRule["frequency"]>("daily");
   const [interval, setIntervalValue] = useState(1);
@@ -304,6 +314,8 @@ export const SchedulerPage: FunctionComponent = () => {
       setTaskCount(entry.quicksprintTarget.taskCount);
     } else if (entry.targetType === "chat" && entry.chatTarget) {
       setChatMessage(entry.chatTarget.bodyMarkdown);
+    } else if (entry.targetType === "memory_remediation" && entry.memoryRemediationTarget) {
+      setMemoryRemediationMode(entry.memoryRemediationTarget.mode);
     }
 
     if (entry.recurrence && entry.recurrence.frequency !== "none") {
@@ -329,6 +341,7 @@ export const SchedulerPage: FunctionComponent = () => {
     setSelectedTemplateId(templates[0]?.id || "");
     setTaskCount(5);
     setChatMessage("");
+    setMemoryRemediationMode("deterministic");
     setRepeatEnabled(false);
     setFrequency("daily");
     setIntervalValue(1);
@@ -370,6 +383,8 @@ export const SchedulerPage: FunctionComponent = () => {
       } else if (targetType === "quicksprint") {
         const template = templates.find((item) => item.id === selectedTemplateId);
         return template ? `Run ${template.name}` : "Scheduled quicksprint";
+      } else if (targetType === "memory_remediation") {
+        return "Long-term memory remediation";
       } else {
         return "Scheduled chat message";
       }
@@ -392,7 +407,7 @@ export const SchedulerPage: FunctionComponent = () => {
         setFeedback({ tone: "error", message: "Choose a quicksprint template." });
         return;
       }
-    } else {
+    } else if (targetType === "chat") {
       if (!chatMessage.trim()) {
         setFeedback({ tone: "error", message: "Write the chat message to schedule." });
         return;
@@ -414,6 +429,10 @@ export const SchedulerPage: FunctionComponent = () => {
         templateId: selectedTemplateId,
         taskCount,
         submitMode: "plan_and_start",
+      };
+    } else if (targetType === "memory_remediation") {
+      input.memoryRemediationTarget = {
+        mode: memoryRemediationMode,
       };
     } else {
       input.chatTarget = {
@@ -558,7 +577,7 @@ export const SchedulerPage: FunctionComponent = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {TARGET_OPTIONS.map((option) => (
               <button
                 key={option.value}
@@ -647,6 +666,23 @@ export const SchedulerPage: FunctionComponent = () => {
                   className={`mt-2 w-full resize-none py-3 font-medium ${SCHEDULER_FIELD_CLASS}`}
                   placeholder="Ask the chat agent to check status, prepare a summary, or start a timed coordination step."
                 />
+              </label>
+            )}
+
+            {targetType === "memory_remediation" && (
+              <label className="block">
+                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Long-term remediation mode</span>
+                <select
+                  value={memoryRemediationMode}
+                  onChange={(event) => setMemoryRemediationMode(event.currentTarget.value === "ai" ? "ai" : "deterministic")}
+                  className={`mt-2 min-h-[44px] w-full ${SCHEDULER_FIELD_CLASS}`}
+                >
+                  <option value="deterministic">Deterministic cleanup</option>
+                  <option value="ai">AI-routed review</option>
+                </select>
+                <p className="mt-2 text-xs leading-relaxed text-slate-400">
+                  Runs project-scoped long-term memory cleanup for CI-failure memories and exact duplicates. AI mode reviews candidates through the Remediation route.
+                </p>
               </label>
             )}
 

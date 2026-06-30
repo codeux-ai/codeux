@@ -67,6 +67,8 @@ export class StructuredAgentRequestService {
 
   async executeRequest<T>(args: StructuredRequestArgs<T>): Promise<StructuredAgentRequestResult<T>> {
     const sessionId = `${args.sessionIdPrefix}-${args.provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+    const maxRetries = this.resolveStructuredRetryCount(args);
+    const maxProviderAttempts = this.resolveMaxProviderAttempts(args, maxRetries);
 
     let invocationId = args.invocationId;
     if (!invocationId) {
@@ -151,7 +153,9 @@ export class StructuredAgentRequestService {
       invocationId,
       onActivity: args.onActivity,
       settings: args.settings,
-      maxRetries: args.maxRetries ?? args.settings.cliWorkflow?.maxParsingRetries ?? 3,
+      maxRetries,
+      maxProviderAttempts,
+      retryProviderFailures: args.purpose === "planning",
       providerLabel: args.providerLabel,
       parseFn: args.parseFn,
       buildRetryPrompt: args.buildRetryPrompt,
@@ -162,5 +166,30 @@ export class StructuredAgentRequestService {
       sessionId,
       invocationId: invocationId || "",
     };
+  }
+
+  private resolveStructuredRetryCount<T>(args: StructuredRequestArgs<T>): number {
+    if (args.maxRetries !== undefined) {
+      return args.maxRetries;
+    }
+    if (args.purpose === "planning") {
+      return args.settings.cliWorkflow?.maxPlanningJsonRetries
+        ?? args.settings.cliWorkflow?.maxParsingRetries
+        ?? 3;
+    }
+    return args.settings.cliWorkflow?.maxParsingRetries ?? 3;
+  }
+
+  private resolveMaxProviderAttempts<T>(args: StructuredRequestArgs<T>, maxRetries: number): number | undefined {
+    if (args.purpose !== "planning") {
+      return undefined;
+    }
+    const planningCap = args.settings.guardrails?.enabled
+      ? args.settings.guardrails.jobs?.planning?.cap
+      : 0;
+    if (planningCap && planningCap > 0) {
+      return planningCap;
+    }
+    return maxRetries + 1;
   }
 }

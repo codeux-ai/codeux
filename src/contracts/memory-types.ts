@@ -29,6 +29,27 @@ export type MemoryCategory =
 
 export const MEMORY_SCOPES: MemoryScope[] = ["sprint", "agent", "project"];
 
+/**
+ * Target tier for a bulk memory clear ("danger zone" reset):
+ * - short_term → sprint + legacy agent scoped memories
+ * - long_term  → project-scoped memories plus all memory claims + evidence
+ * - all        → every memory, claim, and evidence row (the full memory database)
+ */
+export type MemoryClearTier = "short_term" | "long_term" | "all";
+
+export const MEMORY_CLEAR_TIERS: MemoryClearTier[] = ["short_term", "long_term", "all"];
+
+export function isMemoryClearTier(value: unknown): value is MemoryClearTier {
+  return typeof value === "string" && (MEMORY_CLEAR_TIERS as string[]).includes(value);
+}
+
+/** Row counts removed by a bulk memory clear. */
+export interface MemoryClearResult {
+  memories: number;
+  claims: number;
+  evidence: number;
+}
+
 /** Maps a tier to its underlying scope. */
 export function scopeForTier(tier: MemoryTier): MemoryScope {
   return tier === "short_term" ? "sprint" : "project";
@@ -57,12 +78,31 @@ export interface ParsedMemoryEntry {
   content: string;
 }
 
-export type EmbeddingModelId = "bge-small-en-v1.5" | "multilingual-e5-large";
-
-export const EMBEDDING_MODEL_IDS: EmbeddingModelId[] = [
+export const EMBEDDING_MODEL_IDS = [
   "bge-small-en-v1.5",
+  "bge-base-en-v1.5",
+  "bge-large-en-v1.5",
+  "all-minilm-l6-v2",
+  "all-mpnet-base-v2",
   "multilingual-e5-large",
-];
+] as const;
+
+export type InAppEmbeddingModelId = typeof EMBEDDING_MODEL_IDS[number];
+export type EmbeddingModelId = InAppEmbeddingModelId | (string & {});
+
+export function isInAppEmbeddingModelId(value: string): value is InAppEmbeddingModelId {
+  return (EMBEDDING_MODEL_IDS as readonly string[]).includes(value);
+}
+
+export type EmbeddingProviderMode = "in_app" | "external_api";
+export type MemoryRemediationMode = "off" | "deterministic" | "ai";
+
+export interface ExternalEmbeddingSettings {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  dimensions: number | null;
+}
 
 export interface MemorySource {
   type: "auto_capture" | "manual" | "promotion";
@@ -88,6 +128,66 @@ export interface MemoryRecord {
   promotionReason: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export type MemoryClaimStatus = "active" | "superseded" | "deprecated";
+export type MemoryClaimSourceType = "promotion" | "manual" | "remediation";
+export type MemoryClaimEvidenceSupport = "supports" | "contradicts" | "supersedes";
+
+export interface MemoryClaimRecord {
+  id: string;
+  projectId: string;
+  claim: string;
+  fingerprint: string;
+  category: MemoryCategory;
+  confidence: number;
+  durability: number;
+  status: MemoryClaimStatus;
+  tags: string[];
+  appliesToPaths: string[];
+  sourceType: MemoryClaimSourceType;
+  sourceMemoryId: string | null;
+  supersedesClaimId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateMemoryClaimInput {
+  claim: string;
+  category: MemoryCategory;
+  confidence: number;
+  durability: number;
+  tags?: string[];
+  appliesToPaths?: string[];
+  sourceType?: MemoryClaimSourceType;
+  sourceMemoryId?: string | null;
+  supersedesClaimId?: string | null;
+}
+
+export interface UpdateMemoryClaimInput {
+  claim?: string;
+  category?: MemoryCategory;
+  confidence?: number;
+  durability?: number;
+  status?: MemoryClaimStatus;
+  tags?: string[];
+  appliesToPaths?: string[];
+  supersedesClaimId?: string | null;
+}
+
+export interface MemoryClaimEvidenceLink {
+  claimId: string;
+  memoryId: string;
+  supportType: MemoryClaimEvidenceSupport;
+  weight: number;
+  createdAt: string;
+}
+
+export interface AddMemoryClaimEvidenceInput {
+  claimId: string;
+  memoryId: string;
+  supportType?: MemoryClaimEvidenceSupport;
+  weight?: number;
 }
 
 export interface CreateMemoryInput {
@@ -122,6 +222,13 @@ export interface MemorySearchResult {
   similarity: number;
 }
 
+export interface MemoryClaimSearchResult {
+  claim: MemoryClaimRecord;
+  similarity: number;
+  evidenceCount: number;
+  supportingMemory: MemoryRecord;
+}
+
 export interface EmbeddingRecord {
   id: string;
   embeddingBlob: Buffer | Uint8Array;
@@ -147,8 +254,20 @@ export interface EmbeddingModelStatus {
   error: string | null;
 }
 
+export type MemoryPromotionRiskFlag =
+  | "ci_failure"
+  | "test_fixture"
+  | "file_specific"
+  | "task_local"
+  | "implementation_trivia"
+  | "speculative";
+
 export interface PromotionCandidate {
   memory: MemoryRecord;
+  clusterId: string;
+  claim: string;
+  evidenceMemoryIds: string[];
+  riskFlags: MemoryPromotionRiskFlag[];
   score: number;
   reason: string;
   crossSprintCount: number;
@@ -156,11 +275,15 @@ export interface PromotionCandidate {
 
 export interface MemorySettings {
   enabled: boolean;
+  embeddingProvider: EmbeddingProviderMode;
   embeddingModel: EmbeddingModelId | null;
+  externalEmbedding: ExternalEmbeddingSettings;
   autoCaptureSprint: boolean;
   autoCaptureAgent: boolean;
   autoPromote: boolean;
   promotionThreshold: number;
+  remediationMode: MemoryRemediationMode;
+  remediationMaxPromotions: number;
   maxSprintMemories: number;
   maxProjectMemories: number;
   mapMaxEdgesPerNode: number;

@@ -50,10 +50,12 @@ export async function createGitHubRepo(opts: {
 }): Promise<RemoteRepoResult> {
   try {
     validateSafeRepoName(opts.repoName);
-    validateSafeClonePath(opts.cloneParentDir);
-    const targetDir = path.resolve(opts.cloneParentDir, opts.repoName);
+    // Operate on the sanitized, resolved parent directory returned by the
+    // validator rather than the raw request-supplied path.
+    const safeParentDir = validateSafeClonePath(opts.cloneParentDir);
+    const targetDir = path.resolve(safeParentDir, opts.repoName);
     validateNonEmptyDir(targetDir);
-    fs.mkdirSync(opts.cloneParentDir, { recursive: true });
+    fs.mkdirSync(safeParentDir, { recursive: true });
 
     if (!opts.hostToken?.trim()) {
       throw new Error("GitHub token is required to create a remote repository.");
@@ -107,10 +109,12 @@ export async function createGitLabRepo(opts: {
 }): Promise<RemoteRepoResult> {
   try {
     validateSafeRepoName(opts.repoName);
-    validateSafeClonePath(opts.cloneParentDir);
-    const targetDir = path.resolve(opts.cloneParentDir, opts.repoName);
+    // Operate on the sanitized, resolved parent directory returned by the
+    // validator rather than the raw request-supplied path.
+    const safeParentDir = validateSafeClonePath(opts.cloneParentDir);
+    const targetDir = path.resolve(safeParentDir, opts.repoName);
     validateNonEmptyDir(targetDir);
-    fs.mkdirSync(opts.cloneParentDir, { recursive: true });
+    fs.mkdirSync(safeParentDir, { recursive: true });
 
     if (!opts.hostToken?.trim()) {
       throw new Error("GitLab token is required to create a remote repository.");

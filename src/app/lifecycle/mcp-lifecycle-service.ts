@@ -10,6 +10,7 @@ import type { Logger } from "../../shared/logging/logger.js";
 import { CODE_UX_DISPLAY_NAME, CODE_UX_VERSION } from "../../shared/config/code-ux-paths.js";
 import type { RuntimeStartupRecoveryService } from "../../services/runtime-startup-recovery-service.js";
 import { runWithMcpAgentContext } from "../../server/mcp-agent-context.js";
+import { createHttpRateLimiter } from "../../shared/http/rate-limit.js";
 
 export interface BootMcpTransportDeps {
   server: McpServer;
@@ -147,6 +148,10 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
   }
 
   const app = express();
+  // This gateway is network-exposed (HTTPS worker transport), so rate-limit it
+  // in front of the auth check to blunt token brute-forcing and request floods.
+  // The cap is well above a busy worker host's normal request rate.
+  app.use(createHttpRateLimiter());
   app.use(express.json({ limit: "1mb" }));
 
   const sessions = new Map<string, McpHttpSessionEntry>();

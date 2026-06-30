@@ -12,6 +12,7 @@ import type { Logger } from "../shared/logging/logger.js";
 import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute, syncRoute, toErrorResponse } from "./route-utils.js";
 import { ENSURE_CURL_SHELL_FUNCTION, getDockerUserSpec, getProviderFallbackInstallCommand } from "../services/cli-docker-utils.js";
+import { assertSafePathSegment } from "../utils/path-validator.js";
 
 interface TerminalSession {
   sessionId: string;
@@ -492,6 +493,15 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
       }
 
       const resolvedConfigId = providerConfigId || providerId;
+      // `resolvedConfigId` is request-controlled and becomes a directory name under
+      // ~/.code-ux/credentials, where it is targeted by destructive fs.rm(recursive)/mkdir/cp
+      // calls. Reject any value that could escape that directory before it touches the FS.
+      try {
+        assertSafePathSegment(resolvedConfigId, "providerConfigId");
+      } catch (err) {
+        res.status(400).json({ error: err instanceof Error ? err.message : "Invalid providerConfigId" });
+        return;
+      }
       const sessionId = randomUUID();
       const hostCredsDir = path.join(os.homedir(), ".code-ux", "credentials", resolvedConfigId);
       const tempCredsDir = path.join(os.homedir(), ".code-ux", "credentials", `${resolvedConfigId}-temp-${sessionId}`);

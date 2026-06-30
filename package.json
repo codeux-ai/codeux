@@ -1,6 +1,6 @@
 {
   "name": "@codeuxai/codeux",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "description": "Containerized environment for running and managing AI sub-agents",
   "author": "Pierre Voss <p.voss@codeux.ai>",
   "license": "MIT",
@@ -74,6 +74,7 @@
     "colord": "^2.9.3",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.3.2",
     "js-tiktoken": "^1.0.21",
     "mammoth": "^1.12.0",
     "multer": "^2.1.1",

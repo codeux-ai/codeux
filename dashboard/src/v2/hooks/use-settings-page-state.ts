@@ -10,6 +10,7 @@ import {
   saveSystemSettings,
 } from "../lib/settings-api.js";
 import { fetchAgentPresets } from "../lib/agent-preset-api.js";
+import { clearProjectMemories, clearSystemMemories, type MemoryClearTier } from "../lib/memory-api.js";
 import { registerNavigationBlocker } from "../router/navigation-blocker.js";
 import {
   applyExternalHintsToSystemSettings,
@@ -74,6 +75,7 @@ const invocationRouteDefinitions: Array<{
   { id: "qa_review", label: "QA review", description: "Completion-time quality assurance reviews that can request follow-up fixes." },
   { id: "ci_fix", label: "CI fix", description: "Worker-owned CI repair loops and retry work." },
   { id: "merge_conflict", label: "Merge conflict", description: "Worker-owned merge conflict resolution runs." },
+  { id: "remediation", label: "Remediation", description: "Memory curation and long-term remediation reviews." },
 ];
 
 const routingProfileOptions = [
@@ -203,6 +205,7 @@ export const useSettingsPageState = (
   const [resettingProject, setResettingProject] = useState(false);
   const [deletingProject, setDeletingProject] = useState(false);
   const [resettingDatabase, setResettingDatabase] = useState(false);
+  const [memoryClearBusy, setMemoryClearBusy] = useState<string | null>(null);
   const [importingHints, setImportingHints] = useState(false);
   const [externalHints, setExternalHints] = useState<import("../../types.js").ExternalSettingsHints | null>(null);
   const [projectAgentPresetOptions, setProjectAgentPresetOptions] = useState<Array<{ value: string; label: string; avatarConfig?: AgentAvatarConfig }>>([]);
@@ -529,6 +532,34 @@ export const useSettingsPageState = (
     }
   }, [loadSettings]);
 
+  const handleClearMemory = useCallback(async (
+    scope: "project" | "system",
+    tier: MemoryClearTier,
+  ): Promise<void> => {
+    if (scope === "project" && !selectedProject) {
+      return;
+    }
+    setMemoryClearBusy(`${scope}:${tier}`);
+    try {
+      const result = scope === "project"
+        ? await clearProjectMemories(selectedProject!.id, tier)
+        : await clearSystemMemories(tier);
+
+      const parts = [`${result.memories} ${result.memories === 1 ? "memory" : "memories"}`];
+      if (result.claims > 0) {
+        parts.push(`${result.claims} ${result.claims === 1 ? "claim" : "claims"}`);
+      }
+      const tierLabel = tier === "short_term" ? "Short-term" : tier === "long_term" ? "Long-term" : "All";
+      const scopeLabel = scope === "project" ? selectedProject!.name : "system-wide";
+      setSaveMessage(`${tierLabel} memory cleared (${scopeLabel}): removed ${parts.join(", ")}.`);
+      setError(null);
+    } catch (clearError) {
+      setError(clearError instanceof Error ? clearError.message : String(clearError));
+    } finally {
+      setMemoryClearBusy(null);
+    }
+  }, [selectedProject]);
+
   const getValueByPath = useCallback((obj: any, path: string): any => {
     return path.split(".").reduce((acc, part) => acc && acc[part], obj);
   }, []);
@@ -683,7 +714,7 @@ export const useSettingsPageState = (
     editableSettings,
     loading, error, saveMessage,
     savingSystem, savingProject, activeSaving, activeDirty,
-    resettingProject, deletingProject, resettingDatabase, importingHints,
+    resettingProject, deletingProject, resettingDatabase, memoryClearBusy, importingHints,
     externalHints,
     activeCategoryConfig, filteredCategories,
     categories: categories,
@@ -697,7 +728,7 @@ export const useSettingsPageState = (
     selectedProject,
     updateSystem, updateProject, updateEditableSettings,
     handleImportHints, handleSave, handleResetProject,
-    handleDeleteProject, handleResetDatabase,
+    handleDeleteProject, handleResetDatabase, handleClearMemory,
     loadSettings,
     isDirtyRef,
     searchInputRef,

@@ -396,9 +396,39 @@ describe("Provider Routing Logic", () => {
       expect(chooseProviderForTask(settings, mockTask())).toBe("gemini");
 
       settings.aiProvider.invocationRouting.task_coding.strategy = "WEIGHTED";
+      // A weighted route only distributes across its explicit pool. Without a pinned
+      // pool it would fail closed to the primary (see the empty-pool test below).
+      settings.aiProvider.invocationRouting.task_coding.allowedProviders = ["jules", "gemini"];
       settings.aiProvider.providers.jules.weight = 100;
       settings.aiProvider.providers.gemini.weight = 0;
       expect(chooseProviderForTask(settings, mockTask())).toBe("jules");
+    });
+
+    it("fails closed to the primary when a weighted route has an empty pool", () => {
+      // Regression: an empty allowed-provider pool under WEIGHTED used to disable the
+      // pool filter entirely, fanning weighted distribution across every enabled
+      // provider instance (including default-enabled gemini/codex/claude-code). A
+      // route the user set to weighted but never pinned must fall back to its primary,
+      // never silently route to providers that were never selected.
+      const settings = mockSettings("WEIGHTED", "gemini");
+      settings.aiProvider.invocationRouting.task_coding = {
+        ...settings.aiProvider.invocationRouting.task_coding,
+        profile: "GLOBAL",
+        strategy: "WEIGHTED",
+        provider: null, // primary inherited from the global aiProvider.provider
+        allowedProviders: [],
+        providers: {},
+      };
+      settings.aiProvider.providers.jules.weight = 100;
+      settings.aiProvider.providers.codex.weight = 100;
+
+      const result = resolveProviderForInvocation(settings, {
+        invocation: "task_coding",
+        task: mockTask({ prompt: "Implement the feature" }),
+      });
+
+      expect(result.enabledProviders).toEqual(["gemini"]);
+      expect(result.provider).toBe("gemini");
     });
   });
 

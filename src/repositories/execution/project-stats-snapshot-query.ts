@@ -35,6 +35,12 @@ import {
   ExecutionModelStatsSummary,
 } from "../../contracts/app-types.js";
 
+export const DEFAULT_MAX_DURATION_SAMPLES = 10000;
+
+function getDurationSampleCap(deps: ProjectStatsQueryDependencies): number {
+  return deps.maxDurationSamples ?? DEFAULT_MAX_DURATION_SAMPLES;
+}
+
 export function queryProjectStatsSnapshot(
   db: Database,
   projectId: string,
@@ -176,67 +182,18 @@ export function queryProjectStatsSnapshot(
     }
   }
 
-  // Duration distribution aggregates
-  const durationAggRows = db.prepare(`
-    SELECT
-      provider,
-      model,
-      COUNT(duration_ms) as sampleCount,
-      MIN(duration_ms) as minMs,
-      MAX(duration_ms) as maxMs,
-      AVG(duration_ms) as avgMs
-    FROM provider_invocations
-    WHERE project_id = ? AND started_at >= ? AND started_at < ?
-      AND duration_ms IS NOT NULL AND duration_ms > 0
-    GROUP BY provider, model
-  `).all(projectId, rangeStartIso, rangeEndIso) as Array<{
-    provider: string | null;
-    model: string | null;
-    sampleCount: number;
-    minMs: number;
-    maxMs: number;
-    avgMs: number;
-  }>;
-
-  const modelDurationAggs = new Map<string, ExecutionDurationAggregates>();
-  let overallSampleCount = 0;
-  let overallMinMs = Number.MAX_SAFE_INTEGER;
-  let overallMaxMs = 0;
-  let overallSumMs = 0;
-
-  for (const row of durationAggRows) {
-    const key = buildModelStatsKey(row.provider, row.model);
-    modelDurationAggs.set(key, {
-      sampleCount: toNumber(row.sampleCount),
-      minMs: toNumber(row.minMs),
-      maxMs: toNumber(row.maxMs),
-      avgMs: toNumber(row.avgMs),
-    });
-
-    const count = toNumber(row.sampleCount);
-    overallSampleCount += count;
-    overallMinMs = Math.min(overallMinMs, toNumber(row.minMs));
-    overallMaxMs = Math.max(overallMaxMs, toNumber(row.maxMs));
-    overallSumMs += toNumber(row.avgMs) * count;
-  }
-
-  const overallDurationAggs: ExecutionDurationAggregates = {
-    sampleCount: overallSampleCount,
-    minMs: overallSampleCount > 0 ? overallMinMs : 0,
-    maxMs: overallMaxMs,
-    avgMs: overallSampleCount > 0 ? overallSumMs / overallSampleCount : 0,
-  };
+  const sampleCap = getDurationSampleCap(deps);
 
   // Duration distribution per model (percentiles need raw samples, not SUM aggregates)
-  // Bound to the most recent 10000 invocations to prevent unbounded memory growth
+  // Bound to prevent unbounded memory growth. We use deterministic ordering.
   const durationSampleRows = db.prepare(`
     SELECT provider, model, duration_ms as durationMs
     FROM provider_invocations
     WHERE project_id = ? AND started_at >= ? AND started_at < ?
       AND duration_ms IS NOT NULL AND duration_ms > 0
-    ORDER BY started_at DESC
-    LIMIT 10000
-  `).all(projectId, rangeStartIso, rangeEndIso) as Array<{ provider: string | null; model: string | null; durationMs: number | string }>;
+    ORDER BY started_at DESC, id DESC
+    LIMIT ?
+  `).all(projectId, rangeStartIso, rangeEndIso, sampleCap) as Array<{ provider: string | null; model: string | null; durationMs: number | string }>;
 
   const allDurations: number[] = [];
   const modelDurations = new Map<string, number[]>();
@@ -248,6 +205,98 @@ export function queryProjectStatsSnapshot(
     const samples = modelDurations.get(key) || [];
     samples.push(durationMs);
     modelDurations.set(key, samples);
+  }
+
+  const modelDurationAggs = new Map<string, ExecutionDurationAggregates>();
+  let overallDurationAggs: ExecutionDurationAggregates;
+
+  if (durationSampleRows.length < sampleCap) {
+    // We have all the duration samples for this period!
+    // Skip the expensive aggregate GROUP BY query and compute aggregates directly from samples.
+    let overallSampleCount = 0;
+    let overallMinMs = Number.MAX_SAFE_INTEGER;
+    let overallMaxMs = 0;
+    let overallSumMs = 0;
+
+    for (const [key, samples] of modelDurations.entries()) {
+      let minMs = Number.MAX_SAFE_INTEGER;
+      let maxMs = 0;
+      let sumMs = 0;
+      for (const val of samples) {
+        minMs = Math.min(minMs, val);
+        maxMs = Math.max(maxMs, val);
+        sumMs += val;
+      }
+      modelDurationAggs.set(key, {
+        sampleCount: samples.length,
+        minMs: samples.length > 0 ? minMs : 0,
+        maxMs: maxMs,
+        avgMs: samples.length > 0 ? sumMs / samples.length : 0,
+      });
+
+      overallSampleCount += samples.length;
+      overallMinMs = Math.min(overallMinMs, minMs);
+      overallMaxMs = Math.max(overallMaxMs, maxMs);
+      overallSumMs += sumMs;
+    }
+
+    overallDurationAggs = {
+      sampleCount: overallSampleCount,
+      minMs: overallSampleCount > 0 ? overallMinMs : 0,
+      maxMs: overallMaxMs,
+      avgMs: overallSampleCount > 0 ? overallSumMs / overallSampleCount : 0,
+    };
+  } else {
+    // We hit the sample cap, so we only have a subset in memory.
+    // Run the aggregate query to get accurate min/max/avg for the entire dataset.
+    const durationAggRows = db.prepare(`
+      SELECT
+        provider,
+        model,
+        COUNT(duration_ms) as sampleCount,
+        MIN(duration_ms) as minMs,
+        MAX(duration_ms) as maxMs,
+        AVG(duration_ms) as avgMs
+      FROM provider_invocations
+      WHERE project_id = ? AND started_at >= ? AND started_at < ?
+        AND duration_ms IS NOT NULL AND duration_ms > 0
+      GROUP BY provider, model
+    `).all(projectId, rangeStartIso, rangeEndIso) as Array<{
+      provider: string | null;
+      model: string | null;
+      sampleCount: number;
+      minMs: number;
+      maxMs: number;
+      avgMs: number;
+    }>;
+
+    let overallSampleCount = 0;
+    let overallMinMs = Number.MAX_SAFE_INTEGER;
+    let overallMaxMs = 0;
+    let overallSumMs = 0;
+
+    for (const row of durationAggRows) {
+      const key = buildModelStatsKey(row.provider, row.model);
+      modelDurationAggs.set(key, {
+        sampleCount: toNumber(row.sampleCount),
+        minMs: toNumber(row.minMs),
+        maxMs: toNumber(row.maxMs),
+        avgMs: toNumber(row.avgMs),
+      });
+
+      const count = toNumber(row.sampleCount);
+      overallSampleCount += count;
+      overallMinMs = Math.min(overallMinMs, toNumber(row.minMs));
+      overallMaxMs = Math.max(overallMaxMs, toNumber(row.maxMs));
+      overallSumMs += toNumber(row.avgMs) * count;
+    }
+
+    overallDurationAggs = {
+      sampleCount: overallSampleCount,
+      minMs: overallSampleCount > 0 ? overallMinMs : 0,
+      maxMs: overallMaxMs,
+      avgMs: overallSampleCount > 0 ? overallSumMs / overallSampleCount : 0,
+    };
   }
 
   for (const [taskId, wallTime] of wallTimeByTaskId) {

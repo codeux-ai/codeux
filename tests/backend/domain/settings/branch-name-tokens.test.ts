@@ -89,6 +89,13 @@ function makeBasePayload() {
           allowedProviders: [],
           providers: {},
         },
+        remediation: {
+          profile: "WORKER",
+          strategy: "MANUAL",
+          provider: null,
+          allowedProviders: [],
+          providers: {},
+        },
       },
     },
     git: {
@@ -133,6 +140,7 @@ function makeBasePayload() {
         merge_conflict: { cap: 1, onLimit: "WARN_ONLY" },
         clarification_reply: { cap: 1, onLimit: "WARN_ONLY" },
         planning: { cap: 1, onLimit: "WARN_ONLY" },
+        remediation: { cap: 1, onLimit: "WARN_ONLY" },
       },
     },
     sprintLoopSteps: {
@@ -244,13 +252,24 @@ function makeBasePayload() {
     mcpTools: [],
     memory: {
       enabled: false,
+      embeddingProvider: "in_app",
       embeddingModel: null,
+      externalEmbedding: {
+        baseUrl: "https://api.openai.com/v1/embeddings",
+        apiKey: "",
+        model: "text-embedding-3-small",
+        dimensions: null,
+      },
       autoCaptureSprint: true,
       autoCaptureAgent: true,
       autoPromote: true,
       promotionThreshold: 0.8,
+      remediationMode: "deterministic",
+      remediationMaxPromotions: 12,
       maxSprintMemories: 10,
       maxProjectMemories: 50,
+      mapMaxEdgesPerNode: 3,
+      workerLearningsInstruction: "",
     },
   };
 }

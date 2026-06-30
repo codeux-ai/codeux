@@ -111,11 +111,20 @@ function buildEdges(nodes: MemNode[], embeddingMap: EmbeddingMapResult | null): 
             }
         }
     } else {
-        // Fallback edges for nodes in same category
-        for (let i = 0; i < nodes.length; i++) {
-            for (let j = i + 1; j < nodes.length; j++) {
-                if (nodes[i].category === nodes[j].category) {
-                    edges.push({ a: i, b: j, similarity: 0.5 });
+        // Fallback edges for nodes in same category (bounded ring topology)
+        const categories = new Map<string, number[]>();
+        nodes.forEach((n, i) => {
+            if (!categories.has(n.category)) categories.set(n.category, []);
+            categories.get(n.category)!.push(i);
+        });
+
+        for (const catNodes of categories.values()) {
+            if (catNodes.length === 2) {
+                edges.push({ a: catNodes[0], b: catNodes[1], similarity: 0.5 });
+            } else if (catNodes.length >= 3) {
+                for (let i = 0; i < catNodes.length; i++) {
+                    const nextIdx = (i + 1) % catNodes.length;
+                    edges.push({ a: catNodes[i], b: catNodes[nextIdx], similarity: 0.5 });
                 }
             }
         }

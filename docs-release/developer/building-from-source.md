@@ -167,7 +167,7 @@ pnpm run smoke-test            # node dist/index.js --help
 
 - **Forgetting `.js` in imports** → TypeScript silently compiles, but Node fails at runtime. Always import `from "./mod.js"`.
 - **Editing `dist/`** — never. Edit `src/` and rebuild.
-- **Leaving `pnpm-lock.yaml` and `package-lock.json` out of sync** — only `pnpm-lock.yaml` is authoritative. The `package-lock.json` exists for npm-published-package compatibility but should not be edited by hand.
+- **Reintroducing `package-lock.json`** — this is a pnpm-only project; only `pnpm-lock.yaml` is authoritative. Do not run `npm install` here (it generates a stray, security-ungoverned `package-lock.json` that is gitignored).
 - **Not pruning `.cache/tsc/`** — incremental TS state can go stale after large refactors. `rm -rf .cache/tsc` if you see weird type errors.
 
 ## Release process

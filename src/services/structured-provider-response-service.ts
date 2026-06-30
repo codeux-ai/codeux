@@ -7,6 +7,8 @@ import { computeNextParseAttempt } from "../domain/llm/parse-retry-policy.js";
 export interface StructuredExecutionArgs<T> extends Omit<ExecutionProviderRunArgs, "expectTextOutput"> {
   settings: DashboardSettings;
   maxRetries?: number;
+  maxProviderAttempts?: number;
+  retryProviderFailures?: boolean;
   parseFn: (bodyMarkdown: string) => T;
   buildRetryPrompt: (error: Error) => string;
   providerLabel: string;
@@ -43,50 +45,83 @@ export class StructuredProviderResponseService {
 
   async executeAndParse<T>(args: StructuredExecutionArgs<T>): Promise<StructuredProviderResult<T>> {
     const maxRetries = args.maxRetries ?? 3;
+    const maxProviderAttempts = args.maxProviderAttempts && args.maxProviderAttempts > 0
+      ? Math.floor(args.maxProviderAttempts)
+      : null;
     let currentPrompt = args.prompt;
-    let attempt = 0;
+    let parseRetriesUsed = 0;
+    let providerAttempts = 0;
     let continueSessionId = args.continueSessionId;
     let lastError: Error | null = null;
     let nativeSessionId: string | null = null;
     let bodyMarkdown = "";
+    let pendingRetryMessage: string | null = null;
 
-    while (attempt <= maxRetries) {
-      if (attempt > 0 && args.invocationId) {
+    while (true) {
+      if (pendingRetryMessage && args.invocationId) {
         this.deps.executionRepository?.appendExecutionInvocationMessage(args.invocationId, {
           role: "system",
-          contentMarkdown: `Retrying JSON parse in same ${args.providerLabel} session (session: ${args.sessionId}).`,
+          contentMarkdown: pendingRetryMessage,
           metadata: {
             provider: args.provider,
             model: args.model,
             routeKind: "virtual",
           },
         });
+        pendingRetryMessage = null;
       }
 
+      const currentProviderAttempt = providerAttempts;
       const result = await this.deps.providerExecutionService.executeProvider({
         ...args,
         prompt: currentPrompt,
         continueSessionId,
         expectTextOutput: true,
       });
+      providerAttempts++;
 
       bodyMarkdown = result.text?.trim() || "";
       if (!result.ok) {
-        throw new ProviderTransportError(
-          attempt === 0
-            ? `Virtual ${args.providerLabel} worker failed: ${result.stderr || result.stdout}`
-            : `Virtual ${args.providerLabel} worker JSON retry failed.`,
-          attempt
+        lastError = new ProviderTransportError(
+          this.buildProviderFailureMessage(args.providerLabel, result.stderr || result.stdout, currentProviderAttempt),
+          currentProviderAttempt,
         );
+
+        if (this.shouldRetryProviderFailure(args, providerAttempts, maxProviderAttempts)) {
+          this.deps.logger?.warn(`${args.purpose} provider invocation failed, retrying`, {
+            projectId: args.projectId,
+            provider: args.provider,
+            providerAttempts,
+            maxProviderAttempts,
+            error: lastError.message,
+          });
+          pendingRetryMessage = this.buildProviderRetryMessage(args.providerLabel, args.sessionId, providerAttempts, maxProviderAttempts);
+          continue;
+        }
+
+        throw lastError;
       }
 
       if (!bodyMarkdown) {
-         throw new ProviderEmptyOutputError(
-          attempt === 0
+        lastError = new ProviderEmptyOutputError(
+          currentProviderAttempt === 0
             ? `Virtual ${args.providerLabel} worker returned empty output.`
-            : `Virtual ${args.providerLabel} worker JSON retry returned no usable output.`,
-          attempt
+            : `Virtual ${args.providerLabel} worker returned empty output again.`,
+          currentProviderAttempt,
         );
+
+        if (this.shouldRetryProviderFailure(args, providerAttempts, maxProviderAttempts)) {
+          this.deps.logger?.warn(`${args.purpose} provider invocation returned empty output, retrying`, {
+            projectId: args.projectId,
+            provider: args.provider,
+            providerAttempts,
+            maxProviderAttempts,
+          });
+          pendingRetryMessage = this.buildProviderRetryMessage(args.providerLabel, args.sessionId, providerAttempts, maxProviderAttempts);
+          continue;
+        }
+
+        throw lastError;
       }
 
       nativeSessionId = result.nativeSessionId || (args.provider === "opencode" ? null : continueSessionId) || null;
@@ -102,23 +137,52 @@ export class StructuredProviderResponseService {
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
 
-        const retryCheck = computeNextParseAttempt(attempt, maxRetries);
-        if (!retryCheck.shouldRetry) {
+        const retryCheck = computeNextParseAttempt(parseRetriesUsed, maxRetries);
+        if (!retryCheck.shouldRetry || (maxProviderAttempts !== null && providerAttempts >= maxProviderAttempts)) {
           break;
         }
 
         this.deps.logger?.warn(`${args.purpose} JSON parse failed, retrying in same session`, {
           projectId: args.projectId,
-          attempt: attempt + 1,
+          attempt: parseRetriesUsed + 1,
           maxRetries,
+          providerAttempts,
+          maxProviderAttempts,
           error: lastError.message,
         });
 
         currentPrompt = args.buildRetryPrompt(lastError);
-        attempt++;
+        parseRetriesUsed++;
+        pendingRetryMessage = `Retrying JSON parse in same ${args.providerLabel} session (session: ${args.sessionId}).`;
       }
     }
 
     throw lastError || new Error(`${args.purpose} reply was not valid JSON.`);
+  }
+
+  private shouldRetryProviderFailure<T>(
+    args: StructuredExecutionArgs<T>,
+    providerAttempts: number,
+    maxProviderAttempts: number | null,
+  ): boolean {
+    if (!args.retryProviderFailures) {
+      return false;
+    }
+    if (args.signal?.aborted) {
+      return false;
+    }
+    return maxProviderAttempts === null || providerAttempts < maxProviderAttempts;
+  }
+
+  private buildProviderFailureMessage(providerLabel: string, output: string | undefined, attempt: number): string {
+    const detail = output?.trim() || "Provider failed without output.";
+    return attempt === 0
+      ? `Virtual ${providerLabel} worker failed: ${detail}`
+      : `Virtual ${providerLabel} worker failed again: ${detail}`;
+  }
+
+  private buildProviderRetryMessage(providerLabel: string, sessionId: string, providerAttempts: number, maxProviderAttempts: number | null): string {
+    const ceiling = maxProviderAttempts === null ? "unlimited" : String(maxProviderAttempts);
+    return `Retrying ${providerLabel} planning provider invocation after a failed run (attempt ${providerAttempts}/${ceiling}, session: ${sessionId}).`;
   }
 }

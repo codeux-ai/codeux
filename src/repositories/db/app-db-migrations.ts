@@ -231,6 +231,44 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_memories_scope_category", "memories", "scope, category, strength DESC");
   ensureIndex(db, "idx_memories_promoted_from", "memories", "promoted_from_id");
   ensureIndex(db, "idx_memories_embedding_model", "memories", "embedding_model, project_id");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS memory_claims (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      claim TEXT NOT NULL,
+      fingerprint TEXT NOT NULL,
+      category TEXT NOT NULL,
+      confidence REAL NOT NULL DEFAULT 0.5,
+      durability REAL NOT NULL DEFAULT 0.5,
+      status TEXT NOT NULL DEFAULT 'active',
+      tags_json TEXT NOT NULL DEFAULT '[]',
+      applies_to_paths_json TEXT NOT NULL DEFAULT '[]',
+      source_type TEXT NOT NULL DEFAULT 'promotion',
+      source_memory_id TEXT,
+      supersedes_claim_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (source_memory_id) REFERENCES memories(id) ON DELETE SET NULL,
+      FOREIGN KEY (supersedes_claim_id) REFERENCES memory_claims(id) ON DELETE SET NULL
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS memory_claim_evidence (
+      claim_id TEXT NOT NULL,
+      memory_id TEXT NOT NULL,
+      support_type TEXT NOT NULL DEFAULT 'supports',
+      weight REAL NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (claim_id, memory_id),
+      FOREIGN KEY (claim_id) REFERENCES memory_claims(id) ON DELETE CASCADE,
+      FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
+    )
+  `);
+  ensureIndex(db, "idx_memory_claims_project_status", "memory_claims", "project_id, status, updated_at DESC");
+  ensureIndex(db, "idx_memory_claims_project_category", "memory_claims", "project_id, category, confidence DESC");
+  ensureIndex(db, "idx_memory_claim_evidence_memory", "memory_claim_evidence", "memory_id, claim_id");
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_claims_project_fingerprint_active ON memory_claims (project_id, fingerprint) WHERE status = 'active'");
   ensureIndex(db, "idx_agent_presets_project_updated", "agent_presets", "project_id, updated_at DESC");
   ensureIndex(db, "idx_agent_presets_project_name", "agent_presets", "project_id, name");
   ensureUniqueIndex(db, "idx_worker_endpoints_connection", "worker_endpoints", "connection_id");

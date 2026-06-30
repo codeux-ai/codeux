@@ -477,6 +477,151 @@ describe("MemoryRepository", () => {
     });
   });
 
+  describe("memory claims", () => {
+    it("creates, lists, and finds active claims by normalized fingerprint", () => {
+      const source = repo.createMemory(projectId, makeInput({
+        scope: "sprint",
+        sprintId: sprintId1,
+        content: "Use dependency factory composition for service wiring.",
+        category: "patterns",
+        strength: 0.8,
+      }));
+
+      const claim = repo.createMemoryClaim(projectId, {
+        claim: "Use dependency factory composition for service wiring.",
+        category: "patterns",
+        confidence: 0.84,
+        durability: 0.88,
+        tags: ["memory-remediation", "cross-sprint", "memory-remediation"],
+        appliesToPaths: ["src/app/dependency-factory/core-factory.ts"],
+        sourceType: "promotion",
+        sourceMemoryId: source.id,
+      });
+
+      expect(claim).toMatchObject({
+        projectId,
+        claim: "Use dependency factory composition for service wiring.",
+        category: "patterns",
+        confidence: 0.84,
+        durability: 0.88,
+        status: "active",
+        tags: ["cross-sprint", "memory-remediation"],
+        appliesToPaths: ["src/app/dependency-factory/core-factory.ts"],
+        sourceType: "promotion",
+        sourceMemoryId: source.id,
+      });
+      expect(repo.getMemoryClaim(claim.id)).toEqual(claim);
+      expect(repo.listMemoryClaims(projectId, { status: "active" })).toEqual([claim]);
+      expect(repo.findActiveMemoryClaimByFingerprint(
+        projectId,
+        "use dependency factory composition for service wiring",
+      )).toEqual(claim);
+    });
+
+    it("updates claim state and metadata", () => {
+      const claim = repo.createMemoryClaim(projectId, {
+        claim: "Original claim",
+        category: "context",
+        confidence: 1.5,
+        durability: -1,
+      });
+
+      const updated = repo.updateMemoryClaim(claim.id, {
+        claim: "Updated claim",
+        category: "decision",
+        confidence: 0.7,
+        durability: 0.8,
+        status: "superseded",
+        tags: ["updated"],
+        appliesToPaths: ["docs/dashboard/memory.md"],
+      });
+
+      expect(updated).toMatchObject({
+        claim: "Updated claim",
+        category: "decision",
+        confidence: 0.7,
+        durability: 0.8,
+        status: "superseded",
+        tags: ["updated"],
+        appliesToPaths: ["docs/dashboard/memory.md"],
+      });
+      expect(claim.confidence).toBe(1);
+      expect(claim.durability).toBe(0);
+    });
+
+    it("links sprint memories as weighted claim evidence", () => {
+      const memory = repo.createMemory(projectId, makeInput({
+        scope: "sprint",
+        sprintId: sprintId1,
+        content: "Evidence memory",
+      }));
+      const claim = repo.createMemoryClaim(projectId, {
+        claim: "Durable claim",
+        category: "codebase",
+        confidence: 0.7,
+        durability: 0.7,
+      });
+
+      const link = repo.addMemoryClaimEvidence({
+        claimId: claim.id,
+        memoryId: memory.id,
+        supportType: "supports",
+        weight: 0.85,
+      });
+
+      expect(link).toMatchObject({
+        claimId: claim.id,
+        memoryId: memory.id,
+        supportType: "supports",
+        weight: 0.85,
+      });
+      expect(repo.listMemoryClaimEvidence(claim.id)).toEqual([link]);
+    });
+
+    it("creates a searchable promoted project memory for a claim", () => {
+      const source = repo.createMemory(projectId, makeInput({
+        scope: "sprint",
+        sprintId: sprintId1,
+        agentPresetId: "agent-1",
+        category: "architecture",
+        strength: 0.9,
+      }));
+      const claim = repo.createMemoryClaim(projectId, {
+        claim: "Dependency factories own service wiring.",
+        category: "architecture",
+        confidence: 0.9,
+        durability: 0.9,
+        sourceMemoryId: source.id,
+      });
+
+      const promoted = repo.createPromotedClaimMemory(
+        projectId,
+        source,
+        claim.claim,
+        claim.id,
+        "Evidence-backed promotion",
+        0.95,
+      );
+
+      expect(promoted).toMatchObject({
+        scope: "project",
+        sprintId: null,
+        agentPresetId: "agent-1",
+        content: "Dependency factories own service wiring.",
+        category: "architecture",
+        strength: 0.95,
+        promotedFromId: source.id,
+        promotionReason: "Evidence-backed promotion",
+        source: {
+          type: "promotion",
+          originType: "memory_claim",
+          originId: claim.id,
+        },
+      });
+      expect(repo.getMemory(promoted.id)).toEqual(promoted);
+    });
+  });
+
   describe("deleteSprintMemories", () => {
     it("deletes sprint-scoped memories for a specific sprint", () => {
       repo.createMemory(projectId, makeInput({ scope: "sprint", sprintId: "s1", content: "sprint mem" }));
@@ -486,6 +631,77 @@ describe("MemoryRepository", () => {
 
       expect(repo.listBySprint(projectId, "s1")).toHaveLength(0);
       expect(repo.listByProject(projectId, "project")).toHaveLength(1);
+    });
+  });
+
+  describe("clearMemories", () => {
+    const seed = (pid: string) => {
+      repo.createMemory(pid, makeInput({ scope: "sprint", sprintId: sprintId1, content: "short A" }));
+      repo.createMemory(pid, makeInput({ scope: "agent", agentPresetId: "agent-x", content: "short B (legacy)" }));
+      repo.createMemory(pid, makeInput({ scope: "project", content: "long A" }));
+      const longMem = repo.createMemory(pid, makeInput({ scope: "project", content: "long B" }));
+      const claim = repo.createMemoryClaim(pid, { claim: "Durable claim", category: "codebase", confidence: 0.7, durability: 0.7 });
+      repo.addMemoryClaimEvidence({ claimId: claim.id, memoryId: longMem.id, weight: 0.9 });
+    };
+
+    it("clears short-term (sprint + legacy agent) memories only, keeping long-term and claims", () => {
+      seed(projectId);
+
+      const result = repo.clearMemories("short_term", projectId);
+
+      expect(result).toEqual({ memories: 2, claims: 0, evidence: 0 });
+      expect(repo.listByProject(projectId, "sprint")).toHaveLength(0);
+      expect(repo.listByProject(projectId, "agent")).toHaveLength(0);
+      expect(repo.listByProject(projectId, "project")).toHaveLength(2);
+      expect(repo.listMemoryClaims(projectId)).toHaveLength(1);
+    });
+
+    it("clears long-term memories plus claims and evidence, keeping short-term", () => {
+      seed(projectId);
+
+      const result = repo.clearMemories("long_term", projectId);
+
+      expect(result).toEqual({ memories: 2, claims: 1, evidence: 1 });
+      expect(repo.listByProject(projectId, "project")).toHaveLength(0);
+      expect(repo.listMemoryClaims(projectId)).toHaveLength(0);
+      expect(repo.listByProject(projectId, "sprint")).toHaveLength(1);
+      expect(repo.listByProject(projectId, "agent")).toHaveLength(1);
+    });
+
+    it("clears the entire memory database for a project", () => {
+      seed(projectId);
+
+      const result = repo.clearMemories("all", projectId);
+
+      expect(result).toEqual({ memories: 4, claims: 1, evidence: 1 });
+      expect(repo.listByProject(projectId)).toHaveLength(0);
+      expect(repo.listMemoryClaims(projectId)).toHaveLength(0);
+    });
+
+    it("scopes a project clear to that project only", () => {
+      const otherProjectId = createTestProject(storage);
+      seed(projectId);
+      seed(otherProjectId);
+
+      repo.clearMemories("all", projectId);
+
+      expect(repo.listByProject(projectId)).toHaveLength(0);
+      expect(repo.listByProject(otherProjectId)).toHaveLength(4);
+      expect(repo.listMemoryClaims(otherProjectId)).toHaveLength(1);
+    });
+
+    it("clears system-wide across every project when no projectId is given", () => {
+      const otherProjectId = createTestProject(storage);
+      seed(projectId);
+      seed(otherProjectId);
+
+      const result = repo.clearMemories("all");
+
+      expect(result).toEqual({ memories: 8, claims: 2, evidence: 2 });
+      expect(repo.listByProject(projectId)).toHaveLength(0);
+      expect(repo.listByProject(otherProjectId)).toHaveLength(0);
+      expect(repo.listMemoryClaims(projectId)).toHaveLength(0);
+      expect(repo.listMemoryClaims(otherProjectId)).toHaveLength(0);
     });
   });
 
