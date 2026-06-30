@@ -147,6 +147,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
   if (loading) {
     return (
       <div role="status" aria-label="Loading invocations" className="space-y-3">
+        <span className="sr-only" aria-live="polite">Loading invocations</span>
         {Array.from({ length: 6 }).map((_, i) => (
           <div key={i} className={`${LEDGER_ROW_MODERN_CLASS} h-20 motion-safe:animate-pulse bg-slate-100/50 dark:bg-white/5`} />
         ))}
