@@ -14,7 +14,7 @@ interface FileViewerProps {
 ensureMonacoConfigured();
 
 const ViewerShell: FunctionComponent<{ children: preact.ComponentChildren }> = ({ children }) => (
-  <div class="flex h-full w-full items-center justify-center bg-slate-50/35 p-10 text-center text-sm text-slate-500 dark:bg-void-950/45 dark:text-slate-400">
+  <div class="flex h-full w-full items-center justify-center overflow-y-auto bg-slate-50/35 p-10 text-center text-sm text-slate-500 dark:bg-void-950/45 dark:text-slate-400">
     {children}
   </div>
 );
@@ -23,8 +23,8 @@ export const FileViewer: FunctionComponent<FileViewerProps> = ({ file, loading, 
   if (loading) {
     return (
       <ViewerShell>
-        <span class="inline-flex items-center gap-2">
-          <Loader2 class="h-4 w-4 animate-spin text-signal-500" strokeWidth={2} />
+        <span class="inline-flex items-center gap-2 text-balance break-words">
+          <Loader2 class="shrink-0 h-4 w-4 animate-spin text-signal-500" strokeWidth={2} />
           Loading file…
         </span>
       </ViewerShell>
@@ -34,8 +34,8 @@ export const FileViewer: FunctionComponent<FileViewerProps> = ({ file, loading, 
   if (error) {
     return (
       <ViewerShell>
-        <span class="inline-flex items-center gap-2 text-status-red">
-          <FileWarning class="h-4 w-4" strokeWidth={2} />
+        <span class="inline-flex items-center gap-2 text-balance break-words text-status-red">
+          <FileWarning class="shrink-0 h-4 w-4" strokeWidth={2} />
           {error}
         </span>
       </ViewerShell>
@@ -45,7 +45,7 @@ export const FileViewer: FunctionComponent<FileViewerProps> = ({ file, loading, 
   if (!file) {
     return (
       <ViewerShell>
-        <span>Select a file from the tree to view its contents.</span>
+        <span class="text-balance break-words">Select a file from the tree to view its contents.</span>
       </ViewerShell>
     );
   }
@@ -53,8 +53,8 @@ export const FileViewer: FunctionComponent<FileViewerProps> = ({ file, loading, 
   if (file.binary) {
     return (
       <ViewerShell>
-        <span class="inline-flex items-center gap-2">
-          <FileWarning class="h-4 w-4 text-ember-500" strokeWidth={2} />
+        <span class="inline-flex items-center gap-2 text-balance break-words">
+          <FileWarning class="shrink-0 h-4 w-4 text-ember-500" strokeWidth={2} />
           Binary file — preview not available.
         </span>
       </ViewerShell>
@@ -77,6 +77,7 @@ export const FileViewer: FunctionComponent<FileViewerProps> = ({ file, loading, 
           </span>
         )}
         options={{
+          automaticLayout: true,
           readOnly: true,
           domReadOnly: true,
           minimap: { enabled: true, scale: 0.8 },

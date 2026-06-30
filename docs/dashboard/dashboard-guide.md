@@ -402,6 +402,12 @@ Legacy runtime:
 - Settings page now exposes Browser Preview as its own primary left-rail category, covering preview enablement, in-app browser visibility, launch/rebuild automation, Git sync on rebuild, maximum active preview containers, port allocation, and the project-relative preview startup script path
 - The Integrations settings panel now returns the selected detail view to normal document flow after the slide animation completes, so tall forms like GitHub configuration can extend to full height instead of being clipped to the shorter integrations list.
 
+### File Browser view
+- Responsive container layout with bounded height stacking on narrow screens and side-by-side grid panels on wide screens
+- Automatic toggle between inline and side-by-side diff modes based on viewport width
+- Resilient long-path truncation in action bar and active file viewer controls
+- Automatic Monaco viewer layout recalculation to prevent hidden or overflowing code views
+
 ### Dashboard view
 - Task statistics
 - Execution runtime panel for sprint runs, dispatch queue state, live project connections, worker assignment, lease ownership, and recent runtime events
