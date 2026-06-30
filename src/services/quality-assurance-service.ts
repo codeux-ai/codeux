@@ -45,6 +45,9 @@ import { parseQaError, type QaReviewError } from "../domain/qa-review/qa-review-
 import { normalizeQaReviewResult } from "../domain/qa-review/qa-review-result-normalizer.js";
 import type { NormalizedQaReviewResult } from "../domain/qa-review/qa-review-types.js";
 
+
+import { resolveReviewBranch } from "../domain/qa-review/qa-review-branch-resolution.js";
+import { resolveStaleRunningQaInvocationReason, QA_RUN_START_TIMEOUT_MS as STALE_QA_RUN_START_TIMEOUT_MS } from "../domain/qa-review/qa-review-stale-run.js";
 import { clearMergeProjectionForRerun, MERGE_PROJECTION_RESET } from "../domain/sprint/task-reset-state.js";
 import { buildQaReviewRequest, resolveTaskTriggerType } from "../domain/qa-review/qa-review-request-builder.js";
 
@@ -52,7 +55,7 @@ type CliQaProvider = Exclude<ProviderId, "jules">;
 
 const SPRINT_RUN_KEEPALIVE_MS = 30_000;
 const SPRINT_LEASE_EXTENSION_MS = 5 * 60 * 1000;
-const QA_RUN_START_TIMEOUT_MS = 60_000;
+
 /**
  * How many extra QA attempts beyond `maxTaskReviewRuns` we tolerate when the
  * reviewer keeps failing for infrastructure reasons (auth/config/container).
@@ -254,13 +257,32 @@ export class QualityAssuranceService {
     // back to the (usually empty) feature branch - otherwise the QA snapshot is
     // checked out on the feature branch, every review wrongly reports the work
     // missing, and the QA-gated merge never lands (the LOCAL-mode stuck-sprint bug).
-    const reviewBranch = await this.resolveReviewBranch({
-      task: args.task,
-      taskRun,
-      repoPath: args.repoPath,
-      featureBranch: sprintFeatureBranch,
-      githubMode: settings.git.githubMode,
-    });
+    const resolvedBranchResult = await resolveReviewBranch(
+      {
+        task: args.task,
+        taskRun,
+        repoPath: args.repoPath,
+        featureBranch: sprintFeatureBranch,
+        githubMode: settings.git.githubMode,
+      },
+      {
+        findRecoverableWorkerBranch,
+        logger: this.deps.logger,
+      }
+    );
+    const reviewBranch = resolvedBranchResult.reviewBranch;
+
+    if (resolvedBranchResult.recoveredWorkerBranch) {
+      args.task.worker_branch = resolvedBranchResult.recoveredWorkerBranch;
+      if (taskRun && !taskRun.workerBranch) {
+        taskRun.workerBranch = resolvedBranchResult.recoveredWorkerBranch;
+        try {
+          this.deps.executionRepository.updateTaskRun(taskRun.id, { workerBranch: resolvedBranchResult.recoveredWorkerBranch });
+        } catch (err) {
+          this.deps.logger?.warn?.(`Failed to backfill recovered worker branch on task run: ${err}`);
+        }
+      }
+    }
 
     try {
       const review = await this.runReview({
@@ -951,8 +973,13 @@ export class QualityAssuranceService {
     }
 
     const latestInvocation = this.findLatestQaExecutionInvocation(run);
+    const providerInvocation = latestInvocation ? this.resolveProviderInvocationUsage(latestInvocation) : null;
     const staleRunningInvocationReason = latestInvocation
-      ? this.resolveStaleRunningQaInvocationReason(latestInvocation, options.activeContainerSessionIds)
+      ? resolveStaleRunningQaInvocationReason({
+          invocation: latestInvocation,
+          activeContainerSessionIds: options.activeContainerSessionIds,
+          providerInvocation,
+        })
       : null;
     if ((latestInvocation?.status === "running" || latestInvocation?.status === "paused") && !staleRunningInvocationReason) {
       return run;
@@ -960,7 +987,7 @@ export class QualityAssuranceService {
 
     const runStartedAtMs = Date.parse(run.startedAt);
     const ageMs = Number.isFinite(runStartedAtMs) ? Date.now() - runStartedAtMs : 0;
-    if (!latestInvocation && ageMs < QA_RUN_START_TIMEOUT_MS) {
+    if (!latestInvocation && ageMs < STALE_QA_RUN_START_TIMEOUT_MS) {
       return run;
     }
 
@@ -986,7 +1013,7 @@ export class QualityAssuranceService {
         createdAt: finishedAt,
       });
 
-      const providerInvocation = this.resolveProviderInvocationUsage(latestInvocation);
+
       if (providerInvocation?.status === "running") {
         this.deps.executionRepository.updateProviderInvocationUsage(providerInvocation.id, {
           status: "failed",
@@ -1027,39 +1054,6 @@ export class QualityAssuranceService {
       invocation.type === "qa_review"
       && Date.parse(invocation.startedAt) >= Date.parse(run.startedAt)
     )) || null;
-  }
-
-  private resolveStaleRunningQaInvocationReason(
-    invocation: ExecutionInvocationRecord,
-    activeContainerSessionIds?: ReadonlySet<string>,
-  ): string | null {
-    if (invocation.status !== "running" && invocation.status !== "paused") {
-      return `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after the backing invocation ${invocation.status}. Code UX will retry the review.`;
-    }
-
-    const referenceAt = Date.parse(invocation.lastMessageAt || invocation.startedAt);
-    const ageMs = Number.isFinite(referenceAt) ? Date.now() - referenceAt : 0;
-    const providerInvocation = this.resolveProviderInvocationUsage(invocation);
-    if (!providerInvocation) {
-      if (ageMs < QA_RUN_START_TIMEOUT_MS) {
-        return null;
-      }
-      return `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after the backing invocation stayed running without provider runtime linkage. Code UX will retry the review.`;
-    }
-
-    if (providerInvocation.status !== "running") {
-      return `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after the backing provider invocation ${providerInvocation.status}. Code UX will retry the review.`;
-    }
-
-    if (
-      providerInvocation.executionMode === "DOCKER"
-      && activeContainerSessionIds
-      && !activeContainerSessionIds.has(providerInvocation.sessionId)
-    ) {
-      return `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after its Docker container disappeared for session ${providerInvocation.sessionId}. Code UX will retry the review.`;
-    }
-
-    return null;
   }
 
   private resolveProviderInvocationUsage(invocation: ExecutionInvocationRecord): ProviderInvocationUsageRecord | null {
@@ -1294,52 +1288,6 @@ export class QualityAssuranceService {
    * feature branch only when no worker branch with actual work can be found (e.g.
    * the task genuinely produced no changes).
    */
-  private async resolveReviewBranch(args: {
-    task: Subtask;
-    taskRun: TaskRunRecord | null;
-    repoPath: string;
-    featureBranch: string;
-    githubMode: "REMOTE" | "LOCAL";
-  }): Promise<string> {
-    const direct = args.task.worker_branch?.trim() || args.taskRun?.workerBranch?.trim();
-    if (direct) {
-      return direct;
-    }
-
-    if (args.githubMode === "LOCAL") {
-      const provider = (args.task.provider || args.taskRun?.provider || undefined) as ProviderId | undefined;
-      if (args.featureBranch && args.task.id && provider) {
-        try {
-          const recovered = await findRecoverableWorkerBranch({
-            repoPath: args.repoPath,
-            featureBranch: args.featureBranch,
-            branchPrefix: buildWorkerBranchPrefix(args.featureBranch, args.task.id, provider),
-          });
-          if (recovered) {
-            // Backfill so the fix path and feature-PR merge gate see the same evidence.
-            args.task.worker_branch = recovered;
-            if (args.taskRun && !args.taskRun.workerBranch) {
-              args.taskRun.workerBranch = recovered;
-              try {
-                this.deps.executionRepository.updateTaskRun(args.taskRun.id, { workerBranch: recovered });
-              } catch (err) {
-                this.deps.logger?.warn?.(`Failed to backfill recovered worker branch on task run: ${err}`);
-              }
-            }
-            this.deps.logger?.info?.(
-              `LOCAL Mode: Recovered worker branch ${recovered} for QA review of task ${args.task.id} from local refs.`,
-            );
-            return recovered;
-          }
-        } catch (err) {
-          this.deps.logger?.warn?.(`Failed to recover worker branch for QA review of task ${args.task.id}: ${err}`);
-        }
-      }
-    }
-
-    return args.featureBranch;
-  }
-
   private resolveTaskRunForSubtask(task: Subtask, sprintRunId?: string): TaskRunRecord | null {
     const taskId = task.record_id?.trim();
     if (!taskId) {

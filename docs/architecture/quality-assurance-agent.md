@@ -123,7 +123,7 @@ Recovery guarantees:
 
 Run budgeting:
 
-Note: The run budget and retry limit rules are explicitly implemented in a dedicated domain module (`src/domain/qa-review/qa-review-budget.ts`). Additionally, the setup logic for trigger selection, branch fallback, and instruction composition is handled cleanly by pure functions in `src/domain/qa-review/qa-review-request-builder.ts` before the `QualityAssuranceService` acts on it.
+Note: The run budget and retry limit rules are explicitly implemented in a dedicated domain module (`src/domain/qa-review/qa-review-budget.ts`). Additionally, the setup logic for trigger selection, and instruction composition is handled cleanly by pure functions in `src/domain/qa-review/qa-review-request-builder.ts` before the `QualityAssuranceService` acts on it. Branch resolution and stale-review decisions are handled by dedicated helpers in `src/domain/qa-review/qa-review-branch-resolution.ts` and `src/domain/qa-review/qa-review-stale-run.ts`.
 
 - the initial completed task review always counts as run `1`
 - extra QA runs only happen after QA requested fixes and the task reaches code-complete again
