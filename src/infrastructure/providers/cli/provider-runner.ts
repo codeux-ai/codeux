@@ -1,3 +1,4 @@
+import { createLogger, type Logger } from "../../../shared/logging/logger.js";
 import { ProviderTelemetryWatcher } from "./provider-telemetry-watcher.js";
 import { CliWorkflowSettings, ProviderId } from "../../../contracts/app-types.js";
 import type { CustomMcpServer, QwenModelProviderSettings } from "../../../contracts/app-types.js";
@@ -124,9 +125,19 @@ export interface IProviderRunner {
 }
 
 export class ProviderRunner implements IProviderRunner {
-  constructor(private readonly dockerRunner: IDockerRunner) { }
+    private readonly logger: Logger;
 
-  async runProvider(input: ProviderRunInput): Promise<ProviderRunResult> {
+  constructor(
+    private readonly dockerRunner: IDockerRunner,
+    logger?: Logger
+  ) {
+    this.logger = logger ?? createLogger({ bindings: { component: "ProviderRunner" } });
+  }
+
+  private async executeWithWorkspace<T>(
+    input: ProviderRunInput,
+    callback: (prepared: { cwd: string; cleanup: () => Promise<void> }, outputPath: string | null) => Promise<T>
+  ): Promise<T> {
     const preserveSessionWorkspace = this.shouldPreserveSessionWorkspace(input);
     const prepared = input.workflowSettings.executionMode === "DOCKER"
       ? await this.dockerRunner.ensureWorkspace({
@@ -145,36 +156,25 @@ export class ProviderRunner implements IProviderRunner {
     }
 
     try {
+      return await callback(prepared, outputPath);
+    } finally {
+      await prepared.cleanup();
+      await cleanupCodexOutputPath(outputPath, input.workflowSettings.executionMode, prepared.cwd, this.dockerRunner.removeWorkspaceDir ? this.dockerRunner.removeWorkspaceDir.bind(this.dockerRunner) : undefined);
+    }
+  }
+
+  async runProvider(input: ProviderRunInput): Promise<ProviderRunResult> {
+    return this.executeWithWorkspace(input, async (prepared, outputPath) => {
       return await this.runProviderInternal({
         ...input,
         cwd: prepared.cwd,
         codexOutputPath: outputPath,
       });
-    } finally {
-      await prepared.cleanup();
-      await cleanupCodexOutputPath(outputPath,  input.workflowSettings.executionMode,  prepared.cwd, this.dockerRunner.removeWorkspaceDir ? this.dockerRunner.removeWorkspaceDir.bind(this.dockerRunner) : undefined);
-    }
+    });
   }
 
   async runProviderForText(input: ProviderRunInput): Promise<ProviderRunResult & { text: string }> {
-    const preserveSessionWorkspace = this.shouldPreserveSessionWorkspace(input);
-    const prepared = input.workflowSettings.executionMode === "DOCKER"
-      ? await this.dockerRunner.ensureWorkspace({
-        cwd: input.cwd,
-        repoPath: input.repoPath,
-        sessionId: input.workspaceSessionId || input.sessionId,
-        preserve: preserveSessionWorkspace,
-        reuseExisting: preserveSessionWorkspace,
-      })
-      : { cwd: input.cwd, cleanup: async () => undefined };
-
-    const outputPath = resolveCodexOutputPath(input);
-
-    if (outputPath && !outputPath.startsWith("/workspace/")) {
-      await fs.mkdir(path.dirname(outputPath), { recursive: true });
-    }
-
-    try {
+    return this.executeWithWorkspace(input, async (prepared, outputPath) => {
       const result = await this.runProviderInternal({
         ...input,
         cwd: prepared.cwd,
@@ -182,19 +182,14 @@ export class ProviderRunner implements IProviderRunner {
       });
 
       const capturedText = outputPath
-        ? outputPath.startsWith("/workspace/")
-          ? ((await this.dockerRunner.readWorkspaceFile?.(prepared.cwd, outputPath).catch(() => null)) || "").trim()
-          : (await fs.readFile(outputPath, "utf8").catch(() => "")).trim()
+        ? await this.readProviderOutputPath(prepared.cwd, outputPath, input.workflowSettings.executionMode)
         : "";
 
       return {
         ...result,
         text: sanitizeInvocationOutputText(capturedText || result.usageTelemetry.transcriptText || result.stdout || result.stderr),
       };
-    } finally {
-      await prepared.cleanup();
-      await cleanupCodexOutputPath(outputPath,  input.workflowSettings.executionMode,  prepared.cwd, this.dockerRunner.removeWorkspaceDir ? this.dockerRunner.removeWorkspaceDir.bind(this.dockerRunner) : undefined);
-    }
+    });
   }
 
   private shouldPreserveSessionWorkspace(input: ProviderRunInput): boolean {
@@ -515,25 +510,92 @@ export class ProviderRunner implements IProviderRunner {
         nativeSessionId: usageTelemetry.nativeSessionId || resolvedNativeSessionId || nativeSessionId,
       };
     } finally {
-      if (watcher) {
-        await watcher.stop();
-      }
-      if (tempDbPath) {
-        await fs.rm(tempDbPath, { force: true }).catch(() => undefined);
-      }
-      for (const entry of localMcpCleanup) {
-        if (entry.originalContent !== null) {
-          await fs.writeFile(entry.path, entry.originalContent).catch(() => undefined);
-        } else {
-          await fs.rm(entry.path, { force: true }).catch(() => undefined);
-        }
-      }
-      for (const cleanupPath of localRuntimeCleanup) {
-        await fs.rm(cleanupPath, { force: true }).catch(() => undefined);
-      }
-      await cleanupProviderRuntimeArtifacts(provider, workflowSettings.executionMode, sessionId, cwd, antigravityLogPath, this.dockerRunner.removeWorkspaceDir ? this.dockerRunner.removeWorkspaceDir.bind(this.dockerRunner) : undefined);
+      await this.performCleanup({
+        watcher,
+        tempDbPath,
+        localMcpCleanup,
+        localRuntimeCleanup,
+        provider,
+        workflowSettings,
+        sessionId,
+        cwd,
+        antigravityLogPath,
+      });
     }
   }
+  private async performCleanup(opts: {
+    watcher: ProviderTelemetryWatcher | null;
+    tempDbPath: string | null;
+    localMcpCleanup: { path: string; originalContent: string | null }[];
+    localRuntimeCleanup: string[];
+    provider: CliProviderId;
+    workflowSettings: CliWorkflowSettings;
+    sessionId: string;
+    cwd: string;
+    antigravityLogPath: string | null;
+  }): Promise<void> {
+    const {
+      watcher,
+      tempDbPath,
+      localMcpCleanup,
+      localRuntimeCleanup,
+      provider,
+      workflowSettings,
+      sessionId,
+      cwd,
+      antigravityLogPath,
+    } = opts;
+
+    if (watcher) {
+      try {
+        await watcher.stop();
+      } catch (err) {
+        this.logger.error("Provider cleanup task failed: watcher stop", { error: err, logPurpose: "runtime" });
+      }
+    }
+
+    if (tempDbPath) {
+      try {
+        await fs.rm(tempDbPath, { force: true });
+      } catch (err) {
+        this.logger.error("Provider cleanup task failed: temp db removal", { error: err, logPurpose: "runtime" });
+      }
+    }
+
+    for (const entry of localMcpCleanup) {
+      try {
+        if (entry.originalContent !== null) {
+          await fs.writeFile(entry.path, entry.originalContent);
+        } else {
+          await fs.rm(entry.path, { force: true });
+        }
+      } catch (err) {
+        this.logger.error("Provider cleanup task failed: mcp config restore", { error: err, logPurpose: "runtime" });
+      }
+    }
+
+    for (const cleanupPath of localRuntimeCleanup) {
+      try {
+        await fs.rm(cleanupPath, { force: true });
+      } catch (err) {
+        this.logger.error("Provider cleanup task failed: runtime cleanup", { error: err, logPurpose: "runtime" });
+      }
+    }
+
+    try {
+      await cleanupProviderRuntimeArtifacts(
+        provider,
+        workflowSettings.executionMode,
+        sessionId,
+        cwd,
+        antigravityLogPath,
+        this.dockerRunner.removeWorkspaceDir ? this.dockerRunner.removeWorkspaceDir.bind(this.dockerRunner) : undefined
+      );
+    } catch (err) {
+      this.logger.error("Provider cleanup task failed: artifact cleanup", { error: err, logPurpose: "runtime" });
+    }
+  }
+
 
   /**
    * Reads authoritative token usage for an OpenCode run by invoking

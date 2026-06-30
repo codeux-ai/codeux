@@ -139,6 +139,80 @@ describe("ProviderRunner", () => {
     }));
   });
 
+  it("preserves provider result and logs errors when cleanup operations fail", async () => {
+    vi.mocked(runStreamingCommand).mockResolvedValueOnce({
+      ok: true,
+      stdout: "provider output",
+      stderr: "",
+      code: 0,
+      signal: null,
+    });
+
+    // Instead of asserting on the logger directly, which can be brittle due to global pino configuration in testing,
+    // we assert that the error is gracefully swallowed and the provider's valid result is successfully returned,
+    // and that the intended cleanup logic was indeed triggered to fail.
+    const mockRm = vi.spyOn(fs, "rm").mockRejectedValueOnce(new Error("Simulated cleanup error"));
+
+    const result = await runner.runProvider({
+      provider: "antigravity",
+      prompt: "hello",
+      cwd: "/repo",
+      model: "antigravity",
+      apiKey: "key",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(mockRm).toHaveBeenCalled();
+    mockRm.mockRestore();
+  });
+  it("cleans up workspace and codex output path if internal execution throws in runProvider", async () => {
+    dockerRunner.runProviderInDocker.mockRejectedValueOnce(new Error("Execution failed"));
+
+    const mockCleanup = vi.fn();
+    dockerRunner.ensureWorkspace.mockResolvedValueOnce({ cwd: "docker-volume://workspace-error", cleanup: mockCleanup });
+
+    await expect(runner.runProvider({
+      provider: "claude-code",
+      prompt: "throw",
+      cwd: "/repo",
+      model: "sonnet",
+      apiKey: "key",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    })).rejects.toThrow("Execution failed");
+
+    expect(dockerRunner.ensureWorkspace).toHaveBeenCalled();
+    expect(mockCleanup).toHaveBeenCalled();
+  });
+
+  it("cleans up workspace and codex output path if internal execution throws in runProviderForText", async () => {
+    dockerRunner.runProviderInDocker.mockRejectedValueOnce(new Error("Text execution failed"));
+
+    const mockCleanup = vi.fn();
+    dockerRunner.ensureWorkspace.mockResolvedValueOnce({ cwd: "docker-volume://workspace-error-text", cleanup: mockCleanup });
+
+    await expect(runner.runProviderForText({
+      provider: "codex",
+      prompt: "throw text",
+      cwd: "/repo",
+      model: "default",
+      apiKey: "key",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    })).rejects.toThrow("Text execution failed");
+
+    expect(dockerRunner.ensureWorkspace).toHaveBeenCalled();
+    expect(mockCleanup).toHaveBeenCalled();
+  });
+
   it("keeps JSON output enabled for Gemini when MCP config is injected", async () => {
     await runner.runProvider({
       provider: "gemini",

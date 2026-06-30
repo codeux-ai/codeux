@@ -3,7 +3,7 @@
  */
 /// <reference types="@testing-library/jest-dom" />
 import { h } from "preact";
-import { render, screen, cleanup, fireEvent } from "@testing-library/preact";
+import { render, screen, cleanup, fireEvent, act } from "@testing-library/preact";
 import { describe, it, expect, vi, afterEach, beforeEach, beforeAll } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { InteractiveUsageChart } from "../components/InteractiveUsageChart.js";
@@ -70,13 +70,58 @@ beforeAll(() => {
 });
 
 describe("UsageChartAccessibility", () => {
+  let observerCallback: ResizeObserverCallback;
+  let originalObserver: typeof window.ResizeObserver;
+
   beforeEach(() => {
     vi.useFakeTimers();
+    originalObserver = window.ResizeObserver;
+    window.ResizeObserver = class {
+      constructor(callback: ResizeObserverCallback) {
+        observerCallback = callback;
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as any;
   });
 
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    window.ResizeObserver = originalObserver;
+  });
+
+  it("updates geometry and handles hover interactions based on state", async () => {
+    const { container } = render(<Wrapper />);
+
+    act(() => {
+      observerCallback!([
+        {
+          contentRect: { width: 800, height: 400 },
+        } as ResizeObserverEntry,
+      ], {} as ResizeObserver);
+    });
+
+    // Fast-forward RAF so dimension state applies
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    await vi.waitFor(() => {
+      const rects = container.querySelectorAll('rect[tabIndex="0"]');
+      expect(rects.length).toBe(3); // 3 buckets in mock data
+    });
+
+    const rects = container.querySelectorAll('rect[tabIndex="0"]');
+
+    // Simulate hovering a rect to ensure it affects state correctly
+    fireEvent.mouseEnter(rects[1]!);
+    expect(screen.getAllByText('Jan 2').length).toBeGreaterThan(0);
+
+    // Simulate focus to ensure keyboard accessibility works via state
+    fireEvent.focus(rects[2]!);
+    expect(screen.getAllByText('Jan 3').length).toBeGreaterThan(0);
   });
 
   it("renders a textual summary of the chart", () => {

@@ -67,16 +67,39 @@ describe("prepareMemoryGraph", () => {
 
         // Nodes:
         // 0: arch, 1: arch, 2: ctx, 3: ctx, 4: arch
-        // Edges should connect (0,1), (0,4), (1,4), (2,3) -> total 4 edges
+        // Edges should connect in ring: (0,1), (1,4), (4,0) and (2,3) -> total 4 edges
         expect(result.edges).toHaveLength(4);
 
         // Verify edge connections
         const hasEdge = (a: number, b: number) => result.edges.some(e => (e.a === a && e.b === b) || (e.a === b && e.b === a));
         expect(hasEdge(0, 1)).toBe(true);
-        expect(hasEdge(0, 4)).toBe(true);
         expect(hasEdge(1, 4)).toBe(true);
+        expect(hasEdge(4, 0)).toBe(true);
         expect(hasEdge(2, 3)).toBe(true);
         expect(hasEdge(0, 2)).toBe(false); // different categories
+    });
+
+    it("should bound fallback edges for large same-category record sets", () => {
+        const records: MemoryRecord[] = [];
+        for (let i = 0; i < 50; i++) {
+            records.push(createMockMemory(i.toString(), "architecture"));
+        }
+
+        const result = prepareMemoryGraph(records, null);
+
+        // Total edges for 50 items should be 50 (ring topology)
+        expect(result.edges).toHaveLength(50);
+
+        const hasEdge = (a: number, b: number) => result.edges.some(e => (e.a === a && e.b === b) || (e.a === b && e.b === a));
+
+        // Edges should connect in ring: (0,1), (1,2), ..., (48,49), (49,0)
+        expect(hasEdge(0, 1)).toBe(true);
+        expect(hasEdge(48, 49)).toBe(true);
+        expect(hasEdge(49, 0)).toBe(true);
+
+        // Non-adjacent edges shouldn't exist
+        expect(hasEdge(0, 2)).toBe(false);
+        expect(hasEdge(1, 49)).toBe(false);
     });
 
     it("should use provided embedding projections and edges", () => {

@@ -1,11 +1,12 @@
 import type { ExecutionInvocationRecord, ExecutionInvocationMessageRecord, ProjectInvocationsQuery, ProjectInvocationsQueryResult } from "../types.js";
 import { fetchJson } from "../../lib/api/fetch-json.js";
 
-export function fetchProjectInvocations(projectId: string): Promise<ExecutionInvocationRecord[]>;
-export function fetchProjectInvocations(projectId: string, query: ProjectInvocationsQuery): Promise<ProjectInvocationsQueryResult>;
+export function fetchProjectInvocations(projectId: string, query?: undefined, init?: RequestInit): Promise<ExecutionInvocationRecord[]>;
+export function fetchProjectInvocations(projectId: string, query: ProjectInvocationsQuery, init?: RequestInit): Promise<ProjectInvocationsQueryResult>;
 export async function fetchProjectInvocations(
   projectId: string,
-  query?: ProjectInvocationsQuery
+  query?: ProjectInvocationsQuery,
+  init?: RequestInit
 ): Promise<ExecutionInvocationRecord[] | ProjectInvocationsQueryResult> {
   if (query) {
     const searchParams = new URLSearchParams();
@@ -21,18 +22,20 @@ export async function fetchProjectInvocations(
       }
     }
     return fetchJson<ProjectInvocationsQueryResult>(
-      `/api/projects/${encodeURIComponent(projectId)}/execution/invocations?${searchParams.toString()}`
+      `/api/projects/${encodeURIComponent(projectId)}/execution/invocations?${searchParams.toString()}`,
+      init
     );
   }
 
-  return fetchJson<ExecutionInvocationRecord[]>(`/api/projects/${encodeURIComponent(projectId)}/execution/invocations`);
+  return fetchJson<ExecutionInvocationRecord[]>(`/api/projects/${encodeURIComponent(projectId)}/execution/invocations`, init);
 }
 
 export const fetchProjectInvocationsQuery = async (
   projectId: string,
-  query: ProjectInvocationsQuery
+  query: ProjectInvocationsQuery,
+  init?: RequestInit
 ): Promise<ProjectInvocationsQueryResult> => {
-  return fetchProjectInvocations(projectId, query) as Promise<ProjectInvocationsQueryResult>;
+  return fetchProjectInvocations(projectId, query, init) as Promise<ProjectInvocationsQueryResult>;
 };
 
 export const fetchInvocationMessages = async (invocationId: string): Promise<ExecutionInvocationMessageRecord[]> => {

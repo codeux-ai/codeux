@@ -239,9 +239,18 @@ export class VirtualWorkerService {
       return settings;
     };
 
-    for (const project of this.deps.projectManagementRepository.listProjects().projects) {
-      if (this.projectNeedsVirtualWorker(project.id, resolver)) {
-        this.scheduleProject(project.id, "reconcile", resolver);
+    const activeAttentionProjects = this.deps.projectAttentionService.listProjectIdsWithOpenWorkerAttention();
+    const pendingDispatchProjects = this.deps.executionRepository.listProjectIdsWithPendingDispatches();
+
+    const activeProjectIds = new Set([
+      ...activeAttentionProjects,
+      ...pendingDispatchProjects,
+      ...this.activeCycles.keys()
+    ]);
+
+    for (const projectId of activeProjectIds) {
+      if (this.projectNeedsVirtualWorker(projectId, resolver)) {
+        this.scheduleProject(projectId, "reconcile", resolver);
       }
     }
   }

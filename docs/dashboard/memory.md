@@ -42,6 +42,12 @@ Once candidates are loaded, the following steps are executed:
 
 To preserve memory efficiency, the core scoring and sorting operate strictly on dense vectors. The full textual payloads and metadata of the top-ranking results are subsequently hydrated using a single batch repository fetch (`MemoryRepository.getMemories(topIds)`). The service then restores the scored order, returning a list of `MemorySearchResult` objects ready to feed the agent context windows.
 
+## Graph Visualization
+
+When the UI generates visual graphs of memory items:
+- If a valid memory embedding map is present, the layout and edges match the exact vectors provided by the embedding model.
+- If no embedding map is present (or embeddings are still generating), a local fallback algorithm creates a deterministic layout. To preserve front-end performance on dense graphs, fallback category edges are bounded using a deterministic ring topology. Rather than computing $O(N^2)$ all-pairs edges within a category, it calculates exactly $N$ sequential edges per category, limiting memory and rendering bottlenecks.
+
 ## Storage Requirements
 
 Memory records encapsulate the base `content` string alongside its vectorized byte representation (`embeddingBlob`). The byte buffer must correctly decode based on its stored `embeddingDimension`. The system expects IEEE 754 32-bit floats.

@@ -36,6 +36,31 @@ describe("buildSprintDagModel", () => {
     expect(pendingEdge?.state).toBe("pending");
   });
 
+  it("ignores missing dependencies gracefully", () => {
+    const model = buildSprintDagModel([
+      makeTask({ id: "T01", title: "Task 1", depends_on: ["T_MISSING"] }),
+    ]);
+
+    expect(model.columns).toHaveLength(1);
+    expect(model.columns[0]?.map((node) => node.task.id)).toEqual(["T01"]);
+    expect(model.metrics.rootCount).toBe(1);
+    expect(model.metrics.longestChain).toBe(1);
+  });
+
+  it("handles cyclic dependencies deterministically", () => {
+    const model = buildSprintDagModel([
+      makeTask({ id: "T01", title: "Task 1", depends_on: ["T03"] }),
+      makeTask({ id: "T02", title: "Task 2", depends_on: ["T01"] }),
+      makeTask({ id: "T03", title: "Task 3", depends_on: ["T02"] }),
+    ]);
+
+    expect(model.nodes).toHaveLength(3);
+    expect(model.metrics.longestChain).toBeGreaterThan(0);
+    // Depth assignments ensure cycle is broken and tasks exist.
+    const depths = model.nodes.map(n => n.depth);
+    expect(depths.every(d => d >= 0)).toBe(true);
+  });
+
   it("marks root tasks and dependency-unlocked tasks as ready", () => {
     const model = buildSprintDagModel([
       makeTask({ id: "T01", title: "Root Ready", status: "PENDING" }),

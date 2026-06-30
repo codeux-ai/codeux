@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  dashboardSettingsToProjectSettings,
+  cloneProjectSettings,
+  cloneSystemSettings,
   getProviderModelOptions,
   getProviderInstanceModelOptions,
   getOpenCodeConfiguredModel,
@@ -22,7 +25,7 @@ import {
   getProviderDisplayMetadata,
   getVirtualProviderDisplayMetadata,
 } from "../../../dashboard/src/v2/lib/settings-view-models.js";
-import type { SystemSettings, ProjectSettings, ExternalSettingsHints } from "../../../dashboard/src/types.js";
+import type { SystemSettings, ProjectSettings, ExternalSettingsHints, DashboardSettings } from "../../../dashboard/src/types.js";
 
 describe("sortProviderConfigEntries", () => {
   it("keeps the primary first and orders added instances by creation, not by name", () => {
@@ -385,5 +388,146 @@ describe("provider display metadata helpers", () => {
 
     expect(metadata?.effectiveModel).toBe("gpt-5.5");
     expect(getDefaultModelOptionLabel(metadata)).toBe("Default Model (gpt-5.5)");
+  });
+});
+
+
+describe("settings cloning helpers", () => {
+  const createMockQualityAssurance = () => ({
+    enabled: true,
+    maxTaskReviewRuns: 2,
+    maxSprintReviewRuns: 3,
+    exhaustionPolicy: "STOP" as const,
+    taskCompletion: { strategy: "ALWAYS" as const },
+    sprintCompletion: { strategy: "ALWAYS" as const },
+    completedTaskWithoutPr: { strategy: "CREATE_PR" as const },
+  });
+
+  const createMockProjectSettings = (): ProjectSettings => ({
+    appearance: { theme: "system" },
+    automationLevel: "FULL",
+    automationInterventions: {},
+    aiProvider: {
+      provider: "jules",
+      strategy: "MANUAL",
+      providers: {},
+      invocationRouting: {},
+    },
+    git: { githubMode: "app", githubToken: "", defaultBranch: "main", autoCreatePr: false, autoCloseLinkedIssues: false, deleteMergedBranches: false, featureBranchPrefix: "", sprintBranchScheme: "FLAT", sprintKeyPrefix: "" },
+    jira: { host: "h", email: "e", apiToken: "t", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
+    ciIntelligence: {},
+    guardrails: { onLimitAction: "WARN", defaultLimitOverrides: [], limitOverrides: [], jobConfigOverrides: [], jobs: { task_coding: {}, ci_fix: {}, merge_conflict: {}, clarification_reply: {}, planning: {}, remediation: {} } as any },
+    sprintLoopSteps: { apply: { type: "apply" }, pr: { type: "pr" }, runTests: { type: "test" } },
+    cliWorkflow: { executionMode: "HOST" },
+    sprintPreview: { enabled: false },
+    workers: { allowParallelJobs: false },
+    agents: {
+      saveToProjectDirectory: false,
+      routing: {
+        planning: { strategy: "DEFAULT" },
+        taskCoding: { strategy: "DEFAULT", orchestratorAgentPresetIds: ["a", "b"] },
+        ciFix: { strategy: "DEFAULT" },
+        mergeConflict: { strategy: "DEFAULT" },
+        dashboardReply: { strategy: "DEFAULT" },
+        clarificationReply: { strategy: "DEFAULT" },
+      },
+      instructionTemplates: {},
+      qualityAssurance: createMockQualityAssurance(),
+    },
+    skills: [{ id: "skill1", enabled: true }],
+    mcpTools: [{ serverName: "s1", toolName: "t1", enabled: true }],
+    customMcpServers: [{ serverName: "s1", command: "cmd", args: [], env: {}, headers: { "X-Auth": "abc" }, providers: [] }],
+    memory: { enabled: true, embeddingModel: null, externalEmbedding: { baseUrl: "", apiKey: "", model: "", dimensions: null }, autoCaptureSprint: true, autoCaptureAgent: true, autoPromote: false, promotionThreshold: 5, maxSprintMemories: 10, maxProjectMemories: 20, mapMaxEdgesPerNode: 5, workerLearningsInstruction: "" },
+  } as ProjectSettings);
+
+  const createMockDashboardSettings = (): DashboardSettings => {
+    const p = createMockProjectSettings();
+    return { ...p, uiState: {} } as any;
+  };
+
+  it("cloneProjectSettings deep clones nested objects and isolates mutations", () => {
+    const original = createMockProjectSettings();
+    const clone = cloneProjectSettings(original);
+
+    // Verify equality
+    expect(clone).toEqual(original);
+    expect(clone).not.toBe(original);
+
+    // Mutate clone
+    clone.memory.enabled = false;
+    clone.memory.autoCaptureSprint = false;
+    clone.jira.host = "new-host";
+    clone.agents.qualityAssurance.enabled = false;
+    clone.agents.qualityAssurance.taskCompletion.strategy = "NEVER";
+    clone.agents.routing.taskCoding.orchestratorAgentPresetIds.push("c");
+    clone.customMcpServers![0].headers!["X-New"] = "123";
+    clone.mcpTools![0].enabled = false;
+    clone.skills[0].enabled = false;
+
+    // Verify original is untouched
+    expect(original.memory.enabled).toBe(true);
+    expect(original.memory.autoCaptureSprint).toBe(true);
+    expect(original.jira.host).toBe("h");
+    expect(original.agents.qualityAssurance.enabled).toBe(true);
+    expect(original.agents.qualityAssurance.taskCompletion.strategy).toBe("ALWAYS");
+    expect(original.agents.routing.taskCoding.orchestratorAgentPresetIds).toEqual(["a", "b"]);
+    expect(original.customMcpServers![0].headers!["X-New"]).toBeUndefined();
+    expect(original.mcpTools![0].enabled).toBe(true);
+    expect(original.skills[0].enabled).toBe(true);
+  });
+
+  it("dashboardSettingsToProjectSettings deep clones nested objects and isolates mutations", () => {
+    const original = createMockDashboardSettings();
+    const clone = dashboardSettingsToProjectSettings(original);
+
+    expect(clone).not.toBe(original);
+
+    // Mutate clone
+    clone.memory.enabled = false;
+    clone.jira.host = "new-host";
+    clone.agents.qualityAssurance.enabled = false;
+    clone.agents.routing.taskCoding.orchestratorAgentPresetIds.push("c");
+    clone.customMcpServers![0].headers!["X-New"] = "123";
+
+    // Verify original is untouched
+    expect(original.memory.enabled).toBe(true);
+    expect(original.jira.host).toBe("h");
+    expect(original.agents.qualityAssurance.enabled).toBe(true);
+    expect(original.agents.routing.taskCoding.orchestratorAgentPresetIds).toEqual(["a", "b"]);
+    expect(original.customMcpServers![0].headers!["X-New"]).toBeUndefined();
+  });
+
+  it("cloneSystemSettings deep clones nested objects and isolates mutations", () => {
+    const original: SystemSettings = {
+      runtime: {} as any,
+      integrations: {
+        githubToken: "gh",
+        gitlabToken: "gl",
+        jira: { host: "h", email: "e", apiToken: "t", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
+        providers: {
+          "p1": { provider: "jules", name: "Jules", apiKey: "key", mountAuth: false, authPath: "" }
+        }
+      },
+      defaults: createMockProjectSettings(),
+      mcpTools: [{ serverName: "s1", toolName: "t1", enabled: true }],
+      customMcpServers: [],
+    };
+
+    const clone = cloneSystemSettings(original);
+
+    expect(clone).toEqual(original);
+    expect(clone).not.toBe(original);
+
+    // Mutate clone
+    clone.integrations.jira!.host = "mutated";
+    clone.integrations.providers["p1"].apiKey = "mutated-key";
+    clone.defaults.memory.enabled = false;
+    clone.mcpTools[0].enabled = false;
+
+    // Verify original is untouched
+    expect(original.integrations.jira!.host).toBe("h");
+    expect(original.integrations.providers["p1"].apiKey).toBe("key");
+    expect(original.defaults.memory.enabled).toBe(true);
+    expect(original.mcpTools[0].enabled).toBe(true);
   });
 });

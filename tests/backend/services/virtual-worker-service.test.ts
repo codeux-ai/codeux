@@ -246,8 +246,15 @@ describe("VirtualWorkerService", () => {
       } as any,
     });
     const scheduleSpy = vi.spyOn(virtualWorkerService, "scheduleProject");
+    const listProjectsSpy = vi.spyOn(projectManagementRepository, "listProjects");
+    const activeAttentionSpy = vi.spyOn(projectAttentionService, "listProjectIdsWithOpenWorkerAttention");
+    const pendingDispatchesSpy = vi.spyOn(executionRepository, "listProjectIdsWithPendingDispatches");
 
     await virtualWorkerService.reconcile();
+
+    expect(listProjectsSpy).toHaveBeenCalledTimes(0);
+    expect(activeAttentionSpy).toHaveBeenCalled();
+    expect(pendingDispatchesSpy).toHaveBeenCalled();
 
     expect(scheduleSpy).toHaveBeenCalledTimes(1);
     expect(scheduleSpy).toHaveBeenCalledWith(virtualProject.id, "reconcile", expect.any(Function));

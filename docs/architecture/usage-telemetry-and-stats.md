@@ -165,7 +165,7 @@ The dashboard must show these states explicitly and must not invent fake precisi
 
 ## Dashboard API Surface
 
-Overview telemetry uses chunk-safe event loading, preventing the risk of hitting SQLite placeholder limits for large active sprint sets. The duration aggregation strategy bounds memory usage by using pre-aggregated metrics coupled with bounded percentile sampling.
+Overview telemetry uses chunk-safe event loading, preventing the risk of hitting SQLite placeholder limits for large active sprint sets. The duration aggregation strategy bounds memory usage by using bounded deterministic percentile sampling (e.g. bounded to 10000 rows by default, ordered by `started_at DESC, id DESC`). To optimize database performance, it calculates aggregates directly in memory if the sample volume is below this cap, and only falls back to a secondary database scan for aggregates when the cap is exceeded.
 
 Usage data now appears in two read models:
 

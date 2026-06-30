@@ -19,4 +19,5 @@ export interface ProjectStatsQueryDependencies {
   getSprintMetadata: (id: string, ids: string[]) => Map<string, StatsEntityMetadata>;
   updateLastActivity: (map: Map<string, string>, key: string | null, date: string | null) => void;
   getProviderPricing?: (providerId: string, model: string | null) => TokenPricing | undefined;
+  maxDurationSamples?: number;
 }
