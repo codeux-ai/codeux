@@ -24,7 +24,7 @@ Instead, use one of the following private channels:
 1. **GitHub Security Advisories (preferred).** Open a private report via
    [**Report a vulnerability**](https://github.com/codeux-ai/codeux/security/advisories/new). This
    keeps the discussion confidential until a fix is ready.
-2. **Email.** Contact the maintainers at **security@codeux.ai** (or `p.voss@codeux.ai`).
+2. **Email.** Contact the maintainers at **security@codeux.ai**.
 
 Please include as much of the following as you can:
 
