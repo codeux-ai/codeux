@@ -340,6 +340,7 @@ Legacy runtime:
   - rebuild, stop, open-in-tab, startup-script editing, and log viewing
   - sprint previews are proxied through the dashboard instead of embedding raw localhost origins directly
   - extensionless preview-host deep links such as `/sprints` now recover to the preview app shell when the upstream dev server returns `404`, so direct loads and refreshes stay routable
+  - fluid responsive design across device classes (mobile stacking to wide side-panels) with safe viewport-constrained iframe sizing and scrollable/wrappable control chrome
 - File Browser page is project-scoped and mirrors the same v2 hierarchy and workbench visual language as Browser Preview:
   - signal-accent eyebrow and `font-display` heading hierarchy with responsive supporting copy
   - normalized control rail with semantic status badge, sprint/branch context, mode toggle, and rebuild/stop controls

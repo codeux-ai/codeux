@@ -207,7 +207,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                         </div>
                                         <ExternalLink aria-hidden="true" className="w-3.5 h-3.5 shrink-0 text-slate-400 group-hover:text-signal-500 transition-colors" />
                                     </div>
-                                    <div className="flex items-center pl-1">
+                                    <div className="flex items-center pl-1 min-w-0">
                                         <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 truncate">
                                             {formatPort(session)}
                                         </span>
