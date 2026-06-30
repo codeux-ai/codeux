@@ -36,6 +36,7 @@ function createMockDeps(): MemoryRouteDependencies {
       createMemory: vi.fn().mockResolvedValue({ id: "m1", content: "test" }),
       updateMemory: vi.fn().mockReturnValue({ id: "m1", content: "updated" }),
       deleteMemory: vi.fn(),
+      clearMemories: vi.fn().mockReturnValue({ memories: 3, claims: 1, evidence: 1 }),
       listByProject: vi.fn().mockReturnValue([]),
       listBySprint: vi.fn().mockReturnValue([]),
       listByAgent: vi.fn().mockReturnValue([]),
@@ -94,7 +95,7 @@ describe("memory-routes", () => {
     expect(app.get).toHaveBeenCalledTimes(8); // list, claims, evidence, embedding-models, model status, reembed progress, embedding-map, stats
     expect(app.post).toHaveBeenCalledTimes(9); // create, memory search, claim search, promotion analyze/execute, download, cancel, select, reembed
     expect(app.patch).toHaveBeenCalledTimes(1); // update
-    expect(app.delete).toHaveBeenCalledTimes(2); // delete memory, delete model
+    expect(app.delete).toHaveBeenCalledTimes(4); // delete memory, clear project memories, clear system memories, delete model
   });
 
   describe("GET /api/projects/:projectId/memories", () => {
@@ -187,6 +188,42 @@ describe("memory-routes", () => {
       handler({ params: { memoryId: "m1" } }, res);
       expect(deps.memoryService.deleteMemory).toHaveBeenCalledWith("m1");
       expect(res.status).toHaveBeenCalledWith(204);
+    });
+  });
+
+  describe("DELETE /api/projects/:projectId/memories", () => {
+    it("clears project memories for a valid tier", () => {
+      const handler = routes["DELETE:/api/projects/:projectId/memories"].handler;
+      const res = createMockRes();
+      handler({ params: { projectId: "p1" }, query: { tier: "long_term" } }, res);
+      expect(deps.memoryService.clearMemories).toHaveBeenCalledWith("long_term", "p1");
+      expect(res.json).toHaveBeenCalledWith({ memories: 3, claims: 1, evidence: 1 });
+    });
+
+    it("rejects an invalid tier", () => {
+      const handler = routes["DELETE:/api/projects/:projectId/memories"].handler;
+      const res = createMockRes();
+      handler({ params: { projectId: "p1" }, query: { tier: "bogus" } }, res);
+      expect(deps.memoryService.clearMemories).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(400);
+    });
+  });
+
+  describe("DELETE /api/system/memories", () => {
+    it("clears system-wide memories for a valid tier", () => {
+      const handler = routes["DELETE:/api/system/memories"].handler;
+      const res = createMockRes();
+      handler({ query: { tier: "all" } }, res);
+      expect(deps.memoryService.clearMemories).toHaveBeenCalledWith("all");
+      expect(res.json).toHaveBeenCalledWith({ memories: 3, claims: 1, evidence: 1 });
+    });
+
+    it("rejects a missing tier", () => {
+      const handler = routes["DELETE:/api/system/memories"].handler;
+      const res = createMockRes();
+      handler({ query: {} }, res);
+      expect(deps.memoryService.clearMemories).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(400);
     });
   });
 

@@ -13,7 +13,7 @@ import type {
   InAppEmbeddingModelId,
   MemoryClaimStatus,
 } from "../contracts/memory-types.js";
-import { MEMORY_SCOPES, MEMORY_CATEGORIES, isInAppEmbeddingModelId } from "../contracts/memory-types.js";
+import { MEMORY_SCOPES, MEMORY_CATEGORIES, MEMORY_CLEAR_TIERS, isInAppEmbeddingModelId, isMemoryClearTier } from "../contracts/memory-types.js";
 import { EMBEDDING_MODEL_CATALOG } from "../services/embedding-model-catalog.js";
 import { toErrorResponse, syncRoute, asyncRoute } from "./route-utils.js";
 import { requireTrimmedString, parseTrimmedString } from "./request-parsers.js";
@@ -117,6 +117,33 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
       res.status(204).send();
     } catch (error) {
       res.status(400).json(toErrorResponse(error, "Failed to delete memory"));
+    }
+  }));
+
+  // --- Bulk memory clear (danger zone) ---
+
+  app.delete("/api/projects/:projectId/memories", syncRoute((req, res) => {
+    try {
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
+      if (!isMemoryClearTier(req.query.tier)) {
+        res.status(400).json({ error: `tier must be one of: ${MEMORY_CLEAR_TIERS.join(", ")}` });
+        return;
+      }
+      res.json(memoryService.clearMemories(req.query.tier, projectId));
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to clear project memories"));
+    }
+  }));
+
+  app.delete("/api/system/memories", syncRoute((req, res) => {
+    try {
+      if (!isMemoryClearTier(req.query.tier)) {
+        res.status(400).json({ error: `tier must be one of: ${MEMORY_CLEAR_TIERS.join(", ")}` });
+        return;
+      }
+      res.json(memoryService.clearMemories(req.query.tier));
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to clear system memories"));
     }
   }));
 

@@ -29,6 +29,27 @@ export type MemoryCategory =
 
 export const MEMORY_SCOPES: MemoryScope[] = ["sprint", "agent", "project"];
 
+/**
+ * Target tier for a bulk memory clear ("danger zone" reset):
+ * - short_term → sprint + legacy agent scoped memories
+ * - long_term  → project-scoped memories plus all memory claims + evidence
+ * - all        → every memory, claim, and evidence row (the full memory database)
+ */
+export type MemoryClearTier = "short_term" | "long_term" | "all";
+
+export const MEMORY_CLEAR_TIERS: MemoryClearTier[] = ["short_term", "long_term", "all"];
+
+export function isMemoryClearTier(value: unknown): value is MemoryClearTier {
+  return typeof value === "string" && (MEMORY_CLEAR_TIERS as string[]).includes(value);
+}
+
+/** Row counts removed by a bulk memory clear. */
+export interface MemoryClearResult {
+  memories: number;
+  claims: number;
+  evidence: number;
+}
+
 /** Maps a tier to its underlying scope. */
 export function scopeForTier(tier: MemoryTier): MemoryScope {
   return tier === "short_term" ? "sprint" : "project";

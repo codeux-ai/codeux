@@ -73,6 +73,24 @@ export const deleteMemory = async (memoryId: string): Promise<void> => {
   return fetchVoid(`/api/memories/${memoryId}`, { method: "DELETE" });
 };
 
+// --- Bulk memory clear (danger zone) ---
+
+export type MemoryClearTier = "short_term" | "long_term" | "all";
+
+export interface MemoryClearResult {
+  memories: number;
+  claims: number;
+  evidence: number;
+}
+
+export const clearProjectMemories = async (projectId: string, tier: MemoryClearTier): Promise<MemoryClearResult> => {
+  return fetchJson(`/api/projects/${encodeURIComponent(projectId)}/memories?tier=${tier}`, { method: "DELETE" });
+};
+
+export const clearSystemMemories = async (tier: MemoryClearTier): Promise<MemoryClearResult> => {
+  return fetchJson(`/api/system/memories?tier=${tier}`, { method: "DELETE" });
+};
+
 // --- Semantic search ---
 
 export interface SearchMemoriesInput {

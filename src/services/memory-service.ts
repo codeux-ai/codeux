@@ -9,6 +9,8 @@ import type {
   MemoryClaimSearchResult,
   EmbeddingModelId,
   MemorySettings,
+  MemoryClearTier,
+  MemoryClearResult,
 } from "../contracts/memory-types.js";
 import { MemoryRepository } from "../repositories/memory-repository.js";
 import { EmbeddingService } from "./embedding-service.js";
@@ -227,6 +229,14 @@ export class MemoryService {
 
   deleteMemory(memoryId: string): void {
     this.memoryRepository.deleteMemory(memoryId);
+  }
+
+  /**
+   * Bulk-clear memory data by tier. Omitting `projectId` clears system-wide.
+   * See {@link MemoryRepository.clearMemories} for tier semantics.
+   */
+  clearMemories(tier: MemoryClearTier, projectId?: string): MemoryClearResult {
+    return this.memoryRepository.clearMemories(tier, projectId);
   }
 
   listByProject(projectId: string, scope?: MemoryScope, limit?: number): MemoryRecord[] {

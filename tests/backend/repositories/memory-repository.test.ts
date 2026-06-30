@@ -634,6 +634,77 @@ describe("MemoryRepository", () => {
     });
   });
 
+  describe("clearMemories", () => {
+    const seed = (pid: string) => {
+      repo.createMemory(pid, makeInput({ scope: "sprint", sprintId: sprintId1, content: "short A" }));
+      repo.createMemory(pid, makeInput({ scope: "agent", agentPresetId: "agent-x", content: "short B (legacy)" }));
+      repo.createMemory(pid, makeInput({ scope: "project", content: "long A" }));
+      const longMem = repo.createMemory(pid, makeInput({ scope: "project", content: "long B" }));
+      const claim = repo.createMemoryClaim(pid, { claim: "Durable claim", category: "codebase", confidence: 0.7, durability: 0.7 });
+      repo.addMemoryClaimEvidence({ claimId: claim.id, memoryId: longMem.id, weight: 0.9 });
+    };
+
+    it("clears short-term (sprint + legacy agent) memories only, keeping long-term and claims", () => {
+      seed(projectId);
+
+      const result = repo.clearMemories("short_term", projectId);
+
+      expect(result).toEqual({ memories: 2, claims: 0, evidence: 0 });
+      expect(repo.listByProject(projectId, "sprint")).toHaveLength(0);
+      expect(repo.listByProject(projectId, "agent")).toHaveLength(0);
+      expect(repo.listByProject(projectId, "project")).toHaveLength(2);
+      expect(repo.listMemoryClaims(projectId)).toHaveLength(1);
+    });
+
+    it("clears long-term memories plus claims and evidence, keeping short-term", () => {
+      seed(projectId);
+
+      const result = repo.clearMemories("long_term", projectId);
+
+      expect(result).toEqual({ memories: 2, claims: 1, evidence: 1 });
+      expect(repo.listByProject(projectId, "project")).toHaveLength(0);
+      expect(repo.listMemoryClaims(projectId)).toHaveLength(0);
+      expect(repo.listByProject(projectId, "sprint")).toHaveLength(1);
+      expect(repo.listByProject(projectId, "agent")).toHaveLength(1);
+    });
+
+    it("clears the entire memory database for a project", () => {
+      seed(projectId);
+
+      const result = repo.clearMemories("all", projectId);
+
+      expect(result).toEqual({ memories: 4, claims: 1, evidence: 1 });
+      expect(repo.listByProject(projectId)).toHaveLength(0);
+      expect(repo.listMemoryClaims(projectId)).toHaveLength(0);
+    });
+
+    it("scopes a project clear to that project only", () => {
+      const otherProjectId = createTestProject(storage);
+      seed(projectId);
+      seed(otherProjectId);
+
+      repo.clearMemories("all", projectId);
+
+      expect(repo.listByProject(projectId)).toHaveLength(0);
+      expect(repo.listByProject(otherProjectId)).toHaveLength(4);
+      expect(repo.listMemoryClaims(otherProjectId)).toHaveLength(1);
+    });
+
+    it("clears system-wide across every project when no projectId is given", () => {
+      const otherProjectId = createTestProject(storage);
+      seed(projectId);
+      seed(otherProjectId);
+
+      const result = repo.clearMemories("all");
+
+      expect(result).toEqual({ memories: 8, claims: 2, evidence: 2 });
+      expect(repo.listByProject(projectId)).toHaveLength(0);
+      expect(repo.listByProject(otherProjectId)).toHaveLength(0);
+      expect(repo.listMemoryClaims(projectId)).toHaveLength(0);
+      expect(repo.listMemoryClaims(otherProjectId)).toHaveLength(0);
+    });
+  });
+
   describe("upsertModelStatus", () => {
     it("inserts a new model status", () => {
       repo.upsertModelStatus("bge-small-en-v1.5", { downloaded: true, localPath: "/models/bge" });

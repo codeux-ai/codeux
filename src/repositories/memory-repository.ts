@@ -22,6 +22,8 @@ import type {
   CreateMemoryClaimInput,
   UpdateMemoryClaimInput,
   AddMemoryClaimEvidenceInput,
+  MemoryClearTier,
+  MemoryClearResult,
 } from "../contracts/memory-types.js";
 
 interface MemoryRow {
@@ -430,6 +432,53 @@ export class MemoryRepository {
       DELETE FROM memories
       WHERE project_id = ? AND sprint_id = ? AND scope = 'sprint'
     `).run(projectId, sprintId);
+  }
+
+  /**
+   * Bulk-clear memory data by tier, optionally scoped to a single project.
+   * Omitting `projectId` clears system-wide (across every project).
+   *
+   * - short_term: sprint + legacy agent scoped memories only (claims are long-term).
+   * - long_term:  project-scoped memories + every memory claim and its evidence.
+   * - all:        every memory, claim, and evidence row (the full memory database).
+   */
+  clearMemories(tier: MemoryClearTier, projectId?: string): MemoryClearResult {
+    try {
+      const projectClause = projectId ? " AND project_id = ?" : "";
+      const projectParam = projectId ? [projectId] : [];
+      // Evidence references claims by project; scope evidence to the project's claims.
+      const evidenceSql = projectId
+        ? "DELETE FROM memory_claim_evidence WHERE claim_id IN (SELECT id FROM memory_claims WHERE project_id = ?)"
+        : "DELETE FROM memory_claim_evidence";
+
+      return this.db.transaction(() => {
+        let memories = 0;
+        let claims = 0;
+        let evidence = 0;
+
+        if (tier === "short_term") {
+          memories = this.db
+            .prepare(`DELETE FROM memories WHERE scope IN ('sprint', 'agent')${projectClause}`)
+            .run(...projectParam).changes;
+        } else if (tier === "long_term") {
+          evidence = this.db.prepare(evidenceSql).run(...projectParam).changes;
+          claims = this.db.prepare(`DELETE FROM memory_claims WHERE 1 = 1${projectClause}`).run(...projectParam).changes;
+          memories = this.db
+            .prepare(`DELETE FROM memories WHERE scope = 'project'${projectClause}`)
+            .run(...projectParam).changes;
+        } else {
+          evidence = this.db.prepare(evidenceSql).run(...projectParam).changes;
+          claims = this.db.prepare(`DELETE FROM memory_claims WHERE 1 = 1${projectClause}`).run(...projectParam).changes;
+          memories = this.db.prepare(`DELETE FROM memories WHERE 1 = 1${projectClause}`).run(...projectParam).changes;
+        }
+
+        return { memories, claims, evidence };
+      });
+    } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      this.logger.error("Operation failed", { error, projectId, tier });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
   }
 
   createPromotedMemory(
