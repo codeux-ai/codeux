@@ -155,7 +155,7 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
                         <span className="font-mono text-xs font-semibold text-slate-400 dark:text-slate-500 shrink-0">
                             {itemId}
                         </span>
-                        <span className={`font-semibold truncate transition-colors duration-200 ${
+                        <span className={`font-semibold break-words whitespace-normal transition-colors duration-200 ${
                             isFocused ? 'text-signal-600 dark:text-signal-400' : 'text-slate-800 dark:text-slate-200 group-hover:text-slate-900 dark:group-hover:text-white'
                         }`}>
                             {renderTitle()}
