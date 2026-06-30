@@ -99,6 +99,15 @@ export class ProjectAttentionRepository {
     this.db = storage.getDatabase();
   }
 
+  listProjectIdsWithOpenWorkerAttention(): string[] {
+    const rows = this.db.prepare(`
+      SELECT DISTINCT project_id
+      FROM project_attention_items
+      WHERE owner_type = 'worker' AND status IN ('open', 'claimed')
+    `).all() as { project_id: string }[];
+    return rows.map(r => r.project_id);
+  }
+
   listProjectAttentionItems(
     projectId: string,
     options?: { statuses?: ProjectAttentionStatus[]; limit?: number },

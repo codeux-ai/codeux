@@ -740,6 +740,15 @@ export class ExecutionRepository {
     }
   }
 
+  listProjectIdsWithPendingDispatches(): string[] {
+    const rows = this.db.prepare(`
+      SELECT DISTINCT project_id
+      FROM task_dispatches
+      WHERE status IN ('queued', 'claimed', 'running', 'cancel_requested')
+    `).all() as { project_id: string }[];
+    return rows.map(r => r.project_id);
+  }
+
   listTaskDispatches(args: { projectId: string; sprintId?: string; sprintRunId?: string; taskId?: string }): TaskDispatchRecord[] {
     requireProject(this.db, args.projectId);
     const clauses = ["project_id = ?"];
