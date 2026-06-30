@@ -832,11 +832,11 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                             <div className="flex-1" />
 
                             {/* Actions */}
-                            <div className="flex items-center justify-between pt-1">
+                            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
                                 <button
                                     type="button"
                                     onClick={handleClose}
-                                    className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 rounded"
+                                    className="px-4 py-3 sm:p-0 text-center sm:text-left text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 rounded"
                                 >
                                     Cancel
                                 </button>
