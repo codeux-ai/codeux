@@ -1,4 +1,4 @@
- proviname: CI
+name: CI
 
 on:
   push:
