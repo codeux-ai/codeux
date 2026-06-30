@@ -286,7 +286,7 @@ export const InteractiveUsageChart: FunctionComponent<{
           />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-5`}>
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">Peak Tokens</div>
             <div className="mt-2 text-2xl font-black text-[var(--stats-value-color)]">{formatTokens(peakTokens)}</div>
@@ -313,10 +313,10 @@ export const InteractiveUsageChart: FunctionComponent<{
           <div className={`${SUBPANEL_CLASS} flex flex-col border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-5 md:p-6`}>
             <div className="mb-6 flex flex-wrap items-center gap-4">
               <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--stats-label-color)]">Interactive Plot</div>
-              <div className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] ${CHIP_CLASS} truncate max-w-full`}>
+              <div className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] ${CHIP_CLASS} max-w-full whitespace-normal break-words text-center`}>
                 Hover buckets for exact values
               </div>
-              <div className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] ${CHIP_CLASS} truncate max-w-full`}>
+              <div className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] ${CHIP_CLASS} max-w-full whitespace-normal break-words text-center`}>
                 {zoomLabel}
               </div>
               <button

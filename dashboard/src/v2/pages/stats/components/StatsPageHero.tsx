@@ -161,7 +161,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
             </div>
           ) : null}
         </div>
-        <div className="flex flex-col items-start gap-4 lg:items-end lg:justify-end w-full lg:w-auto mt-6 lg:mt-0 min-w-0">
+        <div className="flex flex-col sm:flex-row lg:flex-col items-start sm:items-center lg:items-end gap-4 lg:justify-end w-full lg:w-auto mt-6 lg:mt-0 min-w-0 flex-wrap">
           <div role="group" aria-label="Time window presets" className={`inline-flex flex-wrap p-1 w-full sm:w-auto ${CHIP_CLASS}`}>
             {WINDOW_PRESETS.map((window) => {
               const isActive = activeQuery.window === window;
