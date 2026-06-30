@@ -22,5 +22,5 @@ The Memory UI relies on specific hex colors that match existing app accents:
 ## Responsive Layout Guidelines
 - **Main Canvas:** Uses dynamic viewport height `h-[calc(100dvh-12rem)] min-h-[500px]` to prevent clipping and scrolling issues.
 - **Sidebar & Details:** Stacks to the bottom on mobile (`h-[50vh]`) and anchors to the side on desktop.
-- **Filters & Search:** Wraps flex items cleanly using `flex-wrap` and takes full width on mobile viewports.
+- **Filters & Search:** Wraps flex items cleanly using `flex-wrap` (without hardcoded `w-full`) and applies `min-w-0` for select wrappers to prevent overflow.
 - **Truncation:** Metadata limits string lengths gracefully utilizing `truncate` and `break-words` along with `min-w-0`.
