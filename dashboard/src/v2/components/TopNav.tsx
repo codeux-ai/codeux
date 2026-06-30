@@ -300,7 +300,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                 <GlobalSearch projectId={projectId} selectedProject={selectedProject} sprints={sprints} />
             </div>
 
-            <div className="flex items-center gap-1 sm:gap-2 md:gap-3 shrink-0 flex-wrap justify-end">
+            <div className="flex items-center gap-1 sm:gap-2 md:gap-3 shrink-0 min-w-0 flex-wrap justify-end">
                 {/* Project Selector */}
                 <div className="relative" ref={dropdownRef} onKeyDown={projectKb.onContainerKeyDown}>
                     <button
@@ -315,7 +315,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                         aria-controls="project-listbox"
                         aria-activedescendant={dropdownOpen && filteredProjects.length > 0 ? (projectKb.activeDescendantId || `project-option-${selectedProject?.id || 'none'}`) : undefined}
                         aria-busy={projectSwitchBusy || loading ? "true" : "false"}
-                        className="flex h-9 items-center gap-2.5 rounded-xl border border-black/[0.06] bg-black/[0.04] px-3.5 py-0 transition-all group hover:border-black/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.06] dark:bg-white/[0.04] dark:hover:border-white/[0.08]"
+                        className="flex h-9 min-w-0 items-center gap-2.5 rounded-xl border border-black/[0.06] bg-black/[0.04] px-3.5 py-0 transition-all group hover:border-black/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.06] dark:bg-white/[0.04] dark:hover:border-white/[0.08]"
                     >
                         <StatusDot status={selectedProject?.status || "idle"} />
                         <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono truncate max-w-[80px] sm:max-w-[140px] md:max-w-[200px]">
@@ -326,7 +326,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
                     {/* Project Dropdown */}
                     {dropdownOpen && (
-                        <div id="project-listbox" role="listbox" aria-label="Project list" className="fixed inset-x-4 top-[72px] md:inset-auto md:absolute md:top-full md:right-0 mt-2 min-w-[12rem] w-56 max-w-[calc(100vw-2rem)] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden z-50">
+                        <div id="project-listbox" role="listbox" aria-label="Project list" className="absolute top-full right-0 mt-2 min-w-[12rem] w-56 max-w-[calc(100vw-2rem)] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden z-50">
                             <div className="px-3 pt-3 pb-1.5">
                                 <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Projects</span>
                             </div>
@@ -427,7 +427,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                 setSprintDropdownOpen(!sprintDropdownOpen);
                             }}
                             aria-disabled={sprints.length === 0}
-                            className={`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 flex h-9 items-center gap-2.5 rounded-xl border border-transparent bg-black/[0.04] px-3.5 py-0 transition-all group dark:bg-white/[0.04] ${
+                            className={`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 flex h-9 min-w-0 items-center gap-2.5 rounded-xl border border-transparent bg-black/[0.04] px-3.5 py-0 transition-all group dark:bg-white/[0.04] ${
                                 sprints.length > 0
                                     ? 'hover:border-black/[0.08] dark:hover:border-white/[0.08] cursor-pointer'
                                     : 'opacity-50 cursor-not-allowed'
@@ -446,7 +446,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
                         {/* Sprint Dropdown */}
                         {sprintDropdownOpen && sprints.length > 0 && (
-                            <div id="sprint-listbox" role="listbox" aria-label="Sprint list" className="fixed inset-x-4 top-[72px] md:inset-auto md:absolute md:top-full md:right-0 mt-2 max-w-[calc(100vw-2rem)] min-w-[10rem] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden z-50" style={{ minWidth: Math.max(sprintDropdownWidth, 224) + 'px' }}>
+                            <div id="sprint-listbox" role="listbox" aria-label="Sprint list" className="absolute top-full right-0 mt-2 max-w-[calc(100vw-2rem)] min-w-[10rem] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden z-50" style={{ minWidth: Math.max(sprintDropdownWidth, 224) + 'px' }}>
                                 <div className="px-3 pt-3 pb-1.5">
                                     <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Sprint Scope</span>
                                 </div>
@@ -557,7 +557,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                             aria-haspopup="menu"
                             aria-expanded={isNotificationMenuVisible}
                             aria-label={`Notifications: ${notifications.unreadCount} unread`}
-                            className="relative w-11 h-11 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
+                            className="relative w-11 h-11 shrink-0 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
                         >
                             <Bell aria-hidden="true" className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors" strokeWidth={1.5} />
                             {notifications.unreadCount > 0 && (
@@ -584,7 +584,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                     <button
                         onClick={() => setTheme(isDark ? "LIGHT" : "DARK")}
                         aria-label={`Current theme: ${isDark ? "Dark" : "Light"}. ${isDark ? "Switch to light mode" : "Switch to dark mode"}`}
-                        className="w-11 h-11 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
+                        className="w-11 h-11 shrink-0 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
                     >
                         {isDark
                             ? <Sun aria-hidden="true" className="w-4 h-4 text-slate-400 hover:text-white transition-colors" strokeWidth={1.5} />
