@@ -65,7 +65,7 @@ export const ChatPageShell: FunctionComponent<{
         actions={
         <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:justify-end">
 
-          <div role="tablist" aria-label="Chat Mode" className="flex items-center rounded-full border border-black/[0.06] bg-white/70 p-1 dark:border-white/[0.06] dark:bg-white/[0.03]"
+          <div role="tablist" aria-label="Chat Mode" className="relative flex items-center rounded-full border border-black/[0.06] bg-white/70 p-1 dark:border-white/[0.06] dark:bg-white/[0.03]"
             onKeyDown={(e) => {
               if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
                 e.preventDefault();
@@ -77,6 +77,7 @@ export const ChatPageShell: FunctionComponent<{
               }
             }}
           >
+            <div aria-hidden="true" className="absolute inset-y-1 left-1 w-[calc(50%-4px)] rounded-full transition-transform bg-slate-900 dark:bg-white" style={{ transform: chatMode === 'invocations' ? 'translateX(100%)' : 'translateX(0)', transitionDuration: interactionTokens.controlFeedback.duration, transitionTimingFunction: interactionTokens.controlFeedback.ease }} />
 
             <button
               id="tab-threads"
@@ -91,9 +92,9 @@ export const ChatPageShell: FunctionComponent<{
                 transitionDuration: interactionTokens.controlFeedback.duration,
                 transitionTimingFunction: interactionTokens.controlFeedback.ease,
               }}
-              className={`rounded-full px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${
+              className={`relative z-10 rounded-full px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${
                 chatMode === "threads"
-                  ? "bg-slate-900 text-white dark:bg-white dark:text-void-900"
+                  ? "text-white dark:text-void-900"
                   : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
               }`}
             >
@@ -112,9 +113,9 @@ export const ChatPageShell: FunctionComponent<{
                 transitionDuration: interactionTokens.controlFeedback.duration,
                 transitionTimingFunction: interactionTokens.controlFeedback.ease,
               }}
-              className={`rounded-full px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${
+              className={`relative z-10 rounded-full px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${
                 chatMode === "invocations"
-                  ? "bg-slate-900 text-white dark:bg-white dark:text-void-900"
+                  ? "text-white dark:text-void-900"
                   : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
               }`}
             >
@@ -145,15 +146,16 @@ export const ChatPageShell: FunctionComponent<{
             type="button"
             onClick={onRefresh}
             disabled={manualRefreshing}
+            aria-busy={manualRefreshing}
             style={{
               transitionProperty: "color, background-color, border-color, text-decoration-color, fill, stroke",
               transitionDuration: interactionTokens.controlFeedback.duration,
               transitionTimingFunction: interactionTokens.controlFeedback.ease,
             }}
-            className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:text-white"
+            className="inline-flex min-w-[120px] justify-center items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:text-white"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${manualRefreshing ? "animate-spin" : ""}`} strokeWidth={2.1} />
-            Refresh
+            {manualRefreshing ? "Refreshing..." : "Refresh"}
           </button>
           {chatMode === "threads" && (
             <button
@@ -179,6 +181,7 @@ export const ChatPageShell: FunctionComponent<{
         <div className="shrink-0">
           <ActionFeedbackRegion
             status={error ? "error" : "pending"}
+            autoDismiss={error ? false : undefined}
             message={error || "Refreshing chat state..."}
           />
         </div>

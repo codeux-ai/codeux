@@ -86,6 +86,15 @@ describe("ChatPageShell", () => {
     expect(getByTestId("thread-list")).toBeInTheDocument();
     expect(getByTestId("thread-detail")).toBeInTheDocument();
     expect(getByText("2 pending")).toBeInTheDocument();
+
+    // Verify refresh button text
+    const refreshButton = container.querySelector('button[aria-busy="false"]');
+    expect(refreshButton).not.toBeNull();
+    expect(refreshButton?.textContent).toContain("Refresh");
+
+    // Verify mode tab ARIA state
+    expect(container.querySelector('button[id="tab-threads"]')).toHaveAttribute("aria-selected", "true");
+    expect(container.querySelector('button[id="tab-invocations"]')).toHaveAttribute("aria-selected", "false");
     // Verify animated ping element is present for pending messages
     expect(container.querySelector('.animate-ping')).toBeInTheDocument();
     expect(getByText("Local Worker · idle")).toBeInTheDocument();
