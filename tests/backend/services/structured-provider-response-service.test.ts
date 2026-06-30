@@ -64,6 +64,95 @@ describe("StructuredProviderResponseService", () => {
     expect(mockExecution.executeProvider).toHaveBeenCalledTimes(1);
   });
 
+  it("retries provider failures when enabled and reuses the original prompt", async () => {
+    const mockExecution = {
+      executeProvider: vi.fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          stderr: "Command aborted",
+          stdout: "",
+          nativeSessionId: null,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: '{"status":"ok"}',
+          nativeSessionId: "native-2",
+        })
+    } as unknown as ProviderExecutionService;
+
+    const mockRepo = {
+      appendExecutionInvocationMessage: vi.fn()
+    } as any;
+
+    const service = new StructuredProviderResponseService({
+      providerExecutionService: mockExecution,
+      executionRepository: mockRepo,
+    });
+
+    const result = await service.executeAndParse({
+      projectId: "proj-1",
+      purpose: "planning",
+      type: "planning",
+      provider: "opencode",
+      model: "test-model",
+      apiKey: "123",
+      prompt: "plan this sprint",
+      sessionId: "planning-opencode-1",
+      invocationId: "inv-1",
+      settings: {} as any,
+      maxProviderAttempts: 2,
+      retryProviderFailures: true,
+      parseFn: (text) => JSON.parse(text),
+      buildRetryPrompt: () => "retry json",
+      providerLabel: "OpenCode"
+    });
+
+    expect(result.parsed).toEqual({ status: "ok" });
+    expect(mockExecution.executeProvider).toHaveBeenCalledTimes(2);
+    expect(mockExecution.executeProvider).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      prompt: "plan this sprint",
+      continueSessionId: undefined,
+    }));
+    expect(mockRepo.appendExecutionInvocationMessage).toHaveBeenCalledWith("inv-1", expect.objectContaining({
+      role: "system",
+      contentMarkdown: expect.stringContaining("Retrying OpenCode planning provider invocation after a failed run")
+    }));
+  });
+
+  it("stops retrying provider failures at the provider attempt cap", async () => {
+    const mockExecution = {
+      executeProvider: vi.fn().mockResolvedValue({
+        ok: false,
+        stderr: "Command aborted",
+        stdout: "",
+        nativeSessionId: null,
+      })
+    } as unknown as ProviderExecutionService;
+
+    const service = new StructuredProviderResponseService({
+      providerExecutionService: mockExecution,
+    });
+
+    await expect(service.executeAndParse({
+      projectId: "proj-1",
+      purpose: "planning",
+      type: "planning",
+      provider: "opencode",
+      model: "test-model",
+      apiKey: "123",
+      prompt: "plan this sprint",
+      sessionId: "planning-opencode-1",
+      settings: {} as any,
+      maxProviderAttempts: 2,
+      retryProviderFailures: true,
+      parseFn: (text) => JSON.parse(text),
+      buildRetryPrompt: () => "retry json",
+      providerLabel: "OpenCode"
+    })).rejects.toThrow("Virtual OpenCode worker failed again: Command aborted");
+
+    expect(mockExecution.executeProvider).toHaveBeenCalledTimes(2);
+  });
+
   it("throws ProviderEmptyOutputError when bodyMarkdown is empty", async () => {
     const mockExecution = {
       executeProvider: vi.fn().mockResolvedValue({

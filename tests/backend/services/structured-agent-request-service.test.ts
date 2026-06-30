@@ -127,6 +127,47 @@ describe("StructuredAgentRequestService", () => {
     expect(mockProviderExecutionService.executeProvider).toHaveBeenCalledTimes(3);
   });
 
+  it("uses the planning JSON retry setting instead of the general parsing retry setting", async () => {
+    const mockProviderExecutionService = {
+      executeProvider: vi.fn().mockResolvedValue({
+        ok: true,
+        text: "invalid json over and over",
+        nativeSessionId: "native-123",
+      }),
+    } as unknown as ProviderExecutionService;
+
+    const structuredProviderResponseService = new StructuredProviderResponseService({
+      providerExecutionService: mockProviderExecutionService,
+    });
+    const service = new StructuredAgentRequestService({
+      structuredProviderResponseService,
+    });
+
+    await expect(service.executeRequest({
+      projectId: "proj-1",
+      purpose: "planning",
+      type: "planning",
+      provider: "claude-code",
+      prompt: "initial prompt",
+      model: "model-1",
+      apiKey: "test-key",
+      sessionId: "session-1",
+      settings: {
+        cliWorkflow: {
+          maxParsingRetries: 0,
+          maxPlanningJsonRetries: 2,
+        },
+      } as any,
+      providerPrompt: "initial prompt",
+      parseFn: (text) => JSON.parse(text),
+      buildRetryPrompt: () => "Retry please",
+      providerLabel: "Claude",
+      sessionIdPrefix: "test",
+    })).rejects.toThrow(/Unexpected token 'i'/);
+
+    expect(mockProviderExecutionService.executeProvider).toHaveBeenCalledTimes(3);
+  });
+
 
   it("creates a new execution invocation and appends initial prompt if none provided", async () => {
     const mockExecutionRepository = {
@@ -322,7 +363,9 @@ describe("StructuredAgentRequestService", () => {
       buildRetryPrompt: () => "retry",
       providerLabel: "Claude",
       sessionIdPrefix: "test",
-    })).rejects.toThrow("Virtual Claude worker failed: network error");
+    })).rejects.toThrow("Virtual Claude worker failed again: network error");
+
+    expect(mockProviderExecutionService.executeProvider).toHaveBeenCalledTimes(2);
   });
 
   it("re-throws ProviderEmptyOutputError correctly", async () => {
@@ -356,7 +399,9 @@ describe("StructuredAgentRequestService", () => {
       buildRetryPrompt: () => "retry",
       providerLabel: "Claude",
       sessionIdPrefix: "test",
-    })).rejects.toThrow("Virtual Claude worker returned empty output.");
+    })).rejects.toThrow("Virtual Claude worker returned empty output again.");
+
+    expect(mockProviderExecutionService.executeProvider).toHaveBeenCalledTimes(2);
   });
 
     it("reuses invocationId and does not append duplicate system routing message", async () => {

@@ -323,6 +323,7 @@ QA merge-gate notes:
   - `retryOnReadFileNotFound`
   - `resumeFailedTaskInSameWorkspace`
   - `maxPlanningJsonRetries` (default `3`): Maximum number of retry attempts inside a same-session virtual worker planning loop if the provider output cannot be parsed as valid JSON.
+    - Planning provider transport failures such as `Command aborted` and empty structured output are retried as new provider attempts before the planning request fails. When guardrails are enabled, `guardrails.jobs.planning.cap` bounds the total planning provider attempts.
 - Git onboarding mode:
   - `gitMode` (`remote` | `local`, default `remote`)
     - `remote` keeps the GitHub and GitLab onboarding cards visible and preserves CI/PR automation guidance
