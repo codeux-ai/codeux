@@ -32,3 +32,10 @@ When using the `Table` component for responsive data displays:
 3. **Mobile Labels:** Supply a `mobileLabel` prop to `<TableCell>` components. This programmatic label acts as a substitute for standard column headers when the layout switches to a stacked card presentation on narrow screens.
 4. **Accessible Sort States:** Apply `ariaSort` explicitly only on the active sort column.
 5. **Handling Long Strings:** To ensure long continuous strings do not overflow the mobile cards or desktop columns, `TableCell` internals must use `min-w-0 break-words` classes. Content rendered inside the cell must support text wrapping safely without breaking the mobile layout.
+
+## Long-Form Modal Scrolling
+
+For modals with extensive form content (like `AddProjectModal` and `AddTaskModal`), the layout should ensure that:
+1.  **Headers and Footers are Fixed**: The modal header (title/description) and footer (actions like Cancel/Submit) must remain pinned and visible at all times, independent of scrolling.
+2.  **Scrolling Body**: The internal form body should own the vertical scrolling using `overflow-y-auto` and `flex-1 min-h-0`. This ensures forms are robust under small viewport heights and on-screen keyboards.
+3.  **Invalid Field Scroll**: When a form validation fails, use `getBoundingClientRect()` against the scrollable container to smoothly scroll the first invalid field into view, preventing the browser from natively scrolling it under fixed headers or keyboards.
