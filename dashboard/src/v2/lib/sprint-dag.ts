@@ -63,50 +63,95 @@ function isBlockedPhase(phase: TaskProgressPhase): boolean {
 export function buildSprintDagModel(tasks: Subtask[]): SprintDagModel {
   const tasksById = new Map(tasks.map((task) => [task.id, task]));
   const phaseById = new Map(tasks.map((task) => [task.id, getTaskProgressPhase(task)]));
-  const depthMemo = new Map<string, number>();
 
-  const resolveIncoming = (task: Subtask): string[] => (
-    Array.isArray(task.depends_on)
-      ? task.depends_on.filter((dependencyId) => tasksById.has(dependencyId))
-      : []
-  );
-
-  const getDepth = (taskId: string, ancestry = new Set<string>()): number => {
-    if (depthMemo.has(taskId)) {
-      return depthMemo.get(taskId) || 0;
-    }
-
-    if (ancestry.has(taskId)) {
-      return 0;
-    }
-
-    ancestry.add(taskId);
-    const task = tasksById.get(taskId);
-    if (!task) {
-      depthMemo.set(taskId, 0);
-      return 0;
-    }
-
-    const incoming = resolveIncoming(task);
-    const depth = incoming.length === 0
-      ? 0
-      : Math.max(...incoming.map((dependencyId) => getDepth(dependencyId, new Set(ancestry)))) + 1;
-    depthMemo.set(taskId, depth);
-    return depth;
-  };
-
+  const incomingById = new Map<string, string[]>();
   const outgoingById = new Map<string, string[]>();
+  const inDegree = new Map<string, number>();
+
   for (const task of tasks) {
-    for (const dependencyId of resolveIncoming(task)) {
-      const outgoing = outgoingById.get(dependencyId) || [];
-      outgoing.push(task.id);
-      outgoingById.set(dependencyId, outgoing);
+    incomingById.set(task.id, []);
+    outgoingById.set(task.id, []);
+    inDegree.set(task.id, 0);
+  }
+
+  for (const task of tasks) {
+    if (Array.isArray(task.depends_on)) {
+      for (const dependencyId of task.depends_on) {
+        if (tasksById.has(dependencyId)) {
+          incomingById.get(task.id)!.push(dependencyId);
+          outgoingById.get(dependencyId)!.push(task.id);
+          inDegree.set(task.id, inDegree.get(task.id)! + 1);
+        }
+      }
     }
   }
 
+  const depthMap = new Map<string, number>();
+  const queue: string[] = [];
+
+  for (const [taskId, degree] of inDegree.entries()) {
+    if (degree === 0) {
+      queue.push(taskId);
+      depthMap.set(taskId, 0);
+    }
+  }
+
+  while (queue.length > 0) {
+    const taskId = queue.shift()!;
+
+    for (const outgoingId of outgoingById.get(taskId)!) {
+      inDegree.set(outgoingId, inDegree.get(outgoingId)! - 1);
+      if (inDegree.get(outgoingId) === 0) {
+        queue.push(outgoingId);
+        const incomingDepths = incomingById.get(outgoingId)!.map((id) => depthMap.get(id) || 0);
+        depthMap.set(outgoingId, Math.max(...incomingDepths) + 1);
+      }
+    }
+  }
+
+  // Handle cycles: Any nodes remaining with inDegree > 0
+  const remainingIds = Array.from(inDegree.entries())
+    .filter(([, degree]) => degree > 0)
+    .map(([id]) => id)
+    .sort(); // sort to be deterministic
+
+  while (remainingIds.length > 0) {
+    const cycleStartId = remainingIds.shift()!;
+    if (inDegree.get(cycleStartId)! > 0) {
+      inDegree.set(cycleStartId, 0);
+      const incomingDepths = incomingById.get(cycleStartId)!
+        .map((id) => depthMap.get(id) ?? -1)
+        .filter((depth) => depth !== -1);
+
+      depthMap.set(cycleStartId, incomingDepths.length > 0 ? Math.max(...incomingDepths) + 1 : 0);
+      queue.push(cycleStartId);
+
+      while (queue.length > 0) {
+        const taskId = queue.shift()!;
+        for (const outgoingId of outgoingById.get(taskId)!) {
+          inDegree.set(outgoingId, inDegree.get(outgoingId)! - 1);
+          if (inDegree.get(outgoingId) === 0) {
+            queue.push(outgoingId);
+            const incomingDepths = incomingById.get(outgoingId)!
+              .map((id) => depthMap.get(id) ?? -1)
+              .filter((depth) => depth !== -1);
+            depthMap.set(outgoingId, incomingDepths.length > 0 ? Math.max(...incomingDepths) + 1 : 0);
+          }
+        }
+      }
+    }
+  }
+
+  let rootCount = 0;
+  let longestChain = 0;
+  let readyCount = 0;
+  let runningCount = 0;
+  let codingCompletedCount = 0;
+  let completedCount = 0;
+
   const orderedNodes = tasks.map((task, index) => {
     const phase = phaseById.get(task.id) || "PENDING";
-    const incoming = resolveIncoming(task);
+    const incoming = incomingById.get(task.id)!;
     const dependencyPhases = incoming.map((dependencyId) => phaseById.get(dependencyId) || "PENDING");
 
     const hoverPrompt = typeof task.prompt === "string" && task.prompt.trim().length > 0
@@ -118,17 +163,26 @@ export function buildSprintDagModel(tasks: Subtask[]): SprintDagModel {
       title: tasksById.get(id)?.title || "Unknown Task",
     }));
 
-    const outgoing = outgoingById.get(task.id) || [];
+    const outgoing = outgoingById.get(task.id)!;
+    const depth = depthMap.get(task.id) || 0;
+    const isReady = phase === "PENDING" && dependencyPhases.every((dependencyPhase) => isSettledPhase(dependencyPhase));
+
+    if (incoming.length === 0) rootCount++;
+    longestChain = Math.max(longestChain, depth + 1);
+    if (isReady) readyCount++;
+    if (phase === "RUNNING") runningCount++;
+    if (phase === "CODING_COMPLETED") codingCompletedCount++;
+    if (phase === "COMPLETED") completedCount++;
 
     return {
       task,
       phase,
-      depth: getDepth(task.id),
+      depth,
       row: 0,
       order: index,
       incoming,
       outgoing,
-      isReady: phase === "PENDING" && dependencyPhases.every((dependencyPhase) => isSettledPhase(dependencyPhase)),
+      isReady,
       hover: {
         prompt: hoverPrompt,
         dependencies: hoverDependencies,
@@ -197,12 +251,12 @@ export function buildSprintDagModel(tasks: Subtask[]): SprintDagModel {
     adjacencies,
     columns: sortedColumns,
     metrics: {
-      rootCount: nodes.filter((node) => node.incoming.length === 0).length,
-      longestChain: Math.max(0, ...nodes.map((node) => node.depth + 1)),
-      readyCount: nodes.filter((node) => node.isReady).length,
-      runningCount: nodes.filter((node) => node.phase === "RUNNING").length,
-      codingCompletedCount: nodes.filter((node) => node.phase === "CODING_COMPLETED").length,
-      completedCount: nodes.filter((node) => node.phase === "COMPLETED").length,
+      rootCount,
+      longestChain,
+      readyCount,
+      runningCount,
+      codingCompletedCount,
+      completedCount,
     },
   };
 }
