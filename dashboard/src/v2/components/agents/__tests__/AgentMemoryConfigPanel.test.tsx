@@ -32,6 +32,19 @@ describe("AgentMemoryConfigPanel", () => {
     document.body.innerHTML = "";
   });
 
+  test("provides disabled attributes for clean reset/disable state", async () => {
+    render(
+      <AgentMemoryConfigPanel
+        value={DEFAULT_AGENT_MEMORY_CONFIG}
+        onChange={vi.fn()}
+        onClose={vi.fn()}
+        disabled={true}
+      />
+    );
+    const closeBtn = screen.getByLabelText("Close");
+    expect(closeBtn).toBeDisabled();
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
   });
