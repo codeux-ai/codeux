@@ -210,6 +210,7 @@ Transient provider failures are classified and managed in `src/shared/providers/
 ## Recovery Techniques
 
 - Temporarily disable selected loop steps for diagnosis.
+- Startup recovery responsibilities are split into focused modular routines (QA review recovery, invocation recovery, etc.), while preserving centralized orchestration order. Recovered-state logging surfaces these distinct outcomes to the dashboard.
 - Use the dashboard live view to inspect state without starting new work.
 - Use activities APIs to inspect detailed session trace.
 - Re-enable steps after diagnosis to restore normal operation.
