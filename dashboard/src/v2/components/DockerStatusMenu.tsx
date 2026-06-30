@@ -197,7 +197,7 @@ export const DockerStatusMenu: FunctionComponent = () => {
                     id={menuId}
                     aria-modal="true"
                     aria-label="Active Docker Containers"
-                    className="fixed inset-x-4 top-[72px] md:inset-auto md:absolute md:top-full md:right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50 flex flex-col"
+                    className="fixed inset-x-4 top-[72px] md:inset-auto md:absolute md:top-full md:right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-5rem)] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50 flex flex-col"
                 >
                     <div className="px-4 py-3 border-b border-black/[0.04] dark:border-white/[0.04] flex items-center justify-between shrink-0">
                         <span className="text-xs font-bold uppercase tracking-[0.1em] text-slate-800 dark:text-slate-200">
@@ -211,7 +211,7 @@ export const DockerStatusMenu: FunctionComponent = () => {
                         </div>
                     </div>
 
-                    <div className="max-h-[320px] overflow-y-auto overscroll-contain">
+                    <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
                         {loading ? (
                             <div className="flex items-center justify-center py-8">
                                 <span className="text-xs font-medium text-slate-400">Loading containers...</span>
@@ -229,7 +229,7 @@ export const DockerStatusMenu: FunctionComponent = () => {
                                 </div>
                                 {readiness?.dependencies.map((dependency) => (
                                     <div key={dependency.id} className="rounded-xl border border-black/[0.05] bg-black/[0.02] p-3 dark:border-white/[0.05] dark:bg-white/[0.03]">
-                                        <div className="flex items-center justify-between gap-3">
+                                        <div className="flex flex-wrap items-center justify-between gap-3">
                                             <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{dependency.label}</span>
                                             <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${dependency.status === "ready" ? "bg-signal-500/10 text-signal-600 dark:text-signal-300" : "bg-status-amber/10 text-status-amber"}`}>
                                                 {dependency.status}
@@ -269,7 +269,7 @@ export const DockerStatusMenu: FunctionComponent = () => {
                                                 }
                                             }}
                                         >
-                                            <div className="flex items-start justify-between mb-1.5">
+                                            <div className="flex flex-wrap items-start justify-between mb-1.5 min-w-0 gap-2">
                                                 <div className="flex items-center gap-2 min-w-0">
                                                     {container.state === "running" ? (
                                                         <Play className="w-3.5 h-3.5 text-signal-500 shrink-0" strokeWidth={2.5} />
