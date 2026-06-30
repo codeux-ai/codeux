@@ -168,7 +168,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
           </div>
         </div>
 
-        <div className="flex-1 min-w-0 overflow-y-auto bg-white/98 dark:bg-void-800/98 p-8 flex flex-col">
+        <div className="flex-1 min-w-0 overflow-hidden bg-white/98 dark:bg-void-800/98 p-8 flex flex-col">
           <div className="flex items-start justify-between mb-8">
             <div>
               <h2 className="text-[2rem] font-black text-slate-900 dark:text-white tracking-tight font-display leading-none">
@@ -188,6 +188,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
           </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-6 flex-1 min-h-0">
+            <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-6 pr-2">
             {mode === "import" && (
               <div className="grid gap-3 md:grid-cols-3">
                 {[
@@ -250,7 +251,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
                 />
               </div>
 
-              <div className="flex flex-col min-h-0">
+              <div className="flex flex-col min-h-0 shrink-0">
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Task Bundle</label>
                   {mode === "export" && (
@@ -283,9 +284,10 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
                 />
               </div>
             </div>
+            </div>
 
-            <div className="flex items-center justify-between pt-2">
-              <div className="text-xs text-slate-400">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between pt-2 gap-4">
+              <div className="text-xs text-slate-400 shrink-0 max-w-sm">
                 {mode === "import" ? "Task markers are optional. Supported fields: title, depends_on, is_independent, merged/is_merged, merge_indicator, status, prompt." : "Export reflects current DB state, not repo-local markdown files."}
               </div>
               <div className="flex items-center gap-3">
