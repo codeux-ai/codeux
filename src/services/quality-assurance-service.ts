@@ -52,6 +52,7 @@ import { determineTaskReviewIntent } from "../domain/qa-review/task-review-outco
 import { resolveStaleRunningQaInvocationReason, QA_RUN_START_TIMEOUT_MS as STALE_QA_RUN_START_TIMEOUT_MS } from "../domain/qa-review/qa-review-stale-run.js";
 import { clearMergeProjectionForRerun, MERGE_PROJECTION_RESET } from "../domain/sprint/task-reset-state.js";
 import { buildQaReviewRequest, resolveTaskTriggerType } from "../domain/qa-review/qa-review-request-builder.js";
+import { buildSprintQaSnapshot, shouldRunSprintQaReview } from "../domain/qa-review/sprint-qa-snapshot.js";
 
 type CliQaProvider = Exclude<ProviderId, "jules">;
 
@@ -486,19 +487,16 @@ export class QualityAssuranceService {
 
     const latestRun = this.reconcileRunningQaRun(this.deps.qaReviewRepository.getLatestSprintRun(args.sprintId));
     const maxRuns = qaSettings.maxSprintReviewRuns;
-    const latestTaskSnapshot = readSprintQaSnapshot(latestRun);
     const currentTaskSnapshot = buildSprintQaSnapshot(args.subtasks);
     const latestTaskUpdatedAt = this.getLatestSprintTaskUpdatedAt(args.projectId, args.sprintId);
-    const latestRunFinishedAtMs = latestRun?.finishedAt ? Date.parse(latestRun.finishedAt) : Number.NaN;
-    const hasTaskUpdatesSinceLatestRun = latestRun
-      ? !Number.isFinite(latestRunFinishedAtMs) || latestTaskUpdatedAt > latestRunFinishedAtMs
-      : true;
-    const hasMeaningfulChangesSinceLatestRun = latestRun
-      ? (latestTaskSnapshot
-        ? latestTaskSnapshot !== currentTaskSnapshot
-        : hasTaskUpdatesSinceLatestRun)
-      : true;
     const recoveredStaleLatestRun = isRecoveredStaleQaRun(latestRun);
+    const shouldRunReview = shouldRunSprintQaReview({
+      latestRun,
+      latestTaskUpdatedAtMs: latestTaskUpdatedAt,
+      currentSubtasks: args.subtasks,
+      currentTaskSnapshot,
+      isRecoveredStaleRun: recoveredStaleLatestRun,
+    });
     // Only count the budget as exhausted when the latest run actually produced a
     // verdict (`completed`) at/over the cap. A reviewer that crashed for infra
     // reasons (`failed`) yielded no judgement and must not let the sprint settle
@@ -523,8 +521,7 @@ export class QualityAssuranceService {
     }
     if (
       (latestRun?.outcome === "changes_requested" || latestRun?.status === "failed")
-      && !hasMeaningfulChangesSinceLatestRun
-      && !recoveredStaleLatestRun
+      && !shouldRunReview
     ) {
       return {
         reviewed: false,
@@ -1883,27 +1880,6 @@ function triggerReviewModeDescription(triggerType: QaReviewTriggerType): string 
     default:
       return "Review a completed task for correctness, completeness, and integration quality.";
   }
-}
-
-function buildSprintQaSnapshot(subtasks: Subtask[]): string {
-  return JSON.stringify(
-    subtasks
-      .map((task) => ({
-        id: task.id,
-        title: task.title || "",
-        prompt: task.prompt || "",
-        status: task.status || "",
-        dependsOn: [...task.depends_on].sort(),
-        isMerged: Boolean(task.is_merged),
-        mergeIndicator: task.merge_indicator || "",
-      }))
-      .sort((left, right) => left.id.localeCompare(right.id)),
-  );
-}
-
-function readSprintQaSnapshot(run: QaReviewRunRecord | null): string | null {
-  const snapshot = run?.payload?.taskSnapshot;
-  return typeof snapshot === "string" && snapshot.trim().length > 0 ? snapshot : null;
 }
 
 function renderQaPassReport(taskKey: string, summary: string): string {
