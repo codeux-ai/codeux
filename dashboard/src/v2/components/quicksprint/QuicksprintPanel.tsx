@@ -22,6 +22,15 @@ import { PlanningProgressOverlay } from "../ui/PlanningProgressOverlay.js";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
+import {
+  getBuiltinTemplates,
+  getCustomTemplates,
+  getBuiltinPurposeOptions,
+  getActiveBuiltinPurpose,
+  getVisibleBuiltinTemplates,
+  getCombinedPrompt,
+  type BuiltinPurposeOption,
+} from "../../lib/quicksprint-panel-state.js";
 
 interface VirtualProviderOption {
   id?: string;
@@ -97,11 +106,6 @@ const ICON_OPTIONS: ReadonlyArray<{ value: string; Icon: FunctionComponent<Lucid
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 type Phase = "browse" | "configure" | "editor";
-type BuiltinPurposeOption = {
-  value: string;
-  label: string;
-  description?: string;
-};
 
 interface QuicksprintExecutionOptions {
   shouldHandleResult?: () => boolean;
@@ -207,30 +211,19 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   );
 
   const builtinTemplates = useMemo(
-    () => templates.filter((t) => t.isBuiltIn),
+    () => getBuiltinTemplates(templates),
     [templates],
   );
 
   const customTemplates = useMemo(
-    () => templates.filter((t) => !t.isBuiltIn),
+    () => getCustomTemplates(templates),
     [templates],
   );
 
-  const builtinPurposeOptions = useMemo<BuiltinPurposeOption[]>(() => {
-    const purposes = new Map<string, BuiltinPurposeOption>();
-    for (const template of builtinTemplates) {
-      const value = template.purpose || "general";
-      if (purposes.has(value)) {
-        continue;
-      }
-      purposes.set(value, {
-        value,
-        label: template.purposeLabel || "General",
-        description: template.purposeDescription,
-      });
-    }
-    return Array.from(purposes.values());
-  }, [builtinTemplates]);
+  const builtinPurposeOptions = useMemo(
+    () => getBuiltinPurposeOptions(builtinTemplates),
+    [builtinTemplates],
+  );
 
   useEffect(() => {
     if (builtinPurposeOptions.length === 0) {
@@ -245,42 +238,20 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   }, [builtinPurposeOptions, selectedBuiltinPurpose]);
 
   const activeBuiltinPurpose = useMemo(
-    () => builtinPurposeOptions.find((option) => option.value === selectedBuiltinPurpose) || builtinPurposeOptions[0] || null,
+    () => getActiveBuiltinPurpose(builtinPurposeOptions, selectedBuiltinPurpose),
     [builtinPurposeOptions, selectedBuiltinPurpose],
   );
 
-  const visibleBuiltinTemplates = useMemo(() => {
-    if (!activeBuiltinPurpose) {
-      return builtinTemplates;
-    }
-    return builtinTemplates.filter((template) => (template.purpose || "general") === activeBuiltinPurpose.value);
-  }, [activeBuiltinPurpose, builtinTemplates]);
+  const visibleBuiltinTemplates = useMemo(
+    () => getVisibleBuiltinTemplates(builtinTemplates, activeBuiltinPurpose),
+    [activeBuiltinPurpose, builtinTemplates]
+  );
 
   /* ── Combined prompt preview (agent + template + additional) ────── */
-  const combinedPrompt = useMemo(() => {
-    if (!selectedTemplate) return "";
-    const parts: string[] = [];
-
-    const effectiveAgentPresetId = selectedTemplate.agentPresetId;
-    if (effectiveAgentPresetId) {
-      const agent = agentPresets.find((p) => p.id === effectiveAgentPresetId);
-      if (agent?.instructionMarkdown) {
-        parts.push(`## Agent Context\n\nYou are operating as the "${agent.name}" agent. Follow these agent-specific instructions:\n\n${agent.instructionMarkdown}\n\n---`);
-      }
-    }
-
-    if (selectedTemplate.agentInstructionMarkdown) {
-      parts.push(selectedTemplate.agentInstructionMarkdown);
-    }
-
-    if (additionalPrompt.trim()) {
-      parts.push(`## Additional Instructions\n\n${additionalPrompt.trim()}`);
-    }
-
-    parts.push(`Produce exactly ${taskCount} subtasks.`);
-
-    return parts.join("\n\n");
-  }, [selectedTemplate, agentPresets, additionalPrompt, taskCount]);
+  const combinedPrompt = useMemo(
+    () => getCombinedPrompt(selectedTemplate, agentPresets, additionalPrompt, taskCount),
+    [selectedTemplate, agentPresets, additionalPrompt, taskCount]
+  );
 
   const { execution } = useExecutionTimeline();
   const connections = execution?.connections || [];
