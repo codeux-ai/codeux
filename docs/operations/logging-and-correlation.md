@@ -7,7 +7,7 @@ This project now uses a shared structured logger and request correlation context
 - `src/shared/logging/logger.ts`
   - Dependency-free structured logger.
   - Supports levels: `debug`, `info`, `warn`, `error`.
-  - Classifies records by purpose (`HTTP`, `INVK`, `ORCH`, `MCP`, `LIVE`, `CONF`, etc.) so console output can be scanned by runtime concern.
+  - Classifies records by purpose (`HTTP`, `INVK`, `ORCH`, `MCP`, `LIVE`, `CONF`, `RUNTIME`, etc.) so console output can be scanned by runtime concern.
   - Accepts metadata objects.
   - Output mode:
     - `NODE_ENV=production`: JSON log records.

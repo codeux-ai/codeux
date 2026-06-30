@@ -139,6 +139,46 @@ describe("ProviderRunner", () => {
     }));
   });
 
+  it("preserves provider result and logs errors when cleanup operations fail", async () => {
+    const mockLogger = {
+      error: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      debug: vi.fn(),
+    };
+
+    dockerRunner.removeWorkspaceDir = vi.fn().mockRejectedValueOnce(new Error("Simulated artifact cleanup error"));
+
+    // Create AFTER adding removeWorkspaceDir so that if it checks during execution it sees it. (It checks dynamically anyway, but just to be sure).
+    const runnerWithMockLogger = new ProviderRunner(dockerRunner, mockLogger as any);
+
+    dockerRunner.runProviderInDocker.mockResolvedValueOnce({
+      ok: true,
+      stdout: "provider output",
+      stderr: "",
+      code: 0,
+      signal: null,
+    });
+
+    const result = await runnerWithMockLogger.runProvider({
+      provider: "antigravity",
+      prompt: "hello",
+      cwd: "/repo",
+      model: "antigravity",
+      apiKey: "key",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(dockerRunner.removeWorkspaceDir).toHaveBeenCalled();
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      "Provider cleanup task failed: artifact cleanup",
+      expect.objectContaining({ error: expect.any(Error), logPurpose: "runtime" })
+    );
+  });
   it("cleans up workspace and codex output path if internal execution throws in runProvider", async () => {
     dockerRunner.runProviderInDocker.mockRejectedValueOnce(new Error("Execution failed"));
 
