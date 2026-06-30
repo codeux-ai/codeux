@@ -59,7 +59,7 @@ export const FileBrowserPage: FunctionComponent = () => {
   const [mode, setMode] = useState<BrowserMode>("files");
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [launchSprintId, setLaunchSprintId] = useState("");
-  const [sideBySide, setSideBySide] = useState(true);
+  const [sideBySide, setSideBySide] = useState(typeof window !== "undefined" ? window.innerWidth >= 1024 : true);
   const [treeSearch, setTreeSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -338,19 +338,19 @@ export const FileBrowserPage: FunctionComponent = () => {
               <span class={statusPill.text}>{statusPill.label}</span>
             </span>
           )}
-          <span class="inline-flex items-center gap-1.5 text-[12px] font-medium text-slate-500 dark:text-slate-400">
-            <Server class="h-3.5 w-3.5" strokeWidth={2} />
-            {sessionSprintName || selectedSprint?.name || "No sprint"}
+          <span class="min-w-0 flex-1 inline-flex items-center gap-1.5 text-[12px] font-medium text-slate-500 dark:text-slate-400">
+            <Server class="shrink-0 h-3.5 w-3.5" strokeWidth={2} />
+            <span class="truncate">{sessionSprintName || selectedSprint?.name || "No sprint"}</span>
           </span>
           {selectedSession?.featureBranch && (
-            <span class="inline-flex items-center gap-1.5 rounded-lg border border-black/[0.06] bg-white/75 px-2 py-1 font-mono text-[11px] text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300">
-              <GitBranch class="h-3 w-3 text-signal-600 dark:text-signal-400" strokeWidth={2.2} />
-              {selectedSession.featureBranch}
+            <span class="min-w-0 flex-1 inline-flex items-center gap-1.5 rounded-lg border border-black/[0.06] bg-white/75 px-2 py-1 font-mono text-[11px] text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300">
+              <GitBranch class="shrink-0 h-3 w-3 text-signal-600 dark:text-signal-400" strokeWidth={2.2} />
+              <span class="truncate">{selectedSession.featureBranch}</span>
             </span>
           )}
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           {/* Mode toggle */}
           <div class="flex items-center rounded-xl border border-black/[0.08] bg-black/[0.02] p-0.5 dark:border-white/[0.08] dark:bg-white/[0.03]">
             <button
@@ -415,9 +415,9 @@ export const FileBrowserPage: FunctionComponent = () => {
           lastError={selectedSession?.status === "error" ? selectedSession.lastError : null}
         />
       ) : (
-        <div class="grid min-h-[520px] grid-cols-1 gap-5 lg:h-[calc(100vh-340px)] lg:grid-cols-[340px_minmax(0,1fr)]" data-testid="file-browser-main-tool-panel">
+        <div class="flex flex-col gap-5 lg:grid lg:h-[calc(100vh-340px)] lg:grid-cols-[340px_minmax(0,1fr)]" data-testid="file-browser-main-tool-panel">
           {/* Sidebar panel */}
-          <div class="flex min-h-0 flex-col overflow-hidden rounded-[1.5rem] border border-black/[0.06] bg-white/74 shadow-[0_12px_30px_rgba(15,23,42,0.05)] backdrop-blur-md dark:border-white/[0.07] dark:bg-void-900/42">
+          <div class="flex h-[400px] min-h-0 flex-col overflow-hidden rounded-[1.5rem] border border-black/[0.06] bg-white/74 shadow-[0_12px_30px_rgba(15,23,42,0.05)] backdrop-blur-md lg:h-auto dark:border-white/[0.07] dark:bg-void-900/42">
             {mode === "files" ? (
               <>
                 <div class="border-b border-black/[0.05] p-3 dark:border-white/[0.05]">
@@ -488,9 +488,9 @@ export const FileBrowserPage: FunctionComponent = () => {
           </div>
 
           {/* Viewer panel */}
-          <div class="flex min-h-0 flex-col overflow-hidden rounded-[1.5rem] border border-black/[0.06] bg-white/74 shadow-[0_12px_30px_rgba(15,23,42,0.05)] backdrop-blur-md dark:border-white/[0.07] dark:bg-void-900/46">
+          <div class="flex h-[600px] min-h-0 flex-col overflow-hidden rounded-[1.5rem] border border-black/[0.06] bg-white/74 shadow-[0_12px_30px_rgba(15,23,42,0.05)] backdrop-blur-md lg:h-auto dark:border-white/[0.07] dark:bg-void-900/46">
             <div class="flex items-center justify-between gap-3 border-b border-black/[0.05] px-4 py-2.5 dark:border-white/[0.06]">
-              <div class="min-w-0 truncate font-mono text-[12px] text-slate-500 dark:text-slate-400">
+              <div class="min-w-0 flex-1 truncate font-mono text-[12px] text-slate-500 dark:text-slate-400">
                 {mode === "files"
                   ? selectedFilePath || "No file selected"
                   : selectedChangePath || "No file selected"}

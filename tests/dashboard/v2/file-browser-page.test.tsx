@@ -182,7 +182,7 @@ describe("FileBrowserPage", () => {
 
     const mainPanel = screen.getByTestId("file-browser-main-tool-panel");
     expect(mainPanel).toBeInTheDocument();
-    expect(mainPanel.className).toContain("grid-cols-1");
+    expect(mainPanel.className).toContain("flex flex-col");
     expect(mainPanel.className).toContain("lg:grid-cols-[340px_minmax(0,1fr)]");
     expect(mainPanel.className).toContain("lg:h-[calc(100vh-340px)]");
     expect(screen.getByText("Running")).toBeInTheDocument();
