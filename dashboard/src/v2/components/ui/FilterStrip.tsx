@@ -55,7 +55,7 @@ export function FilterStrip<T extends string>({
                 x: btn.offsetLeft,
                 width: btn.offsetWidth,
                 duration: gsapTokens.selectionMovement.duration,
-                ease: 'power2.out'
+                ease: gsapTokens.selectionMovement.ease
             });
         }
     }, [activeIndex, durations.base, options]);

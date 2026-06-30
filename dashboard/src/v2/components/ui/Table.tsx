@@ -2,6 +2,8 @@ import gsap from "gsap";
 import { useRef, useEffect } from "preact/hooks";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { type ComponentChildren } from "preact";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 
 interface TableProps {
   children: ComponentChildren;
@@ -41,6 +43,7 @@ export function TableBody({ children }: { children: ComponentChildren }) {
   const tbodyRef = useRef<HTMLTableSectionElement>(null);
   const hasMounted = useRef(false);
   const isReducedMotion = useReducedMotion();
+  const gsapTokens = useGsapInteractionTokens();
 
   useEffect(() => {
     if (isReducedMotion || !tbodyRef.current || hasMounted.current) return;
@@ -65,9 +68,9 @@ export function TableBody({ children }: { children: ComponentChildren }) {
       { y: 6 },
       {
         y: 0,
-        stagger: Math.min(25, 200 / rows.length),
-        duration: 0.15,
-        ease: 'power2.out'
+        stagger: Math.min(0.025, 0.2 / rows.length),
+        duration: gsapTokens.listReveal.duration,
+        ease: gsapTokens.listReveal.ease
       }
     );
   }, [children, isReducedMotion]);
@@ -76,6 +79,7 @@ export function TableBody({ children }: { children: ComponentChildren }) {
 }
 
 export function TableRow({ children, className = "", selected, onClick, style }: { children: ComponentChildren; className?: string; selected?: boolean; onClick?: (e: MouseEvent) => void; style?: import("preact").JSX.CSSProperties }) {
+  const tokens = useInteractionTokens();
   const selectedClass = selected ? "bg-signal-500/5 ring-2 ring-inset ring-signal-500/30" : "";
   const cursorClass = onClick ? "cursor-pointer" : "";
   return (
@@ -84,8 +88,8 @@ export function TableRow({ children, className = "", selected, onClick, style }:
       onClick={onClick as any}
       aria-selected={selected}
       role="row"
-      className={`group mb-3 block overflow-hidden rounded-[1.5rem] border shadow-[var(--elevation-base)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[var(--elevation-raised)] focus-within:ring-2 focus-within:ring-signal-500/20 lg:table-row lg:overflow-visible lg:rounded-none lg:border-0 lg:shadow-none lg:hover:bg-[var(--fill-muted-hover)] lg:transition-colors lg:duration-150 ${cursorClass} ${selectedClass} ${className}`}
-      style={style}
+      className={`group mb-3 block overflow-hidden rounded-[1.5rem] border shadow-[var(--elevation-base)] backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:shadow-[var(--elevation-raised)] focus-within:ring-2 focus-within:ring-signal-500/20 lg:table-row lg:overflow-visible lg:rounded-none lg:border-0 lg:shadow-none lg:hover:bg-[var(--fill-muted-hover)] lg:transition-colors ${cursorClass} ${selectedClass} ${className}`}
+      style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease, ...(typeof style === "object" ? style : {}) }}
     >
       {children}
     </tr>

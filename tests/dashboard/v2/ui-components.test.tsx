@@ -329,6 +329,8 @@ describe("UI Components Coverage", () => {
 
     const panelContent = trigger.nextElementSibling;
     expect(panelContent?.getAttribute("aria-hidden")).toBe("true");
+    expect(trigger.getAttribute("style")).toContain("transition-duration");
+    expect(panelContent?.getAttribute("style")).toContain("transition-duration");
 
     fireEvent.click(trigger);
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
@@ -337,6 +339,8 @@ describe("UI Components Coverage", () => {
     fireEvent.click(trigger);
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
     expect(panelContent?.getAttribute("aria-hidden")).toBe("true");
+    expect(trigger.getAttribute("style")).toContain("transition-duration");
+    expect(panelContent?.getAttribute("style")).toContain("transition-duration");
   });
 
   it("handles Menu Escape focus restoration", () => {
