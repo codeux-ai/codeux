@@ -81,10 +81,10 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
             className={`
                 group relative cursor-pointer p-4 rounded-[1.25rem] border text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                 ${isSelected.value
-                    ? "bg-white dark:bg-void-800 border-signal-500 shadow-[0_4px_24px_rgba(0,224,160,0.15)] scale-[1.02]"
+                    ? "bg-signal-500/5 dark:bg-signal-500/10 border-signal-500 ring-1 ring-signal-500 shadow-[0_4px_24px_rgba(0,224,160,0.15)] scale-[1.02] z-10"
                     : "bg-white/60 dark:bg-void-800/50 border-black/[0.06] dark:border-white/[0.06] hover:bg-white dark:hover:bg-void-800 hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)] dark:hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] scale-100"
                 }
-                ${lobotomizeModeSignal.value && !isSelected.value ? "hover:border-status-red/30" : ""}
+                ${lobotomizeModeSignal.value ? "ring-1 ring-status-red/50 hover:bg-status-red/10 hover:border-status-red hover:ring-status-red hover:shadow-[0_4px_24px_rgba(227,0,15,0.15)]" : ""}
             `}
         >
             {lobotomizeModeSignal.value && (
@@ -94,7 +94,8 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
                     aria-label={`Delete ${cat.label} memory: ${content.substring(0, 30)}...`}
                     onClick={handleDelete}
                     className={`absolute top-2 right-2 z-10 p-1.5 rounded-full transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
-                                ${isSelected.value ? "bg-status-red/10 text-status-red hover:bg-status-red hover:text-white" : "bg-black/5 dark:bg-white/5 text-slate-400 hover:bg-status-red hover:text-white"}`}
+                                bg-white/80 dark:bg-void-800/80 backdrop-blur border border-status-red/20 text-status-red shadow-sm hover:bg-status-red hover:text-white hover:border-status-red active:bg-status-red/90 active:scale-95
+                                ${isSelected.value ? "" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"}`}
                 >
                     <X size={14} strokeWidth={2.5} />
                 </button>

@@ -1,8 +1,11 @@
 import { FunctionComponent } from "preact";
+import { useLayoutEffect, useRef } from "preact/hooks";
 import { X } from "lucide-react";
+import gsap from "gsap";
 import type { MemNode, Edge } from "../../lib/memory-graph.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 const CAT: Record<string, { label: string; hex: string; r: number; g: number; b: number }> = {
     architecture: { label: "Architecture", hex: "#00E0A0", r: 0,   g: 224, b: 160 },
@@ -24,6 +27,27 @@ export const Inspector: FunctionComponent<{
     onDelete: (id: string) => void;
 }> = ({ node, allNodes, edges, lobotomize, onClose, onDelete }) => {
     const { isOpen, options, requestConfirm, handleConfirm, handleCancel, triggerRef } = useConfirmDialog();
+    const contentRef = useRef<HTMLDivElement>(null);
+    const reducedMotion = useReducedMotion();
+
+    useLayoutEffect(() => {
+        if (!contentRef.current || !node) return;
+        if (reducedMotion) {
+            gsap.set(contentRef.current, { opacity: 1, clearProps: "all" });
+            return;
+        }
+
+        gsap.fromTo(contentRef.current, {
+            opacity: 0,
+            y: 5
+        }, {
+            opacity: 1,
+            y: 0,
+            duration: 0.2,
+            ease: "power2.out",
+            clearProps: "all"
+        });
+    }, [node?.id, reducedMotion]);
 
     const handleDeleteClick = async () => {
         if (!node) return;
@@ -70,7 +94,7 @@ export const Inspector: FunctionComponent<{
                 <X className="w-3.5 h-3.5 text-slate-500" strokeWidth={2} />
             </button>
             {node && (
-                <>
+                <div ref={contentRef} className="flex flex-col gap-4 h-full will-change-[opacity,transform]">
                     <div className="flex items-center gap-2 pt-1">
                         <div className="w-2.5 h-2.5 rounded-full" style={{ background: cat.hex, boxShadow: `0 0 10px ${cat.hex}` }} />
                         <span className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono" style={{ color: cat.hex }}>
@@ -141,7 +165,7 @@ export const Inspector: FunctionComponent<{
                             />
                         </>
                     )}
-                </>
+                </div>
             )}
         </div>
     );

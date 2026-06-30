@@ -11,6 +11,7 @@ const TIER_TABS: { key: MemTier; label: string; scope: MemoryScope }[] = [
 ];
 
 import { activeTierSignal, selectedSprintIdSignal, selectedAgentPresetIdSignal } from "./memoryState.js";
+import { useInteractionTokens } from "../../lib/motion/index.js";
 
 export const MemoryFilters: FunctionComponent<{
     stats: MemoryStats;
@@ -30,6 +31,7 @@ export const MemoryFilters: FunctionComponent<{
     const activeTier = activeTierSignal.value;
     const selectedSprintId = selectedSprintIdSignal.value;
     const selectedAgentPresetId = selectedAgentPresetIdSignal.value;
+    const interactionTokens = useInteractionTokens();
 
     return (
         <div className="flex flex-col items-start md:items-end w-full md:w-auto gap-3.5 shrink-0">
@@ -46,7 +48,12 @@ export const MemoryFilters: FunctionComponent<{
                             aria-selected={activeTier === tab.key}
                             aria-controls="memory-panel"
                             tabIndex={activeTier === tab.key ? 0 : -1}
-                            className={`text-[10px] font-bold font-mono px-3.5 py-1.5 rounded-full cursor-pointer transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
+                            style={{
+                                transitionProperty: "background-color, border-color, color, box-shadow",
+                                transitionDuration: `${interactionTokens.enterExit.duration}s`,
+                                transitionTimingFunction: interactionTokens.enterExit.ease,
+                            }}
+                            className={`text-[10px] font-bold font-mono px-3.5 py-1.5 rounded-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                             ${activeTier === tab.key
                                 ? "bg-signal-500/[0.12] border border-signal-500/30 text-signal-500 hover:bg-signal-500/[0.2]"
                                 : "bg-black/[0.04] dark:bg-white/[0.04] border border-transparent text-slate-400 hover:bg-black/[0.08] dark:hover:bg-white/[0.08] hover:text-slate-600 dark:hover:text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -152,11 +159,11 @@ export const MemoryFilters: FunctionComponent<{
                                transition-[background-color,box-shadow,border-color,color] duration-300
                                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                                ${lobotomize
-                                   ? "bg-status-red text-white border-status-red shadow-[0_0_24px_rgba(227,0,15,0.4)] hover:bg-status-red/90 hover:shadow-[0_0_36px_rgba(227,0,15,0.6)]"
-                                   : "bg-black/[0.04] dark:bg-white/[0.04] border-black/[0.08] dark:border-white/[0.08] text-slate-600 dark:text-slate-400 hover:border-status-red/50 hover:text-status-red hover:bg-status-red/[0.04]"
+                                   ? "bg-status-red text-white border-status-red shadow-[0_0_24px_rgba(227,0,15,0.4)] hover:bg-status-red/90 hover:shadow-[0_0_36px_rgba(227,0,15,0.6)] active:bg-status-red/80 active:shadow-[0_0_12px_rgba(227,0,15,0.5)]"
+                                   : "bg-black/[0.04] dark:bg-white/[0.04] border-black/[0.08] dark:border-white/[0.08] text-slate-600 dark:text-slate-400 hover:border-status-red/50 hover:text-status-red hover:bg-status-red/[0.04] active:bg-status-red/10 active:border-status-red/60"
                                }`}>
                     <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2.5} />
-                    {lobotomize ? "Danger: Delete Mode (Warning: Destructive Action)" : "Lobotomize"}
+                    {lobotomize ? "Danger: Delete Mode" : "Lobotomize"}
                 </button>
             </div>
         </div>
