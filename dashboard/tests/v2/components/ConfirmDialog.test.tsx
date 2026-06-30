@@ -184,6 +184,41 @@ describe("ConfirmDialog with additional test cases", () => {
     expect(screen.getByText("Processing...")).toBeInTheDocument();
   });
 
+  it("disables buttons when isProcessing is true", () => {
+    vi.useFakeTimers();
+    // Use a promise that doesn't resolve to keep it in processing state
+    const handleConfirm = () => new Promise<void>(() => {});
+
+    render(
+      <ConfirmDialog isOpen={true} options={{...defaultOptions, destructive: false}} onConfirm={handleConfirm} onCancel={vi.fn()} />
+    );
+
+    const confirmBtn = screen.getByRole("button", { name: "Delete" });
+    fireEvent.click(confirmBtn);
+
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+
+    const processingBtn = screen.getByRole("button", { name: /Processing/i });
+    expect(processingBtn).toBeDisabled();
+
+    const cancelBtn = screen.getByRole("button", { name: "Cancel" });
+    expect(cancelBtn).toBeDisabled();
+  });
+
+  it("orders cancel button before confirm button for screen readers", () => {
+    render(
+      <ConfirmDialog isOpen={true} options={defaultOptions} onConfirm={vi.fn()} onCancel={vi.fn()} />
+    );
+
+    const buttons = screen.getAllByRole("button");
+    const cancelIndex = buttons.findIndex(b => b.textContent === "Cancel");
+    const confirmIndex = buttons.findIndex(b => b.textContent?.includes("Delete"));
+
+    expect(cancelIndex).toBeLessThan(confirmIndex);
+  });
+
   it("bypasses transition via reduced-motion for GSAP calls", async () => {
     const gsapMock = await import("gsap");
     const fromToSpy = vi.spyOn(gsapMock.default, 'fromTo');

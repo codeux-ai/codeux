@@ -57,6 +57,36 @@ describe("ActionFeedbackRegion", () => {
     expect(screen.getByRole("button", { name: "Dismiss" })).toBeInTheDocument();
   });
 
+  it("updates aria-live correctly based on status", () => {
+    const { rerender } = render(
+      <ActionFeedbackRegion status="pending" message="Pending" />
+    );
+
+    const region = screen.getByRole("status");
+    expect(region).toHaveAttribute("aria-live", "polite");
+
+    rerender(<ActionFeedbackRegion status="error" message="Error" />);
+
+    const errorRegion = screen.getByRole("alert");
+    expect(errorRegion).toHaveAttribute("aria-live", "assertive");
+  });
+
+  it("handles clearError correctly", () => {
+    const clearError = vi.fn();
+    render(
+      <ActionFeedbackRegion
+        status="error"
+        message="An error occurred"
+        clearError={clearError}
+      />
+    );
+
+    const clearBtn = screen.getByRole("button", { name: "Clear error" });
+    fireEvent.click(clearBtn);
+
+    expect(clearError).toHaveBeenCalledTimes(1);
+  });
+
   it("restores focus when the focused dismiss button is clicked", () => {
     const dismiss = vi.fn();
 

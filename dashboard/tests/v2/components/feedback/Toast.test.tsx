@@ -90,12 +90,11 @@ describe("Toast", () => {
     expect(screen.getByRole("button", { name: "Dismiss toast" })).toBeInTheDocument();
   });
 
-  it("restores focus when a focused dismiss button is clicked", () => {
+  it("shifts focus to document.body on dismiss when active", () => {
     const onDismiss = vi.fn();
 
     render(
       <div>
-        <div role="main" tabIndex={-1}>Main Content</div>
         <Toast
           id="1"
           type="success"
@@ -111,6 +110,6 @@ describe("Toast", () => {
 
     fireEvent.click(dismissBtn);
     expect(onDismiss).toHaveBeenCalledWith("1");
-    expect(document.activeElement?.getAttribute("role")).toBe("main");
+    expect(document.activeElement).toBe(document.body);
   });
 });

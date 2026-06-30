@@ -5,6 +5,7 @@ import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { Overlay } from "./Overlay.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 
 interface DialogProps {
   isOpen: boolean;
@@ -58,7 +59,7 @@ export const Dialog: FunctionComponent<DialogProps> = ({
       setVisible(false);
       const timer = setTimeout(() => {
         setShouldRender(false);
-      }, reducedMotion ? 0 : gsapTokens.enterExit.duration * 1000); // Exit transition time
+      }, reducedMotion ? 0 : MODAL_MOTION.exit.duration * 1000); // Exit transition time
       return () => clearTimeout(timer);
     }
   }, [isOpen, reducedMotion, gsapTokens.enterExit.duration]);
@@ -80,7 +81,7 @@ export const Dialog: FunctionComponent<DialogProps> = ({
         style={{
           opacity: visible ? 1 : 0,
           transform: visible ? 'scale(1)' : 'scale(0.95)',
-          transition: reducedMotion ? 'none' : `opacity ${cssTokens.enterExit.duration} ${cssTokens.enterExit.ease}, transform ${cssTokens.enterExit.duration} ${cssTokens.enterExit.ease}`,
+          transition: reducedMotion ? 'none' : `opacity ${MODAL_MOTION.exit.duration}s ${MODAL_MOTION.exit.ease}, transform ${MODAL_MOTION.exit.duration}s ${MODAL_MOTION.exit.ease}`,
         }}
         onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside dialog
       >

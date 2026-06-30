@@ -62,7 +62,7 @@ export const Modal: FunctionComponent<ModalProps> = ({
             gsap.fromTo(
               cardRef.current.querySelectorAll('[data-modal-region]'),
               { opacity: 0, y: 6 },
-              { opacity: 1, y: 0, stagger: 0.040, duration: 0.12, ease: 'power2.out', delay: MODAL_MOTION.entry.duration }
+              { opacity: 1, y: 0, stagger: MODAL_MOTION.fieldStagger.stagger, duration: MODAL_MOTION.fieldStagger.duration, ease: 'power2.out', delay: MODAL_MOTION.entry.duration }
             );
           }
         }

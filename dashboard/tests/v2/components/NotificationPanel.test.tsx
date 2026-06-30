@@ -107,6 +107,43 @@ describe("NotificationPanel", () => {
     expect(document.activeElement).toBe(actionBtn);
 
     fireEvent.click(actionBtn);
-    expect(document.activeElement).not.toBe(actionBtn);
+    expect(document.activeElement).toBe(screen.getByLabelText("Notifications Panel"));
+  });
+
+  it("keeps focus in panel when dismissing an item", () => {
+    const markAllRead = vi.fn();
+    const markRead = vi.fn();
+    const dismiss = vi.fn();
+    const refresh = vi.fn();
+    const action = vi.fn();
+
+    render(
+      <NotificationPanel
+        unreadCount={1}
+        notifications={[{
+          id: "startup-cluster-not-ready",
+          severity: "critical",
+          title: "Cluster not ready",
+          body: "Docker daemon must be available before containerized provider CLIs can run.",
+          time: "just now",
+          unread: true,
+          dismissible: true,
+          icon: AlertTriangle,
+          actionLabel: "Open onboarding",
+          onAction: action,
+        }]}
+        onMarkAllRead={markAllRead}
+        onMarkRead={markRead}
+        onDismiss={dismiss}
+        onRefresh={refresh}
+      />,
+    );
+
+    const dismissBtn = screen.getByRole("button", { name: "Dismiss Cluster not ready" });
+    dismissBtn.focus();
+    expect(document.activeElement).toBe(dismissBtn);
+
+    fireEvent.click(dismissBtn);
+    expect(document.activeElement).toBe(screen.getByLabelText("Notifications Panel"));
   });
 });
