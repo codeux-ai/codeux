@@ -442,4 +442,92 @@ describe("ProviderConcurrencyService", () => {
       });
     });
   });
+
+  describe("Reconciliation Throttling", () => {
+    let dockerService: any;
+
+    beforeEach(() => {
+      dockerService = {
+        isAvailable: vi.fn().mockResolvedValue(true),
+        listContainers: vi.fn().mockResolvedValue([]),
+      };
+      service = new ProviderConcurrencyService({
+        executionRepository,
+        logger,
+        dockerService,
+      });
+    });
+
+    it("should throttle listContainers calls in waitForSlotAndClaim polling loop", async () => {
+      vi.useFakeTimers();
+      try {
+        const input = { provider: "qwen-code" } as any;
+        const staleInvocation = {
+          id: "provider-stale",
+          provider: "qwen-code",
+          purpose: "qa_review",
+          status: "running",
+          executionMode: "DOCKER",
+          sessionId: "session-1",
+          startedAt: "2000-01-01T00:00:00.000Z",
+          durationMs: null,
+        };
+
+        executionRepository.listRunningProviderInvocationUsages.mockReturnValue([staleInvocation]);
+        executionRepository.listExecutionInvocationsByProviderInvocationId.mockReturnValue([
+          { id: "exec-stale", status: "running", startedAt: "2000-01-01T00:00:00.000Z", lastMessageAt: null },
+        ]);
+
+        // Return null for 5 checks, then succeed on the 6th
+        executionRepository.tryCreateProviderInvocationUsage
+          .mockReturnValueOnce(null) // 0s
+          .mockReturnValueOnce(null) // 2s
+          .mockReturnValueOnce(null) // 4s
+          .mockReturnValueOnce(null) // 6s
+          .mockReturnValueOnce(null) // 8s
+          .mockReturnValueOnce({ id: "inv-new" }); // 10s
+
+        const waitPromise = service.waitForSlotAndClaim("qwen-code", 1, input);
+
+        await vi.advanceTimersByTimeAsync(12000);
+
+        const result = await waitPromise;
+
+        expect(result.id).toBe("inv-new");
+        // Check 1: 0s (forced) -> runs listContainers
+        // Check 2: 2s -> throttled
+        // Check 3: 4s -> throttled
+        // Check 4: 6s -> throttled
+        // Check 5: 8s -> throttled
+        // Check 6: 10s -> runs listContainers (throttle expired)
+        expect(dockerService.listContainers).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("should not throttle hasAvailableCapacity (forces check)", async () => {
+      const staleInvocation = {
+        id: "provider-stale",
+        provider: "qwen-code",
+        purpose: "qa_review",
+        status: "running",
+        executionMode: "DOCKER",
+        sessionId: "session-1",
+        startedAt: "2000-01-01T00:00:00.000Z",
+        durationMs: null,
+      };
+
+      executionRepository.listRunningProviderInvocationUsages.mockReturnValue([staleInvocation]);
+      executionRepository.listExecutionInvocationsByProviderInvocationId.mockReturnValue([
+        { id: "exec-stale", status: "running", startedAt: "2000-01-01T00:00:00.000Z", lastMessageAt: null },
+      ]);
+
+      await service.hasAvailableCapacity("qwen-code", 1);
+      await service.hasAvailableCapacity("qwen-code", 1);
+
+      // Two calls, throttle should be bypassed
+      expect(dockerService.listContainers).toHaveBeenCalledTimes(2);
+    });
+  });
 });

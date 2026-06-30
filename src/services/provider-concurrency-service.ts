@@ -22,6 +22,9 @@ export interface ProviderConcurrencyServiceDeps {
  * Service to manage provider invocation concurrency caps globally across all projects.
  */
 export class ProviderConcurrencyService {
+  private readonly reconciliationLastRunMs = new Map<ProviderId, number>();
+  private readonly RECONCILIATION_THROTTLE_MS = 10_000;
+
   constructor(private readonly deps: ProviderConcurrencyServiceDeps) {}
 
   /**
@@ -33,12 +36,13 @@ export class ProviderConcurrencyService {
    */
   async waitForSlot(provider: ProviderId, limit: number, signal?: AbortSignal, maxWaitMs?: number): Promise<void> {
     if (limit <= 0) {
-      await this.reconcileStaleProviderInvocations(provider);
+      await this.reconcileStaleProviderInvocations(provider, true);
       return;
     }
 
     const startMs = Date.now();
     let lastLogMs = 0;
+    let isFirstCheck = true;
 
     while (true) {
       if (signal?.aborted) {
@@ -49,7 +53,8 @@ export class ProviderConcurrencyService {
         throw new Error(`Provider concurrency wait timed out after ${maxWaitMs}ms`);
       }
 
-      await this.reconcileStaleProviderInvocations(provider);
+      await this.reconcileStaleProviderInvocations(provider, isFirstCheck);
+      isFirstCheck = false;
 
       // Count running invocations across ALL projects in the repository
       const runningInvocations = this.deps.executionRepository.listRunningProviderInvocationUsages([provider]);
@@ -91,12 +96,13 @@ export class ProviderConcurrencyService {
     maxWaitMs?: number
   ): Promise<ProviderInvocationUsageRecord> {
     if (limit <= 0) {
-      await this.reconcileStaleProviderInvocations(provider);
+      await this.reconcileStaleProviderInvocations(provider, true);
       return this.deps.executionRepository.createProviderInvocationUsage(input);
     }
 
     const startMs = Date.now();
     let lastLogMs = 0;
+    let isFirstCheck = true;
 
     while (true) {
       if (signal?.aborted) {
@@ -107,7 +113,8 @@ export class ProviderConcurrencyService {
         throw new Error(`Provider concurrency wait timed out after ${maxWaitMs}ms`);
       }
 
-      await this.reconcileStaleProviderInvocations(provider);
+      await this.reconcileStaleProviderInvocations(provider, isFirstCheck);
+      isFirstCheck = false;
 
       const invocation = this.deps.executionRepository.tryCreateProviderInvocationUsage(input, limit);
       if (invocation) {
@@ -151,11 +158,11 @@ export class ProviderConcurrencyService {
    */
   async hasAvailableCapacity(provider: ProviderId, limit: number): Promise<boolean> {
     if (limit <= 0) {
-      await this.reconcileStaleProviderInvocations(provider);
+      await this.reconcileStaleProviderInvocations(provider, true);
       return true;
     }
 
-    await this.reconcileStaleProviderInvocations(provider);
+    await this.reconcileStaleProviderInvocations(provider, true);
 
     const counts = this.getGlobalRunningCounts([provider]);
     const current = counts[provider] || 0;
@@ -168,11 +175,11 @@ export class ProviderConcurrencyService {
     input: CreateProviderInvocationUsageInput,
   ): Promise<ProviderInvocationUsageRecord | null> {
     if (limit <= 0) {
-      await this.reconcileStaleProviderInvocations(provider);
+      await this.reconcileStaleProviderInvocations(provider, true);
       return this.deps.executionRepository.createProviderInvocationUsage(input);
     }
 
-    await this.reconcileStaleProviderInvocations(provider);
+    await this.reconcileStaleProviderInvocations(provider, true);
 
     return this.deps.executionRepository.tryCreateProviderInvocationUsage(input, limit);
   }
@@ -191,7 +198,15 @@ export class ProviderConcurrencyService {
     return counts;
   }
 
-  private async reconcileStaleProviderInvocations(provider: ProviderId): Promise<void> {
+  private async reconcileStaleProviderInvocations(provider: ProviderId, force = false): Promise<void> {
+    const nowMs = Date.now();
+    const lastRunMs = this.reconciliationLastRunMs.get(provider) || 0;
+    if (!force && nowMs - lastRunMs < this.RECONCILIATION_THROTTLE_MS) {
+      return;
+    }
+
+    this.reconciliationLastRunMs.set(provider, nowMs);
+
     await this.reconcileStaleDockerProviderInvocations(provider);
     this.reconcileStaleJulesProviderInvocations(provider);
   }
