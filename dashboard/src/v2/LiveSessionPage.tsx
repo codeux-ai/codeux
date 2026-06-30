@@ -510,7 +510,7 @@ export const LiveSessionPage: FunctionComponent = () => {
             <SectionDivider label="Task Pipeline" />
 
             {/* ── Filter Strip ────────────────────────────────────────── */}
-            <div className="-mt-8 flex gap-1 p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl w-fit" role="tablist" aria-label="Task status filters">
+            <div className="flex flex-wrap gap-1 p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl w-fit" role="tablist" aria-label="Task status filters">
                 {TASK_FILTERS.map((filter, index) => (
                     <button
                         key={filter}

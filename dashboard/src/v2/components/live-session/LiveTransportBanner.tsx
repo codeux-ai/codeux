@@ -103,7 +103,7 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
           </div>
           <div className="flex flex-col min-w-0">
             <span className="text-sm font-bold tracking-tight">{title}</span>
-            <span className="text-sm opacity-90">{message}</span>
+            <span className="text-sm opacity-90 break-words">{message}</span>
           </div>
         </>
       )}
