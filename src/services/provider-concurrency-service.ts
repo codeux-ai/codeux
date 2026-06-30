@@ -24,6 +24,7 @@ export interface ProviderConcurrencyServiceDeps {
 export class ProviderConcurrencyService {
   private readonly reconciliationLastRunMs = new Map<ProviderId, number>();
   private readonly RECONCILIATION_THROTTLE_MS = 10_000;
+  private readonly activeReconciliations = new Map<ProviderId, Promise<void>>();
 
   constructor(private readonly deps: ProviderConcurrencyServiceDeps) {}
 
@@ -205,10 +206,24 @@ export class ProviderConcurrencyService {
       return;
     }
 
+    let active = this.activeReconciliations.get(provider);
+    if (active) {
+      return active;
+    }
+
     this.reconciliationLastRunMs.set(provider, nowMs);
 
-    await this.reconcileStaleDockerProviderInvocations(provider);
-    this.reconcileStaleJulesProviderInvocations(provider);
+    active = (async () => {
+      try {
+        await this.reconcileStaleDockerProviderInvocations(provider);
+        this.reconcileStaleJulesProviderInvocations(provider);
+      } finally {
+        this.activeReconciliations.delete(provider);
+      }
+    })();
+
+    this.activeReconciliations.set(provider, active);
+    return active;
   }
 
   private async reconcileStaleDockerProviderInvocations(provider: ProviderId): Promise<void> {
