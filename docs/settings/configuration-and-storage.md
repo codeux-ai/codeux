@@ -216,6 +216,7 @@ Dashboard behavior:
     - `qa_review`
     - `ci_fix`
     - `merge_conflict`
+    - `remediation`
   - each route contains:
     - `profile` (`GLOBAL|WORKER`)
       - `GLOBAL`: inherit the top-level `aiProvider.provider` and per-provider base defaults
@@ -236,7 +237,28 @@ Dashboard behavior:
     - `qa_review`: `WORKER`
     - `ci_fix`: `WORKER`
     - `merge_conflict`: `WORKER`
+    - `remediation`: `WORKER`
   - dashboard replies, clarification auto-answer, and QA review runs in `WORKER` mode now follow the preferred worker CLI provider/model by default instead of accidentally inheriting whichever global provider happened to match.
+
+`memory` contains:
+- `enabled`
+- `embeddingProvider` (`in_app|external_api`)
+- `embeddingModel` (`string|null`; in-app mode accepts only downloaded catalog model ids, external mode accepts provider model ids)
+- `externalEmbedding`
+  - `baseUrl`: OpenAI-compatible embeddings endpoint
+  - `apiKey`: bearer token for the external embedding provider
+  - `model`: model id sent to the external endpoint
+  - `dimensions`: optional requested dimension count
+- `autoCaptureSprint`
+- `autoCaptureAgent`
+- `autoPromote`
+- `promotionThreshold`
+- `remediationMode` (`off|deterministic|ai`)
+- `remediationMaxPromotions`
+- `maxSprintMemories`
+- `maxProjectMemories`
+- `mapMaxEdgesPerNode`
+- `workerLearningsInstruction`
 
 `automationInterventions` contains:
 - `autoApprovePlan` (default `true`): auto-approve `AWAITING_PLAN_APPROVAL` sessions in `SEMI_AUTO`

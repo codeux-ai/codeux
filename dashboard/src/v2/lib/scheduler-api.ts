@@ -1,5 +1,7 @@
 import type {
   CreateSchedulerEntryInput,
+  MemoryRemediationScheduleResponse,
+  MemoryRemediationScheduleSettings,
   SchedulerCollectionResponse,
   SchedulerEntryRecord,
   UpdateSchedulerEntryInput,
@@ -44,4 +46,28 @@ export const deleteSchedulerEntry = async (entryId: string): Promise<void> => {
   await fetchJson<{ ok: boolean }>(`/api/scheduler/${encodeURIComponent(entryId)}`, {
     method: "DELETE",
   });
+};
+
+export const fetchMemoryRemediationSchedule = async (
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<MemoryRemediationScheduleResponse> => {
+  return fetchJson<MemoryRemediationScheduleResponse>(
+    `/api/projects/${encodeURIComponent(projectId)}/scheduler/memory-remediation`,
+    { signal },
+  );
+};
+
+export const saveMemoryRemediationSchedule = async (
+  projectId: string,
+  input: MemoryRemediationScheduleSettings,
+): Promise<MemoryRemediationScheduleResponse> => {
+  return fetchJson<MemoryRemediationScheduleResponse>(
+    `/api/projects/${encodeURIComponent(projectId)}/scheduler/memory-remediation`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
 };

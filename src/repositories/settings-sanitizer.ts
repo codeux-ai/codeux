@@ -246,6 +246,7 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
       merge_conflict: { ...DEFAULT_DASHBOARD_SETTINGS.guardrails.jobs.merge_conflict },
       clarification_reply: { ...DEFAULT_DASHBOARD_SETTINGS.guardrails.jobs.clarification_reply },
       planning: { ...DEFAULT_DASHBOARD_SETTINGS.guardrails.jobs.planning },
+      remediation: { ...DEFAULT_DASHBOARD_SETTINGS.guardrails.jobs.remediation },
     },
   },
   sprintLoopSteps: {
@@ -277,7 +278,10 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
   skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),
   mcpTools: DEFAULT_DASHBOARD_SETTINGS.mcpTools.map((tool) => ({ ...tool })),
   customMcpServers: DEFAULT_DASHBOARD_SETTINGS.customMcpServers.map((server) => ({ ...server })),
-  memory: { ...DEFAULT_DASHBOARD_SETTINGS.memory },
+  memory: {
+    ...DEFAULT_DASHBOARD_SETTINGS.memory,
+    externalEmbedding: { ...DEFAULT_DASHBOARD_SETTINGS.memory.externalEmbedding },
+  },
 });
 
 export const sanitizeSettings = (value: unknown, externalHints?: ExternalSettingsHints): DashboardSettings => {

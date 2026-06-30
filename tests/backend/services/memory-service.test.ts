@@ -51,6 +51,8 @@ describe("MemoryService", () => {
     listByAgent: vi.fn(),
     loadEmbeddingsForScope: vi.fn(),
     saveEmbedding: vi.fn(),
+    getMemoryClaim: vi.fn(),
+    listMemoryClaimEvidence: vi.fn(),
     countByScope: vi.fn(),
     countStaleEmbeddings: vi.fn(),
   };
@@ -141,6 +143,24 @@ describe("MemoryService", () => {
       expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining("Failed to embed memory mem-fail"));
       expect(mockRepo.getMemory).not.toHaveBeenCalled();
       expect(result).toEqual(created);
+    });
+  });
+
+  describe("captureMemoriesFromContent", () => {
+    it("does not auto-capture CI failure learnings as short-term memory", async () => {
+      mockRepo.createMemories.mockReturnValue([makeMemoryRecord({ id: "ci-memory" })]);
+      mockEmbeddingService.isLoaded.mockReturnValue(false);
+
+      const count = await service.captureMemoriesFromContent(
+        "proj-1",
+        "sprint-1",
+        null,
+        "## Category: error\n- GitHub Actions CI failed on the build check.\n",
+        "task-run-1",
+      );
+
+      expect(count).toBe(0);
+      expect(mockRepo.createMemories).not.toHaveBeenCalled();
     });
   });
 
@@ -425,9 +445,12 @@ describe("MemoryService", () => {
       expect(mockEmbeddingService.embed).not.toHaveBeenCalled();
     });
 
-    it("returns empty when dimension is not available", async () => {
+    it("uses the query embedding dimension when configured dimension is not available", async () => {
       mockEmbeddingService.getLoadedModelId.mockReturnValue("bge-small-en-v1.5");
       mockEmbeddingService.getDimension.mockReturnValue(null);
+      mockEmbeddingService.embed.mockResolvedValue(new Float32Array([1, 0, 0]));
+      mockRepo.loadEmbeddingsForScope.mockReturnValue([]);
+      mockRepo.getMemories.mockReturnValue([]);
 
       const results = await service.search({
         projectId: "proj-1",
@@ -435,7 +458,70 @@ describe("MemoryService", () => {
       });
 
       expect(results).toEqual([]);
-      expect(mockEmbeddingService.embed).not.toHaveBeenCalled();
+      expect(mockEmbeddingService.embed).toHaveBeenCalledWith("anything");
+    });
+  });
+
+  describe("searchClaims", () => {
+    it("hydrates active claims from project memory search results with evidence counts", async () => {
+      const dim = 3;
+      mockEmbeddingService.getLoadedModelId.mockReturnValue("bge-small-en-v1.5");
+      mockEmbeddingService.embed.mockResolvedValue(new Float32Array([1, 0, 0]));
+      mockRepo.loadEmbeddingsForScope.mockReturnValue([
+        { id: "claim-memory", embeddingBlob: makeFloat32Buffer([1, 0, 0]), embeddingDimension: dim },
+        { id: "plain-memory", embeddingBlob: makeFloat32Buffer([1, 0, 0]), embeddingDimension: dim },
+      ]);
+      const claimMemory = makeMemoryRecord({
+        id: "claim-memory",
+        scope: "project",
+        source: { type: "promotion", originType: "memory_claim", originId: "claim-1" },
+      });
+      const plainMemory = makeMemoryRecord({
+        id: "plain-memory",
+        scope: "project",
+        source: { type: "manual" },
+      });
+      mockRepo.getMemories.mockReturnValue([claimMemory, plainMemory]);
+      mockRepo.getMemoryClaim.mockReturnValue({
+        id: "claim-1",
+        projectId: "proj-1",
+        claim: "Use dependency factories for service wiring.",
+        fingerprint: "use dependency factories for service wiring",
+        category: "patterns",
+        confidence: 0.9,
+        durability: 0.92,
+        status: "active",
+        tags: ["memory-remediation"],
+        appliesToPaths: [],
+        sourceType: "promotion",
+        sourceMemoryId: "mem-source",
+        supersedesClaimId: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      });
+      mockRepo.listMemoryClaimEvidence.mockReturnValue([
+        { claimId: "claim-1", memoryId: "mem-source", supportType: "supports", weight: 1, createdAt: "2026-01-01T00:00:00.000Z" },
+        { claimId: "claim-1", memoryId: "mem-source-2", supportType: "supports", weight: 0.85, createdAt: "2026-01-02T00:00:00.000Z" },
+      ]);
+
+      const results = await service.searchClaims({
+        projectId: "proj-1",
+        query: "service wiring",
+        limit: 5,
+        minSimilarity: 0.3,
+      });
+
+      expect(mockRepo.loadEmbeddingsForScope).toHaveBeenCalledWith(
+        "proj-1",
+        "bge-small-en-v1.5",
+        "project",
+        undefined,
+        undefined,
+      );
+      expect(results).toHaveLength(1);
+      expect(results[0].claim.id).toBe("claim-1");
+      expect(results[0].evidenceCount).toBe(2);
+      expect(results[0].supportingMemory.id).toBe("claim-memory");
     });
   });
 

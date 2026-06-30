@@ -52,7 +52,7 @@ export function createDashboardDependencies(
     activeDispatchRegistry,
     providerRunner,
   } = coreDeps;
-  const { sprintTaskDispatchService, sprintOrchestrator, taskService } = sprintDeps;
+  const { sprintTaskDispatchService, sprintOrchestrator, taskService, memoryRemediationService } = sprintDeps;
 
   const executionControlService = new ExecutionControlService({
     projectManagementRepository,
@@ -406,6 +406,7 @@ export function createDashboardDependencies(
     quicksprintService,
     chatThreadRuntimeService,
     executionControlService,
+    memoryRemediationService,
     logger: logger.child({ component: "scheduler-service" }),
   });
   (managementToolHandler as any).deps.schedulerService = schedulerService;

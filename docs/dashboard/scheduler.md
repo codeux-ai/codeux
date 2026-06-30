@@ -15,6 +15,9 @@ Operators can create entries for:
 - Sprints whose status is not `completed`.
 - Built-in or custom quicksprint templates available to the selected project.
 - Messages sent into `/chat` at the selected date and time.
+- Long-term memory remediation, either deterministic or AI-routed through the Remediation route.
+
+The Memory settings panel can also manage one project-scoped long-term remediation entry. That entry is marked with `memoryRemediationTarget.source = "memory_settings"` so the settings shortcut does not overwrite manually created Scheduler page remediation entries.
 
 Scheduler target selectors, recurrence indicators, and repeating-count summary icons use the dashboard signal jade palette for interactive accents. Sprint and next-run status tones remain differentiated with their existing ember/status colors.
 
@@ -46,6 +49,10 @@ The dashboard API routes are:
   - Updates status, timing, recurrence, or target payload.
 - `DELETE /api/scheduler/:entryId`
   - Deletes an entry.
+- `GET /api/projects/:projectId/scheduler/memory-remediation`
+  - Returns the settings-managed long-term memory remediation entry, if one exists.
+- `PUT /api/projects/:projectId/scheduler/memory-remediation`
+  - Creates, updates, or pauses the settings-managed long-term memory remediation entry.
 
 ## Runtime Execution
 
@@ -73,5 +80,8 @@ Due entries execute through existing production paths:
 - sprint entries call `ExecutionControlService.orchestrateSprint`
 - quicksprint entries call `QuicksprintService.executeQuicksprint`
 - chat entries call `ChatThreadRuntimeService.postMessage`
+- memory remediation entries call `MemoryRemediationService.remediateLongTermMemories`
+
+AI memory remediation entries create a `remediation` invocation record even when no cleanup candidates are found; in that case the invocation is completed with a skipped reason instead of dispatching an empty provider request.
 
 After a successful run, the service advances `nextRunAt` from the scheduled occurrence time. One-time entries move to `completed`; recurring entries stay `scheduled` until their count or end date/time is exhausted. Failed entries move to `failed` with `lastError` for operator visibility.

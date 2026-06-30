@@ -3,7 +3,7 @@ import * as path from "path";
 import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
 import { EMBEDDING_MODEL_CATALOG } from "./embedding-model-catalog.js";
 import { EmbeddingTokenizer } from "./embedding-tokenizer.js";
-import type { EmbeddingModelId } from "../contracts/memory-types.js";
+import type { EmbeddingModelId, ExternalEmbeddingSettings, InAppEmbeddingModelId } from "../contracts/memory-types.js";
 import type { InferenceSession } from "onnxruntime-node";
 
 const MODELS_DIR = getHomeCodeUxPath("models");
@@ -23,12 +23,45 @@ export class EmbeddingService {
   private session: TypedInferenceSession | null = null;
   private tokenizer: EmbeddingTokenizer | null = null;
   private currentModelId: EmbeddingModelId | null = null;
+  private externalSettings: ExternalEmbeddingSettings | null = null;
+  private externalDimension: number | null = null;
 
-  async loadModel(modelId: EmbeddingModelId): Promise<void> {
+  configureExternal(settings: ExternalEmbeddingSettings): void {
+    const baseUrl = settings.baseUrl.trim();
+    const model = settings.model.trim();
+    const apiKey = settings.apiKey.trim();
+    if (!baseUrl || !model || !apiKey) {
+      this.externalSettings = null;
+      this.externalDimension = null;
+      return;
+    }
+
+    if (this.session) {
+      this.session.release().catch(() => {});
+    }
+    this.session = null;
+    this.tokenizer = null;
+    this.externalSettings = {
+      baseUrl,
+      model,
+      apiKey,
+      dimensions: settings.dimensions && settings.dimensions > 0 ? settings.dimensions : null,
+    };
+    this.externalDimension = this.externalSettings.dimensions;
+    this.currentModelId = model;
+  }
+
+  useInAppEmbeddings(): void {
+    this.externalSettings = null;
+    this.externalDimension = null;
+  }
+
+  async loadModel(modelId: InAppEmbeddingModelId): Promise<void> {
     if (this.currentModelId === modelId && this.session) {
       return;
     }
 
+    this.useInAppEmbeddings();
     await this.unloadModel();
 
     const modelPath = this.getModelFilePath(modelId, "model.onnx");
@@ -60,7 +93,7 @@ export class EmbeddingService {
   }
 
   isLoaded(): boolean {
-    return this.session !== null && this.currentModelId !== null;
+    return (this.session !== null && this.currentModelId !== null) || this.externalSettings !== null;
   }
 
   getLoadedModelId(): EmbeddingModelId | null {
@@ -69,10 +102,17 @@ export class EmbeddingService {
 
   getDimension(): number | null {
     if (!this.currentModelId) return null;
-    return EMBEDDING_MODEL_CATALOG[this.currentModelId]?.dimension ?? null;
+    if (this.externalSettings) {
+      return this.externalDimension;
+    }
+    return EMBEDDING_MODEL_CATALOG[this.currentModelId as InAppEmbeddingModelId]?.dimension ?? null;
   }
 
   async embed(text: string): Promise<Float32Array> {
+    if (this.externalSettings) {
+      return await this.embedExternal(text);
+    }
+
     if (!this.session || !this.tokenizer || !this.currentModelId) {
       throw new Error("No model loaded. Call loadModel() first.");
     }
@@ -120,7 +160,7 @@ export class EmbeddingService {
     const data = output.data as Float32Array;
 
     // Mean pooling over sequence dimension
-    const dimension = EMBEDDING_MODEL_CATALOG[this.currentModelId].dimension;
+    const dimension = EMBEDDING_MODEL_CATALOG[this.currentModelId as InAppEmbeddingModelId].dimension;
     const embedding = this.meanPool(data, seqLength, dimension, attentionMask);
 
     // L2 normalize
@@ -135,21 +175,21 @@ export class EmbeddingService {
     return results;
   }
 
-  isModelDownloaded(modelId: EmbeddingModelId): boolean {
+  isModelDownloaded(modelId: InAppEmbeddingModelId): boolean {
     const modelPath = this.getModelFilePath(modelId, "model.onnx");
     const tokenizerPath = this.getModelFilePath(modelId, "tokenizer.json");
     return fs.existsSync(modelPath) && fs.existsSync(tokenizerPath);
   }
 
-  getModelPath(modelId: EmbeddingModelId): string {
+  getModelPath(modelId: InAppEmbeddingModelId): string {
     return path.join(MODELS_DIR, modelId);
   }
 
-  getModelFilePath(modelId: EmbeddingModelId, fileName: string): string {
+  getModelFilePath(modelId: InAppEmbeddingModelId, fileName: string): string {
     return path.join(MODELS_DIR, modelId, fileName);
   }
 
-  deleteModelFiles(modelId: EmbeddingModelId): void {
+  deleteModelFiles(modelId: InAppEmbeddingModelId): void {
     const modelDir = this.getModelPath(modelId);
     if (fs.existsSync(modelDir)) {
       fs.rmSync(modelDir, { recursive: true, force: true });
@@ -196,5 +236,46 @@ export class EmbeddingService {
     }
 
     return vec;
+  }
+
+  private async embedExternal(text: string): Promise<Float32Array> {
+    if (!this.externalSettings) {
+      throw new Error("External embedding provider is not configured.");
+    }
+
+    const body: Record<string, unknown> = {
+      model: this.externalSettings.model,
+      input: text,
+    };
+    if (this.externalSettings.dimensions) {
+      body.dimensions = this.externalSettings.dimensions;
+    }
+
+    const response = await fetch(this.externalSettings.baseUrl, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${this.externalSettings.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(`External embedding request failed (${response.status}): ${detail.slice(0, 500)}`);
+    }
+
+    const payload = await response.json() as {
+      data?: Array<{ embedding?: number[] }>;
+    };
+    const vector = payload.data?.[0]?.embedding;
+    if (!Array.isArray(vector) || vector.length === 0) {
+      throw new Error("External embedding response did not include data[0].embedding.");
+    }
+
+    const embedding = new Float32Array(vector);
+    this.externalDimension = embedding.length;
+    this.currentModelId = this.externalSettings.model;
+    return this.l2Normalize(embedding);
   }
 }

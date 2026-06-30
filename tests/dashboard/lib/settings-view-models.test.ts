@@ -416,7 +416,7 @@ describe("settings cloning helpers", () => {
     git: { githubMode: "app", githubToken: "", defaultBranch: "main", autoCreatePr: false, autoCloseLinkedIssues: false, deleteMergedBranches: false, featureBranchPrefix: "", sprintBranchScheme: "FLAT", sprintKeyPrefix: "" },
     jira: { host: "h", email: "e", apiToken: "t", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
     ciIntelligence: {},
-    guardrails: { onLimitAction: "WARN", defaultLimitOverrides: [], limitOverrides: [], jobConfigOverrides: [], jobs: { task_coding: {}, ci_fix: {}, merge_conflict: {}, clarification_reply: {}, planning: {} } as any },
+    guardrails: { onLimitAction: "WARN", defaultLimitOverrides: [], limitOverrides: [], jobConfigOverrides: [], jobs: { task_coding: {}, ci_fix: {}, merge_conflict: {}, clarification_reply: {}, planning: {}, remediation: {} } as any },
     sprintLoopSteps: { apply: { type: "apply" }, pr: { type: "pr" }, runTests: { type: "test" } },
     cliWorkflow: { executionMode: "HOST" },
     sprintPreview: { enabled: false },
@@ -437,7 +437,7 @@ describe("settings cloning helpers", () => {
     skills: [{ id: "skill1", enabled: true }],
     mcpTools: [{ serverName: "s1", toolName: "t1", enabled: true }],
     customMcpServers: [{ serverName: "s1", command: "cmd", args: [], env: {}, headers: { "X-Auth": "abc" }, providers: [] }],
-    memory: { enabled: true, embeddingModel: null, autoCaptureSprint: true, autoCaptureAgent: true, autoPromote: false, promotionThreshold: 5, maxSprintMemories: 10, maxProjectMemories: 20, mapMaxEdgesPerNode: 5, workerLearningsInstruction: "" },
+    memory: { enabled: true, embeddingModel: null, externalEmbedding: { baseUrl: "", apiKey: "", model: "", dimensions: null }, autoCaptureSprint: true, autoCaptureAgent: true, autoPromote: false, promotionThreshold: 5, maxSprintMemories: 10, maxProjectMemories: 20, mapMaxEdgesPerNode: 5, workerLearningsInstruction: "" },
   } as ProjectSettings);
 
   const createMockDashboardSettings = (): DashboardSettings => {

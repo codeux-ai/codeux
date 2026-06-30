@@ -11,6 +11,7 @@ const GUARDRAIL_JOB_META: Array<{ key: GuardrailJobType; label: string; descript
   { key: "merge_conflict", label: "Merge conflict resolutions", description: "Max merge-conflict resolution attempts per task." },
   { key: "clarification_reply", label: "Clarification auto-answers", description: "Max automatic clarification replies before waiting for a human." },
   { key: "planning", label: "Planning runs", description: "Max planning invocations attributed to a single task." },
+  { key: "remediation", label: "Remediation runs", description: "Max memory remediation invocations per sprint or scheduled long-term cleanup." },
 ];
 
 const GUARDRAIL_ACTION_OPTIONS: Array<{ value: GuardrailOnLimitAction; label: string; hint: string }> = [

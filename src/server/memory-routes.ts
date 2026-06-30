@@ -10,12 +10,15 @@ import type {
   MemoryCategory,
   CreateMemoryInput,
   UpdateMemoryInput,
-  EmbeddingModelId,
+  InAppEmbeddingModelId,
+  MemoryClaimStatus,
 } from "../contracts/memory-types.js";
-import { MEMORY_SCOPES, MEMORY_CATEGORIES, EMBEDDING_MODEL_IDS } from "../contracts/memory-types.js";
+import { MEMORY_SCOPES, MEMORY_CATEGORIES, MEMORY_CLEAR_TIERS, isInAppEmbeddingModelId, isMemoryClearTier } from "../contracts/memory-types.js";
 import { EMBEDDING_MODEL_CATALOG } from "../services/embedding-model-catalog.js";
 import { toErrorResponse, syncRoute, asyncRoute } from "./route-utils.js";
 import { requireTrimmedString, parseTrimmedString } from "./request-parsers.js";
+
+const MEMORY_CLAIM_STATUSES: MemoryClaimStatus[] = ["active", "superseded", "deprecated"];
 
 export interface MemoryRouteDependencies {
   memoryService: MemoryService;
@@ -117,6 +120,68 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
     }
   }));
 
+  // --- Bulk memory clear (danger zone) ---
+
+  app.delete("/api/projects/:projectId/memories", syncRoute((req, res) => {
+    try {
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
+      if (!isMemoryClearTier(req.query.tier)) {
+        res.status(400).json({ error: `tier must be one of: ${MEMORY_CLEAR_TIERS.join(", ")}` });
+        return;
+      }
+      res.json(memoryService.clearMemories(req.query.tier, projectId));
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to clear project memories"));
+    }
+  }));
+
+  app.delete("/api/system/memories", syncRoute((req, res) => {
+    try {
+      if (!isMemoryClearTier(req.query.tier)) {
+        res.status(400).json({ error: `tier must be one of: ${MEMORY_CLEAR_TIERS.join(", ")}` });
+        return;
+      }
+      res.json(memoryService.clearMemories(req.query.tier));
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to clear system memories"));
+    }
+  }));
+
+  app.get("/api/projects/:projectId/memory-claims", syncRoute((req, res) => {
+    try {
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
+      const status = parseTrimmedString(req.query.status);
+      const category = parseTrimmedString(req.query.category);
+      const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : undefined;
+
+      if (status && !MEMORY_CLAIM_STATUSES.includes(status as MemoryClaimStatus)) {
+        res.status(400).json({ error: `status must be one of: ${MEMORY_CLAIM_STATUSES.join(", ")}` });
+        return;
+      }
+      if (category && !MEMORY_CATEGORIES.includes(category as MemoryCategory)) {
+        res.status(400).json({ error: `category must be one of: ${MEMORY_CATEGORIES.join(", ")}` });
+        return;
+      }
+
+      res.json(memoryRepository.listMemoryClaims(projectId, {
+        status: status as MemoryClaimStatus | undefined,
+        category: category as MemoryCategory | undefined,
+        limit,
+      }));
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to list memory claims"));
+    }
+  }));
+
+  app.get("/api/memory-claims/:claimId/evidence", syncRoute((req, res) => {
+    try {
+      const claimId = requireTrimmedString(req.params.claimId, "claimId");
+      res.json(memoryRepository.listMemoryClaimEvidence(claimId));
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to list memory claim evidence"));
+    }
+  }));
+
   // --- Semantic search ---
 
   app.post("/api/projects/:projectId/memories/search", asyncRoute(async (req, res) => {
@@ -145,6 +210,33 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
       res.json(results);
     } catch (error) {
       res.status(400).json(toErrorResponse(error, "Failed to search memories"));
+    }
+  }));
+
+  app.post("/api/projects/:projectId/memory-claims/search", asyncRoute(async (req, res) => {
+    try {
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
+      const { query, limit, minSimilarity } = req.body as {
+        query?: string;
+        limit?: number;
+        minSimilarity?: number;
+      };
+
+      if (!query || typeof query !== "string") {
+        res.status(400).json({ error: "query is required" });
+        return;
+      }
+
+      const results = await memoryService.searchClaims({
+        projectId,
+        query,
+        limit,
+        minSimilarity,
+      });
+
+      res.json(results);
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to search memory claims"));
     }
   }));
 
@@ -191,7 +283,7 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
       const statuses = embeddingModelManager.getStatuses();
       const models = statuses.map((status) => ({
         ...status,
-        ...EMBEDDING_MODEL_CATALOG[status.id],
+        ...EMBEDDING_MODEL_CATALOG[status.id as InAppEmbeddingModelId],
         active: embeddingService.getLoadedModelId() === status.id,
       }));
       res.json(models);
@@ -202,11 +294,12 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
 
   app.post("/api/embedding-models/:modelId/download", asyncRoute(async (req, res) => {
     try {
-      const modelId = String(req.params.modelId) as EmbeddingModelId;
-      if (!EMBEDDING_MODEL_IDS.includes(modelId)) {
-        res.status(400).json({ error: `Unknown model: ${modelId}` });
+      const candidateModelId = String(req.params.modelId);
+      if (!isInAppEmbeddingModelId(candidateModelId)) {
+        res.status(400).json({ error: `Unknown model: ${candidateModelId}` });
         return;
       }
+      const modelId = candidateModelId;
 
       // Start download in background, return immediately
       embeddingModelManager.downloadModel(modelId).catch(() => {
@@ -221,7 +314,12 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
 
   app.post("/api/embedding-models/:modelId/cancel", syncRoute((req, res) => {
     try {
-      const modelId = String(req.params.modelId) as EmbeddingModelId;
+      const candidateModelId = String(req.params.modelId);
+      if (!isInAppEmbeddingModelId(candidateModelId)) {
+        res.status(400).json({ error: `Unknown model: ${candidateModelId}` });
+        return;
+      }
+      const modelId = candidateModelId;
       embeddingModelManager.cancelDownload(modelId);
       res.json({ status: "cancelled", modelId });
     } catch (error) {
@@ -231,11 +329,12 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
 
   app.post("/api/embedding-models/:modelId/select", asyncRoute(async (req, res) => {
     try {
-      const modelId = String(req.params.modelId) as EmbeddingModelId;
-      if (!EMBEDDING_MODEL_IDS.includes(modelId)) {
-        res.status(400).json({ error: `Unknown model: ${modelId}` });
+      const candidateModelId = String(req.params.modelId);
+      if (!isInAppEmbeddingModelId(candidateModelId)) {
+        res.status(400).json({ error: `Unknown model: ${candidateModelId}` });
         return;
       }
+      const modelId = candidateModelId;
 
       await embeddingModelManager.selectModel(modelId);
       res.json({ status: "active", modelId });
@@ -246,7 +345,12 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
 
   app.delete("/api/embedding-models/:modelId", asyncRoute(async (req, res) => {
     try {
-      const modelId = String(req.params.modelId) as EmbeddingModelId;
+      const candidateModelId = String(req.params.modelId);
+      if (!isInAppEmbeddingModelId(candidateModelId)) {
+        res.status(400).json({ error: `Unknown model: ${candidateModelId}` });
+        return;
+      }
+      const modelId = candidateModelId;
       await embeddingModelManager.deleteModel(modelId);
       res.status(204).send();
     } catch (error) {
@@ -256,7 +360,12 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
 
   app.get("/api/embedding-models/:modelId/status", syncRoute((req, res) => {
     try {
-      const modelId = String(req.params.modelId) as EmbeddingModelId;
+      const candidateModelId = String(req.params.modelId);
+      if (!isInAppEmbeddingModelId(candidateModelId)) {
+        res.status(400).json({ error: `Unknown model: ${candidateModelId}` });
+        return;
+      }
+      const modelId = candidateModelId;
       const status = memoryRepository.getModelStatus(modelId);
       if (!status) {
         res.json({

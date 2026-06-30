@@ -12,6 +12,7 @@ export const cloneGuardrails = (guardrails: GuardrailSettings): GuardrailSetting
     merge_conflict: { ...guardrails.jobs.merge_conflict },
     clarification_reply: { ...guardrails.jobs.clarification_reply },
     planning: { ...guardrails.jobs.planning },
+    remediation: { ...guardrails.jobs.remediation },
   },
 });
 
@@ -35,7 +36,14 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
       "claude-code": { ...DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers["claude-code"] },
       "qwen-code": { ...DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers["qwen-code"] },
       opencode: { ...DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.opencode },
+      antigravity: { ...DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.antigravity },
     },
+    invocationRouting: Object.fromEntries(
+      Object.entries(DEFAULT_DASHBOARD_SETTINGS.aiProvider.invocationRouting).map(([routeId, route]) => [
+        routeId,
+        { ...route, allowedProviders: [...route.allowedProviders], providers: { ...route.providers } },
+      ]),
+    ) as DashboardSettings["aiProvider"]["invocationRouting"],
   },
   git: { ...DEFAULT_DASHBOARD_SETTINGS.git },
   jira: { ...DEFAULT_DASHBOARD_SETTINGS.jira },
@@ -72,7 +80,10 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
   skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),
   mcpTools: DEFAULT_DASHBOARD_SETTINGS.mcpTools.map((tool) => ({ ...tool })),
   customMcpServers: DEFAULT_DASHBOARD_SETTINGS.customMcpServers.map((server) => ({ ...server })),
-  memory: { ...DEFAULT_DASHBOARD_SETTINGS.memory },
+  memory: {
+    ...DEFAULT_DASHBOARD_SETTINGS.memory,
+    externalEmbedding: { ...DEFAULT_DASHBOARD_SETTINGS.memory.externalEmbedding },
+  },
 });
 
 export const applyExternalSettingsHints = (

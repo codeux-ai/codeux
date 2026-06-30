@@ -78,6 +78,30 @@ describe("SchedulerRepository", () => {
     expect(updated.nextRunAt).toBeNull();
   });
 
+  it("persists settings-managed memory remediation targets", async () => {
+    const { dir, projectRepository, schedulerRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Scheduler Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+
+    const entry = schedulerRepository.createEntry(project.id, {
+      title: "Long-term memory remediation",
+      targetType: "memory_remediation",
+      scheduledFor: "2026-05-18T03:00:00.000Z",
+      recurrence: { frequency: "weekly", interval: 1 },
+      memoryRemediationTarget: { mode: "ai", source: "memory_settings" },
+    });
+
+    expect(entry.targetType).toBe("memory_remediation");
+    expect(entry.memoryRemediationTarget).toEqual({ mode: "ai", source: "memory_settings" });
+    expect(schedulerRepository.listEntries(project.id)[0]!.memoryRemediationTarget).toEqual({
+      mode: "ai",
+      source: "memory_settings",
+    });
+  });
+
   it("recomputes nextRunAt to the next future occurrence when resuming a paused entry", async () => {
     const { dir, projectRepository, schedulerRepository } = await createRepositories();
     const project = projectRepository.createProject({

@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { pipeline } from "stream/promises";
 import { Writable } from "stream";
-import type { EmbeddingModelId, EmbeddingModelStatus } from "../contracts/memory-types.js";
+import type { EmbeddingModelStatus, InAppEmbeddingModelId } from "../contracts/memory-types.js";
 import { EMBEDDING_MODEL_CATALOG, getModelDownloadUrl } from "./embedding-model-catalog.js";
 import { EmbeddingService } from "./embedding-service.js";
 import { MemoryRepository } from "../repositories/memory-repository.js";
@@ -25,7 +25,7 @@ export class EmbeddingModelManager {
   }
 
   async downloadModel(
-    modelId: EmbeddingModelId,
+    modelId: InAppEmbeddingModelId,
     onProgress?: (progress: number) => void,
   ): Promise<void> {
     if (this.activeDownloads.has(modelId)) {
@@ -103,7 +103,7 @@ export class EmbeddingModelManager {
     }
   }
 
-  cancelDownload(modelId: EmbeddingModelId): void {
+  cancelDownload(modelId: InAppEmbeddingModelId): void {
     const controller = this.activeDownloads.get(modelId);
     if (controller) {
       controller.abort();
@@ -116,7 +116,7 @@ export class EmbeddingModelManager {
     }
   }
 
-  async selectModel(modelId: EmbeddingModelId): Promise<void> {
+  async selectModel(modelId: InAppEmbeddingModelId): Promise<void> {
     if (!this.embeddingService.isModelDownloaded(modelId)) {
       throw new Error(`Model ${modelId} is not downloaded. Download it first.`);
     }
@@ -125,7 +125,7 @@ export class EmbeddingModelManager {
     this.logger.info(`Embedding model switched to ${modelId}`);
   }
 
-  async deleteModel(modelId: EmbeddingModelId): Promise<void> {
+  async deleteModel(modelId: InAppEmbeddingModelId): Promise<void> {
     if (this.embeddingService.getLoadedModelId() === modelId) {
       await this.embeddingService.unloadModel();
     }
@@ -144,7 +144,9 @@ export class EmbeddingModelManager {
 
   async restorePreviousModel(): Promise<void> {
     const statuses = this.memoryRepository.listModelStatuses();
-    const downloaded = statuses.filter((s) => s.downloaded && s.localPath);
+    const downloaded = statuses.filter((s): s is typeof s & { id: InAppEmbeddingModelId } => (
+      s.downloaded && !!s.localPath && Object.prototype.hasOwnProperty.call(EMBEDDING_MODEL_CATALOG, s.id)
+    ));
 
     for (const status of downloaded) {
       if (this.embeddingService.isModelDownloaded(status.id)) {
@@ -164,7 +166,7 @@ export class EmbeddingModelManager {
     const dbMap = new Map(dbStatuses.map((s) => [s.id, s]));
 
     return Object.keys(EMBEDDING_MODEL_CATALOG).map((id) => {
-      const modelId = id as EmbeddingModelId;
+      const modelId = id as InAppEmbeddingModelId;
       const dbStatus = dbMap.get(modelId);
       if (dbStatus) return dbStatus;
 

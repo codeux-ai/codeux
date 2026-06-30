@@ -128,6 +128,73 @@ describe("SchedulerService", () => {
     expect(quicksprintService.executeQuicksprint).toHaveBeenCalledWith("project-1", { prompt: "do it" });
   });
 
+  it("creates a settings-managed memory remediation schedule", () => {
+    const created = createEntry({
+      targetType: "memory_remediation",
+      sprintTarget: undefined,
+      title: "Long-term memory remediation",
+      recurrence: normalizeRecurrenceRule({ frequency: "daily", interval: 1 }),
+      memoryRemediationTarget: { mode: "ai", source: "memory_settings" },
+    });
+    const repo = {
+      listEntries: vi.fn(() => []),
+      createEntry: vi.fn(() => created),
+    };
+    const service = buildService(repo);
+
+    const result = service.setMemoryRemediationSchedule("project-1", {
+      cadence: "daily",
+      mode: "ai",
+      scheduledFor: "2026-05-18T03:00:00.000Z",
+      timezone: "Europe/Berlin",
+    });
+
+    expect(repo.createEntry).toHaveBeenCalledWith("project-1", expect.objectContaining({
+      title: "Long-term memory remediation",
+      targetType: "memory_remediation",
+      recurrence: { frequency: "daily", interval: 1, endMode: "never" },
+      memoryRemediationTarget: { mode: "ai", source: "memory_settings" },
+    }));
+    expect(result).toEqual({ entry: created, cadence: "daily", mode: "ai" });
+  });
+
+  it("updates and pauses an existing settings-managed memory remediation schedule", () => {
+    const existing = createEntry({
+      targetType: "memory_remediation",
+      sprintTarget: undefined,
+      recurrence: normalizeRecurrenceRule({ frequency: "daily", interval: 1 }),
+      memoryRemediationTarget: { mode: "deterministic", source: "memory_settings" },
+    });
+    const updated = { ...existing, recurrence: normalizeRecurrenceRule({ frequency: "weekly", interval: 1 }), memoryRemediationTarget: { mode: "ai" as const, source: "memory_settings" as const } };
+    const paused = { ...updated, status: "paused" as const };
+    const repo = {
+      listEntries: vi.fn(() => [existing]),
+      updateEntry: vi.fn()
+        .mockReturnValueOnce(updated)
+        .mockReturnValueOnce(paused),
+    };
+    const service = buildService(repo);
+
+    const weekly = service.setMemoryRemediationSchedule("project-1", {
+      cadence: "weekly",
+      mode: "ai",
+      scheduledFor: "2026-05-18T03:00:00.000Z",
+    });
+    const off = service.setMemoryRemediationSchedule("project-1", {
+      cadence: "off",
+      mode: "ai",
+    });
+
+    expect(repo.updateEntry).toHaveBeenNthCalledWith(1, existing.id, expect.objectContaining({
+      status: "scheduled",
+      recurrence: { frequency: "weekly", interval: 1, endMode: "never" },
+      memoryRemediationTarget: { mode: "ai", source: "memory_settings" },
+    }));
+    expect(repo.updateEntry).toHaveBeenNthCalledWith(2, existing.id, { status: "paused" });
+    expect(weekly.cadence).toBe("weekly");
+    expect(off.cadence).toBe("off");
+  });
+
   it("marks the run as failed when execution rejects", async () => {
     const entry = createEntry({ sprintTarget: { sprintId: "sprint-1" } });
     const repo = {
