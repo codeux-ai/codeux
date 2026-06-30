@@ -577,6 +577,7 @@ export function buildLiveTaskTimingSummaries(args: {
   events: ExecutionRuntimeEventSummary[];
   sprintRuns?: ExecutionSprintRunSummary[];
   nowIso?: string;
+  index?: import("./live-task-runtime.js").IndexedExecutionHistory;
 }): LiveTaskTimingSummary[] {
   const scopedHistory = args.sprintRuns
     ? scopeExecutionHistoryToRelevantSprintRun({
@@ -590,7 +591,7 @@ export function buildLiveTaskTimingSummaries(args: {
       events: args.events,
     };
 
-  const index = buildIndexedExecutionHistory(scopedHistory.dispatches, scopedHistory.events);
+  const index = args.index || buildIndexedExecutionHistory(scopedHistory.dispatches, scopedHistory.events);
 
   return args.tasks.map((task) => buildLiveTaskTimingSummary({
     task,
@@ -637,15 +638,17 @@ function scopeExecutionHistoryToRelevantSprintRun(args: {
   };
 }
 
-export function buildLiveSprintTimingSummary(args: LiveStatsModelArgs): LiveSprintTimingSummary {
+export function buildLiveSprintTimingSummary(args: LiveStatsModelArgs & { index?: import("./live-task-runtime.js").IndexedExecutionHistory }): LiveSprintTimingSummary {
   const nowIso = args.nowIso || new Date().toISOString();
   const scopedHistory = scopeExecutionHistoryToRelevantSprintRun(args);
   const relevantSprintRun = selectRelevantSprintRun(args.tasks, args.sprintRuns);
+  const index = args.index || buildIndexedExecutionHistory(scopedHistory.dispatches, scopedHistory.events);
   const taskTimings = buildLiveTaskTimingSummaries({
     tasks: args.tasks,
     dispatches: scopedHistory.dispatches,
     events: scopedHistory.events,
     nowIso,
+    index,
   });
   const tokenTotals = getSprintTokenTotals({
     dispatches: scopedHistory.dispatches,

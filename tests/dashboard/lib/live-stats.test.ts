@@ -1,3 +1,4 @@
+import { buildIndexedExecutionHistory } from "../../../dashboard/src/v2/lib/live-task-runtime.js";
 import { describe, expect, it } from "vitest";
 import type {
   ExecutionRuntimeEventSummary,
@@ -1349,6 +1350,33 @@ describe("live stats timing model", () => {
       dispatches,
       events,
       nowIso
+    }));
+
+    expect(bulkResults).toEqual(individualResults);
+  });
+
+  it("handles tasks with no dispatches or events via index", () => {
+    const tasks = [makeTask({ id: "t1", status: "PENDING", record_id: "rec1" })];
+    const dispatches = [];
+    const events = [];
+
+    const nowIso = "2026-03-19T10:10:00.000Z";
+
+    const bulkResults = buildLiveTaskTimingSummaries({
+      tasks,
+      dispatches,
+      events,
+      nowIso
+    });
+
+    const index = buildIndexedExecutionHistory(dispatches, events);
+
+    const individualResults = tasks.map(task => buildLiveTaskTimingSummary({
+      task,
+      dispatches,
+      events,
+      nowIso,
+      index
     }));
 
     expect(bulkResults).toEqual(individualResults);
