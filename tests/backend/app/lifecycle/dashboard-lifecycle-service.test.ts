@@ -142,6 +142,11 @@ describe("dashboard-lifecycle-service", () => {
       } as any,
       projectAttentionRepository: {
         listProjectAttentionItems: vi.fn().mockReturnValue([]),
+        getAttentionItem: vi.fn(),
+        resolveAttentionItem: vi.fn(),
+      } as any,
+      guardrailService: {
+        resetPurpose: vi.fn(),
       } as any,
       executionRepository: {
         getProjectExecutionSnapshot: vi.fn().mockReturnValue({
@@ -246,6 +251,53 @@ describe("dashboard-lifecycle-service", () => {
       );
       expect(mockDeps.dashboardRealtimeService.setSnapshotLoaders).toHaveBeenCalled();
       expect(mockDeps.runtimeContext.dashboardRuntimePort).toBe(3000);
+    });
+
+    it("resets the source guardrail when a human escalation is resolved", async () => {
+      const escalation = {
+        id: "attention-1",
+        projectId: "project-1",
+        sprintId: "sprint-1",
+        taskId: "task-1",
+        sprintRunId: "run-1",
+        dispatchId: null,
+        attentionType: "human_escalation_required",
+        severity: "high",
+        ownerType: "human",
+        status: "open",
+        assignedWorkerEndpointId: null,
+        title: "Virtual worker escalation: Merge conflict for T14",
+        summaryMarkdown: "Virtual worker reached the merge-conflict resolution guardrail (10/10).",
+        payload: {
+          sourceAttentionType: "merge_conflict",
+          sourceAttentionItemId: "source-attention-1",
+        },
+        openedAt: "2026-03-09T00:00:00.000Z",
+        claimedAt: null,
+        resolvedAt: null,
+        updatedAt: "2026-03-09T00:00:00.000Z",
+      };
+      vi.mocked(mockDeps.projectAttentionRepository.getAttentionItem).mockReturnValue(escalation as any);
+      vi.mocked(mockDeps.projectAttentionRepository.resolveAttentionItem).mockReturnValue({
+        ...escalation,
+        status: "dismissed",
+        resolvedAt: "2026-03-09T00:01:00.000Z",
+      } as any);
+
+      await bootDashboard(mockDeps);
+      const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
+      const result = setupArgs.resolveAttentionItem!("project-1", "attention-1", {
+        status: "dismissed",
+        reason: "dashboard_dismissed",
+      });
+
+      expect(result.status).toBe("dismissed");
+      expect(mockDeps.projectAttentionRepository.resolveAttentionItem).toHaveBeenCalledWith("attention-1", {
+        status: "dismissed",
+        reason: "dashboard_dismissed",
+        resolutionSummaryMarkdown: undefined,
+      });
+      expect(mockDeps.guardrailService.resetPurpose).toHaveBeenCalledWith("task-1", "merge_conflict");
     });
 
     it("handles saveSystemSettings callback correctly", async () => {

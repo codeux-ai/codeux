@@ -55,6 +55,8 @@ import type { MemoryPromotionService } from "../../services/memory-promotion-ser
 import type { EmbeddingModelManager } from "../../services/embedding-model-manager.js";
 import type { EmbeddingService } from "../../services/embedding-service.js";
 import type { MemoryRepository } from "../../repositories/memory-repository.js";
+import type { GuardrailService } from "../../services/guardrail-service.js";
+import { GUARDRAIL_LEDGER_PURPOSES, type GuardrailLedgerPurpose } from "../../repositories/guardrail-repository.js";
 import { getRepoDebugLogPath, CODE_UX_SERVICE_NAME } from "../../shared/config/code-ux-paths.js";
 import { getProjectLiveSnapshot } from "../live/project-live-snapshot.js";
 import { DashboardSnapshotCache, mapAssignedWorkers } from "./dashboard-snapshot-cache.js";
@@ -76,6 +78,7 @@ export interface BootDashboardDeps {
   projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
   projectWorkerAssignmentService: ProjectWorkerAssignmentService;
   projectAttentionRepository: ProjectAttentionRepository;
+  guardrailService: GuardrailService;
   agentPresetRepository: AgentPresetRepository;
   agentPresetSyncService: AgentPresetSyncService;
   sprintMarkdownService: SprintMarkdownService;
@@ -196,6 +199,29 @@ function requireProjectAttentionItem(
     throw new Error(`Attention item ${attentionItemId} does not belong to project ${projectId}.`);
   }
   return item;
+}
+
+function resetGuardrailForResolvedHumanAttention(
+  deps: Pick<BootDashboardDeps, "guardrailService">,
+  item: NonNullable<ReturnType<ProjectAttentionRepository["getAttentionItem"]>>,
+): void {
+  if (
+    item.ownerType !== "human"
+    || (item.attentionType !== "human_escalation_required" && item.attentionType !== "dashboard_reply_required")
+    || !item.taskId
+  ) {
+    return;
+  }
+
+  const sourceAttentionType = item.payload?.sourceAttentionType;
+  if (
+    typeof sourceAttentionType !== "string"
+    || !(GUARDRAIL_LEDGER_PURPOSES as string[]).includes(sourceAttentionType)
+  ) {
+    return;
+  }
+
+  deps.guardrailService.resetPurpose(item.taskId, sourceAttentionType as GuardrailLedgerPurpose);
 }
 
 function requireProject(
@@ -356,12 +382,14 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
       }));
     },
     resolveAttentionItem: (projectId, attentionItemId, input) => {
-      requireProjectAttentionItem(deps, projectId, attentionItemId);
-      return mapAttentionItem(deps.projectAttentionRepository.resolveAttentionItem(attentionItemId, {
+      const item = requireProjectAttentionItem(deps, projectId, attentionItemId);
+      const resolved = deps.projectAttentionRepository.resolveAttentionItem(attentionItemId, {
         status: input?.status || "resolved",
         reason: input?.reason,
         resolutionSummaryMarkdown: input?.resolutionSummaryMarkdown,
-      }));
+      });
+      resetGuardrailForResolvedHumanAttention(deps, item);
+      return mapAttentionItem(resolved);
     },
     getLiveActivities: deps.getLiveActivitiesForActiveTasks,
     getGitStatus: deps.getGitStatus,

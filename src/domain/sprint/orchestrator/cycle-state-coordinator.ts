@@ -121,7 +121,8 @@ export class CycleStateCoordinator {
     },
     args: CycleRunnerArgs,
     gitStatus: GitTrackingStatus | null,
-    activeWorkerMergeConflictTaskIds: Set<string>,
+    activeMergeConflictTaskIds: Set<string>,
+    activeHumanMergeConflictEscalationTaskIds: Set<string>,
     mergeConflictDebouncer?: MergeConflictDebouncer,
   ): void {
     const projectId = args.executionContext.project.id;
@@ -146,57 +147,73 @@ export class CycleStateCoordinator {
         task,
         args,
         gitStatus,
-        activeWorkerMergeConflictTaskIds,
+        activeMergeConflictTaskIds,
         mergeConflictDebouncer,
       );
+      const humanEscalationActive = mergeConflictDetected
+        && activeHumanMergeConflictEscalationTaskIds.has(taskId);
       const mergedFeatureTasks = selectMergedFeatureTaskContexts(subtasks, taskId);
 
-      itemsToOpen.push(buildTaskAttentionPayload({
-        projectId,
-        sprintId,
-        taskId,
-        sprintRunId: sprintRunId || "",
-        attentionType: mergeConflictDetected ? "merge_conflict" : "merge_required",
-        severity: mergeConflictDetected || task.merge_indicator === "MERGE_BLOCKED" ? "high" : "medium",
-        ownerType: "worker",
-        title: mergeConflictDetected ? `Merge conflict for ${task.id}` : `Merge required for ${task.id}`,
-        summaryMarkdown: mergeConflictDetected
-          ? buildMergeConflictSummary(task, args, pr || null, mergedFeatureTasks)
-          : task.merge_indicator === "MERGE_BLOCKED"
-            ? `Task \`${task.id}\` is complete but blocked on merge work that could not be resolved automatically.`
-            : `Task \`${task.id}\` is complete and awaiting merge into \`${args.defaultFeatureBranch}\`.`,
-        payload: {
-          repoPath: args.repoPath,
-          workingDirectoryHint: `cd ${args.repoPath}`,
-          featureBranch: args.defaultFeatureBranch,
-          defaultBranch: args.defaultBranch,
-          taskKey: task.id,
-          taskTitle: task.title,
-          taskPrompt: task.prompt,
-          mergeIndicator: task.merge_indicator || null,
-          workerBranch: task.worker_branch || null,
-          prUrl: task.pr_url || null,
-          prNumber: pr?.number ?? null,
-          mergeStateStatus: pr?.mergeStateStatus ?? null,
-          conflictingBranches: {
-            source: task.worker_branch || pr?.headRefName || null,
-            target: args.defaultFeatureBranch,
-          },
-          currentTask: buildTaskContext(task),
-          featureBranchTaskContexts: mergedFeatureTasks,
-        },
-      }));
-      itemsToResolve.push({
-        filter: {
+      if (!humanEscalationActive) {
+        itemsToOpen.push(buildTaskAttentionPayload({
           projectId,
+          sprintId,
           taskId,
-          attentionTypes: [mergeConflictDetected ? "merge_required" : "merge_conflict"],
-        },
-        resolution: {
-          status: "resolved",
-          reason: mergeConflictDetected ? "merge_conflict_attention_replaced" : "merge_required_attention_replaced",
-        },
-      });
+          sprintRunId: sprintRunId || "",
+          attentionType: mergeConflictDetected ? "merge_conflict" : "merge_required",
+          severity: mergeConflictDetected || task.merge_indicator === "MERGE_BLOCKED" ? "high" : "medium",
+          ownerType: "worker",
+          title: mergeConflictDetected ? `Merge conflict for ${task.id}` : `Merge required for ${task.id}`,
+          summaryMarkdown: mergeConflictDetected
+            ? buildMergeConflictSummary(task, args, pr || null, mergedFeatureTasks)
+            : task.merge_indicator === "MERGE_BLOCKED"
+              ? `Task \`${task.id}\` is complete but blocked on merge work that could not be resolved automatically.`
+              : `Task \`${task.id}\` is complete and awaiting merge into \`${args.defaultFeatureBranch}\`.`,
+          payload: {
+            repoPath: args.repoPath,
+            workingDirectoryHint: `cd ${args.repoPath}`,
+            featureBranch: args.defaultFeatureBranch,
+            defaultBranch: args.defaultBranch,
+            taskKey: task.id,
+            taskTitle: task.title,
+            taskPrompt: task.prompt,
+            mergeIndicator: task.merge_indicator || null,
+            workerBranch: task.worker_branch || null,
+            prUrl: task.pr_url || null,
+            prNumber: pr?.number ?? null,
+            mergeStateStatus: pr?.mergeStateStatus ?? null,
+            conflictingBranches: {
+              source: task.worker_branch || pr?.headRefName || null,
+              target: args.defaultFeatureBranch,
+            },
+            currentTask: buildTaskContext(task),
+            featureBranchTaskContexts: mergedFeatureTasks,
+          },
+        }));
+        itemsToResolve.push({
+          filter: {
+            projectId,
+            taskId,
+            attentionTypes: [mergeConflictDetected ? "merge_required" : "merge_conflict"],
+          },
+          resolution: {
+            status: "resolved",
+            reason: mergeConflictDetected ? "merge_conflict_attention_replaced" : "merge_required_attention_replaced",
+          },
+        });
+      } else {
+        itemsToResolve.push({
+          filter: {
+            projectId,
+            taskId,
+            attentionTypes: ["merge_required", "merge_conflict"],
+          },
+          resolution: {
+            status: "resolved",
+            reason: "merge_conflict_human_escalation_active",
+          },
+        });
+      }
     }
 
     const actionTaskIds = new Set<string>();
@@ -338,6 +355,24 @@ export function collectActiveWorkerMergeConflictTaskIds(subtasks: Array<{
   return new Set(
     subtasks
       .filter((item) => item.attentionType === "merge_conflict" && item.ownerType === "worker")
+      .map((item) => item.taskId?.trim())
+      .filter((taskId): taskId is string => Boolean(taskId)),
+  );
+}
+
+export function collectActiveHumanMergeConflictEscalationTaskIds(subtasks: Array<{
+  taskId: string | null;
+  attentionType: string;
+  ownerType: string;
+  payload?: Record<string, unknown> | null;
+}>): Set<string> {
+  return new Set(
+    subtasks
+      .filter((item) => (
+        item.ownerType === "human"
+        && (item.attentionType === "human_escalation_required" || item.attentionType === "dashboard_reply_required")
+        && item.payload?.sourceAttentionType === "merge_conflict"
+      ))
       .map((item) => item.taskId?.trim())
       .filter((taskId): taskId is string => Boolean(taskId)),
   );

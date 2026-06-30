@@ -60,6 +60,7 @@ describe("RuntimeStartupRecoveryService", () => {
     const {
       projectRepository,
       executionRepository,
+      sessionTracking,
       service,
     } = await createFixture();
 
@@ -184,6 +185,7 @@ describe("RuntimeStartupRecoveryService", () => {
     const {
       projectRepository,
       executionRepository,
+      sessionTracking,
       service,
     } = await createFixture();
 
@@ -219,6 +221,7 @@ describe("RuntimeStartupRecoveryService", () => {
     const {
       projectRepository,
       executionRepository,
+      sessionTracking,
       service,
     } = await createFixture();
 
@@ -280,6 +283,16 @@ describe("RuntimeStartupRecoveryService", () => {
       status: "running",
       startedAt: "2026-03-29T10:00:01.000Z",
     });
+    sessionTracking.createSession({
+      id: "jules-stale-task-coding",
+      provider: "jules",
+      taskId: "Sprint 9",
+      title: "Recover stale coding audit",
+      state: "RUNNING",
+      featureBranch: "feature/sprint-9",
+      workerBranch: "task/feature-sprint-9-t01",
+      repoPath: project.baseDir,
+    });
 
     const result = await service.recover();
 
@@ -288,6 +301,7 @@ describe("RuntimeStartupRecoveryService", () => {
       status: "completed",
       errorMessage: null,
     });
+    expect(sessionTracking.getSession("jules-stale-task-coding")?.state).toBe("COMPLETED");
   });
 
   it("reconciles stale active task runs from terminal project task state on startup", async () => {

@@ -39,11 +39,7 @@ export const DashboardV2: FunctionComponent = () => {
     }, [prefersReducedMotion]);
 
     return (
-        <>
-        <a href="#main-content" className="skip-link">
-            Skip to main content
-        </a>
-        <PageContainer as="main" id="main-content" tabIndex={-1} containerRef={mainContentRef} padding="overview" className="gap-12 md:gap-24" aria-label="Dashboard Overview">
+        <PageContainer containerRef={mainContentRef} padding="overview" className="gap-12 md:gap-24" aria-label="Dashboard Overview">
             {/* Page Header */}
             <PageHeader
                 icon={Hexagon}
@@ -89,6 +85,5 @@ export const DashboardV2: FunctionComponent = () => {
                 </aside>
             </div>
         </PageContainer>
-        </>
     );
 };

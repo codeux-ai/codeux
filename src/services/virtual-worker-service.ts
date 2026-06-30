@@ -728,7 +728,7 @@ export class VirtualWorkerService {
         repoPath,
         this.workspaceManager.buildWorktreePath(repoPath, sessionId, effectiveWorkflowSettings.executionMode),
         sourceBranch,
-        sourceBranch,
+        targetBranch,
         undefined,
         gitAuth,
       );

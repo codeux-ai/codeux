@@ -1,4 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
+import os from 'os';
+import path from 'path';
+
+const tempHome = path.join(os.tmpdir(), 'codeux-e2e-home');
 
 /**
  * Read environment variables from file.
@@ -51,5 +55,9 @@ export default defineConfig({
     timeout: 30000,
     stdout: 'pipe',
     stderr: 'pipe',
+    env: {
+      HOME: tempHome,
+      USERPROFILE: tempHome,
+    },
   },
 });

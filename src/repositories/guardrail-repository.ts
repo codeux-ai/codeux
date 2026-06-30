@@ -82,4 +82,8 @@ export class GuardrailRepository {
   reset(taskId: string): void {
     this.db.prepare(`DELETE FROM guardrail_ledger WHERE task_id = ?`).run(taskId);
   }
+
+  resetPurpose(taskId: string, purpose: GuardrailLedgerPurpose): void {
+    this.db.prepare(`DELETE FROM guardrail_ledger WHERE task_id = ? AND purpose = ?`).run(taskId, purpose);
+  }
 }

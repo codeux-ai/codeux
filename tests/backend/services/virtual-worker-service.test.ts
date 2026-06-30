@@ -1142,7 +1142,8 @@ describe("VirtualWorkerService", () => {
     });
 
     vi.spyOn((virtualWorkerService as any).workspaceManager, "buildWorktreePath").mockReturnValue("/tmp/wt");
-    vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree").mockResolvedValue({ worktreePath: "/tmp/wt" });
+    const prepareWorktree = vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree")
+      .mockResolvedValue({ worktreePath: "/tmp/wt" });
     vi.spyOn((virtualWorkerService as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("guidance");
     vi.spyOn((virtualWorkerService as any).workspaceManager, "removeWorktree").mockResolvedValue(undefined);
     vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "exportBinaryPatch").mockResolvedValue("diff --git a/file.txt b/file.txt");
@@ -1161,12 +1162,23 @@ describe("VirtualWorkerService", () => {
     vi.spyOn(execRepo, "appendExecutionInvocationMessage").mockReturnValue({});
     vi.spyOn(execRepo, "updateExecutionInvocation").mockReturnValue({});
 
+    vi.spyOn((virtualWorkerService as any).dockerService, "isAvailable").mockResolvedValue(true);
+    vi.spyOn((virtualWorkerService as any), "isMergeConflictResolvedOnRemote").mockResolvedValue(false);
     vi.spyOn((virtualWorkerService as any), "runMergeIntoSource").mockResolvedValue(true);
     vi.spyOn((virtualWorkerService as any), "ensureMergeConflictResolved").mockResolvedValue(undefined);
     vi.spyOn((virtualWorkerService as any), "finalizeMergeCommit").mockResolvedValue(undefined);
     vi.spyOn((virtualWorkerService as any), "ensureTargetMergedIntoSource").mockResolvedValue(undefined);
 
     await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
+
+    expect(prepareWorktree).toHaveBeenCalledWith(
+      "/test",
+      "/tmp/wt",
+      "src",
+      "tgt",
+      undefined,
+      expect.anything(),
+    );
   });
 
   it("records the merge-conflict guardrail attempt even when the resolution fails", async () => {

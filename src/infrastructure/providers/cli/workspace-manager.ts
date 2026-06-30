@@ -312,7 +312,12 @@ export class WorkspaceManager implements IWorkspaceManager {
       const fetchEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(repoPath, gitAuth ?? {});
       const fetchRefs = Array.from(new Set([workerBranch, featureBranch].filter((branch) => Boolean(branch))));
       for (const branch of fetchRefs) {
-        await runCommandStrict("git", ["fetch", "origin", branch], repoPath, fetchEnv ?? process.env)
+        await runCommandStrict(
+          "git",
+          ["fetch", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`],
+          repoPath,
+          fetchEnv ?? process.env,
+        )
           .catch(() => undefined);
       }
 

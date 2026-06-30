@@ -291,11 +291,8 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
         <header
             ref={navRef}
             data-glass
-            className="sticky top-0 z-50 flex items-center justify-between flex-wrap md:flex-nowrap gap-y-2 w-full min-h-[60px] py-2 md:py-0 px-4 sm:px-6 md:px-12 bg-[#F9F8F4]/90 dark:bg-void-900/90 backdrop-blur-xl border-b border-black/[0.06] dark:border-white/[0.06]"
+            className="sticky top-0 z-50 flex items-center justify-between flex-wrap md:flex-nowrap gap-x-4 gap-y-2 w-full min-h-[60px] py-2 md:py-0 px-4 sm:px-6 md:px-12 bg-[#F9F8F4]/90 dark:bg-void-900/90 backdrop-blur-xl border-b border-black/[0.06] dark:border-white/[0.06]"
         >
-            <a href="#main-content" id="skip-link" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-white dark:focus:bg-void-800 focus:text-signal-600 dark:focus:text-signal-400 focus:rounded-lg focus:shadow-lg focus:text-sm focus:font-semibold">
-                Skip to main content
-            </a>
             <nav aria-label="Primary navigation" className="contents">
             <div className="flex items-center gap-2 sm:gap-4 md:gap-10 flex-1 min-w-0">
                 <BrandSection isMobile={isMobile} onMenuToggle={onMenuToggle} hideLogo={hideLogo} isMobileMenuOpen={isMobileMenuOpen} />

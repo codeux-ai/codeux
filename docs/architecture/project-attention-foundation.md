@@ -126,7 +126,8 @@ When CI intelligence sees a feature PR in `DIRTY` merge state and `ciIntelligenc
   - the prompts for merged tasks already present on the feature branch
 - generic `merge_required` attention for the same task is resolved automatically so the queue shows one clear conflict item
 - these worker-owned conflict items do not count as human merge protocol anymore, so the watch loop keeps running instead of pausing for operator merge work
-- once a worker-owned `merge_conflict` item exists for a task, the orchestrator keeps that routing sticky across later loops until the blocker clears; a stale or incomplete PR snapshot no longer downgrades the task back into manual `merge_required` pause flow
+- once a worker-owned `merge_conflict` item exists for a task, or that item has handed off to an active human `human_escalation_required` / `dashboard_reply_required` item, the orchestrator keeps that routing sticky across later loops until the blocker clears; a stale or incomplete PR snapshot no longer downgrades the task back into manual `merge_required` pause flow
+- active human handoffs sourced from `merge_conflict` are authoritative for their task: later cycles do not reopen another worker-owned merge-conflict repair item, and any lingering worker merge attention for that task is resolved with `merge_conflict_human_escalation_active`
 - feature PR auto-merge failures now also promote into the same worker-owned `merge_conflict` path when the merge command reports a real merge conflict, even if the last PR snapshot had not yet surfaced `DIRTY`
 - the watch loop now also trusts the active worker-owned `merge_conflict` queue directly, so an already-open conflict item cannot regress into `no further action possible` if one cycle returns incomplete merge classification
 - assignment for these conflict items now uses effective heartbeat status, not just persisted worker status, so a dead primary worker cannot keep conflict items pinned away from the live connected worker
@@ -242,6 +243,7 @@ Current dashboard behavior:
 - claim prefers the item's current assigned worker endpoint
 - if the item is unassigned, claim falls back to the project's primary supervising worker, then overflow worker
 - resolved and dismissed items drop out of the active execution snapshot because the dashboard only shows `open` and `claimed` items
+- resolving or dismissing a human-owned handoff item that was created from a guardrail-managed worker item resets that task's matching guardrail counter (for example, a `human_escalation_required` item with `payload.sourceAttentionType = "merge_conflict"` clears the task's `merge_conflict` ledger row). This makes the operator action an explicit acknowledgement that another automated attempt may be tried, instead of leaving the task permanently capped at the previous guardrail limit.
 - attention open/claim/resolve mutations now trigger a direct project execution realtime refresh, so the Live view updates immediately instead of waiting for adjacent execution events
 - the Live sidebar attention ledger now renders as a standalone card with shared dashboard chrome and an optional collapsible header, so the queue can live directly in the sidebar layout without an extra wrapper component
 
