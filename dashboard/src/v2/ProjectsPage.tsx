@@ -253,7 +253,7 @@ const ProjectCard: FunctionComponent<{
                 <WaveFluid accentHex={EMBER_HEX} />
                 <BorderTrace accentHex={EMBER_HEX} />
 
-                <div className="relative z-10 flex flex-1 flex-col gap-4 p-5 pl-6">
+                <div className="relative z-10 flex flex-1 flex-col gap-4 p-5 pl-6 min-w-0">
                     {/* Top line — status + source kind */}
                     <div className="flex items-center justify-between gap-3">
                         <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${statusClass}`}>
@@ -684,7 +684,7 @@ export const ProjectsPage: FunctionComponent = () => {
                     actions={
                     <div className="flex flex-col sm:flex-row md:flex-col items-start sm:items-center md:items-end gap-4 shrink-0">
                         {/* Status pills */}
-                        <div className="flex items-center gap-2.5">
+                        <div className="flex flex-wrap items-center gap-2.5">
                             {runningCount > 0 && (
                                 <div className="px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] rounded-full
                                                bg-status-green/[0.08] text-status-green
@@ -762,7 +762,7 @@ export const ProjectsPage: FunctionComponent = () => {
                         )}
                     >
                     {!loading ? (
-                        <div className="col-start-1 row-start-1 grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-5">
+                        <div className="col-start-1 row-start-1 grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] gap-5">
                             {filtered.map(source => (
                                 <div key={source.id} className="project-card-entry h-full">
                                     <ProjectCard
