@@ -191,6 +191,29 @@ describe("AgentPresetEditorPanel", () => {
     vi.clearAllMocks();
   });
 
+  it("renders disabled reasons on the save button and verifies validation updates", async () => {
+    const onSave = vi.fn();
+    render(<AgentPresetEditorPanel preset={makePreset()} saving={false} onSave={onSave} onCancel={vi.fn()} />);
+
+    // Check initial state reason
+    expect(screen.getByText("No changes")).toBeInTheDocument();
+
+    const nameInput = screen.getByLabelText(/Agent Name/);
+    fireEvent.input(nameInput, { target: { value: "A".repeat(100) } }); // Exceeds NAME_MAX=60
+    fireEvent.blur(nameInput);
+
+    expect(await screen.findByText("Fix errors to save")).toBeInTheDocument();
+  });
+
+  it("provides visual and accessible feedback when randomize is clicked", async () => {
+    render(<AgentPresetEditorPanel preset={makePreset()} saving={false} onSave={vi.fn()} onCancel={vi.fn()} />);
+
+    const randomizeBtn = screen.getByRole("button", { name: /Randomize/i });
+    fireEvent.click(randomizeBtn);
+
+    expect(await screen.findByText("Avatar randomized")).toBeInTheDocument();
+  });
+
   it("shows the active memory summary, opens the memory popover, and persists the selected config", async () => {
     const onSave = vi.fn();
     const preset = makePreset();

@@ -29,6 +29,7 @@ export const AgentKnowledgePanel: FunctionComponent<{
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setError(null);
     Promise.all([
       fetchKnowledgeDocuments(projectId).catch(() => [] as KnowledgeDocument[]),
       fetchAgentKnowledgeSubscriptions(agentPresetId).catch(() => [] as string[]),

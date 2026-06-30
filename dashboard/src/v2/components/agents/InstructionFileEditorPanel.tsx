@@ -206,12 +206,18 @@ export const InstructionFileEditorPanel: FunctionComponent<{
             onClick={() => void handleSave()}
             disabled={saving || !dirty}
             aria-disabled={saving || !dirty}
+            aria-busy={saving}
             className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-[12px] font-bold uppercase tracking-[0.12em] text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:scale-[1.03] hover:bg-signal-400 hover:shadow-[0_0_32px_rgba(0,224,160,0.36)] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none disabled:hover:scale-100 dark:disabled:bg-white/[0.05] dark:disabled:text-slate-500"
           >
             {saving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2.4} /> : <Save className="h-3.5 w-3.5" strokeWidth={2.4} />}
             Save
           </button>
         </div>
+        {dirty && !saving && (
+          <span className="absolute -bottom-5 right-6 text-[10px] text-amber-500 font-bold uppercase tracking-wider">
+            Unsaved changes
+          </span>
+        )}
       </div>
 
       {/* ── Body ── */}
