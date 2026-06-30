@@ -102,6 +102,8 @@ export const UsageChartMinimap: FunctionComponent<{
       <div
         ref={containerRef}
         data-testid="usage-chart-minimap"
+        role="region"
+        aria-label="Chart minimap zoom region"
         tabIndex={0}
         className="relative h-[4.5rem] w-full cursor-crosshair touch-none select-none overflow-hidden rounded-2xl border border-black/[0.05] bg-black/[0.02] dark:border-white/[0.06] dark:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900"
         onPointerDown={handlePointerDown}
@@ -114,6 +116,9 @@ export const UsageChartMinimap: FunctionComponent<{
           }
         }}
       >
+        <div className="sr-only" aria-live="polite">
+          {zoomRange ? `Showing ${zoomRange.end - zoomRange.start + 1} of ${buckets.length} buckets` : 'Zoom reset'}
+        </div>
         <svg
           aria-hidden="true"
           viewBox={`0 0 ${MINIMAP_WIDTH} ${MINIMAP_HEIGHT}`}

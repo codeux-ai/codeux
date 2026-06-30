@@ -548,7 +548,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                     return (
                       <rect
                         key={`hover-${index}`}
-                        tabIndex={0}
+                        tabIndex={-1}
                         x={startX}
                         y={padding}
                         width={rectWidth}

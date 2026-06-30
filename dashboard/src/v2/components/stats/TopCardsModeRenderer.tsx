@@ -34,7 +34,12 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
   const prevMode = useRef(mode);
 
   useLayoutEffect(() => {
-    if (!containerRef.current || reducedMotion || prevMode.current === mode) return;
+    if (!containerRef.current || prevMode.current === mode) return;
+
+    if (reducedMotion) {
+      prevMode.current = mode;
+      return;
+    }
 
     gsap.killTweensOf(containerRef.current.children);
     gsap.fromTo(
@@ -303,7 +308,7 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
   return (
     <section
       ref={containerRef}
-      className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-5 w-full"
+      className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-5 w-full min-h-[10.5rem]"
       data-testid="top-cards-renderer"
     >
       {cardsContent}
