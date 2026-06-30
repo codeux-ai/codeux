@@ -87,6 +87,8 @@ Dashboard chat continuations pass the previous logical chat session as `continue
 
 During Docker bootstrap and host settings materialization, Code UX removes the legacy root-level `enableOpenAILogging` key from persisted Qwen settings and keeps the supported `model.enableOpenAILogging` setting. If an older Qwen process still emits the deprecation warning inline with the reply, invocation output sanitization strips the warning before it reaches the dashboard.
 
+Code UX also writes Qwen's `memory.enableManagedAutoMemory` and `memory.enableManagedAutoDream` settings as `false` for managed provider invocations. Qwen Code enables those background managed-memory passes by default; in headless Code UX runs they can emit a post-turn memory prompt such as "Managed memory has TWO directories..." and try to write into `$HOME/.qwen/memories` plus the project-scoped memory directory under `$HOME/.qwen/projects/<sanitized-cwd>/memory`. Code UX keeps its own database-backed memory system, so Qwen's background memory pass is disabled while unrelated Qwen memory settings are preserved during config merge.
+
 ## External Hints
 
 Code UX detects Qwen credentials from:

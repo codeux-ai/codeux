@@ -1100,6 +1100,10 @@ export class ProviderRunner implements IProviderRunner {
           selectedType: authMode === "LOCAL_AUTH" ? "qwen-oauth" : protocol,
         },
       },
+      memory: {
+        enableManagedAutoMemory: false,
+        enableManagedAutoDream: false,
+      },
       model: modelConfig,
     };
     // Redirect OpenAI request/response logs out of the worktree (default is
