@@ -23,6 +23,17 @@ describe("project-stats-query", () => {
     expect(result.range.resolution).toBe("day");
   });
 
+  it("throws on invalid custom ranges", () => {
+    const dbMock = {} as any;
+    const now = new Date("2023-01-30T10:15:00Z");
+
+    expect(() => normalizeProjectStatsQuery(dbMock, "proj1", { window: "custom" }, now)).toThrow(/Missing or invalid required fields/);
+    expect(() => normalizeProjectStatsQuery(dbMock, "proj1", { window: "custom", from: "invalid" }, now)).toThrow(/Missing or invalid required fields/);
+    expect(() => normalizeProjectStatsQuery(dbMock, "proj1", { window: "custom", from: "2023-01-02", to: "2023-01-01" }, now)).toThrow(/Invalid custom stats window: start must be earlier/);
+    expect(() => normalizeProjectStatsQuery(dbMock, "proj1", { window: "custom", from: "1999-01-01", to: "2023-01-01" }, now)).toThrow(/Invalid custom stats window: from date is outside/);
+    expect(() => normalizeProjectStatsQuery(dbMock, "proj1", { window: "custom", from: "2023-01-01", to: "2099-01-01" }, now)).toThrow(/Invalid custom stats window: to date is outside/);
+  });
+
   it("handles standard presets", () => {
     const dbMock = {} as any;
     const now = new Date("2023-01-30T10:15:00Z");

@@ -98,21 +98,26 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
     }
   }, [threadData.messages, options?.messagesRef]);
 
+  const activeInvocationKey = useMemo(() => {
+    return invocationData.invocations
+      .filter((inv) => inv.status === "running" || inv.id.startsWith("optimistic:"))
+      .map((inv) => inv.id)
+      .sort()
+      .join(",");
+  }, [invocationData.invocations]);
+
   useEffect(() => {
-    if (!selectedProject) {
-      return;
-    }
-    const hasActiveInvocation = invocationData.invocations.some((invocation) => (
-      invocation.status === "running" || invocation.id.startsWith("optimistic:")
-    ));
-    if (!hasActiveInvocation) {
+    if (!selectedProject || !activeInvocationKey) {
       return;
     }
 
+    const intervalSelectedInvocationId = invocationData.selectedInvocationId;
+
     const interval = window.setInterval(() => {
       void refreshThreads({ mode: "invocations" });
-      if (invocationData.selectedInvocationIdRef.current) {
-        void invocationData.refreshInvocationMessages(invocationData.selectedInvocationIdRef.current, { force: true });
+      const currentSelectedInvocationId = invocationData.selectedInvocationIdRef.current;
+      if (currentSelectedInvocationId && currentSelectedInvocationId === intervalSelectedInvocationId) {
+        void invocationData.refreshInvocationMessages(currentSelectedInvocationId, { force: true });
       }
     }, 3000);
 
@@ -120,11 +125,12 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
       window.clearInterval(interval);
     };
   }, [
-    invocationData.invocations,
+    activeInvocationKey,
+    selectedProject,
+    invocationData.selectedInvocationId,
     invocationData.refreshInvocationMessages,
     invocationData.selectedInvocationIdRef,
     refreshThreads,
-    selectedProject,
   ]);
 
   const activeConnection = useMemo(() => {

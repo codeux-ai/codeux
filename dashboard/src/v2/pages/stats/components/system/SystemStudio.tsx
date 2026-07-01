@@ -10,7 +10,7 @@ import {
   Zap,
 } from "lucide-preact";
 import { useSystemViewData, type SystemSummaryMetrics } from "../../../../pages/stats/hooks/use-system-view-data.js";
-import { formatDuration, formatTokens } from "../../stats-utils.js";
+import { formatStatsDuration, formatTokens } from "../../stats-utils.js";
 import { PANEL_CLASS, SUBPANEL_CLASS, CHIP_CLASS, StudioHeader } from "../StatsShared.js";
 import { SystemFilterBar } from "./SystemFilterBar.js";
 import { InvocationsTable } from "./InvocationsTable.js";
@@ -94,7 +94,6 @@ const StatusDistributionBar: FunctionComponent<{ metrics: SystemSummaryMetrics }
 export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ projectId }) => {
   const {
     invocations,
-    allInvocations,
     summaryMetrics,
     availablePurposes,
     availableProviders,
@@ -256,8 +255,8 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
           <SystemMetricCard
             icon={Clock}
             label="Avg Duration"
-            value={formatDuration(summaryMetrics.avgDurationMs)}
-            detail={summaryMetrics.p95DurationMs > 0 ? `p95 ${formatDuration(summaryMetrics.p95DurationMs)}` : "no finished calls"}
+            value={formatStatsDuration(summaryMetrics.avgDurationMs)}
+            detail={summaryMetrics.p95DurationMs > 0 ? `p95 ${formatStatsDuration(summaryMetrics.p95DurationMs)}` : "no finished calls"}
             circleClassName="bg-cyan-500/10 text-cyan-500 dark:text-cyan-400"
           />
           <SystemMetricCard

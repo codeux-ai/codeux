@@ -3,6 +3,7 @@ import type { ProviderInvocationUsageRecord, CreateProviderInvocationUsageInput 
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { sleepWithSignal } from "../shared/providers/provider-retry-policy.js";
+import { failStaleProviderInvocation } from "../domain/runtime/provider-invocation-recovery.js";
 
 const STALE_DOCKER_PROVIDER_INVOCATION_MS = 60_000;
 const STALE_DOCKER_PROVIDER_ACTIVITY_IDLE_MS = 180_000;
@@ -266,32 +267,16 @@ export class ProviderConcurrencyService {
       }
 
       const message = `Recovered stale ${invocation.purpose} provider invocation after its Docker container disappeared for session ${invocation.sessionId}. Code UX will retry the work.`;
-      this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
-        status: "failed",
-        finishedAt: reconciledAt,
-        durationMs: this.calculateDurationMs(invocation, reconciledAt),
-      });
-
-      for (const executionInvocation of linkedInvocations) {
-        if (executionInvocation.status !== "running" && executionInvocation.status !== "paused") {
-          continue;
+      failStaleProviderInvocation(
+        this.deps.executionRepository,
+        invocation,
+        linkedInvocations,
+        {
+          reconciledAt,
+          recoveryReason: "provider_concurrency_stale_docker_reconcile",
+          systemMessage: message,
         }
-        this.deps.executionRepository.updateExecutionInvocation(executionInvocation.id, {
-          status: "failed",
-          finishedAt: reconciledAt,
-          errorMessage: message,
-        });
-        this.deps.executionRepository.appendExecutionInvocationMessage(executionInvocation.id, {
-          role: "system",
-          contentMarkdown: message,
-          metadata: {
-            recovery: "provider_concurrency_stale_docker_reconcile",
-            providerInvocationId: invocation.id,
-            provider,
-          },
-          createdAt: reconciledAt,
-        });
-      }
+      );
 
       this.deps.logger.warn("Recovered stale Docker provider invocation while waiting for provider slot", {
         provider,
@@ -340,11 +325,16 @@ export class ProviderConcurrencyService {
         continue;
       }
 
-      this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
-        status: "failed",
-        finishedAt: reconciledAt,
-        durationMs: this.calculateDurationMs(invocation, reconciledAt),
-      });
+      failStaleProviderInvocation(
+        this.deps.executionRepository,
+        invocation,
+        [],
+        {
+          reconciledAt,
+          recoveryReason: "provider_concurrency_stale_jules_reconcile",
+          systemMessage: "Recovered stale Jules provider invocation.",
+        }
+      );
 
       this.deps.logger.warn("Recovered stale Jules provider invocation while claiming provider slot", {
         provider,
@@ -373,12 +363,4 @@ export class ProviderConcurrencyService {
     });
   }
 
-  private calculateDurationMs(invocation: ProviderInvocationUsageRecord, finishedAt: string): number {
-    const startedAtMs = Date.parse(invocation.startedAt);
-    const finishedAtMs = Date.parse(finishedAt);
-    if (!Number.isFinite(startedAtMs) || !Number.isFinite(finishedAtMs)) {
-      return invocation.durationMs || 0;
-    }
-    return Math.max(0, finishedAtMs - startedAtMs);
-  }
 }

@@ -227,8 +227,14 @@ export class CliWorkflowService {
       ? await this.deps.agentPresetSyncService.resolveTargetedCodingAgent(
         args.settingsScope.projectId,
         args.agentPresetId || manualAgentPresetId,
-      ).catch(() => null)
-      : await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(args.repoPath).catch(() => null);
+      ).catch((err) => {
+        this.deps.logger?.warn("Failed to resolve targeted coding agent template", { repoPath: args.repoPath, error: err instanceof Error ? err.message : String(err) });
+        return null;
+      })
+      : await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(args.repoPath).catch((err) => {
+        this.deps.logger?.warn("Failed to resolve optional worker agent template", { repoPath: args.repoPath, error: err instanceof Error ? err.message : String(err) });
+        return null;
+      });
 
     const ctx: PipelineContext = {
       ...args,
@@ -255,7 +261,10 @@ export class CliWorkflowService {
         ...this.deps,
         getWorkerInstruction: async (repoPath: string) => (
           workerAgent?.instructionMarkdown?.trim()
-          || (await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(repoPath))
+          || (await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(repoPath).catch((err) => {
+            this.deps.logger?.warn("Failed to resolve optional worker agent template", { repoPath, error: err instanceof Error ? err.message : String(err) });
+            return null;
+          }))
             ?.instructionMarkdown?.trim()
           || ""
         ),

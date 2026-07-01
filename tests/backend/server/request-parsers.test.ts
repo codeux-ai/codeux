@@ -163,10 +163,9 @@ describe("Request Parsers", () => {
       expect(result.to).toBe("2024-01-31T23:59:59.999Z");
     });
 
-    it("caps unreasonable future and past ranges", () => {
-      const result = parseProjectStatsQuery({ window: "custom", from: "1990-01-01", to: "2100-01-01" });
-      expect(new Date(result.from!).getTime()).toBe(new Date("2000-01-01T00:00:00.000Z").getTime());
-      expect(new Date(result.to!).getTime()).toBeLessThanOrEqual(Date.now() + 31 * 24 * 60 * 60 * 1000);
+    it("rejects unreasonable future and past ranges", () => {
+      expect(() => parseProjectStatsQuery({ window: "custom", from: "1990-01-01", to: "2024-01-01" })).toThrow(/outside historical\/future bounds/);
+      expect(() => parseProjectStatsQuery({ window: "custom", from: "2024-01-01", to: "2100-01-01" })).toThrow(/outside historical\/future bounds/);
     });
 
     it("rejects invalid or missing bounds for custom", () => {

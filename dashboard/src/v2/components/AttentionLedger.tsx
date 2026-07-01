@@ -319,7 +319,7 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
                                 </div>
                             </div>
                         ) : (
-                            <div ref={listRef} className="max-h-96 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar" role="list" aria-label="Active attention items">
+                            <div ref={listRef} className="max-h-[50dvh] sm:max-h-96 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar" role="list" aria-label="Active attention items">
                                 {visibleAttentionItems.map((item) => {
                                     const assignedWorkerLabel = item.assignedWorkerEndpointId
                                         ? workersByEndpointId.get(item.assignedWorkerEndpointId) || item.assignedWorkerEndpointId

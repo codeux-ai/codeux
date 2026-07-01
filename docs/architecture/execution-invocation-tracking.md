@@ -38,6 +38,13 @@ When an invocation or its messages are created/updated, the server emits a proje
 
 The Live dashboard consumes invocation records through the same project execution snapshot used for runtime events. `getProjectExecutionSnapshot(projectId)` includes a bounded `recentInvocations` list (currently the latest 24 records) so `/live` can render an invocation feed that updates over the existing `project.live.updated` websocket flow. The page-level feed is intentionally summary-level and scoped to the selected sprint when one is selected: status, provider/model, task/sprint context, message count, timing, tokens, and latest error. Task cards filter the same records by task id/task key plus current dispatch and task-run ids to show local invocation activity on the card. Full invocation messages remain loaded on demand from the Chat invocation view.
 
+## Analytics Projection
+The `queryProjectInvocations` query powers paginated dashboard analytics, returning matching invocations alongside a computed summary.
+Instead of loading all matching invocation rows into memory to compute metrics (which becomes a bottleneck for large projects),
+Code UX computes basic summaries, P95 durations, sprint state aggregations, external API metrics, and errors directly through
+bounded SQL queries with typed helpers inside `execution-invocations-query-analytics.ts`. This SQL-side projection ensures high
+scalability without compromising filter integrity.
+
 ## Startup Recovery
 
 CLI-backed provider invocations now persist their workflow execution mode alongside the session id used to launch the worker.

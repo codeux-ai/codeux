@@ -27,8 +27,22 @@ export function normalizeProjectStatsQuery(
     };
 
   if (query.window === "custom") {
-    const fromDate = parseStatsDateInput(query.from, "start")!;
-    const toDate = parseStatsDateInput(query.to, "end")!;
+    const fromDate = parseStatsDateInput(query.from, "start");
+    const toDate = parseStatsDateInput(query.to, "end");
+    if (!fromDate || !toDate) {
+      throw new Error("Missing or invalid required fields: from and to must be valid dates for custom window.");
+    }
+    if (fromDate.getTime() > toDate.getTime()) {
+      throw new Error("Invalid custom stats window: start must be earlier than or equal to end.");
+    }
+    const MIN_DATE = new Date("2000-01-01T00:00:00.000Z").getTime();
+    const MAX_DATE = now.getTime() + 30 * 24 * 60 * 60 * 1000;
+    if (fromDate.getTime() < MIN_DATE || fromDate.getTime() > MAX_DATE) {
+      throw new Error("Invalid custom stats window: from date is outside historical/future bounds.");
+    }
+    if (toDate.getTime() < MIN_DATE || toDate.getTime() > MAX_DATE) {
+      throw new Error("Invalid custom stats window: to date is outside historical/future bounds.");
+    }
     return buildStatsRangeFromBounds(query, fromDate, toDate);
   }
 

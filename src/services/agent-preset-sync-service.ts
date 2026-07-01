@@ -185,7 +185,12 @@ export class AgentPresetSyncService {
     }
 
     if (existing.sourceScope === "project" && existing.sourcePath) {
-      await fs.rm(existing.sourcePath, { force: true }).catch(() => undefined);
+      await fs.rm(existing.sourcePath, { force: true }).catch((error) => {
+        this.deps.logger?.warn("Failed to delete agent preset source file", {
+          path: existing.sourcePath,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
     }
 
     this.deps.agentPresetRepository.deleteAgentPreset(agentPresetId);
@@ -690,7 +695,12 @@ export class AgentPresetSyncService {
     await fs.writeFile(filePath, fileContent, "utf8");
 
     if (args.previousProjectSourcePath && args.previousProjectSourcePath !== filePath) {
-      await fs.rm(args.previousProjectSourcePath, { force: true }).catch(() => undefined);
+      await fs.rm(args.previousProjectSourcePath, { force: true }).catch((error) => {
+        this.deps.logger?.warn("Failed to delete previous agent preset source file", {
+          path: args.previousProjectSourcePath,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
     }
 
     return await this.readAgentSourceFile(filePath, "project");

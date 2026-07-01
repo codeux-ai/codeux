@@ -193,3 +193,38 @@ export interface ExecutionInvocationMessageRow {
   metadata_json: string | null;
   created_at: string;
 }
+
+export interface ExecutionInvocationsSummaryRow {
+  totalInvocations: number;
+  runningCount: number;
+  failedCount: number;
+  completedCount: number;
+  cancelledCount: number;
+  pausedCount: number;
+  totalTokens: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCachedTokens: number;
+  avgDurationMs: number;
+}
+
+export interface ExecutionInvocationsSprintRow {
+  sprintId: string;
+  status: string;
+  count: number;
+}
+
+export interface ExecutionInvocationsApiRow {
+  type: string;
+  purpose: string;
+  provider: string;
+  finishedAt: string | null;
+  duration_ms: number | null;
+  count: number;
+}
+
+export interface ExecutionInvocationsErrorRow {
+  msg: string;
+  status: string;
+  count: number;
+}

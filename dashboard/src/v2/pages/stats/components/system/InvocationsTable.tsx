@@ -15,7 +15,7 @@ import {
 } from "lucide-preact";
 import type { ExecutionInvocationRecord } from "../../../../types.js";
 import type { SystemSort, SystemSortKey } from "../../hooks/use-system-view-data.js";
-import { formatTokens, formatDuration, formatDateTime } from "../../stats-utils.js";
+import { formatTokens, formatStatsDuration, formatDateTime } from "../../stats-utils.js";
 import { DEFAULT_LIST_WINDOW, resolveListWindow } from "../../../../lib/list-window.js";
 import {
   LEDGER_ROW_MODERN_CLASS,
@@ -227,7 +227,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
             const isExpanded = expandedId === invocation.id;
             const { icon: ProviderIcon, bg: providerBg, text: providerText } = getProviderIcon(invocation.provider);
             const duration = invocation.finishedAt
-              ? formatDuration(Date.parse(invocation.finishedAt) - Date.parse(invocation.startedAt))
+              ? formatStatsDuration(Date.parse(invocation.finishedAt) - Date.parse(invocation.startedAt))
               : "running";
 
             return (
@@ -239,10 +239,13 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                         {/* Header Row: Time and Expand */}
                         <div className="flex items-center justify-between lg:contents">
                           {/* Time */}
-                          <div className="text-[11px] font-mono text-slate-400">
+                          <div>
+                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Time</div>
+                            <div className="text-[11px] font-mono text-slate-400">
 
-                          {formatDateTime(invocation.startedAt)}
+                            {formatDateTime(invocation.startedAt)}
 
+                            </div>
                           </div>
                           {/* Expand Toggle Mobile */}
                           <div className="flex justify-end lg:hidden">
@@ -262,26 +265,32 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                         {/* Status & Type Row */}
                         <div className="flex items-center gap-2 lg:contents">
                           {/* Status */}
-                          <div>{renderStatusChip(invocation.status)}</div>
+                          <div>
+                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Status</div>
+                            {renderStatusChip(invocation.status)}
+                          </div>
 
                         {/* Type */}
-                          <div className="flex min-w-0">
-
-                          <div className={`${CHIP_CLASS} px-2 py-0.5 text-[10px] font-medium text-slate-500`}>
-                            {invocation.type?.replace(/_/g, " ") || "unknown"}
+                          <div className="flex flex-col min-w-0">
+                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Type</div>
+                            <div className={`${CHIP_CLASS} w-max px-2 py-0.5 text-[10px] font-medium text-slate-500`}>
+                              {invocation.type?.replace(/_/g, " ") || "unknown"}
+                            </div>
                           </div>
-                        </div>
                         </div>
 
                         {/* Model & Duration Row */}
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between lg:contents">
                           {/* Model */}
-                          <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300 min-w-0">
+                          <div>
+                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Model</div>
+                            <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300 min-w-0">
 
-                          <div className={`rounded-lg p-1.5 ${providerBg} ${providerText}`}>
-                            <ProviderIcon className="h-3 w-3" strokeWidth={2.5} />
-                          </div>
-                          <span className="truncate min-w-0">{invocation.model || "—"}</span>
+                            <div className={`rounded-lg p-1.5 ${providerBg} ${providerText}`}>
+                              <ProviderIcon className="h-3 w-3" strokeWidth={2.5} />
+                            </div>
+                            <span className="truncate min-w-0">{invocation.model || "—"}</span>
+                            </div>
                           </div>
 
                         {/* Token Stats Row */}
@@ -324,14 +333,18 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                         </div>
 
                         {/* Duration */}
-                          <div className={`hidden md:block text-[11px] ${invocation.finishedAt ? "text-slate-600 dark:text-slate-300" : "text-blue-600 dark:text-blue-400"}`}>
+                          <div>
+                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Duration</div>
+                            <div className={`text-[11px] ${invocation.finishedAt ? "text-slate-600 dark:text-slate-300" : "text-blue-600 dark:text-blue-400"}`}>
 
-                          {duration}
-                        </div>
+                            {duration}
+                            </div>
+                          </div>
                         </div>
 
                         {/* Context Chips */}
-                        <div className="flex flex-wrap gap-1 lg:contents">
+                        <div className="flex flex-col gap-1 lg:contents">
+                          <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Context</div>
                           <div className="flex flex-wrap gap-1">
                           {(invocation.sprintNumber !== null || invocation.taskKey !== null) && (
                             <>

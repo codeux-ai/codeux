@@ -169,6 +169,19 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         setTouched(prev => ({ ...prev, path: true }));
         if (Object.keys(validationErrors).length > 0) {
             setTouched({ name: true, path: sourceType === 'new_project' ? newInitMode === 'new-local' : true });
+            setTimeout(() => {
+                const firstInvalid = document.getElementById('add-project-form')?.querySelector('[aria-invalid="true"]');
+                if (firstInvalid instanceof HTMLElement) {
+                    firstInvalid.focus({ preventScroll: true });
+                    const container = document.getElementById('add-project-form-body');
+                    if (container) {
+                        const containerRect = container.getBoundingClientRect();
+                        const elementRect = firstInvalid.getBoundingClientRect();
+                        const offset = elementRect.top - containerRect.top + container.scrollTop - 20;
+                        container.scrollTo({ top: offset, behavior: 'smooth' });
+                    }
+                }
+            }, 0);
             return;
         }
 
@@ -356,10 +369,10 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
             onClose={handleClose}
             initialFocusRef={nameInputRef}
             ariaLabelledBy="add-project-modal-title"
-            className="w-[calc(100vw-2rem)] sm:w-full max-w-2xl lg:max-w-3xl !p-0 !rounded-[2.5rem]"
+            className="w-[calc(100vw-2rem)] sm:w-full max-w-2xl lg:max-w-3xl !p-0 !rounded-[2.5rem] !overflow-hidden flex flex-col"
         >
             <div
-                className="relative flex flex-col sm:flex-row w-full max-h-[calc(100dvh-2rem)] overflow-hidden sm:overflow-y-auto"
+                className="relative flex flex-col sm:flex-row w-full flex-1 min-h-0"
                 style={{ minHeight: modalMinHeight }}
             >
                 {/* ── Left decorative panel ── */}
@@ -386,9 +399,9 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                 </div>
 
                 {/* ── Right form panel ── */}
-                <div className="flex-1 overflow-y-auto bg-white/98 dark:bg-void-800/98 p-5 sm:p-7 lg:p-8 flex flex-col">
+                <div className="flex-1 bg-white/98 dark:bg-void-800/98 flex flex-col min-w-0">
                     {/* Header */}
-                    <div className="flex items-start justify-between mb-6 lg:mb-8">
+                    <div className="flex items-start justify-between shrink-0 p-5 sm:p-7 lg:px-8 lg:pt-8 lg:pb-6 border-b border-black/[0.04] dark:border-white/[0.04]">
                         <div>
                             <h2 id="add-project-modal-title" className="text-[2rem] font-black text-slate-900 dark:text-white tracking-tight font-display leading-none">
                                 Add Project.
@@ -411,8 +424,9 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                     </div>
 
                     {/* Form */}
-                    <form onSubmit={handleSubmit} className="flex flex-col flex-1">
-                        <div ref={fieldsRef} className="flex flex-col gap-5 lg:gap-6 flex-1">
+                    <div className="flex-1 overflow-y-auto p-5 sm:p-7 lg:px-8 lg:py-6" id="add-project-form-body">
+                        <form id="add-project-form" onSubmit={handleSubmit} className="flex flex-col flex-1 gap-5 lg:gap-6">
+
 
                             {submitError && (
                                 <ActionFeedbackRegion status="error" message={submitError} onDismiss={() => setSubmitError(null)} />
@@ -453,7 +467,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                 <legend className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 block mb-2.5">
                                     Source Type
                                 </legend>
-                                <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1">
+                                <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
                                     {(['local', 'git', 'new_project'] as SourceType[]).map((type) => (
                                         <button
                                             key={type}
@@ -673,7 +687,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                         <legend className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 block mb-2.5">
                                             Init Mode
                                         </legend>
-                                        <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1">
+                                        <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
                                             <button
                                                 type="button"
                                                 onClick={() => setNewInitMode('new-local')}
@@ -766,7 +780,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                         Provider detection is optional here; both buttons are shown.
                                                     </span>
                                                 </div>
-                                                <div className="mt-2.5 inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1">
+                                                <div className="mt-2.5 inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
                                                     <button
                                                         type="button"
                                                         onClick={() => setNewProvider('github')}
@@ -796,7 +810,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                 <legend className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 block mb-2.5">
                                                     Visibility
                                                 </legend>
-                                                <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1">
+                                                <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
                                                     <button
                                                         type="button"
                                                         onClick={() => setNewIsPrivate(true)}
@@ -828,36 +842,30 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                 </>
                             )}
 
-                            {/* Spacer */}
-                            <div className="flex-1" />
 
-                            {/* Actions */}
-                            <div className="flex items-center justify-between pt-1">
+                            </form>
+                    </div>
+                    {/* Actions */}
+                    <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between shrink-0 p-5 sm:p-7 lg:px-8 lg:py-6 border-t border-black/[0.04] dark:border-white/[0.04] bg-white/50 dark:bg-void-800/50 gap-3">
                                 <button
                                     type="button"
                                     onClick={handleClose}
-                                    className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 rounded"
+                                    className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 rounded w-full sm:w-auto py-2 sm:py-0"
                                 >
                                     Cancel
                                 </button>
-                                <button
-                                    type="submit"
-                                    disabled={isSubmitting}
+                                <button type="submit" form="add-project-form" disabled={isSubmitting}
                                     aria-busy={isSubmitting}
-                                    className="group/btn flex items-center gap-2.5 px-6 py-3 bg-ember-500 hover:bg-ember-400 disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-700 dark:disabled:text-slate-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(255,184,0,0.25)] hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)] disabled:shadow-none active:scale-95 disabled:active:scale-100 hover:-translate-y-px disabled:hover:-translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
+                                    className="group/btn flex items-center justify-center gap-2.5 px-6 py-3 bg-ember-500 w-full sm:w-auto  hover:bg-ember-400 disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-700 dark:disabled:text-slate-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(255,184,0,0.25)] hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)] disabled:shadow-none active:scale-95 disabled:active:scale-100 hover:-translate-y-px disabled:hover:-translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
                                 >
                                     {isSubmitting ? (
                                         <><Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /><span className="sr-only">Loading</span></>
                                     ) : (
                                         <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
                                     )}
-                                    {isSubmitting
-                                        ? (sourceType !== 'new_project' && initializeProject ? "Setting up..." : "Adding...")
-                                        : (sourceType !== 'new_project' && initializeProject && !showSetupOptions ? "Continue" : "Add Project")}
+                                    {isSubmitting ? (sourceType !== 'new_project' && initializeProject ? "Setting up..." : "Adding...") : (sourceType !== 'new_project' && initializeProject && !showSetupOptions ? "Continue" : "Add Project")}
                                 </button>
                             </div>
-                        </div>
-                    </form>
                 </div>
             </div>
         </Modal>

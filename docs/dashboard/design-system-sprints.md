@@ -44,6 +44,7 @@ This document outlines the design system for the Sprints page and related planni
 
 *   **Shared Menu Styling:** Consistent padding, icon scale, and hover tones across all dropdowns and action menus.
 *   **Accessibility:** Clear keyboard focus states and distinct disabled treatments (e.g., visual dimming combined with descriptive tooltips or explicit disabled attributes).
+*   **Viewport Clamping:** Fixed and absolute menus must clamp to max-w-[calc(100vw-2rem)] to prevent horizontal scroll clipping on smaller screens.
 
 ## Sprint Page Async Action Pattern
 

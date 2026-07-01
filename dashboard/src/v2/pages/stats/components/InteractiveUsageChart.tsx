@@ -8,7 +8,7 @@ import type {
 } from '../../../types.js';
 import {
   formatTokens,
-  formatDuration,
+  formatStatsDuration,
   formatDateTime,
   formatCost
 } from '../stats-utils.js';
@@ -248,7 +248,7 @@ export const InteractiveUsageChart: FunctionComponent<{
             Currently showing {visibleBuckets.length} buckets.
             {activeBucket ? `Focused bucket: ${activeBucket.label}. Tokens: ${activeBucket.usage.totalTokens}` : "No bucket focused."}
             Active series: {visibleSeries.map(s => s.label).join(", ")}.
-            Peak Tokens: {formatTokens(peakTokens)}. Peak Time: {formatDuration(peakTime)}. Average Tokens: {formatTokens(averageTokens)}. Peak Invocations: {peakInvocations.toLocaleString()}.
+            Peak Tokens: {formatTokens(peakTokens)}. Peak Time: {formatStatsDuration(peakTime)}. Average Tokens: {formatTokens(averageTokens)}. Peak Invocations: {peakInvocations.toLocaleString()}.
           </p>
           <table className="sr-only">
             <thead>
@@ -286,7 +286,7 @@ export const InteractiveUsageChart: FunctionComponent<{
           />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-5`}>
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">Peak Tokens</div>
             <div className="mt-2 text-2xl font-black text-[var(--stats-value-color)]">{formatTokens(peakTokens)}</div>
@@ -294,7 +294,7 @@ export const InteractiveUsageChart: FunctionComponent<{
           </div>
           <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-5`}>
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">Peak Time</div>
-            <div className="mt-2 text-2xl font-black text-[var(--stats-value-color)]">{formatDuration(peakTime)}</div>
+            <div className="mt-2 text-2xl font-black text-[var(--stats-value-color)]">{formatStatsDuration(peakTime)}</div>
             <div className="mt-1 text-xs text-[var(--stats-detail-color)]">Active model runtime</div>
           </div>
           <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-5`}>
@@ -313,10 +313,10 @@ export const InteractiveUsageChart: FunctionComponent<{
           <div className={`${SUBPANEL_CLASS} flex flex-col border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-5 md:p-6`}>
             <div className="mb-6 flex flex-wrap items-center gap-4">
               <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--stats-label-color)]">Interactive Plot</div>
-              <div className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] ${CHIP_CLASS} truncate max-w-full`}>
+              <div className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] ${CHIP_CLASS} max-w-full whitespace-normal break-words text-center`}>
                 Hover buckets for exact values
               </div>
-              <div className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] ${CHIP_CLASS} truncate max-w-full`}>
+              <div className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] ${CHIP_CLASS} max-w-full whitespace-normal break-words text-center`}>
                 {zoomLabel}
               </div>
               <button
@@ -575,7 +575,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                   </div>
                   <div className="flex items-center justify-between rounded-2xl border border-amber-500/20 bg-amber-500/10 px-5 py-4 shadow-sm transition-all hover:bg-amber-500/[0.15]">
                     <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-600 dark:text-amber-400">Active Time</div>
-                    <div className="text-base font-black text-[var(--stats-value-color)]">{formatDuration(activeBucket.usage.activeTimeMs)}</div>
+                    <div className="text-base font-black text-[var(--stats-value-color)]">{formatStatsDuration(activeBucket.usage.activeTimeMs)}</div>
                   </div>
                   <div className="flex items-center justify-between rounded-2xl border border-cyan-500/20 bg-cyan-500/10 px-5 py-4 shadow-sm transition-all hover:bg-cyan-500/[0.15]">
                     <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-600 dark:text-cyan-400">Invocations</div>

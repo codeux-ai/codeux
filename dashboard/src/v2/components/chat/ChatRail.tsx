@@ -8,7 +8,7 @@ export const ChatRail: FunctionComponent<{
   children: ComponentChildren;
 }> = ({ title, count, secondaryTitle, secondaryCount, children }) => {
   return (
-    <aside aria-label={title} className="flex h-full min-h-[20rem] max-h-[50vh] flex-col overflow-hidden rounded-3xl border border-black/[0.06] bg-white/80 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] lg:min-h-0 lg:max-h-full">
+    <aside aria-label={title} className="flex flex-col overflow-hidden rounded-3xl border border-black/[0.06] bg-white/80 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] min-h-[16rem] max-h-[40vh] md:min-h-0 md:max-h-none md:h-full">
       <div className="shrink-0 p-5 mb-2">
         <div className="flex items-center justify-between">
           <div>

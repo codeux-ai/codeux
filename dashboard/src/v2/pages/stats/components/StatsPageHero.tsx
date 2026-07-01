@@ -7,7 +7,7 @@ import type {
   ProjectStatsQuery,
   ProjectStatsWindow,
 } from "../../../types.js";
-import { formatDateTime, formatDuration, formatTokens, isValidCustomRange } from "../stats-utils.js";
+import { formatDateTime, formatStatsDuration, formatTokens, isValidCustomRange } from "../stats-utils.js";
 import { PageHeader } from "../../../components/layout/PageHeader.js";
 import {
   PANEL_CLASS,
@@ -150,7 +150,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
             <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
               <HeroKpi icon={Zap} label="Tokens" value={formatTokens(usage.totalTokens)} />
               <HeroKpi icon={Activity} label="Invocations" value={usage.invocationCount.toLocaleString()} />
-              <HeroKpi icon={Clock3} label="Active Time" value={formatDuration(usage.activeTimeMs)} />
+              <HeroKpi icon={Clock3} label="Active Time" value={formatStatsDuration(usage.activeTimeMs)} />
               <HeroKpi
                 icon={ShieldCheck}
                 label="Success Rate"
@@ -161,7 +161,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
             </div>
           ) : null}
         </div>
-        <div className="flex flex-col items-start gap-4 lg:items-end lg:justify-end w-full lg:w-auto mt-6 lg:mt-0 min-w-0">
+        <div className="flex flex-col sm:flex-row lg:flex-col items-start sm:items-center lg:items-end gap-4 lg:justify-end w-full lg:w-auto mt-6 lg:mt-0 min-w-0 flex-wrap">
           <div role="group" aria-label="Time window presets" className={`inline-flex flex-wrap p-1 w-full sm:w-auto ${CHIP_CLASS}`}>
             {WINDOW_PRESETS.map((window) => {
               const isActive = activeQuery.window === window;

@@ -36,7 +36,7 @@ import type {
 } from "../../../types.js";
 import {
   formatTokens,
-  formatDuration,
+  formatStatsDuration,
   formatPercent,
   formatDateTime,
   NUMBER_FORMATTER,
@@ -85,7 +85,7 @@ export const CHART_SERIES: ChartSeriesDefinition[] = [
     label: "Active Time",
     accentHex: "#FFB800",
     accessor: (bucket) => bucket.usage.activeTimeMs,
-    formatter: formatDuration,
+    formatter: formatStatsDuration,
     signalLabel: "Latency",
   },
   {
@@ -506,7 +506,7 @@ export const PurposeRibbon: FunctionComponent<{
           key={purpose.id}
           title={purpose.label.replace(/_/g, " ")}
           value={formatTokens(purpose.usage.totalTokens)}
-          description={`${formatDuration(purpose.usage.activeTimeMs)} active time`}
+          description={`${formatStatsDuration(purpose.usage.activeTimeMs)} active time`}
           icon={config.icon}
           accent={config.accent}
         >

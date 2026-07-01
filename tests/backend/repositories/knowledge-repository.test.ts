@@ -118,4 +118,33 @@ describe("KnowledgeRepository", () => {
     expect(knowledge.countChunks(doc.id)).toBe(0);
     expect(knowledge.listDocumentIdsForAgent(agent.id)).toEqual([]);
   });
+
+  it("handles batched subscription validation correctly with many document IDs", () => {
+    const agent = agents.createAgentPreset(projectId, { name: "Batch agent" });
+    const docs = [];
+    for (let i = 0; i < 5; i++) {
+      docs.push(createDoc(`Doc ${i}`, `text ${i}`, `hash-batch-${i}`).id);
+    }
+
+    // Duplicate inputs, missing, and simulated cross-project
+    const inputIds = [
+      docs[0]!, docs[0]!, docs[1]!, docs[2]!, docs[3]!, docs[4]!,
+      "cross-project-doc-id", "missing-1", "missing-2",
+    ];
+
+    // add many missing ones to test chunking
+    for (let i = 0; i < 150; i++) {
+      inputIds.push(`missing-chunk-${i}`);
+    }
+
+    knowledge.setSubscriptions(agent.id, projectId, inputIds);
+
+    const subscriptions = knowledge.listDocumentIdsForAgent(agent.id);
+    expect(subscriptions.length).toBe(5);
+    expect(new Set(subscriptions)).toEqual(new Set(docs));
+
+    // test empty array clearance
+    knowledge.setSubscriptions(agent.id, projectId, []);
+    expect(knowledge.listDocumentIdsForAgent(agent.id)).toEqual([]);
+  });
 });

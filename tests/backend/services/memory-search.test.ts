@@ -152,6 +152,54 @@ describe("MemoryService - search", () => {
     expect(mockMemoryRepository.getMemories).toHaveBeenCalledWith(["mem-1", "mem-3"]);
   });
 
+  it("should enforce a defensive maximum candidate cap when loading embeddings", async () => {
+    mockMemoryRepository.loadEmbeddingsForScope?.mockReturnValue([]);
+    mockMemoryRepository.getMemories?.mockReturnValue([]);
+
+    await memoryService.search({
+      query: "test query",
+      projectId,
+    });
+
+    expect(mockMemoryRepository.loadEmbeddingsForScope).toHaveBeenCalledWith(
+      projectId,
+      mockModelId,
+      undefined,
+      undefined,
+      undefined,
+      10000
+    );
+  });
+
+  it("should handle ties deterministically using ID", async () => {
+    mockMemoryRepository.loadEmbeddingsForScope?.mockReturnValue([
+      { id: "mem-b", embeddingDimension: 3, embeddingBlob: float32ToBuffer(new Float32Array([1, 0, 0])) },
+      { id: "mem-a", embeddingDimension: 3, embeddingBlob: float32ToBuffer(new Float32Array([1, 0, 0])) },
+      { id: "mem-c", embeddingDimension: 3, embeddingBlob: float32ToBuffer(new Float32Array([1, 0, 0])) },
+    ]);
+
+    mockMemoryRepository.getMemories?.mockImplementation((ids: string[]) => {
+      const records: Record<string, MemoryRecord> = {
+        "mem-b": { id: "mem-b", content: "b" } as any,
+        "mem-a": { id: "mem-a", content: "a" } as any,
+        "mem-c": { id: "mem-c", content: "c" } as any,
+      };
+      return ids.map(id => records[id]!);
+    });
+
+    const result = await memoryService.search({
+      query: "test",
+      projectId,
+      limit: 2,
+    });
+
+    expect(result).toHaveLength(2);
+    expect(result[0]?.memory.id).toBe("mem-a");
+    expect(result[1]?.memory.id).toBe("mem-b");
+
+    expect(mockMemoryRepository.getMemories).toHaveBeenCalledWith(["mem-a", "mem-b"]);
+  });
+
   it("should preserve caller-specified parameters to loadEmbeddingsForScope", async () => {
     mockMemoryRepository.loadEmbeddingsForScope?.mockReturnValue([]);
     mockMemoryRepository.getMemories?.mockReturnValue([]);
@@ -169,7 +217,8 @@ describe("MemoryService - search", () => {
       mockModelId,
       "agent",
       "sprint-123",
-      "agent-abc"
+      "agent-abc",
+      10000
     );
   });
 });

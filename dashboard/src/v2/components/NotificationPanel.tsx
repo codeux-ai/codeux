@@ -82,7 +82,7 @@ export const NotificationPanel: FunctionComponent<{
       ref={panelRef}
       aria-label="Notifications Panel"
       tabIndex={-1}
-      className="fixed inset-x-4 top-[72px] sm:inset-auto sm:absolute sm:top-full sm:right-0 mt-2 w-[23rem] max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-5rem)] overflow-y-auto overflow-x-hidden rounded-2xl border border-black/[0.08] dark:border-white/[0.08] bg-white/95 shadow-2xl backdrop-blur-2xl dark:bg-void-800/95 z-50 flex flex-col"
+      className="fixed inset-x-4 top-[72px] sm:inset-auto sm:absolute sm:top-full sm:right-0 mt-2 w-[23rem] max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-5rem)] overflow-hidden rounded-2xl border border-black/[0.08] dark:border-white/[0.08] bg-white/95 shadow-2xl backdrop-blur-2xl dark:bg-void-800/95 z-50 flex flex-col"
     >
       <div className="sr-only" aria-live="polite" aria-atomic="true">
         {unreadCount} unread notification{unreadCount !== 1 ? 's' : ''}
@@ -90,7 +90,7 @@ export const NotificationPanel: FunctionComponent<{
 
       <div className="absolute left-0 right-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-signal-500/40 to-transparent" />
 
-      <div className="flex items-center justify-between gap-3 border-b border-black/[0.06] bg-black/[0.02] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.02]">
+      <div className="flex items-center justify-between gap-2 shrink-0 border-b border-black/[0.06] bg-black/[0.02] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.02]">
         <div>
           <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
             Notifications
@@ -120,7 +120,7 @@ export const NotificationPanel: FunctionComponent<{
         </div>
       </div>
 
-      <ul className="dashboard-scrollbar max-h-96 overflow-y-auto p-2 m-0 list-none">
+      <ul className="dashboard-scrollbar flex-1 min-h-0 overflow-y-auto p-2 m-0 list-none">
         {notifications.length === 0 ? (
           <li className="flex flex-col items-center justify-center px-5 py-10 text-center">
             <div className="rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-700 dark:text-signal-300">
@@ -163,7 +163,7 @@ export const NotificationPanel: FunctionComponent<{
                     </div>
                     <div className="shrink-0 text-[10px] font-medium text-slate-400">{notification.time}</div>
                   </div>
-                  <div className="mt-3 flex items-center justify-between gap-2">
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                     <button
                       type="button"
                       onClick={() => onMarkRead(notification.id)}

@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { Layers3 } from "lucide-preact";
 import type { ProjectExecutionStatsSnapshot } from "../../../types.js";
-import { formatDuration } from "../stats-utils.js";
+import { formatStatsDuration } from "../stats-utils.js";
 import {
   PANEL_CLASS,
   StudioHeader,
@@ -19,7 +19,7 @@ export const TelemetrySectionsSection: FunctionComponent<TelemetrySectionsSectio
       <div className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7`}>
         <div className="mb-6 flex flex-wrap gap-2">
           <span className={CHIP_CLASS}>{stats.purposes.length} Purpose Types</span>
-          <span className={CHIP_CLASS}>{formatDuration(stats.usage.activeTimeMs)} Active Time</span>
+          <span className={CHIP_CLASS}>{formatStatsDuration(stats.usage.activeTimeMs)} Active Time</span>
         </div>
         <StudioHeader
           icon={Layers3}

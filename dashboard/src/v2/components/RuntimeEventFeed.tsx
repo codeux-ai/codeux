@@ -57,7 +57,7 @@ const RuntimeEventFeed: FunctionComponent<{ events?: ExecutionRuntimeEventSummar
     }
 
     return (
-        <div ref={feedRef} className="max-h-64 overflow-y-auto pr-2 dashboard-scrollbar space-y-1" aria-live="polite" role="log" aria-label="Runtime feed">
+        <div ref={feedRef} className="max-h-[50dvh] sm:max-h-64 overflow-y-auto pr-2 dashboard-scrollbar space-y-1" aria-live="polite" role="log" aria-label="Runtime feed">
             {events.map((event) => {
                 const cfg = getOriginatorCfg(event.originator || "system");
                 const isError = event.eventType.toLowerCase().includes("error") || event.eventType.toLowerCase().includes("fail");
@@ -75,7 +75,7 @@ const RuntimeEventFeed: FunctionComponent<{ events?: ExecutionRuntimeEventSummar
                                     {formatTime(event.createdAt)}
                                 </span>
                             </div>
-                            <div className="text-[12px] text-slate-600 dark:text-slate-400 leading-relaxed font-mono line-clamp-2 group-hover/entry:line-clamp-none transition-all cursor-default">
+                            <div className="text-[12px] text-slate-600 dark:text-slate-400 leading-relaxed font-mono line-clamp-2 group-hover/entry:line-clamp-none transition-all cursor-default break-words">
                                 {getExecutionEventText(event)}
                             </div>
                         </div>

@@ -420,6 +420,7 @@ describe("MemoryService", () => {
         undefined,
         undefined,
         undefined,
+        10000
       );
 
       expect(mockRepo.getMemories).toHaveBeenCalledWith(["mem-a", "mem-c"]);
@@ -517,6 +518,7 @@ describe("MemoryService", () => {
         "project",
         undefined,
         undefined,
+        10000
       );
       expect(results).toHaveLength(1);
       expect(results[0].claim.id).toBe("claim-1");

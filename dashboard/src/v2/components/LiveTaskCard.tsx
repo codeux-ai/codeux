@@ -31,18 +31,9 @@ import { AgentSelectAvatarIcon } from "./agents/AgentSelectAvatarIcon.js";
 import { SprintReviewBadge } from "./sprints/SprintReviewBadge.js";
 import { getSafeUrl } from "../lib/safe-url.js";
 import { formatInvocationDuration, formatInvocationPurpose } from "./chat/invocation-display.js";
+import { formatDuration } from "../lib/format-duration.js";
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
-
-export function formatDuration(totalSeconds: number): string {
-    if (totalSeconds <= 0) return "0s";
-    const h = Math.floor(totalSeconds / 3600);
-    const m = Math.floor((totalSeconds % 3600) / 60);
-    const s = totalSeconds % 60;
-    if (h > 0) return `${h}h ${m}m ${s}s`;
-    if (m > 0) return `${m}m ${s}s`;
-    return `${s}s`;
-}
 
 function extractRetryAfterIso(errorMessage: string): string | null {
     const match = errorMessage.match(/\[RETRY_AFTER:(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\]/);

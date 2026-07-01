@@ -14,11 +14,13 @@ export interface AntigravityLogResult {
   nativeSessionId: string | null;
 }
 
-interface ProtoField {
-  fieldNumber: number;
-  type: string;
-  value: any;
-}
+type ProtoField =
+  | { fieldNumber: number; type: "varint"; value: number }
+  | { fieldNumber: number; type: "fixed64"; value: number }
+  | { fieldNumber: number; type: "fixed32"; value: number }
+  | { fieldNumber: number; type: "string"; value: string }
+  | { fieldNumber: number; type: "bytes"; value: Buffer }
+  | { fieldNumber: number; type: "message"; value: ProtoField[] };
 
 function decodeVarint(buffer: Buffer, pos: number): { value: number; pos: number } {
   let value = 0;
@@ -116,17 +118,17 @@ function extractAntigravityUsageFromProto(fields: ProtoField[]): {
   const f1 = fields.find(f => f.fieldNumber === 1);
   if (!f1 || f1.type !== "message") return null;
   
-  const f17 = f1.value.find((f: any) => f.fieldNumber === 17);
+  const f17 = f1.value.find(f => f.fieldNumber === 17);
   if (!f17 || f17.type !== "message") return null;
   
-  const f2 = f17.value.find((f: any) => f.fieldNumber === 2);
+  const f2 = f17.value.find(f => f.fieldNumber === 2);
   if (!f2 || f2.type !== "message") return null;
   
   const f2Msg = f2.value;
-  const f_input = f2Msg.find((f: any) => f.fieldNumber === 2);
-  const f_output = f2Msg.find((f: any) => f.fieldNumber === 3);
-  const f_reasoning = f2Msg.find((f: any) => f.fieldNumber === 9);
-  const f_candidates = f2Msg.find((f: any) => f.fieldNumber === 10);
+  const f_input = f2Msg.find(f => f.fieldNumber === 2);
+  const f_output = f2Msg.find(f => f.fieldNumber === 3);
+  const f_reasoning = f2Msg.find(f => f.fieldNumber === 9);
+  const f_candidates = f2Msg.find(f => f.fieldNumber === 10);
   
   const inputTokens = f_input && f_input.type === "varint" ? f_input.value : 0;
   const outputTokens = f_output && f_output.type === "varint" ? f_output.value : 0;

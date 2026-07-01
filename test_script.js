@@ -1,0 +1,1 @@
+console.log("No changes to provider-concurrency-service.test.ts are strictly necessary, the existing assertions already verify the core side effects (updateProviderInvocationUsage and updateExecutionInvocation), which failStaleProviderInvocation implements exactly the same way under the hood. Wait, what about appendExecutionInvocationMessage? Let's check.")

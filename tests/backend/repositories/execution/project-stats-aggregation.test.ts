@@ -48,9 +48,11 @@ describe("project-stats-aggregation", () => {
       label: "bucket1",
       usage: createEmptyUsageTotals(),
       providerTokens: new Map(),
+      providerCost: new Map(),
       purposeTime: new Map(),
       purposeInvocations: new Map(),
       modelTokens: new Map(),
+      modelCost: new Map(),
     };
     const u = createEmptyUsageTotals();
     u.totalTokens = 100;

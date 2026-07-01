@@ -103,9 +103,16 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
     if (Object.keys(validationErrors).length > 0) {
       setTouched({ sprintId: true, title: true });
       setTimeout(() => {
-        const firstInvalid = fieldsRef.current?.querySelector('[aria-invalid="true"]');
+        const firstInvalid = document.getElementById('add-task-form')?.querySelector('[aria-invalid="true"]');
         if (firstInvalid instanceof HTMLElement) {
-          firstInvalid.focus();
+          firstInvalid.focus({ preventScroll: true });
+          const container = document.getElementById('add-task-form-body');
+          if (container) {
+            const containerRect = container.getBoundingClientRect();
+            const elementRect = firstInvalid.getBoundingClientRect();
+            const offset = elementRect.top - containerRect.top + container.scrollTop - 20;
+            container.scrollTo({ top: offset, behavior: 'smooth' });
+          }
         }
       }, 0);
       return;
@@ -148,10 +155,10 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
       isOpen={true}
       onClose={handleClose}
       ariaLabelledBy="add-task-modal-title"
-      className="w-[calc(100vw-2rem)] sm:w-full max-w-4xl !p-0 rounded-2xl"
+      className="w-[calc(100vw-2rem)] sm:w-full max-w-4xl !p-0 rounded-2xl !overflow-hidden flex flex-col"
     >
       <div
-        className="relative w-full max-h-[calc(100dvh-2rem)] overflow-hidden sm:overflow-y-auto flex flex-col sm:flex-row"
+        className="relative w-full flex-col sm:flex-row flex-1 min-h-0 flex"
       >
         <div className="relative hidden sm:flex w-56 shrink-0 bg-void-900 dark:bg-void-950 flex-col justify-between p-8 overflow-hidden">
           <span className="absolute -top-2 -left-4 text-[7.5rem] font-black text-white/[0.035] font-display leading-none pointer-events-none select-none tracking-tighter">
@@ -174,8 +181,8 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
           </div>
         </div>
 
-        <div className="flex-1 bg-white/98 dark:bg-void-800/98 p-8 flex flex-col">
-          <div className="flex items-start justify-between mb-8">
+        <div className="flex-1 bg-white/98 dark:bg-void-800/98 flex flex-col min-w-0">
+          <div className="flex items-start justify-between shrink-0 p-5 sm:p-7 lg:px-8 lg:pt-8 lg:pb-6 border-b border-black/[0.04] dark:border-white/[0.04]">
             <div>
               <h2 id="add-task-modal-title" className="text-[2rem] font-black text-slate-900 dark:text-white tracking-tight font-display leading-none">
                 {initialTask ? "Edit Task." : "Create Task."}
@@ -194,7 +201,8 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             </button>
           </div>
 
-          <form ref={fieldsRef} onSubmit={handleSubmit} className="flex flex-col gap-6">
+          <div className="flex-1 overflow-y-auto p-5 sm:p-7 lg:px-8 lg:py-6" id="add-task-form-body">
+            <form id="add-task-form" onSubmit={handleSubmit} className="flex flex-col gap-6">
             <ActionFeedbackRegion status={feedback.status} message={feedback.message} onDismiss={clearFeedback} clearError={clearError} autoDismiss={feedback.autoDismiss} retryAction={feedback.retryAction} retryLabel={feedback.retryLabel} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <FieldWrapper label="Sprint" required error={validationErrors.sprintId} forceTouch={touched.sprintId}>
@@ -376,26 +384,29 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               )}
             </fieldset>
 
-            <div className="flex items-center justify-between pt-2">
+            </form>
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between shrink-0 p-5 sm:p-7 lg:px-8 lg:py-6 border-t border-black/[0.04] dark:border-white/[0.04] bg-white/50 dark:bg-void-800/50 gap-3">
               <button
                 type="button"
                 onClick={handleClose}
                 disabled={isSubmitting}
-                className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 rounded disabled:opacity-50 disabled:cursor-not-allowed py-2 sm:py-0 w-full sm:w-auto"
               >
                 Cancel
               </button>
               <Button
                 type="submit"
+                form="add-task-form"
                 pending={isSubmitting}
                 variant="signal"
                 size="lg"
+                className="w-full sm:w-auto"
               >
                 <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
                 {initialTask ? "Save Task" : "Create Task"}
               </Button>
             </div>
-          </form>
         </div>
       </div>
     </Modal>

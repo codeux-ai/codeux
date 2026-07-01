@@ -163,6 +163,12 @@ describe("ProviderConcurrencyService", () => {
         status: "failed",
         errorMessage: expect.stringContaining("Docker container disappeared"),
       }));
+      expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith("exec-stale", expect.objectContaining({
+        contentMarkdown: expect.stringContaining("Docker container disappeared"),
+        metadata: expect.objectContaining({
+          recovery: "provider_concurrency_stale_docker_reconcile",
+        }),
+      }));
       expect(executionRepository.createProviderInvocationUsage).toHaveBeenCalledWith({ provider: "qwen-code" });
     });
 
@@ -304,6 +310,12 @@ describe("ProviderConcurrencyService", () => {
       expect(executionRepository.updateExecutionInvocation).toHaveBeenCalledWith("exec-stale", expect.objectContaining({
         status: "failed",
         errorMessage: expect.stringContaining("Docker container disappeared"),
+      }));
+      expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith("exec-stale", expect.objectContaining({
+        contentMarkdown: expect.stringContaining("Docker container disappeared"),
+        metadata: expect.objectContaining({
+          recovery: "provider_concurrency_stale_docker_reconcile",
+        }),
       }));
       expect(executionRepository.tryCreateProviderInvocationUsage).toHaveBeenCalledWith({ provider: "qwen-code" }, 2);
     });

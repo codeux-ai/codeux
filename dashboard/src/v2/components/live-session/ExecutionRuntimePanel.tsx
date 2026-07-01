@@ -187,13 +187,13 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                                 No listeners or workers are connected to the selected project yet.
                             </p>
                         ) : (
-                            <div className="max-h-72 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar">
+                            <div className="max-h-[50dvh] sm:max-h-72 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar">
                                 {visibleConnections.map((connection) => (
                                     <div
                                         key={connection.id}
                                         className={`rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] bg-black/[0.015] p-3 pl-3 transition-colors hover:border-signal-500/25 hover:bg-signal-500/[0.035] dark:border-white/[0.04] dark:bg-white/[0.015] ${statusRailTone(connection.status)}`}
                                     >
-                                        <div className="flex items-start justify-between gap-3">
+                                        <div className="flex items-start justify-between gap-3 min-w-0">
                                             <div className="min-w-0">
                                                 <div className="flex flex-wrap items-center gap-2">
                                                     <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
@@ -460,7 +460,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                 <div className="space-y-2">
                                     {visibleSprintRuns.map((run) => (
                                         <div key={run.id} className={`rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] bg-black/[0.015] p-3 pl-3 transition-colors hover:border-signal-500/25 hover:bg-signal-500/[0.035] dark:border-white/[0.04] dark:bg-white/[0.015] ${statusRailTone(run.status)}`}>
-                                            <div className="flex items-center justify-between gap-3">
+                                            <div className="flex items-center justify-between gap-3 min-w-0">
                                                 <div className="min-w-0">
                                                     <div className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
                                                         {run.sprintName}{run.sprintNumber != null ? ` · Sprint ${run.sprintNumber}` : ""}
@@ -543,7 +543,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                         ? "border-slate-400/18 bg-slate-400/8"
                                                         : "border-status-amber/18 bg-status-amber/8"
                                                 } p-3`}>
-                                                    <div className="flex items-start justify-between gap-3">
+                                                    <div className="flex items-start justify-between gap-3 min-w-0">
                                                         <div className="min-w-0">
                                                             <div className={`text-[10px] font-bold uppercase tracking-[0.14em] ${
                                                                 run.humanIntervention.ownerType === "system" || run.humanIntervention.ownerType === "worker"
@@ -584,7 +584,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                             {snapshot.taskDispatches.length === 0 ? (
                                 <div className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 text-[11px] font-mono text-slate-400 dark:border-white/[0.04] dark:bg-white/[0.015] dark:text-slate-500">No task dispatches yet.</div>
                             ) : (
-                                <div className="max-h-80 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar">
+                                <div className="max-h-[50dvh] sm:max-h-80 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar">
                                     {visibleTaskDispatches.map((dispatch) => {
                                         const dispatchEvents = snapshot.recentEvents.filter(
                                             (e) => e.dispatchId === dispatch.id || (e.taskRunId && e.taskRunId === dispatch.taskRunId)
@@ -592,7 +592,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                         const activeCap = findActiveConcurrencyWait(dispatchEvents, dispatch.status);
                                         return (
                                             <div key={dispatch.id} className={`rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] bg-black/[0.015] p-3 pl-3 transition-colors hover:border-signal-500/25 hover:bg-signal-500/[0.035] dark:border-white/[0.04] dark:bg-white/[0.015] ${statusRailTone(activeCap ? "PENDING" : dispatch.status)}`}>
-                                                <div className="flex items-start justify-between gap-3">
+                                                <div className="flex items-start justify-between gap-3 min-w-0">
                                                     <div className="min-w-0">
                                                         <div className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
                                                             {dispatch.taskKey} · {dispatch.taskTitle}
@@ -632,9 +632,9 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                 </div>
                                                 {(dispatch.sessionId || dispatch.workerBranch || dispatch.errorMessage || dispatch.activeLeaseOwnerKey) && (
                                                     <div className="mt-2 space-y-1 border-t border-black/[0.04] pt-2 text-[10px] font-mono text-slate-400 dark:border-white/[0.04]">
-                                                        {dispatch.sessionId && <div>session {dispatch.sessionId}</div>}
-                                                        {dispatch.workerBranch && <div>branch {dispatch.workerBranch}</div>}
-                                                        {dispatch.activeLeaseOwnerKey && <div>lease {dispatch.activeLeaseOwnerKey}</div>}
+                                                        {dispatch.sessionId && <div className="break-all">session {dispatch.sessionId}</div>}
+                                                        {dispatch.workerBranch && <div className="break-all">branch {dispatch.workerBranch}</div>}
+                                                        {dispatch.activeLeaseOwnerKey && <div className="break-all">lease {dispatch.activeLeaseOwnerKey}</div>}
                                                         {dispatch.errorMessage && <QuotaCountdown errorMessage={dispatch.errorMessage} />}
                                                     </div>
                                                 )}

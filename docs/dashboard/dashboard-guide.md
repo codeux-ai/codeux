@@ -340,6 +340,7 @@ Legacy runtime:
   - rebuild, stop, open-in-tab, startup-script editing, and log viewing
   - sprint previews are proxied through the dashboard instead of embedding raw localhost origins directly
   - extensionless preview-host deep links such as `/sprints` now recover to the preview app shell when the upstream dev server returns `404`, so direct loads and refreshes stay routable
+  - fluid responsive design across device classes (mobile stacking to wide side-panels) with safe viewport-constrained iframe sizing and scrollable/wrappable control chrome
 - File Browser page is project-scoped and mirrors the same v2 hierarchy and workbench visual language as Browser Preview:
   - signal-accent eyebrow and `font-display` heading hierarchy with responsive supporting copy
   - normalized control rail with semantic status badge, sprint/branch context, mode toggle, and rebuild/stop controls
@@ -401,6 +402,12 @@ Legacy runtime:
 - Virtual-worker-routed tasks are created from the same task modal and appear in the same board; the executor badge shows whether work is automatic, CLI-backed, Jules-backed, or handled by the virtual worker lane
 - Settings page now exposes Browser Preview as its own primary left-rail category, covering preview enablement, in-app browser visibility, launch/rebuild automation, Git sync on rebuild, maximum active preview containers, port allocation, and the project-relative preview startup script path
 - The Integrations settings panel now returns the selected detail view to normal document flow after the slide animation completes, so tall forms like GitHub configuration can extend to full height instead of being clipped to the shorter integrations list.
+
+### File Browser view
+- Responsive container layout with bounded height stacking on narrow screens and side-by-side grid panels on wide screens
+- Automatic toggle between inline and side-by-side diff modes based on viewport width
+- Resilient long-path truncation in action bar and active file viewer controls
+- Automatic Monaco viewer layout recalculation to prevent hidden or overflowing code views
 
 ### Dashboard view
 - Task statistics
@@ -732,6 +739,7 @@ To prevent credential and runtime config conflicts, provider configurations enfo
 
 The dashboard relies on consistent interaction primitives across all v2 views:
 
+- **Chat Layout**: The chat page fluidly adapts from a stacked mobile view (with a bounded height rail) to a two-column tablet/desktop view. Mode tabs and action rows wrap natively (`flex-wrap`) on small screens, and all deeply nested message content (tool calls, code blocks) enforce horizontal scroll (`overflow-x-auto` and `min-w-0`) rather than expanding the page horizontally.
 - **Data Views**: The Sprint Ledger maintains robust selection scope by pruning selections when filters change to prevent hidden bulk actions. Sort states explicitly surface unsorted, ascending, and descending affordances, and row actions clearly differentiate between deletion, pinning, and execution pending states without relying solely on opacity reductions.
 - **Cursor Affordance**: All interactive controls (buttons, links, tab controls, form toggles, menu/popover triggers, DAG nodes, cards, and dismissible overlays) explicitly use a pointer cursor. Disabled controls retain `cursor-not-allowed` or default arrow cursors.
 - **Async Feedback & Loading**: Active states (like waiting for CI, running tasks, or loading large datasets) use visual indicators like spinners or pulsing dots.

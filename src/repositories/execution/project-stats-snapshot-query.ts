@@ -16,6 +16,7 @@ import { StatsEntityMetadata, ProjectStatsQueryDependencies } from "./execution-
 import {
   usageFields,
   mapAggregatedUsage,
+  createSnapshotPricingResolver,
   mergeAggregatedUsage,
   accumulateBucketUsage,
   mapEntityUsage,
@@ -79,6 +80,7 @@ export function queryProjectStatsSnapshot(
   const providerUsage = new Map<string, ExecutionUsageTotals>();
   const purposeUsage = new Map<string, ExecutionUsageTotals>();
   const tokenSourceCounts = new Map<string, number>();
+  const pricingResolver = createSnapshotPricingResolver(deps.getModelPricing);
   const taskLastActivity = new Map<string, string>();
   const sprintLastActivity = new Map<string, string>();
   const providerLastActivity = new Map<string, string>();
@@ -113,16 +115,7 @@ export function queryProjectStatsSnapshot(
   `).all(...bucketParams, projectId, rangeStartIso, rangeEndIso) as any[];
 
   for (const row of mainAggs) {
-    const u = mapAggregatedUsage(row);
-    if (row.provider) {
-      const pricing = deps.getModelPricing?.(row.provider, row.model);
-      if (pricing) {
-        u.inputCostUsd = (u.inputTokens / 1_000_000) * (pricing.inputTokens || 0);
-        u.outputCostUsd = (u.outputTokens / 1_000_000) * (pricing.outputTokens || 0);
-        u.cachedInputCostUsd = (u.cachedInputTokens / 1_000_000) * (pricing.cachedInputTokens || 0);
-        u.totalCostUsd = u.inputCostUsd + u.outputCostUsd + u.cachedInputCostUsd;
-      }
-    }
+    const u = mapAggregatedUsage(row, pricingResolver, row.provider, row.model);
     mergeAggregatedUsage(usage, u);
 
     // Task aggregations

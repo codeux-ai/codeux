@@ -3,7 +3,7 @@ import type {
   ProjectExecutionStatsChartSeries,
   ProjectExecutionStatsSnapshot
 } from '../../../types.js';
-import { formatDuration, formatTokens, NUMBER_FORMATTER, sumUsage, formatCost } from './stats-utils.js';
+import { formatStatsDuration, formatTokens, NUMBER_FORMATTER, sumUsage, formatCost } from './stats-utils.js';
 import {
   buildPoints,
   buildSmoothPath,
@@ -58,7 +58,7 @@ export function normalizeChartSeries(
     const accentHex = series.color || fallbackColors[idx % fallbackColors.length]!;
 
     const formatter = series.formatter === 'duration'
-      ? formatDuration
+      ? formatStatsDuration
       : series.formatter === 'number'
         ? (val: number) => {
             if (series.id.includes('cost')) return formatCost(val);

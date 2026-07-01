@@ -22,6 +22,7 @@ import { DockerSetupImageCache } from "../infrastructure/providers/cli/docker-se
 import { resolveDockerRuntimeRoot } from "../infrastructure/providers/cli/docker-runtime-paths.js";
 import { formatSprintBranch } from "../domain/sprint/branch-name-generator.js";
 import { runCommandStrict } from "./cli-process-runner.js";
+import { pruneOrphanedDockerVolumes, removeContainersByIds } from "./docker-orphan-cleanup-utils.js";
 import {
   getDockerUserSpec,
   mapPathPrefix,
@@ -76,9 +77,11 @@ interface PreparedStartupScript {
 
 
 export class SprintPreviewService {
-  private readonly lifecycle = new DockerSessionLifecycle();
+  private readonly lifecycle: DockerSessionLifecycle;
 
-  constructor(private readonly deps: SprintPreviewServiceDeps) {}
+  constructor(private readonly deps: SprintPreviewServiceDeps) {
+    this.lifecycle = new DockerSessionLifecycle(this.deps.logger);
+  }
 
   async listSessions(projectId?: string): Promise<SprintPreviewSession[]> {
     const sessions = this.deps.sprintPreviewRepository.listSessions(projectId);
@@ -338,34 +341,18 @@ export class SprintPreviewService {
    * Keeping the volume tied to a live session row preserves build cache for sprints still tracked.
    */
   private async pruneOrphanedVolumes(): Promise<number> {
-    const result = await runCommandStrict(
-      "docker",
-      ["volume", "ls", "-q", "--filter", "label=code-ux.preview-volume=true"],
-      process.cwd(),
-    ).catch(() => null);
-    if (!result?.ok) {
-      return 0;
-    }
-    const prefix = "code-ux-preview-volume-";
     const liveSprintIds = new Set(this.deps.sprintPreviewRepository.listSessions().map((session) => session.sprintId));
-    const orphans = result.stdout
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((name) => name.startsWith(prefix) && !liveSprintIds.has(name.slice(prefix.length)));
-    if (orphans.length > 0) {
-      await runCommandStrict("docker", ["volume", "rm", "-f", ...orphans], process.cwd()).catch(() => undefined);
-    }
-    if (orphans.length > 0) {
-      this.deps.logger?.info("Pruned orphaned sprint preview volumes on startup", { prunedCount: orphans.length });
-    }
-    return orphans.length;
+    return pruneOrphanedDockerVolumes({
+      prefix: "code-ux-preview-volume-",
+      liveIds: liveSprintIds,
+      logger: this.deps.logger,
+      logLabel: "Pruned orphaned sprint preview volumes on startup",
+    });
   }
 
   async cleanupStaleContainersOnStartup(): Promise<void> {
     const containerIds = await this.listPreviewContainerIds();
-    if (containerIds.length > 0) {
-      await runCommandStrict("docker", ["rm", "-f", "-v", ...containerIds], process.cwd()).catch(() => undefined);
-    }
+    await removeContainersByIds(containerIds);
 
     const sessions = this.deps.sprintPreviewRepository.listSessions();
     for (const session of sessions) {

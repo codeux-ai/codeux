@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/preact";
-import { useUsageChartState } from "../use-usage-chart-state.js";
+import { useUsageChartState, parseEnabledSeries, reconcileSeries } from "../use-usage-chart-state.js";
 import type { ProjectExecutionStatsSnapshot } from "../../../types.js";
 
 const baseStats = {
@@ -10,9 +10,80 @@ const baseStats = {
   chartSeries: [{ id: "tokens", label: "Tokens", defaultEnabled: true }, { id: "active", label: "Active", defaultEnabled: false }]
 } as unknown as ProjectExecutionStatsSnapshot;
 
+describe("parseEnabledSeries", () => {
+  it("returns empty object for missing/null input", () => {
+    expect(parseEnabledSeries(null)).toEqual({});
+  });
+  it("returns empty object for malformed JSON", () => {
+    expect(parseEnabledSeries('invalid')).toEqual({});
+  });
+  it("returns empty object for non-object types", () => {
+    expect(parseEnabledSeries('["a"]')).toEqual({});
+    expect(parseEnabledSeries('"string"')).toEqual({});
+  });
+  it("strips non-boolean properties from objects", () => {
+    expect(parseEnabledSeries('{"a": true, "b": "string", "c": null, "d": false}')).toEqual({ a: true, d: false });
+  });
+});
+
+describe("reconcileSeries", () => {
+  const series = [{ id: "tokens", defaultEnabled: true }, { id: "active", defaultEnabled: false }];
+
+  it("returns identical reference if state is valid and unchanged", () => {
+    const current = { tokens: true, active: false };
+    expect(reconcileSeries(current, series)).toBe(current);
+  });
+
+  it("adds missing series with defaultEnabled value", () => {
+    const current = { tokens: true };
+    const next = reconcileSeries(current, series);
+    expect(next).not.toBe(current);
+    expect(next).toEqual({ tokens: true, active: false });
+  });
+
+  it("prunes stale series", () => {
+    const current = { tokens: true, active: true, stale: true };
+    const next = reconcileSeries(current, series);
+    expect(next).not.toBe(current);
+    expect(next).toEqual({ tokens: true, active: true });
+  });
+
+  it("forces at least one active series if all are false", () => {
+    const current = { tokens: false, active: false };
+    const next = reconcileSeries(current, series);
+    expect(next).not.toBe(current);
+    expect(next).toEqual({ tokens: true, active: false });
+  });
+});
+
 describe("useUsageChartState", () => {
   beforeEach(() => {
     localStorage.clear();
+  });
+
+  it("handles restricted localStorage environment safely", () => {
+    const originalGet = localStorage.getItem;
+    try {
+      Object.defineProperty(window, 'localStorage', {
+        value: {
+          getItem: () => { throw new Error("SecurityError"); },
+          setItem: () => { throw new Error("SecurityError"); },
+          clear: () => {}
+        },
+        writable: true
+      });
+      const { result } = renderHook(() => useUsageChartState("proj-restricted", baseStats));
+      expect(result.current.enabledSeries).toEqual({ tokens: true, active: false });
+    } finally {
+      Object.defineProperty(window, 'localStorage', {
+        value: {
+          getItem: originalGet,
+          setItem: localStorage.setItem,
+          clear: localStorage.clear
+        },
+        writable: true
+      });
+    }
   });
 
   it("scopes enabled series storage by projectId", () => {

@@ -1,36 +1,27 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from "preact/hooks";
+import { useState, useMemo, useEffect, useRef } from "preact/hooks";
 import type { FunctionComponent } from "preact";
-import type { LucideProps } from "lucide-preact";
-import {
-  X, Plus, Trash2, ChevronLeft, Eye, EyeOff,
-  Sparkles, ShieldCheck, Accessibility, Zap,
-  Rocket, ClipboardList, Settings2,
-  Bug, Code2, Database, FileSearch, FlaskConical,
-  GitBranch, Globe, Hammer, Heart, Layers,
-  LayoutGrid, Lock, Microscope, Monitor,
-  Paintbrush, RefreshCw, Search, Server,
-  Shield, Terminal, TestTube2, Wrench,
-} from "lucide-preact";
 import gsap from "gsap";
-import type { QuicksprintTemplateRecord } from "../../../../../src/contracts/quicksprint-types.js";
-import type { AgentPreset, ExecutionConnectionSummary, ProviderId } from "../../types.js";
+
+import type { AgentPreset, ProviderId } from "../../types.js";
 import type { PlanningRouteOption } from "../../lib/sprint-composer-state.js";
-import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
-import { getProviderModelOptions } from "../../lib/settings-view-models.js";
-import { getPlanningFeedback } from "../../lib/sprint-planning-feedback.js";
-import { PlanningProgressOverlay } from "../ui/PlanningProgressOverlay.js";
-import { useFocusTrap } from "../../hooks/use-focus-trap.js";
-import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
-import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
+import type { QuicksprintTemplateRecord } from "../../../../../src/contracts/quicksprint-types.js";
+
+import { useQuicksprintEditorState } from "./use-quicksprint-editor-state.js";
+import { useQuicksprintExecutionState } from "./use-quicksprint-execution-state.js";
+import { QuicksprintBrowseView } from "./QuicksprintBrowseView.js";
+import { QuicksprintEditorView } from "./QuicksprintEditorView.js";
+import { QuicksprintExecutionView } from "./QuicksprintExecutionView.js";
+
 import {
   getBuiltinTemplates,
   getCustomTemplates,
   getBuiltinPurposeOptions,
   getActiveBuiltinPurpose,
   getVisibleBuiltinTemplates,
-  getCombinedPrompt,
-  type BuiltinPurposeOption,
 } from "../../lib/quicksprint-panel-state.js";
+
+/* ─── Types ─────────────────────────────────────────────────────────── */
+type Phase = "browse" | "configure" | "editor";
 
 interface VirtualProviderOption {
   id?: string;
@@ -41,71 +32,6 @@ interface VirtualProviderOption {
   iconProviderId?: ProviderId;
   effectiveModel?: string;
 }
-
-/* ─── Icon Map ──────────────────────────────────────────────────────── */
-const IconMap: Record<string, FunctionComponent<LucideProps>> = {
-  Sparkles, ShieldCheck, Accessibility, Zap,
-  Bug, Code2, Database, FileSearch, FlaskConical,
-  GitBranch, Globe, Hammer, Heart, Layers,
-  LayoutGrid, Lock, Microscope, Monitor,
-  Paintbrush, RefreshCw, Search, Server,
-  Shield, Terminal, TestTube2, Wrench,
-};
-
-const TAG_STYLES = [
-  { value: "signal", text: "text-signal-500", bg: "bg-signal-500/10", border: "border-signal-500/20", dot: "bg-signal-500" },
-  { value: "ember", text: "text-ember-500", bg: "bg-ember-500/10", border: "border-ember-500/20", dot: "bg-ember-500" },
-  { value: "green", text: "text-status-green", bg: "bg-status-green/10", border: "border-status-green/20", dot: "bg-status-green" },
-  { value: "red", text: "text-status-red", bg: "bg-status-red/10", border: "border-status-red/20", dot: "bg-status-red" },
-  { value: "amber", text: "text-status-amber", bg: "bg-status-amber/10", border: "border-status-amber/20", dot: "bg-status-amber" },
-  { value: "violet", text: "text-violet-500", bg: "bg-violet-500/10", border: "border-violet-500/20", dot: "bg-violet-500" },
-  { value: "cyan", text: "text-cyan-500", bg: "bg-cyan-500/10", border: "border-cyan-500/20", dot: "bg-cyan-500" },
-  { value: "rose", text: "text-rose-500", bg: "bg-rose-500/10", border: "border-rose-500/20", dot: "bg-rose-500" },
-  { value: "blue", text: "text-blue-500", bg: "bg-blue-500/10", border: "border-blue-500/20", dot: "bg-blue-500" },
-  { value: "slate", text: "text-slate-500", bg: "bg-slate-500/10", border: "border-slate-500/20", dot: "bg-slate-500" },
-];
-
-const getTagStyles = (colorVal: string) => {
-  const found = TAG_STYLES.find(s => s.value === colorVal);
-  if (found) return { ...found, style: {} as React.CSSProperties };
-  // Fallback to CSS variables
-  return {
-    text: "", bg: "", border: "", dot: "", value: colorVal,
-    style: { '--accent': colorVal } as React.CSSProperties
-  };
-};
-
-const ICON_OPTIONS: ReadonlyArray<{ value: string; Icon: FunctionComponent<LucideProps> }> = [
-  { value: "Sparkles", Icon: Sparkles },
-  { value: "ShieldCheck", Icon: ShieldCheck },
-  { value: "Accessibility", Icon: Accessibility },
-  { value: "Zap", Icon: Zap },
-  { value: "Bug", Icon: Bug },
-  { value: "Code2", Icon: Code2 },
-  { value: "Database", Icon: Database },
-  { value: "FileSearch", Icon: FileSearch },
-  { value: "FlaskConical", Icon: FlaskConical },
-  { value: "GitBranch", Icon: GitBranch },
-  { value: "Globe", Icon: Globe },
-  { value: "Hammer", Icon: Hammer },
-  { value: "Heart", Icon: Heart },
-  { value: "Layers", Icon: Layers },
-  { value: "LayoutGrid", Icon: LayoutGrid },
-  { value: "Lock", Icon: Lock },
-  { value: "Microscope", Icon: Microscope },
-  { value: "Monitor", Icon: Monitor },
-  { value: "Paintbrush", Icon: Paintbrush },
-  { value: "RefreshCw", Icon: RefreshCw },
-  { value: "Search", Icon: Search },
-  { value: "Server", Icon: Server },
-  { value: "Shield", Icon: Shield },
-  { value: "Terminal", Icon: Terminal },
-  { value: "TestTube2", Icon: TestTube2 },
-  { value: "Wrench", Icon: Wrench },
-];
-
-/* ─── Types ─────────────────────────────────────────────────────────── */
-type Phase = "browse" | "configure" | "editor";
 
 interface QuicksprintExecutionOptions {
   shouldHandleResult?: () => boolean;
@@ -178,33 +104,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   const [showPrompt, setShowPrompt] = useState(false);
   const [additionalPrompt, setAdditionalPrompt] = useState("");
 
-  /* ── Editor state ───────────────────────────────────────────────── */
-  const [editorTemplate, setEditorTemplate] = useState<QuicksprintTemplateRecord | null>(null);
-  const [edName, setEdName] = useState("");
-  const [edDescription, setEdDescription] = useState("");
-  const [edIcon, setEdIcon] = useState("Zap");
-  const [edCategory, setEdCategory] = useState("engineering");
-  const [edCategoryColor, setEdCategoryColor] = useState("#22c55e");
-  const [showColorPicker, setShowColorPicker] = useState(false);
-  const [showIconPicker, setShowIconPicker] = useState(false);
-  const iconPickerRef = useFocusTrap(showIconPicker, { onClose: () => setShowIconPicker(false), restoreFocus: true });
-  const colorPickerRef = useFocusTrap(showColorPicker, { onClose: () => setShowColorPicker(false), restoreFocus: true });
-  const [pickerPos, setPickerPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
-  const [edInstruction, setEdInstruction] = useState("");
-  const [edTaskCount, setEdTaskCount] = useState(5);
-  const [edAgentPresetId, setEdAgentPresetId] = useState("");
-  const [edSaving, setEdSaving] = useState(false);
-  const [edConfirmDelete, setEdConfirmDelete] = useState(false);
-
-  /* ── Execution state ────────────────────────────────────────────── */
-  const [executingMode, setExecutingMode] = useState<"plan_only" | "plan_and_start" | null>(null);
-  const [elapsedMs, setElapsedMs] = useState(0);
-  const [isOverlayDismissed, setIsOverlayDismissed] = useState(false);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const activeRequestRef = useRef<{ id: number; detached: boolean; cancelled: boolean } | null>(null);
-  const requestCounterRef = useRef(0);
-  const isBusy = executingMode !== null;
-
+  /* ── Computed Data ────────────────────────────────────────────── */
   const selectedTemplate = useMemo(
     () => templates.find((t) => t.id === selectedTemplateId) || null,
     [templates, selectedTemplateId],
@@ -247,77 +147,48 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     [activeBuiltinPurpose, builtinTemplates]
   );
 
-  /* ── Combined prompt preview (agent + template + additional) ────── */
-  const combinedPrompt = useMemo(
-    () => getCombinedPrompt(selectedTemplate, agentPresets, additionalPrompt, taskCount),
-    [selectedTemplate, agentPresets, additionalPrompt, taskCount]
-  );
+  /* ── Handlers ────────────────────────────────────────────── */
+  const handleSelectTemplate = (t: QuicksprintTemplateRecord) => {
+    setSelectedTemplateId(t.id);
+    setTaskCount(t.defaultTaskCount || 5);
+    setPhase("configure");
+    setRouteOverride(null);
+    setModelOverride(null);
+    setShowPrompt(false);
+    setAdditionalPrompt("");
+  };
 
-  const { execution } = useExecutionTimeline();
-  const connections = execution?.connections || [];
+  /* ── Hooks ────────────────────────────────────────────── */
+  const editorState = useQuicksprintEditorState({
+    templates,
+    onCreateTemplate,
+    onUpdateTemplate,
+    onDeleteTemplate,
+    onCancel: () => setPhase("browse"),
+  });
 
-  /* ── Route options (matching SprintComposer) ────────────────────── */
-  const routeOptions = useMemo<PlanningRouteOption[]>(() => {
-    const opts: PlanningRouteOption[] = [];
-    for (const conn of connections) {
-      if (conn.status === "connected" || conn.status === "listening" || conn.status === "idle") {
-        opts.push({ type: "connected", id: conn.id, label: conn.displayName || conn.connectionKey });
-      }
-    }
-    for (const vp of virtualProviders) {
-      opts.push({
-        type: "virtual",
-        id: vp.providerConfigId || vp.id || vp.provider || "",
-        label: vp.displayLabel || vp.label || vp.providerConfigId || vp.id || vp.provider || "Provider",
-        provider: vp.providerConfigId || vp.id || vp.provider,
-        iconProviderId: vp.iconProviderId || (vp.provider as ProviderId | undefined) || (vp.id as ProviderId | undefined),
-        effectiveModel: vp.effectiveModel,
-      });
-    }
-    return opts;
-  }, [connections, virtualProviders]);
+  const wrappedOpenEditor = (t: QuicksprintTemplateRecord | null) => {
+    editorState.openEditor(t);
+    setPhase("editor");
+  };
 
-  const showModelOverride = routeOverride?.type === "virtual";
-  const modelProviderId = routeOverride?.iconProviderId;
-  const modelOptions = useMemo(
-    () => (showModelOverride && modelProviderId ? getProviderModelOptions(modelProviderId) : []),
-    [showModelOverride, modelProviderId],
-  );
-  const defaultModelLabel = routeOverride?.effectiveModel
-    ? `Default Model (${routeOverride.effectiveModel})`
-    : defaultModelOptionLabel;
-  const renderProviderIcon = (providerId: ProviderId) => (
-    <ProviderBrandIcon id={providerId} className="h-5 w-5 rounded-md" imageClassName="h-3 w-3" />
-  );
-  const renderConnectedRouteIcon = () => (
-    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-slate-500/18 bg-slate-500/[0.08] text-slate-600 dark:border-slate-300/18 dark:bg-slate-300/[0.08] dark:text-slate-300">
-      <Settings2 className="h-3.5 w-3.5" strokeWidth={2.2} />
-    </span>
-  );
+  const executionState = useQuicksprintExecutionState({
+    onExecute,
+    virtualProviders,
+    routeOverride,
+    modelOverride,
+    selectedTemplate,
+    additionalPrompt,
+    taskCount,
+    agentPresets,
+    onClose,
+  });
 
   useEffect(() => {
-    if (!modelOverride) {
-      return;
-    }
-    if (!showModelOverride || !modelOptions.some((option) => option.value === modelOverride)) {
-      setModelOverride(null);
-    }
-  }, [modelOptions, modelOverride, showModelOverride]);
-
-  /* ── Planning feedback / timer ──────────────────────────────────── */
-  useEffect(() => {
-    if (!isBusy) { setElapsedMs(0); return; }
-    setIsOverlayDismissed(false);
-    const t0 = Date.now();
-    const id = setInterval(() => setElapsedMs(Date.now() - t0), 100);
-    return () => clearInterval(id);
-  }, [isBusy]);
-
-  const feedback = useMemo(
-    () => isBusy ? getPlanningFeedback(executingMode === "plan_and_start" ? "plan_and_start" : "plan_only", elapsedMs) : null,
-    [isBusy, executingMode, elapsedMs],
-  );
-  const isDark = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+    return () => {
+      executionState.handleCancelExecute();
+    };
+  }, [executionState.handleCancelExecute]);
 
   /* ── Animations ─────────────────────────────────────────────────── */
   useEffect(() => {
@@ -333,853 +204,71 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     if (!items.length) return;
     gsap.fromTo(items, { y: 18, opacity: 0 }, {
       y: 0, opacity: 1, stagger: 0.055, duration: 0.5, ease: "power3.out",
+      delay: 0.1,
     });
-  }, [phase]);
+  }, [phase, showPrompt]);
 
-  /* ── Select template → configure ────────────────────────────────── */
-  const handleSelectTemplate = useCallback((t: QuicksprintTemplateRecord) => {
-    setSelectedTemplateId(t.id);
-    setTaskCount(t.defaultTaskCount || 5);
-    setRouteOverride(null);
-    setModelOverride(null);
-    setShowPrompt(false);
-    setAdditionalPrompt("");
-    setPhase("configure");
-  }, []);
+  const overflowClass = phase === "editor" && (editorState.showIconPicker || editorState.showColorPicker) ? "" : "overflow-hidden";
 
-  /* ── Open editor ────────────────────────────────────────────────── */
-  const openEditor = useCallback((t: QuicksprintTemplateRecord | null) => {
-    setEditorTemplate(t);
-    setEdName(t?.name || "");
-    setEdDescription(t?.description || "");
-    setEdIcon(t?.icon || "Zap");
-    setEdCategory(t?.category || "engineering");
-    setEdCategoryColor(t?.categoryColor || "signal");
-    setShowColorPicker(false);
-    setShowIconPicker(false);
-    setEdInstruction(t?.agentInstructionMarkdown || "");
-    setEdTaskCount(t?.defaultTaskCount || 5);
-    setEdAgentPresetId("");
-    setEdSaving(false);
-    setEdConfirmDelete(false);
-    setPhase("editor");
-  }, []);
-
-  /* ── Editor save ────────────────────────────────────────────────── */
-  const handleEditorSave = useCallback(async () => {
-    if (!edName.trim() || (!edInstruction.trim() && !edAgentPresetId)) return;
-    setEdSaving(true);
-    try {
-      const data = {
-        name: edName.trim(),
-        description: edDescription.trim(),
-        icon: edIcon,
-        category: edCategory,
-        categoryColor: edCategoryColor,
-        agentInstructionMarkdown: edInstruction.trim(),
-        defaultTaskCount: edTaskCount,
-        agentPresetId: edAgentPresetId || undefined,
-      };
-      if (editorTemplate) {
-        await onUpdateTemplate?.(editorTemplate.id, data);
-      } else {
-        await onCreateTemplate?.(data);
-      }
-      setPhase("browse");
-    } finally {
-      setEdSaving(false);
-    }
-  }, [edName, edDescription, edIcon, edCategory, edCategoryColor, edInstruction, edTaskCount, edAgentPresetId, editorTemplate, onCreateTemplate, onUpdateTemplate]);
-
-  const handleEditorDelete = useCallback(async () => {
-    if (!edConfirmDelete) { setEdConfirmDelete(true); return; }
-    if (!editorTemplate) return;
-    await onDeleteTemplate?.(editorTemplate.id);
-    if (selectedTemplateId === editorTemplate.id) setSelectedTemplateId(null);
-    setPhase("browse");
-  }, [edConfirmDelete, editorTemplate, selectedTemplateId, onDeleteTemplate]);
-
-  /* ── Execute ────────────────────────────────────────────────────── */
-  const handleExecute = useCallback(async (mode: "plan_only" | "plan_and_start") => {
-    if (!selectedTemplate || activeRequestRef.current) return;
-    setExecutingMode(mode);
-    setIsOverlayDismissed(false);
-    setElapsedMs(0);
-
-    const ac = new AbortController();
-    const requestId = requestCounterRef.current + 1;
-    requestCounterRef.current = requestId;
-    activeRequestRef.current = { id: requestId, detached: false, cancelled: false };
-    abortControllerRef.current = ac;
-    const shouldHandleResult = (): boolean => {
-      const activeRequest = activeRequestRef.current;
-      return !!activeRequest
-        && activeRequest.id === requestId
-        && !activeRequest.detached
-        && !activeRequest.cancelled;
-    };
-
-    try {
-      await onExecute(
-        selectedTemplate.id,
-        taskCount,
-        mode,
-        additionalPrompt.trim() || undefined,
-        routeOverride,
-        modelOverride,
-        ac.signal,
-        { shouldHandleResult },
-      );
-      if (shouldHandleResult()) {
-        onClose();
-      }
-    } catch {
-      // Error feedback is owned by the page action; detached requests must not affect the reset panel.
-    } finally {
-      const activeRequest = activeRequestRef.current;
-      if (activeRequest?.id === requestId) {
-        activeRequestRef.current = null;
-      }
-      if (abortControllerRef.current === ac) {
-        abortControllerRef.current = null;
-      }
-      if (!activeRequest || activeRequest.id === requestId) {
-        setExecutingMode(null);
-      }
-    }
-  }, [selectedTemplate, taskCount, additionalPrompt, onExecute, onClose, routeOverride, modelOverride]);
-
-  const handleCancelExecute = useCallback(() => {
-    if (activeRequestRef.current) {
-      activeRequestRef.current.cancelled = true;
-      activeRequestRef.current = null;
-    }
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    setExecutingMode(null);
-  }, []);
-
-  const handleNewQuicksprint = useCallback(() => {
-    if (activeRequestRef.current) {
-      activeRequestRef.current.detached = true;
-    }
-    activeRequestRef.current = null;
-    abortControllerRef.current = null;
-    setExecutingMode(null);
-    setIsOverlayDismissed(true);
-    setSelectedTemplateId(null);
-    setTaskCount(5);
-    setRouteOverride(null);
-    setModelOverride(null);
-    setShowPrompt(false);
-    setAdditionalPrompt("");
-    setPhase("browse");
-  }, []);
-
-  /* ─── Render ──────────────────────────────────────────────────── */
+  /* ── Render ─────────────────────────────────────────────────── */
   return (
     <section
       ref={cardRef}
-      className={`relative w-full rounded-[1.75rem] border border-black/[0.06] bg-white/70 shadow-[0_20px_50px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_24px_56px_rgba(0,0,0,0.28)] ${showIconPicker || showColorPicker ? "" : "overflow-hidden"}`}
+      className={`relative w-full rounded-[1.75rem] border border-black/[0.06] bg-white/70 shadow-[0_20px_50px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_24px_56px_rgba(0,0,0,0.28)] ${overflowClass}`}
     >
-      {/* Radial accents */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,107,0,0.07),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(0,224,160,0.06),transparent_34%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(255,107,0,0.09),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(0,224,160,0.07),transparent_34%)]" />
 
-      {/* ═══ Planning Overlay ═══ */}
-      <PlanningProgressOverlay
-        isBusy={isBusy}
-        isDismissed={isOverlayDismissed}
-        feedback={feedback}
-        planningEta={planningEta}
-        elapsedMs={elapsedMs}
-        isDark={isDark}
-        actionType="quicksprint"
-        themeAccent="ember"
-        onDismiss={() => setIsOverlayDismissed(true)}
-        onCancel={handleCancelExecute}
-        secondaryActionLabel="New Quicksprint"
-        onSecondaryAction={handleNewQuicksprint}
-      />
-
-      {/* ═══ Content ═══ */}
-      <div ref={fieldsRef} className="relative z-10">
-        {/* ─── BROWSE PHASE ───────────────────────────────────────── */}
+      <div className="relative min-h-[480px] max-h-[calc(100dvh-12rem)]" ref={fieldsRef}>
         {phase === "browse" && (
-          <div className="p-6 sm:p-8 lg:p-10">
-            {/* Header */}
-            <div data-qs-stagger className="flex items-start justify-between gap-4">
-              <div className="space-y-4">
-                <div className="inline-flex items-center gap-2 rounded-full border border-ember-500/15 bg-ember-500/[0.07] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-ember-600 dark:text-ember-400">
-                  <Zap className="h-3.5 w-3.5" strokeWidth={2.3} />
-                  Quicksprint
-                </div>
-                <div className="space-y-3">
-                  <h2 className="font-display text-[2rem] font-black leading-none tracking-tight text-slate-900 dark:text-white sm:text-[2.35rem]">
-                    Launch A Quicksprint.
-                  </h2>
-                  <p className="max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400 sm:text-[15px]">
-                    Browse purpose-specific default templates or launch your own reusable custom flows to spin up a focused sprint fast.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={onClose}
-                className="inline-flex min-h-[44px] min-w-[44px] h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/78 text-slate-400 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:hover:text-white"
-                aria-label="Close quicksprint"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            {loading ? (
-              <div className="flex items-center justify-center py-20">
-                <div className="h-8 w-8 animate-spin rounded-full border-2 border-ember-500 border-t-transparent" />
-              </div>
-            ) : (
-              <>
-                {/* Built-in templates */}
-                <div data-qs-stagger className="mt-10">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                    <div className="space-y-2">
-                      <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Default Templates</div>
-                      <p className="max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                        Built-in templates are organized by purpose so the catalog can expand into additional language and product families over time.
-                      </p>
-                    </div>
-                    <div className="w-full max-w-sm rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                      <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Purpose</div>
-                      <div className="mt-2">
-                        <AvantgardeSelect
-                          aria-label="Default template purpose"
-                          variant="compact"
-                          value={activeBuiltinPurpose?.value || ""}
-                          onChange={setSelectedBuiltinPurpose}
-                          options={builtinPurposeOptions.map((option) => ({
-                            value: option.value,
-                            label: option.label,
-                          }))}
-                          placeholder="Select Purpose"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  {activeBuiltinPurpose?.description && (
-                    <p className="mt-4 max-w-3xl text-xs leading-relaxed text-slate-400 dark:text-slate-500">
-                      {activeBuiltinPurpose.description}
-                    </p>
-                  )}
-                  <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                    {visibleBuiltinTemplates.map((t) => (
-                      <TemplateCard key={t.id} template={t} onSelect={() => handleSelectTemplate(t)} />
-                    ))}
-                  </div>
-                </div>
-
-                {/* Custom templates */}
-                <div data-qs-stagger className="mt-10">
-                  <div className="flex items-center justify-between mb-5">
-                    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Custom Templates</div>
-                    <button
-                      onClick={() => openEditor(null)}
-                      className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-ember-500/20 bg-ember-500/[0.06] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-ember-600 transition-colors hover:bg-ember-500/[0.12] dark:text-ember-400"
-                    >
-                      <Plus className="h-3 w-3" strokeWidth={2.5} />
-                      New Template
-                    </button>
-                  </div>
-
-                  {customTemplates.length === 0 ? (
-                    <button
-                      onClick={() => openEditor(null)}
-                      className="w-full rounded-[1.4rem] border border-dashed border-black/[0.08] bg-black/[0.015] p-8 text-center transition-colors hover:border-ember-500/30 hover:bg-ember-500/[0.03] dark:border-white/[0.06] dark:bg-white/[0.02] dark:hover:border-ember-500/30"
-                    >
-                      <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-ember-500/10">
-                        <Plus className="h-5 w-5 text-ember-500" />
-                      </div>
-                      <div className="text-sm font-semibold text-slate-500 dark:text-slate-400">Create your first custom template</div>
-                      <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">Combine agent presets with custom prompts for reusable sprint flows</div>
-                    </button>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                      {customTemplates.map((t) => (
-                        <TemplateCard key={t.id} template={t} onSelect={() => handleSelectTemplate(t)} onEdit={() => openEditor(t)} />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
+          <QuicksprintBrowseView
+            templates={templates}
+            builtinTemplates={builtinTemplates}
+            customTemplates={customTemplates}
+            visibleBuiltinTemplates={visibleBuiltinTemplates}
+            builtinPurposeOptions={builtinPurposeOptions}
+            selectedBuiltinPurpose={selectedBuiltinPurpose}
+            setSelectedBuiltinPurpose={setSelectedBuiltinPurpose}
+            handleSelectTemplate={handleSelectTemplate}
+            openEditor={wrappedOpenEditor}
+            activeBuiltinPurpose={activeBuiltinPurpose}
+            loading={loading}
+            onClose={onClose}
+          />
         )}
-
-        {/* ─── CONFIGURE PHASE ────────────────────────────────────── */}
-        {phase === "configure" && selectedTemplate && (
-          <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_22rem]">
-            {/* Left: Template preview */}
-            <div className="border-b border-black/[0.06] p-6 dark:border-white/[0.06] sm:p-8 lg:p-10 xl:border-b-0 xl:border-r">
-              <div data-qs-stagger className="flex items-center gap-3">
-                <button
-                  onClick={() => setPhase("browse")}
-                  className="inline-flex min-h-[44px] min-w-[44px] h-8 w-8 items-center justify-center rounded-full border border-black/[0.06] text-slate-400 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:hover:text-white"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                <div className="inline-flex items-center gap-2 rounded-full border border-ember-500/15 bg-ember-500/[0.07] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-ember-600 dark:text-ember-400">
-                  <Zap className="h-3.5 w-3.5" strokeWidth={2.3} />
-                  Configure Quicksprint
-                </div>
-              </div>
-
-              <h2 data-qs-stagger className="mt-6 font-display text-[1.8rem] font-black leading-tight tracking-tight text-slate-900 dark:text-white sm:text-[2.1rem]">
-                {selectedTemplate.name}
-              </h2>
-              <p data-qs-stagger className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                {selectedTemplate.description}
-              </p>
-
-              {/* Planning Route + Model Override */}
-              <div data-qs-stagger className="mt-8 grid gap-4 sm:grid-cols-2">
-                <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Planning Route</div>
-                  <div className="mt-2">
-                    <AvantgardeSelect
-                      variant="compact"
-                      value={routeOverride?.id || ""}
-                      onChange={(id) => {
-                        const opt = routeOptions.find((o) => o.id === id);
-                        setRouteOverride(opt || null);
-                      }}
-                      options={[
-                        {
-                          value: "",
-                          label: defaultRouteOptionLabel,
-                          icon: defaultRouteIconProviderId
-                            ? () => renderProviderIcon(defaultRouteIconProviderId)
-                            : undefined,
-                        },
-                        ...routeOptions.map((opt) => ({
-                          value: opt.id,
-                          label: opt.label,
-                          icon: opt.type === "virtual" && opt.iconProviderId
-                            ? () => renderProviderIcon(opt.iconProviderId!)
-                            : opt.type === "connected"
-                              ? renderConnectedRouteIcon
-                              : undefined,
-                        })),
-                      ]}
-                      placeholder={defaultRouteOptionLabel}
-                    />
-                  </div>
-                </div>
-
-                <div className={`rounded-[1.4rem] border p-4 transition-all ${
-                  showModelOverride
-                    ? "border-signal-500/20 bg-signal-500/[0.04] dark:bg-signal-500/[0.08]"
-                    : "border-black/[0.06] bg-black/[0.025] opacity-40 dark:border-white/[0.06] dark:bg-white/[0.03]"
-                }`}>
-                  <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Model Override</div>
-                  <div className="mt-2">
-                    <AvantgardeSelect
-                      variant="compact"
-                      disabled={!showModelOverride}
-                      value={modelOverride || ""}
-                      onChange={(val) => setModelOverride(val || null)}
-                      options={[
-                        {
-                          value: "",
-                          label: defaultModelLabel,
-                          icon: modelProviderId
-                            ? () => renderProviderIcon(modelProviderId)
-                            : undefined,
-                        },
-                        ...modelOptions.map((opt) => ({
-                          value: opt.value,
-                          label: opt.label,
-                          icon: modelProviderId
-                            ? () => renderProviderIcon(modelProviderId)
-                            : undefined,
-                        })),
-                      ]}
-                      placeholder={defaultModelLabel}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Additional prompt for this run */}
-              <div data-qs-stagger className="mt-8 space-y-2">
-                <label className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Additional Instructions (optional)</label>
-                <textarea
-                  value={additionalPrompt}
-                  onInput={(e) => setAdditionalPrompt((e.target as HTMLTextAreaElement).value)}
-                  placeholder="Add extra context or requirements for this specific run — e.g. 'Focus only on the auth module' or 'Include migration scripts'..."
-                  rows={4}
-                  className="w-full rounded-[1.7rem] border border-black/[0.06] bg-black/[0.025] p-5 text-sm leading-relaxed text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:border-ember-500/40 focus:shadow-[0_0_0_1px_rgba(255,107,0,0.16),0_0_30px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:placeholder:text-slate-600 resize-y"
-                />
-              </div>
-
-              {/* Prompt preview */}
-              <div data-qs-stagger className="mt-6">
-                <button
-                  onClick={() => setShowPrompt(!showPrompt)}
-                  className="inline-flex min-h-[44px] min-w-[44px] items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-300"
-                >
-                  {showPrompt ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                  {showPrompt ? "Hide Combined Prompt" : "View Combined Prompt"}
-                </button>
-
-                <div
-                  className={`overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-                    showPrompt ? "mt-4 max-h-[600px] opacity-100" : "max-h-0 opacity-0"
-                  }`}
-                >
-                  <div className="rounded-[1.4rem] border border-black/[0.05] bg-black/[0.02] p-5 dark:border-white/[0.05] dark:bg-white/[0.02]">
-                    <pre className="max-h-80 overflow-y-auto text-xs font-mono leading-relaxed text-slate-500 dark:text-slate-400 whitespace-pre-wrap break-words scrollbar-thin scrollbar-thumb-black/10 dark:scrollbar-thumb-white/10">
-                      {combinedPrompt}
-                    </pre>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Right: Configuration sidebar */}
-            <div className="flex flex-col p-6 sm:p-8">
-              {/* Subtask count */}
-              <div data-qs-stagger>
-                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-4">Subtask Count</div>
-                <SubtaskSlider value={taskCount} onChange={setTaskCount} />
-              </div>
-
-              {/* Spacer */}
-              <div className="mt-auto pt-8" />
-
-              {/* Action buttons */}
-              <div data-qs-stagger className="space-y-3">
-                <button
-                  onClick={() => handleExecute("plan_and_start")}
-                  disabled={isBusy}
-                  className="flex min-h-[44px] w-full items-center justify-center gap-2.5 rounded-[1.35rem] bg-ember-600 px-5 py-3.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white shadow-[0_0_20px_rgba(255,107,0,0.25)] transition-all hover:bg-ember-500 hover:shadow-[0_0_28px_rgba(255,107,0,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Rocket className="h-4 w-4" />
-                  Plan & Start
-                </button>
-                <button
-                  onClick={() => handleExecute("plan_only")}
-                  disabled={isBusy}
-                  className="flex min-h-[44px] w-full items-center justify-center gap-2.5 rounded-[1.35rem] border border-black/[0.08] bg-white/66 px-5 py-3.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-black/[0.04] disabled:opacity-50 disabled:cursor-not-allowed dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06]"
-                >
-                  <ClipboardList className="h-4 w-4" />
-                  Plan Only
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ─── EDITOR PHASE ───────────────────────────────────────── */}
         {phase === "editor" && (
-          <div className="p-6 sm:p-8 lg:p-10">
-            <div data-qs-stagger className="flex items-center gap-3">
-              <button
-                onClick={() => setPhase("browse")}
-                className="inline-flex min-h-[44px] min-w-[44px] h-8 w-8 items-center justify-center rounded-full border border-black/[0.06] text-slate-400 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:hover:text-white"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <div className="inline-flex items-center gap-2 rounded-full border border-ember-500/15 bg-ember-500/[0.07] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-ember-600 dark:text-ember-400">
-                <Settings2 className="h-3.5 w-3.5" strokeWidth={2.3} />
-                {editorTemplate ? "Edit Template" : "New Template"}
-              </div>
-            </div>
-
-            {/* Name */}
-            <label data-qs-stagger className="mt-8 block space-y-2">
-              <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Template Name</span>
-              <input
-                type="text"
-                value={edName}
-                onInput={(e) => setEdName((e.target as HTMLInputElement).value)}
-                placeholder="API Integration Tests"
-                className="w-full rounded-[1rem] border border-black/[0.06] bg-transparent px-4 py-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:ring-4 focus:ring-signal-500/20 focus:border-signal-500 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem]"
-                autoFocus
-              />
-            </label>
-
-            {/* Description */}
-            <label data-qs-stagger className="mt-6 block space-y-2">
-              <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Description</span>
-              <input
-                type="text"
-                value={edDescription}
-                onInput={(e) => setEdDescription((e.target as HTMLInputElement).value)}
-                placeholder="What this template does in one line"
-                className="w-full rounded-[1rem] border border-black/[0.06] bg-transparent px-4 py-3 text-sm leading-relaxed text-slate-700 outline-none transition-colors placeholder:text-slate-300 focus:ring-4 focus:ring-signal-500/20 focus:border-signal-500 dark:border-white/[0.06] dark:text-slate-300 dark:placeholder:text-slate-600"
-              />
-            </label>
-
-            {/* Icon + Color + Category Tag + Default Tasks */}
-            <div data-qs-stagger className="mt-8 grid gap-4 sm:grid-cols-2">
-              <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-3">Category Tag</div>
-                <div className="flex items-center gap-3">
-                  {/* Icon picker trigger */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                      const container = cardRef.current?.getBoundingClientRect() || { top: 0, left: 0 };
-                      setPickerPos({ top: rect.bottom - container.top + 8, left: rect.left - container.left });
-                      setShowIconPicker(!showIconPicker);
-                      setShowColorPicker(false);
-                    }}
-                    className="flex min-h-[44px] min-w-[44px] h-10 w-10 flex-shrink-0 cursor-pointer items-center justify-center rounded-xl border border-black/[0.08] bg-white/80 text-slate-600 shadow-sm transition-all duration-200 hover:scale-105 hover:shadow-md hover:border-ember-500/30 hover:text-ember-500 active:scale-95 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:text-ember-400"
-                    title="Pick icon"
-                  >
-                    {(() => { const Ic = IconMap[edIcon] || Zap; return <Ic className="h-5 w-5" />; })()}
-                  </button>
-
-                  {/* Color dot picker trigger */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                      const container = cardRef.current?.getBoundingClientRect() || { top: 0, left: 0 };
-                      setPickerPos({ top: rect.bottom - container.top + 8, left: rect.left - container.left });
-                      setShowColorPicker(!showColorPicker);
-                      setShowIconPicker(false);
-                    }}
-                    className="flex min-h-[44px] min-w-[44px] h-10 w-10 flex-shrink-0 cursor-pointer items-center justify-center rounded-xl border border-black/[0.08] bg-white/80 shadow-sm transition-all duration-200 hover:scale-105 hover:shadow-md active:scale-95 dark:border-white/[0.08] dark:bg-white/[0.05]"
-                    title="Pick tag color"
-                  >
-                    <span
-                      className={`block h-5 w-5 rounded-full shadow-[inset_0_1px_2px_rgba(255,255,255,0.4),0_0_0_2px_rgba(0,0,0,0.06)] transition-transform duration-200 ${getTagStyles(edCategoryColor).dot}`}
-                      style={getTagStyles(edCategoryColor).style?.["--accent"] ? { backgroundColor: "var(--accent)", ...getTagStyles(edCategoryColor).style } : undefined}
-                    />
-                  </button>
-
-                  {/* Category text field */}
-                  <input
-                    type="text"
-                    value={edCategory}
-                    onInput={(e) => setEdCategory((e.target as HTMLInputElement).value)}
-                    placeholder="e.g. engineering..."
-                    className="flex-1 min-w-0 rounded-[1rem] border border-black/[0.06] bg-transparent px-3 py-2 text-sm text-slate-700 outline-none transition-colors placeholder:text-slate-300 focus:ring-4 focus:ring-signal-500/20 focus:border-signal-500 dark:border-white/[0.06] dark:text-slate-300 dark:placeholder:text-slate-600"
-                  />
-                </div>
-
-                {/* Live preview tag */}
-                {edCategory.trim() && (
-                  <div className="mt-3 flex items-center">
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ${getTagStyles(edCategoryColor).bg} ${getTagStyles(edCategoryColor).text}`}
-                      style={getTagStyles(edCategoryColor).style?.["--accent"] ? { backgroundColor: "color-mix(in srgb, var(--accent) 15%, transparent)", color: "var(--accent)", ...getTagStyles(edCategoryColor).style } : undefined}
-                    >
-                      <span
-                        className={`block h-1.5 w-1.5 rounded-full ${getTagStyles(edCategoryColor).dot}`}
-                        style={getTagStyles(edCategoryColor).style?.["--accent"] ? { backgroundColor: "var(--accent)", ...getTagStyles(edCategoryColor).style } : undefined}
-                      />
-                      {edCategory}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">Default Tasks</div>
-                <div className="font-mono text-2xl font-black tracking-tight text-slate-900 dark:text-white">{edTaskCount}</div>
-                <input
-                  type="range" min="1" max="15" value={edTaskCount}
-                  onInput={(e) => setEdTaskCount(parseInt((e.target as HTMLInputElement).value, 10))}
-                  className="mt-2 w-full h-1.5 bg-black/[0.06] rounded-full appearance-none cursor-pointer accent-ember-500 dark:bg-white/[0.08]"
-                />
-              </div>
-            </div>
-
-            {/* Picker popups (absolute to section, overflow toggled) */}
-            {showIconPicker && (<>
-              <div className="fixed inset-0 z-[9998] cursor-pointer" onClick={() => setShowIconPicker(false)} aria-hidden="true" />
-              <div
-                ref={iconPickerRef}
-                role="dialog"
-                aria-modal="true"
-                aria-label="Icon picker"
-                className="absolute z-[9999] w-[17rem] rounded-2xl border border-white/[0.08] p-3 shadow-2xl backdrop-blur-2xl bg-[#1a1d24]/95"
-                style={{ top: pickerPos.top, left: pickerPos.left, animation: "qs-picker-in 0.2s cubic-bezier(0.22,1,0.36,1)" }}
-              >
-                <div className="grid grid-cols-6 gap-1">
-                  {ICON_OPTIONS.map((opt) => {
-                    const isActive = edIcon === opt.value;
-                    return (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => { setEdIcon(opt.value); setShowIconPicker(false); }}
-                        title={opt.value}
-                        className={`flex min-h-[44px] min-w-[44px] h-9 w-9 cursor-pointer items-center justify-center rounded-xl transition-all duration-150 ${
-                          isActive
-                            ? "bg-ember-500/20 text-ember-500 shadow-[0_0_10px_rgba(255,107,0,0.15)] scale-110"
-                            : "text-slate-400 hover:bg-white/[0.08] hover:text-white hover:scale-110"
-                        }`}
-                      >
-                        <opt.Icon className="h-4 w-4" />
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </>)}
-
-            {showColorPicker && (<>
-              <div className="fixed inset-0 z-[9998] cursor-pointer" onClick={() => setShowColorPicker(false)} aria-hidden="true" />
-              <div
-                ref={colorPickerRef}
-                role="dialog"
-                aria-modal="true"
-                aria-label="Color picker"
-                className="absolute z-[9999] w-52 rounded-2xl border border-white/[0.08] p-3 shadow-2xl backdrop-blur-2xl bg-[#1a1d24]/95"
-                style={{ top: pickerPos.top, left: pickerPos.left, animation: "qs-picker-in 0.2s cubic-bezier(0.22,1,0.36,1)" }}
-              >
-                <div className="grid grid-cols-5 gap-2">
-                  {TAG_STYLES.map(({ value, dot }) => {
-                    const isActive = value === edCategoryColor;
-                    return (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => { setEdCategoryColor(value); setShowColorPicker(false); }}
-                        className="group flex min-h-[44px] min-w-[44px] h-8 w-8 cursor-pointer items-center justify-center rounded-full transition-all duration-200 hover:scale-125 active:scale-95"
-                      >
-                        <span
-                          className={`block rounded-full transition-all duration-200 ${dot}`}
-                          style={{
-                            width: isActive ? "1.5rem" : "1.25rem",
-                            height: isActive ? "1.5rem" : "1.25rem",
-                            boxShadow: isActive
-                              ? `inset 0 1px 3px rgba(255,255,255,0.35), 0 0 0 2.5px rgba(255,255,255,0.2), 0 0 12px rgba(255,255,255,0.15)`
-                              : "inset 0 1px 3px rgba(255,255,255,0.35)",
-                          }}
-                        />
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </>)}
-
-            {/* Agent Preset */}
-            {agentPresets.length > 0 && (
-              <div data-qs-stagger className="mt-6">
-                <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">Agent Preset (optional)</div>
-                  <p className="text-xs text-slate-400 dark:text-slate-500 mb-3">
-                    Attach an agent's instructions to this template. The agent's prompt will be prepended to the template instructions.
-                  </p>
-                  <AvantgardeSelect
-                    variant="compact"
-                    value={edAgentPresetId}
-                    onChange={(val) => setEdAgentPresetId(val)}
-                    options={[
-                      { value: "", label: "No Agent" },
-                      ...agentPresets.map((p) => ({ value: p.id, label: `${p.name}${p.labels.length ? ` (${p.labels.join(", ")})` : ""}` })),
-                    ]}
-                    placeholder="No Agent"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Instructions */}
-            <div data-qs-stagger className="mt-6 space-y-2">
-              <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Agent Instructions</span>
-              <textarea
-                value={edInstruction}
-                onInput={(e) => setEdInstruction((e.target as HTMLTextAreaElement).value)}
-                placeholder="Write detailed instructions for the planning agent. Leave empty to use only the agent preset's instructions..."
-                rows={10}
-                className="w-full rounded-[1rem] border border-black/[0.06] bg-black/[0.025] p-5 text-sm font-mono leading-relaxed text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:ring-4 focus:ring-signal-500/20 focus:border-signal-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:placeholder:text-slate-600 resize-y"
-              />
-            </div>
-
-            {/* Footer */}
-            <div data-qs-stagger className="mt-8 flex items-center justify-between">
-              <div>
-                {editorTemplate && !editorTemplate.isBuiltIn && (
-                  <button
-                    type="button"
-                    onClick={handleEditorDelete}
-                    className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors ${
-                      edConfirmDelete
-                        ? "bg-red-600 text-white hover:bg-red-500"
-                        : "text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                    }`}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    {edConfirmDelete ? "Confirm Delete" : "Delete"}
-                  </button>
-                )}
-              </div>
-              <button
-                onClick={handleEditorSave}
-                disabled={edSaving || (!edName.trim() || (!edInstruction.trim() && !edAgentPresetId))}
-                className="inline-flex min-h-[44px] items-center gap-2 rounded-[1.35rem] bg-ember-600 px-6 py-3 text-[11px] font-bold uppercase tracking-[0.14em] text-white shadow-[0_0_20px_rgba(255,107,0,0.25)] transition-all hover:bg-ember-500 hover:shadow-[0_0_28px_rgba(255,107,0,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {edSaving ? "Saving..." : editorTemplate ? "Save Changes" : "Create Template"}
-              </button>
-            </div>
-          </div>
+          <QuicksprintEditorView
+            agentPresets={agentPresets}
+            setPhase={setPhase}
+            cardRef={cardRef}
+            {...editorState}
+          />
+        )}
+        {phase === "configure" && (
+          <QuicksprintExecutionView
+            setPhase={setPhase}
+            selectedTemplateId={selectedTemplateId}
+            selectedTemplate={selectedTemplate}
+            taskCount={taskCount} setTaskCount={setTaskCount}
+            routeOverride={routeOverride} setRouteOverride={setRouteOverride}
+            modelOverride={modelOverride} setModelOverride={setModelOverride}
+            showPrompt={showPrompt} setShowPrompt={setShowPrompt}
+            additionalPrompt={additionalPrompt} setAdditionalPrompt={setAdditionalPrompt}
+            routeOptions={executionState.routeOptions}
+            modelOptions={executionState.modelOptions}
+            combinedPrompt={executionState.combinedPrompt}
+            executingMode={executionState.executingMode}
+            elapsedMs={executionState.elapsedMs}
+            isOverlayDismissed={executionState.isOverlayDismissed} setIsOverlayDismissed={executionState.setIsOverlayDismissed}
+            handleExecute={executionState.handleExecute}
+            handleCancelExecute={executionState.handleCancelExecute}
+            handleNewQuicksprint={executionState.handleNewQuicksprint}
+            defaultRouteOptionLabel={defaultRouteOptionLabel}
+            defaultModelOptionLabel={defaultModelOptionLabel}
+            defaultRouteIconProviderId={defaultRouteIconProviderId}
+            planningEta={planningEta}
+          />
         )}
       </div>
     </section>
-  );
-};
-
-/* ═════════════════════════════════════════════════════════════════════ */
-/*  Template Card                                                       */
-/* ═════════════════════════════════════════════════════════════════════ */
-const TemplateCard: FunctionComponent<{
-  template: QuicksprintTemplateRecord;
-  onSelect: () => void;
-  onEdit?: () => void;
-}> = ({ template, onSelect, onEdit }) => {
-  const Icon = IconMap[template.icon] || Zap;
-  const tagColor = template.categoryColor || "slate";
-
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className="group relative flex flex-col rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-5 text-left transition-all hover:border-ember-500/30 hover:shadow-[0_0_24px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-void-800/60 dark:hover:border-ember-500/30"
-    >
-      {!template.isBuiltIn && onEdit && (
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onEdit(); }}
-          className="absolute top-4 right-4 rounded-lg min-h-[44px] min-w-[44px] p-1.5 text-slate-300 opacity-0 transition-all group-hover:opacity-100 hover:bg-ember-500/10 hover:text-ember-500 dark:text-slate-500"
-          title="Edit template"
-        >
-          <Settings2 className="h-3.5 w-3.5" />
-        </button>
-      )}
-
-      <div className="flex items-center gap-3 mb-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-ember-500/[0.08] text-ember-500 transition-colors group-hover:bg-ember-500/[0.14]">
-          <Icon className="h-4.5 w-4.5" />
-        </div>
-        <h3 className="flex-1 text-sm font-bold text-slate-900 dark:text-white leading-tight pr-6">{template.name}</h3>
-      </div>
-
-      <p className="flex-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400 mb-4">{template.description}</p>
-
-      <div className="flex items-center justify-between">
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ${getTagStyles(tagColor).bg} ${getTagStyles(tagColor).text}`}
-          style={getTagStyles(tagColor).style?.["--accent"] ? { backgroundColor: "color-mix(in srgb, var(--accent) 15%, transparent)", color: "var(--accent)", ...getTagStyles(tagColor).style } : undefined}
-        >
-          <span
-            className={`block h-1.5 w-1.5 rounded-full ${getTagStyles(tagColor).dot}`}
-            style={getTagStyles(tagColor).style?.["--accent"] ? { backgroundColor: "var(--accent)", ...getTagStyles(tagColor).style } : undefined}
-          />
-          {template.category}
-        </span>
-        <span className="text-[10px] font-medium text-slate-400">
-          {template.defaultTaskCount} subtask{template.defaultTaskCount !== 1 ? "s" : ""}
-        </span>
-      </div>
-    </button>
-  );
-};
-
-/* ═════════════════════════════════════════════════════════════════════ */
-/*  Subtask Count Slider                                                */
-/* ═════════════════════════════════════════════════════════════════════ */
-const SubtaskSlider: FunctionComponent<{
-  value: number;
-  onChange: (v: number) => void;
-}> = ({ value, onChange }) => {
-  const min = 1;
-  const max = 15;
-  const pct = ((value - min) / (max - min)) * 100;
-  const trackRef = useRef<HTMLDivElement>(null);
-
-  const handlePointer = useCallback((e: PointerEvent) => {
-    if (!trackRef.current) return;
-    const rect = trackRef.current.getBoundingClientRect();
-    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    onChange(Math.round(min + x * (max - min)));
-  }, [onChange]);
-
-  const handlePointerDown = useCallback((e: PointerEvent) => {
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    handlePointer(e);
-  }, [handlePointer]);
-
-  return (
-    <div className="select-none">
-      {/* Large number display */}
-      <div className="flex items-baseline gap-2 mb-6">
-        <span className="font-mono text-[3.5rem] font-black leading-none tracking-tighter text-slate-900 dark:text-white tabular-nums">
-          {String(value).padStart(2, "0")}
-        </span>
-        <span className="text-sm font-medium text-slate-400">
-          subtask{value !== 1 ? "s" : ""}
-        </span>
-      </div>
-
-      {/* Track */}
-      <div
-        ref={trackRef}
-        className="relative h-10 cursor-pointer touch-none"
-        onPointerDown={handlePointerDown}
-        onPointerMove={(e: PointerEvent) => { if (e.buttons === 1) handlePointer(e); }}
-      >
-        {/* Background track */}
-        <div className="absolute top-1/2 left-0 right-0 h-2 -translate-y-1/2 rounded-full bg-black/[0.06] dark:bg-white/[0.06] overflow-hidden">
-          {/* Fill */}
-          <div
-            className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-ember-500 to-ember-400 transition-[width] duration-75"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-
-        {/* Notches */}
-        <div className="absolute top-1/2 left-0 right-0 -translate-y-1/2 flex justify-between px-[2px]">
-          {Array.from({ length: max - min + 1 }, (_, i) => {
-            const n = min + i;
-            const isActive = n <= value;
-            const isMajor = n === 1 || n === 5 || n === 10 || n === 15;
-            return (
-              <div
-                key={n}
-                className={`rounded-full transition-all ${
-                  isMajor ? "h-3 w-1" : "h-1.5 w-0.5"
-                } ${isActive ? "bg-ember-500/60" : "bg-black/[0.08] dark:bg-white/[0.08]"}`}
-              />
-            );
-          })}
-        </div>
-
-        {/* Thumb */}
-        <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-[left] duration-75"
-          style={{ left: `${pct}%` }}
-        >
-          <div className="relative">
-            <div className="h-6 w-6 rounded-full border-[3px] border-ember-500 bg-white shadow-[0_0_12px_rgba(255,107,0,0.3)] dark:bg-void-800" />
-            <div className="absolute -inset-2 rounded-full bg-ember-500/10 animate-pulse" style={{ animationDuration: "2s" }} />
-          </div>
-        </div>
-      </div>
-
-      {/* Labels */}
-      <div className="mt-2 flex justify-between text-[10px] font-bold tracking-wider text-slate-300 dark:text-slate-600">
-        <span>1</span>
-        <span>5</span>
-        <span>10</span>
-        <span>15</span>
-      </div>
-    </div>
   );
 };

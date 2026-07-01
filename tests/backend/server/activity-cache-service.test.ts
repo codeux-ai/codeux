@@ -31,7 +31,7 @@ describe('ActivityCacheService', () => {
       } as any,
     };
 
-    service = new ActivityCacheService(mockDeps, LIVE_CACHE_MS, GIT_CACHE_MS, PAGE_SIZE);
+    service = new ActivityCacheService(mockDeps, LIVE_CACHE_MS, GIT_CACHE_MS, PAGE_SIZE, 3, 2000);
   });
 
   afterEach(() => {
@@ -224,6 +224,32 @@ describe('ActivityCacheService', () => {
       // Should only fetch once
       expect(mockDeps.fetchRecentActivities).toHaveBeenCalledTimes(1);
       expect(res1).toBe(res2); // Should be the exact same object reference
+    });
+
+    it('should cache fetch failures temporarily with negative TTL', async () => {
+      mockDeps.getSubtasks.mockReturnValue([mockTask]);
+      mockDeps.resolveSessionNameFromTask.mockReturnValue('session-1');
+      mockDeps.fetchRecentActivities.mockRejectedValue(new Error('Fetch failed'));
+
+      // First call fails, should cache as negative
+      await service.getLiveActivitiesForActiveTasks();
+      expect(mockDeps.fetchRecentActivities).toHaveBeenCalledTimes(1);
+
+      mockDeps.fetchRecentActivities.mockClear();
+
+      // Second call immediately after should hit negative cache
+      const result2 = await service.getLiveActivitiesForActiveTasks();
+      expect(mockDeps.fetchRecentActivities).not.toHaveBeenCalled();
+      expect(result2).toEqual({ 'session-1': [] });
+
+      // Advance time past negative TTL (2000ms)
+      vi.advanceTimersByTime(2100);
+
+      // Third call should fetch again
+      mockDeps.fetchRecentActivities.mockResolvedValue([mockActivity]);
+      const result3 = await service.getLiveActivitiesForActiveTasks();
+      expect(mockDeps.fetchRecentActivities).toHaveBeenCalledTimes(1);
+      expect(result3).toEqual({ 'session-1': [mockActivity] });
     });
   });
 

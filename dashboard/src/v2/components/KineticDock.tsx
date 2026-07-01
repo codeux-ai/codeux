@@ -73,13 +73,15 @@ export const KineticDock: FunctionComponent = () => {
 
     /* Active indicator position update */
     const updateIndicatorPosition = useCallback(() => {
-        const el = itemRefs.current[activeIndex];
-        if (!el || !dockRef.current) return;
+        requestAnimationFrame(() => {
+            const el = itemRefs.current[activeIndex];
+            if (!el || !dockRef.current) return;
 
-        // Use offsetLeft to make calculation transformation-invariant (GSAP scaling won't affect it)
-        const center = el.offsetLeft + (el.offsetWidth / 2);
-        setIndicatorState({ left: center - 14, initialized: true });
-    }, [activeIndex]);
+            // Use offsetLeft to make calculation transformation-invariant (GSAP scaling won't affect it)
+            const center = el.offsetLeft + (el.offsetWidth / 2);
+            setIndicatorState({ left: center - 14, initialized: true });
+        });
+    }, [activeIndex, browserVisible]);
 
     /* Entrance */
     useEffect(() => {
@@ -203,7 +205,7 @@ export const KineticDock: FunctionComponent = () => {
                 onPointerDown={() => prefetchRoute(item.path)}
                 onFocus={() => prefetchRoute(item.path)}
                 data-tour-id={`nav-${item.label.toLowerCase()}`}
-                className="relative group flex flex-col items-center justify-center w-[52px] h-[52px] min-w-[44px] min-h-[44px] shrink-0 snap-center rounded-[1.4rem] transition-colors duration-300 decoration-none"
+                className="relative group flex flex-col items-center justify-center w-[52px] h-[52px] min-w-[44px] min-h-[44px] shrink-0 snap-center rounded-[1.4rem] transition-colors duration-300 decoration-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
             >
                 <div className="absolute inset-0 bg-transparent group-hover:bg-black/[0.04] dark:group-hover:bg-white/[0.05] group-focus-visible:bg-black/[0.04] dark:group-focus-visible:bg-white/[0.05] rounded-[1.4rem] pointer-events-none transition-colors duration-300" />
 
@@ -228,17 +230,18 @@ export const KineticDock: FunctionComponent = () => {
     };
 
     return (
-        <div className="fixed bottom-7 left-0 right-0 z-50 flex justify-center items-end h-28 pointer-events-none px-4">
+        <div style={{ paddingBottom: 'env(safe-area-inset-bottom)' }} className="fixed bottom-0 left-0 right-0 z-50 flex justify-center items-end h-[calc(7rem+env(safe-area-inset-bottom))] pointer-events-none px-4">
             <nav
                 aria-label="Dock navigation"
                 ref={dockRef}
                 onPointerMove={handlePointerMove}
                 onPointerLeave={handlePointerLeave}
+                onScroll={updateIndicatorPosition}
                 data-glass
                 className="relative pointer-events-auto flex items-center gap-1.5 p-2.5
                            bg-white/90 dark:bg-void-800/90 backdrop-blur-xl
                            border border-black/[0.06] dark:border-white/[0.08]
-                           rounded-[2rem] max-w-full overflow-x-auto scrollbar-hide touch-pan-x snap-x snap-mandatory
+                           rounded-[2rem] max-w-full overflow-x-auto scroll-px-2.5 scrollbar-hide touch-pan-x snap-x snap-mandatory
                            shadow-[0_20px_50px_rgba(0,0,0,0.08)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.5)]
                            before:absolute before:inset-0 before:rounded-[2rem]
                            before:shadow-[inset_0_1px_1px_rgba(255,255,255,0.6)] dark:before:shadow-[inset_0_1px_1px_rgba(255,255,255,0.06)]"
@@ -262,6 +265,9 @@ export const KineticDock: FunctionComponent = () => {
 
                 {/* Main nav items */}
                 {rightItems.map((item, i) => renderItem(item, LEFT_ITEMS.length + i))}
+
+                {/* Right edge scroll spacer */}
+                <div className="w-[1px] shrink-0" aria-hidden="true" />
             </nav>
         </div>
     );

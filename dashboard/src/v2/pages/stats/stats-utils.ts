@@ -72,7 +72,7 @@ export function formatCost(usd: number | null | undefined): string {
   }).format(usd);
 }
 
-export function formatDuration(value: number): string {
+export function formatStatsDuration(value: number): string {
   const seconds = Math.max(0, Math.round(value / 1000));
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);

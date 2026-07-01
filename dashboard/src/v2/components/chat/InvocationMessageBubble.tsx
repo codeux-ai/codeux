@@ -52,7 +52,7 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
   if (kind === "reasoning") {
     return (
       <div class="flex justify-start">
-        <div class="w-full max-w-[760px] pl-11">
+        <div class="w-full max-w-full lg:max-w-[760px] min-w-0 pl-11">
           <ReasoningWidget text={message.contentMarkdown || ""} />
         </div>
       </div>
@@ -67,7 +67,7 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
     const tokens = (message.metadata?.tokens ?? null) as ParsedTurnTokens | null;
     return (
       <div class="flex justify-start">
-        <div class="w-full max-w-[760px] pl-11">
+        <div class="w-full max-w-full lg:max-w-[760px] min-w-0 pl-11">
           <ToolCallWidget
             toolName={asString(message.metadata?.toolName)}
             status={status}

@@ -62,7 +62,7 @@ export const ChangesList: FunctionComponent<ChangesListProps> = ({ files, select
               {meta.glyph}
             </span>
             <span class="min-w-0 flex-1">
-              <span class="flex items-center gap-1.5 truncate">
+              <span class="min-w-0 flex items-center gap-1.5">
                 <span class="truncate text-[13px] font-semibold text-slate-800 dark:text-slate-100">{name}</span>
               </span>
               {dir && <span class="block truncate font-mono text-[11px] text-slate-400 dark:text-slate-500">{dir}</span>}

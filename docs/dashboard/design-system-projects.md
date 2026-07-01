@@ -13,14 +13,15 @@ This document outlines the design system for the Projects page and related compo
 ### Layout & Density
 
 *   Use appropriate grid spacing to allow cards to breathe while maintaining density.
-*   Truncate long text (like project names or paths) cleanly.
+*   Truncate long text (like project names or paths) cleanly using `min-w-0` correctly on card columns to avoid pushing elements off edge.
 *   Align footers consistently at the bottom of the card.
 *   Ensure stat tiles have balanced proportions.
 
 ### Responsive Design
 
+*   **Grid Sizing:** Use `minmax(min(100%,320px),1fr)` instead of a rigid `320px` to prevent overflow on very narrow viewports.
 *   **Mobile Headers:** Stack the page header and status pills vertically on narrow screens, switching to horizontal on tablet/desktop.
-*   **Action Wrapping:** Allow card actions and filter tabs to wrap (`flex-wrap`) to prevent horizontal overflow or clipping.
+*   **Action Wrapping:** Allow card actions, filter tabs, page actions, and setup dialog buttons to wrap (`flex-wrap` or `flex-col-reverse sm:flex-row`) to prevent horizontal overflow or clipping.
 *   **Dialogs:** Ensure inline dialogs (like Setup) have a maximum height (`max-h-[calc(100vh-2rem)]`) with internal scrolling (`overflow-y-auto`) and stack their primary actions (`flex-col-reverse`) on small viewports.
 
 ### Visual Style

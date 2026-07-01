@@ -68,7 +68,7 @@ export const ChatPageShell: FunctionComponent<{
         actions={
         <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:justify-end">
 
-          <div role="tablist" aria-label="Chat Mode" className="relative flex items-center rounded-full border border-black/[0.06] bg-white/70 p-1 dark:border-white/[0.06] dark:bg-white/[0.03]"
+          <div role="tablist" aria-label="Chat Mode" className="relative flex flex-wrap items-center rounded-full border border-black/[0.06] bg-white/70 p-1 dark:border-white/[0.06] dark:bg-white/[0.03]"
             onKeyDown={(e) => {
               if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
                 e.preventDefault();
@@ -192,7 +192,7 @@ export const ChatPageShell: FunctionComponent<{
         </div>
       )}
 
-      <div className="flex-1 min-h-0 overflow-hidden flex flex-col lg:grid lg:grid-cols-[360px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] gap-6 pb-6">
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col md:grid md:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] gap-6 pb-6">
         {railSlot}
         <section className="flex flex-col min-h-0 flex-1 overflow-hidden rounded-3xl border border-black/[0.06] bg-white/80 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
           {detailSlot}

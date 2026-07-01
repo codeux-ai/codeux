@@ -74,21 +74,13 @@ describe('queryProjectExecutionSnapshot', () => {
     );
   });
 
-  it('should pass empty array when no sprintRuns or taskDispatches to dependencies, or handle properly if dependencies are empty calls', async () => {
+  it('should not call dependencies if sprintRuns or taskDispatches are empty', async () => {
     queryProjectExecutionSnapshot(mockDb as DatabaseAdapter, mockStorage, 'proj-1', mockDeps);
 
-    expect(mockDeps.getUsageTotalsBySprintRunIds).toHaveBeenCalledWith('proj-1', []);
-    expect(mockDeps.getUsageTotalsByTaskIds).toHaveBeenCalledWith('proj-1', []);
-    expect(mockDeps.getWallTimeTotalsBySprintRunIds).toHaveBeenCalledWith(
-      'proj-1',
-      [],
-      expect.any(String)
-    );
-    expect(mockDeps.getWallTimeTotalsByTaskIds).toHaveBeenCalledWith(
-      'proj-1',
-      [],
-      expect.any(String)
-    );
+    expect(mockDeps.getUsageTotalsBySprintRunIds).not.toHaveBeenCalled();
+    expect(mockDeps.getUsageTotalsByTaskIds).not.toHaveBeenCalled();
+    expect(mockDeps.getWallTimeTotalsBySprintRunIds).not.toHaveBeenCalled();
+    expect(mockDeps.getWallTimeTotalsByTaskIds).not.toHaveBeenCalled();
   });
 
   it('should include bounded recent invocations in the execution snapshot', async () => {

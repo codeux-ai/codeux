@@ -189,10 +189,22 @@ export class ProjectSetupService {
 
   private async resolveBaseAgentTemplates(projectId: string, setupAgent: AgentPresetRecord): Promise<AgentPresetRecord[]> {
     const attempts = await Promise.all([
-      this.deps.agentPresetSyncService.getWorkerAgent(projectId).catch(() => null),
-      this.deps.agentPresetSyncService.getPlanningAgent(projectId).catch(() => null),
-      this.deps.agentPresetSyncService.getProjectManagerAgent(projectId).catch(() => null),
-      this.deps.agentPresetSyncService.getQualityAssuranceAgent(projectId).catch(() => null),
+      this.deps.agentPresetSyncService.getWorkerAgent(projectId).catch((err) => {
+        this.deps.logger?.warn("Failed to resolve base agent template", { projectId, agentType: "worker", error: err instanceof Error ? err.message : String(err) });
+        return null;
+      }),
+      this.deps.agentPresetSyncService.getPlanningAgent(projectId).catch((err) => {
+        this.deps.logger?.warn("Failed to resolve base agent template", { projectId, agentType: "planning", error: err instanceof Error ? err.message : String(err) });
+        return null;
+      }),
+      this.deps.agentPresetSyncService.getProjectManagerAgent(projectId).catch((err) => {
+        this.deps.logger?.warn("Failed to resolve base agent template", { projectId, agentType: "projectManager", error: err instanceof Error ? err.message : String(err) });
+        return null;
+      }),
+      this.deps.agentPresetSyncService.getQualityAssuranceAgent(projectId).catch((err) => {
+        this.deps.logger?.warn("Failed to resolve base agent template", { projectId, agentType: "qualityAssurance", error: err instanceof Error ? err.message : String(err) });
+        return null;
+      }),
     ]);
     const templates = [setupAgent, ...attempts].filter((preset): preset is AgentPresetRecord => Boolean(preset));
     const byId = new Map<string, AgentPresetRecord>();

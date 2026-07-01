@@ -30,3 +30,6 @@ The chat and invocation design system for the Code UX dashboard defines the layo
 - **Message History**: The message lists use `role="log"` mapped to `aria-live="polite"` only when newly loaded to avoid repeating the entire history on mount. Regions use clear `aria-label` names.
 - **Screen Reader Clarity**: Status dots, metadata icons, and delivery status badges must be accompanied by visually hidden (`sr-only`) descriptive text (e.g., `Status: Replay Required`, `Error: Rate limit`) so screen readers provide complete context.
 - **Interactive Widgets**: Bubbles, truncations, and expanding blocks must preserve clear semantic roles (`button`, `region`) and expansion states (`aria-expanded`).
+
+## Data Flow and Polling
+- **Active Invocation Polling**: When active invocations exist (running or optimistic), the dashboard actively polls for updates. This polling relies on a stable derived key (`activeInvocationKey`) representing the set of active IDs to prevent unnecessary interval resets when non-ID metadata updates. Stale refreshes are prevented by verifying that both the active project and the selected invocation remain identical to when the polling cycle started.

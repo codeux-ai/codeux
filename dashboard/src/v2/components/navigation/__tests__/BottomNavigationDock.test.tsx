@@ -86,4 +86,20 @@ describe('BottomNavigationDock (KineticDock)', () => {
         const iconWrapper = overviewLink.querySelector('svg');
         expect(iconWrapper?.getAttribute('class')).toContain('group-focus-visible:-translate-y-1.5');
     });
+
+    it('should respect safe-area-inset on the dock container and apply scroll padding', () => {
+        render(<KineticDock />);
+
+        const nav = screen.getByRole('navigation', { name: 'Dock navigation' });
+        expect(nav.getAttribute('class')).toContain('scroll-px-2.5');
+
+        // The outer div should have the dynamic height calculation and bottom 0
+        const outerDiv = nav.parentElement;
+        expect(outerDiv?.getAttribute('class')).toContain('bottom-0');
+        expect(outerDiv?.getAttribute('class')).toContain('h-[calc(7rem+env(safe-area-inset-bottom))]');
+
+        // Assert the spacer div is present (last child of nav)
+        const lastChild = nav.lastElementChild;
+        expect(lastChild?.getAttribute('class')).toContain('w-[1px] shrink-0');
+    });
 });

@@ -14,6 +14,10 @@ describe("AddTaskModal Accessibility", () => {
     render(<AddTaskModal sprints={dummySprints as any} availableTasks={dummyTasks as any} onClose={() => {}} onSubmit={() => {}} />);
     const dialogs = screen.getAllByRole("dialog");
     expect(dialogs[0]).toHaveAttribute("aria-labelledby", "add-task-modal-title");
+
+    // Check for fixed header/footer and scrollable body structure
+    const formBody = document.getElementById("add-task-form-body");
+    expect(formBody).toBeInTheDocument();
   });
 
   test("dependency search and options handle accessibility", async () => {

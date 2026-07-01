@@ -1,3 +1,4 @@
+import type { TokenPricing } from "../contracts/app-types.js";
 import {
   queryExecutionInvocation,
   queryProviderInvocationUsage,
@@ -32,7 +33,6 @@ import {
   mapExecutionSprintRunSummaryRow,
   mapExecutionRuntimeEventSummaryRow
 } from "./execution/execution-read-model-mappers.js";
-
 
 import type {
   ExecutionInvocationRecord,
@@ -96,6 +96,7 @@ import { ExecutionWallTimeQuery } from "./execution/execution-wall-time-query.js
 import { OverviewTelemetryQuery } from "./execution/overview-telemetry-query.js";
 import { createUsageBuckets, createEmptyUsageTotals } from "./execution/stats-buckets.js";
 import { claimNextTaskDispatchTransaction } from "./execution/task-dispatch-claim-query.js";
+import { ExecutionLeaseStore } from "./execution/execution-lease-store.js";
 import {
   requireProject,
   requireSprint,
@@ -116,7 +117,6 @@ import type {
   ProviderInvocationUsageRow,
   ProjectAttentionSummaryRow
 } from "./execution/execution-repository-types.js";
-
 
 interface SprintRunRow {
   id: string;
@@ -151,17 +151,6 @@ interface TaskDispatchRow {
   error_message: string | null;
   created_at: string;
   updated_at: string;
-}
-
-interface ExecutionLeaseRow {
-  id: string;
-  scope_type: string;
-  scope_id: string;
-  owner_key: string;
-  lease_token: string;
-  acquired_at: string;
-  expires_at: string;
-  last_heartbeat_at: string | null;
 }
 
 interface TaskRunRow {
@@ -243,8 +232,8 @@ function cloneUsageTotals(input?: ExecutionUsageTotals | null): ExecutionUsageTo
 export class ExecutionRepository {
   private readonly db: DatabaseAdapter;
   private readonly wallTimeQuery: ExecutionWallTimeQuery;
+  private readonly leaseStore: ExecutionLeaseStore;
   private readonly pendingRealtimeProjectRefreshes = new Map<string, { includeOverview: boolean }>();
-  private readonly leaseProjectCache = new Map<string, string>();
   private realtimeProjectRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
@@ -255,8 +244,11 @@ export class ExecutionRepository {
   ) {
     this.db = storage.getDatabase();
     this.wallTimeQuery = new ExecutionWallTimeQuery(this.db, this.storage);
+    this.leaseStore = new ExecutionLeaseStore(this.db, (projectId: string, inc: boolean) => this.notifyRealtime(projectId, inc), this.logger, {
+      hasActiveTaskDispatches: (id: string) => this.hasActiveTaskDispatches(id),
+      findActiveSprintRun: (p: string, s: string) => this.findActiveSprintRun(p, s)
+    });
   }
-
 
   createExecutionInvocation(input: CreateExecutionInvocationInput): ExecutionInvocationRecord {
     return writeExecutionInvocation(
@@ -335,7 +327,6 @@ export class ExecutionRepository {
       (projectId, includeOverview) => this.notifyRealtime(projectId, includeOverview)
     );
   }
-
 
   appendExecutionInvocationMessage(invocationId: string, input: AppendExecutionInvocationMessageInput): ExecutionInvocationMessageRecord {
     return writeExecutionInvocationMessage(
@@ -1008,8 +999,6 @@ export class ExecutionRepository {
     return row ? (row.state === "COMPLETED" || row.state === "FAILED") : false;
   }
 
-
-
   getTaskDispatch(dispatchId: string): TaskDispatchRecord | null {
     const row = this.db.prepare(`
       SELECT *
@@ -1068,6 +1057,14 @@ export class ExecutionRepository {
     const taskMetaCache = new Map<string, StatsEntityMetadata>();
     const sprintMetaCache = new Map<string, StatsEntityMetadata>();
 
+    let cachedSettings: ReturnType<typeof this.settingsRepository.getSystemSettings> | undefined;
+    try {
+      cachedSettings = this.settingsRepository.getSystemSettings();
+    } catch {
+      // ignore
+    }
+    const pricingCache = new Map<string, TokenPricing | undefined>();
+
     return queryProjectStatsSnapshot(this.db, projectId, input, {
       requireProject: (id) => requireProject(this.db, id),
       getWallTimeTotalsByTaskIdsForRange: (id, start, end, now) => this.wallTimeQuery.getWallTimeTotalsByTaskIdsForRange(id, start, end, now),
@@ -1076,22 +1073,37 @@ export class ExecutionRepository {
         if (!model || !PROVIDER_IDS.includes(providerId as ProviderId)) {
           return undefined;
         }
-        const settings = this.settingsRepository.getSystemSettings();
-        const overrides = settings.modelPricing.overrides;
+
+        const cacheKey = `${providerId}:${model}`;
+        if (pricingCache.has(cacheKey)) {
+          return pricingCache.get(cacheKey);
+        }
+
+        if (!cachedSettings || !cachedSettings.modelPricing) {
+          pricingCache.set(cacheKey, undefined);
+          return undefined;
+        }
+
+        const overrides = cachedSettings.modelPricing.overrides || {};
 
         const canonicalId = resolveCatalogModelId(providerId as ProviderId, model);
         if (canonicalId) {
-          return overrides[canonicalId] ?? getModelCatalogEntry(canonicalId)?.cost;
+          const cost = overrides[canonicalId] ?? getModelCatalogEntry(canonicalId)?.cost;
+          pricingCache.set(cacheKey, cost);
+          return cost;
         }
 
         // Not a built-in slug/alias match — fall back to a custom API provider/gateway
         // routing (e.g. a self-hosted model with no catalogue entry), which still gets a
         // stable override key reconstructed from the paired "API provider" field.
-        const customCanonicalId = resolveCustomProviderModelId(providerId as ProviderId, model, settings);
+        const customCanonicalId = resolveCustomProviderModelId(providerId as ProviderId, model, cachedSettings);
         if (customCanonicalId) {
-          return overrides[customCanonicalId] ?? getModelCatalogEntry(customCanonicalId)?.cost;
+          const cost = overrides[customCanonicalId] ?? getModelCatalogEntry(customCanonicalId)?.cost;
+          pricingCache.set(cacheKey, cost);
+          return cost;
         }
 
+        pricingCache.set(cacheKey, undefined);
         return undefined;
       },
       getTaskMetadata: (id, ids) => {
@@ -1413,178 +1425,31 @@ export class ExecutionRepository {
   }
 
   acquireLease(input: AcquireExecutionLeaseInput): ExecutionLeaseRecord {
-    try {
-      const existing = this.getLease(input.scopeType, input.scopeId);
-      const now = new Date().toISOString();
-
-      if (existing && existing.expiresAt > now && existing.leaseToken !== input.leaseToken) {
-        throw new ConcurrencyConflictError(`Lease already held for ${input.scopeType}:${input.scopeId}`);
-      }
-
-      if (existing) {
-        this.db.prepare(`
-          UPDATE execution_leases
-          SET owner_key = ?, lease_token = ?, acquired_at = ?, expires_at = ?, last_heartbeat_at = ?
-          WHERE scope_type = ? AND scope_id = ?
-        `).run(
-          input.ownerKey,
-          input.leaseToken,
-          now,
-          input.expiresAt,
-          now,
-          input.scopeType,
-          input.scopeId
-        );
-        const updated = requireLease((type, id) => this.getLease(type, id), input.scopeType, input.scopeId);
-        this.notifyRealtimeForLease(input.scopeType, input.scopeId);
-        return updated;
-      }
-
-      const id = randomUUID();
-      this.db.prepare(`
-        INSERT INTO execution_leases (id, scope_type, scope_id, owner_key, lease_token, acquired_at, expires_at, last_heartbeat_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        id,
-        input.scopeType,
-        input.scopeId,
-        input.ownerKey,
-        input.leaseToken,
-        now,
-        input.expiresAt,
-        now
-      );
-      const created = requireLease((type, id) => this.getLease(type, id), input.scopeType, input.scopeId);
-      this.notifyRealtimeForLease(input.scopeType, input.scopeId);
-      return created;
-      } catch (error) {
-      if (error instanceof RepositoryError) throw error;
-      this.logger.error("Operation failed", { error, scopeType: input.scopeType, scopeId: input.scopeId });
-      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
-    }
+    return this.leaseStore.acquireLease(input);
   }
 
   renewLease(input: RenewExecutionLeaseInput): ExecutionLeaseRecord {
-    try {
-      const current = requireLease((type, id) => this.getLease(type, id), input.scopeType, input.scopeId);
-      if (current.leaseToken !== input.leaseToken) {
-        throw new ConcurrencyConflictError(`Lease token mismatch for ${input.scopeType}:${input.scopeId}`);
-      }
-      const now = new Date().toISOString();
-      this.db.prepare(`
-        UPDATE execution_leases
-        SET expires_at = ?, last_heartbeat_at = ?
-        WHERE scope_type = ? AND scope_id = ? AND lease_token = ?
-      `).run(input.expiresAt, now, input.scopeType, input.scopeId, input.leaseToken);
-      return requireLease((type, id) => this.getLease(type, id), input.scopeType, input.scopeId);
-      } catch (error) {
-      if (error instanceof RepositoryError) throw error;
-      this.logger.error("Operation failed", { error, scopeType: input.scopeType, scopeId: input.scopeId });
-      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
-    }
+    return this.leaseStore.renewLease(input);
   }
 
   releaseLease(scopeType: ExecutionLeaseRecord["scopeType"], scopeId: string, leaseToken?: string): void {
-    try {
-      const projectId = this.resolveLeaseProjectId(scopeType, scopeId);
-      this.leaseProjectCache.delete(`${scopeType}:${scopeId}`);
-
-      if (leaseToken) {
-        this.db.prepare(`
-          DELETE FROM execution_leases
-          WHERE scope_type = ? AND scope_id = ? AND lease_token = ?
-        `).run(scopeType, scopeId, leaseToken);
-        if (projectId) {
-          this.notifyRealtime(projectId, false);
-        }
-        return;
-      }
-
-      this.db.prepare(`
-        DELETE FROM execution_leases
-        WHERE scope_type = ? AND scope_id = ?
-      `).run(scopeType, scopeId);
-      if (projectId) {
-        this.notifyRealtime(projectId, false);
-      }
-      } catch (error) {
-      if (error instanceof RepositoryError) throw error;
-      this.logger.error("Operation failed", { error, scopeType, scopeId });
-      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
-    }
+    return this.leaseStore.releaseLease(scopeType, scopeId, leaseToken);
   }
 
   releaseStaleSprintLease(projectId: string, sprintId: string): boolean {
-    try {
-      requireProject(this.db, projectId);
-      requireSprint(this.db, sprintId, projectId);
-
-      const lease = this.getLease("sprint", sprintId);
-      if (!lease) {
-        return false;
-      }
-
-      const activeRun = this.findActiveSprintRun(projectId, sprintId);
-      if (activeRun) {
-        if (activeRun.status === "running" || activeRun.status === "queued") {
-          return false;
-        }
-        if (activeRun.status === "cancel_requested" && this.hasActiveTaskDispatches(activeRun.id)) {
-          return false;
-        }
-      }
-
-      this.releaseLease("sprint", sprintId, lease.leaseToken);
-      return true;
-      } catch (error) {
-      if (error instanceof RepositoryError) throw error;
-      this.logger.error("Operation failed", { error, projectId, sprintId });
-      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
-    }
+    return this.leaseStore.releaseStaleSprintLease(projectId, sprintId);
   }
 
   getLease(scopeType: ExecutionLeaseRecord["scopeType"], scopeId: string): ExecutionLeaseRecord | null {
-    const row = this.db.prepare(`
-      SELECT *
-      FROM execution_leases
-      WHERE scope_type = ? AND scope_id = ?
-    `).get(scopeType, scopeId) as ExecutionLeaseRow | undefined;
-    return row ? this.mapExecutionLeaseRow(row) : null;
+    return this.leaseStore.getLease(scopeType, scopeId);
   }
 
   listAllLeases(scopeType?: ExecutionLeaseRecord["scopeType"]): ExecutionLeaseRecord[] {
-    const rows = scopeType
-      ? this.db.prepare(`
-        SELECT *
-        FROM execution_leases
-        WHERE scope_type = ?
-      `).all(scopeType)
-      : this.db.prepare(`
-        SELECT *
-        FROM execution_leases
-      `).all();
-
-    return (rows as unknown as ExecutionLeaseRow[]).map((row) => this.mapExecutionLeaseRow(row));
+    return this.leaseStore.listAllLeases(scopeType);
   }
 
   listExpiredLeases(scopeType?: ExecutionLeaseRecord["scopeType"], now = new Date()): ExecutionLeaseRecord[] {
-    const nowIso = now.toISOString();
-    const rows = scopeType
-      ? this.db.prepare(`
-        SELECT *
-        FROM execution_leases
-        WHERE scope_type = ?
-          AND expires_at <= ?
-        ORDER BY expires_at ASC
-      `).all(scopeType, nowIso)
-      : this.db.prepare(`
-        SELECT *
-        FROM execution_leases
-        WHERE expires_at <= ?
-        ORDER BY expires_at ASC
-      `).all(nowIso);
-
-    return (rows as unknown as ExecutionLeaseRow[]).map((row) => this.mapExecutionLeaseRow(row));
+    return this.leaseStore.listExpiredLeases(scopeType, now);
   }
 
   hasActiveTaskDispatches(sprintRunId: string): boolean {
@@ -1617,7 +1482,6 @@ export class ExecutionRepository {
     this.releaseStaleSprintLease(updated.projectId, updated.sprintId);
     return updated;
   }
-
 
   private getUsageTotalsByTaskIds(projectId: string, taskIds: string[]): Map<string, ExecutionUsageTotals> {
     if (taskIds.length === 0) {
@@ -1723,7 +1587,6 @@ export class ExecutionRepository {
     return map;
   }
 
-
   private getTaskMetadata(projectId: string, ids: string[]): Map<string, StatsEntityMetadata> {
     if (ids.length === 0) {
       return new Map();
@@ -1791,7 +1654,6 @@ export class ExecutionRepository {
     return chunkMap;
   }
 
-
   private withLastActivityMetadata(
     metadata: Map<string, StatsEntityMetadata>,
     lastActivityMap: Map<string, string>,
@@ -1824,15 +1686,6 @@ export class ExecutionRepository {
       map.set(key, value);
     }
   }
-
-
-
-
-
-
-
-
-
 
   private mapSprintRunRow(row: SprintRunRow): SprintRunRecord {
     return {
@@ -1873,19 +1726,6 @@ export class ExecutionRepository {
     };
   }
 
-  private mapExecutionLeaseRow(row: ExecutionLeaseRow): ExecutionLeaseRecord {
-    return {
-      id: row.id,
-      scopeType: row.scope_type as ExecutionLeaseRecord["scopeType"],
-      scopeId: row.scope_id,
-      ownerKey: row.owner_key,
-      leaseToken: row.lease_token,
-      acquiredAt: row.acquired_at,
-      expiresAt: row.expires_at,
-      lastHeartbeatAt: row.last_heartbeat_at,
-    };
-  }
-
   private mapTaskRunRow(row: TaskRunRow): TaskRunRecord {
     return {
       id: row.id,
@@ -1920,7 +1760,6 @@ export class ExecutionRepository {
     };
   }
 
-
   private mapSprintRunEventRow(row: SprintRunEventRow): SprintRunEventRecord {
     return {
       id: row.id,
@@ -1932,8 +1771,6 @@ export class ExecutionRepository {
       createdAt: row.created_at,
     };
   }
-
-
 
   private listActiveAttentionRowsForProject(projectId: string): ProjectAttentionSummaryRow[] {
     return this.db.prepare(`
@@ -2051,45 +1888,7 @@ export class ExecutionRepository {
       || input.errorMessage !== undefined;
   }
 
-  private notifyRealtimeForLease(scopeType: ExecutionLeaseRecord["scopeType"], scopeId: string): void {
-    const projectId = this.resolveLeaseProjectId(scopeType, scopeId);
-    if (projectId) {
-      this.notifyRealtime(projectId, false);
-    }
-  }
-
   public resolveLeaseProjectId(scopeType: ExecutionLeaseRecord["scopeType"], scopeId: string): string | null {
-    const cacheKey = `${scopeType}:${scopeId}`;
-    const cached = this.leaseProjectCache.get(cacheKey);
-    if (cached !== undefined) {
-      return cached;
-    }
-
-    let projectId: string | null = null;
-
-    if (scopeType === "sprint") {
-      const row = this.db.prepare(`
-        SELECT project_id
-        FROM sprints
-        WHERE id = ?
-      `).get(scopeId) as { project_id: string } | undefined;
-      projectId = row?.project_id || null;
-    } else if (scopeType === "task_dispatch") {
-      const row = this.db.prepare(`
-        SELECT project_id
-        FROM task_dispatches
-        WHERE id = ?
-      `).get(scopeId) as { project_id: string } | undefined;
-      projectId = row?.project_id || null;
-    }
-
-    if (projectId !== null) {
-      if (this.leaseProjectCache.size >= 1000) {
-        this.leaseProjectCache.delete(this.leaseProjectCache.keys().next().value!);
-      }
-      this.leaseProjectCache.set(cacheKey, projectId);
-    }
-
-    return projectId;
+    return this.leaseStore.resolveLeaseProjectId(scopeType, scopeId);
   }
 }

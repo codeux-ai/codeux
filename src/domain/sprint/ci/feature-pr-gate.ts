@@ -22,6 +22,8 @@ import type { Logger } from "../../../shared/logging/logger.js";
 import type {
   AutomationLevel,
   CiIntelligenceSettings,
+  GitPullRequestStatus,
+  GitMergeStatus,
   GitTrackingStatus,
   Subtask,
   AutoMergeFeaturePrResult,
@@ -74,26 +76,26 @@ export class FeaturePrGateService {
 
     // Pre-calculate and cache PR, merged PR, and execution state for each task, catching thrown errors per task.
     interface TaskCiInfo {
-      pr: any;
-      mergedPr: any;
+      pr: GitPullRequestStatus | undefined;
+      mergedPr: GitMergeStatus | undefined;
       hasPr: boolean;
       isExecutionCompleted: boolean;
-      error?: any;
+      error?: unknown;
     }
     const taskCiInfoMap = new Map<string, TaskCiInfo>();
 
     for (const task of updatedSubtasks) {
-      let pr: any = undefined;
-      let mergedPr: any = undefined;
+      let pr: GitPullRequestStatus | undefined = undefined;
+      let mergedPr: GitMergeStatus | undefined = undefined;
       let hasPr = false;
-      let error: any = undefined;
+      let error: unknown = undefined;
       try {
         if (context.gitStatus) {
           pr = matchPrForTask(task, context.gitStatus);
           mergedPr = matchMergedPrForTask(task, context.gitStatus);
         }
         hasPr = !!pr || !!mergedPr || !!task.pr_url;
-      } catch (err: any) {
+      } catch (err) {
         error = err;
         hasPr = taskHasMergeEvidence(task);
       }
@@ -325,8 +327,8 @@ export class FeaturePrGateService {
   private async processTask(
     task: Subtask,
     context: CiGateContext,
-    cachedPr: any,
-    cachedMergedPr: any
+    cachedPr: GitPullRequestStatus | undefined,
+    cachedMergedPr: GitMergeStatus | undefined
   ): Promise<{
     reportText: string;
     events: Array<{ state: string; payload: Record<string, unknown> }>;

@@ -12,6 +12,7 @@ import { sanitizeToken } from "./cli-workflow-utils.js";
 import { QaReviewRecoveryService } from "./runtime-recovery/qa-review-recovery.js";
 import { InvocationRecoveryService } from "./runtime-recovery/invocation-recovery.js";
 import { calculateInvocationDurationMs, isTerminalTaskRunState } from "./runtime-recovery/recovery-utils.js";
+import { failStaleProviderInvocation } from "../domain/runtime/provider-invocation-recovery.js";
 
 const ACTIVE_SPRINT_RUN_STATUSES = ["queued", "running"] as const;
 const ACTIVE_DISPATCH_STATUSES = ["queued", "claimed", "running", "cancel_requested"] as const;
@@ -567,33 +568,17 @@ export class RuntimeStartupRecoveryService {
         continue;
       }
 
-      this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
-        status: "failed",
-        finishedAt: reconciledAt,
-        durationMs: calculateInvocationDurationMs(invocation, reconciledAt),
-      });
-
       const linkedExecutionInvocations = this.deps.executionRepository.listExecutionInvocationsByProviderInvocationId(invocation.id);
-      for (const executionInvocation of linkedExecutionInvocations) {
-        if (executionInvocation.status !== "running" && executionInvocation.status !== "paused") {
-          continue;
+      failStaleProviderInvocation(
+        this.deps.executionRepository,
+        invocation,
+        linkedExecutionInvocations,
+        {
+          reconciledAt,
+          recoveryReason: "startup_cli_invocation_reconcile",
+          systemMessage: failureReason,
         }
-        this.deps.executionRepository.updateExecutionInvocation(executionInvocation.id, {
-          status: "failed",
-          finishedAt: reconciledAt,
-          errorMessage: failureReason,
-        });
-        this.deps.executionRepository.appendExecutionInvocationMessage(executionInvocation.id, {
-          role: "system",
-          contentMarkdown: failureReason,
-          metadata: {
-            recovery: "startup_cli_invocation_reconcile",
-            provider: invocation.provider,
-            sessionId: invocation.sessionId,
-          },
-          createdAt: reconciledAt,
-        });
-      }
+      );
 
       this.reconcileInterruptedTaskExecution(invocation, failureReason, reconciledAt);
 

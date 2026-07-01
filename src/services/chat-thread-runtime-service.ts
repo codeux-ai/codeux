@@ -96,8 +96,14 @@ export class ChatThreadRuntimeService {
       ? await this.deps.agentPresetSyncService.resolveDashboardReplyAgent(
         thread.projectId,
         settings.agents?.routing?.dashboardReply?.agentPresetId ?? null,
-      ).catch(() => null)
-      : await this.deps.agentPresetSyncService.getWorkerAgent(thread.projectId).catch(() => null);
+      ).catch((err) => {
+        this.deps.logger?.warn("Failed to resolve dashboard reply agent template", { projectId: thread.projectId, error: err instanceof Error ? err.message : String(err) });
+        return null;
+      })
+      : await this.deps.agentPresetSyncService.getWorkerAgent(thread.projectId).catch((err) => {
+        this.deps.logger?.warn("Failed to resolve fallback worker agent template", { projectId: thread.projectId, error: err instanceof Error ? err.message : String(err) });
+        return null;
+      });
     const route = this.deps.taskService.resolveInvocationProvider("dashboard_reply", pseudoTask, {
       scope: { projectId: thread.projectId },
       cliOnly: true,

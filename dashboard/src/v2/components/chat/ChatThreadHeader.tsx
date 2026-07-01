@@ -74,11 +74,11 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
             {thread?.title || "No Thread Selected"}
           </h2>
         </div>
-        <div className="text-left sm:text-right text-[10px] font-mono text-slate-400 w-full sm:w-auto">
+        <div className="text-left sm:text-right text-[10px] font-mono text-slate-400 w-full sm:w-auto min-w-0">
           <div className="mb-2 w-full">
             {thread ? `${thread.messageCount} messages` : "0 messages"}
           </div>
-          <div className="flex flex-wrap items-center sm:justify-end gap-2">
+          <div className="flex flex-wrap items-center sm:justify-end gap-2 min-w-0">
             {thread && thread.messageCount > 0 && (
               <button
                 type="button"

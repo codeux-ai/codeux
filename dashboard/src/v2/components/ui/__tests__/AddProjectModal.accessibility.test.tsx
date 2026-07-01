@@ -11,6 +11,10 @@ describe("AddProjectModal Accessibility", () => {
     const { container } = render(<AddProjectModal onClose={() => {}} onAdd={() => {}} initialSourceType="local" />);
     const dialogs = screen.getAllByRole("dialog");
     expect(dialogs[0]).toHaveAttribute("aria-labelledby", "add-project-modal-title");
+
+    // Check for fixed header/footer and scrollable body structure
+    const formBody = document.getElementById("add-project-form-body");
+    expect(formBody).toBeInTheDocument();
   });
 
   test("form inputs have associated labels and handle validation errors", async () => {

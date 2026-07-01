@@ -234,4 +234,20 @@ describe("SearchOverlay Accessibility", () => {
         // mockOnClose is called on select in handleSelect logic? Yes, but handleSelect does navigate + onClose
         expect(mockOnClose).toHaveBeenCalled();
     });
+
+    it("renders in unanchored/fallback mobile mode gracefully", () => {
+        render(
+            <SearchOverlay
+                isOpen={true}
+                onClose={mockOnClose}
+                searchQuery="t"
+                onSearchChange={mockOnSearchChange}
+                results={mockResults}
+            />
+        );
+
+        const dialog = screen.getByRole("dialog", { hidden: true });
+        expect(dialog).toHaveClass("max-w-[calc(100vw-2rem)]");
+        expect(dialog).toHaveClass("max-h-[calc(100dvh-2rem)]");
+    });
 });

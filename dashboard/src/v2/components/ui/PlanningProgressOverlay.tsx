@@ -124,7 +124,7 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
         if (e.target === e.currentTarget) onDismiss();
       }}
     >
-      <div className="flex flex-col items-center justify-center bg-white dark:bg-void-800 rounded-2xl shadow-2xl border border-black/[0.08] dark:border-white/[0.08] max-w-2xl w-full p-8 relative cursor-default" onClick={(e) => e.stopPropagation()}>
+      <div className="flex flex-col items-center justify-center bg-white dark:bg-void-800 rounded-2xl shadow-2xl border border-black/[0.08] dark:border-white/[0.08] max-w-2xl w-full p-6 sm:p-8 relative cursor-default max-h-[calc(100dvh-2rem)] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
       <button
         type="button"
         onClick={onDismiss}

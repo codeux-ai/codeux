@@ -97,7 +97,7 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
           </div>
 
           {/* Message Body */}
-          <div className="prose prose-sm max-w-none text-[14px] leading-7 text-slate-800 dark:text-slate-200 prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit break-words overflow-wrap-anywhere min-w-0"
+          <div className="prose prose-sm max-w-none text-[14px] leading-7 text-slate-800 dark:text-slate-200 prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit prose-pre:overflow-x-auto break-words overflow-wrap-anywhere min-w-0"
             dangerouslySetInnerHTML={{ __html: renderMarkdown(message.bodyMarkdown) }}
           />
 

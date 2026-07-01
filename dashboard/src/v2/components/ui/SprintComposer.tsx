@@ -505,7 +505,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   return (
     <section
       ref={cardRef}
-      className="relative w-full overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/78 shadow-[0_20px_50px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/72 dark:shadow-[0_24px_56px_rgba(0,0,0,0.28)]"
+      className="relative flex w-full max-h-[calc(100dvh-2rem)] flex-col overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/78 shadow-[0_20px_50px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/72 dark:shadow-[0_24px_56px_rgba(0,0,0,0.28)]"
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,224,160,0.08),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(255,184,0,0.08),transparent_34%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(0,224,160,0.1),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(255,184,0,0.09),transparent_34%)]" />
 
@@ -534,10 +534,12 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
       <form
         ref={fieldsRef}
         onSubmit={handleSubmit}
-        className="relative z-10 grid gap-0 xl:grid-cols-[minmax(0,1fr)_21rem]"
+        className="relative z-10 flex min-h-0 flex-1 flex-col"
         tabIndex={-1}
       >
-        <div className="border-b border-black/[0.06] p-6 dark:border-white/[0.06] sm:p-8 lg:p-10 xl:border-b-0 xl:border-r">
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_21rem]">
+            <div className="border-b border-black/[0.06] p-6 dark:border-white/[0.06] sm:p-8 lg:p-10 xl:border-b-0 xl:border-r">
           <div data-composer-stagger className="mb-8">
             <ActionFeedbackRegion status={actionFeedback.status} message={actionFeedback.message} onDismiss={clearFeedback} clearError={clearError} autoDismiss={actionFeedback.autoDismiss} retryAction={actionFeedback.retryAction} retryLabel={actionFeedback.retryLabel} />
           </div>
@@ -739,10 +741,10 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                              <span>{issue.repository}</span>
-                              <span className="text-signal-600 dark:text-signal-300">{issue.issueKey || `#${issue.issueNumber}`}</span>
+                              <span className="min-w-0 truncate">{issue.repository}</span>
+                              <span className="text-signal-600 dark:text-signal-300 shrink-0">{issue.issueKey || `#${issue.issueNumber}`}</span>
                             </div>
-                            <h3 className="mt-1 line-clamp-2 text-sm font-black leading-snug text-slate-900 dark:text-white">
+                            <h3 className="mt-1 line-clamp-2 min-w-0 text-sm font-black leading-snug text-slate-900 dark:text-white">
                               {issue.title}
                             </h3>
                           </div>
@@ -927,50 +929,53 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
             </div>
           </div>
 
-          <div data-composer-stagger className="mt-auto flex flex-col gap-3 pt-2">
-            {isBusy && isOverlayDismissed && feedback && (
-              <div className="flex w-full flex-col gap-3 rounded-xl border border-signal-500/30 bg-signal-500/[0.06] p-3 dark:bg-signal-500/[0.08] sm:flex-row sm:items-center sm:justify-between">
-                <button
-                  type="button"
-                  onClick={() => setIsOverlayDismissed(false)}
-                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                >
-                  <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-signal-500" /><span className="sr-only">Loading</span></>
-                  <div className="min-w-0">
-                    <div className="text-xs font-bold text-signal-700 dark:text-signal-300">
-                      {PLANNING_ACTION_LABELS[busyAction!] || "Planning in progress..."}
-                    </div>
-                    <div className="mt-0.5 text-[10px] text-signal-600/70 dark:text-signal-400/70">
-                      {String(Math.floor(elapsedMs / 60000)).padStart(2, "0")}:{String(Math.floor((elapsedMs % 60000) / 1000)).padStart(2, "0")} elapsed
-                    </div>
-                  </div>
-                </button>
-              </div>
-            )}
-            <button
-              type="submit"
-              disabled={isBusy}
-              aria-busy={isSubmitting}
-              className="inline-flex items-center justify-center gap-2.5 rounded-[1.2rem] bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.16)] transition-all hover:-translate-y-px hover:opacity-92 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-void-900"
-            >
-              {isSubmitting ? <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /><span className="sr-only">Loading</span></> : <SubmitIcon className="h-4 w-4" strokeWidth={2.3} />}
-              {isSubmitting
-                ? PLANNING_ACTION_LABELS[state.submitMode as PlanningActionType] || "Processing..."
-                : state.submitMode === 'draft' ? (state.isEditing ? "Save Changes" : "Save Draft") : activeMode.label}
-            </button>
-            <button
-              type="button"
-              onClick={isBusy ? handleCancel : onClose}
-              className={`rounded-[1.2rem] border px-5 py-3 text-sm font-semibold transition-colors ${
-                isBusy
-                  ? "border-status-red/30 bg-status-red/[0.06] text-status-red hover:bg-status-red/[0.12]"
-                  : "border-black/[0.06] bg-white/66 text-slate-500 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-300 dark:hover:text-white"
-              }`}
-            >
-              {isBusy ? "Cancel Active Request" : "Cancel"}
-            </button>
-          </div>
         </aside>
+          </div>
+        </div>
+
+        <div className="shrink-0 border-t border-black/[0.06] dark:border-white/[0.06] p-4 sm:p-6 bg-white/78 dark:bg-void-800/72 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-3 z-20 relative">
+          {isBusy && isOverlayDismissed && feedback && (
+            <div className="flex w-full flex-col gap-3 rounded-xl border border-signal-500/30 bg-signal-500/[0.06] p-3 dark:bg-signal-500/[0.08] sm:flex-row sm:items-center sm:justify-between sm:mr-auto">
+              <button
+                type="button"
+                onClick={() => setIsOverlayDismissed(false)}
+                className="flex min-w-0 flex-1 items-center gap-3 text-left"
+              >
+                <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-signal-500" /><span className="sr-only">Loading</span></>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-signal-700 dark:text-signal-300">
+                    {PLANNING_ACTION_LABELS[busyAction!] || "Planning in progress..."}
+                  </div>
+                  <div className="mt-0.5 text-[10px] text-signal-600/70 dark:text-signal-400/70">
+                    {String(Math.floor(elapsedMs / 60000)).padStart(2, "0")}:{String(Math.floor((elapsedMs % 60000) / 1000)).padStart(2, "0")} elapsed
+                  </div>
+                </div>
+              </button>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={isBusy ? handleCancel : onClose}
+            className={`rounded-[1.2rem] border px-5 py-3 text-sm font-semibold transition-colors w-full sm:w-auto ${
+              isBusy
+                ? "border-status-red/30 bg-status-red/[0.06] text-status-red hover:bg-status-red/[0.12]"
+                : "border-black/[0.06] bg-white/66 text-slate-500 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-300 dark:hover:text-white"
+            }`}
+          >
+            {isBusy ? "Cancel Active Request" : "Cancel"}
+          </button>
+          <button
+            type="submit"
+            disabled={isBusy}
+            aria-busy={isSubmitting}
+            className="inline-flex items-center justify-center gap-2.5 rounded-[1.2rem] bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.16)] transition-all hover:-translate-y-px hover:opacity-92 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-void-900 w-full sm:w-auto"
+          >
+            {isSubmitting ? <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /><span className="sr-only">Loading</span></> : <SubmitIcon className="h-4 w-4" strokeWidth={2.3} />}
+            {isSubmitting
+              ? PLANNING_ACTION_LABELS[state.submitMode as PlanningActionType] || "Processing..."
+              : state.submitMode === 'draft' ? (state.isEditing ? "Save Changes" : "Save Draft") : activeMode.label}
+          </button>
+        </div>
       </form>
     </section>
   );

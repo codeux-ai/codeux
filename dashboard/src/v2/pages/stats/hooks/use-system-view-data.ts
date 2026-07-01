@@ -395,15 +395,15 @@ function computeLegacySprintStateSummary(allInvocations: ExecutionInvocationReco
   };
 }
 
+/**
+ * Stats system view hook.
+ * This is a server-projected analytics surface. It trusts the server-side
+ * `ProjectInvocationsQueryResult.summary`, available filters, and paginated items.
+ * Legacy client-side processing is only kept as a fallback for older mocks.
+ */
 export function useSystemViewData(projectId: string) {
-  const [allInvocations, setAllInvocations] = useState<ExecutionInvocationRecord[]>([]);
-  const [serverTotalCount, setServerTotalCount] = useState<number | null>(null);
-  const [serverSummary, setServerSummary] = useState<SystemSummaryMetrics | null>(null);
-  const [serverExtMetrics, setServerExtMetrics] = useState<ExternalApiMetrics | null>(null);
-  const [serverSprintSummary, setServerSprintSummary] = useState<SprintStateSummary | null>(null);
-  const [serverErrorsByCategory, setServerErrorsByCategory] = useState<ErrorsByCategory | null>(null);
-  const [serverAvailablePurposes, setServerAvailablePurposes] = useState<string[] | null>(null);
-  const [serverAvailableProviders, setServerAvailableProviders] = useState<string[] | null>(null);
+  const [legacyAllInvocations, setLegacyAllInvocations] = useState<ExecutionInvocationRecord[] | null>(null);
+  const [serverResult, setServerResult] = useState<ProjectInvocationsQueryResult | null>(null);
   const [filters, setFilters] = useState<SystemFilters>(EMPTY_FILTERS);
   const [search, setSearch] = useState<string>("");
   const [sort, setSort] = useState<SystemSort>({ key: "startedAt", dir: "desc" });
@@ -419,14 +419,8 @@ export function useSystemViewData(projectId: string) {
 
   useEffect(() => {
     if (!projectId) {
-      setAllInvocations([]);
-      setServerTotalCount(null);
-          setServerSummary(null);
-          setServerExtMetrics(null);
-          setServerSprintSummary(null);
-          setServerErrorsByCategory(null);
-          setServerAvailablePurposes(null);
-          setServerAvailableProviders(null);
+      setLegacyAllInvocations(null);
+      setServerResult(null);
       setLoading(false);
       setError(null);
       return;
@@ -452,38 +446,11 @@ export function useSystemViewData(projectId: string) {
     void fetchProjectInvocations(projectId, query, { signal: controller.signal })
       .then((response: ExecutionInvocationRecord[] | ProjectInvocationsQueryResult) => {
         if (Array.isArray(response)) {
-          setAllInvocations(response);
-          setServerTotalCount(null);
-          setServerSummary(null);
-          setServerAvailablePurposes(null);
-          setServerAvailableProviders(null);
-          setServerExtMetrics(null);
-          setServerSprintSummary(null);
-          setServerErrorsByCategory(null);
+          setLegacyAllInvocations(response);
+          setServerResult(null);
         } else {
-          setAllInvocations(response.items);
-          setServerTotalCount(response.totalCount);
-          setServerAvailablePurposes(response.availablePurposes || null);
-          setServerAvailableProviders(response.availableProviders || null);
-          if (response.summary) {
-            setServerExtMetrics(response.summary.externalApiMetrics || null);
-            setServerSprintSummary(response.summary.sprintStateSummary || null);
-            setServerErrorsByCategory(response.summary.errorsByCategory || null);
-            const sum = response.summary;
-            const decidedCount = sum.completedCount + sum.failedCount + sum.cancelledCount;
-            const cacheDenominator = sum.totalInputTokens + sum.totalCachedTokens;
-            setServerSummary({
-              ...sum,
-              errorRate: sum.failedCount / Math.max(1, sum.totalInvocations),
-              successRate: decidedCount > 0 ? sum.completedCount / decidedCount : null,
-              cacheHitRate: cacheDenominator > 0 ? sum.totalCachedTokens / cacheDenominator : null,
-            });
-          } else {
-            setServerSummary(null);
-            setServerExtMetrics(null);
-            setServerSprintSummary(null);
-            setServerErrorsByCategory(null);
-          }
+          setLegacyAllInvocations(null);
+          setServerResult(response);
         }
         setLoading(false);
       })
@@ -501,54 +468,61 @@ export function useSystemViewData(projectId: string) {
   }, [projectId, refreshKey, page, search, sort, filters]);
 
   const filteredInvocations = useMemo(() => {
-    if (serverTotalCount !== null) {
-      return allInvocations;
+    if (serverResult !== null) {
+      return serverResult.items;
     }
-    return computeLegacyFilteredInvocations(allInvocations, filters, search, sort);
-  }, [allInvocations, filters, search, sort, serverTotalCount]);
+    return legacyAllInvocations ? computeLegacyFilteredInvocations(legacyAllInvocations, filters, search, sort) : [];
+  }, [legacyAllInvocations, serverResult, filters, search, sort]);
 
   const summaryMetrics = useMemo<SystemSummaryMetrics>(() => {
-    if (serverSummary) {
-      return serverSummary;
+    if (serverResult?.summary) {
+      const sum = serverResult.summary;
+      const decidedCount = sum.completedCount + sum.failedCount + sum.cancelledCount;
+      const cacheDenominator = sum.totalInputTokens + sum.totalCachedTokens;
+      return {
+        ...sum,
+        errorRate: sum.failedCount / Math.max(1, sum.totalInvocations),
+        successRate: decidedCount > 0 ? sum.completedCount / decidedCount : null,
+        cacheHitRate: cacheDenominator > 0 ? sum.totalCachedTokens / cacheDenominator : null,
+      };
     }
     return computeLegacySummaryMetrics(filteredInvocations);
-  }, [filteredInvocations, serverSummary]);
+  }, [filteredInvocations, serverResult]);
 
   const availablePurposes = useMemo(() => {
-    if (serverAvailablePurposes) return serverAvailablePurposes;
-    return computeLegacyAvailablePurposes(allInvocations);
-  }, [allInvocations, serverAvailablePurposes]);
+    if (serverResult?.availablePurposes) return serverResult.availablePurposes;
+    return legacyAllInvocations ? computeLegacyAvailablePurposes(legacyAllInvocations) : [];
+  }, [legacyAllInvocations, serverResult]);
 
   const externalApiMetrics = useMemo<ExternalApiMetrics>(() => {
-    if (serverExtMetrics) return serverExtMetrics;
-    return computeLegacyExternalApiMetrics(allInvocations);
-  }, [allInvocations, serverExtMetrics]);
+    if (serverResult?.summary?.externalApiMetrics) return serverResult.summary.externalApiMetrics;
+    return legacyAllInvocations ? computeLegacyExternalApiMetrics(legacyAllInvocations) : { git: { calls: 0, avgDurationMs: 0 }, jules: { calls: 0, avgDurationMs: 0 }, jira: { calls: 0, avgDurationMs: 0 }, other: { calls: 0, avgDurationMs: 0 } };
+  }, [legacyAllInvocations, serverResult]);
 
   const sprintStateSummary = useMemo<SprintStateSummary>(() => {
-    if (serverSprintSummary) return serverSprintSummary;
-    return computeLegacySprintStateSummary(allInvocations);
-  }, [allInvocations, serverSprintSummary]);
+    if (serverResult?.summary?.sprintStateSummary) return serverResult.summary.sprintStateSummary;
+    return legacyAllInvocations ? computeLegacySprintStateSummary(legacyAllInvocations) : { totalSprints: 0, activeSprints: 0, completedSprints: 0, failedSprints: 0, totalTasks: 0, runningTasks: 0, blockedTasks: 0 };
+  }, [legacyAllInvocations, serverResult]);
 
   const errorsByCategory = useMemo<ErrorsByCategory>(() => {
-    if (serverErrorsByCategory) return serverErrorsByCategory;
-    return computeLegacyErrorsByCategory(allInvocations);
-  }, [allInvocations, serverErrorsByCategory]);
+    if (serverResult?.summary?.errorsByCategory) return serverResult.summary.errorsByCategory;
+    return legacyAllInvocations ? computeLegacyErrorsByCategory(legacyAllInvocations) : { timeout: 0, rateLimit: 0, apiError: 0, modelError: 0, cancelled: 0, other: 0 };
+  }, [legacyAllInvocations, serverResult]);
 
   const availableProviders = useMemo(() => {
-    if (serverAvailableProviders) return serverAvailableProviders;
-    return computeLegacyAvailableProviders(allInvocations);
-  }, [allInvocations, serverAvailableProviders]);
+    if (serverResult?.availableProviders) return serverResult.availableProviders;
+    return legacyAllInvocations ? computeLegacyAvailableProviders(legacyAllInvocations) : [];
+  }, [legacyAllInvocations, serverResult]);
 
   const refetch = useCallback(() => {
     setRefreshKey((current) => current + 1);
   }, []);
 
-  const hasMore = serverTotalCount !== null ? (page * pageSize + allInvocations.length < serverTotalCount) : false;
-  const totalCount = serverTotalCount !== null ? serverTotalCount : allInvocations.length;
+  const hasMore = serverResult !== null ? (page * pageSize + serverResult.items.length < serverResult.totalCount) : false;
+  const totalCount = serverResult !== null ? serverResult.totalCount : (legacyAllInvocations?.length || 0);
 
   return {
     invocations: filteredInvocations,
-    allInvocations,
     summaryMetrics,
     availablePurposes,
     availableProviders,

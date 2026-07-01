@@ -100,6 +100,11 @@ describe("ExecutionRepository", () => {
       sourceRef: "/workspace/empty-execution",
     });
 
+    const usageTaskSpy = vi.spyOn(executionRepository as any, "getUsageTotalsByTaskIds");
+    const usageSprintRunSpy = vi.spyOn(executionRepository as any, "getUsageTotalsBySprintRunIds");
+    const wallTimeTaskSpy = vi.spyOn((executionRepository as any).wallTimeQuery, "getWallTimeTotalsByTaskIds");
+    const wallTimeSprintRunSpy = vi.spyOn((executionRepository as any).wallTimeQuery, "getWallTimeTotalsBySprintRunIds");
+
     const snapshot = executionRepository.getProjectExecutionSnapshot(project.id);
     expect(snapshot).toMatchObject({
       projectId: project.id,
@@ -111,6 +116,11 @@ describe("ExecutionRepository", () => {
       overflowAssignedWorkers: [],
       attentionItems: [],
     });
+
+    expect(usageTaskSpy).not.toHaveBeenCalled();
+    expect(usageSprintRunSpy).not.toHaveBeenCalled();
+    expect(wallTimeTaskSpy).not.toHaveBeenCalled();
+    expect(wallTimeSprintRunSpy).not.toHaveBeenCalled();
   });
 
   it("falls back to unscoped task runs when listing latest runs for a sprint run", async () => {

@@ -48,6 +48,7 @@ import { fetchAgentPresets } from "./lib/agent-preset-api.js";
 import type { AgentPreset } from "./types.js";
 import { STATUS_CFG } from "./lib/tasks-constants.js";
 import { buildTaskCardViewModel } from "./lib/tasks/task-card-view-model.js";
+import { buildTaskBoardViewModel } from "./lib/tasks/task-board-view-model.js";
 import { useDashboardRuntimeData } from "../hooks/use-dashboard-runtime-data.js";
 import { buildLiveTaskEnrichmentMap } from "./lib/tasks/live-task-enrichment.js";
 import { useReducedMotion } from "./hooks/use-reduced-motion.js";
@@ -185,17 +186,17 @@ const SprintSelector: FunctionComponent<{
     <div className="relative">
       <button
         onClick={() => setOpen((current) => !current)}
-        className={`group flex items-center gap-3 px-5 py-3 rounded-2xl border transition-all duration-300 ${
+        className={`group flex items-center gap-3 px-5 py-3 rounded-2xl border transition-all duration-300 min-w-0 max-w-full ${
           selected
             ? "bg-ember-500/[0.06] dark:bg-ember-500/[0.08] border-ember-500/20 dark:border-ember-500/25 shadow-[0_0_20px_rgba(255,184,0,0.06)]"
             : "bg-black/[0.03] dark:bg-white/[0.03] border-black/[0.06] dark:border-white/[0.06]"
         } hover:border-ember-500/40 dark:hover:border-ember-500/40`}
       >
-        <Target className={`w-4 h-4 ${selected ? "text-ember-500" : "text-slate-400"} transition-colors`} strokeWidth={2} />
-        <span className={`text-sm font-bold tracking-tight ${selected ? "text-ember-600 dark:text-ember-400" : "text-slate-600 dark:text-slate-400"}`}>
+        <Target className={`w-4 h-4 shrink-0 ${selected ? "text-ember-500" : "text-slate-400"} transition-colors`} strokeWidth={2} />
+        <span className={`text-sm font-bold tracking-tight truncate min-w-0 ${selected ? "text-ember-600 dark:text-ember-400" : "text-slate-600 dark:text-slate-400"}`}>
           {selected ? formatSprintDisplay(selected, sprintKeyPrefix) : "All Sprints"}
         </span>
-        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${open ? "rotate-180" : ""}`} strokeWidth={2} />
+        <ChevronDown className={`w-4 h-4 shrink-0 text-slate-400 transition-transform duration-300 ${open ? "rotate-180" : ""}`} strokeWidth={2} />
       </button>
 
       {open && (
@@ -233,15 +234,15 @@ const SprintSelector: FunctionComponent<{
                   sprint.status === "cancelled" ? "bg-slate-400 dark:bg-slate-500" :
                   "bg-slate-400 dark:bg-slate-600"
                 }`} />
-                <div className="flex-1 min-w-0">
-                  <span className={`text-sm font-bold tracking-tight ${isActive ? "text-ember-600 dark:text-ember-400" : "text-slate-800 dark:text-white"}`}>
+                <div className="flex-1 min-w-0 flex flex-col">
+                  <span className={`text-sm font-bold tracking-tight truncate min-w-0 ${isActive ? "text-ember-600 dark:text-ember-400" : "text-slate-800 dark:text-white"}`}>
                     {formatSprintDisplay(sprint, sprintKeyPrefix)}
                   </span>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[9px] font-mono text-slate-400 uppercase tracking-[0.1em]">{sprint.date}</span>
+                    <span className="text-[9px] font-mono text-slate-400 uppercase tracking-[0.1em] truncate min-w-0">{sprint.date}</span>
                   </div>
                 </div>
-                <div className="flex flex-col items-end gap-0.5">
+                <div className="flex flex-col items-end gap-0.5 shrink-0 pl-2">
                   <span className="text-[10px] font-mono font-bold text-slate-500">{sprint.tasksCount}</span>
                   <div className="w-12 h-1 rounded-full bg-black/[0.06] dark:bg-white/[0.06] overflow-hidden">
                     <div className="h-full rounded-full bg-signal-500 transition-all duration-500" style={{ width: `${sprint.completion}%` }} />
@@ -497,38 +498,30 @@ export const TasksPage: FunctionComponent = () => {
     return () => ctx.revert();
   }, [resolvedTaskId, tasks]);
 
-  const allTasks = useMemo(() => [...optimisticTasks, ...tasks], [optimisticTasks, tasks]);
-  const taskLookup = useMemo(() => new Map(allTasks.map(t => [t.recordId, t])), [allTasks]);
-
-  const { filteredTasks, visibleTasks, stats, columns } = useMemo(() => {
-    return deriveTaskBoardState(allTasks, statusFilter, priorityFilter, listWindow);
-  }, [allTasks, statusFilter, priorityFilter, listWindow]);
-
-  const scopedDispatches = useMemo(() =>
-    taskScopeSprintId
-      ? execution.taskDispatches.filter((d) => d.sprintId === taskScopeSprintId)
-      : execution.taskDispatches,
-    [execution.taskDispatches, taskScopeSprintId]
-  );
-  const scopedEvents = useMemo(() =>
-    taskScopeSprintId
-      ? execution.recentEvents.filter((e) => e.sprintId === taskScopeSprintId)
-      : execution.recentEvents,
-    [execution.recentEvents, taskScopeSprintId]
-  );
-
-  const liveEnrichmentMap = useMemo(
-    () => buildLiveTaskEnrichmentMap(status.subtasks ?? [], scopedDispatches, scopedEvents),
-    [status.subtasks, scopedDispatches, scopedEvents]
-  );
-
-  const taskViewModels = useMemo(() => {
-    const map = new Map<string, ReturnType<typeof buildTaskCardViewModel>>();
-    allTasks.forEach(task => {
-      map.set(task.recordId, buildTaskCardViewModel(task, taskLookup, liveEnrichmentMap.get(task.recordId)));
+  const { boardState, taskViewModels } = useMemo(() => {
+    return buildTaskBoardViewModel({
+      tasks,
+      optimisticTasks,
+      statusFilter,
+      priorityFilter,
+      listWindow,
+      taskScopeSprintId,
+      taskDispatches: execution.taskDispatches,
+      recentEvents: execution.recentEvents,
+      subtasks: status.subtasks ?? [],
     });
-    return map;
-  }, [allTasks, taskLookup, liveEnrichmentMap]);
+  }, [
+    tasks,
+    optimisticTasks,
+    statusFilter,
+    priorityFilter,
+    listWindow,
+    taskScopeSprintId,
+    execution.taskDispatches,
+    execution.recentEvents,
+    status.subtasks,
+  ]);
+  const { filteredTasks, visibleTasks, stats, columns } = boardState;
 
   const selectedSprintModel = taskScopeSprintId ? sprints.find((sprint: Sprint) => sprint.id === taskScopeSprintId) || null : null;
   const isTaskScopeReady = !!selectedProject && sprints.length > 0;
@@ -799,8 +792,10 @@ export const TasksPage: FunctionComponent = () => {
       />
 
       {isTaskScopeReady && (
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 mt-2 sm:-mt-4">
-          <SprintSelector sprints={sprints} selectedId={taskScopeSprintId} onSelect={handleSprintScopeSelect} sprintKeyPrefix={sprintKeyPrefix} />
+        <div className="flex flex-wrap items-center gap-4 mt-2 sm:-mt-4">
+          <div className="min-w-0 flex-shrink">
+            <SprintSelector sprints={sprints} selectedId={taskScopeSprintId} onSelect={handleSprintScopeSelect} sprintKeyPrefix={sprintKeyPrefix} />
+          </div>
 
           <FilterStrip
             options={[
@@ -879,8 +874,8 @@ export const TasksPage: FunctionComponent = () => {
       {isTaskScopeReady && (
         <div ref={boardRef} className={`grid gap-6 ${
           columns.length === 1 ? "grid-cols-1" :
-          columns.length === 2 ? "grid-cols-1 md:grid-cols-2" :
-          "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
+          columns.length === 2 ? "grid-cols-1 lg:grid-cols-2" :
+          "grid-cols-1 lg:grid-cols-2 xl:grid-cols-3"
         }`}>
           {columns.map(({ status, count, tasks: columnTasks }) => (
             <div key={status} className="flex flex-col">

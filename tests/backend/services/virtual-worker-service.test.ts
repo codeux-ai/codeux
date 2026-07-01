@@ -166,6 +166,88 @@ describe("VirtualWorkerService", () => {
     expect(settingsSpy).toHaveBeenCalledTimes(1);
   });
 
+  it("reconcile skips projects already scheduled or active", async () => {
+    const {
+      settingsRepository,
+      sessionTracking,
+      projectManagementRepository,
+      executionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionService,
+      workerTaskDispatchService,
+    } = await createFixture();
+
+    const virtualProject = projectManagementRepository.createProject({
+      name: "Virtual Project",
+      sourceType: "local",
+      sourceRef: "/workspace/virtual-project",
+      defaultBranch: "main",
+    });
+
+    settingsRepository.saveProjectSettings(virtualProject.id, {
+      workers: {
+        executionMode: "VIRTUAL",
+        virtualWorkerProvider: "codex",
+      },
+    });
+
+    // Add an attention item so it gets picked up as a candidate
+    projectAttentionService.openItem({
+      projectId: virtualProject.id,
+      sprintId: null,
+      taskId: null,
+      sprintRunId: null,
+      dispatchId: null,
+      attentionType: "action_required",
+      severity: "high",
+      ownerType: "worker",
+      title: "Virtual attention",
+      summaryMarkdown: "Action needed",
+      payload: null,
+    });
+
+    const virtualWorkerService = new VirtualWorkerService({
+      settingsRepository,
+      sessionTracking,
+      executionRepository,
+      projectManagementRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectWorkerAssignmentService: new ProjectWorkerAssignmentService(
+        projectWorkerAssignmentRepository,
+        workerEndpointRepository,
+      ),
+      projectAttentionService,
+      workerTaskDispatchService,
+      cliWorkflowService: {
+        startTask: vi.fn(),
+      } as any,
+      providerConcurrencyService: {
+        hasAvailableCapacity: vi.fn().mockResolvedValue(true),
+      } as any,
+    });
+
+    // Mock projectNeedsVirtualWorker to observe it
+    const spyProjectNeeds = vi.spyOn(virtualWorkerService as any, "projectNeedsVirtualWorker");
+
+    // Force active cycle
+    (virtualWorkerService as any).activeCycles.set(virtualProject.id, Promise.resolve());
+
+    await virtualWorkerService.reconcile();
+
+    // Since the project is active, it should be skipped and projectNeedsVirtualWorker should not be called
+    expect(spyProjectNeeds).not.toHaveBeenCalled();
+
+    // Clear the map and test scheduled projects
+    (virtualWorkerService as any).activeCycles.delete(virtualProject.id);
+    (virtualWorkerService as any).scheduledProjects.add(virtualProject.id);
+
+    await virtualWorkerService.reconcile();
+
+    expect(spyProjectNeeds).not.toHaveBeenCalled();
+  });
+
   it("reconcile only schedules projects that still need virtual worker execution", async () => {
     const {
       settingsRepository,

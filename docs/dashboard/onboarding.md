@@ -10,6 +10,21 @@ The browser-local key `codeux:onboarding-complete:v1` is still written for compa
 
 The onboarding shell uses the same animated dashboard background and modal motion system as the Import and Add Project overlays. Onboarding forces the shared background into its dark palette and applies quieter color grading so the setup UI remains legible while still feeling integrated with the app. The shell is viewport-bounded, with the step body owning its own scrollbar for long provider configuration forms.
 
+## Component Structure
+
+The onboarding UI is orchestrated by `OnboardingExperience.tsx`, which delegates rendering logic to individual step components under `dashboard/src/v2/components/onboarding/`:
+- `OnboardingInstallationStep.tsx`
+- `OnboardingIntroductionStep.tsx`
+- `OnboardingProvidersStep.tsx`
+- `OnboardingProviderSetupStep.tsx`
+- `OnboardingGitStep.tsx`
+- `OnboardingJiraStep.tsx`
+- `OnboardingDefaultsStep.tsx`
+- `OnboardingAutomationStep.tsx`
+- `OnboardingAppearanceStep.tsx`
+
+Navigation and step-sequencing state is managed by the shared `useOnboardingStepFlow` hook, allowing the orchestrator to act purely as a view-router and state-manager while the step components remain thin and focused.
+
 ## Runtime Readiness
 
 Onboarding begins with installation checks from `GET /api/onboarding/readiness`.

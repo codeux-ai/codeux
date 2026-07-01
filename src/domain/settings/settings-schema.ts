@@ -730,8 +730,8 @@ export const validateSettingsPayload = (payload: unknown): ValidationResult<Dash
     issues.push({ path: "dbPruningEnabled", message: "Expected a boolean" });
   }
 
-  if (typeof payload.dbRetentionDays !== "number") {
-    issues.push({ path: "dbRetentionDays", message: "Expected a number" });
+  if (typeof payload.dbRetentionDays !== "number" || !Number.isFinite(payload.dbRetentionDays) || payload.dbRetentionDays < 1 || payload.dbRetentionDays > 3650) {
+    issues.push({ path: "dbRetentionDays", message: "Expected a finite number between 1 and 3650" });
   }
 
   const validAutomationLevels: AutomationLevel[] = ["FULL", "SEMI_AUTO", "ALWAYS_ASK"];

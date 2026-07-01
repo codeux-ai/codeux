@@ -19,6 +19,7 @@ When using shared overlay components (`Modal`, `Dialog`, `Drawer`, `Notification
 3.  **Command Palettes & Positioning (e.g., `SearchOverlay`)**:
     *   Anchored positioning should fall back to a centered, screen-relative mobile command surface if the available space below the anchor is too small (e.g., `< 300px` available) or if the viewport is narrow (e.g., `< 768px`).
     *   Ensure focus return and keyboard navigation work correctly regardless of the layout fallback mode.
+    *   Top-nav dropdowns (e.g., project and sprint selectors) must use layout-aware positioning (such as `absolute top-full`) instead of fixed top coordinates, ensuring they remain anchored below the button and wrap cleanly without overlapping if the header height changes. Compact action clusters should use `min-w-0` to allow text truncation and wrap safely without clipping or hiding primary controls.
 
 4.  **Notification Panels**:
     *   Flyout menus and notification surfaces should be collision-aware with width and max-height constraints (e.g., `max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-5rem)]`) so they remain fully visible from the top nav at tablet widths without clipping.
@@ -31,3 +32,16 @@ When using the `Table` component for responsive data displays:
 3. **Mobile Labels:** Supply a `mobileLabel` prop to `<TableCell>` components. This programmatic label acts as a substitute for standard column headers when the layout switches to a stacked card presentation on narrow screens.
 4. **Accessible Sort States:** Apply `ariaSort` explicitly only on the active sort column.
 5. **Handling Long Strings:** To ensure long continuous strings do not overflow the mobile cards or desktop columns, `TableCell` internals must use `min-w-0 break-words` classes. Content rendered inside the cell must support text wrapping safely without breaking the mobile layout.
+
+## Long-Form Modal Scrolling
+
+For modals with extensive form content (like `AddProjectModal` and `AddTaskModal`), the layout should ensure that:
+1.  **Headers and Footers are Fixed**: The modal header (title/description) and footer (actions like Cancel/Submit) must remain pinned and visible at all times, independent of scrolling.
+2.  **Scrolling Body**: The internal form body should own the vertical scrolling using `overflow-y-auto` and `flex-1 min-h-0`. This ensures forms are robust under small viewport heights and on-screen keyboards.
+3.  **Invalid Field Scroll**: When a form validation fails, use `getBoundingClientRect()` against the scrollable container to smoothly scroll the first invalid field into view, preventing the browser from natively scrolling it under fixed headers or keyboards.
+
+## Safe Areas & Bottom Navigation
+
+Fixed bottom navigation elements, such as the `KineticDock`, must account for mobile browser UI chrome and safe areas:
+1. **Dynamic Bottom Constraints**: Use `bottom-0` and set the container's height dynamically with `h-[calc(height+env(safe-area-inset-bottom))]` while applying `pb-[env(safe-area-inset-bottom)]` or a style attribute for bottom padding to elevate the controls above the iOS home indicator.
+2. **Horizontal Scroll Boundaries**: For horizontally scrolling lists inside constrained boundaries (e.g., `snap-x`), add an explicit right spacer (`<div className="w-[1px] shrink-0" aria-hidden="true" />`) and apply horizontal scroll padding (`scroll-px-*`) to prevent the last navigation item from being clipped visually or causing focus states to overflow out of bounds.

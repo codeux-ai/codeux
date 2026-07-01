@@ -66,22 +66,18 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
     const reducedMotion = useReducedMotion();
 
     const [modalStyle, setModalStyle] = useState({});
-
+    const [isMobileFallback, setIsMobileFallback] = useState(false);
 
     const updatePosition = () => {
         if (anchorRef && anchorRef.current && isOpen) {
             const rect = anchorRef.current.getBoundingClientRect();
             // Fallback to centered mobile mode if narrow screen or insufficient height
             if (window.innerWidth < 768 || window.innerHeight - rect.bottom < 300) {
-                setModalStyle({
-                    width: 'calc(100vw - 2rem)',
-                    maxHeight: 'calc(100dvh - 2rem)',
-                    margin: '0 auto',
-                    position: 'relative'
-                });
+                setIsMobileFallback(true);
                 return;
             }
 
+            setIsMobileFallback(false);
             const top = rect.bottom + 8;
             let left = rect.left;
 
@@ -100,6 +96,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                 maxHeight: `calc(100dvh - ${top + 16}px)`
             });
         } else if (!anchorRef && isOpen) {
+            setIsMobileFallback(false);
             setModalStyle({});
         }
     };
@@ -204,7 +201,19 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
     const activeItemRef = useRef<HTMLButtonElement>(null);
     useEffect(() => {
         if (activeItemRef.current) {
-            if (typeof activeItemRef.current.scrollIntoView === 'function') activeItemRef.current.scrollIntoView({ block: 'nearest' });
+            const el = activeItemRef.current;
+            const container = el.closest('.overflow-y-auto') as HTMLElement;
+            if (container) {
+                const containerRect = container.getBoundingClientRect();
+                const elRect = el.getBoundingClientRect();
+                if (elRect.bottom > containerRect.bottom) {
+                    container.scrollTop += (elRect.bottom - containerRect.bottom);
+                } else if (elRect.top < containerRect.top) {
+                    container.scrollTop -= (containerRect.top - elRect.top);
+                }
+            } else if (typeof el.scrollIntoView === 'function') {
+                el.scrollIntoView({ block: 'nearest' });
+            }
         }
     }, [focusedIndex]);
 
@@ -214,7 +223,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
     return (
         <div
             ref={overlayRef}
-            className={anchorRef ? "fixed inset-0 z-[100] hidden items-start justify-center px-4 sm:px-6 sm:pt-16" : "fixed inset-0 z-[100] hidden items-start justify-center pt-16 px-4 sm:px-6"}
+            className={anchorRef && !isMobileFallback ? "fixed inset-0 z-[100] hidden items-start justify-center px-4 sm:px-6 sm:pt-16" : "fixed inset-0 z-[100] hidden items-start justify-center pt-16 px-4 sm:px-6"}
             style={{ display: 'none' }}
         >
             <div
@@ -227,8 +236,8 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                 aria-label="Search"
                 aria-modal="true"
                 ref={containerRef}
-                className={anchorRef ? "flex flex-col bg-white dark:bg-void-800 rounded-2xl shadow-2xl overflow-hidden border border-black/5 dark:border-white/10 max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)]" : "relative w-full max-w-4xl mx-auto flex flex-col bg-white dark:bg-void-800 rounded-2xl shadow-2xl overflow-hidden border border-black/5 dark:border-white/10 max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)]"}
-                style={anchorRef ? modalStyle : {}}
+                className={anchorRef && !isMobileFallback ? "flex flex-col bg-white dark:bg-void-800 rounded-2xl shadow-2xl overflow-hidden border border-black/5 dark:border-white/10 max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)]" : "relative w-full max-w-4xl mx-auto flex flex-col bg-white dark:bg-void-800 rounded-2xl shadow-2xl overflow-hidden border border-black/5 dark:border-white/10 max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)]"}
+                style={anchorRef && !isMobileFallback ? modalStyle : {}}
             >
                 {/* Search Header */}
                 <div className="flex items-center px-4 py-4 border-b border-black/5 dark:border-white/5">
@@ -245,7 +254,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                         placeholder="Search sprints, tasks, agents..."
                         value={searchQuery}
                         onInput={(e) => onSearchChange(e.currentTarget.value)}
-                        className="flex-1 bg-transparent border-none outline-none text-lg text-slate-900 dark:text-white placeholder-slate-400"
+                        className="flex-1 min-w-0 bg-transparent border-none outline-none text-lg text-slate-900 dark:text-white placeholder-slate-400"
                     />
                     {isLoading && <Loader2 className="w-5 h-5 animate-spin text-slate-400 mr-2" />}
                     <button
@@ -310,7 +319,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                             </div>
                         )
                     ) : (
-                        <div id="search-results-list" role="listbox" className={`grid grid-cols-1 md:grid-cols-2 gap-4 p-2 transition-opacity duration-200 ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}>
+                        <div id="search-results-list" role="listbox" className={`grid grid-cols-1 lg:grid-cols-2 gap-4 p-2 transition-opacity duration-200 ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}>
                             {CATEGORIES.map((category) => {
                                 if (category.items?.length === 0) return null;
                                 return (
@@ -352,8 +361,8 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                 </div>
 
                 {/* Footer hints */}
-                <div className="px-4 py-3 bg-slate-50 dark:bg-white/5 border-t border-black/5 dark:border-white/5 flex items-center justify-between text-xs text-slate-500">
-                    <div className="flex items-center gap-4">
+                <div className="px-4 py-3 bg-slate-50 dark:bg-white/5 border-t border-black/5 dark:border-white/5 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+                    <div className="flex flex-wrap items-center gap-4">
                         <span className="flex items-center gap-1">
                             <kbd className="px-1.5 py-0.5 rounded-md bg-white dark:bg-void-800 border border-black/10 dark:border-white/10 shadow-sm font-mono text-[10px]">↑</kbd>
                             <kbd className="px-1.5 py-0.5 rounded-md bg-white dark:bg-void-800 border border-black/10 dark:border-white/10 shadow-sm font-mono text-[10px]">↓</kbd>

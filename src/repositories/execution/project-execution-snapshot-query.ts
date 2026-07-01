@@ -47,11 +47,23 @@ export function queryProjectExecutionSnapshot(
   const uniqueSprintRunIds = Array.from(new Set(sprintRuns.map((row) => row.id)));
   const uniqueTaskIds = Array.from(new Set(taskDispatches.map((row) => row.task_id)));
 
-  const usageBySprintRunId = deps.getUsageTotalsBySprintRunIds(projectId, uniqueSprintRunIds);
   const nowIso = new Date().toISOString();
-  const usageByTaskId = deps.getUsageTotalsByTaskIds(projectId, uniqueTaskIds);
-  const wallTimeBySprintRunId = deps.getWallTimeTotalsBySprintRunIds(projectId, uniqueSprintRunIds, nowIso);
-  const wallTimeByTaskId = deps.getWallTimeTotalsByTaskIds(projectId, uniqueTaskIds, nowIso);
+
+  const usageBySprintRunId = uniqueSprintRunIds.length > 0
+    ? deps.getUsageTotalsBySprintRunIds(projectId, uniqueSprintRunIds)
+    : new Map<string, ExecutionUsageTotals>();
+
+  const usageByTaskId = uniqueTaskIds.length > 0
+    ? deps.getUsageTotalsByTaskIds(projectId, uniqueTaskIds)
+    : new Map<string, ExecutionUsageTotals>();
+
+  const wallTimeBySprintRunId = uniqueSprintRunIds.length > 0
+    ? deps.getWallTimeTotalsBySprintRunIds(projectId, uniqueSprintRunIds, nowIso)
+    : new Map<string, number>();
+
+  const wallTimeByTaskId = uniqueTaskIds.length > 0
+    ? deps.getWallTimeTotalsByTaskIds(projectId, uniqueTaskIds, nowIso)
+    : new Map<string, number>();
 
   return {
     projectId: projectRow?.id || null,
@@ -71,6 +83,6 @@ export function queryProjectExecutionSnapshot(
     attentionItems: [],
     recentEvents: runtimeEvents.map((row) => mapExecutionRuntimeEventSummaryRow(row)),
     recentInvocations,
-    updatedAt: new Date().toISOString(),
+    updatedAt: nowIso,
   };
 }

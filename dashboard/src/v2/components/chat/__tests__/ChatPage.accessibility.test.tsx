@@ -68,6 +68,7 @@ describe('ChatPage Accessibility', () => {
 
     const tablist = screen.getByRole('tablist', { name: "Chat Mode" });
     expect(tablist).toBeInTheDocument();
+    expect(tablist).toHaveClass('flex-wrap');
 
     const tabs = screen.getAllByRole('tab');
     expect(tabs).toHaveLength(2);

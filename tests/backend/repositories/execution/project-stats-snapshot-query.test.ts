@@ -326,6 +326,102 @@ describe("queryProjectStatsSnapshot", () => {
   });
 });
 
+describe("queryProjectStatsSnapshot pricing resolver caching", () => {
+  it("resolves pricing once per provider/model and correctly rolls up costs", () => {
+    const mockPricing = vi.fn().mockImplementation((provider: string, model: string | null) => {
+      if (provider === "openai" && model === "gpt-4") return { inputTokens: 5, outputTokens: 15, cachedInputTokens: 2.5 };
+      return undefined;
+    });
+
+    const dbMock = {
+      prepare: vi.fn().mockImplementation((query: string) => {
+        return {
+          get: vi.fn().mockImplementation(() => {
+            if (query.includes("COUNT(duration_ms)")) return { count: 2 };
+            return { id: "proj-cache", name: "Project Cache" };
+          }),
+          all: vi.fn().mockImplementation(() => {
+            if (query.includes("AVG(duration_ms)")) return [];
+            if (query.includes("duration_ms as durationMs")) return [];
+            if (query.includes("SELECT\n      CAST((julianday(started_at) - julianday(?))") || query.includes("bucketIndex,")) {
+              return [
+                {
+                  bucketIndex: 0,
+                  task_id: "task-1",
+                  sprint_key: "sprint-1",
+                  provider: "openai",
+                  purpose: "test",
+                  usage_source: "reported",
+                  model: "gpt-4",
+                  status: "completed",
+                  lastActivityAt: "2023-01-01T00:00:00Z",
+                  invocationCount: 1,
+                  activeTimeMs: 100,
+                  inputTokens: 1000000,
+                  cachedInputTokens: 500000,
+                  outputTokens: 2000000,
+                  reasoningOutputTokens: 0,
+                  totalTokens: 3500000,
+                  toolCallCount: 0,
+                  reportedInvocationCount: 1,
+                  estimatedInvocationCount: 0,
+                  unsupportedInvocationCount: 0,
+                  unavailableInvocationCount: 0,
+                },
+                {
+                  bucketIndex: 0,
+                  task_id: "task-2",
+                  sprint_key: "sprint-2",
+                  provider: "openai",
+                  purpose: "test2",
+                  usage_source: "estimated",
+                  model: "gpt-4",
+                  status: "completed",
+                  lastActivityAt: "2023-01-01T00:01:00Z",
+                  invocationCount: 1,
+                  activeTimeMs: 100,
+                  inputTokens: 1000000,
+                  cachedInputTokens: 500000,
+                  outputTokens: 2000000,
+                  reasoningOutputTokens: 0,
+                  totalTokens: 3500000,
+                  toolCallCount: 0,
+                  reportedInvocationCount: 0,
+                  estimatedInvocationCount: 1,
+                  unsupportedInvocationCount: 0,
+                  unavailableInvocationCount: 0,
+                }
+              ];
+            }
+            return [];
+          }),
+        };
+      })
+    };
+
+    const depsMock: ProjectStatsQueryDependencies = {
+      requireProject: vi.fn(),
+      getWallTimeTotalsByTaskIdsForRange: vi.fn().mockReturnValue(new Map()),
+      getWallTimeTotalsBySprintRunIdsForRange: vi.fn().mockReturnValue(new Map()),
+      getTaskMetadata: vi.fn().mockReturnValue(new Map()),
+      getSprintMetadata: vi.fn().mockReturnValue(new Map()),
+      updateLastActivity: vi.fn(),
+      getModelPricing: mockPricing,
+    };
+
+    const snapshot = queryProjectStatsSnapshot(dbMock as any, "proj-cache", "7d", depsMock);
+
+    expect(mockPricing).toHaveBeenCalledTimes(1);
+    expect(mockPricing).toHaveBeenCalledWith("openai", "gpt-4");
+
+    const expectedCost = (5 + 1.25 + 30) * 2; // (input + cached + output) * 2 rows
+    expect(snapshot.usage.totalCostUsd).toBe(expectedCost);
+    expect(snapshot.providers.find(p => p.id === "openai")?.usage.totalCostUsd).toBe(expectedCost);
+    expect(snapshot.models.find(m => m.provider === "openai" && m.model === "gpt-4")?.usage.totalCostUsd).toBe(expectedCost);
+    expect(snapshot.buckets[0].usage.totalCostUsd).toBe(expectedCost);
+  });
+});
+
 describe("queryProjectStatsSnapshot extracted helpers", () => {
   it("imports usageFields correctly", () => {
     expect(typeof usageFields).toBe("string");

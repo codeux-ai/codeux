@@ -3,6 +3,7 @@ import type { ExecutionRepository } from "../../repositories/execution-repositor
 import type { ProjectManagementRepository } from "../../repositories/project-management-repository.js";
 import type { SessionTrackingRepository } from "../../repositories/session-tracking-repository.js";
 import { calculateInvocationDurationMs, isTerminalTaskRunState } from "./recovery-utils.js";
+import { failStaleProviderInvocation } from "../../domain/runtime/provider-invocation-recovery.js";
 
 const QA_RUN_START_TIMEOUT_MS = 60_000;
 const TASK_CODING_INVOCATION_TYPES = ["task_coding", "cli_task_coding", "cli_task_followup"] as const;
@@ -220,32 +221,36 @@ export class InvocationRecoveryService {
         continue;
       }
 
-      this.deps.executionRepository.updateProviderInvocationUsage(providerInvocation.id, {
-        status: resolution.status,
-        finishedAt: reconciledAt,
-        durationMs: calculateInvocationDurationMs(providerInvocation, reconciledAt),
-      });
-
-      const linkedExecutionInvocations = this.deps.executionRepository.listExecutionInvocationsByProviderInvocationId(providerInvocation.id);
-      for (const executionInvocation of linkedExecutionInvocations) {
-        if (executionInvocation.status !== "running" && executionInvocation.status !== "paused") {
-          continue;
-        }
-        this.deps.executionRepository.updateExecutionInvocation(executionInvocation.id, {
+      if (resolution.status === "failed") {
+        const linkedExecutionInvocations = this.deps.executionRepository.listExecutionInvocationsByProviderInvocationId(providerInvocation.id);
+        failStaleProviderInvocation(
+          this.deps.executionRepository,
+          providerInvocation,
+          linkedExecutionInvocations,
+          {
+            reconciledAt,
+            recoveryReason: "startup_task_coding_provider_reconcile",
+            systemMessage: resolution.message,
+          }
+        );
+      } else {
+        this.deps.executionRepository.updateProviderInvocationUsage(providerInvocation.id, {
           status: resolution.status,
           finishedAt: reconciledAt,
-          errorMessage: resolution.status === "failed" ? resolution.message : null,
+          durationMs: calculateInvocationDurationMs(providerInvocation, reconciledAt),
         });
-        this.deps.executionRepository.appendExecutionInvocationMessage(executionInvocation.id, {
-          role: "system",
-          contentMarkdown: resolution.message,
-          metadata: {
-            recovery: "startup_task_coding_provider_reconcile",
-            provider: providerInvocation.provider,
-            sessionId: providerInvocation.sessionId,
-          },
-          createdAt: reconciledAt,
-        });
+
+        const linkedExecutionInvocations = this.deps.executionRepository.listExecutionInvocationsByProviderInvocationId(providerInvocation.id);
+        for (const executionInvocation of linkedExecutionInvocations) {
+          if (executionInvocation.status !== "running" && executionInvocation.status !== "paused") {
+            continue;
+          }
+          this.deps.executionRepository.updateExecutionInvocation(executionInvocation.id, {
+            status: resolution.status,
+            finishedAt: reconciledAt,
+            errorMessage: null,
+          });
+        }
       }
 
       reconciledProviderIds.push(providerInvocation.id);

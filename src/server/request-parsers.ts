@@ -530,26 +530,24 @@ export function parseProjectStatsQuery(query: Record<string, unknown>): ProjectS
     const toDate = parseStatsDateInput(to, "end");
 
     if (!fromDate || !toDate) {
-      throw new Error("Custom stats windows require valid from and to values.");
+      throw new Error("Missing or invalid required fields: from and to must be valid dates for custom window.");
     }
     if (fromDate.getTime() > toDate.getTime()) {
-      throw new Error("Custom stats window start must be earlier than end.");
+      throw new Error("Invalid custom stats window: start must be earlier than or equal to end.");
     }
 
     const MIN_DATE = new Date("2000-01-01T00:00:00.000Z").getTime();
     const MAX_DATE = Date.now() + 30 * 24 * 60 * 60 * 1000;
 
-    if (fromDate.getTime() < MIN_DATE) {
-      from = "2000-01-01T00:00:00.000Z";
-    } else {
-      from = fromDate.toISOString();
+    if (fromDate.getTime() < MIN_DATE || fromDate.getTime() > MAX_DATE) {
+      throw new Error("Invalid custom stats window: from date is outside historical/future bounds.");
+    }
+    if (toDate.getTime() < MIN_DATE || toDate.getTime() > MAX_DATE) {
+      throw new Error("Invalid custom stats window: to date is outside historical/future bounds.");
     }
 
-    if (toDate.getTime() > MAX_DATE) {
-      to = new Date(MAX_DATE).toISOString();
-    } else {
-      to = toDate.toISOString();
-    }
+    from = fromDate.toISOString();
+    to = toDate.toISOString();
   }
 
   return { window, from, to };

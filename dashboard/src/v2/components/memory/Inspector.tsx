@@ -75,7 +75,7 @@ export const Inspector: FunctionComponent<{
 
     return (
         <div
-            className="absolute right-0 top-0 bottom-0 w-full sm:w-[300px] z-30
+            className="absolute right-0 top-0 bottom-0 w-full lg:w-[300px] z-30
                        bg-white/80 dark:bg-void-800/80 backdrop-blur-3xl
                        border-l border-black/[0.06] dark:border-white/[0.06]
                        shadow-[-20px_0_60px_rgba(0,0,0,0.08)] dark:shadow-[-20px_0_60px_rgba(0,0,0,0.4)]

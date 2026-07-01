@@ -78,7 +78,6 @@ describe("useSystemViewData", () => {
     });
 
     expect(result.current).toHaveProperty("invocations");
-    expect(result.current).toHaveProperty("allInvocations");
     expect(result.current).toHaveProperty("summaryMetrics");
     expect(result.current).toHaveProperty("availablePurposes");
     expect(result.current).toHaveProperty("availableProviders");
