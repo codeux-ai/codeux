@@ -212,8 +212,12 @@ export const ProviderInstanceCard: FunctionComponent<{
                   <Row label="Environment key" description="Variable name Qwen reads for this instance's API key.">
                     <TextInput value={provider.qwenEnvKey || "OLLAMA_API_KEY"} onChange={(value) => onUpdate({ qwenEnvKey: value })} mono />
                   </Row>
-                  <Row label="Model id" description="The custom model registered in Qwen Code modelProviders and shown on the AI Models page. Search the catalogue or type a custom id.">
-                    <ModelCombobox value={provider.qwenModelId || providerModel || "glm-4.7-flash"} onChange={(value) => onUpdate({ qwenModelId: value })} />
+                  <Row label="Model id" description="The bare model identifier registered in Qwen Code modelProviders (e.g. glm-4.7-flash, no provider prefix) and shown on the AI Models page. Search the catalogue or type a custom id.">
+                    <ModelCombobox
+                      value={provider.qwenModelId || providerModel || "glm-4.7-flash"}
+                      onChange={(value) => onUpdate({ qwenModelId: value })}
+                      providerId={provider.qwenApiProviderId}
+                    />
                   </Row>
                   <Row label="Base URL" description="OpenAI-compatible, Anthropic, Gemini, or local endpoint used by this model entry. Type a custom URL/IP or pick a provider above.">
                     <TextInput value={provider.qwenBaseUrl || "http://127.0.0.1:11434/v1"} onChange={(value) => onUpdate({ qwenBaseUrl: value })} mono />
@@ -282,8 +286,12 @@ export const ProviderInstanceCard: FunctionComponent<{
 
               {provider.openCodeAuthMode === "CUSTOM_PROVIDER" && (
                 <>
-                  <Row label="Model id" description="The model segment registered under the custom provider. Search the catalogue or type a custom id.">
-                    <ModelCombobox value={provider.openCodeModelId || splitOpenCodeModel(providerModel).modelId} onChange={(value) => onUpdate({ openCodeModelId: value })} />
+                  <Row label="Model id" description="The bare model segment registered under the provider above (OpenCode combines them as provider/model itself). Search the catalogue or type a custom id.">
+                    <ModelCombobox
+                      value={provider.openCodeModelId || splitOpenCodeModel(providerModel).modelId}
+                      onChange={(value) => onUpdate({ openCodeModelId: value })}
+                      providerId={provider.openCodeProviderId || splitOpenCodeModel(providerModel).providerId}
+                    />
                   </Row>
                   <Row label="Provider package" description="OpenCode provider adapter package. OpenAI-compatible endpoints use the AI SDK compatible adapter.">
                     <TextInput value={provider.openCodePackage || "@ai-sdk/openai-compatible"} onChange={(value) => onUpdate({ openCodePackage: value })} mono />
@@ -346,8 +354,8 @@ export const ProviderInstanceCard: FunctionComponent<{
             label="Custom model"
             description={
               provider.provider === "claude-code"
-                ? "Model slug sent to the gateway (e.g. anthropic/claude-sonnet-4.5). Applied to every Claude Code tier so background calls hit the same model. Leave empty to use the agent's selected model. Search the catalogue or type a custom slug."
-                : "Model slug sent to the gateway (e.g. openai/gpt-5-codex). Overrides the agent's selected model. Leave empty to use the agent's selected model. Search the catalogue or type a custom slug."
+                ? "Bare model slug sent to the gateway (e.g. claude-sonnet-4-5, no provider prefix — the provider above already determines the endpoint). Applied to every Claude Code tier so background calls hit the same model. Leave empty to use the agent's selected model. Search the catalogue or type a custom slug."
+                : "Bare model slug sent to the gateway (e.g. gpt-5-codex, no provider prefix — the provider above already determines the endpoint). Overrides the agent's selected model. Leave empty to use the agent's selected model. Search the catalogue or type a custom slug."
             }
             last={isLast}
           >
@@ -356,6 +364,7 @@ export const ProviderInstanceCard: FunctionComponent<{
               onChange={(value) => onUpdate({ customModel: value || undefined })}
               disabled={currentAuthType !== "apiKey"}
               placeholder="Leave empty to use the agent's selected model"
+              providerId={provider.customProviderId}
             />
           </Row>
         </>

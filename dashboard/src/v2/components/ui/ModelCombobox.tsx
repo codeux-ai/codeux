@@ -34,6 +34,12 @@ export const modelsDevLogoUrl = (providerId: string): string => `https://models.
  * (https://models.dev), prefetched into assets/models-dev/catalog.json and served via
  * GET /api/model-catalog. Falls back to a free-typed value for models outside the
  * catalogue (private/self-hosted gateway models).
+ *
+ * The value is always the bare model identifier (e.g. "claude-sonnet-4-5"), never a
+ * "<provider>/<model>" composite — the provider is a separate, paired field (see
+ * ProviderCombobox), and most APIs reject a provider-prefixed model id. When `providerId`
+ * is set, options are restricted to that provider's models so the identifier is guaranteed
+ * correct for whichever endpoint the paired provider field points at.
  */
 export const ModelCombobox: FunctionComponent<{
   value: string;
@@ -41,13 +47,16 @@ export const ModelCombobox: FunctionComponent<{
   disabled?: boolean;
   placeholder?: string;
   "aria-label"?: string;
-}> = ({ value, onChange, disabled = false, placeholder = "Search models…", "aria-label": ariaLabel }) => {
+  /** Restrict results to a single models.dev provider id, paired with an API provider field. */
+  providerId?: string;
+}> = ({ value, onChange, disabled = false, placeholder = "Search models…", "aria-label": ariaLabel, providerId }) => {
   const catalog = useModelCatalog();
 
   const options = useMemo<SelectOption[]>(() => {
-    const catalogOptions: SelectOption[] = catalog.map((entry) => ({
-      value: entry.id,
-      label: `${entry.providerName} — ${entry.modelName}`,
+    const scoped = providerId ? catalog.filter((entry) => entry.providerId === providerId) : catalog;
+    const catalogOptions: SelectOption[] = scoped.map((entry) => ({
+      value: entry.modelId,
+      label: providerId ? entry.modelName : `${entry.providerName} — ${entry.modelName}`,
       icon: (
         <ProviderBrandIcon
           id={entry.providerId}
@@ -63,7 +72,7 @@ export const ModelCombobox: FunctionComponent<{
       catalogOptions.unshift({ value: trimmedValue, label: trimmedValue });
     }
     return catalogOptions;
-  }, [catalog, value]);
+  }, [catalog, value, providerId]);
 
   return (
     <div className="min-w-[220px]">

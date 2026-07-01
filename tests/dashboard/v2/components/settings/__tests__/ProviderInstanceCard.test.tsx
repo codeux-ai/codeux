@@ -10,6 +10,12 @@ const PROVIDER_CATALOG = [
   { id: "anthropic", name: "Anthropic", apiBaseUrl: undefined },
 ];
 
+const MODEL_CATALOG = [
+  { id: "anthropic/claude-sonnet-4-5", providerId: "anthropic", providerName: "Anthropic", modelId: "claude-sonnet-4-5", modelName: "Claude Sonnet 4.5" },
+  { id: "anthropic/claude-opus-4-5", providerId: "anthropic", providerName: "Anthropic", modelId: "claude-opus-4-5", modelName: "Claude Opus 4.5" },
+  { id: "openai/gpt-5.5", providerId: "openai", providerName: "OpenAI", modelId: "gpt-5.5", modelName: "GPT-5.5" },
+];
+
 describe("ProviderInstanceCard", () => {
   const originalFetch = global.fetch;
 
@@ -17,6 +23,9 @@ describe("ProviderInstanceCard", () => {
     global.fetch = vi.fn().mockImplementation((url: string) => {
       if (url === "/api/model-catalog/providers") {
         return Promise.resolve({ ok: true, json: async () => PROVIDER_CATALOG });
+      }
+      if (url === "/api/model-catalog") {
+        return Promise.resolve({ ok: true, json: async () => MODEL_CATALOG });
       }
       return Promise.resolve({ ok: true, json: async () => [] });
     }) as any;
@@ -179,5 +188,40 @@ describe("ProviderInstanceCard", () => {
       openCodeProviderId: "openrouter",
       openCodeBaseUrl: "https://openrouter.ai/api/v1",
     });
+  });
+
+  it("stores the bare model id (no provider prefix) and filters options to the selected API provider", async () => {
+    const provider: SystemProviderConfig = {
+      provider: "claude-code",
+      name: "Claude Gateway",
+      apiKey: "test-key",
+      mountAuth: false,
+      authPath: "",
+      authType: "apiKey",
+      customProviderId: "anthropic",
+    };
+    const onUpdate = vi.fn();
+
+    render(
+      <ProviderInstanceCard
+        providerConfigId="test-id"
+        provider={provider}
+        providerModel="default"
+        dockerExecutionEnabled={false}
+        onUpdate={onUpdate}
+      />
+    );
+
+    const trigger = await screen.findByText("Leave empty to use the agent's selected model");
+    fireEvent.click(trigger.closest("button")!);
+
+    // Filtered to the anthropic provider: shows bare model names, no OpenAI model, no provider prefix.
+    expect(await screen.findByText("Claude Sonnet 4.5")).toBeDefined();
+    expect(screen.queryByText("GPT-5.5")).toBeNull();
+    expect(screen.queryByText("Anthropic — Claude Sonnet 4.5")).toBeNull();
+
+    fireEvent.click(screen.getByText("Claude Sonnet 4.5"));
+
+    expect(onUpdate).toHaveBeenCalledWith({ customModel: "claude-sonnet-4-5" });
   });
 });
