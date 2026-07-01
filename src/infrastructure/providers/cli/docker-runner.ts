@@ -7,7 +7,7 @@ import { CliWorkflowSettings, type CustomMcpServer } from "../../../contracts/ap
 import { isUsableCustomMcpServer } from "../../../mcp/mcp-tool-availability.js";
 import { buildProviderMcpConfigArtifact } from "./mcp-config-format.js";
 import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.js";
-import { CommandResult, runStreamingCommand } from "../../../services/cli-process-runner.js";
+import { CommandResult, runCommandStrict, runStreamingCommand } from "../../../services/cli-process-runner.js";
 import {
   getDockerUserSpec,
   mapPathPrefix,
@@ -147,12 +147,14 @@ export class DockerRunner implements IDockerRunner {
       await fs.writeFile(argvFilePath, this.buildProviderArgvFile(args), "utf8");
       const argvFileSource = this.mapDockerSourcePathForDaemon(argvFilePath, repoPath, sessionId, "provider argv", onActivity);
 
+      const containerName = this.buildContainerName(providerLabel, sessionId);
+
       const dockerArgs = [
         "run",
         "--rm",
         "-i",
         "--name",
-        this.buildContainerName(providerLabel, sessionId),
+        containerName,
         "--network",
         "host",
         "--workdir",
@@ -251,6 +253,13 @@ export class DockerRunner implements IDockerRunner {
       dockerArgs.push(resolvedImage.image, "bash", "-c", bootstrapScript, "provider-runner", command);
 
       onActivity(`Running ${providerLabel} in Docker image ${resolvedImage.image} (workspace volume: ${workspace.volumeName}, runtime volume: ${runtimeVolumeName}).`);
+
+      // The container name is deterministic per (provider, sessionId), so a retried
+      // invocation for the same session (e.g. a chat turn superseded and resumed after
+      // an abort) reuses it. Docker's `--rm` cleanup from a just-killed previous run is
+      // asynchronous and can still be in flight, so force-remove any stale container
+      // occupying the name first rather than racing `docker run --name` against it.
+      await runCommandStrict("docker", ["rm", "-f", containerName], process.cwd()).catch(() => undefined);
 
       return await runStreamingCommand("docker", dockerArgs, process.cwd(), process.env, {
         signal,
