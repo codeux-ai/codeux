@@ -503,7 +503,7 @@ export const ChatPage: FunctionComponent = () => {
           </div>
         </div>
 
-        <div id="chat-panel" role="tabpanel" aria-labelledby="tab-threads" className="flex-1 min-h-0 flex flex-col overflow-y-auto">
+        <div id="chat-panel" role="tabpanel" aria-labelledby="tab-invocations" className="flex-1 min-h-0 flex flex-col overflow-y-auto">
           <div role="log" aria-label="Message history" aria-live={messages.length > 0 && !threadsLoading && !threadMessagesLoading ? "polite" : "off"} aria-atomic="false" aria-relevant="additions" ref={messagesRef} className="flex-1 min-h-0 space-y-6 px-6 py-6">
           {invocationsLoading ? (
             <LoadingChat label="Loading invocations" />

@@ -90,6 +90,31 @@ describe('ChatPage Accessibility', () => {
     expect(heading).toHaveTextContent('My Threads');
   });
 
+  it('bounds chat panes so invocation navigation does not grow the page', () => {
+    render(
+      <ChatPageShell
+        selectedProject={{ id: "p1", name: "Project 1" } as any}
+        chatMode="invocations"
+        onSetChatMode={vi.fn()}
+        onRefresh={vi.fn()}
+        manualRefreshing={false}
+        onCreateThread={vi.fn()}
+        pendingDashboardMessages={0}
+        error={null}
+        railSlot={<ChatRail title="Invocations" count={3}>Rows</ChatRail>}
+        detailSlot={<div>Transcript</div>}
+      />
+    );
+
+    const rail = screen.getByRole('complementary', { name: 'Invocations' });
+    const detailPanel = screen.getByText('Transcript').closest('section');
+    const splitPane = detailPanel?.parentElement;
+
+    expect(rail).toHaveClass('h-full', 'overflow-hidden', 'lg:max-h-full');
+    expect(detailPanel).toHaveClass('min-h-0', 'overflow-hidden');
+    expect(splitPane).toHaveClass('min-h-0', 'overflow-hidden', 'lg:grid-rows-[minmax(0,1fr)]');
+  });
+
   it('has accessible message composer and regions', () => {
     render(
       <ProjectDataContext.Provider value={{ projects: [{ id: "p1", name: "P" } as any], selectedProject: { id: "p1", name: "P" } as any } as any}>
