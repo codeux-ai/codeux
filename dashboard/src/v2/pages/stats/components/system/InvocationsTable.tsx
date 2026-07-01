@@ -15,7 +15,7 @@ import {
 } from "lucide-preact";
 import type { ExecutionInvocationRecord } from "../../../../types.js";
 import type { SystemSort, SystemSortKey } from "../../hooks/use-system-view-data.js";
-import { formatTokens, formatDuration, formatDateTime } from "../../stats-utils.js";
+import { formatTokens, formatStatsDuration, formatDateTime } from "../../stats-utils.js";
 import { DEFAULT_LIST_WINDOW, resolveListWindow } from "../../../../lib/list-window.js";
 import {
   LEDGER_ROW_MODERN_CLASS,
@@ -227,7 +227,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
             const isExpanded = expandedId === invocation.id;
             const { icon: ProviderIcon, bg: providerBg, text: providerText } = getProviderIcon(invocation.provider);
             const duration = invocation.finishedAt
-              ? formatDuration(Date.parse(invocation.finishedAt) - Date.parse(invocation.startedAt))
+              ? formatStatsDuration(Date.parse(invocation.finishedAt) - Date.parse(invocation.startedAt))
               : "running";
 
             return (

@@ -32,7 +32,7 @@ import type {
 import {
   formatTokens,
   formatCost,
-  formatDuration,
+  formatStatsDuration,
   formatPercent,
   formatDateTime,
   sumUsage,
@@ -191,7 +191,7 @@ export const TrendStudio: FunctionComponent<{
       />
       <TrendKpiTile
         label="Active Time"
-        value={formatDuration(stats.usage.activeTimeMs)}
+        value={formatStatsDuration(stats.usage.activeTimeMs)}
         delta={activeTimeDelta}
         detail="vs first half of window"
       />
@@ -204,8 +204,8 @@ export const TrendStudio: FunctionComponent<{
       />
       <TrendKpiTile
         label="Median Latency"
-        value={stats.duration && stats.duration.sampleCount > 0 ? formatDuration(stats.duration.p50Ms) : "—"}
-        detail={stats.duration && stats.duration.sampleCount > 0 ? `p95 ${formatDuration(stats.duration.p95Ms)}` : "no samples"}
+        value={stats.duration && stats.duration.sampleCount > 0 ? formatStatsDuration(stats.duration.p50Ms) : "—"}
+        detail={stats.duration && stats.duration.sampleCount > 0 ? `p95 ${formatStatsDuration(stats.duration.p95Ms)}` : "no samples"}
       />
       <TrendKpiTile
         label="Success Rate"
@@ -262,7 +262,7 @@ export const TrendStudio: FunctionComponent<{
                 <span className="font-medium text-slate-700 dark:text-slate-300">{(purpose.usage?.invocationCount || 0).toLocaleString()}</span> invocations
               </div>
               <div>
-                <span className="font-medium text-slate-700 dark:text-slate-300">{formatDuration(purpose.usage?.activeTimeMs || 0)}</span> active time
+                <span className="font-medium text-slate-700 dark:text-slate-300">{formatStatsDuration(purpose.usage?.activeTimeMs || 0)}</span> active time
               </div>
             </div>
           </div>
@@ -347,11 +347,11 @@ export const CompositionStudio: FunctionComponent<{
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600 dark:text-slate-300">Active Time</div>
-                  <div className="mt-2 text-lg font-black text-slate-900 dark:text-white">{formatDuration(stats.usage.activeTimeMs)}</div>
+                  <div className="mt-2 text-lg font-black text-slate-900 dark:text-white">{formatStatsDuration(stats.usage.activeTimeMs)}</div>
                 </div>
                 <div className="text-right">
                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600 dark:text-slate-300">Wall Time</div>
-                  <div className="mt-2 text-lg font-black text-slate-900 dark:text-white">{formatDuration(stats.usage.wallTimeMs ?? 0)}</div>
+                  <div className="mt-2 text-lg font-black text-slate-900 dark:text-white">{formatStatsDuration(stats.usage.wallTimeMs ?? 0)}</div>
                 </div>
               </div>
             </div>
@@ -423,7 +423,7 @@ export const CompositionStudio: FunctionComponent<{
                       <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">calls</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-lg font-black text-slate-900 dark:text-white">{formatDuration(provider.usage.activeTimeMs)}</div>
+                      <div className="text-lg font-black text-slate-900 dark:text-white">{formatStatsDuration(provider.usage.activeTimeMs)}</div>
                       <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">active</div>
                     </div>
                 <div className="text-right">
@@ -608,7 +608,7 @@ export const ReliabilityStudio: FunctionComponent<{
                     </div>
                     <div className={`${SUBPANEL_CLASS} p-4`}>
                       <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Active Time</div>
-                      <div className="mt-2 text-lg font-black text-slate-900 dark:text-white">{formatDuration(provider.usage.activeTimeMs)}</div>
+                      <div className="mt-2 text-lg font-black text-slate-900 dark:text-white">{formatStatsDuration(provider.usage.activeTimeMs)}</div>
                       <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">active</div>
                     </div>
                     <div className={`${SUBPANEL_CLASS} p-4`}>
@@ -623,7 +623,7 @@ export const ReliabilityStudio: FunctionComponent<{
                     <div className={`${SUBPANEL_CLASS} p-4`}>
                       <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Avg Latency</div>
                       <div className="mt-2 text-lg font-black text-slate-900 dark:text-white">
-                        {avgLatencyMs !== null ? formatDuration(avgLatencyMs) : "—"}
+                        {avgLatencyMs !== null ? formatStatsDuration(avgLatencyMs) : "—"}
                       </div>
                       <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
                         {latencySamples > 0 ? `${latencySamples.toLocaleString()} samples` : "no samples"}

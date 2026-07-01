@@ -12,7 +12,7 @@ import {
 } from "lucide-preact";
 import type { ExecutionInvocationMessageRecord, ExecutionInvocationRecord } from "../../../../types.js";
 import { fetchInvocationMessages } from "../../../../lib/invocation-api.js";
-import { formatDateTime, formatDuration, formatTokens } from "../../stats-utils.js";
+import { formatDateTime, formatStatsDuration, formatTokens } from "../../stats-utils.js";
 
 interface InvocationMessagesPanelProps {
   invocation: ExecutionInvocationRecord;
@@ -32,7 +32,7 @@ const ROLE_ICON_CLASS: Record<ExecutionInvocationMessageRecord["role"], string> 
   tool: "bg-violet-500/10 text-violet-300",
 };
 
-function formatDurationLabel(invocation: ExecutionInvocationRecord): string {
+function formatStatsDurationLabel(invocation: ExecutionInvocationRecord): string {
   if (!invocation.finishedAt) {
     return "running";
   }
@@ -43,7 +43,7 @@ function formatDurationLabel(invocation: ExecutionInvocationRecord): string {
     return "running";
   }
 
-  return formatDuration(Math.max(0, finishedAtMs - startedAtMs));
+  return formatStatsDuration(Math.max(0, finishedAtMs - startedAtMs));
 }
 
 function renderStatusChip(status: ExecutionInvocationRecord["status"]): JSX.Element {
@@ -157,7 +157,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
           </div>
           {renderStatusChip(invocation.status)}
           <div className="rounded-full border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 text-slate-300">
-            {formatDurationLabel(invocation)}
+            {formatStatsDurationLabel(invocation)}
           </div>
           <div className="rounded-full border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 text-slate-300">
             {formatTokens(invocation.totalTokens ?? 0)} total tokens

@@ -11,7 +11,7 @@ import {
   Zap,
 } from "lucide-preact";
 import type { ExecutionModelStatsSummary, ProjectExecutionStatsSnapshot } from "../../../types.js";
-import { formatDuration, formatTokens, formatDateTime, formatPercent } from "../stats-utils.js";
+import { formatStatsDuration, formatTokens, formatDateTime, formatPercent } from "../stats-utils.js";
 import {
   PANEL_CLASS,
   SUBPANEL_CLASS,
@@ -122,8 +122,8 @@ const ModelCard: FunctionComponent<{
         />
         <ModelMetric
           label="Median Latency"
-          value={model.duration.sampleCount > 0 ? formatDuration(model.duration.p50Ms) : "—"}
-          detail={model.duration.sampleCount > 0 ? `p95 ${formatDuration(model.duration.p95Ms)}` : "no samples"}
+          value={model.duration.sampleCount > 0 ? formatStatsDuration(model.duration.p50Ms) : "—"}
+          detail={model.duration.sampleCount > 0 ? `p95 ${formatStatsDuration(model.duration.p95Ms)}` : "no samples"}
         />
         <ModelMetric
           label="Cache Hit Rate"
@@ -152,13 +152,13 @@ const ModelCard: FunctionComponent<{
         <div>
           <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">p50</div>
           <div className="mt-1 text-base font-black text-slate-900 dark:text-white">
-            {model.duration.sampleCount > 0 ? formatDuration(model.duration.p50Ms) : "—"}
+            {model.duration.sampleCount > 0 ? formatStatsDuration(model.duration.p50Ms) : "—"}
           </div>
         </div>
         <div>
           <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">p95</div>
           <div className="mt-1 text-base font-black text-slate-900 dark:text-white">
-            {model.duration.sampleCount > 0 ? formatDuration(model.duration.p95Ms) : "—"}
+            {model.duration.sampleCount > 0 ? formatStatsDuration(model.duration.p95Ms) : "—"}
           </div>
         </div>
       </div>

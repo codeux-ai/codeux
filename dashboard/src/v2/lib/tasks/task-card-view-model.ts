@@ -1,5 +1,6 @@
 import type { Task, TaskStatus, TaskExecutorType } from "../../types.js";
 import { type LiveTaskEnrichment } from "./live-task-enrichment.js";
+import { formatDuration } from "../format-duration.js";
 
 export interface DependencyIndicator {
   recordId: string;
@@ -25,17 +26,6 @@ const EXECUTOR_LABEL: Record<TaskExecutorType, string> = {
   docker_cli: "CLI",
   jules: "Jules",
 };
-
-// Duplicates the function from LiveTaskCard.tsx intentionally to keep it in the utility layer
-export function formatDuration(totalSeconds: number): string {
-    if (totalSeconds <= 0) return "0s";
-    const h = Math.floor(totalSeconds / 3600);
-    const m = Math.floor((totalSeconds % 3600) / 60);
-    const s = totalSeconds % 60;
-    if (h > 0) return `${h}h ${m}m ${s}s`;
-    if (m > 0) return `${m}m ${s}s`;
-    return `${s}s`;
-}
 
 export function formatTimeAgo(iso: string, now: number = Date.now()): string {
   const timestamp = new Date(iso).getTime();
