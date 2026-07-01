@@ -88,6 +88,7 @@ export const ChatPage: FunctionComponent = () => {
     activateInvocation,
     handleCompactThread,
     handleSend,
+    navigateHistory,
     handleDeleteThread,
     createThreadForCompose,
     threadIndex,
@@ -324,6 +325,29 @@ export const ChatPage: FunctionComponent = () => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
                     void handleSend();
+                    return;
+                  }
+                  if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+                    const element = event.currentTarget;
+                    // Single-line content has no ambiguous cursor movement, so history
+                    // recall always applies there. Multi-line (Shift+Enter) text only
+                    // recalls history when the caret is at the true start/end of the
+                    // whole value — otherwise Up/Down should move between lines as usual.
+                    const isSingleLine = !element.value.includes("\n");
+                    const atStart = element.selectionStart === 0 && element.selectionEnd === 0;
+                    const atEnd = element.selectionStart === element.value.length && element.selectionEnd === element.value.length;
+                    const direction = event.key === "ArrowUp" ? "up" : "down";
+                    const shouldRecall = direction === "up" ? (isSingleLine || atStart) : (isSingleLine || atEnd);
+                    if (shouldRecall && navigateHistory(direction)) {
+                      event.preventDefault();
+                      requestAnimationFrame(() => {
+                        if (!composerRef.current) return;
+                        composerRef.current.style.height = "auto";
+                        composerRef.current.style.height = `${composerRef.current.scrollHeight}px`;
+                        const pos = direction === "up" ? 0 : composerRef.current.value.length;
+                        composerRef.current.setSelectionRange(pos, pos);
+                      });
+                    }
                   }
                 }}
               />
