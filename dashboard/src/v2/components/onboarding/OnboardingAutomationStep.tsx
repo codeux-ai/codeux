@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import type { SystemSettings } from "../../../types.js";
 import { PillChoiceGroup } from "../settings/SettingsFormFields.js";
-import { Toggle } from "../settings/SettingsFormFields.js";
+import { Toggle as UiToggle } from "../ui/Toggle.js";
 
 const ToggleRow = ({ title, description, checked, onChange }: { title: string, description: string, checked: boolean, onChange: (v: boolean) => void }) => (
   <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
@@ -10,7 +10,7 @@ const ToggleRow = ({ title, description, checked, onChange }: { title: string, d
         <div className="text-sm font-bold text-slate-900 dark:text-white">{title}</div>
         <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{description}</div>
       </div>
-      <Toggle value={checked} onChange={onChange} aria-label={title} />
+      <UiToggle value={checked} onChange={onChange} aria-label={title} />
     </div>
   </div>
 );

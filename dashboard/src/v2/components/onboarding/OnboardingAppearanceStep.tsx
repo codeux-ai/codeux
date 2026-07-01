@@ -1,6 +1,6 @@
 import type { FunctionComponent } from "preact";
 import type { SystemSettings } from "../../../types.js";
-import { PillChoiceGroup, Row, Toggle } from "../settings/SettingsFormFields.js";
+import { PillChoiceGroup, Row, Toggle, SelectInput } from "../settings/SettingsFormFields.js";
 import { SectionCard } from "../settings/panels/SharedPanelComponents.js";
 
 export interface OnboardingAppearanceStepProps {
@@ -61,11 +61,50 @@ export const OnboardingAppearanceStep: FunctionComponent<OnboardingAppearanceSte
           </div>
         </div>
 
+
         {/* Right Column: Code & Terminal */}
         <div className="space-y-4">
-          <h4 className="text-xs font-black uppercase tracking-[0.2em] text-signal-400">Code & Terminal</h4>
+          <h4 className="text-xs font-black uppercase tracking-[0.2em] text-signal-400">Environment</h4>
 
+          <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+            <div className="text-sm font-black text-slate-900 dark:text-white">Background Mode</div>
+            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose between animated shaders or static colors.</div>
+            <div className="mt-4">
+              <PillChoiceGroup
+                value={settings.defaults.appearance.backgroundMode}
+                onChange={(value) => updateAppearance({ backgroundMode: value as "ANIMATED" | "STATIC" })}
+                options={[
+                  { value: "ANIMATED", label: "Animated" },
+                  { value: "STATIC", label: "Static" },
+                ]}
+              />
+            </div>
           </div>
+
+          {typeof window !== "undefined" && Boolean(window.codeUxDesktop?.setZoom) && (
+            <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+              <div className="text-sm font-black text-slate-900 dark:text-white">Zoom Level</div>
+              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Scale the desktop interface size.</div>
+              <div className="mt-4">
+                <SelectInput
+                  value={String(settings.defaults.appearance.zoomLevel ?? 1)}
+                  onChange={(value) => updateAppearance({ zoomLevel: Number(value) })}
+                  options={[
+                    { value: "0.85", label: "85%" },
+                    { value: "0.9", label: "90%" },
+                    { value: "0.95", label: "95%" },
+                    { value: "1", label: "100%" },
+                    { value: "1.05", label: "105%" },
+                    { value: "1.1", label: "110%" },
+                    { value: "1.15", label: "115%" },
+                    { value: "1.2", label: "120%" },
+                  ]}
+                />
+              </div>
+            </div>
+          )}
+
+        </div>
       </div>
     </div>
   );
