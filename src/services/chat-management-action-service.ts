@@ -6,6 +6,7 @@ import type { ExecutionRepository } from "../repositories/execution-repository.j
 import type { ManagementToolHandler } from "../mcp/management-tool-handler.js";
 import type { StructuredProviderResponseService } from "./structured-provider-response-service.js";
 import type { ProviderExecutionService } from "./provider-execution-service.js";
+import { findAllJsonCandidates } from "../domain/llm/json-extraction.js";
 
 export interface ChatManagementActionServiceDeps {
   structuredProviderResponseService: StructuredProviderResponseService;
@@ -32,90 +33,12 @@ const isRecord = (value: unknown): value is Record<string, unknown> => {
   return !!value && typeof value === "object" && !Array.isArray(value);
 };
 
-const stripJsonLanguagePrefix = (value: string): string => {
-  return value.trim().replace(/^json\s*\n/i, "").trim();
-};
-
-const extractJsonObjectCandidates = (value: string): string[] => {
-  const candidates: string[] = [];
-  let startIndex = -1;
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-
-  for (let index = 0; index < value.length; index += 1) {
-    const character = value[index];
-
-    if (inString) {
-      if (escaped) {
-        escaped = false;
-      } else if (character === "\\") {
-        escaped = true;
-      } else if (character === "\"") {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (character === "\"") {
-      inString = true;
-      continue;
-    }
-
-    if (character === "{") {
-      if (depth === 0) {
-        startIndex = index;
-      }
-      depth += 1;
-      continue;
-    }
-
-    if (character === "}" && depth > 0) {
-      depth -= 1;
-      if (depth === 0 && startIndex >= 0) {
-        candidates.push(value.slice(startIndex, index + 1));
-        startIndex = -1;
-      }
-    }
-  }
-
-  return candidates;
-};
-
-const buildJsonCandidates = (bodyMarkdown: string): string[] => {
-  const candidates: string[] = [];
-  const pushCandidate = (candidate: string): void => {
-    const trimmed = candidate.trim();
-    if (trimmed && !candidates.includes(trimmed)) {
-      candidates.push(trimmed);
-    }
-    const stripped = stripJsonLanguagePrefix(candidate);
-    if (stripped && stripped !== trimmed && !candidates.includes(stripped)) {
-      candidates.push(stripped);
-    }
-  };
-
-  pushCandidate(bodyMarkdown);
-
-  const fencedJsonPattern = /```(?:json)?\s*([\s\S]*?)\s*```/gi;
-  let match: RegExpExecArray | null;
-  while ((match = fencedJsonPattern.exec(bodyMarkdown)) !== null) {
-    pushCandidate(match[1] || "");
-  }
-
-  for (const candidate of extractJsonObjectCandidates(bodyMarkdown)) {
-    pushCandidate(candidate);
-  }
-
-  return candidates;
-};
-
 const parseProviderManagementJson = (bodyMarkdown: string, depth = 0): ParsedProviderManagementJSON => {
   if (depth > 2) {
     throw new Error("Missing or invalid 'replyMarkdown'");
   }
 
-  for (const candidate of buildJsonCandidates(bodyMarkdown)) {
+  for (const candidate of findAllJsonCandidates(bodyMarkdown)) {
     try {
       const parsed = JSON.parse(candidate) as unknown;
 
