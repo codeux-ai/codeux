@@ -26,7 +26,8 @@ export const AgentMcpManagePanel: FunctionComponent<{
   value: AgentMcpAccessConfig;
   onChange: (next: AgentMcpAccessConfig) => void;
   availableServers: CustomMcpServer[];
-}> = ({ onClose, value, onChange, availableServers }) => {
+  disabled?: boolean;
+}> = ({ onClose, value, onChange, availableServers, disabled }) => {
   const toolEnabledByName = useMemo(() => {
     const map = new Map<string, boolean>();
     for (const toggle of value.codeUxToolToggles) {
@@ -80,6 +81,7 @@ export const AgentMcpManagePanel: FunctionComponent<{
           type="button"
           onClick={onClose}
           aria-label="Close"
+          disabled={disabled}
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-black/[0.08] bg-white/60 text-slate-500 transition-colors hover:bg-white hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
         >
           <X className="h-4 w-4" strokeWidth={2.4} />
@@ -132,7 +134,7 @@ export const AgentMcpManagePanel: FunctionComponent<{
                             <div className="truncate font-mono text-[11px] font-semibold text-slate-600 dark:text-slate-300">{def.name}</div>
                             <div className="truncate text-[10px] text-slate-400 dark:text-slate-500">{def.description}</div>
                           </div>
-                          <Toggle value={isToolEnabled(def.name)} onChange={(enabled) => setTool(def.name, enabled)} aria-label={`Enable ${def.name}`} />
+                          <Toggle value={isToolEnabled(def.name)} onChange={(enabled) => setTool(def.name, enabled)} aria-label={`Enable ${def.name}`} disabled={disabled} />
                         </div>
                       ))}
                     </div>
@@ -180,7 +182,7 @@ export const AgentMcpManagePanel: FunctionComponent<{
                     </div>
                   </div>
                 </div>
-                <Toggle value={isLinked(server.id)} onChange={(linked) => setLinked(server.id, linked)} aria-label={`Link ${server.label || server.name}`} />
+                <Toggle value={isLinked(server.id)} onChange={(linked) => setLinked(server.id, linked)} aria-label={`Link ${server.label || server.name}`} disabled={disabled} />
               </div>
             ))
           )}
@@ -192,7 +194,8 @@ export const AgentMcpManagePanel: FunctionComponent<{
         <button
           type="button"
           onClick={onClose}
-          className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-[12px] font-bold uppercase tracking-[0.12em] text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:scale-[1.03] hover:bg-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
+          disabled={disabled}
+          className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-[12px] font-bold uppercase tracking-[0.12em] text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:scale-[1.03] hover:bg-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
           Done

@@ -529,5 +529,44 @@ describe("ProviderConcurrencyService", () => {
       // Two calls, throttle should be bypassed
       expect(dockerService.listContainers).toHaveBeenCalledTimes(2);
     });
+
+    it("should coalesce concurrent forced reconciliation checks", async () => {
+      const staleInvocation = {
+        id: "provider-stale",
+        provider: "qwen-code",
+        purpose: "qa_review",
+        status: "running",
+        executionMode: "DOCKER",
+        sessionId: "session-1",
+        startedAt: "2000-01-01T00:00:00.000Z",
+        durationMs: null,
+      };
+
+      executionRepository.listRunningProviderInvocationUsages.mockReturnValue([staleInvocation]);
+      executionRepository.listExecutionInvocationsByProviderInvocationId.mockReturnValue([
+        { id: "exec-stale", status: "running", startedAt: "2000-01-01T00:00:00.000Z", lastMessageAt: null },
+      ]);
+
+      let resolveListContainers: (val: any) => void;
+      dockerService.listContainers = vi.fn().mockImplementation(() => {
+        return new Promise((resolve) => {
+          resolveListContainers = resolve;
+        });
+      });
+
+      // Call hasAvailableCapacity and tryClaimSlot concurrently
+      const promise1 = service.hasAvailableCapacity("qwen-code", 1);
+      const promise2 = service.tryClaimSlot("qwen-code", 1, { provider: "qwen-code" } as any);
+
+      // Wait a tick to let them start and hit the docker check
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      resolveListContainers!([]);
+
+      await Promise.all([promise1, promise2]);
+
+      // Both should have shared the same forced check pass, thus docker check called only once
+      expect(dockerService.listContainers).toHaveBeenCalledTimes(1);
+    });
   });
 });

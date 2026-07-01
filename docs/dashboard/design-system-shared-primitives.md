@@ -32,11 +32,11 @@ The goal is to ensure all primitives align with the signal-and-ember operational
 
 ## Component Guidelines
 
-1.  **Buttons**: Should utilize `--elevation-raised` (for primary), `--accent-focus-ring`, and consistent proportional padding across all variants.
+1.  **Buttons**: Should utilize `--elevation-raised` (for primary), `--accent-focus-ring`, and consistent proportional padding across all variants. For responsive buttons containing dynamic text (e.g., pending states), avoid `whitespace-nowrap` as it causes horizontal overflow on mobile screens. Instead, apply `min-w-0` to the button, wrap the text in a `span` with `truncate min-w-0`, and add `shrink-0` to any adjacent icons. When implementing custom single-choice button groups, use standard ARIA radiogroup semantics by applying `role="radiogroup"` to the wrapper and `role="radio"` with `aria-checked` to the individual choice options.
 2.  **Cards**: Built on `--surface-glass`, bordered by `--border-hairline`, and grounded by `--elevation-base`. They should not be nested unless the inner element is explicitly a card.
 3.  **Inputs & Selects**: Inputs use `--fill-muted` and `--border-hairline`. Focus states should strictly use `--accent-focus-ring`. Error and valid states override the border but maintain the structural radius.
-4.  **Tables**: Headers should use `--text-metadata`. Hover states for rows apply `--fill-muted-hover`. Borders between cells use `--border-hairline`.
-5.  **EmptyStates & SectionHeaders**: Leverage `--text-metadata` to ensure textual consistency. Icons use `--surface-glass` for subtle emphasis without drawing primary attention away from calls to action.
+4.  **Tables**: Headers should use `--text-metadata`. Hover states for rows apply `--fill-muted-hover`. Borders between cells use `--border-hairline`. When using the custom `Table` primitive, provide the `mobileLabel` prop on `TableCell` elements to ensure visible column labels are communicated to assistive technology on mobile layouts. In sortable data tables, the parent `<th>` element must declare the `aria-sort` attribute ('ascending', 'descending', or 'none'). The internal sort `<button>` should include an explicit `aria-label` or visually hidden `.sr-only` text.
+5.  **EmptyStates & SectionHeaders**: Leverage `--text-metadata` to ensure textual consistency. Icons use `--surface-glass` for subtle emphasis without drawing primary attention away from calls to action. When displaying dynamic filter or table result counts (e.g., 'Showing 10 of 50'), apply `aria-live="polite"` directly to the text container so screen readers natively announce updates.
 
 ### Field Accessibility & Error Contracts
 

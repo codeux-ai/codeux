@@ -1,6 +1,9 @@
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
-import { useId, useMemo, useState } from "preact/hooks";
+import { useId, useMemo, useState, useLayoutEffect, useRef } from "preact/hooks";
+import gsap from "gsap";
+import { useReducedMotion, useResolvedMotionDuration } from "../../hooks/use-reduced-motion.js";
+import { INTERACTION_TOKENS } from "../../lib/motion/tokens.js";
 import { ChevronDown, Cpu, ExternalLink, MessageSquareText, Timer } from "lucide-preact";
 import { formatTime } from "../../../lib/time.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
@@ -28,6 +31,31 @@ const InvocationFeedRow: FunctionComponent<{
   invocation: ExecutionInvocationRecord;
   sprintKeyPrefix?: string;
 }> = memo(({ invocation, sprintKeyPrefix = "SPR" }) => {
+  const rowRef = useRef<HTMLDivElement>(null);
+  const isReducedMotion = useReducedMotion();
+  const highlightDuration = useResolvedMotionDuration(parseFloat(INTERACTION_TOKENS.controlFeedback.duration) / 1000);
+  const prevStatusRef = useRef(invocation.status);
+
+  useLayoutEffect(() => {
+    if (!rowRef.current) return;
+    if (prevStatusRef.current !== invocation.status) {
+      if (isReducedMotion) {
+        const el = rowRef.current;
+        el.classList.add("bg-signal-500/10", "border-signal-500/20");
+        setTimeout(() => {
+          if (el) el.classList.remove("bg-signal-500/10", "border-signal-500/20");
+        }, 500);
+      } else {
+        gsap.killTweensOf(rowRef.current);
+        gsap.fromTo(rowRef.current,
+          { backgroundColor: "rgba(0, 224, 160, 0.15)", borderColor: "rgba(0, 224, 160, 0.3)" },
+          { backgroundColor: "rgba(0, 0, 0, 0.015)", borderColor: "rgba(0, 0, 0, 0.04)", duration: highlightDuration * 2, ease: "power2.out", overwrite: "auto", clearProps: "backgroundColor,borderColor" }
+        );
+      }
+    }
+    prevStatusRef.current = invocation.status;
+  }, [invocation.status, isReducedMotion, highlightDuration]);
+
   const activityAt = getInvocationActivityAt(invocation);
   const duration = formatInvocationDuration(invocation.startedAt || invocation.createdAt, invocation.finishedAt);
   const tokenTotal = invocation.totalTokens ?? ((invocation.inputTokens ?? 0) + (invocation.outputTokens ?? 0));
@@ -38,7 +66,7 @@ const InvocationFeedRow: FunctionComponent<{
   const purposeLabel = formatInvocationPurpose(invocation.type);
 
   return (
-    <div className={`group/row rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] bg-black/[0.015] p-3 pl-3 transition-colors hover:border-signal-500/25 hover:bg-signal-500/[0.035] dark:border-white/[0.04] dark:bg-white/[0.015] ${statusRailTone(invocation.status)}`}>
+    <div ref={rowRef} className={`group/row rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] bg-black/[0.015] p-3 pl-3 transition-colors hover:border-signal-500/25 hover:bg-signal-500/[0.035] dark:border-white/[0.04] dark:bg-white/[0.015] ${statusRailTone(invocation.status)}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
@@ -115,6 +143,27 @@ export const InvocationFeedPanel: FunctionComponent<{
   const { execution: snapshot } = useExecutionTimeline();
   const [open, setOpen] = useState(defaultOpen);
   const contentId = useId();
+  const contentRef = useRef<HTMLDivElement>(null);
+  const isReducedMotion = useReducedMotion();
+  const enterDuration = useResolvedMotionDuration(parseFloat(INTERACTION_TOKENS.enterExit.duration) / 1000);
+
+  useLayoutEffect(() => {
+    if (!contentRef.current || !collapsible) return;
+    if (isReducedMotion) {
+      gsap.set(contentRef.current, { height: open ? "auto" : 0, overflow: "hidden" });
+    } else {
+      gsap.killTweensOf(contentRef.current);
+      gsap.to(contentRef.current, {
+        height: open ? "auto" : 0,
+        duration: enterDuration,
+        ease: INTERACTION_TOKENS.enterExit.ease,
+        overwrite: "auto",
+        onComplete: () => {
+          if (open && contentRef.current) gsap.set(contentRef.current, { height: "auto" });
+        }
+      });
+    }
+  }, [open, isReducedMotion, enterDuration, collapsible]);
 
   const invocations = useMemo(
     () => scopedInvocations ?? snapshot?.recentInvocations ?? [],
@@ -145,6 +194,11 @@ export const InvocationFeedPanel: FunctionComponent<{
           {runningCount} live
         </span>
       )}
+      {failedCount > 0 && (
+        <span className="rounded-md bg-status-red/10 px-2 py-0.5 text-[9px] font-mono font-bold text-status-red">
+          {failedCount} failed
+        </span>
+      )}
     </div>
   );
 
@@ -171,7 +225,7 @@ export const InvocationFeedPanel: FunctionComponent<{
       )}
 
       <div className={collapsible ? `collapsible-section ${open ? "open" : ""}` : ""} id={contentId}>
-        <div className={collapsible ? "collapsible-content" : ""}>
+        <div ref={contentRef} className={collapsible ? "collapsible-content overflow-hidden" : ""}>
           <div className="relative z-10 px-5 pb-5 pt-0">
             <div className="mb-3 grid grid-cols-3 gap-2">
               {[

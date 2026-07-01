@@ -214,6 +214,33 @@ describe("SprintLedger Component", () => {
     });
   });
 
+  it("displays pending state on select all button when bulk action is running", async () => {
+    const pendingBulkActionIds = new Set(["sprint-delete:sprint-1", "sprint-delete:sprint-2"]);
+    const { unmount } = render(<SprintLedger {...defaultProps} pendingActionIds={pendingBulkActionIds} />);
+    await waitFor(() => {
+      const selectAllBtn = screen.getByTitle("Select all visible sprints");
+      expect(selectAllBtn).toBeDisabled();
+    });
+    unmount();
+  });
+
+  it("displays pending state on bulk actions when running", async () => {
+    const { unmount } = render(<SprintLedger {...defaultProps} />);
+    await waitFor(() => expect(screen.getByText("Alpha Design")).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole("button", { name: /Select sprint/i })[0]);
+    await waitFor(() => expect(screen.getAllByText("Start", { selector: 'button' }).length).toBeGreaterThan(0));
+    const startBtn = screen.getByRole("button", { name: "Start selected sprints" });
+    expect(startBtn.getAttribute("title")).toBeNull();
+    unmount();
+    const pendingBulkActionIds = new Set(["sprint-start:sprint-2"]);
+    render(<SprintLedger {...defaultProps} pendingActionIds={pendingBulkActionIds} />);
+    await waitFor(() => expect(screen.getByText("Beta API")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /Select sprint Beta API/i }));
+    await waitFor(() => expect(screen.getAllByText("Starting...", { selector: 'button' }).length).toBeGreaterThan(0));
+    const pendingStartBtn = screen.getByRole("button", { name: "Starting selected sprints" });
+    expect(pendingStartBtn.getAttribute("title")).toBe("Wait for the current action to finish");
+  });
+
   it("sorts rows correctly", () => {
     render(<SprintLedger {...defaultProps} />);
 

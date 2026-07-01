@@ -160,6 +160,7 @@ function DestructiveConfirmButton({
       className={`relative overflow-hidden ${className}`}
       style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
       aria-busy={isLoading}
+      disabled={isLoading}
       aria-live="polite"
       aria-label={isHolding ? `Holding — ${Math.floor(progress / 10) * 10}% complete, release to cancel` : `Hold to ${label}`}
     >
@@ -303,6 +304,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
       intent="destructive"
       className="z-[10000] overflow-y-auto p-4 sm:p-6"
       blur
+      onClose={() => handleClose(onCancel)}
     >
       <div
         ref={(el) => {

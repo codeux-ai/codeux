@@ -7,6 +7,8 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { useOnboardingState } from "../../../dashboard/src/v2/hooks/useOnboardingState.js";
 import { OnboardingExperience } from "../../../dashboard/src/v2/components/onboarding/OnboardingExperience.js";
+import { GuidedDashboardTour } from "../../../dashboard/src/v2/components/onboarding/GuidedDashboardTour.js";
+import { DASHBOARD_TOUR_START_EVENT } from "../../../dashboard/src/v2/lib/onboarding-control.js";
 import { cloneDefaultSettings } from "../../../dashboard/src/lib/settings.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import * as settingsApi from "../../../dashboard/src/v2/lib/settings-api.js";
@@ -93,10 +95,58 @@ describe("onboarding state hook", () => {
   });
 });
 
+describe("GuidedDashboardTour integration", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    cleanup();
+  });
+
+  it("handles tour start with unavailable targets gracefully", async () => {
+    const { queryByRole } = render(<GuidedDashboardTour />);
+    window.dispatchEvent(new CustomEvent(DASHBOARD_TOUR_START_EVENT));
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(queryByRole("dialog")).toBeNull();
+  });
+});
+
 describe("OnboardingExperience integration", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     cleanup();
+  });
+
+  it("shows step navigation labels and readiness pending/error states accessibly", async () => {
+    const defaultSettings = cloneDefaultSettings();
+    const systemSettings = {
+      runtime: { dashboardPort: defaultSettings.dashboardPort, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
+      integrations: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+      defaults: defaultSettings,
+    };
+    vi.mocked(settingsApi.fetchSystemSettings).mockResolvedValue(systemSettings as any);
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.endsWith("/api/user/onboarding")) {
+        return new Response(JSON.stringify({ completed: false, onboardingCompletedAt: null }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.endsWith("/api/onboarding/readiness")) {
+        return new Response(JSON.stringify({
+          checkedAt: "2026-06-01T00:00:00.000Z",
+          cluster: { status: "blocked", label: "Unhealthy", detail: "Docker is not running." },
+          dependencies: [], providers: [],
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+
+    render(<OnboardingExperience />);
+
+    const activeStepBtn = await screen.findByRole("button", { name: /Installation/i, current: "step" });
+    expect(activeStepBtn).not.toBeNull();
+
+    const readinessRegion = await screen.findAllByText("Blocked");
+    expect(readinessRegion.length).toBeGreaterThan(0);
+    expect(readinessRegion[0]!.getAttribute("aria-live")).toBe("polite");
   });
 
   it("toggles Git onboarding between remote and local modes", async () => {

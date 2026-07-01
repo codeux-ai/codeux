@@ -14,6 +14,11 @@ export interface DockerAssetPruneResult {
 }
 
 const WORKSPACE_VOLUME_PREFIX = "code-ux-";
+const WORKSPACE_VOLUME_LABEL = "code-ux.workspace=true";
+const RUNTIME_VOLUME_LABEL = "code-ux.workspace-runtime=true";
+const RUNTIME_VOLUME_SUFFIX = "-runtime";
+const DOCKER_PRUNE_TIMEOUT_MS = 10_000;
+const DOCKER_REMOVE_BATCH_SIZE = 50;
 
 export class DockerAssetPruneService {
   constructor(
@@ -29,13 +34,20 @@ export class DockerAssetPruneService {
         .map((session) => session.id),
     );
 
+    const [
+      prunedHelperContainers,
+      prunedLoginContainers,
+      prunedTempCredentialsDirs,
+    ] = await Promise.all([
+      this.pruneOrphanedHelperContainers(),
+      this.pruneOrphanedLoginContainers(),
+      this.pruneTemporaryCredentialsDirectories(),
+    ]);
+
     // Remove helper containers before workspace volumes: a surviving helper keeps its volume
     // mounted, which would otherwise block the volume removal below.
-    const prunedHelperContainers = await this.pruneOrphanedHelperContainers();
     const prunedWorkspaceVolumes = await this.pruneWorkspaceVolumes(activeSessionIds);
     const prunedSetupImages: string[] = [];
-    const prunedLoginContainers = await this.pruneOrphanedLoginContainers();
-    const prunedTempCredentialsDirs = await this.pruneTemporaryCredentialsDirectories();
 
     if (
       prunedWorkspaceVolumes.length > 0 ||
@@ -63,16 +75,16 @@ export class DockerAssetPruneService {
   }
 
   private async pruneWorkspaceVolumes(activeSessionIds: ReadonlySet<string>): Promise<string[]> {
-    const result = await this.runDocker(["volume", "ls", "--format", "{{.Name}}"]);
-    if (!result) {
-      return [];
-    }
+    const [workspaceResult, runtimeResult] = await Promise.all([
+      this.runDocker(["volume", "ls", "-q", "--filter", `label=${WORKSPACE_VOLUME_LABEL}`]),
+      this.runDocker(["volume", "ls", "-q", "--filter", `label=${RUNTIME_VOLUME_LABEL}`]),
+    ]);
 
-    const volumeNames = result.stdout
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.startsWith(WORKSPACE_VOLUME_PREFIX));
-    const pruned: string[] = [];
+    const volumeNames = [
+      ...this.parseLines(workspaceResult?.stdout),
+      ...this.parseLines(runtimeResult?.stdout),
+    ].filter((line, index, all) => line.startsWith(WORKSPACE_VOLUME_PREFIX) && all.indexOf(line) === index);
+    const staleVolumes: string[] = [];
 
     for (const volumeName of volumeNames) {
       const workspaceKey = this.extractWorkspaceKey(volumeName);
@@ -82,13 +94,10 @@ export class DockerAssetPruneService {
       if (activeSessionIds.has(workspaceKey)) {
         continue;
       }
-      const removed = await this.runDocker(["volume", "rm", "-f", volumeName]);
-      if (removed?.ok) {
-        pruned.push(volumeName);
-      }
+      staleVolumes.push(volumeName);
     }
 
-    return pruned;
+    return await this.removeDockerItems(["volume", "rm", "-f"], staleVolumes);
   }
 
   private async pruneOrphanedLoginContainers(): Promise<string[]> {
@@ -97,20 +106,7 @@ export class DockerAssetPruneService {
       return [];
     }
 
-    const containerIds = result.stdout
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
-    const pruned: string[] = [];
-
-    for (const containerId of containerIds) {
-      const removed = await this.runDocker(["rm", "-f", containerId]);
-      if (removed?.ok) {
-        pruned.push(containerId);
-      }
-    }
-
-    return pruned;
+    return await this.removeDockerItems(["rm", "-f", "-v"], this.parseLines(result.stdout));
   }
 
   private async pruneOrphanedHelperContainers(): Promise<string[]> {
@@ -121,20 +117,7 @@ export class DockerAssetPruneService {
       return [];
     }
 
-    const containerIds = result.stdout
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
-    const pruned: string[] = [];
-
-    for (const containerId of containerIds) {
-      const removed = await this.runDocker(["rm", "-f", containerId]);
-      if (removed?.ok) {
-        pruned.push(containerId);
-      }
-    }
-
-    return pruned;
+    return await this.removeDockerItems(["rm", "-f", "-v"], this.parseLines(result.stdout));
   }
 
   private async pruneTemporaryCredentialsDirectories(): Promise<string[]> {
@@ -164,14 +147,46 @@ export class DockerAssetPruneService {
 
   private async runDocker(args: string[]) {
     try {
-      return await runCommandStrict("docker", args, process.cwd());
+      return await runCommandStrict("docker", args, process.cwd(), process.env, { timeout: DOCKER_PRUNE_TIMEOUT_MS });
     } catch {
       return null;
     }
   }
 
+  private parseLines(value: string | undefined): string[] {
+    return (value || "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+  }
+
+  private async removeDockerItems(baseArgs: string[], itemNames: string[]): Promise<string[]> {
+    const pruned: string[] = [];
+    for (let index = 0; index < itemNames.length; index += DOCKER_REMOVE_BATCH_SIZE) {
+      const batch = itemNames.slice(index, index + DOCKER_REMOVE_BATCH_SIZE);
+      const result = await this.runDocker([...baseArgs, ...batch]);
+      if (result?.ok) {
+        pruned.push(...batch);
+        continue;
+      }
+      if (batch.length === 1) {
+        continue;
+      }
+      for (const item of batch) {
+        const singleResult = await this.runDocker([...baseArgs, item]);
+        if (singleResult?.ok) {
+          pruned.push(item);
+        }
+      }
+    }
+    return pruned;
+  }
+
   private extractWorkspaceKey(volumeName: string): string | null {
-    const match = volumeName.match(/^code-ux-.+-([a-f0-9]{12})-(.+)$/);
+    const workspaceVolumeName = volumeName.endsWith(RUNTIME_VOLUME_SUFFIX)
+      ? volumeName.slice(0, -RUNTIME_VOLUME_SUFFIX.length)
+      : volumeName;
+    const match = workspaceVolumeName.match(/^code-ux-.+-([a-f0-9]{12})-(.+)$/);
     return match?.[2] || null;
   }
 }

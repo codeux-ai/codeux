@@ -29,9 +29,13 @@ export type ClaudeModel =
   | "opus[1m]"
   | "opusplan"
   | "claude-opus-4-6"
+  | "claude-opus-4-7"
+  | "claude-opus-4-8"
   | "claude-sonnet-4-6"
+  | "claude-sonnet-5"
   | "claude-haiku-4-5-20251001"
-  | "claude-fable-5";
+  | "claude-fable-5"
+  | "claude-mythos-5";
 
 export type CodexModel =
   | "gpt-5.5"

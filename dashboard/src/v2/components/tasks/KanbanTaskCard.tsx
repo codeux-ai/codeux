@@ -116,7 +116,7 @@ export const KanbanTaskCard: FunctionComponent<{
             {task.id.toUpperCase()}
           </span>
           <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.1em] text-slate-400">
-            <span className="sr-only">, Status: </span><span aria-live="polite" className="sr-only">{task.status.replace('_', ' ')}</span>
+            <span className="sr-only">, Status: </span><span aria-live="polite" className="sr-only">Task {task.id} status is now {task.status.replace('_', ' ')}</span>
             <StatusIcon className="w-3 h-3" aria-hidden="true" style={{ color: STATUS_CFG[task.status].hex }} />
           </div>
         </div>

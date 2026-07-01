@@ -1,12 +1,15 @@
+import { buildProviderSettingsOverride } from "../../provider-settings-override.js";
 import type { PipelineContext } from "./pipeline-context.js";
 import { resolveProviderForInvocation } from "../../provider-routing.js";
 import { ProviderExecutionService, resolveEffectiveModel } from "../../provider-execution-service.js";
 
 export async function executeProviderStage(ctx: PipelineContext, providerPrompt: string): Promise<void> {
-  const providerSettings = ctx.providerSettingsOverride || resolveProviderForInvocation(ctx.settings, {
+  const resolvedProvider = resolveProviderForInvocation(ctx.settings, {
     invocation: "task_coding",
     task: ctx.task,
-  }).providers[ctx.provider];
+  });
+  const resolvedProviderSettings = resolvedProvider.providers[ctx.provider];
+  const providerSettings = ctx.providerSettingsOverride || buildProviderSettingsOverride(resolvedProviderSettings.model, resolvedProviderSettings);
 
   const effectiveModel = resolveEffectiveModel({
     provider: ctx.provider,
@@ -20,11 +23,11 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
   });
 
   const providerMountAuth = "mountAuth" in providerSettings
-    ? providerSettings.mountAuth
-    : providerSettings.providerMountAuth;
+    ? (providerSettings as any).mountAuth
+    : (providerSettings as any).providerMountAuth;
   const providerAuthPath = "authPath" in providerSettings
-    ? providerSettings.authPath
-    : providerSettings.providerAuthPath;
+    ? (providerSettings as any).authPath
+    : (providerSettings as any).providerAuthPath;
 
   const taskRun = ctx.taskRunId && ctx.deps.executionRepository
     ? ctx.deps.executionRepository.getTaskRun(ctx.taskRunId)

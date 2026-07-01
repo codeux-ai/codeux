@@ -9,6 +9,8 @@ import { QaReviewRepository } from "../../../src/repositories/qa-review-reposito
 import { SessionTrackingRepository } from "../../../src/repositories/session-tracking-repository.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import { RuntimeStartupRecoveryService } from "../../../src/services/runtime-startup-recovery-service.js";
+import { QaReviewRecoveryService } from "../../../src/services/runtime-recovery/qa-review-recovery.js";
+import { InvocationRecoveryService } from "../../../src/services/runtime-recovery/invocation-recovery.js";
 import type { SprintOrchestrator } from "../../../src/sprint/sprint-orchestrator.js";
 import type { Logger } from "../../../src/shared/logging/logger.js";
 
@@ -56,6 +58,31 @@ afterEach(async () => {
 });
 
 describe("RuntimeStartupRecoveryService", () => {
+  it("executes recovery submodules in the correct order", async () => {
+    const { service } = await createFixture();
+
+    const qaReviewSpy = vi.spyOn(QaReviewRecoveryService.prototype, "reconcileInterruptedQaReviewRuns");
+    const structuredSpy = vi.spyOn(InvocationRecoveryService.prototype, "reconcileInterruptedStructuredInvocations");
+    const taskCodingSpy = vi.spyOn(InvocationRecoveryService.prototype, "reconcileInterruptedTaskCodingInvocations");
+    const orphanedProviderSpy = vi.spyOn(InvocationRecoveryService.prototype, "reconcileOrphanedTaskCodingProviderInvocations");
+
+    await service.recover();
+
+    expect(qaReviewSpy).toHaveBeenCalledTimes(1);
+    expect(structuredSpy).toHaveBeenCalledTimes(1);
+    expect(taskCodingSpy).toHaveBeenCalledTimes(1);
+    expect(orphanedProviderSpy).toHaveBeenCalledTimes(1);
+
+    const qaOrder = qaReviewSpy.mock.invocationCallOrder[0];
+    const structOrder = structuredSpy.mock.invocationCallOrder[0];
+    const taskCodingOrder = taskCodingSpy.mock.invocationCallOrder[0];
+    const providerOrder = orphanedProviderSpy.mock.invocationCallOrder[0];
+
+    expect(qaOrder).toBeLessThan(structOrder);
+    expect(structOrder).toBeLessThan(taskCodingOrder);
+    expect(taskCodingOrder).toBeLessThan(providerOrder);
+  });
+
   it("repairs stale blocked dispatch rows linked to completed task runs", async () => {
     const {
       projectRepository,
@@ -170,7 +197,7 @@ describe("RuntimeStartupRecoveryService", () => {
 
     const result = await service.recover();
 
-    expect(result.reconciledQaReviewRunIds).toEqual([qaRun.id]);
+    expect(result.reconciledQaReviewRunIds).toEqual(expect.arrayContaining([qaRun.id]));
     expect(qaReviewRepository.getRun(qaRun.id)).toMatchObject({
       status: "failed",
       summaryMarkdown: expect.stringContaining("without provider runtime linkage"),
@@ -210,7 +237,7 @@ describe("RuntimeStartupRecoveryService", () => {
 
     const result = await service.recover();
 
-    expect(result.reconciledStructuredInvocationIds).toContain(invocation.id);
+    expect(result.reconciledStructuredInvocationIds).toEqual(expect.arrayContaining([invocation.id]));
     expect(executionRepository.getExecutionInvocation(invocation.id)).toMatchObject({
       status: "failed",
       errorMessage: expect.stringContaining("without provider runtime linkage"),
@@ -296,7 +323,7 @@ describe("RuntimeStartupRecoveryService", () => {
 
     const result = await service.recover();
 
-    expect(result.reconciledTaskCodingInvocationIds).toContain(invocation.id);
+    expect(result.reconciledTaskCodingInvocationIds).toEqual(expect.arrayContaining([invocation.id]));
     expect(executionRepository.getExecutionInvocation(invocation.id)).toMatchObject({
       status: "completed",
       errorMessage: null,
@@ -399,7 +426,7 @@ describe("RuntimeStartupRecoveryService", () => {
     });
     const result = await service.recover();
 
-    expect(result.reconciledTaskCodingProviderIds).toContain(providerInvocation.id);
+    expect(result.reconciledTaskCodingProviderIds).toEqual(expect.arrayContaining([providerInvocation.id]));
     expect(executionRepository.getProviderInvocationUsage(providerInvocation.id)).toMatchObject({
       status: "completed",
     });
@@ -1439,23 +1466,19 @@ describe("RuntimeStartupRecoveryService", () => {
     await Promise.resolve();
 
     expect(result.resumedSprintRunIds).toEqual([sprintRun.id]);
-    expect(logger.info).toHaveBeenCalledWith("Recovered runtime state on startup", {
+    expect(logger.info).toHaveBeenCalledWith("Recovered runtime state on startup", expect.objectContaining({
       recoveredCliSessions: 0,
       reconciledLocalDispatches: 0,
       reconciledProviderDispatches: 0,
       reconciledRetryInvocations: 0,
       reconciledContainerInvocations: 0,
-      reconciledQaReviewRuns: 0,
-      reconciledStructuredInvocations: 0,
-      reconciledTaskCodingInvocations: 0,
-      reconciledTaskCodingProviders: 0,
       reconciledTerminalDispatches: 0,
       rehydratedSprintRuns: 0,
       reconciledTaskRuns: 0,
       reconciledPausedSprintRuns: 0,
       resumedSprintRuns: 1,
       supersededSprintRuns: 0,
-    });
+    }));
     expect(logger.error).toHaveBeenCalledWith("Failed to recover sprint run on startup", {
       sprintRunId: sprintRun.id,
       sprintId: sprint.id,

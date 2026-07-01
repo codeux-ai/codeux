@@ -58,6 +58,7 @@ test('Input wires helper/error text properly', () => {
     const input = container.querySelector('input');
     expect(input).toHaveAttribute('aria-errormessage', 'test-input-error');
     expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(container.querySelector('.min-h-\\[1\\.25rem\\]')).toBeInTheDocument();
 });
 
 test('Select wires helper/error text properly', () => {

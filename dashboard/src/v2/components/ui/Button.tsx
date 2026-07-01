@@ -114,17 +114,17 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
             const tl = gsap.timeline();
             tl.to(buttonRef.current, {
               boxShadow: "0 0 0 6px rgba(var(--accent-primary-rgb), 0.3)",
-              duration: 0.2,
+              duration: gsapTokens.controlFeedback.duration,
               ease: "power2.out",
             }).to(buttonRef.current, {
               boxShadow: "0 0 0 0px rgba(var(--accent-primary-rgb), 0)",
-              duration: 0.2,
+              duration: gsapTokens.controlFeedback.duration,
               ease: "power2.in",
             });
           } else {
              gsap.to(buttonRef.current, {
               boxShadow: "0 0 0 6px rgba(var(--accent-primary-rgb), 0.3)",
-              duration: 0.2,
+              duration: gsapTokens.controlFeedback.duration,
               ease: "power2.out",
             });
           }
@@ -139,7 +139,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
         if (buttonRef.current) {
           gsap.to(buttonRef.current, {
             keyframes: [{ x: -5 }, { x: 4 }, { x: -3 }, { x: 2 }, { x: 0 }],
-            duration: 0.3,
+            duration: gsapTokens.inlineValidation.duration,
             ease: "none",
           });
         }
@@ -212,13 +212,16 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
       <div ref={contentRef} className={`flex items-center justify-center gap-2`}>
         {(Icon || isSuccess || isError) && (
           <div ref={iconContainerRef} className="relative flex items-center justify-center w-4 h-4 shrink-0">
-            <div data-active={!isPending && !isSuccess && !isError} className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${isPending || isSuccess || isError ? "scale-0 opacity-0 pointer-events-none" : "scale-100 opacity-100"}`}>
+            <div data-active={!isPending && !isSuccess && !isError} className={`absolute inset-0 flex items-center justify-center transition-all  ${isPending || isSuccess || isError ? "scale-0 opacity-0 pointer-events-none" : "scale-100 opacity-100"}`}
+              style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}>
               {Icon && <Icon className="w-4 h-4" aria-hidden="true" />}
             </div>
-            <div key={`success-${feedback.status}`} data-active={isSuccess} className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${isSuccess ? "scale-100 opacity-100" : "scale-0 opacity-0 pointer-events-none"}`}>
+            <div key={`success-${feedback.status}`} data-active={isSuccess} className={`absolute inset-0 flex items-center justify-center transition-all  ${isSuccess ? "scale-100 opacity-100" : "scale-0 opacity-0 pointer-events-none"}`}
+              style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}>
               <Check className="w-4 h-4" strokeWidth={3} aria-hidden="true" />
             </div>
-            <div key={`error-${feedback.status}`} data-active={isError} className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${isError ? "scale-100 opacity-100" : "scale-0 opacity-0 pointer-events-none"}`}>
+            <div key={`error-${feedback.status}`} data-active={isError} className={`absolute inset-0 flex items-center justify-center transition-all  ${isError ? "scale-100 opacity-100" : "scale-0 opacity-0 pointer-events-none"}`}
+              style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}>
               <X className="w-4 h-4" strokeWidth={3} aria-hidden="true" />
             </div>
           </div>

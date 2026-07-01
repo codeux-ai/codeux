@@ -261,7 +261,7 @@ function terminateSession(sessionId: string, reason: string): void {
   } catch {
     // Ignore if process is already dead
   }
-  const cleanupProcess = spawn("docker", ["rm", "-f", `code-ux-login-${session.providerId}-${session.sessionId}`], {
+  const cleanupProcess = spawn("docker", ["rm", "-f", "-v", `code-ux-login-${session.providerId}-${session.sessionId}`], {
     stdio: "ignore",
   });
   if (typeof cleanupProcess.unref === "function") {
@@ -328,7 +328,7 @@ async function cleanupAllRunningLoginSessions(logger?: Logger): Promise<void> {
         const containerIds = stdout.trim().split(/\s+/).filter(Boolean);
         if (containerIds.length > 0) {
           logger?.info(`[DEBUG] Preemptively removing active/stray login containers: ${containerIds.join(", ")}`);
-          cp.exec(`docker rm -f ${containerIds.join(" ")}`, (rmErr) => {
+          cp.exec(`docker rm -f -v ${containerIds.join(" ")}`, (rmErr) => {
             if (rmErr) {
               logger?.error(`[DEBUG] Failed to force-remove leftover login containers: ${String(rmErr)}`);
             }

@@ -9,6 +9,10 @@ import {
   Minus,
   RefreshCw,
   X,
+  Play,
+  Square,
+  AlertCircle,
+  Loader2,
 } from "lucide-preact";
 import type { SprintPreviewSession } from "../../../types.js";
 
@@ -80,14 +84,15 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
               {session.sprintName}
             </span>
-            <div className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] ${statusTone[session.status]}`}>
+            <div className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] flex items-center gap-1.5 ${statusTone[session.status]}`}>
+              {session.status === 'starting' ? <Loader2 className="w-3 h-3 animate-spin" /> : session.status === 'running' ? <Play className="w-3 h-3" fill="currentColor" /> : session.status === 'error' ? <AlertCircle className="w-3 h-3" /> : <Square className="w-3 h-3" fill="currentColor" />}
               {session.status}
             </div>
           </div>
           <button
             type="button"
             onClick={() => setWindowState("normal")}
-            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border border-black/[0.08] px-3 text-[11px] font-semibold text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
+            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border border-black/[0.08] px-3 text-[11px] font-semibold text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
           >
             <Maximize2 className="h-3 w-3" strokeWidth={2.5} />
             Restore
@@ -159,7 +164,8 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
               )}
             </button>
           </div>
-          <div className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${statusTone[session.status]}`}>
+          <div className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] flex items-center gap-1.5 ${statusTone[session.status]}`}>
+            {session.status === 'starting' ? <Loader2 className="w-3 h-3 animate-spin" /> : session.status === 'running' ? <Play className="w-3 h-3" fill="currentColor" /> : session.status === 'error' ? <AlertCircle className="w-3 h-3" /> : <Square className="w-3 h-3" fill="currentColor" />}
             {session.status}
           </div>
         </div>
@@ -169,6 +175,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             onClick={onNavigateBack}
             disabled={!navigationEnabled}
             aria-disabled={!navigationEnabled}
+            aria-busy={!navigationEnabled && session?.status === 'starting'}
             title={navigationEnabled ? "Go back" : "Back navigation requires a running container"}
             className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
           >
@@ -179,6 +186,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             onClick={onNavigateForward}
             disabled={!navigationEnabled}
             aria-disabled={!navigationEnabled}
+            aria-busy={!navigationEnabled && session?.status === 'starting'}
             title={navigationEnabled ? "Go forward" : "Forward navigation requires a running container"}
             className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
           >
@@ -189,6 +197,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             onClick={onReload}
             disabled={!navigationEnabled}
             aria-disabled={!navigationEnabled}
+            aria-busy={!navigationEnabled && session?.status === 'starting'}
             title={navigationEnabled ? "Reload preview" : "Reload requires a running container"}
             className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
           >
@@ -206,6 +215,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
               onInput={(event) => onAddressChange((event.currentTarget as HTMLInputElement).value)}
               disabled={!navigationEnabled}
             aria-disabled={!navigationEnabled}
+            aria-busy={!navigationEnabled && session?.status === 'starting'}
               title={navigationEnabled ? "Preview address" : "Address entry requires a running container"}
               placeholder={navigationEnabled ? "Enter path..." : "Container not running..."}
               className="h-10 w-full rounded-2xl border border-black/[0.08] bg-white/80 px-4 font-mono text-sm text-slate-800 outline-none transition focus:border-signal-500/40 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-100"

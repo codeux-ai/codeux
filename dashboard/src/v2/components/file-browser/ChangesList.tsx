@@ -26,7 +26,7 @@ const splitPath = (path: string): { dir: string; name: string } => {
 export const ChangesList: FunctionComponent<ChangesListProps> = ({ files, selectedPath, onSelect }) => {
   if (files.length === 0) {
     return (
-      <div class="flex h-full flex-col items-center justify-center gap-3 p-10 text-center">
+      <div class="flex h-full flex-col items-center justify-center gap-3 p-10 text-center" role="status">
         <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-signal-500/10 text-signal-500">
           <GitCompare class="h-6 w-6" strokeWidth={1.8} />
         </div>
@@ -49,10 +49,10 @@ export const ChangesList: FunctionComponent<ChangesListProps> = ({ files, select
             key={change.path}
             type="button"
             onClick={() => onSelect(change.path)}
-            class={`group flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors ${
+            class={`group flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 ${
               isSelected
-                ? "bg-signal-500/[0.12] ring-1 ring-inset ring-signal-500/25"
-                : "hover:bg-black/[0.04] dark:hover:bg-white/[0.05]"
+                ? "border-signal-500/25 bg-signal-500/[0.12]"
+                : "border-transparent hover:bg-black/[0.04] dark:hover:bg-white/[0.05]"
             }`}
           >
             <span
@@ -67,7 +67,7 @@ export const ChangesList: FunctionComponent<ChangesListProps> = ({ files, select
               </span>
               {dir && <span class="block truncate font-mono text-[11px] text-slate-400 dark:text-slate-500">{dir}</span>}
             </span>
-            <span class="flex shrink-0 items-center gap-2 font-mono text-[11px]">
+            <span class="flex shrink-0 items-center gap-2 font-mono text-[11px] tabular-nums">
               {change.additions > 0 && <span class="text-status-green">+{change.additions}</span>}
               {change.deletions > 0 && <span class="text-status-red">−{change.deletions}</span>}
               <FileDiff class="h-3.5 w-3.5 text-slate-300 transition-colors group-hover:text-slate-500 dark:text-slate-600" strokeWidth={2} />

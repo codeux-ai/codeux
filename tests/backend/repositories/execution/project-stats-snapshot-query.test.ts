@@ -143,7 +143,13 @@ describe("queryProjectStatsSnapshot", () => {
     const dbMock = {
       prepare: vi.fn().mockImplementation((query: string) => {
         return {
-          get: vi.fn().mockReturnValue({ id: "proj-1", name: "Project 1", sprint_id: "sprint-1", sprint_name: "Sprint 1", sprint_number: 1 }),
+
+          get: vi.fn().mockImplementation(() => {
+            if (query.includes("COUNT(duration_ms)")) {
+              return { count: 1 };
+            }
+            return { id: "proj-1", name: "Project 1", sprint_id: "sprint-1", sprint_name: "Sprint 1", sprint_number: 1 };
+          }),
           all: vi.fn().mockImplementation(() => {
             if (query.includes("AVG(duration_ms)")) {
               return [{ provider: "openai", model: "gpt-4", sampleCount: 1, minMs: 100, maxMs: 100, avgMs: 100 }];
@@ -191,7 +197,7 @@ describe("queryProjectStatsSnapshot", () => {
       getTaskMetadata: vi.fn().mockReturnValue(new Map()),
       getSprintMetadata: vi.fn().mockReturnValue(new Map()),
       updateLastActivity: vi.fn(),
-      getProviderPricing: vi.fn().mockReturnValue({ inputTokens: 5, outputTokens: 15, cachedInputTokens: 2.5 }),
+      getModelPricing: vi.fn().mockReturnValue({ inputTokens: 5, outputTokens: 15, cachedInputTokens: 2.5 }),
     };
 
     const snapshot = queryProjectStatsSnapshot(dbMock as any, "proj-1", "7d", depsMock);
@@ -234,6 +240,89 @@ describe("queryProjectStatsSnapshot", () => {
     expect(snapshot.chartSeries.find(s => s.id === 'git_deletions')).toMatchObject({ grouping: 'git', formatter: 'number', defaultEnabled: true });
     expect(snapshot.chartSeries.find(s => s.id === 'git_prs')).toMatchObject({ grouping: 'git', formatter: 'number', defaultEnabled: false });
     expect(snapshot.chartSeries.find(s => s.id === 'git_merges')).toMatchObject({ grouping: 'git', formatter: 'number', defaultEnabled: false });
+  });
+
+  it("uses duration aggregate fallback when duration row count exceeds sample cap", () => {
+    const dbMock = {
+      prepare: vi.fn().mockImplementation((query: string) => {
+        return {
+          get: vi.fn().mockImplementation(() => {
+            if (query.includes("COUNT(duration_ms)")) {
+              // Return a count that is larger than the cap
+              return { count: 10001 };
+            }
+            return { id: "proj-2", name: "Project 2" };
+          }),
+          all: vi.fn().mockImplementation(() => {
+            if (query.includes("AVG(duration_ms)")) {
+              return [{ provider: "anthropic", model: "claude-2", sampleCount: 10001, minMs: 50, maxMs: 500, avgMs: 250 }];
+            }
+            if (query.includes("duration_ms as durationMs")) {
+              throw new Error("Should not execute detailed duration query when cap is exceeded");
+            }
+            return [];
+          }),
+        };
+      })
+    };
+
+    const depsMock: ProjectStatsQueryDependencies = {
+      requireProject: vi.fn(),
+      getWallTimeTotalsByTaskIdsForRange: vi.fn().mockReturnValue(new Map()),
+      getWallTimeTotalsBySprintRunIdsForRange: vi.fn().mockReturnValue(new Map()),
+      getTaskMetadata: vi.fn().mockReturnValue(new Map()),
+      getSprintMetadata: vi.fn().mockReturnValue(new Map()),
+      updateLastActivity: vi.fn(),
+      getModelPricing: vi.fn().mockReturnValue({}),
+      maxDurationSamples: 10000,
+    };
+
+    const snapshot = queryProjectStatsSnapshot(dbMock as any, "proj-2", "7d", depsMock);
+
+    expect(snapshot.duration).toEqual({ sampleCount: 10001, avgMs: 250, p50Ms: 250, p95Ms: 250, maxMs: 500 });
+  });
+
+  it("fetches sample behavior when duration count is below cap", () => {
+    const dbMock = {
+      prepare: vi.fn().mockImplementation((query: string) => {
+        return {
+          get: vi.fn().mockImplementation(() => {
+            if (query.includes("COUNT(duration_ms)")) {
+              return { count: 3 };
+            }
+            return { id: "proj-3", name: "Project 3" };
+          }),
+          all: vi.fn().mockImplementation(() => {
+            if (query.includes("AVG(duration_ms)")) {
+              throw new Error("Should not execute AVG aggregate query when below cap");
+            }
+            if (query.includes("duration_ms as durationMs")) {
+              return [
+                { provider: "anthropic", model: "claude-2", durationMs: 100 },
+                { provider: "anthropic", model: "claude-2", durationMs: 200 },
+                { provider: "anthropic", model: "claude-2", durationMs: 300 }
+              ];
+            }
+            return [];
+          }),
+        };
+      })
+    };
+
+    const depsMock: ProjectStatsQueryDependencies = {
+      requireProject: vi.fn(),
+      getWallTimeTotalsByTaskIdsForRange: vi.fn().mockReturnValue(new Map()),
+      getWallTimeTotalsBySprintRunIdsForRange: vi.fn().mockReturnValue(new Map()),
+      getTaskMetadata: vi.fn().mockReturnValue(new Map()),
+      getSprintMetadata: vi.fn().mockReturnValue(new Map()),
+      updateLastActivity: vi.fn(),
+      getModelPricing: vi.fn().mockReturnValue({}),
+      maxDurationSamples: 10000,
+    };
+
+    const snapshot = queryProjectStatsSnapshot(dbMock as any, "proj-3", "7d", depsMock);
+
+    expect(snapshot.duration).toEqual({ sampleCount: 3, avgMs: 200, p50Ms: 200, p95Ms: 300, maxMs: 300 });
   });
 });
 

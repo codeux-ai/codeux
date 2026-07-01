@@ -55,3 +55,15 @@ export function peekNextWorkerAttention(
     return true;
   }) || null;
 }
+
+export function computeReconciliationCandidates(
+  activeAttentionProjects: string[],
+  pendingDispatchProjects: string[],
+  activeCycles: string[]
+): string[] {
+  return Array.from(new Set([
+    ...activeAttentionProjects,
+    ...pendingDispatchProjects,
+    ...activeCycles
+  ]));
+}

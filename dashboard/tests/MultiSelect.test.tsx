@@ -72,4 +72,5 @@ test("passes ARIA and ID props to internal combobox input", () => {
   expect(input.getAttribute("aria-invalid")).toBe("true");
   expect(input.getAttribute("aria-errormessage")).toBe("test-error");
   expect(input.getAttribute("aria-required")).toBe("true");
+  expect(screen.getByRole("combobox").parentElement?.parentElement?.getAttribute("class")).toBeDefined();
 });

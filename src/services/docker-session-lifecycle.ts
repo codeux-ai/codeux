@@ -38,7 +38,7 @@ export class DockerSessionLifecycle {
     if (!containerRef.trim()) {
       return;
     }
-    await runCommandStrict("docker", ["rm", "-f", containerRef], cwd).catch(() => undefined);
+    await runCommandStrict("docker", ["rm", "-f", "-v", containerRef], cwd).catch(() => undefined);
   }
 
   public parseDockerPsOutput(stdout: string, hasHostPort: boolean = true): DockerContainerSummary[] {

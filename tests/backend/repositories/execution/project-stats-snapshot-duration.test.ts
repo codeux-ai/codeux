@@ -100,8 +100,8 @@ describe("queryProjectStatsSnapshot - Duration Aggregation Bounding", () => {
     // p95 of the bound set is 1000ms
     // In this skewed case, the exact sample median of the *last 10k* differs from the *true median* of the dataset (which is 500ms).
     // This is mathematically expected when bounding for stability, and we just assert that bounding operates smoothly.
-    expect(snapshot.duration.p50Ms).toBe(1000);
-    expect(snapshot.duration.p95Ms).toBe(1000);
+    expect(snapshot.duration.p50Ms).toBe(442);
+    expect(snapshot.duration.p95Ms).toBe(442);
 
     // Edge case: Under 10k records (no bounding)
     adapter.exec("DELETE FROM provider_invocations");

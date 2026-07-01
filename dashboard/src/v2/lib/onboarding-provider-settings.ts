@@ -7,6 +7,7 @@ import type {
   SystemSettings
 } from "../../types.js";
 import {
+  cloneSystemSettings,
   createProjectProviderDraft,
   sortProviderConfigEntries,
 } from "./settings-view-models.js";
@@ -80,7 +81,7 @@ export const getProviderInitialSelection = (
   return Array.from(new Set<ProviderId>(["jules", ...enabled, ...detected]));
 };
 
-export const cloneSettings = (settings: SystemSettings): SystemSettings => JSON.parse(JSON.stringify(settings)) as SystemSettings;
+export const cloneSettings = (settings: SystemSettings): SystemSettings => cloneSystemSettings(settings);
 
 export const getSystemProvidersByType = (
   settings: SystemSettings | null,

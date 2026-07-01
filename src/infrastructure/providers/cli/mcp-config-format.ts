@@ -165,7 +165,16 @@ export function buildProviderMcpConfigArtifact(
     }
     if (options.qwenSettingsContent) {
       try {
-        settings = { ...settings, ...JSON.parse(options.qwenSettingsContent) };
+        const generated = JSON.parse(options.qwenSettingsContent) as Record<string, unknown>;
+        const existingMemory = settings.memory as Record<string, unknown> | undefined;
+        const generatedMemory = generated.memory as Record<string, unknown> | undefined;
+        settings = { ...settings, ...generated };
+        if (existingMemory || generatedMemory) {
+          settings.memory = {
+            ...(existingMemory || {}),
+            ...(generatedMemory || {}),
+          };
+        }
       } catch {}
       delete settings.enableOpenAILogging;
     }

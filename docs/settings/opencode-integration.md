@@ -100,11 +100,13 @@ When the runtime connection has a bearer token, Code UX includes an `Authorizati
 
 Docker execution prepares OpenCode in the shared CLI bootstrap path:
 
+- mounts the task Git checkout at `/workspace` and the provider runtime home at `/code-ux-runtime-home`
 - creates `$HOME/.local/share/opencode` and `$HOME/.config/opencode`
 - copies mounted local auth from `/opt/credentials/opencode`
 - passes `OPENCODE_API_KEY` and `OPENCODE_CONFIG_CONTENT` into the container
 - writes `OPENCODE_CONFIG_CONTENT` to `$HOME/.config/opencode/opencode.json` and exports `OPENCODE_CONFIG` before running `opencode`
 - invokes OpenCode with `--dir /workspace`; generated config permissions allow headless task runs to edit the isolated workspace instead of stopping on tool approval
+- keeps OpenCode's database and internal snapshot Git store under `/code-ux-runtime-home/.local/share/opencode`, outside the worktree OpenCode snapshots
 - rewrites loopback URLs in generated OpenCode config from `127.0.0.1` or `localhost` to `host.docker.internal` on Docker Desktop, WSL, macOS, and Windows so local endpoints such as Ollama remain reachable from the provider container
 - installs OpenCode if `opencode` is missing and fallback installs are enabled
 

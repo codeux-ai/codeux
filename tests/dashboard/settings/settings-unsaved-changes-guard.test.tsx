@@ -100,6 +100,10 @@ describe("useUnsavedChangesGuard", () => {
 
 
 describe("UnsavedChangesModal rendering", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it("renders action buttons with w-full for mobile layouts", () => {
     const { container } = render(
       <UnsavedChangesModal

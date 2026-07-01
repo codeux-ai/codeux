@@ -77,6 +77,14 @@ Appearance choices update `defaults.appearance`, which is also used by the Setti
 
 Operators can reopen onboarding from `Settings -> General -> Onboarding`. The action resets the persisted onboarding completion state and clears the browser-local marker; it does not reset saved system or project settings.
 
+
+## Settings Draft Management
+
+Onboarding settings state is managed purely without component side effects by helper functions in `dashboard/src/v2/lib/onboarding-settings-draft.ts`. These pure helpers process provider choices and system integration states directly into `SystemSettings` structures before they are flushed. This ensures:
+- Derived defaults are consistent across initial render, interactions, and final save.
+- Tests can independently verify provider sync behaviors without a full UI test harness.
+- Form controls map user intent strictly to Draft states instead of managing API formats internally.
+
 ## Interactive Login Session Cleanup
 
 Dashboard-guided provider login sessions now use an explicit lifecycle protocol to prevent orphaned Docker login containers after browser interruptions.

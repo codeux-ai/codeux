@@ -1,11 +1,15 @@
 // @vitest-environment happy-dom
 import { h } from "preact";
-import { render } from "@testing-library/preact";
-import { describe, it, expect } from "vitest";
+import { render, cleanup } from "@testing-library/preact";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import '@testing-library/jest-dom/vitest';
 import { ActionFeedbackRegion } from "../../../../dashboard/src/v2/components/ui/ActionFeedbackRegion.js";
 
 describe("ActionFeedbackRegion", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it("renders with appropriate ARIA attributes for alert", () => {
     const { getByRole } = render(
       <ActionFeedbackRegion status="error" message="An error occurred" />
@@ -23,7 +27,7 @@ describe("ActionFeedbackRegion", () => {
     );
     const element = getByRole("status");
     expect(element).toBeInTheDocument();
-    expect(element.getAttribute("aria-live")).toBe("polite");
+    expect(element.getAttribute("aria-live")).toBe("off");
     expect(element.getAttribute("aria-atomic")).toBe("true");
     expect(element.textContent).toContain("Success message");
   });
@@ -35,5 +39,15 @@ describe("ActionFeedbackRegion", () => {
     );
     const retryButton = getByRole("button", { name: "Retry" });
     expect(retryButton).toBeInTheDocument();
+  });
+
+  it("handles retryAction correctly", () => {
+    const retryAction = vi.fn();
+    const { getByRole } = render(
+      <ActionFeedbackRegion status="error" message="Error" retryAction={retryAction} />
+    );
+    const retryButton = getByRole("button", { name: "Retry" });
+    retryButton.click();
+    expect(retryAction).toHaveBeenCalledTimes(1);
   });
 });

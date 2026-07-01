@@ -97,6 +97,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
           <button
             type="button"
             aria-label={isPinPending ? "Pinning selected sprints" : "Pin selected sprints to showcase"}
+            title={isAnyPending ? "Wait for the current action to finish" : undefined}
             aria-disabled={isAnyPending}
             onClick={onBulkShowcaseEnable}
             disabled={isAnyPending}
@@ -108,6 +109,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
           <button
             type="button"
             aria-label={isPinPending ? "Unpinning selected sprints" : "Unpin selected sprints from showcase"}
+            title={isAnyPending ? "Wait for the current action to finish" : undefined}
             aria-disabled={isAnyPending}
             onClick={onBulkShowcaseDisable}
             disabled={isAnyPending}
@@ -119,6 +121,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
           <button
             type="button"
             aria-label={isStartPending ? "Starting selected sprints" : "Start selected sprints"}
+            title={isAnyPending ? "Wait for the current action to finish" : undefined}
             aria-disabled={isAnyPending}
             onClick={onBulkStart}
             disabled={isAnyPending}
@@ -130,6 +133,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
           <button
             type="button"
             aria-label={isDeletePending ? "Deleting selected sprints" : "Delete selected sprints"}
+            title={isAnyPending ? "Wait for the current action to finish" : undefined}
             aria-disabled={isAnyPending}
             onClick={onBulkDelete}
             disabled={isAnyPending}
@@ -141,6 +145,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
           <button
             type="button"
             aria-label="Clear sprint selection"
+            title={isAnyPending ? "Wait for the current action to finish" : undefined}
             aria-disabled={isAnyPending}
             onClick={onClearSelection}
             disabled={isAnyPending}

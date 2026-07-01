@@ -228,6 +228,8 @@ describe("CommandRunner", () => {
       expect(containerized.args).toEqual(expect.arrayContaining([
         "run",
         "--rm",
+        "type=tmpfs,target=/git",
+        "HOME=/tmp/code-ux-git-home",
         "--entrypoint",
         "git",
         "alpine/git",

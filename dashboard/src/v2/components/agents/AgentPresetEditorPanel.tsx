@@ -117,7 +117,7 @@ const FieldShell: FunctionComponent<{
         {required && <span className="text-signal-500">*</span>}
       </label>
       {counter && (
-        <span className="font-mono text-[10px] font-bold text-slate-400 dark:text-slate-500">
+        <span aria-live="polite" className="font-mono text-[10px] font-bold text-slate-400 dark:text-slate-500">
           {counter}
         </span>
       )}
@@ -469,6 +469,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
               type="submit"
               disabled={submitDisabled}
               aria-disabled={submitDisabled}
+              aria-busy={saving}
               className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-[12px] font-bold uppercase tracking-[0.12em] text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:scale-[1.03] hover:bg-signal-400 hover:shadow-[0_0_32px_rgba(0,224,160,0.36)] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none disabled:hover:scale-100 dark:disabled:bg-white/[0.05] dark:disabled:text-slate-500"
             >
               {saving ? (
@@ -479,6 +480,11 @@ export const AgentPresetEditorPanel: FunctionComponent<{
               Save Agent
             </button>
           </div>
+          {submitDisabled && !saving && (
+            <p className="mt-2 text-right text-[11px] text-slate-500">
+              {hasErrors ? "Fix errors to save" : "No changes"}
+            </p>
+          )}
         </div>
 
         {/* ── Body ── */}

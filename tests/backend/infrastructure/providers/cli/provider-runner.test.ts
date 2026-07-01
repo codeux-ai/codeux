@@ -317,6 +317,10 @@ describe("ProviderRunner", () => {
       model: {
         name: "glm-4.7-flash",
       },
+      memory: {
+        enableManagedAutoMemory: false,
+        enableManagedAutoDream: false,
+      },
       mcpServers: {
         code_ux: {
           httpUrl: "http://host.docker.internal:4445/mcp",
@@ -906,7 +910,7 @@ describe("ProviderRunner", () => {
 
     expect(dockerRunner.readWorkspaceFile).toHaveBeenCalledWith(
       "docker-volume://workspace-1",
-      "/workspace/.code-ux-home/.claude/projects/-workspace/native-123.jsonl",
+      "/code-ux-runtime-home/.claude/projects/-workspace/native-123.jsonl",
     );
     expect(result.usageTelemetry).toMatchObject({
       inputTokens: 12,
@@ -1037,12 +1041,29 @@ describe("ProviderRunner MCP config generation", () => {
   });
 
   it("writes local qwen config with merged existing settings", async () => {
-    await writeConfig(null, "/tmp/cwd", "qwen-code", JSON.stringify({ enableOpenAILogging: true, customOpt: "abc" }), [
+    vi.mocked(fs.readFile).mockResolvedValueOnce(JSON.stringify({
+      memory: {
+        enableAutoSkill: true,
+      },
+    }) as any);
+    await writeConfig(null, "/tmp/cwd", "qwen-code", JSON.stringify({
+      enableOpenAILogging: true,
+      customOpt: "abc",
+      memory: {
+        enableManagedAutoMemory: false,
+        enableManagedAutoDream: false,
+      },
+    }), [
       { id: "1", name: "tool", transport: "stdio", command: "echo", enabled: true }
     ]);
     const json = JSON.parse(getWrittenContent(".qwen/settings.json")!);
     expect(json.enableOpenAILogging).toBeUndefined();
     expect(json.customOpt).toBe("abc");
+    expect(json.memory).toEqual({
+      enableAutoSkill: true,
+      enableManagedAutoMemory: false,
+      enableManagedAutoDream: false,
+    });
     expect(json.mcpServers.tool).toEqual({ command: "echo" });
   });
 

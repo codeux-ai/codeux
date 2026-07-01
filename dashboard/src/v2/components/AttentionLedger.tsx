@@ -19,6 +19,148 @@ type AttentionLedgerProps = {
     defaultOpen?: boolean;
 };
 
+
+
+const AttentionLedgerRow = memo(({ item, snapshot, onClaimAttentionItem, onResolveAttentionItem, onDismissAttentionItem, pendingActionIds }: { item: any; snapshot: any; onClaimAttentionItem: any; onResolveAttentionItem: any; onDismissAttentionItem: any; pendingActionIds: any }) => {
+    const rowRef = useRef<HTMLDivElement>(null);
+    const isReducedMotion = useReducedMotion();
+    const highlightDuration = useResolvedMotionDuration(parseFloat(INTERACTION_TOKENS.controlFeedback.duration) / 1000);
+    const prevStatusRef = useRef(item.status);
+
+    useLayoutEffect(() => {
+        if (!rowRef.current) return;
+        if (prevStatusRef.current !== item.status) {
+            if (isReducedMotion) {
+                const el = rowRef.current;
+                el.classList.add("bg-status-amber/10", "border-status-amber/20");
+                setTimeout(() => {
+                    if (el) el.classList.remove("bg-status-amber/10", "border-status-amber/20");
+                }, 500);
+            } else {
+                gsap.killTweensOf(rowRef.current);
+                gsap.fromTo(rowRef.current,
+                    { backgroundColor: "rgba(245, 158, 11, 0.15)", borderColor: "rgba(245, 158, 11, 0.3)" },
+                    { backgroundColor: "rgba(0, 0, 0, 0.015)", borderColor: "rgba(0, 0, 0, 0.04)", duration: highlightDuration * 2, ease: "power2.out", overwrite: "auto", clearProps: "backgroundColor,borderColor" }
+                );
+            }
+        }
+        prevStatusRef.current = item.status;
+    }, [item.status, isReducedMotion, highlightDuration]);
+
+    const canClaim = item.status === "open" && (!item.assignedWorkerEndpointId || item.assignedWorkerEndpointId === snapshot.primaryAssignedWorker);
+    const assignedWorkerLabel = item.assignedWorkerEndpointId
+        ? item.assignedWorkerEndpointId === snapshot.primaryAssignedWorker
+            ? "Primary Worker"
+            : snapshot.overflowAssignedWorkers.includes(item.assignedWorkerEndpointId)
+                ? "Overflow Worker"
+                : item.assignedWorkerEndpointId
+        : "Unassigned";
+
+    const claimActionId = `attention-claim:${item.id}`;
+    const resolveActionId = `attention-resolve:${item.id}`;
+    const dismissActionId = `attention-dismiss:${item.id}`;
+
+    return (
+        <div
+            ref={rowRef}
+            className={`rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] bg-black/[0.015] p-3 pl-3 dark:border-white/[0.04] dark:bg-white/[0.015] ${
+                item.status === "open" ? "border-l-status-amber bg-status-amber/[0.02]" :
+                item.status === "claimed" ? "border-l-signal-500 bg-signal-500/[0.02]" :
+                item.status === "resolved" ? "border-l-status-green bg-status-green/[0.02]" :
+                "border-l-slate-400"
+            }`}
+        >
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 pl-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className="min-w-0 max-w-full truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
+                            {item.title}
+                        </span>
+                        <span className={`rounded-md border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${
+                            ATTENTION_SEVERITY_TONE[item.severity] || ATTENTION_SEVERITY_TONE.medium
+                        }`}>
+                            {item.severity}
+                        </span>
+                        <span className="rounded-md border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
+                            {ATTENTION_TYPE_LABELS[item.attentionType] || item.attentionType.replace(/_/g, " ")}
+                        </span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-mono text-slate-400">
+                        <span className={ATTENTION_STATUS_TONE[item.status] || "text-slate-400"}>
+                            {item.status}
+                        </span>
+                        <span className="text-slate-300 dark:text-slate-700">/</span>
+                        <span>{ATTENTION_OWNER_LABELS[item.ownerType] || item.ownerType}</span>
+                        <span className="text-slate-300 dark:text-slate-700">/</span>
+                        <span>{assignedWorkerLabel}</span>
+                        {shortenRuntimeId(item.taskId) && (
+                            <>
+                                <span className="text-slate-300 dark:text-slate-700">/</span>
+                                <span>task {shortenRuntimeId(item.taskId)}</span>
+                            </>
+                        )}
+                        {shortenRuntimeId(item.dispatchId) && (
+                            <>
+                                <span className="text-slate-300 dark:text-slate-700">/</span>
+                                <span>dispatch {shortenRuntimeId(item.dispatchId)}</span>
+                            </>
+                        )}
+                    </div>
+                </div>
+                <div className="shrink-0 text-right text-[10px] font-mono text-slate-400">
+                    {formatTime(item.updatedAt)}
+                </div>
+            </div>
+
+            <div
+                className={`mt-2 line-clamp-2 text-[11px] leading-relaxed text-slate-500 prose-p:my-0 dark:text-slate-400 ${MARKDOWN_PROSE_CLASS}`}
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(item.summaryMarkdown || "No summary provided.") }}
+            />
+
+            <div className="mt-3 flex flex-wrap gap-2 border-t border-black/[0.04] pt-2 dark:border-white/[0.04]">
+                {canClaim && snapshot.projectId && (
+                    <button
+                        type="button"
+                        onClick={() => getPendingActionState(pendingActionIds, claimActionId) === "idle" && onClaimAttentionItem(snapshot.projectId, item.id)}
+                        {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, claimActionId) === "pending", false)}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/15 aria-disabled:opacity-50 dark:text-signal-400"
+                        aria-label={"Claim attention item: " + item.title}
+                    >
+                        <Bot className={`h-3 w-3 ${getPendingActionState(pendingActionIds, claimActionId) === "pending" ? "motion-safe:animate-pulse" : ""}`} strokeWidth={2} />
+                        {getPendingActionState(pendingActionIds, claimActionId) === "pending" ? "Claiming" : "Claim"}
+                        {getPendingActionState(pendingActionIds, claimActionId) === "pending" && <span className="sr-only">Claiming...</span>}
+                    </button>
+                )}
+                {snapshot.projectId && (
+                    <button
+                        type="button"
+                        onClick={() => getPendingActionState(pendingActionIds, resolveActionId) === "idle" && onResolveAttentionItem(snapshot.projectId, item.id)}
+                        {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, resolveActionId) === "pending", false)}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-status-green/20 bg-status-green/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-green transition-colors hover:bg-status-green/15 aria-disabled:opacity-50"
+                        aria-label={"Resolve attention item: " + item.title}
+                    >
+                        <CheckCircle2 className={`h-3 w-3 ${getPendingActionState(pendingActionIds, resolveActionId) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} />
+                        {getPendingActionState(pendingActionIds, resolveActionId) === "pending" ? "Resolving" : "Resolve"}
+                        {getPendingActionState(pendingActionIds, resolveActionId) === "pending" && <span className="sr-only">Resolving...</span>}
+                    </button>
+                )}
+                {snapshot.projectId && (
+                    <button
+                        type="button"
+                        onClick={() => getPendingActionState(pendingActionIds, dismissActionId) === "idle" && onDismissAttentionItem(snapshot.projectId, item.id)}
+                        {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, dismissActionId) === "pending", false)}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:bg-black/[0.035] aria-disabled:opacity-50 dark:border-white/[0.06] dark:text-slate-400 dark:hover:bg-white/[0.04]"
+                        aria-label={"Dismiss attention item: " + item.title}
+                    >
+                        <XCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, dismissActionId) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} />
+                        {getPendingActionState(pendingActionIds, dismissActionId) === "pending" ? "Dismissing" : "Dismiss"}
+                        {getPendingActionState(pendingActionIds, dismissActionId) === "pending" && <span className="sr-only">Dismissing...</span>}
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+});
 export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
     collapsible = false,
     defaultOpen = true,
@@ -118,6 +260,28 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
         </>
     );
 
+    const contentRef = useRef<HTMLDivElement>(null);
+    const isReducedMotion = useReducedMotion();
+    const enterDuration = useResolvedMotionDuration(parseFloat(INTERACTION_TOKENS.enterExit.duration) / 1000);
+
+    useLayoutEffect(() => {
+        if (!contentRef.current || !collapsible) return;
+        if (isReducedMotion) {
+            gsap.set(contentRef.current, { height: open ? "auto" : 0, overflow: "hidden" });
+        } else {
+            gsap.killTweensOf(contentRef.current);
+            gsap.to(contentRef.current, {
+                height: open ? "auto" : 0,
+                duration: enterDuration,
+                ease: INTERACTION_TOKENS.enterExit.ease,
+                overwrite: "auto",
+                onComplete: () => {
+                    if (open && contentRef.current) gsap.set(contentRef.current, { height: "auto" });
+                }
+            });
+        }
+    }, [open, isReducedMotion, enterDuration, collapsible]);
+
     return (
         <div className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800">
 
@@ -140,7 +304,7 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
             )}
 
             <div className={`${collapsible ? `collapsible-section ${open ? "open" : ""}` : ""}`}>
-                <div id={contentId} className={`${collapsible ? "collapsible-content" : ""}`}>
+                <div id={contentId} ref={contentRef} className={`${collapsible ? "collapsible-content overflow-hidden" : ""}`}>
                     <div className="relative z-10 px-5 pb-5 pt-0">
                         {attentionItems.length === 0 ? (
                             <div className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 dark:border-white/[0.04] dark:bg-white/[0.015]">

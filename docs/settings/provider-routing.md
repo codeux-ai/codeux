@@ -174,3 +174,8 @@ Dashboard route and model controls share provider display metadata from the sett
 
 File:
 - `dashboard/src/v2/SettingsPage.tsx`
+
+
+## Provider Override Settings Boundary
+
+Code UX enforces a single shared typed mapping boundary, `buildProviderSettingsOverride` in `src/services/provider-settings-override.ts`, for converting resolved dashboard provider settings and models into the isolated `providerSettingsOverride` payload needed for CLI execution and QA review dispatches. This shared boundary keeps contract drift out of the duplicated dispatch call sites while maintaining support for auth path overrides, Qwen auth mode sub-fields, OpenCode custom provider logic, and base provider parameters like model or API keys.
