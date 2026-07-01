@@ -114,9 +114,9 @@ describe("SprintPreviewService startup cleanup", () => {
     expect(updatedSession?.containerName).toBeNull();
     await expect(fs.access(legacyPreviewPath)).rejects.toThrow();
 
-    expect(runCommandStrict).toHaveBeenCalledWith("docker", ["rm", "-f", "container-1"], process.cwd());
-    expect(runCommandStrict).toHaveBeenCalledWith("docker", ["rm", "-f", "container-2"], process.cwd());
-    expect(runCommandStrict).toHaveBeenCalledWith("docker", ["rm", "-f", "helper-1"], process.cwd());
+    expect(runCommandStrict).toHaveBeenCalledWith("docker", ["rm", "-f", "-v", "container-1"], process.cwd());
+    expect(runCommandStrict).toHaveBeenCalledWith("docker", ["rm", "-f", "-v", "container-2"], process.cwd());
+    expect(runCommandStrict).toHaveBeenCalledWith("docker", ["rm", "-f", "-v", "helper-1"], process.cwd());
     expect(runCommandStrict).toHaveBeenCalledWith(
       "git",
       ["worktree", "remove", "--force", legacyPreviewPath],

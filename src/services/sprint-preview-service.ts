@@ -234,6 +234,7 @@ export class SprintPreviewService {
 
         const userSpec = await this.resolveDockerUserSpec(workspacePath);
         const volumeName = `code-ux-preview-volume-${sprintId}`;
+        await this.ensureSprintVolume(volumeName, projectId, sprintId, session.id, project.baseDir);
         if (userSpec) {
           await runCommandStrict("docker", [
             "run",
@@ -315,10 +316,23 @@ export class SprintPreviewService {
   /**
    * Removes the per-sprint preview build-cache volume. A preview volume must live exactly as long
    * as its session row; every site that deletes a session row must also call this, otherwise the
-   * volume is orphaned forever (it carries no docker label, so it cannot be label-pruned later).
+   * volume is orphaned until the next prefix-based startup prune.
    */
   private async removeSprintVolume(sprintId: string): Promise<void> {
     await runCommandStrict("docker", ["volume", "rm", "-f", `code-ux-preview-volume-${sprintId}`], process.cwd()).catch(() => undefined);
+  }
+
+  private async ensureSprintVolume(volumeName: string, projectId: string, sprintId: string, sessionId: string, cwd: string): Promise<void> {
+    await runCommandStrict("docker", [
+      "volume",
+      "create",
+      "--label", "code-ux.preview-volume=true",
+      "--label", "code-ux.managed=true",
+      "--label", `code-ux.project-id=${projectId}`,
+      "--label", `code-ux.sprint-id=${sprintId}`,
+      "--label", `code-ux.session-id=${sessionId}`,
+      volumeName,
+    ], cwd);
   }
 
   /**
@@ -349,7 +363,7 @@ export class SprintPreviewService {
   async cleanupStaleContainersOnStartup(): Promise<void> {
     const containerIds = await this.listPreviewContainerIds();
     for (const containerId of containerIds) {
-      await runCommandStrict("docker", ["rm", "-f", containerId], process.cwd()).catch(() => undefined);
+      await runCommandStrict("docker", ["rm", "-f", "-v", containerId], process.cwd()).catch(() => undefined);
     }
     await this.cleanupOrphanedSetupContainers(process.cwd());
 

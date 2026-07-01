@@ -279,7 +279,7 @@ describe("SprintPreviewService unit tests", () => {
       expect(result.status).toBe("stopped");
       expect(runCommandStrict).toHaveBeenCalledWith(
         "docker",
-        ["rm", "-f", expect.stringContaining("code-ux-preview")],
+        ["rm", "-f", "-v", expect.stringContaining("code-ux-preview")],
         expect.any(String),
       );
     });
@@ -382,6 +382,19 @@ describe("SprintPreviewService unit tests", () => {
       const service = new SprintPreviewService(deps as any);
       await service.startSession("proj-1", "sprint-1");
 
+      expect(vi.mocked(runCommandStrict)).toHaveBeenCalledWith(
+        "docker",
+        expect.arrayContaining([
+          "volume",
+          "create",
+          "--label",
+          "code-ux.preview-volume=true",
+          "--label",
+          "code-ux.managed=true",
+          "code-ux-preview-volume-sprint-1",
+        ]),
+        "/repo",
+      );
       expect(vi.mocked(runCommandStrict).mock.calls.some((call) => call[0] === "docker" && call[1][0] === "cp" && call[1][2].endsWith(":/tmp/workspace.tar"))).toBe(true);
       expect(vi.mocked(runCommandStrict).mock.calls.some((call) => call[0] === "docker" && call[1][0] === "cp" && call[1][2].endsWith(":/tmp/preview-start.sh"))).toBe(true);
       expect(vi.mocked(runCommandStrict).mock.calls.some((call) => call[0] === "docker" && call[1][0] === "start")).toBe(true);
@@ -1495,7 +1508,7 @@ describe("SprintPreviewService unit tests", () => {
       const service = new SprintPreviewService(deps as any);
       await (service as any).cleanupOrphanedSetupContainers("/cwd");
 
-      expect(runCommandStrict).toHaveBeenCalledWith("docker", ["rm", "-f", "orphan-1"], "/cwd");
+      expect(runCommandStrict).toHaveBeenCalledWith("docker", ["rm", "-f", "-v", "orphan-1"], "/cwd");
     });
 
     it("skips containers with labels", async () => {
@@ -1520,7 +1533,7 @@ describe("SprintPreviewService unit tests", () => {
       // Should NOT have called rm for the labeled container
       expect(runCommandStrict).not.toHaveBeenCalledWith(
         "docker",
-        ["rm", "-f", "labeled-1"],
+        ["rm", "-f", "-v", "labeled-1"],
         "/cwd",
       );
     });

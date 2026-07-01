@@ -104,7 +104,7 @@ export class DockerAssetPruneService {
     const pruned: string[] = [];
 
     for (const containerId of containerIds) {
-      const removed = await this.runDocker(["rm", "-f", containerId]);
+      const removed = await this.runDocker(["rm", "-f", "-v", containerId]);
       if (removed?.ok) {
         pruned.push(containerId);
       }
@@ -128,7 +128,7 @@ export class DockerAssetPruneService {
     const pruned: string[] = [];
 
     for (const containerId of containerIds) {
-      const removed = await this.runDocker(["rm", "-f", containerId]);
+      const removed = await this.runDocker(["rm", "-f", "-v", containerId]);
       if (removed?.ok) {
         pruned.push(containerId);
       }

@@ -135,6 +135,7 @@ export class SprintFileBrowserService {
 
         const volumeName = `code-ux-file-browser-volume-${sprintId}`;
         await runCommandStrict("docker", ["volume", "rm", "-f", volumeName], project.baseDir).catch(() => undefined);
+        await this.ensureSprintVolume(volumeName, projectId, sprintId, session.id, project.baseDir);
 
         const archivePath = `${workspacePath}.tar`;
         const dockerArgs = [
@@ -371,10 +372,23 @@ export class SprintFileBrowserService {
   /**
    * Removes the per-sprint file-browser volume. The volume must live exactly as long as its session
    * row; every site that deletes a session row must also call this, otherwise the volume is orphaned
-   * forever (it carries no docker label, so it cannot be label-pruned later).
+   * until the next prefix-based startup prune.
    */
   private async removeSprintVolume(sprintId: string): Promise<void> {
     await runCommandStrict("docker", ["volume", "rm", "-f", `code-ux-file-browser-volume-${sprintId}`], process.cwd()).catch(() => undefined);
+  }
+
+  private async ensureSprintVolume(volumeName: string, projectId: string, sprintId: string, sessionId: string, cwd: string): Promise<void> {
+    await runCommandStrict("docker", [
+      "volume",
+      "create",
+      "--label", "code-ux.file-browser-volume=true",
+      "--label", "code-ux.managed=true",
+      "--label", `code-ux.project-id=${projectId}`,
+      "--label", `code-ux.sprint-id=${sprintId}`,
+      "--label", `code-ux.session-id=${sessionId}`,
+      volumeName,
+    ], cwd);
   }
 
   /**
@@ -404,7 +418,7 @@ export class SprintFileBrowserService {
   async cleanupStaleContainersOnStartup(): Promise<void> {
     const containerIds = (await this.listFileBrowserContainers(process.cwd())).map((c) => c.id);
     for (const containerId of containerIds) {
-      await runCommandStrict("docker", ["rm", "-f", containerId], process.cwd()).catch(() => undefined);
+      await runCommandStrict("docker", ["rm", "-f", "-v", containerId], process.cwd()).catch(() => undefined);
     }
 
     const sessions = this.deps.sprintFileBrowserRepository.listSessions();

@@ -90,8 +90,8 @@ describe("DockerAssetPruneService", () => {
     const result = await new DockerAssetPruneService(sessionTracking).cleanupOnStartup();
 
     expect(result.prunedLoginContainers).toEqual(["container-id-1", "container-id-2"]);
-    expect(runCommandStrict).toHaveBeenCalledWith("docker", ["rm", "-f", "container-id-1"], expect.any(String));
-    expect(runCommandStrict).toHaveBeenCalledWith("docker", ["rm", "-f", "container-id-2"], expect.any(String));
+    expect(runCommandStrict).toHaveBeenCalledWith("docker", ["rm", "-f", "-v", "container-id-1"], expect.any(String));
+    expect(runCommandStrict).toHaveBeenCalledWith("docker", ["rm", "-f", "-v", "container-id-2"], expect.any(String));
   });
 
   it("prunes temporary credentials directories on startup", async () => {

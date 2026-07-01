@@ -142,6 +142,7 @@ Current preview controls include:
 
 Startup hygiene:
 - Docker session lifecycle management (such as `docker ps` parsing, lock acquisition for atomic container operations, container removal, and name sanitization) has been extracted to `DockerSessionLifecycle` in `src/services/docker-session-lifecycle.ts` so both preview and file-browser share identical mechanics without diverging.
+- preview and file-browser runtime volumes are created explicitly with deterministic `code-ux-preview-volume-<sprintId>` / `code-ux-file-browser-volume-<sprintId>` names and Code UX labels before any container mount, so Docker does not auto-create unlabeled named volumes for these sessions
 - Code UX now removes any existing `code-ux.preview=true` containers on server startup before the preview reconciliation loop begins
 - Code UX also removes orphaned unlabeled setup-helper containers that were created by older inline setup-image preview flows
 - persisted preview sessions are reset back to `stopped` during that startup cleanup so stale containers do not survive process restarts
