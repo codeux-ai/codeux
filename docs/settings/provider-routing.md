@@ -176,6 +176,10 @@ File:
 - `dashboard/src/v2/SettingsPage.tsx`
 
 
+## Provider Runtime Config Boundary
+
+Code UX extracts provider runtime config and MCP config assembly from `ProviderRunner` into focused typed builder modules, such as `src/infrastructure/providers/cli/provider-runtime-config.ts`. This isolates the JSON/TOML generation logic for providers like Qwen, OpenCode, and Antigravity, while keeping process execution and mount creation in the runner.
+
 ## Provider Override Settings Boundary
 
 Code UX enforces a single shared typed mapping boundary, `buildProviderSettingsOverride` in `src/services/provider-settings-override.ts`, for converting resolved dashboard provider settings and models into the isolated `providerSettingsOverride` payload needed for CLI execution and QA review dispatches. This shared boundary keeps contract drift out of the duplicated dispatch call sites while maintaining support for auth path overrides, Qwen auth mode sub-fields, OpenCode custom provider logic, and base provider parameters like model or API keys.
