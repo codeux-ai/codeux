@@ -625,5 +625,8 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
       "Each bullet should be a self-contained statement (1-2 sentences) that would be useful context for a future developer or AI working on this project.",
     ].join("\n"),
   },
+  modelPricing: {
+    overrides: {},
+  },
 };
 ;

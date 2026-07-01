@@ -84,6 +84,7 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
     ...DEFAULT_DASHBOARD_SETTINGS.memory,
     externalEmbedding: { ...DEFAULT_DASHBOARD_SETTINGS.memory.externalEmbedding },
   },
+  modelPricing: { overrides: { ...DEFAULT_DASHBOARD_SETTINGS.modelPricing.overrides } },
 });
 
 export const applyExternalSettingsHints = (

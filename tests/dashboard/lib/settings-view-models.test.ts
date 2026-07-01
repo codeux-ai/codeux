@@ -513,6 +513,7 @@ describe("settings cloning helpers", () => {
       defaults: createMockProjectSettings(),
       mcpTools: [{ serverName: "s1", toolName: "t1", enabled: true }],
       customMcpServers: [],
+      modelPricing: { overrides: {} },
     };
 
     const clone = cloneSystemSettings(original);

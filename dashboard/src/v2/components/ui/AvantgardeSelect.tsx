@@ -24,6 +24,10 @@ interface AvantgardeSelectProps {
   variant?: "default" | "compact" | "card";
   className?: string;
   searchable?: boolean;
+  /** When searchable, offers a synthetic "Use "<typed text>"" option if nothing matches, committing the raw typed value via onChange. */
+  allowCustomValue?: boolean;
+  /** Caps how many matching options are rendered (after filtering), so a large option set never dumps thousands of rows into the DOM. Search still matches against the full list. */
+  maxVisibleOptions?: number;
   invalid?: boolean;
   "aria-label"?: string;
   "aria-labelledby"?: string;
@@ -82,6 +86,8 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
   variant = "default",
   className = "",
   searchable = false,
+  allowCustomValue = false,
+  maxVisibleOptions,
   invalid = false,
   "aria-label": ariaLabel,
   "aria-labelledby": ariaLabelledby,
@@ -98,6 +104,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listboxRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [position, setPosition] = useState<DropdownPosition | null>(null);
   const reducedMotion = useReducedMotion();
   const tokens = useInteractionTokens();
@@ -231,11 +238,20 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
   }, [open, value, options]);
 
 
+  // Focus once per open (not on every reposition from scroll/resize, which would otherwise
+  // steal focus back from the search input mid-typing). Searchable selects focus the search
+  // input directly so typing can start immediately; non-searchable ones focus the listbox for
+  // keyboard nav.
   useEffect(() => {
-    if (open && listboxRef.current) {
+    if (!open || !isRendered) {
+      return;
+    }
+    if (searchable) {
+      focusWithoutScroll(searchInputRef.current);
+    } else {
       focusWithoutScroll(listboxRef.current);
     }
-  }, [open, position]);
+  }, [open, isRendered, searchable]);
 
 
   // Click outside
@@ -256,10 +272,21 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
 
 
   const filteredOptions = useMemo(() => {
-    if (!searchable || !filter.trim()) return options;
-    const lowerFilter = filter.toLowerCase();
-    return options.filter(o => o.label.toLowerCase().includes(lowerFilter));
-  }, [options, searchable, filter]);
+    const cap = (list: SelectOption[]) => (
+      maxVisibleOptions !== undefined && list.length > maxVisibleOptions
+        ? list.slice(0, maxVisibleOptions)
+        : list
+    );
+
+    if (!searchable || !filter.trim()) return cap(options);
+    const trimmed = filter.trim();
+    const lowerFilter = trimmed.toLowerCase();
+    const matches = cap(options.filter(o => o.label.toLowerCase().includes(lowerFilter)));
+    if (!allowCustomValue) return matches;
+    const hasExactMatch = options.some(o => o.value.toLowerCase() === lowerFilter || o.label.toLowerCase() === lowerFilter);
+    if (hasExactMatch) return matches;
+    return [...matches, { value: trimmed, label: `Use "${trimmed}"` }];
+  }, [options, searchable, allowCustomValue, filter, maxVisibleOptions]);
 
   const onKeyDown = (e: KeyboardEvent) => {
     if (!open) return;
@@ -380,7 +407,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
                   }}
                   onKeyDown={onKeyDown as any}
                   className="w-full px-3 py-1.5 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-signal-500/30 text-slate-700 dark:text-slate-200"
-                  ref={(el) => { if (el && open) focusWithoutScroll(el); }}
+                  ref={searchInputRef}
                 />
               </div>
             )}

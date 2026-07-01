@@ -3,6 +3,7 @@ import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute, syncRoute } from "./route-utils.js";
 import type { SystemSettings } from "../contracts/settings-scope-types.js";
 import { registerUserOnboardingRoutes } from "./routes/user/onboarding.js";
+import { getModelCatalog, getModelCatalogProviders } from "../domain/model-catalog/model-catalog-loader.js";
 
 // Note: liveActivityCacheMs is needed but excluded from DashboardDependencies,
 // so we pass it explicitly.
@@ -47,6 +48,14 @@ export function registerSettingsRoutes(router: Express, deps: DashboardDependenc
 
   router.get("/api/settings/import-sources", syncRoute((req, res) => {
     res.json(deps.getExternalSettingsHints());
+  }));
+
+  router.get("/api/model-catalog", syncRoute((req, res) => {
+    res.json(getModelCatalog());
+  }));
+
+  router.get("/api/model-catalog/providers", syncRoute((req, res) => {
+    res.json(getModelCatalogProviders());
   }));
 
   router.get("/api/onboarding/readiness", asyncRoute(async (req, res) => {

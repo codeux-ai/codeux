@@ -216,6 +216,7 @@ export const cloneSystemSettings = (settings: SystemSettings): SystemSettings =>
   defaults: cloneProjectSettings(settings.defaults),
   mcpTools: cloneMcpTools(settings.mcpTools),
   customMcpServers: cloneCustomMcpServers(settings.customMcpServers),
+  modelPricing: { overrides: { ...settings.modelPricing?.overrides } },
 });
 
 export const applyEffectiveProjectSettings = (effectiveProject: EffectiveSettingsResponse): { settings: ProjectSettings, sources: Record<string, SettingsValueSource> } => {

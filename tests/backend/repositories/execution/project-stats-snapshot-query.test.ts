@@ -197,7 +197,7 @@ describe("queryProjectStatsSnapshot", () => {
       getTaskMetadata: vi.fn().mockReturnValue(new Map()),
       getSprintMetadata: vi.fn().mockReturnValue(new Map()),
       updateLastActivity: vi.fn(),
-      getProviderPricing: vi.fn().mockReturnValue({ inputTokens: 5, outputTokens: 15, cachedInputTokens: 2.5 }),
+      getModelPricing: vi.fn().mockReturnValue({ inputTokens: 5, outputTokens: 15, cachedInputTokens: 2.5 }),
     };
 
     const snapshot = queryProjectStatsSnapshot(dbMock as any, "proj-1", "7d", depsMock);
@@ -273,7 +273,7 @@ describe("queryProjectStatsSnapshot", () => {
       getTaskMetadata: vi.fn().mockReturnValue(new Map()),
       getSprintMetadata: vi.fn().mockReturnValue(new Map()),
       updateLastActivity: vi.fn(),
-      getProviderPricing: vi.fn().mockReturnValue({}),
+      getModelPricing: vi.fn().mockReturnValue({}),
       maxDurationSamples: 10000,
     };
 
@@ -316,7 +316,7 @@ describe("queryProjectStatsSnapshot", () => {
       getTaskMetadata: vi.fn().mockReturnValue(new Map()),
       getSprintMetadata: vi.fn().mockReturnValue(new Map()),
       updateLastActivity: vi.fn(),
-      getProviderPricing: vi.fn().mockReturnValue({}),
+      getModelPricing: vi.fn().mockReturnValue({}),
       maxDurationSamples: 10000,
     };
 

@@ -115,7 +115,7 @@ export function queryProjectStatsSnapshot(
   for (const row of mainAggs) {
     const u = mapAggregatedUsage(row);
     if (row.provider) {
-      const pricing = deps.getProviderPricing?.(row.provider, row.model);
+      const pricing = deps.getModelPricing?.(row.provider, row.model);
       if (pricing) {
         u.inputCostUsd = (u.inputTokens / 1_000_000) * (pricing.inputTokens || 0);
         u.outputCostUsd = (u.outputTokens / 1_000_000) * (pricing.outputTokens || 0);

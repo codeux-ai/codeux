@@ -82,7 +82,8 @@ describe("onboarding-provider-settings", () => {
         memory: { enabled: true, embeddingModel: null, externalEmbedding: { baseUrl: "", apiKey: "", model: "", dimensions: null }, autoCaptureSprint: true, autoCaptureAgent: true, autoPromote: false, promotionThreshold: 5, maxSprintMemories: 10, maxProjectMemories: 20, mapMaxEdgesPerNode: 5, workerLearningsInstruction: "" }
       },
       mcpTools: [],
-      customMcpServers: []
+      customMcpServers: [],
+      modelPricing: { overrides: {} },
     } as unknown as SystemSettings;
     const cloned = cloneSettings(settings);
     expect(cloned).toEqual(settings);
