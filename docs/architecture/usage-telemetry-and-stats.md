@@ -269,4 +269,4 @@ Because the canonical source is per invocation, additional reporting surfaces ca
 
 Live provider telemetry polling is extracted into `ProviderTelemetryWatcher`. This helper is responsible for the periodic read of provider log artifacts during an active session (e.g. while `provider-runner` waits for the CLI to complete). It handles the polling loop, background error swallowing, and temporary database cleanup without affecting the core completion result. Note that telemetry emitted by `ProviderTelemetryWatcher` is best-effort for live dashboarding; the final usage data collected by `ProviderRunner` after process exit remains authoritative.
 
-Client-side chart state persistence (such as enabled chart series) is scoped per project id to prevent visual regressions when switching between projects.
+Client-side chart state persistence (such as enabled chart series) is sanitized and reconciled client-side and is scoped per project id to prevent visual regressions when switching between projects.
