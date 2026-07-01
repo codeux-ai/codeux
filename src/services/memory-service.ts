@@ -273,31 +273,37 @@ export class MemoryService {
     const dimension = queryEmbedding.length;
 
     // Load candidate embeddings
+    const MAX_CANDIDATES = 10000;
     const candidates = this.memoryRepository.loadEmbeddingsForScope(
       query.projectId,
       modelId,
       query.scope,
       query.sprintId,
       query.agentPresetId,
+      MAX_CANDIDATES,
     );
 
     // Compute similarities
-    const scored: Array<{ id: string; similarity: number }> = [];
+    const limit = query.limit ?? 20;
+    const topK: Array<{ id: string; similarity: number }> = [];
     const minSim = query.minSimilarity ?? 0.3;
 
     for (const candidate of candidates) {
       if (candidate.embeddingDimension !== dimension) continue;
       const vec = bufferToFloat32(candidate.embeddingBlob, candidate.embeddingDimension);
       const sim = cosineSimilarity(queryEmbedding, vec);
+
       if (sim >= minSim) {
-        scored.push({ id: candidate.id, similarity: sim });
+        if (topK.length < limit) {
+          topK.push({ id: candidate.id, similarity: sim });
+          topK.sort((a, b) => b.similarity - a.similarity || a.id.localeCompare(b.id));
+        } else if (sim > topK[topK.length - 1]!.similarity || (sim === topK[topK.length - 1]!.similarity && candidate.id.localeCompare(topK[topK.length - 1]!.id) < 0)) {
+          topK.pop();
+          topK.push({ id: candidate.id, similarity: sim });
+          topK.sort((a, b) => b.similarity - a.similarity || a.id.localeCompare(b.id));
+        }
       }
     }
-
-    // Sort by similarity descending
-    scored.sort((a, b) => b.similarity - a.similarity);
-    const limit = query.limit ?? 20;
-    const topK = scored.slice(0, limit);
 
     // Fetch full records in batch
     const topIds = topK.map((item) => item.id);

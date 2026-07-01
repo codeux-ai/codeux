@@ -29,14 +29,14 @@ Before computing similarity scores, candidate memories are loaded from the repos
 - **Sprint ID**: Optionally filters to knowledge explicitly bound to a given sprint.
 - **Agent Preset ID**: Optionally filters to knowledge specific to an agent persona.
 - **Dimension Matching**: Ensures only embeddings created with the currently loaded Embedding Model's dimension size are selected for comparison. This prevents errors when the default embedding model is swapped.
+- **Maximum Candidates**: To protect local runtimes from unbounded scans, a defensive maximum limit of 10,000 candidate records is applied during loading.
 
 ### 2. Ranking and Scoring
 
 Once candidates are loaded, the following steps are executed:
 
 1. **Cosine Similarity**: The cosine similarity is computed between the query's vector and each candidate memory's vector. Candidates that fall below the caller-specified `minSimilarity` threshold (default is `0.3`) are pruned.
-2. **Descending Sort**: Qualifying candidates are sorted in descending order by their similarity score so the most relevant contexts bubble to the top.
-3. **Limit Output**: Results are strictly limited to the caller's requested `limit` bound (default `20`).
+2. **Bounded Top-K Selection**: Instead of sorting all qualifying candidates at the end, a bounded selection of size `limit` (default `20`) is maintained and incrementally sorted in descending order. When candidates have equal similarity scores, they are ordered deterministically by ID.
 
 ### 3. Hydration
 
