@@ -36,8 +36,6 @@ describe("ChatPageShell", () => {
         selectedProject={null}
         chatMode="threads"
         onSetChatMode={vi.fn()}
-        onRefresh={vi.fn()}
-        manualRefreshing={false}
         onCreateThread={vi.fn()}
         pendingDashboardMessages={0}
         error={null}
@@ -66,8 +64,6 @@ describe("ChatPageShell", () => {
         selectedProject={mockProject}
         chatMode="threads"
         onSetChatMode={vi.fn()}
-        onRefresh={vi.fn()}
-        manualRefreshing={false}
         onCreateThread={vi.fn()}
         pendingDashboardMessages={2}
         error={null}
@@ -86,10 +82,11 @@ describe("ChatPageShell", () => {
     expect(getByTestId("thread-detail")).toBeInTheDocument();
     expect(getByText("2 pending")).toBeInTheDocument();
 
-    // Verify refresh button text
-    const refreshButton = container.querySelector('button[aria-busy="false"]');
-    expect(refreshButton).not.toBeNull();
-    expect(refreshButton?.textContent).toContain("Refresh");
+    // The chat header no longer exposes a manual refresh control.
+    const refreshButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Refresh")
+    );
+    expect(refreshButton).toBeUndefined();
 
     // Verify mode tab ARIA state
     expect(container.querySelector('button[id="tab-threads"]')).toHaveAttribute("aria-selected", "true");
@@ -104,8 +101,6 @@ describe("ChatPageShell", () => {
         selectedProject={mockProject}
         chatMode="invocations"
         onSetChatMode={vi.fn()}
-        onRefresh={vi.fn()}
-        manualRefreshing={false}
         onCreateThread={vi.fn()}
         pendingDashboardMessages={0}
         error={null}
@@ -139,8 +134,6 @@ describe("ChatPageShell", () => {
         selectedProject={mockProject}
         chatMode="threads"
         onSetChatMode={vi.fn()}
-        onRefresh={vi.fn()}
-        manualRefreshing={false}
         onCreateThread={vi.fn()}
         pendingDashboardMessages={0}
         error="Network failure"

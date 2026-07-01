@@ -1,7 +1,7 @@
 import type { FunctionComponent, ComponentChildren } from "preact";
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { MessageCircle, RefreshCw, Plus } from "lucide-preact";
+import { MessageCircle, Plus } from "lucide-preact";
 import type { Source } from "../../types.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
@@ -13,8 +13,6 @@ export const ChatPageShell: FunctionComponent<{
   selectedProject: Source | null;
   chatMode: "threads" | "invocations";
   onSetChatMode: (mode: "threads" | "invocations") => void;
-  onRefresh: () => void;
-  manualRefreshing: boolean;
   onCreateThread: () => void;
   pendingDashboardMessages: number;
   error: string | null;
@@ -24,8 +22,6 @@ export const ChatPageShell: FunctionComponent<{
   selectedProject,
   chatMode,
   onSetChatMode,
-  onRefresh,
-  manualRefreshing,
   onCreateThread,
   pendingDashboardMessages,
   error,
@@ -166,21 +162,6 @@ export const ChatPageShell: FunctionComponent<{
           </span>
           <button
             type="button"
-            onClick={onRefresh}
-            disabled={manualRefreshing}
-            aria-busy={manualRefreshing}
-            style={{
-              transitionProperty: "color, background-color, border-color, text-decoration-color, fill, stroke",
-              transitionDuration: interactionTokens.controlFeedback.duration,
-              transitionTimingFunction: interactionTokens.controlFeedback.ease,
-            }}
-            className="inline-flex min-w-[120px] justify-center items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:text-white"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${manualRefreshing ? "animate-spin" : ""}`} strokeWidth={2.1} />
-            {manualRefreshing ? "Refreshing..." : "Refresh"}
-          </button>
-          <button
-            type="button"
             onClick={onCreateThread}
             disabled={!selectedProject || chatMode !== "threads"}
             style={{
@@ -201,12 +182,12 @@ export const ChatPageShell: FunctionComponent<{
         }
       />
 
-      {(error || manualRefreshing) && (
+      {error && (
         <div className="shrink-0">
           <ActionFeedbackRegion
-            status={error ? "error" : "pending"}
-            autoDismiss={error ? false : undefined}
-            message={error || "Refreshing chat state..."}
+            status="error"
+            autoDismiss={false}
+            message={error}
           />
         </div>
       )}

@@ -557,8 +557,7 @@ Realtime consumers currently include:
 
 Chat-specific behavior:
 
-- The Chat refresh button is now manual-only.
-- Background realtime sync and fallback refreshes no longer drive the refresh button spinner state.
+- The Chat header no longer exposes a manual refresh button; thread and invocation data stay current through realtime sync, route-driven hydration, and bounded fallback polling.
 
 Live view behavior:
 

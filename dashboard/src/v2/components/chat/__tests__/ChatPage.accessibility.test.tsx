@@ -28,7 +28,6 @@ vi.mock('../../../hooks/use-chat-page-data.js', () => ({
     invocationMessages: [],
     input: "",
     setInput: vi.fn(),
-    manualRefreshing: false,
     sending: true,
     error: "Test error",
     selectedProject: { id: "p1", name: "Project 1" },
@@ -59,8 +58,6 @@ describe('ChatPage Accessibility', () => {
         selectedProject={null}
         chatMode="threads"
         onSetChatMode={vi.fn()}
-        onRefresh={vi.fn()}
-        manualRefreshing={false}
         onCreateThread={vi.fn()}
         pendingDashboardMessages={0}
         error={null}
@@ -78,6 +75,7 @@ describe('ChatPage Accessibility', () => {
     expect(tabs[0]).toHaveTextContent('Threads');
     expect(tabs[1]).toHaveAttribute('aria-selected', 'false');
     expect(tabs[1]).toHaveTextContent('Invocations');
+    expect(screen.queryByRole('button', { name: /refresh/i })).not.toBeInTheDocument();
   });
 
   it('labels the chat rail correctly', () => {
@@ -96,8 +94,6 @@ describe('ChatPage Accessibility', () => {
         selectedProject={{ id: "p1", name: "Project 1" } as any}
         chatMode="invocations"
         onSetChatMode={vi.fn()}
-        onRefresh={vi.fn()}
-        manualRefreshing={false}
         onCreateThread={vi.fn()}
         pendingDashboardMessages={0}
         error={null}

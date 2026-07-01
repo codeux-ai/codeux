@@ -67,7 +67,6 @@ export const ChatPage: FunctionComponent = () => {
     invocationMessages,
     input,
     setInput,
-    manualRefreshing,
     deletingThreadId,
     sending,
     compacting,
@@ -83,7 +82,6 @@ export const ChatPage: FunctionComponent = () => {
     connections,
     invocationsLoading,
     invocationMessagesLoading,
-    refreshThreads,
     activateThread,
     activateInvocation,
     handleCompactThread,
@@ -581,8 +579,6 @@ export const ChatPage: FunctionComponent = () => {
         selectedProject={null}
         chatMode={chatMode}
         onSetChatMode={setChatMode}
-        onRefresh={() => void refreshThreads({ manual: true })}
-        manualRefreshing={manualRefreshing}
         onCreateThread={() => void createThreadForCompose()}
         pendingDashboardMessages={pendingDashboardMessages}
         error={error}
@@ -611,8 +607,6 @@ export const ChatPage: FunctionComponent = () => {
       selectedProject={selectedProject}
       chatMode={chatMode}
       onSetChatMode={setChatMode}
-      onRefresh={() => void refreshThreads({ manual: true })}
-      manualRefreshing={manualRefreshing}
       onCreateThread={() => void createThreadForCompose()}
       pendingDashboardMessages={pendingDashboardMessages}
       error={error}
