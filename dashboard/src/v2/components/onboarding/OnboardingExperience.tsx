@@ -36,6 +36,17 @@ import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useOnboardingState } from "../../hooks/useOnboardingState.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 import { OnboardingIntro } from "./OnboardingIntro.js";
+import { useOnboardingStepFlow, type StepId } from "./use-onboarding-step-flow.js";
+import { OnboardingInstallationStep } from "./OnboardingInstallationStep.js";
+import { OnboardingIntroductionStep } from "./OnboardingIntroductionStep.js";
+import { OnboardingProvidersStep } from "./OnboardingProvidersStep.js";
+import { OnboardingProviderSetupStep } from "./OnboardingProviderSetupStep.js";
+import { OnboardingGitStep } from "./OnboardingGitStep.js";
+import { OnboardingJiraStep } from "./OnboardingJiraStep.js";
+import { OnboardingAutomationStep } from "./OnboardingAutomationStep.js";
+import { OnboardingAppearanceStep } from "./OnboardingAppearanceStep.js";
+import { OnboardingDefaultsStep } from "./OnboardingDefaultsStep.js";
+
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { ProviderInstanceCard } from "../settings/ProviderInstanceCard.js";
 import { sanitizeSystemProviderConfig } from "../../lib/provider-runtime-preview.js";
@@ -91,19 +102,7 @@ const DeepOceanBackground = lazy(async () => {
   return { default: mod.DeepOceanBackground as FunctionComponent<{ forceDark?: boolean; className?: string }> };
 });
 
-type StepId = "installation" | "introduction" | "providers" | "provider-setup" | "git" | "jira" | "defaults" | "automation" | "appearance";
 
-const steps: Array<{ id: StepId; label: string; icon: typeof Settings }> = [
-  { id: "installation", label: "Installation", icon: Box },
-  { id: "introduction", label: "Introduction", icon: ShieldCheck },
-  { id: "providers", label: "Select Providers", icon: Cpu },
-  { id: "provider-setup", label: "Providers", icon: Settings },
-  { id: "git", label: "Git", icon: GitBranch },
-  { id: "jira", label: "Jira", icon: ClipboardList },
-  { id: "defaults", label: "Default providers", icon: Layers },
-  { id: "automation", label: "Automation", icon: Sparkles },
-  { id: "appearance", label: "Appearance", icon: Monitor },
-];
 
 const DEFAULT_JIRA_SETTINGS: SystemSettings["integrations"]["jira"] = {
   host: "",
@@ -218,7 +217,7 @@ export const OnboardingExperience: FunctionComponent = () => {
   const sideRef = useRef<HTMLElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const [activeStep, setActiveStep] = useState(0);
+  const { activeStep, setActiveStep, activeStepData: active, goToNextStep, goToPreviousStep, resetSteps, steps } = useOnboardingStepFlow();
   const [readiness, setReadiness] = useState<OnboardingRuntimeReadiness>(defaultReadiness);
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [selectedProviders, setSelectedProviders] = useState<ProviderId[]>([]);
@@ -242,7 +241,7 @@ export const OnboardingExperience: FunctionComponent = () => {
 
   useEffect(() => {
     const handleOpen = () => {
-      setActiveStep(0);
+      resetSteps();
       void resetOnboardingState();
       setOpen(true);
       setIntroPhase("intro");
@@ -348,8 +347,7 @@ export const OnboardingExperience: FunctionComponent = () => {
     return () => ctx.revert();
   }, [activeStep, selectedProviders.length, settings, reducedMotion]);
 
-  const active = steps[activeStep] ?? steps[0]!;
-  const readinessByProvider = useMemo(
+    const readinessByProvider = useMemo(
     () => Object.fromEntries(readiness.providers.map((provider) => [provider.provider, provider])) as Partial<Record<ProviderId, OnboardingProviderCredentialStatus>>,
     [readiness.providers],
   );
@@ -714,7 +712,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                   icon: Box,
                   active: activeStep === 0,
                   complete: activeStep > 0,
-                  onClick: () => setActiveStep(0),
+                  onClick: () => resetSteps(),
                 },
                 {
                   id: "introduction",
@@ -823,646 +821,76 @@ export const OnboardingExperience: FunctionComponent = () => {
             ) : null}
 
             {active.id === "installation" ? (
-              <div className="space-y-5">
-                <div data-onboarding-card className={`relative overflow-hidden rounded-3xl border p-5 shadow-[0_18px_45px_rgba(15,23,42,0.05)] ${clusterReady ? "border-signal-500/20 bg-signal-500/8" : "border-status-amber/25 bg-status-amber/10"}`}>
-                  <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/70 to-transparent" />
-                  <div className="flex items-start gap-4">
-                    <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${clusterReady ? "bg-signal-500/12 text-signal-600" : "bg-status-amber/15 text-status-amber"}`}>
-                      {clusterReady ? <Check className="h-6 w-6" /> : <Info className="h-6 w-6" />}
-                    </div>
-                    <div aria-live="polite">
-                      <div className="text-lg font-black text-slate-900 dark:text-white">{readiness.cluster.label}</div>
-                      <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{readiness.cluster.detail}</div>
-                    </div>
-                  </div>
-                </div>
-                <div className="grid gap-3 md:grid-cols-3">
-                  {readiness.dependencies.map((dependency) => (
-                    <div data-onboarding-card key={dependency.id} className="rounded-2xl border border-black/[0.06] bg-white/75 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.035)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm font-bold text-slate-900 dark:text-white">{dependency.label}</div>
-                        <span className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${dependency.status === "ready" ? "bg-signal-500/10 text-signal-700 dark:text-signal-300" : "bg-status-amber/10 text-status-amber"}`}>
-                          {dependency.status}
-                        </span>
-                      </div>
-                      <div className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{dependency.description}</div>
-                      {dependency.status !== "ready" ? (
-                        <div className="mt-3 space-y-2.5">
-                          <div className="rounded-xl bg-black/[0.04] p-3 text-xs leading-relaxed text-slate-600 dark:bg-white/[0.05] dark:text-slate-300">
-                            {dependency.resolution}
-                          </div>
-                          {(dependency.id === "docker-cli" || dependency.id === "docker-daemon") && (
-                            <div className="flex flex-col gap-2 pt-1">
-                              <a
-                                href={getSafeUrl(getOSInfo(platform).dockerDesktopLink)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-signal-500/20 bg-signal-500/10 py-2 text-center text-xs font-bold uppercase tracking-[0.12em] text-signal-700 hover:bg-signal-500/15 dark:text-signal-200"
-                              >
-                                Docker Desktop for {getOSInfo(platform).osLabel}
-                              </a>
-                              <a
-                                href={getSafeUrl(getOSInfo(platform).dockerDownloadLink)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-black/[0.06] bg-black/[0.03] py-2 text-center text-xs font-bold uppercase tracking-[0.12em] text-slate-600 hover:bg-black/[0.06] dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:bg-white/[0.08]"
-                              >
-                                Docker Download
-                              </a>
-                            </div>
-                          )}
-                          {dependency.id === "git-cli" && (
-                            <div className="flex flex-col gap-2 pt-1">
-                              <a
-                                href={getSafeUrl(getOSInfo(platform).gitLink)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-signal-500/20 bg-signal-500/10 py-2 text-center text-xs font-bold uppercase tracking-[0.12em] text-signal-700 hover:bg-signal-500/15 dark:text-signal-200"
-                              >
-                                Download Git for {getOSInfo(platform).osLabel}
-                              </a>
-                              <div className="rounded-lg bg-black/[0.04] px-2.5 py-1.5 font-mono text-[10px] text-slate-500 dark:bg-white/[0.05] dark:text-slate-400">
-                                {getOSInfo(platform).gitInstruction}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-                <button type="button" onClick={() => void load()} className="inline-flex items-center gap-2 rounded-2xl border border-black/[0.08] bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-200">
-                  <RefreshCw className="h-4 w-4" />
-                  Recheck
-                </button>
-              </div>
+              <OnboardingInstallationStep
+                clusterReady={clusterReady}
+                readiness={readiness}
+                osInfo={getOSInfo(platform)}
+              />
             ) : null}
 
             {active.id === "introduction" ? (
-              <div className="space-y-4">
-                <div data-onboarding-card className="relative overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/80 p-6 shadow-[0_18px_48px_rgba(15,23,42,0.055)] dark:border-white/[0.06] dark:bg-white/[0.045]">
-                  <div aria-hidden className="absolute -right-8 -top-10 font-display text-[7rem] font-black leading-none tracking-tight text-black/[0.025] dark:text-white/[0.025]">UX</div>
-                  <div className="relative z-10 max-w-3xl">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-signal-700 dark:text-signal-200">
-                      <Sparkles className="h-3.5 w-3.5" strokeWidth={2.4} />
-                      Agentic runtime
-                    </div>
-                    <h4 className="mt-4 font-display text-3xl font-black leading-none tracking-tight text-slate-950 dark:text-white">Welcome to Code UX.</h4>
-                    <p className="mt-3 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-300">
-                      Code UX is an advanced containerized agentic workspace for turning projects into guided sprints, executable tasks, live previews, and measurable delivery. It coordinates provider CLIs inside isolated Docker runtimes, keeps credentials inside the intended tools, and gives you one polished control surface for agents, memory, knowledge base, browser sessions, and automation.
-                    </p>
-                    <div className="mt-5 flex flex-wrap gap-2">
-                      {[
-                        [Github, "GitHub", CODEUX_REPO_URL],
-                        [Star, "Star on GitHub", CODEUX_REPO_URL],
-                        [BookOpen, "Documentation", `${CODEUX_REPO_URL}#readme`],
-                      ].map(([Icon, label, href]) => {
-                        const BadgeIcon = Icon as typeof Github;
-                        return (
-                          <a
-                            key={String(label)}
-                            href={getSafeUrl(String(href))}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 rounded-2xl border border-black/[0.06] bg-white/80 px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-slate-600 shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition-all hover:-translate-y-0.5 hover:border-signal-500/25 hover:text-slate-950 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-slate-300 dark:hover:text-white"
-                          >
-                            <BadgeIcon className="h-3.5 w-3.5 text-signal-600 dark:text-signal-300" strokeWidth={2.4} />
-                            {String(label)}
-                          </a>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  {[
-                    ["Container-first execution", "Provider CLIs run inside isolated Docker containers with a mounted workspace snapshot.", ShieldCheck],
-                    ["Credential boundary", "Local credentials are copied only into the intended CLI runtime and are not used as raw application secrets.", ShieldCheck],
-                    ["TOS-compliant workflow", "Authentication stays with each provider's supported CLI flow, so Code UX orchestrates tools instead of impersonating providers.", ShieldCheck],
-                    ["Knowledge Base", "Maintain a persistent technical knowledge base that agents use for deep architectural context.", Library],
-                  ].map(([title, description, Icon]) => {
-                    const CardIcon = Icon as typeof ShieldCheck;
-                    return (
-                      <div data-onboarding-card key={title as string} className="group rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.045)] transition-transform hover:-translate-y-1 dark:border-white/[0.06] dark:bg-white/[0.04]">
-                        <CardIcon className="h-6 w-6 text-signal-600 dark:text-signal-300" />
-                        <div className="mt-4 text-base font-black text-slate-900 dark:text-white">{title as string}</div>
-                        <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{description as string}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div data-onboarding-card className="relative overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/80 p-6 shadow-[0_18px_48px_rgba(15,23,42,0.055)] dark:border-white/[0.06] dark:bg-white/[0.045]">
-                  <div aria-hidden className="absolute -right-8 -top-10 font-display text-[7rem] font-black leading-none tracking-tight text-black/[0.025] dark:text-white/[0.025]">MIT</div>
-                  <div className="relative z-10">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
-                        <ShieldCheck className="h-4 w-4 text-signal-600 dark:text-signal-300" strokeWidth={2.4} />
-                        <div className="text-sm font-black uppercase tracking-[0.16em] text-slate-700 dark:text-slate-200">License</div>
-                      </div>
-                      <a
-                        href={getSafeUrl(`${CODEUX_REPO_URL}/blob/main/LICENSE`)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[10px] font-black uppercase tracking-[0.14em] text-signal-600 hover:text-signal-700 dark:text-signal-300 dark:hover:text-signal-200"
-                      >
-                        View on GitHub
-                      </a>
-                    </div>
-                    <p className="mt-2 text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
-                      Code UX is open source under the MIT License. By continuing you acknowledge the terms below.
-                    </p>
-                    <div className="dashboard-scrollbar mt-4 max-h-52 overflow-y-auto overscroll-contain rounded-[1.25rem] border border-black/[0.06] bg-black/[0.03] p-4 dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">{LICENSE_TEXT}</pre>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <OnboardingIntroductionStep />
             ) : null}
 
             {active.id === "providers" ? (
-              <div className="space-y-4">
-                <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                  <div className="flex items-start gap-3">
-                    <KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-signal-600 dark:text-signal-300" />
-                    <div>
-                      <div className="text-base font-black text-slate-900 dark:text-white">Choose every provider you want available</div>
-                      <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                        You can use local auth-copy, API keys, or both. The next step lets you add multiple named instances for each provider.
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="grid gap-3 md:grid-cols-2">
-                  {PROVIDER_TYPES.map((providerId) => {
-                    const provider = readinessByProvider[providerId];
-                    const selected = selectedProviders.includes(providerId);
-                    const instanceCount = getSystemProvidersByType(settings, providerId).length;
-                    return (
-                      <button
-                        data-onboarding-card
-                        key={providerId}
-                        type="button"
-                        onClick={() => toggleProvider(providerId)}
-                        className={`group relative overflow-hidden rounded-3xl border p-4 text-left shadow-[0_14px_34px_rgba(15,23,42,0.04)] transition-[border-color,background-color,transform,box-shadow] hover:-translate-y-1 ${selected ? "border-signal-500/30 bg-signal-500/10 shadow-[0_18px_46px_rgba(0,224,160,0.08)]" : "border-black/[0.06] bg-white/75 hover:border-black/[0.12] dark:border-white/[0.06] dark:bg-white/[0.04]"}`}
-                      >
-                        <div aria-hidden className={`absolute left-0 top-4 bottom-4 w-1 rounded-r-full transition-opacity ${selected ? "bg-signal-500 opacity-100" : "bg-slate-300 opacity-0 group-hover:opacity-100 dark:bg-slate-600"}`} />
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-3">
-                            <ProviderBrandIcon id={providerId} />
-                            <div>
-                              <div className="font-black text-slate-900 dark:text-white">{providerLabels[providerId]}</div>
-                              <div className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{instanceCount || 1} instance{(instanceCount || 1) === 1 ? "" : "s"}</div>
-                            </div>
-                          </div>
-                          <span className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${provider?.available ? "bg-signal-500/10 text-signal-700 dark:text-signal-300" : selected ? "bg-ember-500/10 text-ember-600 dark:text-ember-400" : "bg-slate-500/10 text-slate-500"}`}>
-                            {providerId === "jules" ? "API key" : provider?.available ? "Detected" : selected ? "Configure" : "Optional"}
-                          </span>
-                        </div>
-                        <div className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{provider?.description || providerDescriptions[providerId]}</div>
-                        <div className="mt-3 font-mono text-[11px] text-slate-400">{provider?.authPath || (providerId === "jules" ? "API key only" : "Auth path configurable")}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+              <OnboardingProvidersStep
+                selectedProviders={selectedProviders}
+                toggleProvider={toggleProvider}
+                readinessByProvider={readinessByProvider}
+                settings={settings}
+              />
             ) : null}
 
             {active.id === "provider-setup" ? (
-              <div className="space-y-4">
-                {selectedProviderTypes.length === 0 ? (
-                  <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/75 p-6 text-sm text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04]">
-                    No providers selected. You can add provider credentials later in Settings.
-                  </div>
-                ) : selectedProviderTypes.map((providerId) => {
-                  const providerEntries = getSystemProvidersByType(settings, providerId);
-                  const readinessStatus = readinessByProvider[providerId];
-                  return (
-                    <div data-onboarding-card key={providerId} className="relative overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/78 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.055)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      <div aria-hidden className="pointer-events-none absolute -right-6 -top-8 font-display text-[7rem] font-black leading-none tracking-tight text-black/[0.025] dark:text-white/[0.025]">
-                        {getProviderWatermark(providerId)}
-                      </div>
-                      <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 border-b border-black/[0.06] pb-4 dark:border-white/[0.06]">
-                        <div className="flex min-w-0 items-start gap-3">
-                          <ProviderBrandIcon id={providerId} />
-                          <div className="min-w-0">
-                            <div className="text-base font-black text-slate-900 dark:text-white">{providerLabels[providerId]}</div>
-                            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                              {readinessStatus?.detectedFiles.length ? `Detected: ${readinessStatus.detectedFiles.join(", ")}` : providerDescriptions[providerId]}
-                            </div>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => addProviderInstance(providerId)}
-                          className="inline-flex items-center gap-2 rounded-2xl border border-signal-500/20 bg-signal-500/10 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-signal-700 hover:bg-signal-500/15 dark:text-signal-200"
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                          Add instance
-                        </button>
-                      </div>
-
-                      <div className="relative z-10 mt-4 space-y-3">
-                        {providerEntries.length === 0 ? (
-                          <div className="rounded-2xl border border-ember-500/20 bg-ember-500/10 p-4 text-sm text-ember-700 dark:text-ember-300">
-                            Add an instance to configure {providerLabels[providerId]} credentials.
-                          </div>
-                        ) : providerEntries.map(([providerConfigId, integrationProvider], index) => {
-                          const projectProvider = settings?.defaults.aiProvider.providers[providerConfigId];
-                          const providerModel = projectProvider?.model
-                            || (integrationProvider.provider === "opencode" ? "anthropic/claude-sonnet-4-5" : "qwen3-coder-plus");
-                          return (
-                            <ProviderInstanceCard
-                              key={providerConfigId}
-                              providerConfigId={providerConfigId}
-                              provider={integrationProvider}
-                              providerModel={providerModel}
-                              dockerExecutionEnabled={dockerExecutionEnabled}
-                              onUpdate={(updates) => configureProviderInstance(providerConfigId, updates)}
-                              onRemove={providerEntries.length > 1 ? () => removeProviderInstance(providerConfigId) : undefined}
-                              enabled={projectProvider?.enabled ?? true}
-                              onToggleEnabled={(value) => configureProjectProvider(providerConfigId, { enabled: value })}
-                              index={index}
-                              total={providerEntries.length}
-                            />
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <OnboardingProviderSetupStep
+                selectedProviderTypes={selectedProviderTypes}
+                settings={settings}
+                readinessByProvider={readinessByProvider}
+                dockerExecutionEnabled={dockerExecutionEnabled}
+                addProviderInstance={addProviderInstance}
+                configureProviderInstance={configureProviderInstance}
+                removeProviderInstance={removeProviderInstance}
+                configureProjectProvider={configureProjectProvider}
+              />
             ) : null}
 
             {active.id === "git" && settings ? (
-              <div className="space-y-4">
-                <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                  <div className="flex items-start gap-3">
-                    <GitBranch className="mt-0.5 h-5 w-5 shrink-0 text-signal-600 dark:text-signal-300" />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-base font-black text-slate-900 dark:text-white">Git mode</div>
-                      <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                        Remote mode keeps pull requests and CI automation available. Local mode stays repo-local for offline or self-managed workflows.
-                      </div>
-                      <div className="mt-4">
-                        <PillChoiceGroup
-                          value={gitMode}
-                          onChange={(value) => updateCliWorkflow({ gitMode: value as ProjectSettings["cliWorkflow"]["gitMode"] })}
-                          options={[
-                            { value: "remote", label: "Remote", hint: "PRs, CI, and remote branch sync stay enabled." },
-                            { value: "local", label: "Local", hint: "Disable remote PR orchestration and stay repo-local." },
-                          ]}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                {gitMode === "local" ? (
-                  <div data-onboarding-card className="flex items-start gap-3 rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                    <Info className="mt-0.5 h-5 w-5 shrink-0 text-amber-500 dark:text-amber-300" />
-                    <div className="text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                      Local mode does not support automatic CI or pull requests. Remote mode is recommended for full feature access.
-                    </div>
-                  </div>
-                ) : null}
-                {gitMode !== "local" ? (
-                  <>
-                    <div data-onboarding-card>
-                      <SectionCard title="GitHub" watermark="GIT" icon={<Github strokeWidth={2.4} />}>
-                        <Row label="GitHub token" description="System token used for GitHub repository, pull request, and CI integration.">
-                          <TextInput
-                            value={settings.integrations.githubToken || ""}
-                            onChange={(value) => updateSettings((current) => ({ ...current, integrations: { ...current.integrations, githubToken: value } }))}
-                            mono
-                          />
-                        </Row>
-                        <Row label="Mount GitHub auth" description="Copy the host `gh` credential directory into Docker.">
-                          <Toggle aria-label="Toggle setting"                             value={settings.defaults.cliWorkflow.containerMountGithubAuth}
-                            onChange={() => updateCliWorkflow({ containerMountGithubAuth: !settings.defaults.cliWorkflow.containerMountGithubAuth })}
-                          />
-                        </Row>
-                        <Row label="GitHub auth path" description="Host path copied into the Docker runtime for GitHub CLI auth." last>
-                          <TextInput
-                            value={settings.defaults.cliWorkflow.containerGithubAuthPath}
-                            onChange={(value) => updateCliWorkflow({ containerGithubAuthPath: value })}
-                            disabled={!settings.defaults.cliWorkflow.containerMountGithubAuth}
-                            mono
-                          />
-                        </Row>
-                      </SectionCard>
-                    </div>
-                    <div data-onboarding-card>
-                      <SectionCard title="GitLab" watermark="GLB" icon={<GitBranch strokeWidth={2.4} />}>
-                        <Row label="GitLab token" description="System token used for GitLab repository, merge request, and CI integration." last>
-                          <TextInput
-                            value={settings.integrations.gitlabToken || ""}
-                            onChange={(value) => updateSettings((current) => ({ ...current, integrations: { ...current.integrations, gitlabToken: value } }))}
-                            mono
-                          />
-                        </Row>
-                      </SectionCard>
-                    </div>
-                  </>
-                ) : null}
-                <div data-onboarding-card>
-                  <SectionCard title="Git identity" watermark="ID" icon={<GitBranch strokeWidth={2.4} />}>
-                    <Row label="Copy local git config" description="Use the host `.gitconfig` in Docker instead of the configured Code UX git identity." last={settings.defaults.cliWorkflow.containerMountGitConfig}>
-                      <Toggle aria-label="Toggle setting"                         value={settings.defaults.cliWorkflow.containerMountGitConfig}
-                        onChange={() => updateCliWorkflow({ containerMountGitConfig: !settings.defaults.cliWorkflow.containerMountGitConfig })}
-                      />
-                    </Row>
-                    {!settings.defaults.cliWorkflow.containerMountGitConfig ? (
-                      <>
-                        <Row label="Git user name" description="Git author name configured inside provider containers.">
-                          <TextInput
-                            value={settings.defaults.cliWorkflow.containerGitUserName}
-                            onChange={(value) => updateCliWorkflow({ containerGitUserName: value })}
-                            placeholder="Code UX"
-                          />
-                        </Row>
-                        <Row label="Git email" description="Git author email configured inside provider containers." last>
-                          <TextInput
-                            value={settings.defaults.cliWorkflow.containerGitUserEmail}
-                            onChange={(value) => updateCliWorkflow({ containerGitUserEmail: value })}
-                            placeholder="agents@codeux.ai"
-                            mono
-                          />
-                        </Row>
-                      </>
-                    ) : null}
-                  </SectionCard>
-                </div>
-              </div>
+              <OnboardingGitStep
+                settings={settings}
+                gitMode={gitMode}
+                updateCliWorkflow={updateCliWorkflow}
+              />
             ) : null}
 
             {active.id === "jira" && settings ? (
-              <div className="space-y-4">
-                <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                  <div className="flex items-start gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[#0052CC]/18 bg-[#0052CC]/10 text-[#0052CC] dark:border-[#4C9AFF]/18 dark:bg-[#4C9AFF]/10 dark:text-[#4C9AFF]">
-                      <JiraIcon className="h-5 w-5" />
-                    </span>
-                    <div>
-                      <div className="text-base font-black text-slate-900 dark:text-white">Connect Jira (optional)</div>
-                      <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                        Link an issue tracker to import work as tasks and auto-close issues after a sprint. You can skip this and configure it later in Settings.
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div data-onboarding-card>
-                  <SectionCard title="Jira Configuration" watermark="JRA" icon={<ClipboardList strokeWidth={2.4} />}>
-                    <Row label="Jira site URL" description="Base URL for Jira Cloud or Data Center, for example `https://company.atlassian.net`.">
-                      <TextInput value={jiraSettings.host} onChange={(value) => updateJira({ host: value })} mono />
-                    </Row>
-                    <Row label="Account email" description="Email used with Jira Cloud API tokens. Leave empty for bearer-token Jira deployments.">
-                      <TextInput value={jiraSettings.email} onChange={(value) => updateJira({ email: value })} mono />
-                    </Row>
-                    <Row label="API token" description="Jira API token used for issue search, issue context loading, and transitions.">
-                      <TextInput value={jiraSettings.apiToken} onChange={(value) => updateJira({ apiToken: value })} mono />
-                    </Row>
-                    <Row label="Default project" description="Project key used to prefill the Jira import JQL.">
-                      <TextInput value={jiraSettings.defaultProject} onChange={(value) => updateJira({ defaultProject: value.toUpperCase() })} mono />
-                    </Row>
-                    <Row label="Close transition" description="Transition name used when auto-closing linked Jira issues after sprint completion.">
-                      <TextInput value={jiraSettings.closeTransitionName} onChange={(value) => updateJira({ closeTransitionName: value })} />
-                    </Row>
-                    <Row label="Auto-close Jira issues" description="Move linked Jira issues through the configured transition after the sprint completes." last>
-                      <Toggle aria-label="Toggle setting" value={jiraSettings.autoCloseLinkedIssues} onChange={() => updateJira({ autoCloseLinkedIssues: !jiraSettings.autoCloseLinkedIssues })} />
-                    </Row>
-                  </SectionCard>
-                </div>
-              </div>
+              <OnboardingJiraStep
+                settings={settings}
+                jiraSettings={jiraSettings}
+                updateJira={updateJira}
+              />
             ) : null}
 
             {active.id === "automation" && settings ? (
-              <div className="grid gap-4 md:grid-cols-2">
-                <Choice title="Automation level" value={settings.defaults.automationLevel} options={[
-                  ["ALWAYS_ASK", "Manual"],
-                  ["SEMI_AUTO", "Semi-auto"],
-                  ["FULL", "Full auto"],
-                ]} onChange={(value) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, automationLevel: value as SystemSettings["defaults"]["automationLevel"] } }))} />
-                <Choice title="Feature PR automerge" value={settings.defaults.ciIntelligence.featurePrAutoMergeMode} options={[
-                  ["OFF", "Off"],
-                  ["CREATE_PR", "Create PR"],
-                  ["WHEN_GREEN", "When green"],
-                  ["ALWAYS", "Always"],
-                ]} onChange={(value) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, ciIntelligence: { ...current.defaults.ciIntelligence, featurePrAutoMergeMode: value as SystemSettings["defaults"]["ciIntelligence"]["featurePrAutoMergeMode"] } } }))} />
-                <Choice title="Main PR automerge" value={settings.defaults.ciIntelligence.mainBranchAutoMergeMode} options={[
-                  ["OFF", "Off"],
-                  ["CREATE_PR", "Create PR"],
-                  ["WHEN_GREEN", "When green"],
-                  ["ALWAYS", "Always"],
-                ]} onChange={(value) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, ciIntelligence: { ...current.defaults.ciIntelligence, mainBranchAutoMergeMode: value as SystemSettings["defaults"]["ciIntelligence"]["mainBranchAutoMergeMode"] } } }))} />
-                <ToggleRow title="Auto-approve plans" description="Let planning continue without manual approval when the generated plan is available." checked={settings.defaults.automationInterventions.autoApprovePlan} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, automationInterventions: { ...current.defaults.automationInterventions, autoApprovePlan: checked } } }))} />
-                <ToggleRow title="Memory system" description="Capture sprint and agent learnings for later retrieval." checked={settings.defaults.memory.enabled} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, memory: { ...current.defaults.memory, enabled: checked } } }))} />
-                <ToggleRow title="Resolve main merge conflicts" description="Let a virtual worker attempt conflicts on the main branch merge gate before escalating." checked={settings.defaults.ciIntelligence.resolveMainMergeConflicts} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, ciIntelligence: { ...current.defaults.ciIntelligence, resolveMainMergeConflicts: checked } } }))} />
-                <ToggleRow title="Fix main merge CI failures" description="Let a virtual worker fix failing CI on the main branch merge gate before escalating." checked={settings.defaults.ciIntelligence.resolveMainMergeFailedChecks} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, ciIntelligence: { ...current.defaults.ciIntelligence, resolveMainMergeFailedChecks: checked } } }))} />
-                <ToggleRow title="Resolve feature merge conflicts" description="Let a virtual worker resolve feature PR conflicts against the sprint branch when safe." checked={settings.defaults.ciIntelligence.resolveMergeConflicts} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, ciIntelligence: { ...current.defaults.ciIntelligence, resolveMergeConflicts: checked } } }))} />
-                <ToggleRow title="Enable QA agent" description="Run quality-assurance reviews after task and sprint completion events." checked={settings.defaults.agents.qualityAssurance.enabled} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, agents: { ...current.defaults.agents, qualityAssurance: { ...current.defaults.agents.qualityAssurance, enabled: checked } } } }))} />
-              </div>
+              <OnboardingAutomationStep
+                settings={settings}
+                updateSettings={updateSettings}
+              />
             ) : null}
 
             {active.id === "appearance" && settings ? (
-              <div className="space-y-6">
-                <div className="grid gap-6 md:grid-cols-2">
-                  {/* Left Column: Core Layout & Feel */}
-                  <div className="space-y-4">
-                    <h4 className="text-xs font-black uppercase tracking-[0.2em] text-signal-400">Core Display</h4>
-                    
-                    <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      <div className="text-sm font-black text-slate-900 dark:text-white">Theme</div>
-                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Select light, dark, or sync with your system.</div>
-                      <div className="mt-4">
-                        <PillChoiceGroup
-                          value={settings.defaults.appearance.theme}
-                          onChange={(value) => updateAppearance({ theme: value as any })}
-                          options={[
-                            { value: "SYSTEM", label: "System" },
-                            { value: "LIGHT", label: "Light" },
-                            { value: "DARK", label: "Dark" },
-                          ]}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      <div className="text-sm font-black text-slate-900 dark:text-white">Navigation Mode</div>
-                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose between floating dock or sidebar.</div>
-                      <div className="mt-4">
-                        <PillChoiceGroup
-                          value={settings.defaults.appearance.navigationMode}
-                          onChange={(value) => updateAppearance({ navigationMode: value as any })}
-                          options={[
-                            { value: "DOCK", label: "Dock" },
-                            { value: "SIDEBAR", label: "Sidebar" },
-                          ]}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      <div className="text-sm font-black text-slate-900 dark:text-white">Reduced Motion</div>
-                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Limit interface animations.</div>
-                      <div className="mt-4">
-                        <PillChoiceGroup
-                          value={settings.defaults.appearance.reducedMotion}
-                          onChange={(value) => updateAppearance({ reducedMotion: value as any })}
-                          options={[
-                            { value: "AUTO", label: "Auto" },
-                            { value: "REDUCE", label: "Reduce" },
-                            { value: "NONE", label: "None" },
-                          ]}
-                        />
-                      </div>
-                    </div>
-
-                    {typeof window !== "undefined" && Boolean(window.codeUxDesktop?.setZoom) && (
-                      <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                        <div className="text-sm font-black text-slate-900 dark:text-white">Zoom Level</div>
-                        <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Scale the desktop interface size.</div>
-                        <div className="mt-4">
-                          <SelectInput
-                            value={String(settings.defaults.appearance.zoomLevel ?? 1)}
-                            onChange={(value) => updateAppearance({ zoomLevel: Number(value) })}
-                            options={[
-                              { value: "0.75", label: "75%" },
-                              { value: "0.9", label: "90%" },
-                              { value: "1", label: "100%" },
-                              { value: "1.1", label: "110%" },
-                              { value: "1.25", label: "125%" },
-                              { value: "1.5", label: "150%" },
-                              { value: "1.75", label: "175%" },
-                              { value: "2", label: "200%" },
-                            ]}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Right Column: Custom Aesthetics & Background */}
-                  <div className="space-y-4">
-                    <h4 className="text-xs font-black uppercase tracking-[0.2em] text-signal-400">Background & Styling</h4>
-
-                    <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      <div className="text-sm font-black text-slate-900 dark:text-white">Background Mode</div>
-                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Select animated textures or a flat color.</div>
-                      <div className="mt-4">
-                        <PillChoiceGroup
-                          value={settings.defaults.appearance.backgroundMode || "ANIMATED"}
-                          onChange={(value) => updateAppearance({ backgroundMode: value as any })}
-                          options={[
-                            { value: "ANIMATED", label: "Animated" },
-                            { value: "STATIC", label: "Static" },
-                          ]}
-                        />
-                      </div>
-                    </div>
-
-                    {(settings.defaults.appearance.backgroundMode || "ANIMATED") === "STATIC" && (
-                      <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                        <div className="text-sm font-black text-slate-900 dark:text-white">Static Color</div>
-                        <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose a solid solid back color.</div>
-                        <div className="mt-4 flex items-center gap-3">
-                          <input
-                            type="color"
-                            value={settings.defaults.appearance.staticBackgroundColor || "#0d0f12"}
-                            onInput={(e) => updateAppearance({ staticBackgroundColor: (e.target as HTMLInputElement).value })}
-                            className="h-10 w-20 cursor-pointer rounded-lg border-2 border-black/[0.06] bg-transparent p-1 focus:outline-none focus:ring-2 focus:ring-signal-500 dark:border-white/[0.06]"
-                          />
-                          <span className="font-mono text-sm uppercase text-slate-500 dark:text-slate-400">
-                            {settings.defaults.appearance.staticBackgroundColor || "#0d0f12"}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <OnboardingAppearanceStep
+                settings={settings}
+                updateAppearance={updateAppearance}
+              />
             ) : null}
 
             {active.id === "defaults" && settings ? (
-              <div className="space-y-4">
-                <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                  <div className="flex items-start gap-3">
-                    <Layers className="mt-0.5 h-5 w-5 shrink-0 text-signal-600 dark:text-signal-300" />
-                    <div>
-                      <div className="text-base font-black text-slate-900 dark:text-white">Pick your default providers</div>
-                      <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                        Choose which configured instance answers by default, and which one virtual workers run inside containers. You can fine-tune per-route routing later on the AI Models page.
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                {enabledProviderInstances.length === 0 ? (
-                  <div data-onboarding-card className="rounded-3xl border border-ember-500/20 bg-ember-500/10 p-6 text-sm text-ember-700 dark:text-ember-300">
-                    No enabled providers yet. Go back to the Select Providers and Providers steps to enable at least one instance.
-                  </div>
-                ) : (
-                  <>
-                    <div data-onboarding-card>
-                      <SectionCard title="Default routing" watermark="DEF" icon={<Layers strokeWidth={2.4} />}>
-                        <Row label="Default AI provider" description="The instance used when a route has no explicit override.">
-                          <SelectInput
-                            value={settings.defaults.aiProvider.provider || ""}
-                            onChange={(value) => updateSettings((current) => ({
-                              ...current,
-                              defaults: {
-                                ...current.defaults,
-                                aiProvider: { ...current.defaults.aiProvider, provider: value as ProviderConfigId },
-                              },
-                            }))}
-                            options={providerInstanceOptions}
-                            aria-label="Default AI provider"
-                          />
-                        </Row>
-                        <Row label="Virtual worker provider" description="The CLI instance dispatched inside Docker containers to execute tasks." last>
-                          <SelectInput
-                            value={settings.defaults.workers.virtualWorkerProvider || ""}
-                            onChange={(value) => updateSettings((current) => ({
-                              ...current,
-                              defaults: {
-                                ...current.defaults,
-                                workers: { ...current.defaults.workers, virtualWorkerProvider: value as ProviderConfigId },
-                              },
-                            }))}
-                            options={workerInstanceOptions.length > 0 ? workerInstanceOptions : providerInstanceOptions}
-                            aria-label="Virtual worker provider"
-                          />
-                        </Row>
-                      </SectionCard>
-                    </div>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {enabledProviderInstances.map(([providerConfigId, provider]) => {
-                        const isDefault = settings.defaults.aiProvider.provider === providerConfigId;
-                        const isWorker = settings.defaults.workers.virtualWorkerProvider === providerConfigId;
-                        return (
-                          <div data-onboarding-card key={providerConfigId} className="flex items-center justify-between gap-3 rounded-3xl border border-black/[0.06] bg-white/75 p-4 shadow-[0_14px_34px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                            <div className="flex min-w-0 items-center gap-3">
-                              <ProviderBrandIcon id={provider.provider} />
-                              <div className="min-w-0">
-                                <div className="truncate text-sm font-black text-slate-900 dark:text-white">{provider.name}</div>
-                                <div className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{getProviderTypeLabel(provider.provider)}</div>
-                              </div>
-                            </div>
-                            <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-                              {isDefault ? (
-                                <span className="rounded-full border border-signal-500/25 bg-signal-500/10 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-signal-700 dark:text-signal-200">Default</span>
-                              ) : null}
-                              {isWorker ? (
-                                <span className="rounded-full border border-sky-500/25 bg-sky-500/10 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-sky-700 dark:text-sky-300">Worker</span>
-                              ) : null}
-                              {!isDefault && !isWorker ? (
-                                <span className="rounded-full border border-black/[0.08] bg-black/[0.03] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.04]">Available</span>
-                              ) : null}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-              </div>
+              <OnboardingDefaultsStep
+                settings={settings}
+                providerInstanceOptions={providerInstanceOptions}
+                workerInstanceOptions={workerInstanceOptions}
+                updateSettings={updateSettings}
+              />
             ) : null}
           </div>
 
@@ -1470,7 +898,7 @@ export const OnboardingExperience: FunctionComponent = () => {
             <button
               type="button"
               disabled={activeStep === 0}
-              onClick={() => setActiveStep((step) => Math.max(0, step - 1))}
+              onClick={() => goToPreviousStep()}
               className="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-bold text-slate-500 transition-colors hover:bg-black/[0.04] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-white/[0.06]"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -1478,7 +906,7 @@ export const OnboardingExperience: FunctionComponent = () => {
             </button>
             <div className="flex items-center gap-2">
               {[
-                { active: activeStep === 0, onClick: () => setActiveStep(0), label: "Installation" },
+                { active: activeStep === 0, onClick: () => resetSteps(), label: "Installation" },
                 { active: activeStep === 1, onClick: () => setActiveStep(1), label: "Introduction" },
                 { active: activeStep === 2, onClick: () => setActiveStep(2), label: "Select Providers" },
                 { active: activeStep >= 3 && activeStep <= 6, onClick: () => setActiveStep(activeStep >= 3 && activeStep <= 6 ? activeStep : 3), label: "Providers" },
@@ -1508,7 +936,7 @@ export const OnboardingExperience: FunctionComponent = () => {
               <button
                 type="button"
                 disabled={!canGoNext}
-                onClick={() => setActiveStep((step) => Math.min(steps.length - 1, step + 1))}
+                onClick={() => goToNextStep()}
                 className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.18)] transition-colors hover:bg-slate-700 disabled:opacity-60 dark:bg-white dark:text-void-900"
               >
                 Next
