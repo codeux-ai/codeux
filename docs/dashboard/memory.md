@@ -52,6 +52,8 @@ When the UI generates visual graphs of memory items:
 
 Memory records encapsulate the base `content` string alongside its vectorized byte representation (`embeddingBlob`). The byte buffer must correctly decode based on its stored `embeddingDimension`. The system expects IEEE 754 32-bit floats.
 
+**Note:** Knowledge subscriptions validate requested document IDs in batched chunk-safe queries (validating project ownership efficiently) before applying the replace-all transaction.
+
 ## Long-Term Claims and Evidence
 
 Sprint-scoped memories are treated as observations. Durable project knowledge is stored as canonical claims:

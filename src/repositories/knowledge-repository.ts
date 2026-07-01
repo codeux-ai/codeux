@@ -239,6 +239,17 @@ export class KnowledgeRepository {
 
   /** Replace an agent's full subscription set with the given document ids (validated to the project). */
   setSubscriptions(agentPresetId: string, projectId: string, documentIds: string[]): void {
+    const uniqueIds = [...new Set(documentIds)];
+    const validRows = executeChunkedInQuery<{ id: string }>(
+      (sql) => this.db.prepare(sql),
+      {
+        sqlPrefix: "SELECT id FROM knowledge_documents WHERE project_id = ? AND id",
+        bindParamsBefore: [projectId],
+        items: uniqueIds,
+      }
+    );
+    const validIds = new Set(validRows.map((row) => row.id));
+
     this.db.transaction(() => {
       this.db.prepare("DELETE FROM agent_knowledge_subscriptions WHERE agent_preset_id = ?").run(agentPresetId);
       const now = new Date().toISOString();
@@ -246,9 +257,8 @@ export class KnowledgeRepository {
         INSERT OR IGNORE INTO agent_knowledge_subscriptions (agent_preset_id, document_id, project_id, created_at)
         VALUES (?, ?, ?, ?)
       `);
-      for (const documentId of [...new Set(documentIds)]) {
-        const doc = this.db.prepare("SELECT id FROM knowledge_documents WHERE id = ? AND project_id = ?").get(documentId, projectId);
-        if (doc) {
+      for (const documentId of uniqueIds) {
+        if (validIds.has(documentId)) {
           stmt.run(agentPresetId, documentId, projectId, now);
         }
       }
