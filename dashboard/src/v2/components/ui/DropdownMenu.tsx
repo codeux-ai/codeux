@@ -201,8 +201,8 @@ export const DropdownMenu = ({
             opacity: 1,
             y: 0,
             stagger: Math.min(0.018, 0.18 / itemCount),
-            duration: 0.12,
-            ease: "power2.out",
+            duration: gsapTokens.listReveal.duration,
+            ease: gsapTokens.listReveal.ease,
             delay: gsapTokens.enterExit.duration,
           }
         );

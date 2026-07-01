@@ -51,6 +51,7 @@ const cloneMcpTools = (tools: McpToolToggle[]): McpToolToggle[] => tools.map((to
 const cloneCustomMcpServers = (servers: CustomMcpServer[] = []): CustomMcpServer[] => servers.map((server) => ({
   ...server,
   headers: server.headers ? { ...server.headers } : undefined,
+  env: server.env ? { ...server.env } : undefined,
   providers: server.providers ? [...server.providers] : undefined,
 }));
 const cloneProjectAiProviderSettings = (
@@ -215,6 +216,7 @@ export const cloneSystemSettings = (settings: SystemSettings): SystemSettings =>
   defaults: cloneProjectSettings(settings.defaults),
   mcpTools: cloneMcpTools(settings.mcpTools),
   customMcpServers: cloneCustomMcpServers(settings.customMcpServers),
+  modelPricing: { overrides: { ...settings.modelPricing?.overrides } },
 });
 
 export const applyEffectiveProjectSettings = (effectiveProject: EffectiveSettingsResponse): { settings: ProjectSettings, sources: Record<string, SettingsValueSource> } => {
@@ -485,9 +487,13 @@ export const AI_MODEL_CATALOG: Record<string, string[]> = {
     "opus[1m]",
     "opusplan",
     "claude-opus-4-6",
+    "claude-opus-4-7",
+    "claude-opus-4-8",
     "claude-sonnet-4-6",
+    "claude-sonnet-5",
     "claude-haiku-4-5-20251001",
     "claude-fable-5",
+    "claude-mythos-5",
   ],
   codex: [
     "gpt-5.5",

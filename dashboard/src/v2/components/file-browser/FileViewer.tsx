@@ -23,7 +23,7 @@ export const FileViewer: FunctionComponent<FileViewerProps> = ({ file, loading, 
   if (loading) {
     return (
       <ViewerShell>
-        <span class="inline-flex items-center gap-2">
+        <span class="inline-flex items-center gap-2" role="status" aria-live="polite">
           <Loader2 class="h-4 w-4 animate-spin text-signal-500" strokeWidth={2} />
           Loading file…
         </span>
@@ -34,9 +34,13 @@ export const FileViewer: FunctionComponent<FileViewerProps> = ({ file, loading, 
   if (error) {
     return (
       <ViewerShell>
-        <span class="inline-flex items-center gap-2 text-status-red">
-          <FileWarning class="h-4 w-4" strokeWidth={2} />
-          {error}
+        <span class="inline-flex flex-col items-center gap-2 text-status-red" role="alert">
+          <span class="inline-flex items-center gap-2">
+            <FileWarning class="h-4 w-4" strokeWidth={2} />
+            Failed to load file contents.
+          </span>
+          <span class="text-xs text-status-red/80">{error}</span>
+          <span class="text-xs text-status-red/80">Try selecting the file again.</span>
         </span>
       </ViewerShell>
     );
@@ -45,7 +49,10 @@ export const FileViewer: FunctionComponent<FileViewerProps> = ({ file, loading, 
   if (!file) {
     return (
       <ViewerShell>
-        <span>Select a file from the tree to view its contents.</span>
+        <span class="flex flex-col gap-2 items-center text-slate-500">
+          <span class="font-medium text-slate-700 dark:text-slate-300">No file selected</span>
+          <span>Select a file from the tree to view its contents.</span>
+        </span>
       </ViewerShell>
     );
   }
@@ -53,9 +60,12 @@ export const FileViewer: FunctionComponent<FileViewerProps> = ({ file, loading, 
   if (file.binary) {
     return (
       <ViewerShell>
-        <span class="inline-flex items-center gap-2">
-          <FileWarning class="h-4 w-4 text-ember-500" strokeWidth={2} />
-          Binary file — preview not available.
+        <span class="inline-flex flex-col items-center gap-2" role="status">
+          <span class="inline-flex items-center gap-2 font-medium text-slate-700 dark:text-slate-300">
+            <FileWarning class="h-4 w-4 text-ember-500" strokeWidth={2} />
+            Binary file detected
+          </span>
+          <span>File contents cannot be displayed in the editor.</span>
         </span>
       </ViewerShell>
     );
@@ -71,7 +81,7 @@ export const FileViewer: FunctionComponent<FileViewerProps> = ({ file, loading, 
         value={file.content}
         beforeMount={ensureMonacoConfigured}
         loading={(
-          <span class="inline-flex items-center gap-2 text-sm text-slate-500">
+          <span class="inline-flex items-center gap-2 text-sm text-slate-500" role="status" aria-live="polite">
             <Loader2 class="h-4 w-4 animate-spin text-signal-500" strokeWidth={2} />
             Preparing editor…
           </span>

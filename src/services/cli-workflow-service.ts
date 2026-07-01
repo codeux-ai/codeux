@@ -17,6 +17,8 @@ import type { ProjectManagementRepository } from "../repositories/project-manage
 import { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
 import { runCommandStrict, type CommandResult } from "./cli-process-runner.js";
 import { isReadFileNotFoundToolError, buildReadFileRetryPrompt } from "./cli-workflow-text-utils.js";
+import type { ProviderSettingsOverride } from "./provider-settings-override.js";
+
 import {
   buildProviderPrompt,
   buildWorkerBranch,
@@ -60,28 +62,7 @@ interface CliWorkflowServiceDependencies {
 
 interface StartCliTaskInput {
   provider: Exclude<ProviderId, "jules">;
-  providerSettingsOverride?: {
-    model: string;
-    thinkingMode: ThinkingMode;
-    apiKey: string;
-    qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
-    qwenRegion?: "china" | "international";
-    qwenBaseUrl?: string;
-    qwenEnvKey?: string;
-    qwenModelId?: string;
-    qwenProtocol?: "openai" | "anthropic" | "gemini";
-    qwenAdditionalModelProviders?: QwenModelProviderSettings[];
-  openCodeAuthMode?: "LOCAL_AUTH" | "ENV_KEY" | "CUSTOM_PROVIDER";
-  openCodeProviderId?: string;
-  openCodeModelId?: string;
-  openCodeBaseUrl?: string;
-  openCodeEnvKey?: string;
-  openCodePackage?: string;
-    providerMountAuth?: boolean;
-    providerAuthPath?: string;
-    customBaseUrl?: string;
-    customModel?: string;
-  };
+  providerSettingsOverride?: ProviderSettingsOverride;
   task: Subtask;
   repoPath: string;
   featureBranch: string;

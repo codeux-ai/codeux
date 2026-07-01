@@ -192,7 +192,7 @@ export function createCoreDependencies(
     connectionChatRepository,
   );
   const agentPresetRepository = new AgentPresetRepository(appDbStorage);
-  const executionRepository = new ExecutionRepository(appDbStorage, dashboardRealtimeService);
+  const executionRepository = new ExecutionRepository(appDbStorage, dashboardRealtimeService, undefined, settingsRepository);
   const guardrailRepository = new GuardrailRepository(appDbStorage);
   const guardrailService = new GuardrailService(
     guardrailRepository,

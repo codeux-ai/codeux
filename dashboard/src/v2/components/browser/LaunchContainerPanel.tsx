@@ -26,7 +26,7 @@ export const LaunchContainerPanel: FunctionComponent<LaunchContainerPanelProps> 
       </div>
       <div className="mt-4 space-y-3">
         <div aria-live="polite" className="text-xs text-slate-500 mb-2">
-          {launchBusy ? "A preview is already launching..." : sprints.length === 0 ? "No active sprint to launch" : !launchEnabled ? "Select a project to start" : null}
+          {launchBusy ? "A preview is already launching..." : !launchEnabled ? "Select a project to start" : sprints.length === 0 ? "No active sprint to launch" : null}
         </div>
         <select
           value={launchSprintId}
@@ -34,7 +34,7 @@ export const LaunchContainerPanel: FunctionComponent<LaunchContainerPanelProps> 
           disabled={!launchEnabled || launchBusy || sprints.length === 0}
           aria-disabled={!launchEnabled || launchBusy || sprints.length === 0}
           className={`w-full rounded-2xl border border-black/[0.08] bg-white/85 px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-200 ${
-            (!launchEnabled || launchBusy || sprints.length === 0) ? "cursor-not-allowed disabled:opacity-50 pointer-events-none" : ""
+            (!launchEnabled || launchBusy || sprints.length === 0) ? "cursor-not-allowed opacity-50" : ""
           }`}
         >
           {sprints.length === 0 && <option value="">No sprints available</option>}
@@ -66,7 +66,7 @@ export const LaunchContainerPanel: FunctionComponent<LaunchContainerPanelProps> 
           ) : (
             <Play className="h-4 w-4" strokeWidth={2.2} />
           )}
-          {launchBusy ? "Starting..." : sprints.length === 0 ? "No Sprints" : !launchEnabled ? "Unavailable" : "Launch Container"}
+          {launchBusy ? "Launching..." : !launchEnabled ? "Disabled: No Project" : sprints.length === 0 ? "Disabled: No Sprint" : "Launch Container"}
         </button>
       </div>
     </div>

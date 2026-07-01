@@ -27,12 +27,23 @@ describe("DockerAssetPruneService", () => {
     } as unknown as SessionTrackingRepository;
 
     vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
-      if (args[0] === "volume" && args[1] === "ls") {
+      if (args[0] === "volume" && args[1] === "ls" && args.includes("label=code-ux.workspace=true")) {
         return {
           ok: true,
           stdout: [
             "code-ux-repo-aaaaaaaaaaaa-cli-codex-active",
             "code-ux-repo-aaaaaaaaaaaa-cli-codex-stale",
+          ].join("\n"),
+          stderr: "",
+          code: 0,
+        } as any;
+      }
+      if (args[0] === "volume" && args[1] === "ls" && args.includes("label=code-ux.workspace-runtime=true")) {
+        return {
+          ok: true,
+          stdout: [
+            "code-ux-repo-aaaaaaaaaaaa-cli-codex-active-runtime",
+            "code-ux-repo-aaaaaaaaaaaa-cli-codex-stale-runtime",
           ].join("\n"),
           stderr: "",
           code: 0,
@@ -48,10 +59,25 @@ describe("DockerAssetPruneService", () => {
 
     const result = await new DockerAssetPruneService(sessionTracking).cleanupOnStartup();
 
-    expect(result.prunedWorkspaceVolumes).toEqual(["code-ux-repo-aaaaaaaaaaaa-cli-codex-stale"]);
+    expect(result.prunedWorkspaceVolumes).toEqual([
+      "code-ux-repo-aaaaaaaaaaaa-cli-codex-stale",
+      "code-ux-repo-aaaaaaaaaaaa-cli-codex-stale-runtime",
+    ]);
     expect(result.prunedSetupImages).toEqual([]);
-    expect(runCommandStrict).toHaveBeenCalledWith("docker", ["volume", "rm", "-f", "code-ux-repo-aaaaaaaaaaaa-cli-codex-stale"], expect.any(String));
-    expect(runCommandStrict).not.toHaveBeenCalledWith("docker", ["image", "rm", "-f", expect.any(String)], expect.any(String));
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "docker",
+      [
+        "volume",
+        "rm",
+        "-f",
+        "code-ux-repo-aaaaaaaaaaaa-cli-codex-stale",
+        "code-ux-repo-aaaaaaaaaaaa-cli-codex-stale-runtime",
+      ],
+      expect.any(String),
+      process.env,
+      { timeout: 10_000 },
+    );
+    expect(runCommandStrict).not.toHaveBeenCalledWith("docker", ["image", "rm", "-f", expect.any(String)], expect.any(String), process.env, { timeout: 10_000 });
   });
 
   it("prunes orphaned login containers on startup", async () => {
@@ -90,8 +116,13 @@ describe("DockerAssetPruneService", () => {
     const result = await new DockerAssetPruneService(sessionTracking).cleanupOnStartup();
 
     expect(result.prunedLoginContainers).toEqual(["container-id-1", "container-id-2"]);
-    expect(runCommandStrict).toHaveBeenCalledWith("docker", ["rm", "-f", "container-id-1"], expect.any(String));
-    expect(runCommandStrict).toHaveBeenCalledWith("docker", ["rm", "-f", "container-id-2"], expect.any(String));
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "docker",
+      ["rm", "-f", "-v", "container-id-1", "container-id-2"],
+      expect.any(String),
+      process.env,
+      { timeout: 10_000 },
+    );
   });
 
   it("prunes temporary credentials directories on startup", async () => {

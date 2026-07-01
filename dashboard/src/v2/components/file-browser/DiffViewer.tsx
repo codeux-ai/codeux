@@ -24,7 +24,7 @@ export const DiffViewer: FunctionComponent<DiffViewerProps> = ({ diff, loading, 
   if (loading) {
     return (
       <ViewerShell>
-        <span class="inline-flex items-center gap-2">
+        <span class="inline-flex items-center gap-2" role="status" aria-live="polite">
           <Loader2 class="h-4 w-4 animate-spin text-signal-500" strokeWidth={2} />
           Computing diff…
         </span>
@@ -35,9 +35,13 @@ export const DiffViewer: FunctionComponent<DiffViewerProps> = ({ diff, loading, 
   if (error) {
     return (
       <ViewerShell>
-        <span class="inline-flex items-center gap-2 text-status-red">
-          <FileWarning class="h-4 w-4" strokeWidth={2} />
-          {error}
+        <span class="inline-flex flex-col items-center gap-2 text-status-red" role="alert">
+          <span class="inline-flex items-center gap-2">
+            <FileWarning class="h-4 w-4" strokeWidth={2} />
+            Failed to load diff.
+          </span>
+          <span class="text-xs text-status-red/80">{error}</span>
+          <span class="text-xs text-status-red/80">Try selecting the change again.</span>
         </span>
       </ViewerShell>
     );
@@ -46,7 +50,10 @@ export const DiffViewer: FunctionComponent<DiffViewerProps> = ({ diff, loading, 
   if (!diff) {
     return (
       <ViewerShell>
-        <span>Select a changed file to see what changed versus the default branch.</span>
+        <span class="flex flex-col gap-2 items-center text-slate-500">
+          <span class="font-medium text-slate-700 dark:text-slate-300">No change selected</span>
+          <span>Select a changed file to see what changed versus the default branch.</span>
+        </span>
       </ViewerShell>
     );
   }
@@ -54,9 +61,12 @@ export const DiffViewer: FunctionComponent<DiffViewerProps> = ({ diff, loading, 
   if (diff.binary) {
     return (
       <ViewerShell>
-        <span class="inline-flex items-center gap-2">
-          <FileWarning class="h-4 w-4 text-ember-500" strokeWidth={2} />
-          Binary file — diff preview not available.
+        <span class="inline-flex flex-col items-center gap-2" role="status">
+          <span class="inline-flex items-center gap-2 font-medium text-slate-700 dark:text-slate-300">
+            <FileWarning class="h-4 w-4 text-ember-500" strokeWidth={2} />
+            Binary file detected
+          </span>
+          <span>Diff preview is not available for binary files.</span>
         </span>
       </ViewerShell>
     );
@@ -72,7 +82,7 @@ export const DiffViewer: FunctionComponent<DiffViewerProps> = ({ diff, loading, 
         modified={diff.modified ?? ""}
         beforeMount={ensureMonacoConfigured}
         loading={(
-          <span class="inline-flex items-center gap-2 text-sm text-slate-500">
+          <span class="inline-flex items-center gap-2 text-sm text-slate-500" role="status" aria-live="polite">
             <Loader2 class="h-4 w-4 animate-spin text-signal-500" strokeWidth={2} />
             Preparing diff…
           </span>

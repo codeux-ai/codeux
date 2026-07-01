@@ -3,6 +3,7 @@ import { useState, useCallback, useMemo, useContext, useEffect, useRef, useLayou
 import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { Toast, type ToastProps } from "./Toast.js";
+import { GSAP_DURATIONS, GSAP_EASINGS } from "../../lib/motion/constants.js";
 
 type ToastMessage = Omit<ToastProps, "onDismiss" | "isDismissing">;
 
@@ -71,7 +72,7 @@ export const ToastProvider: FunctionComponent<{ children: ComponentChildren }> =
         const delta = prevTop - currentTop;
 
         if (delta !== 0 && !reducedMotion) {
-          gsap.fromTo(el, { y: delta }, { y: 0, duration: 0.25, ease: 'power2.out' });
+          gsap.fromTo(el, { y: delta }, { y: 0, duration: GSAP_DURATIONS.base, ease: GSAP_EASINGS.smooth });
         }
       }
     });

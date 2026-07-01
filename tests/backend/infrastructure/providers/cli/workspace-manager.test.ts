@@ -128,8 +128,18 @@ describe("WorkspaceManager", () => {
     );
     const bundlePath = path.join("/tmp/code-ux-bundle-123", "repo.bundle");
     expect(runCommandStrict).toHaveBeenCalledWith("git", ["bundle", "create", bundlePath, "--all"], "/repo/project");
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "docker",
+      expect.arrayContaining(["volume", "create", "--label", "code-ux.workspace-runtime=true"]),
+      expect.any(String),
+    );
     const bootstrapCall = vi.mocked(runCommandStrict).mock.calls.find((call) =>
-      call[0] === "docker" && call[1].includes("--entrypoint") && call[1].includes("sh")
+      call[0] === "docker"
+      && call[1].includes("--entrypoint")
+      && call[1].includes("sh")
+      && call[4]
+      && typeof call[4] === "object"
+      && "stdinFile" in call[4]
     );
     expect(bootstrapCall?.[1]).toEqual(expect.arrayContaining([
       "run",
@@ -330,7 +340,12 @@ describe("WorkspaceManager", () => {
 
     expect(vi.mocked(runCommandStrict).mock.calls.some((call) => call[0] === "bash")).toBe(false);
     const bootstrapCall = vi.mocked(runCommandStrict).mock.calls.find((call) =>
-      call[0] === "docker" && call[1].includes("--entrypoint") && call[1].includes("sh")
+      call[0] === "docker"
+      && call[1].includes("--entrypoint")
+      && call[1].includes("sh")
+      && call[4]
+      && typeof call[4] === "object"
+      && "stdinFile" in call[4]
     );
     expect(bootstrapCall?.[4]).toEqual(expect.objectContaining({
       stdinFile: expect.stringContaining("C:\\Users\\pierr\\AppData\\Local\\Temp\\code-ux-bundle-k9Efgd"),
@@ -588,6 +603,11 @@ describe("WorkspaceManager", () => {
     expect(runCommandStrict).toHaveBeenCalledWith(
       "docker",
       ["volume", "rm", "-f", "code-ux-project-abcd1234ef56-session-1"],
+      expect.any(String),
+    );
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "docker",
+      ["volume", "rm", "-f", "code-ux-project-abcd1234ef56-session-1-runtime"],
       expect.any(String),
     );
   });

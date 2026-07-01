@@ -109,3 +109,8 @@ To optimize for the real query shapes used by the DB-native orchestrator and liv
 - **`idx_task_dispatches_connection_executor`**: Speeds up worker-affinity and next-task lookups per executor.
 - **`idx_project_attention_items_project_status_updated`**: Sorts project-level active attention items by most recently updated (`updated_at DESC`).
 - **`idx_project_attention_items_sprint_run_status_updated`**: Speeds up finding attention items blocking specific sprint runs (`updated_at DESC`).
+- **`idx_provider_invocations_provider_status`**: Optimizes looking up running provider invocations by provider and status.
+- **`idx_task_dispatches_project_executor_status_priority`**: Optimizes retrieving queued task dispatches by project, executor, status, and priority.
+- **`idx_task_runs_task_sprint_session`**: Speeds up finding task runs by task, sprint run, and session.
+- **`idx_project_attention_items_project_owner_status`**: Optimizes querying active attention items by project, owner type, and status.
+- **`idx_execution_invocations_provider_invocation`**: Speeds up looking up execution invocations by provider invocation id.

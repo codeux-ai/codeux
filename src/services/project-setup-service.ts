@@ -490,7 +490,6 @@ export class ProjectSetupService {
 
   private async configureAgentRouting(projectId: string): Promise<void> {
     const presets = await this.deps.agentPresetSyncService.listAgentPresets(projectId);
-    const setupAgent = presets.find((preset) => preset.name === PROJECT_SETUP_AGENT_NAME);
     const excludedNames = new Set([
       PROJECT_SETUP_AGENT_NAME.toLowerCase(),
       "planning agent",
@@ -515,7 +514,6 @@ export class ProjectSetupService {
           planning: {
             ...effectiveAgents.routing.planning,
             ...current.agents?.routing?.planning,
-            agentPresetId: setupAgent?.id || current.agents?.routing?.planning?.agentPresetId || null,
           },
           taskCoding: {
             ...effectiveAgents.routing.taskCoding,

@@ -63,15 +63,10 @@ export class WorkspaceArtifactService {
 
   async exportBinaryPatch(workspaceRef: string, baseRef: string): Promise<string> {
     // Pathspecs shared by the diff and the untracked-file scan. Keeping them in
-    // sync matters: `.code-ux-home` holds each provider's sprint HOME, and some
-    // CLIs (notably opencode) keep a churning git snapshot store there with tens
-    // of thousands of ephemeral loose objects. If `ls-files` is allowed to walk
-    // it, the output can exceed the command runner's stdout clip limit, which
-    // truncates the head of the stream and corrupts the first path — that
-    // corrupted path then slips past the JS filter and makes `git add
-    // --intent-to-add` fail with "pathspec did not match any files", taking the
-    // whole export (and the task) down with it. Excluding it at the source keeps
-    // the listing small and correct.
+    // sync matters. Current Docker runs keep provider HOME in a sibling runtime
+    // volume, but older preserved workspaces may still contain `.code-ux-home`
+    // with churning provider state. Excluding it at the source keeps legacy
+    // listings small and prevents runtime cache/state from entering patches.
     const excludePathspecs = [
       `:(exclude)${LEARNINGS_FILENAME}`,
       ":(exclude).code-ux-home",

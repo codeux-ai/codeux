@@ -84,10 +84,10 @@ export class DockerHelperContainerPool {
   async release(key: string): Promise<void> {
     const entry = this.helpers.get(key);
     this.helpers.delete(key);
-    await this.runner("docker", ["rm", "-f", this.spec.nameFor(key)]).catch(() => undefined);
+    await this.removeContainerWithVolumes(this.spec.nameFor(key));
     if (entry?.creating) {
       await entry.creating.catch(() => undefined);
-      await this.runner("docker", ["rm", "-f", this.spec.nameFor(key)]).catch(() => undefined);
+      await this.removeContainerWithVolumes(this.spec.nameFor(key));
     }
   }
 
@@ -100,7 +100,7 @@ export class DockerHelperContainerPool {
       this.reaper = null;
     }
     await Promise.all(entries.map((entry) => (
-      entry.id ? this.runner("docker", ["rm", "-f", entry.id]).catch(() => undefined) : Promise.resolve(undefined)
+      entry.id ? this.removeContainerWithVolumes(entry.id) : Promise.resolve(undefined)
     )));
   }
 
@@ -114,7 +114,7 @@ export class DockerHelperContainerPool {
   private async create(key: string): Promise<string> {
     const name = this.spec.nameFor(key);
     // Reclaim a same-named helper left behind by a previous process before starting a fresh one.
-    await this.runner("docker", ["rm", "-f", name]).catch(() => undefined);
+    await this.removeContainerWithVolumes(name);
     const result = await this.runner("docker", this.spec.buildCreateArgs(key, name));
     if (!result.ok) {
       throw new Error(result.stderr || result.stdout || "Failed to start helper container.");
@@ -143,7 +143,7 @@ export class DockerHelperContainerPool {
       }
       this.helpers.delete(key);
       if (entry.id) {
-        removals.push(this.runner("docker", ["rm", "-f", entry.id]).catch(() => undefined));
+        removals.push(this.removeContainerWithVolumes(entry.id));
       }
     }
     await Promise.all(removals);
@@ -151,5 +151,9 @@ export class DockerHelperContainerPool {
       clearInterval(this.reaper);
       this.reaper = null;
     }
+  }
+
+  private async removeContainerWithVolumes(containerRef: string): Promise<void> {
+    await this.runner("docker", ["rm", "-f", "-v", containerRef]).catch(() => undefined);
   }
 }

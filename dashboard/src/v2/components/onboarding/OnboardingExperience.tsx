@@ -48,6 +48,13 @@ type IntroPhase = "intro" | "transitioning" | "onboarding";
 import type { OnboardingProviderCredentialStatus, OnboardingRuntimeReadiness, ProviderConfigId, ProviderId, ProjectSettings, SystemSettings } from "../../../types.js";
 import { getSafeUrl } from "../../lib/safe-url.js";
 import {
+  buildProviderConfigId,
+  getFirstCliProviderConfigId,
+  getProviderInitialSelection,
+  getSystemProvidersByType,
+  syncProjectProvidersToIntegrationCatalog
+} from "../../lib/onboarding-settings-draft.js";
+import {
   createProjectProviderDraft,
   createSystemProviderDraft,
   getProviderInstanceLabel,
@@ -148,10 +155,6 @@ const getProviderWatermark = (providerId: ProviderId): string => (
               : "CLD"
 );
 
-const buildProviderConfigId = (providerId: ProviderId): ProviderConfigId => (
-  `${providerId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
-);
-
 const defaultReadiness: OnboardingRuntimeReadiness = {
   checkedAt: "",
   cluster: {
@@ -163,85 +166,7 @@ const defaultReadiness: OnboardingRuntimeReadiness = {
   providers: [],
 };
 
-const getProviderInitialSelection = (
-  providers: OnboardingProviderCredentialStatus[],
-  settings: SystemSettings,
-): ProviderId[] => {
-  const detected = providers
-    .filter((provider) => provider.available || provider.mountEnabled)
-    .map((provider) => provider.provider);
-  const enabled = Object.values(settings.defaults.aiProvider.providers)
-    .filter((provider) => provider.enabled)
-    .map((provider) => provider.provider);
-  return Array.from(new Set<ProviderId>(["jules", ...enabled, ...detected]));
-};
-
 const cloneSettings = (settings: SystemSettings): SystemSettings => JSON.parse(JSON.stringify(settings)) as SystemSettings;
-
-const getSystemProvidersByType = (
-  settings: SystemSettings | null,
-  providerId: ProviderId,
-): Array<[ProviderConfigId, SystemSettings["integrations"]["providers"][ProviderConfigId]]> => (
-  sortProviderConfigEntries(Object.entries(settings?.integrations.providers || {})
-    .filter(([, provider]) => provider.provider === providerId) as Array<[ProviderConfigId, SystemSettings["integrations"]["providers"][ProviderConfigId]]>)
-);
-
-const getFirstCliProviderConfigId = (providers: ProjectSettings["aiProvider"]["providers"]): ProviderConfigId | null => (
-  Object.entries(providers).find(([, provider]) => provider.provider !== "jules")?.[0] || null
-);
-
-const syncProjectProvidersToIntegrationCatalog = (
-  settings: SystemSettings,
-  nextIntegrationProviders: SystemSettings["integrations"]["providers"],
-): ProjectSettings => {
-  const nextProjectProviders = Object.fromEntries(
-    Object.entries(nextIntegrationProviders).map(([providerConfigId, provider]) => [
-      providerConfigId,
-      settings.defaults.aiProvider.providers[providerConfigId]
-        ? {
-          ...settings.defaults.aiProvider.providers[providerConfigId],
-          provider: provider.provider,
-          name: provider.name,
-        }
-        : createProjectProviderDraft(provider.provider, provider.name),
-    ]),
-  ) as ProjectSettings["aiProvider"]["providers"];
-
-  const nextInvocationRouting = Object.fromEntries(
-    Object.entries(settings.defaults.aiProvider.invocationRouting).map(([routeId, route]) => [
-      routeId,
-      {
-        ...route,
-        provider: route.provider && nextProjectProviders[route.provider] ? route.provider : null,
-        allowedProviders: route.allowedProviders.filter((providerConfigId) => nextProjectProviders[providerConfigId]),
-        providers: Object.fromEntries(
-          Object.entries(route.providers).filter(([providerConfigId]) => nextProjectProviders[providerConfigId]),
-        ),
-      },
-    ]),
-  ) as ProjectSettings["aiProvider"]["invocationRouting"];
-
-  const fallbackGlobalProvider = settings.defaults.aiProvider.provider && nextProjectProviders[settings.defaults.aiProvider.provider]
-    ? settings.defaults.aiProvider.provider
-    : Object.keys(nextProjectProviders)[0] || null;
-  const fallbackWorkerProvider = nextProjectProviders[settings.defaults.workers.virtualWorkerProvider]
-    ? settings.defaults.workers.virtualWorkerProvider
-    : getFirstCliProviderConfigId(nextProjectProviders) || fallbackGlobalProvider || settings.defaults.workers.virtualWorkerProvider;
-
-  return {
-    ...settings.defaults,
-    aiProvider: {
-      ...settings.defaults.aiProvider,
-      provider: fallbackGlobalProvider,
-      providers: nextProjectProviders,
-      invocationRouting: nextInvocationRouting,
-    },
-    workers: {
-      ...settings.defaults.workers,
-      virtualWorkerProvider: fallbackWorkerProvider,
-    },
-  };
-};
 
 const platform = (typeof window !== "undefined" && window.codeUxDesktop?.platform) || "linux";
 
@@ -325,6 +250,21 @@ export const OnboardingExperience: FunctionComponent = () => {
     window.addEventListener(ONBOARDING_OPEN_EVENT, handleOpen);
     return () => window.removeEventListener(ONBOARDING_OPEN_EVENT, handleOpen);
   }, [resetOnboardingState]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        void markOnboardingCompleted("cancel");
+        window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
+        setOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, markOnboardingCompleted]);
 
   const handleIntroExitStart = () => {
     setIntroPhase("transitioning");
@@ -761,7 +701,7 @@ export const OnboardingExperience: FunctionComponent = () => {
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3">
                 <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Cluster</div>
-                <div className={`mt-2 inline-flex rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${clusterReady ? "bg-signal-400/15 text-signal-200" : "bg-status-amber/15 text-status-amber"}`}>
+                <div aria-live="polite" className={`mt-2 inline-flex rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${clusterReady ? "bg-signal-400/15 text-signal-200" : "bg-status-amber/15 text-status-amber"}`}>
                   {clusterReady ? "Ready" : "Blocked"}
                 </div>
               </div>
@@ -832,6 +772,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                     key={step.id}
                     data-step-item
                     type="button"
+                    aria-current={activeItem ? "step" : undefined}
                     onClick={step.onClick}
                     className={`group flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-[background-color,border-color,transform] hover:translate-x-1 ${
                       activeItem ? "border-white/30 bg-white text-slate-950 shadow-[0_16px_40px_rgba(0,0,0,0.18)]" : "border-white/0 text-slate-300 hover:border-white/10 hover:bg-white/8 hover:text-white"
@@ -889,7 +830,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                     <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${clusterReady ? "bg-signal-500/12 text-signal-600" : "bg-status-amber/15 text-status-amber"}`}>
                       {clusterReady ? <Check className="h-6 w-6" /> : <Info className="h-6 w-6" />}
                     </div>
-                    <div>
+                    <div aria-live="polite">
                       <div className="text-lg font-black text-slate-900 dark:text-white">{readiness.cluster.label}</div>
                       <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{readiness.cluster.detail}</div>
                     </div>

@@ -1,0 +1,45 @@
+name: Models Catalog
+
+on:
+  push:
+    branches: [main, dev]
+
+concurrency:
+  group: models-catalog-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  update-catalog:
+    name: Prefetch models.dev catalogue
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.0
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Fetch models.dev catalogue
+        run: node scripts/fetch-models-dev.mjs
+
+      - name: Commit catalogue if changed
+        run: |
+          if git diff --quiet -- assets/models-dev/catalog.json; then
+            echo "No catalogue changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add assets/models-dev/catalog.json
+          git commit -m "chore: update models.dev catalogue [skip ci]"
+          git push origin HEAD:${{ github.ref_name }}

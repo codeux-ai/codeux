@@ -279,7 +279,7 @@ describe("SprintPreviewService unit tests", () => {
       expect(result.status).toBe("stopped");
       expect(runCommandStrict).toHaveBeenCalledWith(
         "docker",
-        ["rm", "-f", expect.stringContaining("code-ux-preview")],
+        ["rm", "-f", "-v", expect.stringContaining("code-ux-preview")],
         expect.any(String),
       );
     });
@@ -382,6 +382,19 @@ describe("SprintPreviewService unit tests", () => {
       const service = new SprintPreviewService(deps as any);
       await service.startSession("proj-1", "sprint-1");
 
+      expect(vi.mocked(runCommandStrict)).toHaveBeenCalledWith(
+        "docker",
+        expect.arrayContaining([
+          "volume",
+          "create",
+          "--label",
+          "code-ux.preview-volume=true",
+          "--label",
+          "code-ux.managed=true",
+          "code-ux-preview-volume-sprint-1",
+        ]),
+        "/repo",
+      );
       expect(vi.mocked(runCommandStrict).mock.calls.some((call) => call[0] === "docker" && call[1][0] === "cp" && call[1][2].endsWith(":/tmp/workspace.tar"))).toBe(true);
       expect(vi.mocked(runCommandStrict).mock.calls.some((call) => call[0] === "docker" && call[1][0] === "cp" && call[1][2].endsWith(":/tmp/preview-start.sh"))).toBe(true);
       expect(vi.mocked(runCommandStrict).mock.calls.some((call) => call[0] === "docker" && call[1][0] === "start")).toBe(true);
@@ -1445,84 +1458,4 @@ describe("SprintPreviewService unit tests", () => {
     });
   });
 
-  describe("cleanupLegacyPreviewWorkspaces", () => {
-    it("does nothing when legacy dir does not exist", async () => {
-      const service = new SprintPreviewService(deps as any);
-      await (service as any).cleanupLegacyPreviewWorkspaces("/repo");
-      // readdir throws ENOENT → early return
-      expect(runCommandStrict).not.toHaveBeenCalled();
-    });
-
-    it("removes preview- prefixed directories", async () => {
-      const fsMod = await import("fs/promises");
-      vi.mocked(fsMod.readdir).mockResolvedValue([
-        { name: "preview-old", isDirectory: () => true },
-        { name: "other-dir", isDirectory: () => true },
-        { name: "preview-file", isDirectory: () => false },
-      ] as any);
-
-      vi.mocked(runCommandStrict).mockResolvedValue({ exitCode: 0, stdout: "", stderr: "", durationMs: 1 });
-
-      const service = new SprintPreviewService(deps as any);
-      await (service as any).cleanupLegacyPreviewWorkspaces("/repo");
-
-      expect(runCommandStrict).toHaveBeenCalledWith(
-        "git",
-        ["worktree", "remove", "--force", expect.stringContaining("preview-old")],
-        "/repo",
-      );
-      expect(runCommandStrict).toHaveBeenCalledWith("git", ["worktree", "prune"], "/repo");
-    });
-  });
-
-  describe("cleanupOrphanedSetupContainers", () => {
-    it("removes containers matching orphaned setup command", async () => {
-      vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
-        if (command === "docker" && args?.[0] === "ps" && args?.includes("status=running")) {
-          return { exitCode: 0, stdout: "orphan-1\n", stderr: "", durationMs: 1 };
-        }
-        if (command === "docker" && args?.[0] === "inspect") {
-          return {
-            exitCode: 0,
-            stdout: '{}\t["/bin/sh","-c","bash /tmp/code-ux-setup.sh && rm -f /tmp/code-ux-setup.sh"]',
-            stderr: "",
-            durationMs: 1,
-          };
-        }
-        return { exitCode: 0, stdout: "", stderr: "", durationMs: 1 };
-      });
-
-      const service = new SprintPreviewService(deps as any);
-      await (service as any).cleanupOrphanedSetupContainers("/cwd");
-
-      expect(runCommandStrict).toHaveBeenCalledWith("docker", ["rm", "-f", "orphan-1"], "/cwd");
-    });
-
-    it("skips containers with labels", async () => {
-      vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
-        if (command === "docker" && args?.[0] === "ps") {
-          return { exitCode: 0, stdout: "labeled-1\n", stderr: "", durationMs: 1 };
-        }
-        if (command === "docker" && args?.[0] === "inspect") {
-          return {
-            exitCode: 0,
-            stdout: '{"app":"true"}\t["bash"]',
-            stderr: "",
-            durationMs: 1,
-          };
-        }
-        return { exitCode: 0, stdout: "", stderr: "", durationMs: 1 };
-      });
-
-      const service = new SprintPreviewService(deps as any);
-      await (service as any).cleanupOrphanedSetupContainers("/cwd");
-
-      // Should NOT have called rm for the labeled container
-      expect(runCommandStrict).not.toHaveBeenCalledWith(
-        "docker",
-        ["rm", "-f", "labeled-1"],
-        "/cwd",
-      );
-    });
-  });
 });

@@ -1,10 +1,12 @@
 import type { FunctionComponent } from "preact";
-import { useState } from "preact/hooks";
+import { useState, useRef, useLayoutEffect } from "preact/hooks";
+import gsap from "gsap";
 import { GitBranch, ListTodo, Rows3 } from "lucide-preact";
 import type { ProjectExecutionStatsSnapshot } from "../../../types.js";
 import { TelemetryLedger } from "./TelemetryLedger.js";
 import { GitTelemetryTab } from "./GitTelemetryTab.js";
 import { CHIP_CLASS } from "./StatsShared.js";
+import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
 
 export interface TelemetryLedgerTabsProps {
   stats: ProjectExecutionStatsSnapshot;
@@ -14,6 +16,26 @@ type LedgerTab = "tasks" | "sprints" | "git";
 
 export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = ({ stats }) => {
   const [activeTab, setActiveTab] = useState<LedgerTab>("tasks");
+  const contentRef = useRef<HTMLDivElement>(null);
+  const reducedMotion = useReducedMotion();
+  const prevTab = useRef(activeTab);
+
+  useLayoutEffect(() => {
+    if (!contentRef.current || prevTab.current === activeTab) return;
+
+    if (reducedMotion) {
+      prevTab.current = activeTab;
+      return;
+    }
+
+    gsap.killTweensOf(contentRef.current);
+    gsap.fromTo(
+      contentRef.current,
+      { opacity: 0, y: 10 },
+      { opacity: 1, y: 0, duration: 0.3, ease: "power2.out", clearProps: "all" }
+    );
+    prevTab.current = activeTab;
+  }, [activeTab, reducedMotion]);
 
   const tabs: Array<{ id: LedgerTab; label: string; icon: typeof ListTodo; badge: string | null }> = [
     { id: "tasks", label: "Task Telemetry", icon: ListTodo, badge: `${stats.tasks.length} tasks` },
@@ -35,9 +57,10 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
             if (nextIndex >= tabs.length) nextIndex = 0;
             if (nextIndex < 0) nextIndex = tabs.length - 1;
             setActiveTab(tabs[nextIndex].id);
-            setTimeout(() => {
+            // Delay the focus by a microtask to allow render to complete
+            Promise.resolve().then(() => {
               document.getElementById(`tab-${tabs[nextIndex].id}`)?.focus();
-            }, 0);
+            });
           }
         }}
       >
@@ -81,6 +104,7 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
         id={`tabpanel-${activeTab}`}
         aria-labelledby={`tab-${activeTab}`}
         tabIndex={0}
+        ref={contentRef}
       >
         {activeTab === "git" && stats.git ? (
           <GitTelemetryTab gitStats={stats.git} />

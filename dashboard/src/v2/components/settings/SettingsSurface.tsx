@@ -6,6 +6,7 @@ import gsap from "gsap";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useGsapDurations } from "../../lib/motion/constants.js";
+import { ActionFeedbackRegion } from "../ui/ActionFeedbackRegion.js";
 
 export const NoticePanel: FunctionComponent<{
   tone?: "neutral" | "warning" | "success" | "error" | "pending";
@@ -137,25 +138,20 @@ export const SettingsBody: FunctionComponent<{
   message?: string | null;
   loading?: boolean;
   loadingLabel?: string;
+  saving?: boolean;
+  savingLabel?: string;
+  dirty?: boolean;
+  dirtyLabel?: string;
+  successLabel?: string;
   children: ComponentChildren;
-}> = ({ error, message, loading, loadingLabel = "Loading\u2026", children }) => (
-  <div className="px-7 py-6">
-    {error ? (
-      <div className="mb-5">
-        <NoticePanel title="Error" tone="error">{error}</NoticePanel>
-      </div>
-    ) : null}
-
-    {message ? (
-      <div className="mb-5">
-        <NoticePanel title="Success" tone="success">{message}</NoticePanel>
-      </div>
-    ) : null}
-
-    {loading ? (
-      <NoticePanel title="Loading" tone="pending">{loadingLabel}</NoticePanel>
-    ) : (
-      children
+}> = ({ error, message, loading, loadingLabel = "Loading\u2026", saving, savingLabel, dirty, dirtyLabel, successLabel, children }) => (
+  <div className="px-7 py-6 flex flex-col gap-4">
+    {(error || message || loading || saving || dirty) && (
+      <ActionFeedbackRegion
+        status={error ? "error" : loading || saving ? "pending" : message ? "success" : dirty ? "warning" : "idle"}
+        message={error || (loading ? loadingLabel : saving ? (savingLabel || "Saving...") : message ? (successLabel || message) : dirty ? (dirtyLabel || "You have unsaved changes.") : null)}
+      />
     )}
+    {!loading && children}
   </div>
 );

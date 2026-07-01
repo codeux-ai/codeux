@@ -216,8 +216,9 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
 
   return (
     <TableRow
+      aria-busy={isRowPending || isTogglePending || isPauseResumePending}
       className={`group transition-all focus-within:ring-2 focus-within:ring-signal-500/20 ${rowTone} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""} ${pendingRowClass} hover:bg-[var(--bg-hover-subtle)] transition-[box-shadow,transform] duration-150 [@media(hover:hover)]:hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)] [@media(hover:hover)]:hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:transform-none`}
-      style={{ transitionDuration: duration, transitionTimingFunction: ease }}
+      style={{ transitionDuration: typeof duration === 'number' ? `${duration}s` : duration, transitionTimingFunction: ease }}
     >
       <TableCell isFirst className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`} mobileLabel="Select">
         <button
@@ -225,8 +226,8 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           onClick={() => onToggleRow(sprint.id)}
           disabled={isDeletePending || isAnyBulkPending}
           className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-black/[0.06] bg-white/72 text-slate-400 transition-colors hover:border-signal-500/25 hover:text-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.07] dark:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
-          title={isSelected ? "Deselect sprint" : "Select sprint"}
-          aria-label={isSelected ? `Deselect sprint ${sprint.name}` : `Select sprint ${sprint.name}`}
+          title={isDeletePending ? "Wait for the current action to finish" : isSelected ? "Deselect sprint" : "Select sprint"}
+          aria-label={isDeletePending ? `Cannot select sprint ${sprint.name} while deleting` : isSelected ? `Deselect sprint ${sprint.name}` : `Select sprint ${sprint.name}`}
         >
           {isSelected
             ? <span ref={checkIconRef} className="flex"><CheckSquare className="h-4 w-4 text-signal-500" strokeWidth={2.2} /></span>

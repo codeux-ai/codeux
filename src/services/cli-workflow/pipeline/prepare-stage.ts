@@ -1,3 +1,4 @@
+import { buildProviderSettingsOverride } from "../../provider-settings-override.js";
 import { buildProviderPrompt } from "../../cli-workflow-utils.js";
 import type { PipelineContext } from "./pipeline-context.js";
 import type { AgentMemoryConfig } from "../../../contracts/agent-preset-types.js";
@@ -35,10 +36,12 @@ export async function executePrepareStage(
   ctx: PipelineContext,
   resumeFromFailedSessionId?: string
 ): Promise<{ worktreePath: string; initialHead: string; providerPrompt: string }> {
-  const providerSettings = ctx.providerSettingsOverride || resolveProviderForInvocation(ctx.settings, {
+  const resolvedProvider = resolveProviderForInvocation(ctx.settings, {
     invocation: "task_coding",
     task: ctx.task,
-  }).providers[ctx.provider];
+  });
+  const resolvedProviderSettings = resolvedProvider.providers[ctx.provider];
+  const providerSettings = ctx.providerSettingsOverride || buildProviderSettingsOverride(resolvedProviderSettings.model, resolvedProviderSettings);
 
   const workerGuide = await ctx.deps.getWorkerInstruction(ctx.repoPath);
 

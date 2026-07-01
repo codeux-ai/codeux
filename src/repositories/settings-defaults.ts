@@ -113,9 +113,13 @@ export const CLAUDE_MODELS: string[] = [
   "opus[1m]",
   "opusplan",
   "claude-opus-4-6",
+  "claude-opus-4-7",
+  "claude-opus-4-8",
   "claude-sonnet-4-6",
+  "claude-sonnet-5",
   "claude-haiku-4-5-20251001",
   "claude-fable-5",
+  "claude-mythos-5",
 ];
 
 export const CODEX_MODELS: string[] = [
@@ -620,6 +624,9 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
       "",
       "Each bullet should be a self-contained statement (1-2 sentences) that would be useful context for a future developer or AI working on this project.",
     ].join("\n"),
+  },
+  modelPricing: {
+    overrides: {},
   },
 };
 ;

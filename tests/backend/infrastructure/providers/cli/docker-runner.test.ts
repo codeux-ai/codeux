@@ -4,6 +4,7 @@ import { DockerRunner } from "../../../../../src/infrastructure/providers/cli/do
 
 vi.mock("fs/promises");
 vi.mock("../../../../../src/services/cli-process-runner.js", () => ({
+  runCommandStrict: vi.fn(),
   runStreamingCommand: vi.fn(),
 }));
 vi.mock("../../../../../src/infrastructure/providers/cli/docker-bootstrap-builder.js", () => ({
@@ -36,7 +37,7 @@ vi.mock("../../../../../src/infrastructure/providers/cli/docker-runtime-paths.js
   resolveDockerRuntimeRoot: vi.fn(() => "/runtime-root"),
 }));
 
-import { runStreamingCommand } from "../../../../../src/services/cli-process-runner.js";
+import { runCommandStrict, runStreamingCommand } from "../../../../../src/services/cli-process-runner.js";
 import { DockerSetupImageCache } from "../../../../../src/infrastructure/providers/cli/docker-setup-image-cache.js";
 
 describe("DockerRunner", () => {
@@ -50,6 +51,7 @@ describe("DockerRunner", () => {
     vi.mocked(fs.stat).mockResolvedValue({ uid: 1000, gid: 1000 } as any);
     vi.mocked(fs.access).mockRejectedValue(new Error("missing"));
     vi.mocked(fs.writeFile).mockResolvedValue(undefined);
+    vi.mocked(runCommandStrict).mockResolvedValue({ ok: true, stdout: "", stderr: "", code: 0, signal: null } as any);
     vi.mocked(runStreamingCommand).mockResolvedValue({
       ok: true,
       stdout: "done",
@@ -143,7 +145,9 @@ describe("DockerRunner", () => {
     );
     const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
     expect(dockerArgs.some((arg) => arg.includes("type=volume") && arg.includes("source=workspace-1"))).toBe(true);
-    expect(dockerArgs).toContain("HOME=/workspace/.code-ux-home");
+    expect(dockerArgs.some((arg) => arg.includes("type=volume") && arg.includes("source=workspace-1-runtime") && arg.includes("target=/code-ux-runtime-home"))).toBe(true);
+    expect(dockerArgs).toContain("HOME=/code-ux-runtime-home");
+    expect(dockerArgs).not.toContain("HOME=/workspace/.code-ux-home");
     const cacheInstance = vi.mocked(DockerSetupImageCache).mock.results[0]?.value as any;
     expect(cacheInstance.resolveImage).toHaveBeenCalledWith(expect.objectContaining({ runtimeRoot: "/runtime-root" }));
   });
@@ -213,6 +217,9 @@ describe("DockerRunner", () => {
     ]));
     expect(dockerArgs).not.toEqual(expect.arrayContaining([
       expect.stringContaining("target=/workspace/.code-ux-home/.gemini/settings.json"),
+    ]));
+    expect(dockerArgs).not.toEqual(expect.arrayContaining([
+      expect.stringContaining("target=/code-ux-runtime-home/.gemini/settings.json"),
     ]));
   });
 });

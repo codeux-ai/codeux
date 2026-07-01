@@ -37,11 +37,58 @@ describe("onboarding-provider-settings", () => {
   });
 
   it("cloneSettings deep clones the settings object", () => {
-    const settings = { a: 1, b: { c: 2 } } as unknown as SystemSettings;
+    const settings = {
+      runtime: {},
+      integrations: {
+        jira: { host: "", email: "", apiToken: "", autoCloseLinkedIssues: false, defaultProject: "", closeTransitionName: "Done" },
+        providers: {
+          "p1": { provider: "jules", name: "Jules", apiKey: "key", mountAuth: false, authPath: "" }
+        }
+      },
+      defaults: {
+        appearance: { theme: "system" },
+        automationLevel: "FULL",
+        automationInterventions: {},
+        git: { githubMode: "app", githubToken: "", defaultBranch: "main", autoCreatePr: false, autoCloseLinkedIssues: false, deleteMergedBranches: false, featureBranchPrefix: "", sprintBranchScheme: "FLAT", sprintKeyPrefix: "" },
+        jira: { host: "h", email: "e", apiToken: "t", autoCloseLinkedIssues: false, defaultProject: "P", closeTransitionName: "Done" },
+        ciIntelligence: {},
+        sprintLoopSteps: { apply: { type: "apply" }, pr: { type: "pr" }, runTests: { type: "test" } },
+        cliWorkflow: { executionMode: "HOST" },
+        sprintPreview: { enabled: false },
+        aiProvider: {
+          provider: "jules",
+          strategy: "MANUAL",
+          providers: {},
+          invocationRouting: {}
+        },
+        workers: { allowParallelJobs: false },
+        agents: {
+          saveToProjectDirectory: false,
+          routing: {
+            planning: { strategy: "DEFAULT" },
+            taskCoding: { strategy: "DEFAULT", orchestratorAgentPresetIds: [] },
+            ciFix: { strategy: "DEFAULT" },
+            mergeConflict: { strategy: "DEFAULT" },
+            dashboardReply: { strategy: "DEFAULT" },
+            clarificationReply: { strategy: "DEFAULT" },
+          },
+          instructionTemplates: {},
+          qualityAssurance: { enabled: false, maxTaskReviewRuns: 2, maxSprintReviewRuns: 3, exhaustionPolicy: "STOP", taskCompletion: { strategy: "ALWAYS" }, sprintCompletion: { strategy: "ALWAYS" }, completedTaskWithoutPr: { strategy: "CREATE_PR" } }
+        },
+        guardrails: { onLimitAction: "WARN", defaultLimitOverrides: [], limitOverrides: [], jobConfigOverrides: [], jobs: { task_coding: {}, ci_fix: {}, merge_conflict: {}, clarification_reply: {}, planning: {}, remediation: {} } },
+        skills: [],
+        mcpTools: [],
+        customMcpServers: [],
+        memory: { enabled: true, embeddingModel: null, externalEmbedding: { baseUrl: "", apiKey: "", model: "", dimensions: null }, autoCaptureSprint: true, autoCaptureAgent: true, autoPromote: false, promotionThreshold: 5, maxSprintMemories: 10, maxProjectMemories: 20, mapMaxEdgesPerNode: 5, workerLearningsInstruction: "" }
+      },
+      mcpTools: [],
+      customMcpServers: [],
+      modelPricing: { overrides: {} },
+    } as unknown as SystemSettings;
     const cloned = cloneSettings(settings);
     expect(cloned).toEqual(settings);
     expect(cloned).not.toBe(settings);
-    expect(cloned.b).not.toBe(settings.b);
+    expect(cloned.integrations.providers).not.toBe(settings.integrations.providers);
   });
 
   it("getSystemProvidersByType sorts and filters integration providers by type", () => {

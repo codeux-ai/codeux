@@ -1,10 +1,11 @@
 import type { FunctionComponent } from "preact";
 import { useState } from "preact/hooks";
-import { Terminal, Trash2, Banknote } from "lucide-preact";
+import { Terminal, Trash2 } from "lucide-preact";
 import { PillChoiceGroup, ProviderLogo, Row, SelectInput, TextInput, Toggle } from "./SettingsFormFields.js";
 import { getProviderDefaultAuthPath, getProviderTypeLabel } from "../../lib/settings-view-models.js";
 import { TerminalLoginModal } from "./TerminalLoginModal.js";
-import { TokenPricingModal } from "./TokenPricingModal.js";
+import { ModelCombobox } from "../ui/ModelCombobox.js";
+import { ProviderCombobox } from "../ui/ProviderCombobox.js";
 import {
   buildOpenCodeConfigPreview,
   buildQwenSettingsPreview,
@@ -37,7 +38,6 @@ export const ProviderInstanceCard: FunctionComponent<{
   total?: number;
 }> = ({ providerConfigId, provider, providerModel, dockerExecutionEnabled, onUpdate, onRemove, isLast = true, enabled, onToggleEnabled, index, total }) => {
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [showPricingModal, setShowPricingModal] = useState(false);
 
   const currentAuthType = provider.authType || (provider.mountAuth ? "localAuth" : "apiKey");
 
@@ -64,14 +64,6 @@ export const ProviderInstanceCard: FunctionComponent<{
               <Toggle aria-label="Toggle setting" value={enabled ?? true} onChange={() => onToggleEnabled(!(enabled ?? true))} />
             </label>
           ) : null}
-          <button
-            type="button"
-            onClick={() => setShowPricingModal(true)}
-            className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-black/[0.02] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 hover:bg-black/[0.04]  dark:text-slate-300 dark:hover:bg-white/[0.06]"
-          >
-            <Banknote className="h-3.5 w-3.5" />
-            Token pricing
-          </button>
           {onRemove ? (
 
             <button
@@ -88,20 +80,6 @@ export const ProviderInstanceCard: FunctionComponent<{
 
       <Row label="Display name" description="Used throughout AI Models and runtime route summaries.">
         <TextInput value={provider.name} onChange={(value) => onUpdate({ name: value })} />
-        <div className="mt-2 flex flex-wrap gap-2">
-          {provider.tokenPricing ? (
-            <div className="inline-flex items-center gap-1.5 rounded-lg border border-signal-500/20 bg-signal-500/10 px-2 py-1 text-[10px] font-semibold text-signal-600 dark:border-signal-400/20 dark:bg-signal-400/10 dark:text-signal-400">
-              <Banknote className="h-3 w-3" />
-              ${provider.tokenPricing.inputTokens}/M in • ${provider.tokenPricing.outputTokens}/M out
-              {provider.tokenPricing.cachedInputTokens > 0 ? ` • ${provider.tokenPricing.cachedInputTokens}/M cached` : ""}
-            </div>
-          ) : (
-            <div className="inline-flex items-center gap-1.5 rounded-lg border border-black/[0.06] bg-black/[0.02] px-2 py-1 text-[10px] font-semibold text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400">
-              <Banknote className="h-3 w-3" />
-              Unset pricing
-            </div>
-          )}
-        </div>
       </Row>
 
       {provider.provider !== "jules" ? (
@@ -215,6 +193,15 @@ export const ProviderInstanceCard: FunctionComponent<{
 
               {(provider.qwenAuthMode || "MODEL_PROVIDER") === "MODEL_PROVIDER" && (
                 <>
+                  <Row label="API provider" description="Search the catalogue or type a custom provider name. Picking a known provider fills in its base URL below.">
+                    <ProviderCombobox
+                      value={provider.qwenApiProviderId || ""}
+                      onChange={(value, apiBaseUrl) => onUpdate({
+                        qwenApiProviderId: value || undefined,
+                        ...(apiBaseUrl ? { qwenBaseUrl: apiBaseUrl } : {}),
+                      })}
+                    />
+                  </Row>
                   <Row label="Provider protocol" description="Qwen Code groups modelProviders by API protocol.">
                     <SelectInput
                       value={provider.qwenProtocol || "openai"}
@@ -225,10 +212,14 @@ export const ProviderInstanceCard: FunctionComponent<{
                   <Row label="Environment key" description="Variable name Qwen reads for this instance's API key.">
                     <TextInput value={provider.qwenEnvKey || "OLLAMA_API_KEY"} onChange={(value) => onUpdate({ qwenEnvKey: value })} mono />
                   </Row>
-                  <Row label="Model id" description="The custom model registered in Qwen Code modelProviders and shown on the AI Models page.">
-                    <TextInput value={provider.qwenModelId || providerModel || "glm-4.7-flash"} onChange={(value) => onUpdate({ qwenModelId: value })} mono />
+                  <Row label="Model id" description="The bare model identifier registered in Qwen Code modelProviders (e.g. glm-4.7-flash, no provider prefix) and shown on the AI Models page. Search the catalogue or type a custom id.">
+                    <ModelCombobox
+                      value={provider.qwenModelId || providerModel || "glm-4.7-flash"}
+                      onChange={(value) => onUpdate({ qwenModelId: value })}
+                      providerId={provider.qwenApiProviderId}
+                    />
                   </Row>
-                  <Row label="Base URL" description="OpenAI-compatible, Anthropic, Gemini, or local endpoint used by this model entry.">
+                  <Row label="Base URL" description="OpenAI-compatible, Anthropic, Gemini, or local endpoint used by this model entry. Type a custom URL/IP or pick a provider above.">
                     <TextInput value={provider.qwenBaseUrl || "http://127.0.0.1:11434/v1"} onChange={(value) => onUpdate({ qwenBaseUrl: value })} mono />
                   </Row>
                 </>
@@ -278,8 +269,14 @@ export const ProviderInstanceCard: FunctionComponent<{
 
               {(provider.openCodeAuthMode || "ENV_KEY") !== "LOCAL_AUTH" && (
                 <>
-                  <Row label="Provider id" description="The provider segment in OpenCode's `provider/model` selector.">
-                    <TextInput value={provider.openCodeProviderId || splitOpenCodeModel(providerModel).providerId} onChange={(value) => onUpdate({ openCodeProviderId: value })} mono />
+                  <Row label="Provider id" description="The provider segment in OpenCode's `provider/model` selector. Search the catalogue or type a custom id. Picking a known provider fills in its base URL below.">
+                    <ProviderCombobox
+                      value={provider.openCodeProviderId || splitOpenCodeModel(providerModel).providerId}
+                      onChange={(value, apiBaseUrl) => onUpdate({
+                        openCodeProviderId: value,
+                        ...(apiBaseUrl ? { openCodeBaseUrl: apiBaseUrl } : {}),
+                      })}
+                    />
                   </Row>
                   <Row label="Environment key" description="Host environment variable to import when the stored API key is empty. Runtime config maps it to OPENCODE_API_KEY.">
                     <TextInput value={provider.openCodeEnvKey || "OLLAMA_API_KEY"} onChange={(value) => onUpdate({ openCodeEnvKey: value })} mono />
@@ -289,13 +286,17 @@ export const ProviderInstanceCard: FunctionComponent<{
 
               {provider.openCodeAuthMode === "CUSTOM_PROVIDER" && (
                 <>
-                  <Row label="Model id" description="The model segment registered under the custom provider.">
-                    <TextInput value={provider.openCodeModelId || splitOpenCodeModel(providerModel).modelId} onChange={(value) => onUpdate({ openCodeModelId: value })} mono />
+                  <Row label="Model id" description="The bare model segment registered under the provider above (OpenCode combines them as provider/model itself). Search the catalogue or type a custom id.">
+                    <ModelCombobox
+                      value={provider.openCodeModelId || splitOpenCodeModel(providerModel).modelId}
+                      onChange={(value) => onUpdate({ openCodeModelId: value })}
+                      providerId={provider.openCodeProviderId || splitOpenCodeModel(providerModel).providerId}
+                    />
                   </Row>
                   <Row label="Provider package" description="OpenCode provider adapter package. OpenAI-compatible endpoints use the AI SDK compatible adapter.">
                     <TextInput value={provider.openCodePackage || "@ai-sdk/openai-compatible"} onChange={(value) => onUpdate({ openCodePackage: value })} mono />
                   </Row>
-                  <Row label="Base URL" description="OpenAI-compatible endpoint for OpenRouter, Ollama, vLLM, LM Studio, LiteLLM, or a private gateway.">
+                  <Row label="Base URL" description="OpenAI-compatible endpoint for OpenRouter, Ollama, vLLM, LM Studio, LiteLLM, or a private gateway. Type a custom URL/IP or pick a provider above.">
                     <TextInput value={provider.openCodeBaseUrl || "http://127.0.0.1:11434/v1"} onChange={(value) => onUpdate({ openCodeBaseUrl: value })} mono />
                   </Row>
                 </>
@@ -326,11 +327,25 @@ export const ProviderInstanceCard: FunctionComponent<{
             </Row>
           )}
           <Row
+            label="API provider"
+            description="Search the catalogue or type a custom provider name (self-hosted gateway, private proxy, etc.). Picking a known provider fills in the base URL below."
+          >
+            <ProviderCombobox
+              value={provider.customProviderId || ""}
+              onChange={(value, apiBaseUrl) => onUpdate({
+                customProviderId: value || undefined,
+                ...(apiBaseUrl ? { customBaseUrl: apiBaseUrl } : {}),
+              })}
+              disabled={currentAuthType !== "apiKey"}
+              placeholder="Leave empty to use the default endpoint"
+            />
+          </Row>
+          <Row
             label={provider.provider === "claude-code" ? "Anthropic base URL" : "OpenAI base URL"}
             description={
               provider.provider === "claude-code"
-                ? "Override ANTHROPIC_BASE_URL. Claude Code speaks the Anthropic Messages API and appends /v1/messages itself, so use an Anthropic-compatible endpoint WITHOUT a /v1 suffix — for OpenRouter that is https://openrouter.ai/api (not .../api/v1, which is the OpenAI URL used by Codex/Qwen). The API key is sent as a Bearer token. Leave empty to use the default Anthropic API."
-                : "Override OPENAI_BASE_URL. Route Codex through a custom OpenAI-compatible endpoint, e.g. https://openrouter.ai/api/v1. Leave empty to use the default OpenAI API."
+                ? "Override ANTHROPIC_BASE_URL. Claude Code speaks the Anthropic Messages API and appends /v1/messages itself, so use an Anthropic-compatible endpoint WITHOUT a /v1 suffix — for OpenRouter that is https://openrouter.ai/api (not .../api/v1, which is the OpenAI URL used by Codex/Qwen). The API key is sent as a Bearer token. Leave empty to use the default Anthropic API. Type a custom URL/IP or pick a provider above."
+                : "Override OPENAI_BASE_URL. Route Codex through a custom OpenAI-compatible endpoint, e.g. https://openrouter.ai/api/v1. Leave empty to use the default OpenAI API. Type a custom URL/IP or pick a provider above."
             }
           >
             <TextInput value={provider.customBaseUrl || ""} onChange={(value) => onUpdate({ customBaseUrl: value || undefined })} disabled={currentAuthType !== "apiKey"} mono />
@@ -339,12 +354,18 @@ export const ProviderInstanceCard: FunctionComponent<{
             label="Custom model"
             description={
               provider.provider === "claude-code"
-                ? "Model slug sent to the gateway (e.g. anthropic/claude-sonnet-4.5). Applied to every Claude Code tier so background calls hit the same model. Leave empty to use the agent's selected model."
-                : "Model slug sent to the gateway (e.g. openai/gpt-5-codex). Overrides the agent's selected model. Leave empty to use the agent's selected model."
+                ? "Bare model slug sent to the gateway (e.g. claude-sonnet-4-5, no provider prefix — the provider above already determines the endpoint). Applied to every Claude Code tier so background calls hit the same model. Leave empty to use the agent's selected model. Search the catalogue or type a custom slug."
+                : "Bare model slug sent to the gateway (e.g. gpt-5-codex, no provider prefix — the provider above already determines the endpoint). Overrides the agent's selected model. Leave empty to use the agent's selected model. Search the catalogue or type a custom slug."
             }
             last={isLast}
           >
-            <TextInput value={provider.customModel || ""} onChange={(value) => onUpdate({ customModel: value || undefined })} disabled={currentAuthType !== "apiKey"} mono />
+            <ModelCombobox
+              value={provider.customModel || ""}
+              onChange={(value) => onUpdate({ customModel: value || undefined })}
+              disabled={currentAuthType !== "apiKey"}
+              placeholder="Leave empty to use the agent's selected model"
+              providerId={provider.customProviderId}
+            />
           </Row>
         </>
       )}
@@ -373,14 +394,6 @@ export const ProviderInstanceCard: FunctionComponent<{
             // Trigger an update with a new lastLoginAt timestamp to make the form dirty so the user can Save Changes
             onUpdate({ lastLoginAt: Date.now() });
           }}
-        />
-      )}
-      {showPricingModal && (
-        <TokenPricingModal
-          isOpen={showPricingModal}
-          onClose={() => setShowPricingModal(false)}
-          pricing={provider.tokenPricing}
-          onSave={(pricing) => onUpdate({ tokenPricing: pricing })}
         />
       )}
     </div>

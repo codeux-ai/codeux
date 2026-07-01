@@ -2,12 +2,12 @@ import * as os from "os";
 import * as path from "path";
 import * as pathPosix from "path/posix";
 import * as fs from "fs/promises";
-import { ProviderRunInput } from "./provider-runner.js";
-import { CliWorkflowSettings } from "../../../contracts/app-types.js";
-import { CliProviderId } from "./provider-command-specs.js";
+import type { ProviderRunInput } from "./provider-runner.js";
+import type { CliWorkflowSettings } from "../../../contracts/app-types.js";
+import type { CliProviderId } from "./provider-command-specs.js";
 
 export const CONTAINER_WORKSPACE_ROOT = "/workspace";
-export const CONTAINER_RUNTIME_HOME = pathPosix.join(CONTAINER_WORKSPACE_ROOT, ".code-ux-home");
+export const CONTAINER_RUNTIME_HOME = "/code-ux-runtime-home";
 export const QWEN_OPENAI_LOG_DIRNAME = "qwen-openai-logs";
 export const CONTAINER_QWEN_OPENAI_LOG_DIR = pathPosix.join(CONTAINER_RUNTIME_HOME, QWEN_OPENAI_LOG_DIRNAME);
 

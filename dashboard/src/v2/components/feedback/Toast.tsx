@@ -94,7 +94,7 @@ export const Toast: FunctionComponent<ToastProps> = ({
 
   const handleDismiss = () => {
     if (document.activeElement === dismissButtonRef.current || document.activeElement === actionButtonRef.current) {
-      const fallback = (document.querySelector('[role="main"]') as HTMLElement) || document.body;
+      const fallback = document.body;
       if (fallback !== document.body && fallback.tabIndex < 0) fallback.tabIndex = -1;
       fallback.focus();
       if (document.activeElement === dismissButtonRef.current || document.activeElement === actionButtonRef.current) {

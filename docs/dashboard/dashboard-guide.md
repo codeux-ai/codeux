@@ -385,6 +385,7 @@ Legacy runtime:
 - Chat page now receives websocket updates for thread assignment changes and incoming thread messages in the active thread
 - Chat page now shows a live "working" bubble once a listener has picked up a dashboard message and is preparing a reply
 - Chat page message, invocation, and working bubbles now use light-mode slate surfaces and darker text to keep chat transcripts readable without altering the Warm Void dark theme
+- Chat page invocation navigation keeps the rail and transcript height-bounded, so clicking through long invocation records scrolls only the internal panes and does not add page-level blank space.
 - Chat page now force-refreshes the selected thread when realtime thread updates arrive, so virtual replies clear stale `pending` delivery badges and sidebar counts as soon as the reply lands
 - Chat message and thread timestamp chrome now suppresses malformed timestamps instead of rendering `Invalid Date`
 - Thread compaction now works on both virtual and connected chat routes: virtual routes invoke the selected CLI chat worker directly, while connected routes send a hidden control request to the selected live worker, store its compaction summary, and use that saved handoff for the next fresh reply prompt
@@ -556,8 +557,7 @@ Realtime consumers currently include:
 
 Chat-specific behavior:
 
-- The Chat refresh button is now manual-only.
-- Background realtime sync and fallback refreshes no longer drive the refresh button spinner state.
+- The Chat header no longer exposes a manual refresh button; thread and invocation data stay current through realtime sync, route-driven hydration, and bounded fallback polling.
 
 Live view behavior:
 

@@ -1,4 +1,4 @@
-import { useCallback } from "preact/hooks";
+import { useCallback, useMemo } from "preact/hooks";
 import type {
   CreateTaskInput,
   ImprovePromptInput,
@@ -44,6 +44,7 @@ import {
   updateCustomQuicksprintTemplate,
   deleteCustomQuicksprintTemplate,
 } from "../../lib/quicksprint-api.js";
+import { SprintPageActionRunner } from "../../lib/sprint-page-action-runner.js";
 
 export interface SprintsPageActionsDeps {
   selectedProject: any;
@@ -104,6 +105,51 @@ export function useSprintsPageActions({
   reloadQuicksprintTemplates,
   createProject,
 }: SprintsPageActionsDeps) {
+  const checkActiveRun = useCallback(
+    async (sprintId: string) => {
+      if (!selectedProject) return false;
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        const snapshot = await fetchProjectExecution(selectedProject.id);
+        if (
+          snapshot.sprintRuns.some(
+            (run: any) =>
+              run.sprintId === sprintId &&
+              (run.status === "running" || run.status === "queued"),
+          )
+        ) {
+          return true;
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 250));
+      }
+      return false;
+    },
+    [selectedProject],
+  );
+
+  const actionRunner = useMemo(
+    () =>
+      new SprintPageActionRunner({
+        pendingActionIds,
+        setPendingActionIds,
+        setOptimisticStatuses,
+        setSuppressedRunningSprintIds,
+        refresh,
+        refreshExecution,
+        setError,
+        checkActiveRun,
+      }),
+    [
+      pendingActionIds,
+      setPendingActionIds,
+      setOptimisticStatuses,
+      setSuppressedRunningSprintIds,
+      refresh,
+      refreshExecution,
+      setError,
+      checkActiveRun,
+    ],
+  );
+
   const runSprintAction = useCallback(
     async (
       actionId: string,
@@ -114,121 +160,40 @@ export function useSprintsPageActions({
         waitForActiveRun?: boolean;
       } = {},
     ) => {
-      setPendingActionIds((current) => new Set(current).add(actionId));
-      if (options.optimisticStatus) {
-        setOptimisticStatuses((current) => ({
-          ...current,
-          [sprintId]: options.optimisticStatus!,
-        }));
-      }
-      try {
-        await operation();
-        if (options.optimisticStatus === "cancelled") {
-          setSuppressedRunningSprintIds((current) =>
-            new Set(current).add(sprintId),
-          );
-        }
-        if (options.waitForActiveRun && selectedProject) {
-          for (let attempt = 0; attempt < 8; attempt += 1) {
-            const snapshot = await fetchProjectExecution(selectedProject.id);
-            if (
-              snapshot.sprintRuns.some(
-                (run: any) =>
-                  run.sprintId === sprintId &&
-                  (run.status === "running" || run.status === "queued"),
-              )
-            ) {
-              break;
-            }
-            await new Promise((resolve) => window.setTimeout(resolve, 250));
-          }
-        }
-        await Promise.all([refresh(), refreshExecution()]);
-        setOptimisticStatuses((current) => {
-          const next = { ...current };
-          delete next[sprintId];
-          return next;
-        });
-      } catch (error) {
-        setOptimisticStatuses((current) => {
-          const next = { ...current };
-          delete next[sprintId];
-          return next;
-        });
-        await Promise.all([refresh(), refreshExecution()]);
-        setError(error instanceof Error ? error.message : String(error));
-        throw error;
-      } finally {
-        setPendingActionIds((current) => {
-          const next = new Set(current);
-          next.delete(actionId);
-          return next;
-        });
-      }
+      await actionRunner.runAction(actionId, sprintId, operation, {
+        ...options,
+        rethrow: true,
+      });
     },
-    [
-      refresh,
-      refreshExecution,
-      selectedProject,
-      setOptimisticStatuses,
-      setPendingActionIds,
-      setSuppressedRunningSprintIds,
-      setError,
-    ],
+    [actionRunner],
   );
 
   const handleMarkCompleted = useCallback(
     async (sprintId: string) => {
-      const actionId = `sprint-mark-completed:${sprintId}`;
-      if (pendingActionIds.has(actionId)) {
-        return;
-      }
-      setPendingActionIds((current) => new Set(current).add(actionId));
-      try {
-        await updateSprint(sprintId, { status: "completed" });
-        await refresh();
-      } catch (error) {
-        setError(error instanceof Error ? error.message : String(error));
-      } finally {
-        setPendingActionIds((current) => {
-          const next = new Set(current);
-          next.delete(actionId);
-          return next;
-        });
-      }
+      await actionRunner.runAction(
+        `sprint-mark-completed:${sprintId}`,
+        sprintId,
+        async () => {
+          await updateSprint(sprintId, { status: "completed" });
+        },
+      );
     },
-    [pendingActionIds, refresh, setError, setPendingActionIds],
+    [actionRunner],
   );
 
   const handleBulkToggleShowcase = useCallback(
     async (sprintIds: string[], state: boolean) => {
-      const availableIds = sprintIds.filter(
-        (id) => !pendingActionIds.has(`sprint-showcase:${id}`),
-      );
-      if (availableIds.length === 0) return;
-
-      setPendingActionIds((current) => {
-        const next = new Set(current);
-        for (const id of availableIds) next.add(`sprint-showcase:${id}`);
-        return next;
-      });
-
-      try {
-        await Promise.all(
-          availableIds.map((id) => updateSprintShowcase(id, state)),
+      const actionIds = sprintIds.map((id) => `sprint-showcase:${id}`);
+      await actionRunner.runAction(actionIds, null, async (availableIds) => {
+        const idsToUpdate = availableIds.map((actionId) =>
+          actionId.replace("sprint-showcase:", ""),
         );
-        await refresh();
-      } catch (error) {
-        setError(error instanceof Error ? error.message : String(error));
-      } finally {
-        setPendingActionIds((current) => {
-          const next = new Set(current);
-          for (const id of availableIds) next.delete(`sprint-showcase:${id}`);
-          return next;
-        });
-      }
+        await Promise.all(
+          idsToUpdate.map((id) => updateSprintShowcase(id, state)),
+        );
+      });
     },
-    [pendingActionIds, refresh, setError, setPendingActionIds],
+    [actionRunner],
   );
 
   const handleSprintToggle = useCallback(
@@ -585,27 +550,17 @@ export function useSprintsPageActions({
 
   const handleToggleShowcase = useCallback(
     async (sprint: Sprint) => {
-      const actionId = `sprint-showcase:${sprint.id}`;
-      if (pendingActionIds.has(actionId)) {
-        return;
-      }
-      setPendingActionIds((current) => new Set(current).add(actionId));
-      try {
-        await updateSprint(sprint.id, {
-          showcasePinned: !sprint.showcasePinned,
-        });
-        await refresh();
-      } catch (error) {
-        setError(error instanceof Error ? error.message : String(error));
-      } finally {
-        setPendingActionIds((current) => {
-          const next = new Set(current);
-          next.delete(actionId);
-          return next;
-        });
-      }
+      await actionRunner.runAction(
+        `sprint-showcase:${sprint.id}`,
+        sprint.id,
+        async () => {
+          await updateSprint(sprint.id, {
+            showcasePinned: !sprint.showcasePinned,
+          });
+        },
+      );
     },
-    [pendingActionIds, refresh, setPendingActionIds, setError],
+    [actionRunner],
   );
 
   const handleOpenExport = useCallback(

@@ -1,3 +1,4 @@
+import type { ProviderSettingsOverride } from "../../provider-settings-override.js";
 import type { CliWorkflowSettings, DashboardSettings, ProviderId, QwenModelProviderSettings, Subtask, ThinkingMode } from "../../../contracts/app-types.js";
 import type { AgentMemoryConfig, AgentMcpAccessConfig } from "../../../contracts/agent-preset-types.js";
 import type { IWorkspaceManager } from "../../../infrastructure/providers/cli/workspace-manager.js";
@@ -31,28 +32,7 @@ export interface PipelineContext {
   featureBranch: string;
   task: Subtask;
   provider: Exclude<ProviderId, "jules">;
-  providerSettingsOverride?: {
-    model: string;
-    thinkingMode: ThinkingMode;
-    apiKey: string;
-    qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
-    qwenRegion?: "china" | "international";
-    qwenBaseUrl?: string;
-    qwenEnvKey?: string;
-    qwenModelId?: string;
-    qwenProtocol?: "openai" | "anthropic" | "gemini";
-    qwenAdditionalModelProviders?: QwenModelProviderSettings[];
-  openCodeAuthMode?: "LOCAL_AUTH" | "ENV_KEY" | "CUSTOM_PROVIDER";
-  openCodeProviderId?: string;
-  openCodeModelId?: string;
-  openCodeBaseUrl?: string;
-  openCodeEnvKey?: string;
-  openCodePackage?: string;
-    providerMountAuth?: boolean;
-    providerAuthPath?: string;
-    customBaseUrl?: string;
-    customModel?: string;
-  };
+  providerSettingsOverride?: ProviderSettingsOverride;
   title: string;
   repoPath: string;
   worktreePath: string;

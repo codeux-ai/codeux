@@ -1,4 +1,4 @@
-import rateLimit, { type RateLimitRequestHandler } from "express-rate-limit";
+import { rateLimit, type RateLimitRequestHandler } from "express-rate-limit";
 
 /**
  * Builds a generous fixed-window rate limiter for first-party HTTP surfaces.

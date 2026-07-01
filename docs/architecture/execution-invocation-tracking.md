@@ -62,3 +62,4 @@ When a provider's global concurrency limit is reached, ready tasks are deferred 
 1. The task status remains `PENDING` in memory, allowing the task to be rescheduled and retried on subsequent sprint cycles.
 2. A `task_run` record is created or updated to have a `state` of `"PENDING"`, and a linked `task_dispatch` is created with a status of `"queued"`.
 3. A durable event of type `"provider_concurrency_wait"` is appended to the `task_run_events` table carrying the `provider`, `currentCount`, and `limit` in its payload. This allows the dashboard to display the slot waiting status and show the usage (e.g., `2/2` waiting for slot) without inventing run-failure or code-execution attempts.
+4. During concurrent capacity checks, stale provider reconciliation scans (e.g., checking Docker container availability) are throttled and duplicate forced checks coalesce into a single shared scan to avoid excessive external resource calls.

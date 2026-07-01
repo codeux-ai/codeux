@@ -36,8 +36,6 @@ describe("ChatPageShell", () => {
         selectedProject={null}
         chatMode="threads"
         onSetChatMode={vi.fn()}
-        onRefresh={vi.fn()}
-        manualRefreshing={false}
         onCreateThread={vi.fn()}
         pendingDashboardMessages={0}
         error={null}
@@ -66,11 +64,8 @@ describe("ChatPageShell", () => {
         selectedProject={mockProject}
         chatMode="threads"
         onSetChatMode={vi.fn()}
-        onRefresh={vi.fn()}
-        manualRefreshing={false}
         onCreateThread={vi.fn()}
         pendingDashboardMessages={2}
-        activeConnectionLabel="Local Worker · idle"
         error={null}
         railSlot={
           <ChatRail title="Threads" count={5}>
@@ -86,19 +81,26 @@ describe("ChatPageShell", () => {
     expect(getByTestId("thread-list")).toBeInTheDocument();
     expect(getByTestId("thread-detail")).toBeInTheDocument();
     expect(getByText("2 pending")).toBeInTheDocument();
+
+    // The chat header no longer exposes a manual refresh control.
+    const refreshButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Refresh")
+    );
+    expect(refreshButton).toBeUndefined();
+
+    // Verify mode tab ARIA state
+    expect(container.querySelector('button[id="tab-threads"]')).toHaveAttribute("aria-selected", "true");
+    expect(container.querySelector('button[id="tab-invocations"]')).toHaveAttribute("aria-selected", "false");
     // Verify animated ping element is present for pending messages
     expect(container.querySelector('.animate-ping')).toBeInTheDocument();
-    expect(getByText("Local Worker · idle")).toBeInTheDocument();
   });
 
-  it("renders invocation mode without thread-specific buttons", () => {
-    const { getByTestId, getByText, queryAllByText } = render(
+  it("renders invocation mode with thread-specific buttons grayed out, not hidden", () => {
+    const { container, getByTestId, getByText } = render(
       <ChatPageShell
         selectedProject={mockProject}
         chatMode="invocations"
         onSetChatMode={vi.fn()}
-        onRefresh={vi.fn()}
-        manualRefreshing={false}
         onCreateThread={vi.fn()}
         pendingDashboardMessages={0}
         error={null}
@@ -113,9 +115,17 @@ describe("ChatPageShell", () => {
 
     expect(getByTestId("invocation-list")).toBeInTheDocument();
     expect(getByText("10")).toBeInTheDocument();
-    expect(getByTestId("invocation-list")).toBeInTheDocument();
     expect(getByTestId("invocation-detail")).toBeInTheDocument();
-    // Removing fragile exact query constraints for layout test since mode conditions are confirmed working correctly in UI code.
+
+    // The New Thread button stays mounted (no layout shift when switching tabs)
+    // but is disabled/grayed out since it doesn't apply to invocation mode.
+    const newThreadButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("New Thread")
+    );
+    expect(newThreadButton).toBeDisabled();
+
+    // The pending-messages badge also stays mounted, showing a muted "Inbox clear".
+    expect(container.textContent).toContain("Inbox clear");
   });
 
   it("renders error state correctly", () => {
@@ -124,8 +134,6 @@ describe("ChatPageShell", () => {
         selectedProject={mockProject}
         chatMode="threads"
         onSetChatMode={vi.fn()}
-        onRefresh={vi.fn()}
-        manualRefreshing={false}
         onCreateThread={vi.fn()}
         pendingDashboardMessages={0}
         error="Network failure"

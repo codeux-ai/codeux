@@ -14,6 +14,7 @@ import type {
   InvocationRoutingProfile,
   ProviderStrategy,
   McpToolToggle,
+  ModelPricingSettings,
   ProviderId,
   SprintPreviewSettings,
   SkillToggle,
@@ -24,7 +25,6 @@ import type {
   JiraSettings,
 } from "./app-types.js";
 import type { MemorySettings } from "./memory-types.js";
-import type { TokenPricing } from "./app-types.js";
 import type { WorkerRuntimeSettings } from "./worker-types.js";
 
 export type { WorkerRuntimeSettings };
@@ -110,7 +110,8 @@ export interface SystemProviderCredentialSettings {
   customBaseUrl?: string;
   /** Custom model identifier sent to the CLI when routing through a custom base URL (claude-code, codex). */
   customModel?: string;
-  tokenPricing?: TokenPricing;
+  /** models.dev provider id selected to autofill customBaseUrl, or a free-typed provider name (claude-code, codex). */
+  customProviderId?: string;
   qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
   qwenRegion?: "china" | "international";
   qwenBaseUrl?: string;
@@ -118,6 +119,8 @@ export interface SystemProviderCredentialSettings {
   qwenModelId?: string;
   qwenProtocol?: "openai" | "anthropic" | "gemini";
   qwenAdditionalModelProviders?: QwenModelProviderSettings[];
+  /** models.dev provider id selected to autofill qwenBaseUrl, or a free-typed provider name. */
+  qwenApiProviderId?: string;
   openCodeAuthMode?: "LOCAL_AUTH" | "ENV_KEY" | "CUSTOM_PROVIDER";
   openCodeProviderId?: string;
   openCodeModelId?: string;
@@ -149,6 +152,7 @@ export interface SystemSettings {
   defaults: ProjectSettings;
   mcpTools: McpToolToggle[];
   customMcpServers: CustomMcpServer[];
+  modelPricing: ModelPricingSettings;
 }
 
 export type SettingsOverride<T> = {

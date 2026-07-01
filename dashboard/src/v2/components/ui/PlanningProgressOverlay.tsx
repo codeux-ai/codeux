@@ -1,6 +1,6 @@
 import type { FunctionComponent } from "preact";
 import { X } from "lucide-preact";
-import { useRef, useLayoutEffect } from "preact/hooks";
+import { useRef, useLayoutEffect, useEffect } from "preact/hooks";
 import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { ContainerShip, WoodenShip } from "./PlanningShip.js";
@@ -39,6 +39,19 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
   const textContainerRef = useRef<HTMLDivElement>(null);
   const prevTextRef = useRef(feedback?.text);
   const reducedMotion = useReducedMotion();
+
+  useEffect(() => {
+    if (!isBusy || isDismissed) {
+      return;
+    }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onDismiss();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isBusy, isDismissed, onDismiss]);
 
   useLayoutEffect(() => {
     if (!feedback || !textContainerRef.current) return;

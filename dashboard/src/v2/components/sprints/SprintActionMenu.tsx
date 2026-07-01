@@ -246,7 +246,8 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
           onDelete?.();
         }}
         disabled={deleteBusy}
-        aria-label={`Delete sprint ${sprint.name}`}
+        aria-busy={deleteBusy}
+        aria-label={deleteBusy ? `Deleting sprint ${sprint.name}` : `Delete sprint ${sprint.name}`}
         className={deleteBusy ? `${handleDeleteClassName} disabled:cursor-not-allowed disabled:opacity-40` : handleDeleteClassName}
       >
         {deleteBusy ? (

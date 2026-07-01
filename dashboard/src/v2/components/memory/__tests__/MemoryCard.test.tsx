@@ -4,7 +4,7 @@ import { render, fireEvent } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { expect, test, describe, vi, afterEach } from "vitest";
 import { MemoryCard } from "../MemoryCard.js";
-import { lobotomizeModeSignal, memoriesSignal } from "../memoryState.js";
+import { activeMemoryIdSignal, lobotomizeModeSignal, memoriesSignal } from "../memoryState.js";
 import { memoryMutationsSignal } from "../memoryState.js";
 
 expect.extend(matchers);
@@ -98,5 +98,23 @@ describe("MemoryCard", () => {
         const card = getByRole("option", { name: "Architecture memory, scope project, strength 75%. accessible-test-content" });
         expect(card).toBeInTheDocument();
         expect(card).toHaveAttribute("aria-selected", "false");
+    });
+
+    test("sets aria-selected when activeMemoryIdSignal matches id", () => {
+        activeMemoryIdSignal.value = "test-id";
+        const { getByRole } = render(
+            <MemoryCard
+                id="test-id"
+                content="accessible-test-content"
+                category="architecture"
+                strength={0.75}
+                scope="project"
+                onClick={vi.fn()}
+            />
+        );
+
+        const card = getByRole("option", { name: "Architecture memory, scope project, strength 75%. accessible-test-content" });
+        expect(card).toHaveAttribute("aria-selected", "true");
+        activeMemoryIdSignal.value = null; // cleanup
     });
 });

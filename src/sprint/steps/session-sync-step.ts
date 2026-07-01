@@ -2,9 +2,11 @@ import type { JulesActivity, JulesSession, Subtask } from "../../contracts/app-t
 import type { TaskRunRecord, TaskDispatchStatus, TaskRunState } from "../../contracts/execution-types.js";
 import type { SessionSyncDependencies } from "../sprint-types.js";
 import { buildTaskRunKey, extractTaskRunKeyFromTitle } from "../../services/task-run-key.js";
+import { planSessionActivityFetches } from "../../domain/sprint/session-sync/activity-fetch-plan.js";
 import type { ProviderInvocationUsageRecord } from "../../contracts/execution-types.js";
 import { applyPendingTaskRuntimeReset } from "../../domain/sprint/task-reset-state.js";
 import { isCompletedTaskSettled } from "../../domain/sprint/task-merge-state.js";
+import { fetchActivitiesBounded } from "../../domain/sprint/session-sync/bounded-activity-fetch.js";
 import { hasUserReplyAfterLatestAgentRequest } from "../action-required-automation.js";
 import {
   extractProviderErrorCategory,
@@ -540,66 +542,38 @@ export const runSessionSyncStep = async (
     }
   }
 
-  const uniqueSessionNames = new Set<string>();
-  for (const task of subtasks) {
-    const expectedRunKey = buildTaskRunKey(context.repoPath, context.sprintNumber, task.id);
-    const match = sessionMap.get(expectedRunKey);
-    if (match) {
-      if (isForeignSessionMatch(deps, task, match)) {
-        deps.logger.warn("Skipping foreign provider session matched by task run key", {
-          taskId: task.record_id || task.id,
-          projectId: task.project_id,
-          sprintId: task.sprint_id,
-          sessionId: deps.extractSessionId(match),
-          sessionName: deps.resolveSessionName(match),
-        });
-        continue;
-      }
-
-      const sessionName = deps.resolveSessionName(match);
-      if (sessionName) {
-        // Skip fetching activities if the session is already terminal locally
-        let isFullySynced = false;
-        if (deps.executionRepository) {
-          if (typeof deps.executionRepository.isSessionTerminal === "function") {
-            if (deps.executionRepository.isSessionTerminal(sessionName)) {
-              isFullySynced = true;
-            }
-          } else if (task.record_id && deps.sprintRunId) {
-            const taskRun = deps.executionRepository.getLatestTaskRun(task.record_id, deps.sprintRunId);
-            if (taskRun && (taskRun.state === "COMPLETED" || taskRun.state === "FAILED")) {
-              isFullySynced = true;
-            }
-          }
+  const isLocallyTerminal = (sessionName: string, task: Subtask) => {
+    if (deps.executionRepository) {
+      if (typeof deps.executionRepository.isSessionTerminal === "function") {
+        if (deps.executionRepository.isSessionTerminal(sessionName)) {
+          return true;
         }
-
-        const isRemoteTerminal = match.state === "COMPLETED" || match.state === "FAILED";
-        if (isFullySynced && isRemoteTerminal) {
-          continue;
+      } else if (task.record_id && deps.sprintRunId) {
+        const taskRun = deps.executionRepository.getLatestTaskRun(task.record_id, deps.sprintRunId);
+        if (taskRun && (taskRun.state === "COMPLETED" || taskRun.state === "FAILED")) {
+          return true;
         }
-
-        uniqueSessionNames.add(sessionName);
       }
     }
-  }
+    return false;
+  };
 
-  const activitiesMap = new Map<string, JulesActivity[]>();
-  const sessionNameArray = Array.from(uniqueSessionNames);
-  const chunkSize = 5;
+  const sessionNameArray = planSessionActivityFetches(
+    subtasks,
+    sessionMap,
+    context,
+    deps,
+    isForeignSessionMatch,
+    isLocallyTerminal
+  );
 
-  for (let i = 0; i < sessionNameArray.length; i += chunkSize) {
-    const chunk = sessionNameArray.slice(i, i + chunkSize);
-    await Promise.all(
-      chunk.map(async (sessionName) => {
-        try {
-          const activities = await deps.fetchRecentActivities(sessionName, 5);
-          activitiesMap.set(sessionName, activities);
-        } catch {
-          deps.logger.warn("Could not fetch activities for session", { sessionName });
-        }
-      })
-    );
-  }
+  const activitiesMap = await fetchActivitiesBounded(
+    sessionNameArray,
+    5, // concurrency
+    5, // pageSize
+    deps.fetchRecentActivities,
+    deps.logger
+  );
 
   for (const task of subtasks) {
     const expectedRunKey = buildTaskRunKey(context.repoPath, context.sprintNumber, task.id);

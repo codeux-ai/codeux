@@ -31,7 +31,7 @@ export const DependencyStatusIndicators: FunctionComponent<{
             className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[9px] font-bold uppercase tracking-[0.14em] ${containerClass}`}
             title={`Depends on ${dep.title} (${statusText})`}
           >
-            <span className="sr-only">Depends on task {dep.id}, status: {statusText}. Title: {dep.title}</span>
+            <span className="sr-only">Dependency {dep.id} ({dep.title}) is {statusText}</span>
             <ArrowRight className="w-2.5 h-2.5" strokeWidth={2.5} aria-hidden="true" />
             <span aria-hidden="true">{dep.id}</span>
           </div>

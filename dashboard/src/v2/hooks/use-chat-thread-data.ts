@@ -138,6 +138,9 @@ export const useChatThreadData = (options: {
   const threadsRef = useRef<ChatThread[]>([]);
   const inflightMessageFetchesRef = useRef(new Map<string, Promise<ChatMessageRecord[]>>());
   const activationTokenRef = useRef(0);
+  const sentHistoryRef = useRef<string[]>([]);
+  const historyIndexRef = useRef<number>(-1);
+  const historyDraftRef = useRef<string>("");
 
   const { feedback, setSuccess, clearFeedback } = useActionFeedback();
   const {
@@ -332,11 +335,55 @@ export const useChatThreadData = (options: {
     }
   }, [cache, refreshMessages, requestConfirm, selectedProject, selectedThread, setSuccess, setThreadsSnapshot]);
 
+  const recordSentMessage = useCallback((message: string): void => {
+    sentHistoryRef.current = [...sentHistoryRef.current.filter((entry) => entry !== message), message].slice(-50);
+    historyIndexRef.current = -1;
+    historyDraftRef.current = "";
+  }, []);
+
+  const navigateHistory = useCallback((direction: "up" | "down"): boolean => {
+    const history = sentHistoryRef.current;
+    if (history.length === 0) {
+      return false;
+    }
+
+    if (direction === "up") {
+      if (historyIndexRef.current === -1) {
+        historyDraftRef.current = input;
+        historyIndexRef.current = history.length - 1;
+      } else if (historyIndexRef.current > 0) {
+        historyIndexRef.current -= 1;
+      } else {
+        return true;
+      }
+      setInput(history[historyIndexRef.current]);
+      return true;
+    }
+
+    if (historyIndexRef.current === -1) {
+      return false;
+    }
+    if (historyIndexRef.current < history.length - 1) {
+      historyIndexRef.current += 1;
+      setInput(history[historyIndexRef.current]);
+    } else {
+      historyIndexRef.current = -1;
+      setInput(historyDraftRef.current);
+    }
+    return true;
+  }, [input]);
+
   const handleSend = useCallback(async (): Promise<void> => {
     const bodyMarkdown = input.trim();
     if (!bodyMarkdown || !selectedProject) {
       return;
     }
+
+    setInput("");
+    if (composerRef?.current) {
+      composerRef.current.style.height = "auto";
+    }
+    recordSentMessage(bodyMarkdown);
 
     setSending(true);
     const optimisticInvocationId = onMessageSending?.({
@@ -351,10 +398,6 @@ export const useChatThreadData = (options: {
         bodyMarkdown,
       });
       onMessageSent?.({ message: created, optimisticInvocationId });
-      setInput("");
-      if (composerRef?.current) {
-        composerRef.current.style.height = "auto";
-      }
       const nextMessages = upsertMessage(cache.getMessages(thread.id) || [], created);
       cache.setMessages(thread.id, nextMessages);
       if (thread.id === selectedThreadIdRef.current) {
@@ -369,13 +412,14 @@ export const useChatThreadData = (options: {
         onMessageSendFailed?.(optimisticInvocationId);
       }
       setError(sendError instanceof Error ? sendError.message : String(sendError));
+      setInput((current) => current || bodyMarkdown);
       if (composerRef?.current) {
         composerRef.current.focus();
       }
     } finally {
       setSending(false);
     }
-  }, [cache, composerRef, createThreadForCompose, execution, input, onMessageSendFailed, onMessageSending, onMessageSent, selectedProject, selectedThread, setMessagesSnapshot]);
+  }, [cache, composerRef, createThreadForCompose, execution, input, onMessageSendFailed, onMessageSending, onMessageSent, recordSentMessage, selectedProject, selectedThread, setMessagesSnapshot]);
 
   const handleDeleteThread = useCallback(async (threadId: string): Promise<void> => {
     const nextThreads = removeThread(cache.getThreads(selectedProject?.id || "") || threadsRef.current, threadId);
@@ -428,6 +472,7 @@ export const useChatThreadData = (options: {
     createThreadForCompose,
     handleCompactThread,
     handleSend,
+    navigateHistory,
     handleDeleteThread,
     feedback,
     clearFeedback,

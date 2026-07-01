@@ -3,7 +3,27 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { Tree } from "react-arborist";
 import type { NodeRendererProps } from "react-arborist";
 import { ChevronRight, File as FileIcon, Folder, FolderOpen } from "lucide-preact";
+import { useMemo } from "preact/hooks";
 import type { FileBrowserTreeNode } from "../../../types.js";
+
+
+const HighlightMatch = ({ text, term }: { text: string; term?: string }) => {
+  if (!term) return <span>{text}</span>;
+  const index = text.toLowerCase().indexOf(term.toLowerCase());
+  if (index === -1) return <span>{text}</span>;
+
+  const before = text.slice(0, index);
+  const match = text.slice(index, index + term.length);
+  const after = text.slice(index + term.length);
+
+  return (
+    <span>
+      {before}
+      <mark class="bg-signal-500/30 text-inherit rounded-sm px-[1px]">{match}</mark>
+      {after}
+    </span>
+  );
+};
 
 interface FileTreeProps {
   nodes: FileBrowserTreeNode[];
@@ -12,8 +32,9 @@ interface FileTreeProps {
   searchTerm?: string;
 }
 
-const TreeNodeRow: FunctionComponent<NodeRendererProps<FileBrowserTreeNode>> = ({ node, style, dragHandle }) => {
+const TreeNodeRow: FunctionComponent<NodeRendererProps<FileBrowserTreeNode>> = ({ node, style, dragHandle, tree }) => {
   const isDirectory = node.data.type === "directory";
+  const searchTerm = tree.props.searchTerm;
   const isSelected = node.isSelected && !isDirectory;
 
   return (
@@ -27,7 +48,15 @@ const TreeNodeRow: FunctionComponent<NodeRendererProps<FileBrowserTreeNode>> = (
           node.select();
         }
       }}
-      class={`group flex min-w-0 h-full items-center gap-1.5 rounded-lg pr-2 text-[13px] transition-colors cursor-pointer ${
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          if (isDirectory) node.toggle();
+          else node.select();
+        }
+      }}
+      class={`group flex min-w-0 h-full items-center gap-1.5 rounded-lg pr-2 text-[13px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-inset ${
         isSelected
           ? "bg-signal-500/[0.14] text-slate-900 ring-1 ring-inset ring-signal-500/25 dark:text-white"
           : "text-slate-600 hover:bg-black/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.05]"
@@ -36,7 +65,7 @@ const TreeNodeRow: FunctionComponent<NodeRendererProps<FileBrowserTreeNode>> = (
       <span class="flex h-4 w-4 shrink-0 items-center justify-center text-slate-400">
         {isDirectory ? (
           <ChevronRight
-            class={`h-3.5 w-3.5 transition-transform duration-200 ${node.isOpen ? "rotate-90" : ""}`}
+            class={`h-3.5 w-3.5 transition-transform duration-200 motion-reduce:transition-none ${node.isOpen ? "rotate-90" : ""}`}
             strokeWidth={2.4}
           />
         ) : null}
@@ -48,7 +77,7 @@ const TreeNodeRow: FunctionComponent<NodeRendererProps<FileBrowserTreeNode>> = (
           <FileIcon class="h-3.5 w-3.5" strokeWidth={1.8} />
         )}
       </span>
-      <span class="truncate font-medium">{node.data.name}</span>
+      <span class="truncate font-medium"><HighlightMatch text={node.data.name} term={searchTerm} /></span>
     </div>
   );
 };

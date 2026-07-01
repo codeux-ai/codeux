@@ -4,6 +4,7 @@ import type { AgentAvatarConfig } from "../../types.js";
 import type { AgentAvatarExpression } from "../../lib/agent-avatar.js";
 import { LazyAgentAvatarScene } from "./LazyAgentAvatarScene.js";
 import { SHOWCASE_EXPRESSIONS } from "../../lib/agent-avatar.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 /* ── Expression icon + label map (single source of truth) ── */
 export const EXPRESSION_META: Record<string, { Icon: typeof Smile; label: string }> = {
@@ -40,6 +41,8 @@ export const AgentAvatarStage: FunctionComponent<{
   fallbackMode = false,
   disabled = false,
 }) => {
+  const reducedMotion = useReducedMotion();
+  const shouldFallback = fallbackMode || reducedMotion;
   const activeMeta = EXPRESSION_META[expression];
   return (
     <div
@@ -56,10 +59,13 @@ export const AgentAvatarStage: FunctionComponent<{
       />
 
       <div className={`relative w-full ${heightClass}`}>
+        <span className="sr-only" aria-live="polite">
+          Bot expression changed to {activeMeta.label}
+        </span>
         <LazyAgentAvatarScene
           config={config}
           expression={expression}
-          fallbackMode={fallbackMode}
+          fallbackMode={shouldFallback}
           className="h-full w-full"
         />
       </div>

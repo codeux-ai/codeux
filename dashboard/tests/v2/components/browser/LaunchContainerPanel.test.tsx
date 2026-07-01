@@ -19,7 +19,7 @@ test("renders No Sprints state", () => {
       launchBusy={false}
     />
   );
-  expect(screen.getByRole("button")).toHaveTextContent("No Sprints");
+  expect(screen.getByRole("button")).toHaveTextContent("Disabled: No Sprint");
   expect(screen.getByRole("button")).toBeDisabled();
 });
 
@@ -34,7 +34,7 @@ test("renders Unavailable state", () => {
       launchBusy={false}
     />
   );
-  expect(screen.getByRole("button")).toHaveTextContent("Unavailable");
+  expect(screen.getByRole("button")).toHaveTextContent("Disabled: No Project");
   expect(screen.getByRole("button")).toBeDisabled();
 });
 
@@ -49,7 +49,7 @@ test("renders Starting state", () => {
       launchBusy={true}
     />
   );
-  expect(screen.getByRole("button")).toHaveTextContent("Starting...");
+  expect(screen.getByRole("button")).toHaveTextContent("Launching...");
   expect(screen.getByRole("button")).toBeDisabled();
 });
 

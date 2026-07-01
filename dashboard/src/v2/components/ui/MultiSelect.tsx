@@ -1,5 +1,9 @@
 import type { FunctionComponent } from "preact";
-import { useState, useRef, useEffect } from "preact/hooks";
+import { useState, useRef, useEffect, useLayoutEffect } from "preact/hooks";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { gsap } from "gsap";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { X } from "lucide-preact";
 
 export interface Option {
@@ -40,6 +44,16 @@ export const MultiSelect: FunctionComponent<MultiSelectProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const listboxRef = useRef<HTMLDivElement>(null);
   const [listboxId] = useState(() => 'ms-' + Math.random().toString(36).slice(2, 7));
+  const tokens = useInteractionTokens();
+  const gsapTokens = useGsapInteractionTokens();
+  const isReducedMotion = useReducedMotion();
+
+
+  useLayoutEffect(() => {
+    if (isOpen && listboxRef.current && !isReducedMotion) {
+      gsap.fromTo(listboxRef.current, { opacity: 0, y: -4 }, { opacity: 1, y: 0, duration: gsapTokens.listReveal.duration, ease: gsapTokens.listReveal.ease });
+    }
+  }, [isOpen, isReducedMotion, gsapTokens.listReveal]);
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -185,6 +199,7 @@ export const MultiSelect: FunctionComponent<MultiSelectProps> = ({
               {label}
               <button
                 type="button"
+                style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
                 onClick={(e) => {
                   e.stopPropagation();
                   removeTag(tag);
@@ -235,6 +250,7 @@ export const MultiSelect: FunctionComponent<MultiSelectProps> = ({
               <div
                 key={option.value}
                 role="option"
+                style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
                 aria-selected={isSelected}
                 tabIndex={-1}
                 className={`flex cursor-pointer items-center px-3 py-2 text-xs hover:bg-black/[0.04] dark:hover:bg-white/[0.05] focus:bg-black/[0.04] dark:focus:bg-white/[0.05] focus:ring-1 focus:ring-inset focus:ring-signal-500/50 outline-none ${

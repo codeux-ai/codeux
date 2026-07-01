@@ -84,6 +84,7 @@ describe("ChatThreadHeader", () => {
     const compactButton = container.querySelector('button[title="Compact Conversation"]');
     expect(compactButton).toHaveClass("cursor-wait");
     expect(compactButton).toHaveClass("opacity-70");
+    expect(compactButton).toHaveAttribute("aria-busy", "true");
   });
 
   it("calls onCompact when compact button is clicked", () => {

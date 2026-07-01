@@ -51,4 +51,14 @@ describe("MemorySearch Accessibility", () => {
 
         expect(getByText("Search cleared")).toBeInTheDocument();
     });
+
+    test("typing in search makes active-query polite announcement", async () => {
+        searchQuerySignal.value = "";
+        const { getByRole, getByText } = render(<MemorySearch />);
+        const input = getByRole("textbox", { name: "Search memory" });
+
+        await fireEvent.input(input, { target: { value: "test query" } });
+
+        expect(getByText("Searching...")).toBeInTheDocument();
+    });
 });

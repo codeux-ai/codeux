@@ -61,6 +61,12 @@ const ZoomedWrapper = () => {
   return <InteractiveUsageChart stats={mockStats as any} loading={false} error={null} refresh={async () => {}} chartState={chartState} />;
 };
 
+const EmptyWrapper = () => {
+  const emptyStats = { ...mockStats, buckets: [], chartSeries: [] };
+  const chartState = useUsageChartState("test", emptyStats as any);
+  return <InteractiveUsageChart stats={emptyStats as any} loading={false} error={null} refresh={async () => {}} chartState={chartState} />;
+};
+
 beforeAll(() => {
   if (typeof window.SVGPathElement !== 'undefined') {
     Object.defineProperty(window.SVGPathElement.prototype, 'getTotalLength', {

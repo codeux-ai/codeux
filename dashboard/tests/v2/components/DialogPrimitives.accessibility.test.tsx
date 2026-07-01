@@ -8,6 +8,7 @@ import '@testing-library/jest-dom/vitest';
 import { Dialog } from '../../../src/v2/components/ui/Dialog';
 import { Modal } from '../../../src/v2/components/ui/Modal';
 import { Drawer } from '../../../src/v2/components/ui/Drawer';
+import { MODAL_MOTION } from '../../../src/v2/lib/motion/modal-motion';
 
 vi.mock('gsap', () => ({
   default: {
@@ -177,7 +178,7 @@ describe('Dialog Primitives Accessibility', () => {
         expect(document.activeElement).toBe(insideBtn);
 
         await user.keyboard('{Escape}');
-        vi.advanceTimersByTime(500); // Allow close animation
+        vi.advanceTimersByTime(MODAL_MOTION.exit.duration * 1000 + 100); // Allow close animation
 
         expect(document.activeElement).toBe(openBtn);
       });

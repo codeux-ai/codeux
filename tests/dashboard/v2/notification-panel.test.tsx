@@ -62,4 +62,21 @@ describe("NotificationPanel", () => {
     const accent = screen.getByText("Human Intervention Required").closest("[data-notification-item]")?.querySelector(".bg-signal-500");
     expect(accent).toBeInTheDocument();
   });
+
+  it("renders stacking UI rendering classes", () => {
+    render(
+      <NotificationPanel
+        notifications={[]}
+        unreadCount={0}
+        onMarkAllRead={vi.fn()}
+        onMarkRead={vi.fn()}
+        onDismiss={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    const panel = screen.getByLabelText("Notifications Panel");
+    expect(panel).toHaveClass("flex");
+    expect(panel).toHaveClass("flex-col");
+  });
 });

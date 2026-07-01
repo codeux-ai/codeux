@@ -98,6 +98,8 @@ For `status` and `orchestrate`, each cycle can run:
 
 2. Sync sessions and activities
 - `session-sync-step.ts`
+- Session-sync activity fetch planning is delegated to `src/domain/sprint/session-sync/activity-fetch-plan.ts` to make decisions testable.
+- Session activity fetching uses a bounded concurrency worker pool to prevent overloading the backend, preserving isolated failures per-session.
 - Sync source is provider-agnostic:
   - Jules API sessions (when available)
   - locally tracked CLI sessions (`gemini`/`codex`)

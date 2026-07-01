@@ -207,13 +207,89 @@ describe("ProjectSetupService", () => {
       .resolves.toContain("Code UX Basic Checks");
 
     const presets = await agentPresetSyncService.listAgentPresets(project.id);
-    expect(presets.some((preset) => preset.name === "Project Setup Agent")).toBe(true);
+    const setupAgent = presets.find((preset) => preset.name === "Project Setup Agent");
+    expect(setupAgent).toBeTruthy();
     expect(presets.some((preset) => preset.name === "Frontend Runtime Agent")).toBe(true);
 
     const effective = settingsRepository.resolveProjectDashboardSettings(project.id).settings;
-    expect(effective.agents.routing.planning.agentPresetId).toBeTruthy();
+    expect(effective.agents.routing.planning.agentPresetId).toBeNull();
     expect(effective.agents.routing.taskCoding.mode).toBe("ORCHESTRATOR");
     expect(effective.agents.routing.taskCoding.orchestratorAgentPresetIds.length).toBeGreaterThanOrEqual(1);
+    expect(effective.agents.routing.taskCoding.orchestratorAgentPresetIds).not.toContain(setupAgent?.id);
+  });
+
+  it("preserves an existing planning agent route when applying generated agents", async () => {
+    const repoDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-project-setup-planning-route-"));
+    tempDirs.push(repoDir);
+    await fs.writeFile(path.join(repoDir, "package.json"), JSON.stringify({ scripts: { test: "vitest run" } }, null, 2));
+
+    const storage = new AppDbStorage();
+    const projectManagementRepository = new ProjectManagementRepository(storage);
+    const settingsRepository = new SettingsRepository();
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const agentPresetSyncService = new AgentPresetSyncService({
+      projectManagementRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: repoDir,
+    });
+    const project = projectManagementRepository.createProject({
+      name: "Routed Planner App",
+      sourceType: "local",
+      sourceRef: repoDir,
+    });
+    const planner = await agentPresetSyncService.createAgentPreset(project.id, {
+      name: "Repository Planning Agent",
+      description: "Plans work for this repository.",
+      labels: ["planning"],
+      instructionMarkdown: "Preserve repository-specific planning policy.",
+    });
+    settingsRepository.saveProjectSettings(project.id, {
+      agents: {
+        routing: {
+          planning: { agentPresetId: planner.id },
+        },
+      },
+    });
+
+    const providerPayload = {
+      summary: "Generated coding specialists.",
+      agents: [
+        {
+          name: "Backend Runtime Agent",
+          description: "Owns backend runtime work.",
+          labels: ["worker"],
+          instructionMarkdown: "Inspect backend modules before changing runtime behavior.",
+        },
+      ],
+      quicksprints: [],
+      previewScript: null,
+      ci: [],
+    };
+    const providerRunner = new FakeProviderRunner(JSON.stringify(providerPayload));
+    const service = new ProjectSetupService({
+      projectManagementRepository,
+      settingsRepository,
+      executionRepository,
+      agentPresetSyncService,
+      providerRunner,
+      projectRoot: process.cwd(),
+    });
+
+    await service.setupProject(project.id, {
+      options: { agents: true, quicksprints: false, previewScript: false, ci: false },
+    });
+
+    const presets = await agentPresetSyncService.listAgentPresets(project.id);
+    const setupAgent = presets.find((preset) => preset.name === "Project Setup Agent");
+    const generatedWorker = presets.find((preset) => preset.name === "Backend Runtime Agent");
+    const effective = settingsRepository.resolveProjectDashboardSettings(project.id).settings;
+
+    expect(effective.agents.routing.planning.agentPresetId).toBe(planner.id);
+    expect(effective.agents.routing.planning.agentPresetId).not.toBe(setupAgent?.id);
+    expect(effective.agents.routing.taskCoding.mode).toBe("ORCHESTRATOR");
+    expect(effective.agents.routing.taskCoding.orchestratorAgentPresetIds).toContain(generatedWorker?.id);
   });
 
   it("starts background setup and exposes the invocation id before provider completion", async () => {

@@ -262,9 +262,8 @@ describe("SprintComposer", () => {
 
     expect(mockOnSubmit).toHaveBeenCalled();
 
-    // Dismiss overlay
-    const closeBtn = getByText("Minimize");
-    fireEvent.click(closeBtn);
+    // Dismiss overlay via keyboard
+    fireEvent.keyDown(window, { key: "Escape" });
 
     // Overlay should disappear
     await waitFor(() => {
@@ -487,7 +486,7 @@ describe("AddTaskModal Lifecycle", () => {
     const errorRegion = getByText("Failed");
     expect(errorRegion).toBeInTheDocument();
 
-    const dismissBtn = getByRole("button", { name: "Dismiss error" });
+    const dismissBtn = getByRole("button", { name: "Clear error" });
 
     // Explicitly focus it to ensure focus behavior is correctly represented
     dismissBtn.focus();

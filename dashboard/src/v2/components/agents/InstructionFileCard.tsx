@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
-import { ChevronRight, FileText, Plus } from "lucide-preact";
+import { ChevronRight, FileText, Plus, Check } from "lucide-preact";
 import type { InstructionFileSummary } from "../../lib/instruction-file-api.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { getInstructionAccentHex, formatBytes } from "../../lib/instruction-file-display.js";
@@ -28,6 +28,7 @@ export const InstructionFileCard: FunctionComponent<{
       ref={cardRef}
       type="button"
       onClick={onClick}
+      aria-selected={isSelected}
       className={`group relative flex w-full overflow-hidden rounded-[1.4rem] border text-left backdrop-blur-xl transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${
         isSelected
           ? "border-signal-500/40 bg-white/85 shadow-[0_8px_32px_rgba(0,224,160,0.12)] dark:border-signal-500/40 dark:bg-void-800/75 dark:shadow-[0_8px_32px_rgba(0,224,160,0.10)]"
@@ -48,11 +49,19 @@ export const InstructionFileCard: FunctionComponent<{
           className={`relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl transition-shadow duration-300 ${isSelected ? "shadow-[0_0_16px_rgba(0,224,160,0.12)]" : ""}`}
           style={{ background: `linear-gradient(135deg, ${accentHex}1f, ${accentHex}0a)` }}
         >
-          <FileText
-            className={file.exists ? "h-6 w-6" : "h-6 w-6 opacity-60"}
-            style={{ color: accentHex }}
-            strokeWidth={1.8}
-          />
+          {isSelected ? (
+            <Check
+              className="h-6 w-6"
+              style={{ color: accentHex }}
+              strokeWidth={2.4}
+            />
+          ) : (
+            <FileText
+              className={file.exists ? "h-6 w-6" : "h-6 w-6 opacity-60"}
+              style={{ color: accentHex }}
+              strokeWidth={1.8}
+            />
+          )}
           {file.providerId && (
             <ProviderBrandIcon
               id={file.providerId}

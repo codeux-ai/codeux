@@ -162,7 +162,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
     <div
       ref={containerRef}
       role={isError ? "alert" : "status"}
-      aria-live={isError ? "assertive" : "polite"}
+      aria-live={displayedStatus === "error" ? "assertive" : displayedStatus === "pending" ? "polite" : "off"}
       aria-atomic="true"
       aria-busy={displayedStatus === "pending" ? "true" : undefined}
       className={`relative overflow-hidden flex items-start gap-3 p-3 rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.2)] border ${config.colors} bg-white dark:bg-void-800 ${className}`}
@@ -190,7 +190,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
         {displayedStatus === "error" && clearError ? (
           <div role="alert" className="ml-auto flex items-center gap-2 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 px-3 py-1 text-xs font-medium">
             Failed
-            <button aria-label="Dismiss error" onClick={clearError}>×</button>
+            <button aria-label="Clear error" onClick={clearError}>×</button>
           </div>
         ) : onDismiss && (
           <button
@@ -199,7 +199,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
             onClick={() => {
               if (document.activeElement === dismissBtnRef.current) {
                 // attempt to restore focus contextually or drop it safely
-                const fallback = (document.querySelector('[role="main"]') as HTMLElement) || document.body;
+                const fallback = document.body;
                 if (fallback !== document.body && fallback.tabIndex < 0) {
                     fallback.tabIndex = -1;
                 }
