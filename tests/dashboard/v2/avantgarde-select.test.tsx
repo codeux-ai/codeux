@@ -215,4 +215,28 @@ describe("AvantgardeSelect", () => {
     expect(screen.getAllByText(/^Option 1\d?$/).length).toBeLessThanOrEqual(5);
     expect(screen.queryByText("Option 1")).not.toBeNull();
   });
+
+  it("focuses the search input by default when a searchable select opens", async () => {
+    const options = [{ value: "1", label: "Anthropic" }, { value: "2", label: "OpenAI" }];
+    render(<AvantgardeSelect value="" onChange={() => {}} options={options} searchable placeholder="Pick" />);
+    fireEvent.click(screen.getByText("Pick"));
+
+    const search = await screen.findByPlaceholderText("Search...");
+    await waitFor(() => expect(document.activeElement).toBe(search));
+  });
+
+  it("keeps the search input focused through a reposition (scroll/resize) while typing", async () => {
+    const options = [{ value: "1", label: "Anthropic" }, { value: "2", label: "OpenAI" }];
+    render(<AvantgardeSelect value="" onChange={() => {}} options={options} searchable placeholder="Pick" />);
+    fireEvent.click(screen.getByText("Pick"));
+
+    const search = await screen.findByPlaceholderText("Search...");
+    await waitFor(() => expect(document.activeElement).toBe(search));
+
+    fireEvent.input(search, { target: { value: "o" } });
+    // A reposition (e.g. from the filtered list's height changing) must not steal focus back
+    // to the listbox container.
+    fireEvent.scroll(window);
+    expect(document.activeElement).toBe(search);
+  });
 });

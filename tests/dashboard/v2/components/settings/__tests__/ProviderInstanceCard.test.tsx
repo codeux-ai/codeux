@@ -21,6 +21,15 @@ const MODEL_CATALOG = [
   // A reseller-only model under its own id — excluded from the default (no provider selected)
   // list entirely, since 302ai isn't a primary model-creator provider.
   { id: "302ai/gizmo-x", providerId: "302ai", providerName: "302.AI", modelId: "gizmo-x", modelName: "Gizmo X" },
+  // A large primary provider (alibaba sorts first alphabetically and has 50+ real models in
+  // the live catalogue) to guard against a render cap crowding out every other provider.
+  ...Array.from({ length: 60 }, (_, i) => ({
+    id: `alibaba/qwen-model-${i}`,
+    providerId: "alibaba",
+    providerName: "Alibaba",
+    modelId: `qwen-model-${i}`,
+    modelName: `Qwen Model ${i}`,
+  })),
 ];
 
 describe("ProviderInstanceCard", () => {
@@ -270,6 +279,12 @@ describe("ProviderInstanceCard", () => {
     // shouldn't show up in the default (no provider selected) list at all.
     expect(screen.queryByText("Gizmo X")).toBeNull();
 
+    // Alibaba alone contributes 60 fixture models (sorts first alphabetically among primary
+    // providers) — it must not crowd out every other provider's models via a render cap.
+    expect(screen.getByText("Qwen Model 0")).toBeDefined();
+    expect(screen.getByText("Claude Sonnet 4.5")).toBeDefined();
+    expect(screen.getByText("GPT-5.5")).toBeDefined();
+
     fireEvent.click(screen.getByText("GPT-5.5"));
     expect(onUpdate).toHaveBeenCalledWith({ customModel: "gpt-5.5" });
   });
@@ -318,6 +333,6 @@ describe("ProviderInstanceCard", () => {
     fireEvent.click(trigger.closest("button")!);
 
     await screen.findByText("Model 0");
-    expect(screen.getAllByText(/^Model \d+$/).length).toBeLessThanOrEqual(50);
+    expect(screen.getAllByText(/^Model \d+$/).length).toBeLessThan(200);
   });
 });

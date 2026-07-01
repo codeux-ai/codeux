@@ -104,6 +104,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listboxRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [position, setPosition] = useState<DropdownPosition | null>(null);
   const reducedMotion = useReducedMotion();
   const tokens = useInteractionTokens();
@@ -237,11 +238,20 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
   }, [open, value, options]);
 
 
+  // Focus once per open (not on every reposition from scroll/resize, which would otherwise
+  // steal focus back from the search input mid-typing). Searchable selects focus the search
+  // input directly so typing can start immediately; non-searchable ones focus the listbox for
+  // keyboard nav.
   useEffect(() => {
-    if (open && listboxRef.current) {
+    if (!open || !isRendered) {
+      return;
+    }
+    if (searchable) {
+      focusWithoutScroll(searchInputRef.current);
+    } else {
       focusWithoutScroll(listboxRef.current);
     }
-  }, [open, position]);
+  }, [open, isRendered, searchable]);
 
 
   // Click outside
@@ -397,7 +407,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
                   }}
                   onKeyDown={onKeyDown as any}
                   className="w-full px-3 py-1.5 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-signal-500/30 text-slate-700 dark:text-slate-200"
-                  ref={(el) => { if (el && open) focusWithoutScroll(el); }}
+                  ref={searchInputRef}
                 />
               </div>
             )}

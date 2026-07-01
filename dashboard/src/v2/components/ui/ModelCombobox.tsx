@@ -60,11 +60,13 @@ const PRIMARY_MODEL_PROVIDER_IDS = new Set([
  * "<provider>/<model>" composite — the provider is a separate, paired field (see
  * ProviderCombobox). Without one selected, the list is limited to primary model-creator
  * providers (see PRIMARY_MODEL_PROVIDER_IDS) and deduped to one row per bare model id, so it
- * reads as a clean model list rather than every gateway's copy of the same models; the
- * visible list is also capped so it never dumps thousands of rows into the DOM. Once a
- * provider is selected, options are scoped to just that provider's models (any provider,
- * allowlisted or not), which also guarantees the identifier is correct for whichever
- * endpoint the paired provider field points at.
+ * reads as a clean model list rather than every gateway's copy of the same models — all of
+ * it is shown (no render cap), since the allowlist already keeps it to a few hundred rows at
+ * most and any hard cap would just show whichever provider happens to sort first. Once a
+ * specific provider is selected, options are scoped to just that provider's models (any
+ * provider, allowlisted or not) — that guarantees the identifier is correct for whichever
+ * endpoint the paired provider field points at, and is where the render cap actually matters,
+ * since a single gateway (OpenRouter, Vercel AI Gateway, etc.) can list hundreds of models.
  */
 export const ModelCombobox: FunctionComponent<{
   value: string;
@@ -121,7 +123,7 @@ export const ModelCombobox: FunctionComponent<{
         placeholder={placeholder}
         searchable
         allowCustomValue
-        maxVisibleOptions={50}
+        maxVisibleOptions={providerId ? 100 : undefined}
         aria-label={ariaLabel}
       />
     </div>
