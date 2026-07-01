@@ -136,7 +136,7 @@ The reconciliation scan merges:
 - Projects with pending task dispatches
 - Projects that already have an active virtual cycle running
 
-It deduplicates this project set and explicitly ignores all other projects in the system. This ensures the 3-second reconciliation timer only evaluates settings resolution, scheduling policies, and state transitions for projects that have demonstrable immediate work to do or finish.
+It deduplicates this project set and explicitly ignores all other projects in the system. To further bounded work, projects that are already actively running a cycle or scheduled are skipped entirely during per-project need checks, ensuring settings resolution is only evaluated once per candidate and only when actually necessary to decide scheduling.
 
 ## Recovery
 

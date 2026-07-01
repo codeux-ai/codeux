@@ -251,6 +251,9 @@ export class VirtualWorkerService {
     );
 
     for (const projectId of activeProjectIds) {
+      if (this.activeCycles.has(projectId) || this.scheduledProjects.has(projectId)) {
+        continue;
+      }
       if (this.projectNeedsVirtualWorker(projectId, resolver)) {
         this.scheduleProject(projectId, "reconcile", resolver);
       }
