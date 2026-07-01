@@ -64,14 +64,14 @@ export const SettingsModelPricingPanel: FunctionComponent<{ state: SettingsPageS
             type="text"
             value={search}
             onInput={(e) => setSearch(e.currentTarget.value)}
-            placeholder="Search the models.dev catalogue by provider or model name…"
+            placeholder="Search the catalogue by provider or model name…"
             className="w-full bg-transparent text-sm text-slate-700 placeholder-slate-400 outline-none dark:text-slate-200"
           />
         </div>
 
         <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
           {search.trim()
-            ? `Showing up to ${MAX_VISIBLE_RESULTS} matches from the models.dev catalogue.`
+            ? `Showing up to ${MAX_VISIBLE_RESULTS} matches from the catalogue.`
             : "Showing models referenced by your configured providers and any existing overrides. Search to browse the full catalogue."}
         </p>
 

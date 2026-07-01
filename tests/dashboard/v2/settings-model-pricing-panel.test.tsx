@@ -52,7 +52,7 @@ describe("SettingsModelPricingPanel", () => {
     cleanup();
   });
 
-  it("shows the models.dev base price for a model referenced by a configured provider", async () => {
+  it("shows the catalogue base price for a model referenced by a configured provider", async () => {
     const systemSettings = buildSystemSettings();
     render(<SettingsModelPricingPanel state={{ systemSettings, updateSystem: vi.fn() } as any} />);
 
@@ -93,7 +93,7 @@ describe("SettingsModelPricingPanel", () => {
 
     expect(screen.queryByText("Anthropic — Claude Sonnet 4.5")).toBeNull();
 
-    const search = screen.getByPlaceholderText("Search the models.dev catalogue by provider or model name…");
+    const search = screen.getByPlaceholderText("Search the catalogue by provider or model name…");
     fireEvent.input(search, { target: { value: "claude" } });
 
     expect(await screen.findByText("Anthropic — Claude Sonnet 4.5")).toBeDefined();

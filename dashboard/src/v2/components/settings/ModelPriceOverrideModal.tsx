@@ -68,19 +68,19 @@ export const ModelPriceOverrideModal: FunctionComponent<ModelPriceOverrideModalP
               Price override
             </h2>
             <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-              {modelLabel} — cost per million tokens. Leave all fields at 0 to fall back to the models.dev base price.
+              {modelLabel} — cost per million tokens. Leave all fields at 0 to fall back to the catalogue base price.
             </p>
           </div>
         </div>
 
         <div className="flex flex-col gap-4">
-          <Row label="Input tokens" description={basePrice ? `models.dev base price: $${basePrice.inputTokens}/M.` : "No published base price."}>
+          <Row label="Input tokens" description={basePrice ? `Catalogue base price: $${basePrice.inputTokens}/M.` : "No published base price."}>
             <NumberInput value={inputTokens} onChange={setInputTokens} min={0} step={0.01} />
           </Row>
-          <Row label="Output tokens" description={basePrice ? `models.dev base price: $${basePrice.outputTokens}/M.` : "No published base price."}>
+          <Row label="Output tokens" description={basePrice ? `Catalogue base price: $${basePrice.outputTokens}/M.` : "No published base price."}>
             <NumberInput value={outputTokens} onChange={setOutputTokens} min={0} step={0.01} />
           </Row>
-          <Row label="Cached input tokens" description={basePrice ? `models.dev base price: $${basePrice.cachedInputTokens}/M.` : "No published base price."}>
+          <Row label="Cached input tokens" description={basePrice ? `Catalogue base price: $${basePrice.cachedInputTokens}/M.` : "No published base price."}>
             <NumberInput value={cachedInputTokens} onChange={setCachedInputTokens} min={0} step={0.01} />
           </Row>
         </div>
