@@ -1268,7 +1268,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                   {/* Left Column: Core Layout & Feel */}
                   <div className="space-y-4">
                     <h4 className="text-xs font-black uppercase tracking-[0.2em] text-signal-400">Core Display</h4>
-                    
+
                     <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
                       <div className="text-sm font-black text-slate-900 dark:text-white">Theme</div>
                       <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Select light, dark, or sync with your system.</div>
