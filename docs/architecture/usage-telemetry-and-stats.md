@@ -172,7 +172,7 @@ Usage data now appears in two read models:
 - `GET /api/projects/:projectId/execution`
   - task and sprint execution summaries now include usage rollups
 - `GET /api/projects/:projectId/stats?window=24h|7d|30d|all|custom&from=YYYY-MM-DD&to=YYYY-MM-DD`
-  - project-scoped statistics snapshot for the Stats page. Custom ranges must be parseable dates, where from <= to, and are capped to historical (e.g. Jan 1 2000) and future limits.
+  - project-scoped statistics snapshot for the Stats page. Custom ranges must be parseable dates, where from <= to, and must remain within documented historical (e.g. Jan 1 2000) and future limits. Invalid, incomplete, inverted, or out-of-bounds custom ranges will fail consistently with validation errors.
 
 Historical Docker-backed CLI invocations that were persisted as `unavailable` before container telemetry fallback support are backfilled at startup when they have prompt or transcript character counts. The backfill marks them as `estimated` using the same conservative character heuristic, preserving rows that already have provider-reported or provider-specific estimated usage.
 
