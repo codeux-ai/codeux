@@ -1,5 +1,5 @@
 import type { FunctionComponent, ComponentChildren } from "preact";
-import { useLayoutEffect, useRef } from "preact/hooks";
+import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { MessageCircle, RefreshCw, Plus } from "lucide-preact";
 import type { Source } from "../../types.js";
@@ -37,6 +37,15 @@ export const ChatPageShell: FunctionComponent<{
   const headerRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
   const interactionTokens = useInteractionTokens();
+  const threadsTabRef = useRef<HTMLButtonElement>(null);
+  const invocationsTabRef = useRef<HTMLButtonElement>(null);
+  const [indicatorRect, setIndicatorRect] = useState<{ left: number; width: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const activeTab = chatMode === "threads" ? threadsTabRef.current : invocationsTabRef.current;
+    if (!activeTab) return;
+    setIndicatorRect({ left: activeTab.offsetLeft, width: activeTab.offsetWidth });
+  }, [chatMode]);
 
   useLayoutEffect(() => {
     const ctx = gsap.context(() => {
@@ -77,9 +86,21 @@ export const ChatPageShell: FunctionComponent<{
               }
             }}
           >
-            <div aria-hidden="true" className="absolute inset-y-1 left-1 w-[calc(50%-4px)] rounded-full transition-transform bg-slate-900 dark:bg-white" style={{ transform: chatMode === 'invocations' ? 'translateX(100%)' : 'translateX(0)', transitionDuration: interactionTokens.controlFeedback.duration, transitionTimingFunction: interactionTokens.controlFeedback.ease }} />
+            <div
+              aria-hidden="true"
+              className="absolute inset-y-1 rounded-full bg-slate-900 shadow-[0_1px_2px_rgba(0,0,0,0.08),0_1px_8px_rgba(0,0,0,0.06)] dark:bg-white dark:shadow-[0_1px_8px_rgba(0,0,0,0.35)]"
+              style={{
+                left: indicatorRect ? `${indicatorRect.left}px` : 0,
+                width: indicatorRect ? `${indicatorRect.width}px` : 0,
+                opacity: indicatorRect ? 1 : 0,
+                transitionProperty: "left, width, opacity",
+                transitionDuration: interactionTokens.selectionMovement.duration,
+                transitionTimingFunction: interactionTokens.selectionMovement.ease,
+              }}
+            />
 
             <button
+              ref={threadsTabRef}
               id="tab-threads"
               role="tab"
               aria-selected={chatMode === "threads"}
@@ -101,6 +122,7 @@ export const ChatPageShell: FunctionComponent<{
               Threads
             </button>
             <button
+              ref={invocationsTabRef}
               id="tab-invocations"
               role="tab"
               aria-selected={chatMode === "invocations"}
