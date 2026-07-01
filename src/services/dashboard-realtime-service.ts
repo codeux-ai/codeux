@@ -462,173 +462,161 @@ const task = (async () => {
 
     const publishTasks: Array<Promise<void>> = [];
 
-    if (shouldPublishProjects) {
-      const result = this.buildPublishTask({
-        now,
-        lastPublishedAt: this.projectsPublishedAt,
+
+    const scopes = [
+      {
+        ids: shouldPublishProjects ? ["projects"] : [],
         minIntervalMs: PROJECTS_MIN_INTERVAL_MS,
-        scopeType: "projects",
-        scopeId: "projects",
+        scopeType: "projects" as const,
+        scopeId: (id: string) => "projects",
         eventType: "projects.updated",
         entityType: "project_collection",
-        entityId: "projects",
+        entityId: (id: string) => "projects",
         loader: () => loaders.getProjectsSnapshot(),
-        logType: "realtime_background_refresh",
-        onPublished: (publishedAt) => {
+        lastPublishedAt: (id: string) => this.projectsPublishedAt,
+        logType: "realtime_background_refresh" as const,
+        onPublished: (id: string, publishedAt: number) => {
           this.projectsPublishedAt = publishedAt;
         },
-      });
-
-      if (result.waitMs > 0) {
-        this.pendingProjects = this.trackCoalesceFlag(this.pendingProjects, "projects.updated");
-        nextDelayMs = this.getNextDelay(nextDelayMs, result.waitMs);
-      } else if (result.task) {
-        publishTasks.push(result.task);
-      }
-    }
-
-    for (const projectId of projectLiveIds) {
-      const result = this.buildPublishTask({
-        now,
-        lastPublishedAt: this.projectLivePublishedAt.get(projectId) ?? 0,
+        onPending: (id: string) => {
+          this.pendingProjects = this.trackCoalesceFlag(this.pendingProjects, "projects.updated");
+        },
+      },
+      {
+        ids: projectLiveIds,
         minIntervalMs: PROJECT_LIVE_MIN_INTERVAL_MS,
-        scopeType: "project",
+        scopeType: "project" as const,
         // Dedicated sub-scope so the heavy live payload (~0.5MB, status+execution
         // +git+activity feed) is delivered ONLY to clients that render it (Live and
         // Tasks pages). Pages on the plain `project:<id>` scope (sprints, overview,
         // chat) no longer receive — or have to parse — these frames.
-        scopeId: `${projectId}:live`,
+        scopeId: (projectId: string) => `${projectId}:live`,
         eventType: "project.live.updated",
         entityType: "project_live",
-        entityId: projectId,
-        projectId,
-        loader: () => loaders.getProjectLiveSnapshot(projectId),
-        cacheKey: `project:${projectId}:project.live.updated`,
+        entityId: (projectId: string) => projectId,
+        projectId: (projectId: string) => projectId,
+        loader: (projectId: string) => loaders.getProjectLiveSnapshot(projectId),
+        cacheKey: (projectId: string) => `project:${projectId}:project.live.updated`,
         skipDuplicate: true,
         sprintIdExtractor: (payload: any) => payload.selectedSprintId,
-        logType: "realtime_snapshot_published",
+        logType: "realtime_snapshot_published" as const,
         logPayloadSize: true,
-        onPublished: (publishedAt) => {
+        lastPublishedAt: (projectId: string) => this.projectLivePublishedAt.get(projectId) ?? 0,
+        onPublished: (projectId: string, publishedAt: number) => {
           this.projectLivePublishedAt.set(projectId, publishedAt);
         },
-      });
-
-      if (result.waitMs > 0) {
-        this.pendingProjectLiveIds.add(projectId);
-        nextDelayMs = this.getNextDelay(nextDelayMs, result.waitMs);
-      } else if (result.task) {
-        publishTasks.push(result.task);
-      }
-    }
-
-    for (const projectId of projectGitIds) {
-      const loadGit = loaders.getProjectGitStatus;
-      if (!loadGit) {
-        break;
-      }
-      const result = this.buildPublishTask({
-        now,
-        lastPublishedAt: this.projectGitPublishedAt.get(projectId) ?? 0,
+        onPending: (projectId: string) => {
+          this.pendingProjectLiveIds.add(projectId);
+        },
+      },
+      {
+        ids: loaders.getProjectGitStatus ? projectGitIds : [],
         minIntervalMs: PROJECT_GIT_MIN_INTERVAL_MS,
-        scopeType: "project",
-        scopeId: projectId,
+        scopeType: "project" as const,
+        scopeId: (projectId: string) => projectId,
         eventType: "project.git.updated",
         entityType: "project_git",
-        entityId: projectId,
-        projectId,
-        loader: () => loadGit(projectId),
-        cacheKey: `project:${projectId}:project.git.updated`,
+        entityId: (projectId: string) => projectId,
+        projectId: (projectId: string) => projectId,
+        loader: (projectId: string) => loaders.getProjectGitStatus!(projectId),
+        cacheKey: (projectId: string) => `project:${projectId}:project.git.updated`,
         skipDuplicate: true,
-        onPublished: (publishedAt) => {
+        lastPublishedAt: (projectId: string) => this.projectGitPublishedAt.get(projectId) ?? 0,
+        onPublished: (projectId: string, publishedAt: number) => {
           this.projectGitPublishedAt.set(projectId, publishedAt);
         },
-      });
-
-      if (result.waitMs > 0) {
-        this.pendingProjectGitIds.add(projectId);
-        nextDelayMs = this.getNextDelay(nextDelayMs, result.waitMs);
-      } else if (result.task) {
-        publishTasks.push(result.task);
-      }
-    }
-
-    for (const projectId of projectIds) {
-      const result = this.buildPublishTask({
-        now,
-        lastPublishedAt: this.projectExecutionPublishedAt.get(projectId) ?? 0,
+        onPending: (projectId: string) => {
+          this.pendingProjectGitIds.add(projectId);
+        },
+      },
+      {
+        ids: projectIds,
         minIntervalMs: PROJECT_EXECUTION_MIN_INTERVAL_MS,
-        scopeType: "project",
-        scopeId: projectId,
+        scopeType: "project" as const,
+        scopeId: (projectId: string) => projectId,
         eventType: "project.execution.updated",
         entityType: "project",
-        entityId: projectId,
-        projectId,
-        loader: () => loaders.getProjectExecutionSnapshot(projectId),
-        cacheKey: `project:${projectId}:project.execution.updated`,
+        entityId: (projectId: string) => projectId,
+        projectId: (projectId: string) => projectId,
+        loader: (projectId: string) => loaders.getProjectExecutionSnapshot(projectId),
+        cacheKey: (projectId: string) => `project:${projectId}:project.execution.updated`,
         skipDuplicate: true,
-        onPublished: (publishedAt) => {
+        lastPublishedAt: (projectId: string) => this.projectExecutionPublishedAt.get(projectId) ?? 0,
+        onPublished: (projectId: string, publishedAt: number) => {
           this.projectExecutionPublishedAt.set(projectId, publishedAt);
         },
-      });
-
-      if (result.waitMs > 0) {
-        this.pendingProjectIds.add(projectId);
-        nextDelayMs = this.getNextDelay(nextDelayMs, result.waitMs);
-      } else if (result.task) {
-        publishTasks.push(result.task);
-      }
-    }
-
-    for (const projectId of projectStatusIds) {
-      const result = this.buildPublishTask({
-        now,
-        lastPublishedAt: this.projectRuntimeStatusPublishedAt.get(projectId) ?? 0,
+        onPending: (projectId: string) => {
+          this.pendingProjectIds.add(projectId);
+        },
+      },
+      {
+        ids: projectStatusIds,
         minIntervalMs: PROJECT_RUNTIME_STATUS_MIN_INTERVAL_MS,
-        scopeType: "project",
-        scopeId: projectId,
+        scopeType: "project" as const,
+        scopeId: (projectId: string) => projectId,
         eventType: "project.runtime_status.updated",
         entityType: "project_status",
-        entityId: projectId,
-        projectId,
-        loader: () => loaders.getProjectStatusSnapshot(projectId),
-        onPublished: (publishedAt) => {
+        entityId: (projectId: string) => projectId,
+        projectId: (projectId: string) => projectId,
+        loader: (projectId: string) => loaders.getProjectStatusSnapshot(projectId),
+        lastPublishedAt: (projectId: string) => this.projectRuntimeStatusPublishedAt.get(projectId) ?? 0,
+        onPublished: (projectId: string, publishedAt: number) => {
           this.projectRuntimeStatusPublishedAt.set(projectId, publishedAt);
         },
-      });
-
-      if (result.waitMs > 0) {
-        this.pendingProjectStatusIds.add(projectId);
-        nextDelayMs = this.getNextDelay(nextDelayMs, result.waitMs);
-      } else if (result.task) {
-        publishTasks.push(result.task);
-      }
-    }
-
-    for (const projectId of projectStructureIds) {
-      const result = this.buildPublishTask({
-        now,
-        lastPublishedAt: this.projectStructurePublishedAt.get(projectId) ?? 0,
+        onPending: (projectId: string) => {
+          this.pendingProjectStatusIds.add(projectId);
+        },
+      },
+      {
+        ids: projectStructureIds,
         minIntervalMs: PROJECT_STRUCTURE_MIN_INTERVAL_MS,
-        scopeType: "project",
-        scopeId: projectId,
+        scopeType: "project" as const,
+        scopeId: (projectId: string) => projectId,
         eventType: "project.structure.updated",
         entityType: "project",
-        entityId: projectId,
-        projectId,
-        loader: () => ({
+        entityId: (projectId: string) => projectId,
+        projectId: (projectId: string) => projectId,
+        loader: (projectId: string) => ({
           projectId,
           updatedAt: new Date().toISOString(),
         }),
-        onPublished: (publishedAt) => {
+        lastPublishedAt: (projectId: string) => this.projectStructurePublishedAt.get(projectId) ?? 0,
+        onPublished: (projectId: string, publishedAt: number) => {
           this.projectStructurePublishedAt.set(projectId, publishedAt);
         },
-      });
+        onPending: (projectId: string) => {
+          this.pendingProjectStructureIds.add(projectId);
+        },
+      },
+    ];
 
-      if (result.waitMs > 0) {
-        this.pendingProjectStructureIds.add(projectId);
-        nextDelayMs = this.getNextDelay(nextDelayMs, result.waitMs);
-      } else if (result.task) {
-        publishTasks.push(result.task);
+    for (const scope of scopes) {
+      for (const id of scope.ids) {
+        const result = this.buildPublishTask({
+          now,
+          lastPublishedAt: scope.lastPublishedAt(id),
+          minIntervalMs: scope.minIntervalMs,
+          scopeType: scope.scopeType,
+          scopeId: scope.scopeId(id),
+          eventType: scope.eventType,
+          entityType: scope.entityType,
+          entityId: scope.entityId(id),
+          ...(scope.projectId ? { projectId: scope.projectId(id) } : {}),
+          loader: () => scope.loader(id),
+          ...(scope.cacheKey ? { cacheKey: scope.cacheKey(id) } : {}),
+          skipDuplicate: scope.skipDuplicate,
+          sprintIdExtractor: scope.sprintIdExtractor,
+          logType: scope.logType,
+          logPayloadSize: scope.logPayloadSize,
+          onPublished: (publishedAt) => scope.onPublished(id, publishedAt),
+        });
+
+        if (result.waitMs > 0) {
+          scope.onPending(id);
+          nextDelayMs = this.getNextDelay(nextDelayMs, result.waitMs);
+        } else if (result.task) {
+          publishTasks.push(result.task);
+        }
       }
     }
 
