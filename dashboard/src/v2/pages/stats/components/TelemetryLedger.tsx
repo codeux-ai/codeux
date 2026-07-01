@@ -3,7 +3,7 @@ import { useMemo, useState } from "preact/hooks";
 import { ArrowDownRight, ArrowUpRight, Brain, Database, Activity, Clock3, Hash, Zap, Search } from "lucide-preact";
 import { useProgressiveList } from "../../../../hooks/use-progressive-list.js";
 import type { ExecutionStatsEntitySummary } from "../../../types.js";
-import { formatTokens, formatDuration, formatDateTime, formatPercent } from "../stats-utils.js";
+import { formatTokens, formatStatsDuration, formatDateTime, formatPercent } from "../stats-utils.js";
 import {
   CHIP_CLASS,
   INPUT_CLASS,
@@ -179,7 +179,7 @@ export const TelemetryLedger: FunctionComponent<{
               <LedgerSummaryTile
                 icon={Clock3}
                 label="Avg Active"
-                value={formatDuration(globalTotals.totalActiveMs / Math.max(1, items.length))}
+                value={formatStatsDuration(globalTotals.totalActiveMs / Math.max(1, items.length))}
                 detail={`per ${kindLabel.replace(/s$/, "")}`}
               />
               <LedgerSummaryTile
@@ -288,7 +288,7 @@ export const TelemetryLedger: FunctionComponent<{
                           </div>
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Active</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatDuration(item.usage.activeTimeMs)}</div>
+                            <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatStatsDuration(item.usage.activeTimeMs)}</div>
                           </div>
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Calls</div>
@@ -304,7 +304,7 @@ export const TelemetryLedger: FunctionComponent<{
                         </div>
                         <div>
                           <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Active</div>
-                          <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatDuration(item.usage.activeTimeMs)}</div>
+                          <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatStatsDuration(item.usage.activeTimeMs)}</div>
                         </div>
                         <div>
                           <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Calls</div>

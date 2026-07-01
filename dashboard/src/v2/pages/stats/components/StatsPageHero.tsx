@@ -7,7 +7,7 @@ import type {
   ProjectStatsQuery,
   ProjectStatsWindow,
 } from "../../../types.js";
-import { formatDateTime, formatDuration, formatTokens, isValidCustomRange } from "../stats-utils.js";
+import { formatDateTime, formatStatsDuration, formatTokens, isValidCustomRange } from "../stats-utils.js";
 import { PageHeader } from "../../../components/layout/PageHeader.js";
 import {
   PANEL_CLASS,
@@ -150,7 +150,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
             <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
               <HeroKpi icon={Zap} label="Tokens" value={formatTokens(usage.totalTokens)} />
               <HeroKpi icon={Activity} label="Invocations" value={usage.invocationCount.toLocaleString()} />
-              <HeroKpi icon={Clock3} label="Active Time" value={formatDuration(usage.activeTimeMs)} />
+              <HeroKpi icon={Clock3} label="Active Time" value={formatStatsDuration(usage.activeTimeMs)} />
               <HeroKpi
                 icon={ShieldCheck}
                 label="Success Rate"

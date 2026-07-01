@@ -22,6 +22,7 @@ import type {
   ExecutionTaskDispatchSummary,
   Subtask,
 } from "../../types.js";
+import { formatDuration, formatDurationTight } from "../lib/format-duration.js";
 import {
   LIVE_TASK_STAGE_ORDER,
   STATS_DECK_VISIBLE_STAGES,
@@ -97,38 +98,6 @@ const STAGE_META: Record<LiveTaskStageKey, {
     chip: "border-status-green/15 bg-status-green/8 dark:bg-status-green/10",
   },
 };
-
-function formatDuration(totalSeconds: number): string {
-  if (totalSeconds <= 0) {
-    return "0s";
-  }
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  if (minutes > 0) {
-    return `${minutes}m ${seconds}s`;
-  }
-  return `${seconds}s`;
-}
-
-function formatDurationTight(totalSeconds: number): string {
-  if (totalSeconds <= 0) {
-    return "0s";
-  }
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  if (minutes > 0) {
-    return `${minutes}m`;
-  }
-  return `${seconds}s`;
-}
 
 function formatPercent(value: number): string {
   return `${Math.max(0, Math.min(100, Math.round(value)))}%`;

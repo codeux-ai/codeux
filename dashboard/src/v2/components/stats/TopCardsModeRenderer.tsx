@@ -3,7 +3,7 @@ import type {
   ProjectExecutionStatsSnapshot,
   SegmentDefinition,
 } from "../../types.js";
-import { formatTokens, formatDuration, createSeries } from "../../pages/stats/stats-utils.js";
+import { formatTokens, formatStatsDuration, createSeries } from "../../pages/stats/stats-utils.js";
 import { StatsMetricCard } from "./StatsMetricCard.js";
 import { STATS_COLORS } from "../../lib/stats/color-tokens.js";
 import type { StatsVisualMode } from "../../pages/stats/components/stats-ui-primitives.js";
@@ -104,7 +104,7 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
         />
         <StatsMetricCard
           label="Wall Runtime"
-          value={formatDuration(wallRuntime)}
+          value={formatStatsDuration(wallRuntime)}
           detail="Task-run wall time in the same window, including completed sprint work."
           accentHex={STATS_COLORS.wallRuntime}
           sparkline={metricSeries.wallRuntime}
@@ -224,8 +224,8 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
         />
         <StatsMetricCard
           label="Median Latency"
-          value={stats.duration && stats.duration.sampleCount > 0 ? formatDuration(stats.duration.p50Ms) : "—"}
-          detail={stats.duration && stats.duration.sampleCount > 0 ? `p95 ${formatDuration(stats.duration.p95Ms)} across ${stats.duration.sampleCount.toLocaleString()} calls` : "No finished invocations yet"}
+          value={stats.duration && stats.duration.sampleCount > 0 ? formatStatsDuration(stats.duration.p50Ms) : "—"}
+          detail={stats.duration && stats.duration.sampleCount > 0 ? `p95 ${formatStatsDuration(stats.duration.p95Ms)} across ${stats.duration.sampleCount.toLocaleString()} calls` : "No finished invocations yet"}
           accentHex="#0EA5E9"
           sparkline={[]}
           signalLabel="Latency"
