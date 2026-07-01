@@ -37,7 +37,7 @@ export interface ActivityCacheServiceDependencies {
 }
 
 export class ActivityCacheService {
-  private liveActivitiesCache: Map<string, { timestamp: number; data: JulesActivity[] }> = new Map();
+  private liveActivitiesCache: Map<string, { timestamp: number; data: JulesActivity[]; isNegative: boolean }> = new Map();
   private liveActivitiesFetchPromise: Promise<Record<string, JulesActivity[]>> | null = null;
 
   constructor(
@@ -45,7 +45,8 @@ export class ActivityCacheService {
     private readonly liveActivityCacheMs: number,
     private readonly gitStatusCacheMs: number,
     private readonly activityPageSize: number,
-    private readonly activityFetchConcurrency: number = 3
+    private readonly activityFetchConcurrency: number = 3,
+    private readonly negativeActivityCacheMs: number = 2000
   ) {}
 
   invalidateGitStatusCache(): void {
@@ -91,11 +92,14 @@ export class ActivityCacheService {
 
       for (const sessionName of activeSessionNames) {
         const cached = this.liveActivitiesCache.get(sessionName);
-        if (cached && now - cached.timestamp < this.liveActivityCacheMs) {
-          result[sessionName] = cached.data;
-        } else {
-          missingSessions.push(sessionName);
+        if (cached) {
+          const ttl = cached.isNegative ? this.negativeActivityCacheMs : this.liveActivityCacheMs;
+          if (now - cached.timestamp < ttl) {
+            result[sessionName] = cached.data;
+            continue;
+          }
         }
+        missingSessions.push(sessionName);
       }
 
       if (missingSessions.length > 0) {
@@ -104,19 +108,19 @@ export class ActivityCacheService {
           async (sessionName) => {
             try {
               const activities = await this.deps.fetchRecentActivities(sessionName, this.activityPageSize);
-              return [sessionName, activities] as [string, JulesActivity[]];
+              return { sessionName, activities, isNegative: activities.length === 0 };
             } catch {
               this.deps.logger?.warn("Could not fetch live activities", { sessionName });
-              return [sessionName, []] as [string, JulesActivity[]];
+              return { sessionName, activities: [], isNegative: true };
             }
           },
           this.activityFetchConcurrency
         );
 
         const fetchTimestamp = Date.now();
-        for (const [sessionName, activities] of fetchResults) {
+        for (const { sessionName, activities, isNegative } of fetchResults) {
           result[sessionName] = activities;
-          this.liveActivitiesCache.set(sessionName, { timestamp: fetchTimestamp, data: activities });
+          this.liveActivitiesCache.set(sessionName, { timestamp: fetchTimestamp, data: activities, isNegative });
         }
       }
 
