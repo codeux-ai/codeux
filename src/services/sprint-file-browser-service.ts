@@ -372,7 +372,7 @@ export class SprintFileBrowserService {
   /**
    * Removes the per-sprint file-browser volume. The volume must live exactly as long as its session
    * row; every site that deletes a session row must also call this, otherwise the volume is orphaned
-   * until the next prefix-based startup prune.
+   * until the next label-based startup prune.
    */
   private async removeSprintVolume(sprintId: string): Promise<void> {
     await runCommandStrict("docker", ["volume", "rm", "-f", `code-ux-file-browser-volume-${sprintId}`], process.cwd()).catch(() => undefined);
@@ -396,7 +396,11 @@ export class SprintFileBrowserService {
    * is dropped without its volume being cleaned (deleted sprints, crashed reconciles, pre-fix leaks).
    */
   private async pruneOrphanedVolumes(): Promise<number> {
-    const result = await runCommandStrict("docker", ["volume", "ls", "-q"], process.cwd()).catch(() => null);
+    const result = await runCommandStrict(
+      "docker",
+      ["volume", "ls", "-q", "--filter", "label=code-ux.file-browser-volume=true"],
+      process.cwd(),
+    ).catch(() => null);
     if (!result?.ok) {
       return 0;
     }
@@ -406,8 +410,8 @@ export class SprintFileBrowserService {
       .split("\n")
       .map((line) => line.trim())
       .filter((name) => name.startsWith(prefix) && !liveSprintIds.has(name.slice(prefix.length)));
-    for (const name of orphans) {
-      await runCommandStrict("docker", ["volume", "rm", "-f", name], process.cwd()).catch(() => undefined);
+    if (orphans.length > 0) {
+      await runCommandStrict("docker", ["volume", "rm", "-f", ...orphans], process.cwd()).catch(() => undefined);
     }
     if (orphans.length > 0) {
       this.deps.logger?.info("Pruned orphaned file browser volumes on startup", { prunedCount: orphans.length });
@@ -417,8 +421,8 @@ export class SprintFileBrowserService {
 
   async cleanupStaleContainersOnStartup(): Promise<void> {
     const containerIds = (await this.listFileBrowserContainers(process.cwd())).map((c) => c.id);
-    for (const containerId of containerIds) {
-      await runCommandStrict("docker", ["rm", "-f", "-v", containerId], process.cwd()).catch(() => undefined);
+    if (containerIds.length > 0) {
+      await runCommandStrict("docker", ["rm", "-f", "-v", ...containerIds], process.cwd()).catch(() => undefined);
     }
 
     const sessions = this.deps.sprintFileBrowserRepository.listSessions();

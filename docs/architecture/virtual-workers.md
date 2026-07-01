@@ -142,10 +142,10 @@ It deduplicates this project set and explicitly ignores all other projects in th
 
 Startup cleanup prunes orphaned `virtual_cli` endpoints from previous runs.
 
-Startup cleanup also aggressively removes stale Code UX Docker assets:
+Startup cleanup also removes stale Code UX Docker assets through a background, label-filtered prune so server boot does not wait on full Docker daemon scans:
 
-- stale workspace volumes for finished, failed, unrecoverable, or outdated sessions
-- orphaned helper/login containers from previous runs, removing anonymous image-declared volumes with `docker rm -f -v`
+- stale labeled workspace/runtime volumes for finished, failed, unrecoverable, or outdated sessions
+- orphaned labeled helper/login containers from previous runs, removing anonymous image-declared volumes with `docker rm -f -v`
 
 Cached setup-script Docker images are content-addressed by base image, setup script content, and setup-cache Dockerfile content. They are preserved across dashboard restarts and reused until one of those inputs changes or Docker no longer has the image.
 
