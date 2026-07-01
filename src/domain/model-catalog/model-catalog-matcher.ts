@@ -1,4 +1,5 @@
 import type { ProviderId } from "../../contracts/app-types.js";
+import type { SystemSettings } from "../../contracts/settings-scope-types.js";
 import { getModelCatalogEntry } from "./model-catalog-loader.js";
 
 /**
@@ -70,6 +71,47 @@ export function resolveCatalogModelId(providerId: ProviderId, rawModel: string):
   const aliasId = MODEL_SLUG_ALIASES[providerId]?.[model];
   if (aliasId && getModelCatalogEntry(aliasId)) {
     return aliasId;
+  }
+
+  return null;
+}
+
+/**
+ * Fallback for models routed through a custom API provider/gateway (the "API provider" +
+ * "Custom model" pair on Claude Code/Codex/Qwen/OpenCode instances — see ProviderCombobox /
+ * ModelCombobox in the dashboard). Those fields store a bare model id paired with a
+ * separately-selected provider id, which may not be one of PROVIDER_TO_CATALOG_PROVIDER's
+ * fixed mappings (e.g. routing through OpenRouter, or a self-hosted gateway not in the
+ * models.dev catalogue at all) — resolveCatalogModelId alone can't find those. This scans the
+ * configured instances of the given provider type for one whose custom model field matches
+ * the raw model string, and reconstructs the same "<provider>/<model>" id the settings UI
+ * uses as the price-override key for that instance, whether or not it's a real catalogue
+ * entry (a self-hosted model with no catalogue match still gets a stable, unique override
+ * key of "<selected-provider-or-'custom'>/<model>").
+ */
+export function resolveCustomProviderModelId(
+  providerId: ProviderId,
+  rawModel: string,
+  settings: SystemSettings,
+): string | null {
+  const model = rawModel.trim();
+  if (!model) {
+    return null;
+  }
+
+  for (const instance of Object.values(settings.integrations.providers)) {
+    if (instance.provider !== providerId) {
+      continue;
+    }
+    if (providerId === "qwen-code" && instance.qwenModelId === model) {
+      return `${instance.qwenApiProviderId || "custom"}/${model}`;
+    }
+    if (providerId === "opencode" && instance.openCodeModelId === model) {
+      return `${instance.openCodeProviderId || "custom"}/${model}`;
+    }
+    if ((providerId === "claude-code" || providerId === "codex") && instance.customModel === model) {
+      return `${instance.customProviderId || "custom"}/${model}`;
+    }
   }
 
   return null;

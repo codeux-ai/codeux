@@ -100,6 +100,63 @@ describe("ExecutionRepository model pricing", () => {
     expect(snapshot.usage.totalCostUsd).toBeCloseTo(3, 5);
   });
 
+  it("prices a self-hosted custom model with no catalogue entry, keyed by its paired API provider", async () => {
+    const { projectRepository, executionRepository, settingsRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Custom Model Pricing Project",
+      sourceType: "local",
+      sourceRef: "/workspace/model-pricing-custom",
+    });
+
+    const baseSettings = settingsRepository.getSystemSettings();
+    settingsRepository.saveSystemSettings({
+      ...baseSettings,
+      integrations: {
+        ...baseSettings.integrations,
+        providers: {
+          ...baseSettings.integrations.providers,
+          "codex-local": {
+            provider: "codex",
+            name: "Codex Local",
+            apiKey: "",
+            mountAuth: false,
+            authPath: "",
+            customProviderId: "my-custom-gateway",
+            customModel: "my-local-model",
+          },
+        },
+      },
+      modelPricing: {
+        overrides: {
+          "my-custom-gateway/my-local-model": { inputTokens: 4, outputTokens: 8, cachedInputTokens: 0 },
+        },
+      },
+    });
+
+    const invocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sessionId: "session-custom",
+      provider: "codex",
+      purpose: "task_coding",
+      model: "my-local-model",
+    });
+    executionRepository.updateProviderInvocationUsage(invocation.id, {
+      status: "completed",
+      finishedAt: new Date().toISOString(),
+      inputTokens: 1_000_000,
+      cachedInputTokens: 0,
+      outputTokens: 1_000_000,
+      reasoningOutputTokens: 0,
+      totalTokens: 2_000_000,
+      usageSource: "reported",
+    });
+
+    const snapshot = executionRepository.getProjectStatsSnapshot(project.id, "24h");
+    expect(snapshot.usage.inputCostUsd).toBeCloseTo(4, 5);
+    expect(snapshot.usage.outputCostUsd).toBeCloseTo(8, 5);
+    expect(snapshot.usage.totalCostUsd).toBeCloseTo(12, 5);
+  });
+
   it("omits cost when the provider/model has no catalogue match and no override", async () => {
     const { projectRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({

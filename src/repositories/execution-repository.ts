@@ -84,7 +84,7 @@ import type {
 import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-realtime-service.js";
 import type { ProviderId } from "../contracts/app-types.js";
 import { PROVIDER_IDS } from "./settings-defaults.js";
-import { resolveCatalogModelId } from "../domain/model-catalog/model-catalog-matcher.js";
+import { resolveCatalogModelId, resolveCustomProviderModelId } from "../domain/model-catalog/model-catalog-matcher.js";
 import { getModelCatalogEntry } from "../domain/model-catalog/model-catalog-loader.js";
 import { SettingsRepository } from "./settings-repository.js";
 import { queryExecutionSprintRuns } from "./execution/execution-sprint-runs-query.js";
@@ -1076,12 +1076,23 @@ export class ExecutionRepository {
         if (!model || !PROVIDER_IDS.includes(providerId as ProviderId)) {
           return undefined;
         }
+        const settings = this.settingsRepository.getSystemSettings();
+        const overrides = settings.modelPricing.overrides;
+
         const canonicalId = resolveCatalogModelId(providerId as ProviderId, model);
-        if (!canonicalId) {
-          return undefined;
+        if (canonicalId) {
+          return overrides[canonicalId] ?? getModelCatalogEntry(canonicalId)?.cost;
         }
-        const override = this.settingsRepository.getSystemSettings().modelPricing.overrides[canonicalId];
-        return override ?? getModelCatalogEntry(canonicalId)?.cost;
+
+        // Not a built-in slug/alias match — fall back to a custom API provider/gateway
+        // routing (e.g. a self-hosted model with no catalogue entry), which still gets a
+        // stable override key reconstructed from the paired "API provider" field.
+        const customCanonicalId = resolveCustomProviderModelId(providerId as ProviderId, model, settings);
+        if (customCanonicalId) {
+          return overrides[customCanonicalId] ?? getModelCatalogEntry(customCanonicalId)?.cost;
+        }
+
+        return undefined;
       },
       getTaskMetadata: (id, ids) => {
         const missing = ids.filter(i => !taskMetaCache.has(i));
