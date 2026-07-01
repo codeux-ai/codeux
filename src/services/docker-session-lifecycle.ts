@@ -1,4 +1,5 @@
 import { runCommandStrict } from "./cli-process-runner.js";
+import type { Logger } from "../shared/logging/logger.js";
 
 export interface DockerContainerSummary {
   id: string;
@@ -14,6 +15,8 @@ export function sanitizeContainerNameComponent(value: string, maxLength: number)
 
 export class DockerSessionLifecycle {
   private readonly sessionLocks = new Map<string, Promise<unknown>>();
+
+  constructor(private readonly logger?: Logger) {}
 
   public async withSessionLock<T>(lockKey: string, operation: () => Promise<T>): Promise<T> {
     const previous = this.sessionLocks.get(lockKey) || Promise.resolve();
@@ -38,7 +41,12 @@ export class DockerSessionLifecycle {
     if (!containerRef.trim()) {
       return;
     }
-    await runCommandStrict("docker", ["rm", "-f", "-v", containerRef], cwd).catch(() => undefined);
+    await runCommandStrict("docker", ["rm", "-f", "-v", containerRef], cwd).catch((error) => {
+      this.logger?.warn("Failed to remove docker container", {
+        containerRef,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
   }
 
   public parseDockerPsOutput(stdout: string, hasHostPort: boolean = true): DockerContainerSummary[] {

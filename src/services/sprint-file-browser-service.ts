@@ -46,10 +46,12 @@ interface GitRunResult {
 }
 
 export class SprintFileBrowserService {
-  private readonly lifecycle = new DockerSessionLifecycle();
+  private readonly lifecycle: DockerSessionLifecycle;
   private readonly treeCache = new Map<string, { tree: FileBrowserTree; containerId: string; lastBuildAt: string | null }>();
 
-  constructor(private readonly deps: SprintFileBrowserServiceDeps) {}
+  constructor(private readonly deps: SprintFileBrowserServiceDeps) {
+    this.lifecycle = new DockerSessionLifecycle(this.deps.logger);
+  }
 
   async listSessions(projectId?: string): Promise<FileBrowserSession[]> {
     const sessions = this.deps.sprintFileBrowserRepository.listSessions(projectId);

@@ -77,9 +77,11 @@ interface PreparedStartupScript {
 
 
 export class SprintPreviewService {
-  private readonly lifecycle = new DockerSessionLifecycle();
+  private readonly lifecycle: DockerSessionLifecycle;
 
-  constructor(private readonly deps: SprintPreviewServiceDeps) {}
+  constructor(private readonly deps: SprintPreviewServiceDeps) {
+    this.lifecycle = new DockerSessionLifecycle(this.deps.logger);
+  }
 
   async listSessions(projectId?: string): Promise<SprintPreviewSession[]> {
     const sessions = this.deps.sprintPreviewRepository.listSessions(projectId);
