@@ -11,6 +11,7 @@ export interface SanitizableProviderConfig {
   apiKey: string;
   customBaseUrl?: string;
   customModel?: string;
+  customProviderId?: string;
   qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
   qwenRegion?: "china" | "international";
   qwenBaseUrl?: string;
@@ -18,6 +19,7 @@ export interface SanitizableProviderConfig {
   qwenModelId?: string;
   qwenProtocol?: "openai" | "anthropic" | "gemini";
   qwenAdditionalModelProviders?: any[];
+  qwenApiProviderId?: string;
   openCodeAuthMode?: "LOCAL_AUTH" | "ENV_KEY" | "CUSTOM_PROVIDER";
   openCodeProviderId?: string;
   openCodeModelId?: string;
@@ -46,6 +48,7 @@ export const sanitizeSystemProviderConfig = <T extends SanitizableProviderConfig
     sanitized.apiKey = "";
     sanitized.customBaseUrl = "";
     sanitized.customModel = "";
+    sanitized.customProviderId = "";
 
     if (sanitized.provider === "qwen-code") {
       sanitized.qwenAuthMode = "LOCAL_AUTH";
@@ -55,6 +58,7 @@ export const sanitizeSystemProviderConfig = <T extends SanitizableProviderConfig
       sanitized.qwenModelId = "";
       sanitized.qwenProtocol = undefined;
       sanitized.qwenAdditionalModelProviders = [];
+      sanitized.qwenApiProviderId = "";
     } else if (sanitized.provider === "opencode") {
       sanitized.openCodeAuthMode = "LOCAL_AUTH";
       sanitized.openCodeProviderId = "";

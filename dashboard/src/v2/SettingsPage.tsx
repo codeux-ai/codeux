@@ -258,8 +258,8 @@ export const SettingsPage: FunctionComponent = () => {
 
           <div className="flex flex-col gap-3">
             <ActionFeedbackRegion
-              status={error ? "error" : saveMessage ? "success" : "idle"}
-              message={error || saveMessage || null}
+              status={error ? "error" : activeSaving ? "pending" : saveMessage ? "success" : activeDirty ? "warning" : "idle"}
+              message={error || (activeSaving ? "Saving changes..." : saveMessage ? "Changes saved." : activeDirty ? "You have unsaved changes." : null)}
               onDismiss={clearFeedback}
             />
           </div>

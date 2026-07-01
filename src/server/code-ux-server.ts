@@ -1009,14 +1009,12 @@ export class CodeUxServer {
       this.logger.error("Failed to clean up stale file browser containers on startup", { error });
     }
     let recoveredSprintRunIds: string[] = [];
-    try {
-      await new DockerAssetPruneService(
-        this.sessionTracking,
-        this.logger.child({ component: "docker-asset-prune-service" }),
-      ).cleanupOnStartup();
-    } catch (error) {
+    void new DockerAssetPruneService(
+      this.sessionTracking,
+      this.logger.child({ component: "docker-asset-prune-service" }),
+    ).cleanupOnStartup().catch((error) => {
       this.logger.error("Failed to prune stale Docker assets on startup", { error });
-    }
+    });
 
     try {
       await new BranchReaperService({

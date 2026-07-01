@@ -181,11 +181,11 @@ export function pickLatestTaskDispatch(
   index?: IndexedExecutionHistory,
 ): ExecutionTaskDispatchSummary | null {
   const recordId = normalizeString(task.record_id);
-  const rawDispatches = recordId && index?.dispatchesByRecordId.has(recordId)
-    ? index.dispatchesByRecordId.get(recordId)!
-    : index?.dispatchesByTaskKey.has(task.id)
-      ? index.dispatchesByTaskKey.get(task.id)!
-      : dispatches;
+  const rawDispatches = index
+    ? (recordId && index.dispatchesByRecordId.has(recordId)
+      ? index.dispatchesByRecordId.get(recordId)!
+      : index.dispatchesByTaskKey.get(task.id) || [])
+    : dispatches;
 
   const scopedDispatches = rawDispatches.filter((dispatch) => taskScopeMatchesDispatch(task, dispatch));
   const latestByRecency = (items: ExecutionTaskDispatchSummary[]): ExecutionTaskDispatchSummary | null => (
@@ -213,15 +213,15 @@ export function getTaskEventsForLiveTask(
 ): ExecutionRuntimeEventSummary[] {
   const recordId = normalizeString(task.record_id);
 
-  const rawEvents = dispatch?.taskRunId && index?.eventsByTaskRunId.has(dispatch.taskRunId)
-    ? index.eventsByTaskRunId.get(dispatch.taskRunId)!
-    : dispatch?.id && index?.eventsByDispatchId.has(dispatch.id)
-      ? index.eventsByDispatchId.get(dispatch.id)!
-      : recordId && index?.eventsByRecordId.has(recordId)
-        ? index.eventsByRecordId.get(recordId)!
-        : index?.eventsByTaskKey.has(task.id)
-          ? index.eventsByTaskKey.get(task.id)!
-          : events;
+  const rawEvents = index
+    ? (dispatch?.taskRunId && index.eventsByTaskRunId.has(dispatch.taskRunId)
+      ? index.eventsByTaskRunId.get(dispatch.taskRunId)!
+      : dispatch?.id && index.eventsByDispatchId.has(dispatch.id)
+        ? index.eventsByDispatchId.get(dispatch.id)!
+        : recordId && index.eventsByRecordId.has(recordId)
+          ? index.eventsByRecordId.get(recordId)!
+          : index.eventsByTaskKey.get(task.id) || [])
+    : events;
 
   const scopedEvents = rawEvents.filter((event) => taskScopeMatchesEvent(task, event));
   const sortEvents = (items: ExecutionRuntimeEventSummary[]): ExecutionRuntimeEventSummary[] => {

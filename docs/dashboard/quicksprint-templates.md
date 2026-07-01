@@ -22,6 +22,9 @@ The TypeScript catalog in `src/domain/quicksprint/quicksprint-catalog.ts` is now
 The shared template record contract lives in:
 - `src/contracts/quicksprint-types.ts`
 
+The view-model state derivation logic for the Quicksprint panel, including template grouping, purpose filtering, and prompt composition, lives in:
+- `dashboard/src/v2/lib/quicksprint-panel-state.ts`
+
 ## File Format
 
 Quicksprint templates use the same editable mixed Markdown pattern as agent files:

@@ -5,25 +5,27 @@ import type { Category, CategoryId } from "../../hooks/use-settings-page-state.j
 import { NoticePanel } from "./SettingsSurface.js";
 import { SHARED_INTERACTION_CLASSES } from "../ui/Button.js";
 
-import { AlertTriangle, Bot, BrainCircuit, Compass, Cpu, Monitor, Plug, Server, Settings, SlidersHorizontal, Target } from "lucide-preact";
+import { AlertTriangle, Banknote, Bot, BrainCircuit, Compass, Cpu, Monitor, Plug, Server, Settings, SlidersHorizontal, Target } from "lucide-preact";
 
 export const CATEGORIES: Category[] = [
   { id: "general", num: "01", label: "General", icon: SlidersHorizontal, description: "Scope, runtime, and automation posture" },
   { id: "appearance", num: "02", label: "Appearance", icon: Monitor, description: "Dashboard layout and theme preferences" },
   { id: "models", num: "03", label: "AI Models", icon: Cpu, description: "Provider routing, models, and weighting" },
-  { id: "sprint", num: "04", label: "Sprint & Git", icon: Target, description: "Git flow, branch naming, merge rules, and execution runtime" },
-  { id: "browser", num: "05", label: "Browser Preview", icon: Compass, description: "Preview runtime, browser visibility, and container policy" },
-  { id: "agents", num: "06", label: "Agents", icon: Bot, description: "Project-local markdown mirrors and agent authoring behavior" },
-  { id: "memory", num: "07", label: "Memory", icon: BrainCircuit, description: "Embedding models, auto-capture, and promotion policy" },
-  { id: "integrations", num: "08", label: "Integrations", icon: Plug, description: "Provider keys, Git hosts, and external connection policy" },
-  { id: "mcp", num: "09", label: "MCP", icon: Server, description: "MCP servers injected into CLIs and built-in tool access" },
-  { id: "danger", num: "10", label: "Danger Zone", icon: AlertTriangle, description: "Reset project overrides only when needed", danger: true },
+  { id: "modelPricing", num: "04", label: "Model Pricing", icon: Banknote, description: "Per-model token pricing from the catalogue, with your own overrides" },
+  { id: "sprint", num: "05", label: "Sprint & Git", icon: Target, description: "Git flow, branch naming, merge rules, and execution runtime" },
+  { id: "browser", num: "06", label: "Browser Preview", icon: Compass, description: "Preview runtime, browser visibility, and container policy" },
+  { id: "agents", num: "07", label: "Agents", icon: Bot, description: "Project-local markdown mirrors and agent authoring behavior" },
+  { id: "memory", num: "08", label: "Memory", icon: BrainCircuit, description: "Embedding models, auto-capture, and promotion policy" },
+  { id: "integrations", num: "09", label: "Integrations", icon: Plug, description: "Provider keys, Git hosts, and external connection policy" },
+  { id: "mcp", num: "10", label: "MCP", icon: Server, description: "MCP servers injected into CLIs and built-in tool access" },
+  { id: "danger", num: "11", label: "Danger Zone", icon: AlertTriangle, description: "Reset project overrides only when needed", danger: true },
 ];
 
 export const CATEGORY_SEARCH_HINTS: Record<CategoryId, string[]> = {
   general: ["automation", "scope", "runtime", "dashboard", "clarification", "pause", "resume"],
   appearance: ["theme", "layout", "dock", "sidebar", "light", "dark", "motion", "appearance"],
   models: ["provider", "routing", "model", "thinking", "worker", "codex", "gemini", "claude", "jules"],
+  modelPricing: ["pricing", "price", "cost", "token", "catalogue", "override", "billing", "usage"],
   sprint: ["ci", "merge", "watch", "loop", "docker", "execution", "cleanup", "branch", "branch name", "branch naming", "branch scheme", "default branch", "feature branch", "git flow", "autofix", "browser", "preview", "container", "port"],
   browser: ["browser", "preview", "container", "port", "routing", "rebuild", "launch", "concurrent", "iframe"],
   agents: ["agent", "prompt", "template", "markdown", "instruction"],

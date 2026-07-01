@@ -169,6 +169,8 @@ export interface ProcessManagementActionArgs {
   agentMcpAccess?: AgentMcpAccessConfig | null;
   /** Responding agent preset id, for code_ux gateway tool enforcement. */
   mcpAgentId?: string | null;
+  /** Aborts the in-flight provider invocation (and any pending concurrency wait) when a newer chat message supersedes this turn. */
+  signal?: AbortSignal;
 }
 
 export class ChatManagementActionService {
@@ -295,6 +297,7 @@ export class ChatManagementActionService {
         customMcpServers: args.settings.customMcpServers,
         agentMcpAccess: args.agentMcpAccess,
         mcpAgentId: args.mcpAgentId,
+        signal: args.signal,
       });
 
       const replyText = (result.text?.trim() || result.stdout || "").trim();
@@ -305,7 +308,7 @@ export class ChatManagementActionService {
       });
 
       this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
-        status: result.ok ? "completed" : "failed",
+        status: args.signal?.aborted ? "cancelled" : (result.ok ? "completed" : "failed"),
         finishedAt: new Date().toISOString(),
       });
 
@@ -321,12 +324,13 @@ export class ChatManagementActionService {
       };
     } catch (err: unknown) {
       const errMessage = err instanceof Error ? err.message : String(err);
+      const wasCancelled = Boolean(args.signal?.aborted);
       this.deps.executionRepository.appendExecutionInvocationMessage(execInvocationId, {
         role: "system",
-        contentMarkdown: `Error: ${errMessage}`,
+        contentMarkdown: wasCancelled ? "Superseded by a newer chat message." : `Error: ${errMessage}`,
       });
       this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
-        status: "failed",
+        status: wasCancelled ? "cancelled" : "failed",
         finishedAt: new Date().toISOString(),
       });
       throw err;
@@ -400,6 +404,7 @@ export class ChatManagementActionService {
         buildRetryPrompt: (error: Error) => {
           return `Your response could not be parsed as valid JSON. Please return STRICT JSON with \`replyMarkdown\` and \`action\` fields.\nError: ${error.message}`;
         },
+        signal: args.signal,
       });
 
       const parsed = response.parsed;
@@ -454,12 +459,13 @@ export class ChatManagementActionService {
 
     } catch (err: unknown) {
       const errMessage = err instanceof Error ? err.message : String(err);
+      const wasCancelled = Boolean(args.signal?.aborted);
       this.deps.executionRepository.appendExecutionInvocationMessage(execInvocationId, {
         role: "system",
-        contentMarkdown: `Error: ${errMessage}`,
+        contentMarkdown: wasCancelled ? "Superseded by a newer chat message." : `Error: ${errMessage}`,
       });
       this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
-        status: "failed",
+        status: wasCancelled ? "cancelled" : "failed",
         finishedAt: new Date().toISOString(),
       });
       throw err;

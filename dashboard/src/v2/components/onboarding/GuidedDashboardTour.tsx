@@ -336,22 +336,40 @@ export const GuidedDashboardTour: FunctionComponent = () => {
     setProgress(100);
   }, [activeIndex, availableSteps.length, progress]);
 
-  const hideTour = () => {
+  const hideTour = useCallback(() => {
     window.localStorage.setItem(DASHBOARD_TOUR_STORAGE_KEY, "true");
     setOpen(false);
-  };
+  }, []);
 
-  const goPrevious = () => {
+  const goPrevious = useCallback(() => {
     suppressAutoAdvanceRef.current = true;
     setProgress(0);
     setActiveIndex((current) => Math.max(0, current - 1));
-  };
+  }, []);
 
-  const goNext = () => {
+  const goNext = useCallback(() => {
     suppressAutoAdvanceRef.current = true;
     setProgress(0);
     setActiveIndex((current) => Math.min(availableSteps.length - 1, current + 1));
-  };
+  }, [availableSteps.length]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        hideTour();
+      } else if (e.key === "ArrowLeft") {
+        if (activeIndex > 0) goPrevious();
+      } else if (e.key === "ArrowRight") {
+        if (activeIndex === availableSteps.length - 1) hideTour();
+        else goNext();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, activeIndex, availableSteps.length, hideTour, goPrevious, goNext]);
 
   const geometry = useMemo(() => {
     if (!targetRect) {
@@ -416,7 +434,7 @@ export const GuidedDashboardTour: FunctionComponent = () => {
         }}
       >
         <div className={`absolute inset-0 rounded-[1.35rem] ${accent.bgSoft}`} />
-        <div className={`absolute inset-[-8px] rounded-[1.65rem] border ${accent.border} opacity-70 animate-ping`} />
+        <div className={`absolute inset-[-8px] rounded-[1.65rem] border ${accent.border} opacity-70 motion-safe:animate-ping`} />
       </div>
 
       <div

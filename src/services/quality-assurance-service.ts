@@ -1,3 +1,4 @@
+import { buildProviderSettingsOverride } from "./provider-settings-override.js";
 import {
   buildProviderPrompt,
   DEFAULT_CLI_WORKFLOW_SETTINGS,
@@ -47,9 +48,11 @@ import type { NormalizedQaReviewResult } from "../domain/qa-review/qa-review-typ
 
 
 import { resolveReviewBranch } from "../domain/qa-review/qa-review-branch-resolution.js";
+import { determineTaskReviewIntent } from "../domain/qa-review/task-review-outcome.js";
 import { resolveStaleRunningQaInvocationReason, QA_RUN_START_TIMEOUT_MS as STALE_QA_RUN_START_TIMEOUT_MS } from "../domain/qa-review/qa-review-stale-run.js";
 import { clearMergeProjectionForRerun, MERGE_PROJECTION_RESET } from "../domain/sprint/task-reset-state.js";
 import { buildQaReviewRequest, resolveTaskTriggerType } from "../domain/qa-review/qa-review-request-builder.js";
+import { buildSprintQaSnapshot, shouldRunSprintQaReview } from "../domain/qa-review/sprint-qa-snapshot.js";
 
 type CliQaProvider = Exclude<ProviderId, "jules">;
 
@@ -284,45 +287,49 @@ export class QualityAssuranceService {
       }
     }
 
-    try {
-      const review = await this.runReview({
+      let resolvedReview: NormalizedQaReviewResult | undefined;
+      let caughtError: unknown;
+
+      try {
+        resolvedReview = await this.runReview({
+          triggerType,
+          scope,
+          projectName: project.name,
+          sprintGoal: sprint.goal || "",
+          repoPath: args.repoPath,
+          agentInstructions: agentInstructions,
+          subtasks: args.subtasks,
+          currentTask: args.task,
+          taskRun,
+          sprintRunId: args.sprintRunId || null,
+          agentPresetId: agentPresetId,
+          reviewBranch,
+          baseBranch: sprintFeatureBranch,
+        });
+      } catch (e) {
+        caughtError = e;
+      }
+
+      const intentOutcome = determineTaskReviewIntent({
         triggerType,
-        scope,
-        projectName: project.name,
-        sprintGoal: sprint.goal || "",
-        repoPath: args.repoPath,
-        agentInstructions: agentInstructions,
-        subtasks: args.subtasks,
-        currentTask: args.task,
-        taskRun,
-        sprintRunId: args.sprintRunId || null,
-        agentPresetId: agentPresetId,
-        reviewBranch,
-        baseBranch: sprintFeatureBranch,
+        review: resolvedReview,
+        error: caughtError,
+        existingRuns,
+        maxTaskReviewRuns: qaSettings.maxTaskReviewRuns,
       });
 
-      // A `completed_task_without_pr` task may legitimately need no PR (the work
-      // was a no-op / nothing to commit) — `shouldHavePr === false` lets it pass
-      // instead of blocking forever on a PR that should not exist. But an explicit
-      // `changes_requested` verdict must win over that flag: a reviewer that finds
-      // the work wrong yet also reports "no PR needed" would otherwise force-pass
-      // broken work, which then resurfaces at sprint-completion QA and drives the
-      // change loop. Trust the changes_requested verdict (fail-closed).
-      const noPrNeeded = triggerType === "completed_task_without_pr"
-        && review.shouldHavePr === false
-        && review.verdict !== "changes_requested";
-      if (review.verdict === "pass" || noPrNeeded) {
+      if (intentOutcome.intent === "pass") {
         this.deps.qaReviewRepository.updateRun(run.id, {
           status: "completed",
           outcome: "pass",
-          summaryMarkdown: review.summary,
-          payload: review.raw,
+          summaryMarkdown: intentOutcome.summary,
+          payload: resolvedReview!.raw,
           finishedAt: new Date().toISOString(),
         });
         this.appendTaskEvent(taskRun, "qa_review_passed", {
           triggerType,
-          summary: review.summary,
-          findings: review.findings,
+          summary: intentOutcome.summary,
+          findings: resolvedReview!.findings,
           qaReviewRunId: run.id,
         });
         // QA cleared — drop the QA_PENDING indicator so the merge gate can
@@ -333,73 +340,71 @@ export class QualityAssuranceService {
           reviewed: true,
           reopenedTask: false,
           mergeBlocked: false,
-          reportText: renderQaPassReport(args.task.id, review.summary),
+          reportText: renderQaPassReport(args.task.id, intentOutcome.summary),
         };
       }
 
-      const fixInstructions = review.fixInstructions
-        || (triggerType === "completed_task_without_pr" && review.shouldHavePr
-          ? "A feature PR is still required for this task. Ensure the branch contains the intended changes, push any missing commits, and create or update the feature PR so Code UX can track the work correctly."
-          : null);
+      if (intentOutcome.intent === "changes_requested") {
+        const continued = intentOutcome.fixInstructions
+          ? await this.requestFixesForTask({
+            task: args.task,
+            taskRun,
+            repoPath: args.repoPath,
+            featureBranch: sprintFeatureBranch,
+            scope,
+            prompt: intentOutcome.fixInstructions,
+          })
+          : { applied: false, mode: "none" as const };
 
-      const continued = fixInstructions
-        ? await this.requestFixesForTask({
-          task: args.task,
-          taskRun,
-          repoPath: args.repoPath,
-          featureBranch: sprintFeatureBranch,
-          scope,
-          prompt: fixInstructions,
-        })
-        : { applied: false, mode: "none" as const };
+        this.deps.qaReviewRepository.updateRun(run.id, {
+          status: "completed",
+          outcome: "changes_requested",
+          summaryMarkdown: intentOutcome.summary,
+          fixInstructions: intentOutcome.fixInstructions,
+          payload: {
+            ...resolvedReview!.raw,
+            continued: continued.applied,
+            continuationMode: continued.mode,
+          },
+          finishedAt: new Date().toISOString(),
+        });
 
-      this.deps.qaReviewRepository.updateRun(run.id, {
-        status: "completed",
-        outcome: "changes_requested",
-        summaryMarkdown: review.summary,
-        fixInstructions,
-        payload: {
-          ...review.raw,
+        if (continued.applied) {
+          this.deps.projectManagementRepository.updateTask(taskId, {
+            status: "in_progress",
+            ...MERGE_PROJECTION_RESET,
+          });
+          args.task.status = "RUNNING";
+        } else {
+          this.deps.projectManagementRepository.updateTask(taskId, {
+            status: "pending",
+            ...MERGE_PROJECTION_RESET,
+          });
+          args.task.status = "PENDING";
+        }
+        // Re-entering the coding stage: drop any stale CI / QA / MERGED indicator.
+        clearMergeProjectionForRerun(args.task);
+
+        this.appendTaskEvent(taskRun, "qa_review_changes_requested", {
+          triggerType,
+          summary: intentOutcome.summary,
+          findings: resolvedReview!.findings,
+          fixInstructions: intentOutcome.fixInstructions,
+          qaReviewRunId: run.id,
           continued: continued.applied,
           continuationMode: continued.mode,
-        },
-        finishedAt: new Date().toISOString(),
-      });
+        });
 
-      if (continued.applied) {
-        this.deps.projectManagementRepository.updateTask(taskId, {
-          status: "in_progress",
-          ...MERGE_PROJECTION_RESET,
-        });
-        args.task.status = "RUNNING";
-      } else {
-        this.deps.projectManagementRepository.updateTask(taskId, {
-          status: "pending",
-          ...MERGE_PROJECTION_RESET,
-        });
-        args.task.status = "PENDING";
+        return {
+          reviewed: true,
+          reopenedTask: true,
+          mergeBlocked: true,
+          reportText: renderQaChangesRequestedReport(args.task.id, intentOutcome.summary, continued.applied),
+        };
       }
-      // Re-entering the coding stage: drop any stale CI / QA / MERGED indicator.
-      clearMergeProjectionForRerun(args.task);
 
-      this.appendTaskEvent(taskRun, "qa_review_changes_requested", {
-        triggerType,
-        summary: review.summary,
-        findings: review.findings,
-        fixInstructions,
-        qaReviewRunId: run.id,
-        continued: continued.applied,
-        continuationMode: continued.mode,
-      });
-
-      return {
-        reviewed: true,
-        reopenedTask: true,
-        mergeBlocked: true,
-        reportText: renderQaChangesRequestedReport(args.task.id, review.summary, continued.applied),
-      };
-    } catch (error) {
-      const qaError = parseQaError(error);
+      // Handle retryable_failure and fatal_failure
+      const qaError = intentOutcome.error;
       this.deps.qaReviewRepository.updateRun(run.id, {
         status: "failed",
         summaryMarkdown: qaError.message,
@@ -428,10 +433,9 @@ export class QualityAssuranceService {
       return {
         reviewed: false,
         reopenedTask: false,
-        mergeBlocked: qaError.isRetryable && (existingRuns + 1 < qaSettings.maxTaskReviewRuns),
-        reportText: renderQaReviewFailedReport(args.task.id, error),
+        mergeBlocked: intentOutcome.intent === "retryable_failure",
+        reportText: renderQaReviewFailedReport(args.task.id, caughtError || qaError),
       };
-    }
   }
 
   async reconcileRunningTaskQaReviews(args: {
@@ -483,19 +487,16 @@ export class QualityAssuranceService {
 
     const latestRun = this.reconcileRunningQaRun(this.deps.qaReviewRepository.getLatestSprintRun(args.sprintId));
     const maxRuns = qaSettings.maxSprintReviewRuns;
-    const latestTaskSnapshot = readSprintQaSnapshot(latestRun);
     const currentTaskSnapshot = buildSprintQaSnapshot(args.subtasks);
     const latestTaskUpdatedAt = this.getLatestSprintTaskUpdatedAt(args.projectId, args.sprintId);
-    const latestRunFinishedAtMs = latestRun?.finishedAt ? Date.parse(latestRun.finishedAt) : Number.NaN;
-    const hasTaskUpdatesSinceLatestRun = latestRun
-      ? !Number.isFinite(latestRunFinishedAtMs) || latestTaskUpdatedAt > latestRunFinishedAtMs
-      : true;
-    const hasMeaningfulChangesSinceLatestRun = latestRun
-      ? (latestTaskSnapshot
-        ? latestTaskSnapshot !== currentTaskSnapshot
-        : hasTaskUpdatesSinceLatestRun)
-      : true;
     const recoveredStaleLatestRun = isRecoveredStaleQaRun(latestRun);
+    const shouldRunReview = shouldRunSprintQaReview({
+      latestRun,
+      latestTaskUpdatedAtMs: latestTaskUpdatedAt,
+      currentSubtasks: args.subtasks,
+      currentTaskSnapshot,
+      isRecoveredStaleRun: recoveredStaleLatestRun,
+    });
     // Only count the budget as exhausted when the latest run actually produced a
     // verdict (`completed`) at/over the cap. A reviewer that crashed for infra
     // reasons (`failed`) yielded no judgement and must not let the sprint settle
@@ -520,8 +521,7 @@ export class QualityAssuranceService {
     }
     if (
       (latestRun?.outcome === "changes_requested" || latestRun?.status === "failed")
-      && !hasMeaningfulChangesSinceLatestRun
-      && !recoveredStaleLatestRun
+      && !shouldRunReview
     ) {
       return {
         reviewed: false,
@@ -897,27 +897,8 @@ export class QualityAssuranceService {
           purpose: "qa_review",
           type: "qa_review",
           provider,
-          model: providerSettings.model,
-          apiKey: providerSettings.apiKey,
           maxConcurrentTasks: providerSettings.maxConcurrentTasks,
-          qwenAuthMode: providerSettings.qwenAuthMode,
-
-        qwenRegion: providerSettings.qwenRegion,
-        qwenBaseUrl: providerSettings.qwenBaseUrl,
-        qwenEnvKey: providerSettings.qwenEnvKey,
-        qwenModelId: providerSettings.qwenModelId,
-        qwenProtocol: providerSettings.qwenProtocol,
-        qwenAdditionalModelProviders: providerSettings.qwenAdditionalModelProviders,
-        openCodeAuthMode: providerSettings.openCodeAuthMode,
-        openCodeProviderId: providerSettings.openCodeProviderId,
-        openCodeModelId: providerSettings.openCodeModelId,
-        openCodeBaseUrl: providerSettings.openCodeBaseUrl,
-        openCodeEnvKey: providerSettings.openCodeEnvKey,
-        openCodePackage: providerSettings.openCodePackage,
-          providerMountAuth: providerSettings.mountAuth,
-          providerAuthPath: providerSettings.authPath,
-          customBaseUrl: providerSettings.customBaseUrl,
-          customModel: providerSettings.customModel,
+          ...buildProviderSettingsOverride(providerSettings.model, providerSettings),
           providerPrompt,
           repoPath: args.repoPath,
           cwd: snapshotWorkspace,
@@ -1600,25 +1581,7 @@ export class QualityAssuranceService {
       provider: args.provider,
       prompt: providerPrompt,
       cwd: worktreePath,
-      model: effectiveModel,
-      apiKey: followUpProviderSettings.apiKey,
-      qwenAuthMode: followUpProviderSettings.qwenAuthMode,
-      qwenRegion: followUpProviderSettings.qwenRegion,
-      qwenBaseUrl: followUpProviderSettings.qwenBaseUrl,
-      qwenEnvKey: followUpProviderSettings.qwenEnvKey,
-      qwenModelId: followUpProviderSettings.qwenModelId,
-      qwenProtocol: followUpProviderSettings.qwenProtocol,
-      qwenAdditionalModelProviders: followUpProviderSettings.qwenAdditionalModelProviders,
-        openCodeAuthMode: followUpProviderSettings.openCodeAuthMode,
-        openCodeProviderId: followUpProviderSettings.openCodeProviderId,
-        openCodeModelId: followUpProviderSettings.openCodeModelId,
-        openCodeBaseUrl: followUpProviderSettings.openCodeBaseUrl,
-        openCodeEnvKey: followUpProviderSettings.openCodeEnvKey,
-        openCodePackage: followUpProviderSettings.openCodePackage,
-      providerMountAuth: followUpProviderSettings.mountAuth,
-      providerAuthPath: followUpProviderSettings.authPath,
-      customBaseUrl: followUpProviderSettings.customBaseUrl,
-      customModel: followUpProviderSettings.customModel,
+      ...buildProviderSettingsOverride(effectiveModel, followUpProviderSettings),
       sessionId: args.sessionId,
       workflowSettings,
       repoPath: args.repoPath,
@@ -1917,27 +1880,6 @@ function triggerReviewModeDescription(triggerType: QaReviewTriggerType): string 
     default:
       return "Review a completed task for correctness, completeness, and integration quality.";
   }
-}
-
-function buildSprintQaSnapshot(subtasks: Subtask[]): string {
-  return JSON.stringify(
-    subtasks
-      .map((task) => ({
-        id: task.id,
-        title: task.title || "",
-        prompt: task.prompt || "",
-        status: task.status || "",
-        dependsOn: [...task.depends_on].sort(),
-        isMerged: Boolean(task.is_merged),
-        mergeIndicator: task.merge_indicator || "",
-      }))
-      .sort((left, right) => left.id.localeCompare(right.id)),
-  );
-}
-
-function readSprintQaSnapshot(run: QaReviewRunRecord | null): string | null {
-  const snapshot = run?.payload?.taskSnapshot;
-  return typeof snapshot === "string" && snapshot.trim().length > 0 ? snapshot : null;
 }
 
 function renderQaPassReport(taskKey: string, summary: string): string {

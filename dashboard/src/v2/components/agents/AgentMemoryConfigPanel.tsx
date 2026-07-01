@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useMemo, useState } from "preact/hooks";
+import { useMemo, useState, useEffect } from "preact/hooks";
 import { BrainCircuit, Check, ChevronDown, ChevronUp, X } from "lucide-preact";
 import { DEFAULT_AGENT_MEMORY_CONFIG, MEMORY_CATEGORIES, type AgentMemoryConfig, type MemoryCategory } from "../../memory-types.js";
 
@@ -86,6 +86,9 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
   disabled = false,
 }) => {
   const [showOverrides, setShowOverrides] = useState(false);
+  useEffect(() => {
+    if (disabled) setShowOverrides(false);
+  }, [disabled]);
 
   const visibleCategories = useMemo(() => getVisibleCategories(value.categories), [value.categories]);
 

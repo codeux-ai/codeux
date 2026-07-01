@@ -377,18 +377,19 @@ export class ProviderExecutionService {
             ? await this.deps.providerRunner.runProviderForText(runnerOpts)
             : await this.deps.providerRunner.runProvider(runnerOpts);
         } catch (error) {
+          const wasCancelled = Boolean(args.signal?.aborted);
           const preserveForStartupRecovery = isRestartInterruptedDockerInvocation(error, args);
           if (invocation && this.deps.executionRepository && !preserveForStartupRecovery) {
             const finishedAt = new Date().toISOString();
             const durationMs = Date.now() - startedMs;
             this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
-              status: "failed",
+              status: wasCancelled ? "cancelled" : "failed",
               finishedAt,
               durationMs,
             });
           }
-          this.deps.logger?.error("Provider invocation crashed", {
-            logPurpose: "invocation",
+          const logFields = {
+            logPurpose: "invocation" as const,
             invocationId: execInvocationId,
             providerInvocationId: invocation?.id,
             projectId: args.projectId,
@@ -399,7 +400,12 @@ export class ProviderExecutionService {
             purpose: args.purpose,
             durationMs: Date.now() - startedMs,
             error,
-          });
+          };
+          if (wasCancelled) {
+            this.deps.logger?.info("Provider invocation cancelled", logFields);
+          } else {
+            this.deps.logger?.error("Provider invocation crashed", logFields);
+          }
           // Persist buffered streaming activity before the failure unwinds.
           activityCoalescer?.stop();
           throw error;
@@ -413,7 +419,7 @@ export class ProviderExecutionService {
         const durationMs = Date.now() - startedMs;
         if (this.isProviderInvocationStillRunning(invocation.id)) {
           this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
-            status: result.ok ? "completed" : "failed",
+            status: args.signal?.aborted ? "cancelled" : (result.ok ? "completed" : "failed"),
             model: effectiveModel,
             nativeSessionId: result.nativeSessionId,
             finishedAt,
@@ -611,7 +617,7 @@ export class ProviderExecutionService {
       if (execInvocationId) {
         if (this.isExecutionInvocationStillRunning(execInvocationId)) {
           this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
-            status: "failed",
+            status: args.signal?.aborted ? "cancelled" : "failed",
             provider: args.provider,
             model: args.model,
             finishedAt: new Date().toISOString(),

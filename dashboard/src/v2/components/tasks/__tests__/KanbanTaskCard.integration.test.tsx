@@ -234,8 +234,8 @@ describe("KanbanTaskCard Integration", () => {
     expect(mockRequestConfirm).toHaveBeenCalled();
   });
 
-  it("renders status transition clearly when a task status updates", () => {
-    const { container, rerender } = render(
+  it("renders status transition clearly when a task status updates", async () => {
+    const { container, rerender, findByText } = render(
       <KanbanTaskCard
         viewModel={mockViewModel} // status: in_progress
         onEdit={onEdit}
@@ -243,7 +243,7 @@ describe("KanbanTaskCard Integration", () => {
       />
     );
 
-    // Rerender with a new status to trigger the status flash animation
+    // Rerender with a new status to trigger the status update
     const updatedViewModel = {
       ...mockViewModel,
       task: { ...mockViewModel.task, status: "completed" as const }
@@ -257,9 +257,10 @@ describe("KanbanTaskCard Integration", () => {
       />
     );
 
-    // Using gsap.fromTo for status flash, mock should have been called
-    expect(vi.mocked(gsap.fromTo)).toHaveBeenCalled();
-    // The specific flash logic creates a temporary div, but the test ensures the component renders without crashing
+    // We verify the new status is announced via aria-live
+    const liveRegion = await findByText("Task TASK-123 status is now completed");
+    expect(liveRegion).toBeInTheDocument();
+    expect(liveRegion).toHaveAttribute("aria-live", "polite");
     expect(container).toBeInTheDocument();
   });
 
@@ -296,7 +297,7 @@ describe("KanbanTaskCard Integration", () => {
   });
 
   it("ensures dependency indicators have clear screen-reader support", () => {
-    const { getAllByText, getByTitle, container } = render(
+    const { getByText, getByTitle, container } = render(
       <KanbanTaskCard
         viewModel={mockViewModel}
         onEdit={onEdit}
@@ -304,10 +305,10 @@ describe("KanbanTaskCard Integration", () => {
       />
     );
 
-    // Check that 'Depends on' text is in the document (from the new sr-only span)
-    const srTexts = getAllByText(/Depends on task/);
-    expect(srTexts.length).toBeGreaterThan(0);
-    expect(srTexts[0]).toHaveClass("sr-only");
+    // Check that descriptive 'Dependency' text is in the document (from the new sr-only span)
+    const srText = getByText(/Dependency TASK-124 \(Backend API\) is completed/i);
+    expect(srText).toBeInTheDocument();
+    expect(srText).toHaveClass("sr-only");
 
     // Ensure the ID spans have aria-hidden to prevent redundant readouts
     const task124Elements = container.querySelectorAll('span[aria-hidden="true"]');
@@ -326,11 +327,12 @@ describe("KanbanTaskCard Integration", () => {
     const { getByText } = render(<KanbanTaskCard viewModel={mockViewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
     const kbdGuidance = document.getElementById(`task-card-kbd-${mockViewModel.task.recordId}`);
     expect(kbdGuidance).toBeInTheDocument();
-    expect(kbdGuidance).toHaveTextContent(/Keyboard reordering is not supported/i);
+    expect(kbdGuidance).toHaveTextContent(/Draggable task. Drag and drop is pointer-only. Keyboard reordering is not supported/i);
   });
 
   it("provides task titles in action button accessible labels", () => {
     const { getByRole } = render(<KanbanTaskCard viewModel={mockViewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
     expect(getByRole('button', { name: /Edit task TASK-123: Implement new feature/i })).toBeInTheDocument();
+    expect(getByRole('button', { name: /Delete task TASK-123: Implement new feature/i })).toBeInTheDocument();
   });
 });

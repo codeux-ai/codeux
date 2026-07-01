@@ -28,9 +28,16 @@ export const ProviderBrandIcon: FunctionComponent<{
   disabled?: boolean;
   className?: string;
   imageClassName?: string;
-}> = ({ id, disabled = false, className = "", imageClassName = "" }) => {
+  /** Remote icon URL override for ids outside the built-in brand set (e.g. models.dev logos). */
+  src?: string;
+  /** Fallback initials/label used when `src` is set and the remote image fails to load. */
+  fallbackLabel?: string;
+}> = ({ id, disabled = false, className = "", imageClassName = "", src, fallbackLabel }) => {
   const [failed, setFailed] = useState(false);
-  const icon = getBrandIcon(id);
+  const icon = src
+    ? { slug: "", fallback: (fallbackLabel || id).slice(0, 2).toUpperCase(), label: fallbackLabel || id }
+    : getBrandIcon(id);
+  const iconSrc = src || `${LOBE_ICON_BASE_URL}/${icon.slug}.svg`;
 
   const hasHeight = className.split(/\s+/).some(c => c.startsWith("h-"));
   const hasWidth = className.split(/\s+/).some(c => c.startsWith("w-"));
@@ -69,7 +76,7 @@ export const ProviderBrandIcon: FunctionComponent<{
       ) : (
         <img
           alt=""
-          src={`${LOBE_ICON_BASE_URL}/${icon.slug}.svg`}
+          src={iconSrc}
           className={`object-contain ${imgSizeClasses} ${imageClassName}`}
           onError={() => setFailed(true)}
         />

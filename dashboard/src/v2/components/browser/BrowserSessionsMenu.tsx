@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useState, useRef, useCallback } from "preact/hooks";
 import { Link } from "@tanstack/react-router";
-import { Compass, ExternalLink, Loader2, ServerOff, FolderArchive } from "lucide-preact";
+import { Compass, ExternalLink, Loader2, ServerOff, FolderArchive, Play, Square, AlertCircle } from "lucide-preact";
 import { useProjectData } from "../../context/project-data.js";
 import { fetchPreviewSessions } from "../../lib/browser-api.js";
 import { buildPreviewUrl } from "../../lib/preview-origin.js";
@@ -198,7 +198,8 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                     <div className="flex items-center justify-between min-w-0 w-full gap-2">
                                         <div className="flex items-center gap-2 min-w-0">
                                             <div className="flex items-center gap-1.5 shrink-0 bg-black/[0.04] dark:bg-white/[0.04] px-1.5 py-0.5 rounded-md">
-                                                <div className={`w-1.5 h-1.5 rounded-full ${statusColors[session.status] || "bg-slate-400"}`} />
+                                                <div className={`w-1.5 h-1.5 rounded-full ${statusColors[session.status] || "bg-slate-400"} hidden`} />
+                                                {session.status === 'starting' ? <Loader2 className="w-3 h-3 animate-spin text-ember-500" /> : session.status === 'running' ? <Play className="w-3 h-3 text-signal-500" fill="currentColor" /> : session.status === 'error' ? <AlertCircle className="w-3 h-3 text-status-red" /> : <Square className="w-3 h-3 text-slate-500" fill="currentColor" />}
                                                 <span className="text-[9px] font-bold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">{session.status}</span>
                                             </div>
                                             <span className="text-sm font-semibold truncate text-slate-700 dark:text-slate-200 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">

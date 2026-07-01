@@ -114,7 +114,7 @@ Merge-conflict handling intentionally stays isolated from the original task work
 
 For CI autofix, Code UX now prefers reusing the existing task workspace when one is still available for the same worker branch. That allows follow-up CI fixes to continue in the same workspace context instead of creating an unnecessary new Docker volume for every CI rerun. The CI-fix prompt also receives the worker agent's current memory context and writes new durable learnings back into memory from the reused workspace.
 
-Workspace artifact export captures both tracked edits and newly created untracked files from the worker workspace. This matters for CI autofix follow-ups that add missing modules or tests after the original task run; the exporter uses a temporary Git index for untracked files and still excludes the transient `.task-learnings.md` memory-capture file and `.code-ux-home/` provider home from commits.
+Workspace artifact export captures both tracked edits and newly created untracked files from the worker workspace. This matters for CI autofix follow-ups that add missing modules or tests after the original task run; the exporter uses a temporary Git index for untracked files and still excludes the transient `.task-learnings.md` memory-capture file plus legacy `.code-ux-home/` provider state from commits. Current Docker workers keep provider HOME in a paired runtime volume mounted outside `/workspace`, so fresh workspaces contain only the coding checkout.
 
 CI autofix finalization now refuses to resolve worker attention as fixed when the invocation produced no patch and there are no unpublished commits on the worker branch. Existing commits ahead of the feature branch are not treated as CI-fix evidence on their own; a no-op CI-fix run is escalated instead of consuming an attempt with a misleading "pushed" resolution.
 
@@ -126,14 +126,26 @@ For QA review execution, Code UX now runs the review itself against a fresh snap
 
 Unsupported worker-owned attention types are escalated back to human attention with a summary.
 
+
+## Reconciliation Scanning
+
+To minimize idle work and redundant compute cycles, virtual worker scheduling computes a minimal actionable candidate set before checking specific project rules.
+
+The reconciliation scan merges:
+- Projects with active (unclaimed or virtual-worker-claimed) open attention items
+- Projects with pending task dispatches
+- Projects that already have an active virtual cycle running
+
+It deduplicates this project set and explicitly ignores all other projects in the system. This ensures the 3-second reconciliation timer only evaluates settings resolution, scheduling policies, and state transitions for projects that have demonstrable immediate work to do or finish.
+
 ## Recovery
 
 Startup cleanup prunes orphaned `virtual_cli` endpoints from previous runs.
 
-Startup cleanup also aggressively removes stale Code UX Docker assets:
+Startup cleanup also removes stale Code UX Docker assets through a background, label-filtered prune so server boot does not wait on full Docker daemon scans:
 
-- stale workspace volumes for finished, failed, unrecoverable, or outdated sessions
-- orphaned helper/login containers from previous runs
+- stale labeled workspace/runtime volumes for finished, failed, unrecoverable, or outdated sessions
+- orphaned labeled helper/login containers from previous runs, removing anonymous image-declared volumes with `docker rm -f -v`
 
 Cached setup-script Docker images are content-addressed by base image, setup script content, and setup-cache Dockerfile content. They are preserved across dashboard restarts and reused until one of those inputs changes or Docker no longer has the image.
 

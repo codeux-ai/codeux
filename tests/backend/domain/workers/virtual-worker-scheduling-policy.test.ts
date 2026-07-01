@@ -3,7 +3,8 @@ import {
   isOrchestratorHandledClarificationItem,
   resolveWorkerExecutionMode,
   projectNeedsVirtualWorker,
-  peekNextWorkerAttention
+  peekNextWorkerAttention,
+  computeReconciliationCandidates
 } from "../../../../src/domain/workers/virtual-worker-scheduling-policy.js";
 import type { DashboardSettings } from "../../../../src/contracts/app-types.js";
 import type { ProjectAttentionItemRecord } from "../../../../src/contracts/project-attention-types.js";
@@ -98,6 +99,30 @@ describe("Virtual Worker Scheduling Policy", () => {
 
       expect(result).toBe(openWorkerItem);
       expect(resolver).toHaveBeenCalledTimes(1); // Should only be called once, for openWorkerItem
+    });
+  });
+
+  describe("computeReconciliationCandidates", () => {
+    it("returns an empty array when all inputs are empty", () => {
+      expect(computeReconciliationCandidates([], [], [])).toEqual([]);
+    });
+
+    it("deduplicates project IDs across lists", () => {
+      const activeAttention = ["proj-1", "proj-2"];
+      const pendingDispatch = ["proj-2", "proj-3"];
+      const activeCycles = ["proj-3", "proj-4", "proj-1"];
+
+      const result = computeReconciliationCandidates(activeAttention, pendingDispatch, activeCycles);
+
+      expect(result).toHaveLength(4);
+      expect(result).toContain("proj-1");
+      expect(result).toContain("proj-2");
+      expect(result).toContain("proj-3");
+      expect(result).toContain("proj-4");
+    });
+
+    it("handles non-overlapping lists", () => {
+      expect(computeReconciliationCandidates(["p1"], ["p2"], ["p3"])).toEqual(["p1", "p2", "p3"]);
     });
   });
 });

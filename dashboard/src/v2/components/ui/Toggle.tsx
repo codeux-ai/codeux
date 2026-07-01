@@ -31,7 +31,7 @@ export const Toggle: FunctionComponent<ToggleProps> = ({ value, onChange, danger
     gsap.to(thumbRef.current, {
       x: value ? 20 : 0,
       duration: gsapTokens.controlFeedback.duration,
-      ease: reducedMotion ? 'none' : 'back.out(1.7)',
+      ease: reducedMotion ? 'none' : gsapTokens.controlFeedback.ease,
       overwrite: true
     });
   }, [value, reducedMotion, durations.base]);
@@ -60,7 +60,7 @@ export const Toggle: FunctionComponent<ToggleProps> = ({ value, onChange, danger
       />
       <span
         ref={thumbRef}
-        className={`absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-[0_2px_7px_rgba(0,0,0,0.18)] group-enabled:group-active:w-6 ${
+        className={`absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-[0_2px_7px_rgba(0,0,0,0.18)] ${!disabled ? "group-enabled:group-active:w-6" : ""} ${
           value ? "group-enabled:group-active:translate-x-4" : ""
         }`}
       >

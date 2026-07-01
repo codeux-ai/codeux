@@ -1,6 +1,9 @@
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
-import { useId, useMemo, useState } from "preact/hooks";
+import { useId, useMemo, useState, useLayoutEffect, useRef } from "preact/hooks";
+import gsap from "gsap";
+import { useReducedMotion, useResolvedMotionDuration } from "../../hooks/use-reduced-motion.js";
+import { INTERACTION_TOKENS } from "../../lib/motion/tokens.js";
 import { Radio, Bot, CheckCircle2, XCircle, Workflow, ChevronDown, Play, PauseCircle, Clock, RotateCcw } from "lucide-preact";
 import { formatTime } from "../../../lib/time.js";
 import { renderMarkdown } from "../../../lib/markdown.js";
@@ -91,6 +94,27 @@ export const ConnectionRuntimePanel: FunctionComponent<{
     const { execution: snapshot } = useExecutionTimeline();
     const [open, setOpen] = useState(defaultOpen);
     const contentId = useId();
+    const contentRef = useRef<HTMLDivElement>(null);
+    const isReducedMotion = useReducedMotion();
+    const enterDuration = useResolvedMotionDuration(parseFloat(INTERACTION_TOKENS.enterExit.duration) / 1000);
+
+    useLayoutEffect(() => {
+        if (!contentRef.current || !collapsible) return;
+        if (isReducedMotion) {
+            gsap.set(contentRef.current, { height: open ? "auto" : 0, overflow: "hidden" });
+        } else {
+            gsap.killTweensOf(contentRef.current);
+            gsap.to(contentRef.current, {
+                height: open ? "auto" : 0,
+                duration: enterDuration,
+                ease: INTERACTION_TOKENS.enterExit.ease,
+                overwrite: "auto",
+                onComplete: () => {
+                    if (open && contentRef.current) gsap.set(contentRef.current, { height: "auto" });
+                }
+            });
+        }
+    }, [open, isReducedMotion, enterDuration, collapsible]);
 
     const { activeConnections, listeningConnections, workerConnections, managerConnections } = useMemo(() => {
         const active = snapshot?.connections.filter((connection) => connection.status !== "offline") ?? [];
@@ -156,7 +180,7 @@ export const ConnectionRuntimePanel: FunctionComponent<{
             )}
 
             <div className={collapsible ? `collapsible-section ${open ? "open" : ""}` : ""} id={contentId}>
-                <div className={collapsible ? "collapsible-content" : ""}>
+                <div ref={contentRef} className={collapsible ? "collapsible-content overflow-hidden" : ""}>
                     <div className={`relative z-10 ${collapsible ? "px-5 pb-5 pt-0" : "px-5 pb-5 pt-0"}`}>
                         {snapshot.connections.length === 0 ? (
                             <p className="text-[11px] font-mono text-slate-400 dark:text-slate-600">
@@ -299,6 +323,29 @@ export const ExecutionRuntimePanel: FunctionComponent<{
 
     const [open, setOpen] = useState(defaultOpen);
     const contentId = useId();
+
+    const contentRef = useRef<HTMLDivElement>(null);
+    const isReducedMotion = useReducedMotion();
+    const enterDuration = useResolvedMotionDuration(parseFloat(INTERACTION_TOKENS.enterExit.duration) / 1000);
+
+    useLayoutEffect(() => {
+        if (!contentRef.current || !collapsible) return;
+        if (isReducedMotion) {
+            gsap.set(contentRef.current, { height: open ? "auto" : 0, overflow: "hidden" });
+        } else {
+            gsap.killTweensOf(contentRef.current);
+            gsap.to(contentRef.current, {
+                height: open ? "auto" : 0,
+                duration: enterDuration,
+                ease: INTERACTION_TOKENS.enterExit.ease,
+                overwrite: "auto",
+                onComplete: () => {
+                    if (open && contentRef.current) gsap.set(contentRef.current, { height: "auto" });
+                }
+            });
+        }
+    }, [open, isReducedMotion, enterDuration, collapsible]);
+
     if (!snapshot) return null;
     const activeSprintRuns = useMemo(() => snapshot.sprintRuns.filter((run) => run.status === "running" || run.status === "queued"), [snapshot.sprintRuns, snapshot.sprintRuns.length]);
     const activeDispatches = useMemo(() => snapshot.taskDispatches.filter((dispatch) => (
@@ -323,6 +370,10 @@ export const ExecutionRuntimePanel: FunctionComponent<{
     const blockedAttentionCount = useMemo(
         () => snapshot.attentionItems.filter((item) => item.status === "open" || item.status === "claimed").length,
         [snapshot.attentionItems, snapshot.attentionItems.length],
+    );
+    const failedTaskCount = useMemo(
+        () => snapshot.taskDispatches.filter((dispatch) => dispatch.status === "failed").length,
+        [snapshot.taskDispatches, snapshot.taskDispatches.length],
     );
 
     return (
@@ -352,6 +403,11 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                     attention {blockedAttentionCount}
                                 </span>
                             )}
+                            {failedTaskCount > 0 && (
+                                <span className="rounded-md bg-status-red/10 px-2 py-0.5 font-mono text-status-red">
+                                    failed {failedTaskCount}
+                                </span>
+                            )}
                         </div>
                     </div>
                     <ChevronDown
@@ -372,7 +428,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                 className={collapsible ? `collapsible-section ${open ? "open" : ""}` : ""}
                 id={contentId}
             >
-                <div className={collapsible ? "collapsible-content" : ""}>
+                <div ref={contentRef} className={collapsible ? "collapsible-content overflow-hidden" : ""}>
                     <div className={`relative z-10 space-y-5 ${collapsible ? "px-5 pb-5 pt-0" : "px-5 pb-5 pt-0"}`}>
                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                             {[

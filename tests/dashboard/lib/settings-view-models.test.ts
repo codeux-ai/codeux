@@ -436,7 +436,7 @@ describe("settings cloning helpers", () => {
     },
     skills: [{ id: "skill1", enabled: true }],
     mcpTools: [{ serverName: "s1", toolName: "t1", enabled: true }],
-    customMcpServers: [{ serverName: "s1", command: "cmd", args: [], env: {}, headers: { "X-Auth": "abc" }, providers: [] }],
+    customMcpServers: [{ serverName: "s1", command: "cmd", args: [], env: { "FOO": "bar" }, headers: { "X-Auth": "abc" }, providers: [] }],
     memory: { enabled: true, embeddingModel: null, externalEmbedding: { baseUrl: "", apiKey: "", model: "", dimensions: null }, autoCaptureSprint: true, autoCaptureAgent: true, autoPromote: false, promotionThreshold: 5, maxSprintMemories: 10, maxProjectMemories: 20, mapMaxEdgesPerNode: 5, workerLearningsInstruction: "" },
   } as ProjectSettings);
 
@@ -461,6 +461,7 @@ describe("settings cloning helpers", () => {
     clone.agents.qualityAssurance.taskCompletion.strategy = "NEVER";
     clone.agents.routing.taskCoding.orchestratorAgentPresetIds.push("c");
     clone.customMcpServers![0].headers!["X-New"] = "123";
+    clone.customMcpServers![0].env!["BAZ"] = "qux";
     clone.mcpTools![0].enabled = false;
     clone.skills[0].enabled = false;
 
@@ -472,6 +473,7 @@ describe("settings cloning helpers", () => {
     expect(original.agents.qualityAssurance.taskCompletion.strategy).toBe("ALWAYS");
     expect(original.agents.routing.taskCoding.orchestratorAgentPresetIds).toEqual(["a", "b"]);
     expect(original.customMcpServers![0].headers!["X-New"]).toBeUndefined();
+    expect(original.customMcpServers![0].env!["BAZ"]).toBeUndefined();
     expect(original.mcpTools![0].enabled).toBe(true);
     expect(original.skills[0].enabled).toBe(true);
   });
@@ -511,6 +513,7 @@ describe("settings cloning helpers", () => {
       defaults: createMockProjectSettings(),
       mcpTools: [{ serverName: "s1", toolName: "t1", enabled: true }],
       customMcpServers: [],
+      modelPricing: { overrides: {} },
     };
 
     const clone = cloneSystemSettings(original);

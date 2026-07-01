@@ -7,7 +7,7 @@ import { CliWorkflowSettings, type CustomMcpServer } from "../../../contracts/ap
 import { isUsableCustomMcpServer } from "../../../mcp/mcp-tool-availability.js";
 import { buildProviderMcpConfigArtifact } from "./mcp-config-format.js";
 import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.js";
-import { CommandResult, runStreamingCommand } from "../../../services/cli-process-runner.js";
+import { CommandResult, runCommandStrict, runStreamingCommand } from "../../../services/cli-process-runner.js";
 import {
   getDockerUserSpec,
   mapPathPrefix,
@@ -21,8 +21,9 @@ import { DockerBootstrapBuilder } from "./docker-bootstrap-builder.js";
 import { DockerCredentialMountBuilder } from "./docker-credential-mount-builder.js";
 import { DockerSetupImageCache } from "./docker-setup-image-cache.js";
 import { resolveDockerRuntimeRoot } from "./docker-runtime-paths.js";
-import { WorkspaceManager } from "./workspace-manager.js";
+import { buildRuntimeVolumeName, WorkspaceManager } from "./workspace-manager.js";
 import { workspaceVolumeHelperPool, type WorkspaceVolumeHelperPool } from "./workspace-volume-helper.js";
+import { CONTAINER_RUNTIME_HOME, CONTAINER_WORKSPACE_ROOT } from "./provider-runtime-artifacts.js";
 import { getHomeCodeUxPath, getRepoCodeUxPath } from "../../../shared/config/code-ux-paths.js";
 import { ensureDefaultCodeUxAssetsInstalled } from "../../../services/code-ux-default-assets-service.js";
 
@@ -32,7 +33,6 @@ const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
   "../../../../.code-ux/container/setup.sh",
 );
 
-const CONTAINER_WORKSPACE_ROOT = "/workspace";
 const CONTAINER_PROVIDER_ARGV_FILE = "/opt/code-ux/provider-argv.sh";
 
 export interface IDockerRunner {
@@ -117,9 +117,11 @@ export class DockerRunner implements IDockerRunner {
   }): Promise<CommandResult> {
     const { command, args, cwd, providerEnv, sessionId, providerLabel, workflowSettings, repoPath, signal, onActivity } = input;
     const workspace = this.resolveWorkspace(cwd);
-    const runtimeHome = pathPosix.join(CONTAINER_WORKSPACE_ROOT, ".code-ux-home");
+    await this.workspaceManager.ensureRuntimeVolume(cwd);
+    const runtimeHome = CONTAINER_RUNTIME_HOME;
     const runtimeNpmPrefix = pathPosix.join(runtimeHome, ".npm-global");
     const runtimeNpmCache = pathPosix.join(runtimeHome, ".npm-cache");
+    const runtimeVolumeName = buildRuntimeVolumeName(workspace.volumeName);
 
     await this.maybeLogDockerPathMappingHint(sessionId, repoPath, onActivity);
 
@@ -145,12 +147,14 @@ export class DockerRunner implements IDockerRunner {
       await fs.writeFile(argvFilePath, this.buildProviderArgvFile(args), "utf8");
       const argvFileSource = this.mapDockerSourcePathForDaemon(argvFilePath, repoPath, sessionId, "provider argv", onActivity);
 
+      const containerName = this.buildContainerName(providerLabel, sessionId);
+
       const dockerArgs = [
         "run",
         "--rm",
         "-i",
         "--name",
-        this.buildContainerName(providerLabel, sessionId),
+        containerName,
         "--network",
         "host",
         "--workdir",
@@ -165,6 +169,13 @@ export class DockerRunner implements IDockerRunner {
         toDockerMountArg({
           source: workspace.volumeName,
           destination: CONTAINER_WORKSPACE_ROOT,
+          readonly: false,
+          type: "volume",
+        }),
+        "--mount",
+        toDockerMountArg({
+          source: runtimeVolumeName,
+          destination: runtimeHome,
           readonly: false,
           type: "volume",
         }),
@@ -241,7 +252,14 @@ export class DockerRunner implements IDockerRunner {
 
       dockerArgs.push(resolvedImage.image, "bash", "-c", bootstrapScript, "provider-runner", command);
 
-      onActivity(`Running ${providerLabel} in Docker image ${resolvedImage.image} (isolated volume: ${workspace.volumeName}).`);
+      onActivity(`Running ${providerLabel} in Docker image ${resolvedImage.image} (workspace volume: ${workspace.volumeName}, runtime volume: ${runtimeVolumeName}).`);
+
+      // The container name is deterministic per (provider, sessionId), so a retried
+      // invocation for the same session (e.g. a chat turn superseded and resumed after
+      // an abort) reuses it. Docker's `--rm` cleanup from a just-killed previous run is
+      // asynchronous and can still be in flight, so force-remove any stale container
+      // occupying the name first rather than racing `docker run --name` against it.
+      await runCommandStrict("docker", ["rm", "-f", containerName], process.cwd()).catch(() => undefined);
 
       return await runStreamingCommand("docker", dockerArgs, process.cwd(), process.env, {
         signal,
@@ -278,7 +296,7 @@ export class DockerRunner implements IDockerRunner {
   async readWorkspaceFile(cwd: string, targetPath: string): Promise<string | null> {
     const workspace = this.resolveWorkspace(cwd);
     try {
-      const result = await this.volumeHelperPool.exec(workspace.volumeName, ["cat", targetPath]);
+      const result = await this.volumeHelperPool.exec(workspace.volumeName, ["cat", targetPath], buildRuntimeVolumeName(workspace.volumeName));
       return result.ok ? result.stdout : null;
     } catch {
       return null;
@@ -288,7 +306,7 @@ export class DockerRunner implements IDockerRunner {
   async readWorkspaceFileBase64(cwd: string, targetPath: string): Promise<string | null> {
     const workspace = this.resolveWorkspace(cwd);
     try {
-      const result = await this.volumeHelperPool.exec(workspace.volumeName, ["base64", targetPath]);
+      const result = await this.volumeHelperPool.exec(workspace.volumeName, ["base64", targetPath], buildRuntimeVolumeName(workspace.volumeName));
       return result.ok ? result.stdout : null;
     } catch {
       return null;
@@ -299,7 +317,7 @@ export class DockerRunner implements IDockerRunner {
     const workspace = this.resolveWorkspace(cwd);
     try {
       const script = `f=$(ls -1t "${dirPath}"/${glob} 2>/dev/null | head -1); [ -n "$f" ] && cat "$f"`;
-      const result = await this.volumeHelperPool.exec(workspace.volumeName, ["sh", "-c", script]);
+      const result = await this.volumeHelperPool.exec(workspace.volumeName, ["sh", "-c", script], buildRuntimeVolumeName(workspace.volumeName));
       return result.ok && result.stdout.trim() ? result.stdout : null;
     } catch {
       return null;
@@ -317,7 +335,7 @@ export class DockerRunner implements IDockerRunner {
     const workspace = this.resolveWorkspace(cwd);
     try {
       const script = `first=1; printf '['; for f in "${dirPath}"/*.json; do [ -e "$f" ] || continue; [ "$first" -eq 1 ] || printf ','; cat "$f"; first=0; done; printf ']'`;
-      const result = await this.volumeHelperPool.exec(workspace.volumeName, ["sh", "-c", script]);
+      const result = await this.volumeHelperPool.exec(workspace.volumeName, ["sh", "-c", script], buildRuntimeVolumeName(workspace.volumeName));
       if (!result.ok) return null;
       const trimmed = result.stdout.trim();
       return trimmed && trimmed !== "[]" ? trimmed : null;
@@ -330,7 +348,7 @@ export class DockerRunner implements IDockerRunner {
   async removeWorkspaceDir(cwd: string, dirPath: string): Promise<void> {
     const workspace = this.resolveWorkspace(cwd);
     try {
-      await this.volumeHelperPool.exec(workspace.volumeName, ["rm", "-rf", dirPath]);
+      await this.volumeHelperPool.exec(workspace.volumeName, ["rm", "-rf", dirPath], buildRuntimeVolumeName(workspace.volumeName));
     } catch {
       // best-effort cleanup
     }

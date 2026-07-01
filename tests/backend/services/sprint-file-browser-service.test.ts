@@ -138,6 +138,19 @@ describe("SprintFileBrowserService", () => {
     expect(dockerRunArgs).toContain("code-ux.file-browser=true");
     expect(dockerRunArgs).toContain("tail");
 
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "docker",
+      expect.arrayContaining([
+        "volume",
+        "create",
+        "--label",
+        "code-ux.file-browser-volume=true",
+        "--label",
+        "code-ux.managed=true",
+        `code-ux-file-browser-volume-${sprint.id}`,
+      ]),
+      project.baseDir,
+    );
     expect(runCommandStrict.mock.calls.some(([cmd, args]) => cmd === "docker" && (args as string[])[0] === "cp")).toBe(true);
     expect(runCommandStrict.mock.calls.some(([cmd, args]) => cmd === "docker" && (args as string[])[0] === "start")).toBe(true);
     expect(runCommandStrict.mock.calls.some(([cmd, args]) => cmd === "docker" && (args as string[])[0] === "exec")).toBe(true);

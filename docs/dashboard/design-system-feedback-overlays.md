@@ -17,6 +17,7 @@ Used for primary overlay surfaces that sit above the rest of the page layout.
 - **Radius:** `rounded-2xl`
 - **Border:** `border border-black/[0.08] dark:border-white/[0.08]`
 - **Shadow:** `shadow-2xl`
+- **Scrolling Behavior:** For modals requiring independent scrolling of body content (like long forms), override the `Modal` default overflow by adding `!overflow-hidden flex flex-col` to its `className`. Structure the inner modal with fixed headers/footers using `shrink-0` and make the content body scrollable with `flex-1 overflow-y-auto min-h-0`. In dialog or modal footers, use `flex flex-col-reverse sm:flex-row items-stretch sm:items-center` to stack action buttons vertically on mobile.
 
 ### Floating Popups (Popovers, Menus, DropdownMenus)
 Used for transient contextual interfaces anchored to a trigger.
@@ -25,6 +26,7 @@ Used for transient contextual interfaces anchored to a trigger.
 - **Radius:** `rounded-2xl`
 - **Border:** `border border-black/[0.08] dark:border-white/[0.08]`
 - **Shadow:** `shadow-[0_16px_36px_rgba(15,23,42,0.14)] dark:shadow-[0_16px_36px_rgba(0,0,0,0.4)]`
+- **Mobile Viewport Clamping:** Fixed and absolute positioned menus (like action dropdowns or import surfaces) must use viewport clamping (e.g., `max-w-[calc(100vw-2rem)]`) to prevent horizontal clipping on narrow mobile screens.
 
 ### Minimal Floating (Tooltips)
 Used for quick, un-interactable labels.

@@ -123,7 +123,7 @@ Recovery guarantees:
 
 Run budgeting:
 
-Note: The run budget and retry limit rules are explicitly implemented in a dedicated domain module (`src/domain/qa-review/qa-review-budget.ts`). Additionally, the setup logic for trigger selection, and instruction composition is handled cleanly by pure functions in `src/domain/qa-review/qa-review-request-builder.ts` before the `QualityAssuranceService` acts on it. Branch resolution and stale-review decisions are handled by dedicated helpers in `src/domain/qa-review/qa-review-branch-resolution.ts` and `src/domain/qa-review/qa-review-stale-run.ts`.
+Note: The run budget and retry limit rules are explicitly implemented in a dedicated domain module (`src/domain/qa-review/qa-review-budget.ts`). Additionally, the setup logic for trigger selection, and instruction composition is handled cleanly by pure functions in `src/domain/qa-review/qa-review-request-builder.ts` before the `QualityAssuranceService` acts on it. Branch resolution and stale-review decisions are handled by dedicated helpers in `src/domain/qa-review/qa-review-branch-resolution.ts` and `src/domain/qa-review/qa-review-stale-run.ts`. The task QA verdict-to-state transition logic (classifying the normalized result into pass, changes requested, or retryable failure intent) is handled purely in `src/domain/qa-review/task-review-outcome.ts`.
 
 - the initial completed task review always counts as run `1`
 - extra QA runs only happen after QA requested fixes and the task reaches code-complete again
@@ -149,6 +149,7 @@ Behavior:
 - if QA creates follow-up tasks, sprint completion is held open until those new tasks finish and sprint QA passes on a later run
 - sprint QA runs once for the finished sprint, then only runs again after a prior `changes_requested` or failed result and meaningful sprint task state changes have occurred
 - a passing sprint QA result is final for that sprint state and is not retriggered by another orchestration cycle with no real work changes
+- sprint task state changes are detected purely by serializing all current subtasks into a `SprintQaSnapshot` (including status, prompt, and merge indicators) and comparing it with the payload of the latest QA run; if a historical QA run lacks a saved snapshot, Code UX falls back to comparing the newest task modification timestamp against the QA run's finish timestamp
 - sprint QA uses the same `maxTaskReviewRuns` budget semantics as task QA:
   - run `1` is the initial finished-sprint review
   - later runs are only used to check QA-requested fixes or follow-up work

@@ -111,4 +111,22 @@ describe("WorkspaceVolumeHelperPool", () => {
     expect(fallbackCalls).toHaveLength(1);
     expect(fallbackCalls[0].args).toEqual(expect.arrayContaining(["alpine:3.20", "cat", "x"]));
   });
+
+  it("mounts the runtime volume when provided and releases helpers for the workspace", async () => {
+    const { runner, calls } = makeRunner();
+    const pool = new WorkspaceVolumeHelperPool(runner as any);
+    pools.push(pool);
+
+    await pool.exec("vol-1", ["cat", "/code-ux-runtime-home/.codex/session.jsonl"], "vol-1-runtime");
+    await pool.releaseVolume("vol-1");
+
+    const createCall = calls.find((c) => c.args[0] === "run" && c.args.includes("-d"));
+    expect(createCall?.args.join(" ")).toContain("source=vol-1");
+    expect(createCall?.args.join(" ")).toContain("target=/workspace");
+    expect(createCall?.args.join(" ")).toContain("source=vol-1-runtime");
+    expect(createCall?.args.join(" ")).toContain("target=/code-ux-runtime-home");
+
+    const removeCall = calls.find((c) => c.args[0] === "rm" && c.args.includes("-f"));
+    expect(removeCall).toBeDefined();
+  });
 });

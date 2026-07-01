@@ -134,7 +134,7 @@ export const InvocationListCard: FunctionComponent<{
           value: (
             <span className={`flex items-center gap-1.5 ${ss.text}`}>
               <span className={`inline-block h-1.5 w-1.5 rounded-full ${ss.dot} ${isRunning ? "animate-pulse" : ""}`} />
-              <span className="capitalize">{isOptimistic ? "Pending" : invocation.status}</span>
+              <span aria-live="polite" className={`capitalize ${isOptimistic ? "opacity-70 text-slate-500" : ""}`}>{isOptimistic ? "Pending" : invocation.status}</span>
             </span>
           ),
         },
@@ -248,7 +248,7 @@ export const InvocationListCard: FunctionComponent<{
                   transitionTimingFunction: interactionTokens.expansionCollapse.ease,
                 }}
               >
-                <div className="overflow-hidden">
+                <div className="overflow-hidden min-h-0">
                   <div className={`mt-3 grid grid-cols-2 overflow-hidden rounded-xl border border-black/[0.05] bg-black/[0.015] dark:border-white/[0.06] dark:bg-white/[0.02] ${!showStats ? "invisible" : ""}`}>
                     {cells.map((cell, idx) => {
                       const full = cell.full || (stretchLast && idx === lastIndex);

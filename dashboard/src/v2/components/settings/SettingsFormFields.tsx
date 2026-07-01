@@ -27,7 +27,8 @@ export const PillChoiceGroup: FunctionComponent<{
   onChange: (value: string) => void;
   options: Array<{ value: string; label: string; hint?: string }>;
   disabled?: boolean;
-}> = ({ value, onChange, options, disabled }) => (
+  invalid?: boolean;
+}> = ({ value, onChange, options, disabled, invalid }) => (
   <div className="flex flex-wrap gap-2">
     {options.map((option) => {
       const active = option.value === value;
@@ -36,11 +37,14 @@ export const PillChoiceGroup: FunctionComponent<{
           key={option.value}
           type="button"
           disabled={disabled}
+          aria-invalid={invalid}
           onClick={() => onChange(option.value)}
           className={`group relative min-w-[104px] overflow-hidden rounded-[1rem] border px-4 py-2 text-left transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-signal-500 disabled:cursor-not-allowed disabled:opacity-50 motion-safe:active:scale-[0.98] ${
-            active
-              ? "border-signal-500/30 bg-signal-500/[0.11] text-signal-700 shadow-[0_10px_20px_rgba(0,224,160,0.08)] hover:bg-signal-500/[0.15] dark:border-signal-400/30 dark:bg-signal-400/[0.12] dark:text-signal-200 dark:hover:bg-signal-400/[0.16]"
-              : "border-black/[0.06] bg-white/70 text-slate-600 hover:-translate-y-px hover:border-black/[0.12] hover:bg-black/[0.02] hover:text-slate-800 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-white/[0.12] dark:hover:bg-white/[0.08] dark:hover:text-white"
+            invalid
+              ? "border-status-red/60 bg-status-red/[0.04] text-status-red hover:bg-status-red/[0.08]"
+              : active
+                ? "border-signal-500/30 bg-signal-500/[0.11] text-signal-700 shadow-[0_10px_20px_rgba(0,224,160,0.08)] hover:bg-signal-500/[0.15] dark:border-signal-400/30 dark:bg-signal-400/[0.12] dark:text-signal-200 dark:hover:bg-signal-400/[0.16]"
+                : "border-black/[0.06] bg-white/70 text-slate-600 hover:-translate-y-px hover:border-black/[0.12] hover:bg-black/[0.02] hover:text-slate-800 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-white/[0.12] dark:hover:bg-white/[0.08] dark:hover:text-white"
           }`}
         >
           <div
@@ -73,13 +77,15 @@ export const TextInput: FunctionComponent<{
   placeholder?: string;
   mono?: boolean;
   disabled?: boolean;
+  invalid?: boolean;
   "aria-label"?: string;
   "aria-description"?: string;
-}> = ({ value, onChange, placeholder, mono, disabled, "aria-label": ariaLabel, "aria-description": ariaDescription }) => (
+}> = ({ value, onChange, placeholder, mono, disabled, invalid, "aria-label": ariaLabel, "aria-description": ariaDescription }) => (
   <UiInput
     value={value}
     placeholder={placeholder}
     disabled={disabled}
+    aria-invalid={invalid}
     aria-label={ariaLabel}
     aria-description={ariaDescription}
     onInput={(event) => onChange((event.currentTarget as HTMLInputElement).value)}
@@ -92,13 +98,15 @@ export const TextAreaInput: FunctionComponent<{
   onChange: (value: string) => void;
   placeholder?: string;
   rows?: number;
+  invalid?: boolean;
   "aria-label"?: string;
   "aria-description"?: string;
-}> = ({ value, onChange, placeholder, rows = 12, "aria-label": ariaLabel, "aria-description": ariaDescription }) => (
+}> = ({ value, onChange, placeholder, rows = 12, invalid, "aria-label": ariaLabel, "aria-description": ariaDescription }) => (
   <textarea
     value={value}
     rows={rows}
     placeholder={placeholder}
+    aria-invalid={invalid}
     aria-label={ariaLabel}
     aria-description={ariaDescription}
     onInput={(event) => onChange((event.currentTarget as HTMLTextAreaElement).value)}
@@ -113,9 +121,10 @@ export const NumberInput: FunctionComponent<{
   max?: number;
   step?: number;
   disabled?: boolean;
+  invalid?: boolean;
   "aria-label"?: string;
   "aria-description"?: string;
-}> = ({ value, onChange, min, max, step = 1, disabled, "aria-label": ariaLabel, "aria-description": ariaDescription }) => (
+}> = ({ value, onChange, min, max, step = 1, disabled, invalid, "aria-label": ariaLabel, "aria-description": ariaDescription }) => (
   <input
     type="number"
     value={value}
@@ -123,6 +132,7 @@ export const NumberInput: FunctionComponent<{
     max={max}
     step={step}
     disabled={disabled}
+    aria-invalid={invalid}
     aria-label={ariaLabel}
     aria-description={ariaDescription}
     onInput={(event) => onChange(Number((event.currentTarget as HTMLInputElement).value))}
@@ -176,12 +186,13 @@ export const Row: FunctionComponent<{
             {onReset && badge === "Project override" ? (
               <button
                 type="button"
+                aria-label="Reset to default"
                 onClick={(e) => {
                   e.stopPropagation();
                   onReset();
                 }}
                 title="Delete project override (revert to system default)"
-                className="ml-1 rounded-full p-0.5 text-amber-600 hover:bg-amber-500/20 hover:text-amber-800 dark:text-amber-300 dark:hover:bg-amber-300/25 dark:hover:text-amber-100 transition-colors duration-150 cursor-pointer"
+                className="ml-1 rounded-full p-1 text-amber-600 hover:bg-amber-500/20 hover:text-amber-800 dark:text-amber-300 dark:hover:bg-amber-300/25 dark:hover:text-amber-100 transition-colors duration-150 cursor-pointer"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" className="h-2.5 w-2.5">
                   <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />

@@ -9,6 +9,7 @@ import { CommandResult, runCommandStrict } from "../../../services/cli-process-r
 import { extractPathHints } from "../../../services/cli-workflow-text-utils.js";
 import { workspaceVolumeHelperPool } from "./workspace-volume-helper.js";
 import { releaseGitHelperForCwd } from "../../../shared/subprocess/command-runner.js";
+import { CONTAINER_RUNTIME_HOME } from "./provider-runtime-artifacts.js";
 import {
   buildGitHttpAuthEnvForRepoWithFallbacks,
   buildNonInteractiveGitEnv,
@@ -17,8 +18,10 @@ import {
 
 const WORKSPACE_HANDLE_PREFIX = "docker-volume://";
 const CONTAINER_WORKSPACE_ROOT = "/workspace";
+const CONTAINER_WORKSPACE_HELPER_HOME = "/tmp/code-ux-home";
 const WORKSPACE_HELPER_IMAGE = "alpine/git";
 const WORKSPACE_VOLUME_LABEL = "code-ux.workspace=true";
+const RUNTIME_VOLUME_LABEL = "code-ux.workspace-runtime=true";
 const WORKSPACE_SESSION_LABEL_PREFIX = "code-ux.workspace-session=";
 
 export interface WorkspaceCommandOptions {
@@ -84,6 +87,8 @@ const parseWorkspaceHandle = (value: string): { volumeName: string } => {
   }
   return { volumeName };
 };
+
+export const buildRuntimeVolumeName = (workspaceVolumeName: string): string => `${workspaceVolumeName}-runtime`;
 
 const FALLBACK_WORKER_UID = "1000:1000";
 
@@ -451,6 +456,7 @@ export class WorkspaceManager implements IWorkspaceManager {
       // otherwise block its removal.
       await workspaceVolumeHelperPool.releaseVolume(volumeName).catch(() => undefined);
       await runCommandStrict("docker", ["volume", "rm", "-f", volumeName], process.cwd()).catch(() => undefined);
+      await runCommandStrict("docker", ["volume", "rm", "-f", buildRuntimeVolumeName(volumeName)], process.cwd()).catch(() => undefined);
       return;
     }
 
@@ -540,7 +546,7 @@ export class WorkspaceManager implements IWorkspaceManager {
       "--entrypoint",
       command,
       "-e",
-      `HOME=${CONTAINER_WORKSPACE_ROOT}/.code-ux-home`,
+      `HOME=${CONTAINER_WORKSPACE_HELPER_HOME}`,
       ...buildWorkspaceDockerEnvArgs(options.env ?? process.env),
       WORKSPACE_HELPER_IMAGE,
       ...args,
@@ -603,6 +609,31 @@ export class WorkspaceManager implements IWorkspaceManager {
 
   private async createVolume(worktreePath: string): Promise<void> {
     const { volumeName } = parseWorkspaceHandle(worktreePath);
+    await this.createManagedWorkspaceVolume(volumeName);
+    await this.ensureRuntimeVolume(worktreePath);
+  }
+
+  async ensureRuntimeVolume(worktreePath: string): Promise<void> {
+    const { volumeName } = parseWorkspaceHandle(worktreePath);
+    const runtimeVolumeName = buildRuntimeVolumeName(volumeName);
+    const sessionKey = volumeName.match(/^code-ux-.+-([a-f0-9]{12})-(.+)$/)?.[2] || volumeName;
+    await runCommandStrict(
+      "docker",
+      [
+        "volume",
+        "create",
+        "--label",
+        RUNTIME_VOLUME_LABEL,
+        "--label",
+        `${WORKSPACE_SESSION_LABEL_PREFIX}${sessionKey}`,
+        runtimeVolumeName,
+      ],
+      process.cwd(),
+    );
+    await this.initializeRuntimeVolumeOwnership(runtimeVolumeName);
+  }
+
+  private async createManagedWorkspaceVolume(volumeName: string): Promise<void> {
     const sessionKey = volumeName.match(/^code-ux-.+-([a-f0-9]{12})-(.+)$/)?.[2] || volumeName;
     await runCommandStrict(
       "docker",
@@ -617,6 +648,29 @@ export class WorkspaceManager implements IWorkspaceManager {
       ],
       process.cwd(),
     );
+  }
+
+  private async initializeRuntimeVolumeOwnership(runtimeVolumeName: string): Promise<void> {
+    const ownerSpec = getWorkspaceOwnerSpec();
+    if (!ownerSpec) {
+      return;
+    }
+    await this.ensurePublicHelperImage(WORKSPACE_HELPER_IMAGE, process.cwd(), process.env);
+    await runCommandStrict(
+      "docker",
+      [
+        "run",
+        "--rm",
+        "--mount",
+        `type=volume,source=${runtimeVolumeName},target=${CONTAINER_RUNTIME_HOME}`,
+        "--entrypoint",
+        "sh",
+        WORKSPACE_HELPER_IMAGE,
+        "-lc",
+        `chown ${shellQuote(ownerSpec)} ${shellQuote(CONTAINER_RUNTIME_HOME)}`,
+      ],
+      process.cwd(),
+    ).catch(() => undefined);
   }
 
   private async isCodeUxManagedVolume(volumeName: string): Promise<boolean> {
@@ -690,7 +744,6 @@ export class WorkspaceManager implements IWorkspaceManager {
         "git -C /workspace config user.email \"${CODE_UX_GIT_USER_EMAIL:-agents@codeux.ai}\"",
         // Check out the seeded branch in the same container, removing the separate checkout run.
         `git -C /workspace checkout -B ${shellQuote(resolvedBranch)} ${shellQuote(`refs/heads/${resolvedBranch}`)} >/dev/null`,
-        "mkdir -p /workspace/.code-ux-home",
         ownerSpec ? `chown -R ${shellQuote(ownerSpec)} /workspace` : null,
       ].filter((step): step is string => Boolean(step)).join(" && ");
 
@@ -803,7 +856,6 @@ export class WorkspaceManager implements IWorkspaceManager {
           : "git -C /workspace remote remove origin >/dev/null 2>&1 || true",
         "git -C /workspace config user.name \"${CODE_UX_GIT_USER_NAME:-Code UX}\"",
         "git -C /workspace config user.email \"${CODE_UX_GIT_USER_EMAIL:-agents@codeux.ai}\"",
-        "mkdir -p /workspace/.code-ux-home",
         ownerSpec ? `chown -R ${shellQuote(ownerSpec)} /workspace` : null,
       ].filter((step): step is string => Boolean(step)).join(" && ");
 

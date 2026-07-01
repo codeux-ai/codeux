@@ -39,7 +39,7 @@ Use the standard interaction definitions when designing animations:
    - *Pacing:* Fast.
 
 7. **`inlineValidation`**
-   - *Use Case:* Showing field-level validation errors, shake animations, or bouncy cues for invalid inputs.
+   - *Use Case:* Showing field-level validation errors, shake animations, or bouncy cues for invalid inputs. To ensure accessible validation recovery on failed form submissions, automatically shift focus to the first invalid field (e.g., querying for `[aria-invalid="true"]`).
    - *Pacing:* Fast with spring/bounce easing.
 
 8. **`asyncFeedback`**
@@ -60,6 +60,7 @@ All interaction timings automatically respect the user's system preferences or d
 - When a user prefers reduced motion, the aforementioned hooks (`useInteractionTokens`, `useGsapInteractionTokens`) automatically resolve all duration values to `0` or `"0ms"`.
 - This ensures visual state changes happen instantly while preserving logical flows and React/Preact lifecycle events that depend on state transitions.
 - Do not hardcode custom fallback logic for `duration`. Use the hooks, and the components will naturally skip the animation timing.
+- Decorative or continuous animations (e.g., GSAP, SVG `<animate>`, Tailwind flow) must be explicitly disabled. State-communicating animations must be replaced with static visual equivalents (like badges or colored shadows) rather than simply being removed, to preserve state comprehension.
 
 ## Overlay Transitions & Focus Management
 
@@ -69,6 +70,7 @@ All standard overlays (Dialog, DropdownMenu, Popover, Tooltip, ConfirmDialog) ad
 2. **Focus Restoration:** Dialogs, DropdownMenus, and Popovers must reliably restore focus to the element that triggered them when they close. This relies on caching the `document.activeElement` during the `isOpen` state change and using `.focus({ preventScroll: true })` after closing to prevent unexpected page jumps.
 3. **Menu Keyboard Navigation:** Dropdown menus and lists utilizing arrow key navigation should use standard roles (e.g., `role="menuitem"`) and ensure their querying logic explicitly ignores `disabled` or `aria-disabled="true"` elements to ensure users do not become trapped on non-interactive items.
 4. **Focus Trapping:** Active focus traps must gracefully handle empty containers or containers with dynamically hidden content. If no valid focusable descendants exist, the container itself receives focus. Traps must filter out hidden, disabled, inert, or `aria-hidden="true"` elements when calculating focus boundaries. Furthermore, if the original trigger is removed from the DOM, focus safely falls back to the document body.
+5. **Scroll Management:** When native `element.scrollIntoView()` triggers unwanted whole-page layout shifts or window bouncing in nested `overflow-y-auto` panels, replace it by calculating bounding client rects (`element.getBoundingClientRect()`) against the container and adjusting `container.scrollTop` manually.
 
 ## Menu & Popover Keyboard Expectations
 DropdownMenus and Popovers are expected to be fully keyboard accessible:

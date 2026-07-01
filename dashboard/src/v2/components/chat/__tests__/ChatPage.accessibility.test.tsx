@@ -28,7 +28,6 @@ vi.mock('../../../hooks/use-chat-page-data.js', () => ({
     invocationMessages: [],
     input: "",
     setInput: vi.fn(),
-    manualRefreshing: false,
     sending: true,
     error: "Test error",
     selectedProject: { id: "p1", name: "Project 1" },
@@ -59,8 +58,6 @@ describe('ChatPage Accessibility', () => {
         selectedProject={null}
         chatMode="threads"
         onSetChatMode={vi.fn()}
-        onRefresh={vi.fn()}
-        manualRefreshing={false}
         onCreateThread={vi.fn()}
         pendingDashboardMessages={0}
         error={null}
@@ -78,6 +75,7 @@ describe('ChatPage Accessibility', () => {
     expect(tabs[0]).toHaveTextContent('Threads');
     expect(tabs[1]).toHaveAttribute('aria-selected', 'false');
     expect(tabs[1]).toHaveTextContent('Invocations');
+    expect(screen.queryByRole('button', { name: /refresh/i })).not.toBeInTheDocument();
   });
 
   it('labels the chat rail correctly', () => {
@@ -88,6 +86,29 @@ describe('ChatPage Accessibility', () => {
 
     const heading = screen.getByRole('heading', { level: 2 });
     expect(heading).toHaveTextContent('My Threads');
+  });
+
+  it('bounds chat panes so invocation navigation does not grow the page', () => {
+    render(
+      <ChatPageShell
+        selectedProject={{ id: "p1", name: "Project 1" } as any}
+        chatMode="invocations"
+        onSetChatMode={vi.fn()}
+        onCreateThread={vi.fn()}
+        pendingDashboardMessages={0}
+        error={null}
+        railSlot={<ChatRail title="Invocations" count={3}>Rows</ChatRail>}
+        detailSlot={<div>Transcript</div>}
+      />
+    );
+
+    const rail = screen.getByRole('complementary', { name: 'Invocations' });
+    const detailPanel = screen.getByText('Transcript').closest('section');
+    const splitPane = detailPanel?.parentElement;
+
+    expect(rail).toHaveClass('h-full', 'overflow-hidden', 'lg:max-h-full');
+    expect(detailPanel).toHaveClass('min-h-0', 'overflow-hidden');
+    expect(splitPane).toHaveClass('min-h-0', 'overflow-hidden', 'lg:grid-rows-[minmax(0,1fr)]');
   });
 
   it('has accessible message composer and regions', () => {

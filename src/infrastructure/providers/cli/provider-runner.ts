@@ -727,10 +727,10 @@ export class ProviderRunner implements IProviderRunner {
   ): Promise<boolean> {
     const candidates = [
       executionMode === "DOCKER"
-        ? pathPosix.join(CONTAINER_WORKSPACE_ROOT, ".code-ux-home", ".gemini", "antigravity-cli", "conversations", `${conversationId}.db`)
+        ? pathPosix.join(CONTAINER_RUNTIME_HOME, ".gemini", "antigravity-cli", "conversations", `${conversationId}.db`)
         : path.join(os.homedir(), ".gemini", "antigravity-cli", "conversations", `${conversationId}.db`),
       executionMode === "DOCKER"
-        ? pathPosix.join(CONTAINER_WORKSPACE_ROOT, ".code-ux-home", ".gemini", "antigravity", "conversations", `${conversationId}.db`)
+        ? pathPosix.join(CONTAINER_RUNTIME_HOME, ".gemini", "antigravity", "conversations", `${conversationId}.db`)
         : path.join(os.homedir(), ".gemini", "antigravity", "conversations", `${conversationId}.db`),
     ];
 
@@ -1099,6 +1099,10 @@ export class ProviderRunner implements IProviderRunner {
         auth: {
           selectedType: authMode === "LOCAL_AUTH" ? "qwen-oauth" : protocol,
         },
+      },
+      memory: {
+        enableManagedAutoMemory: false,
+        enableManagedAutoDream: false,
       },
       model: modelConfig,
     };

@@ -13,28 +13,23 @@ import { DEFAULT_INSTRUCTION_TEMPLATES } from "../../../src/instructions/instruc
 import type { SystemSettings, ProjectSettingsOverride } from "../../../src/contracts/settings-scope-types.js";
 
 describe("Settings Resolution Service", () => {
-  describe("Provider Pricing Normalization", () => {
-    it("should default tokenPricing to zero if not provided", () => {
+  describe("Model Pricing Settings", () => {
+    it("defaults modelPricing.overrides to an empty object when not provided", () => {
       const systemSettings = sanitizeSystemSettings({ integrations: { providers: { jules: { provider: "jules" } } } } as any);
-      expect(systemSettings.integrations.providers["jules"].tokenPricing).toEqual({ inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 });
+      expect(systemSettings.modelPricing).toEqual({ overrides: {} });
     });
 
-    it("should preserve explicitly configured tokenPricing", () => {
-      const tokenPricing = { inputTokens: 2, outputTokens: 10, cachedInputTokens: 1 };
-      const systemSettings = sanitizeSystemSettings({ integrations: { providers: { jules: { provider: "jules", tokenPricing } } } } as any);
-      expect(systemSettings.integrations.providers["jules"].tokenPricing).toEqual(tokenPricing);
+    it("preserves explicitly configured per-model price overrides", () => {
+      const overrides = { "anthropic/claude-sonnet-4-5": { inputTokens: 3, outputTokens: 15, cachedInputTokens: 1 } };
+      const systemSettings = sanitizeSystemSettings({ modelPricing: { overrides } } as any);
+      expect(systemSettings.modelPricing.overrides).toEqual(overrides);
     });
 
-    it("should pass tokenPricing through dashboard provider settings resolution", () => {
-      const tokenPricing = { inputTokens: 3, outputTokens: 15, cachedInputTokens: 0 };
-      const systemSettings = {
-        runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
-        integrations: { providers: { jules: { provider: "jules", tokenPricing } }, githubToken: "" },
-      };
-      const systemSettingsMock = sanitizeSystemSettings(systemSettings as any);
-      systemSettingsMock.integrations.providers["jules"].tokenPricing = tokenPricing;
+    it("passes modelPricing through dashboard settings resolution", () => {
+      const overrides = { "openai/gpt-5.5": { inputTokens: 3, outputTokens: 15, cachedInputTokens: 0 } };
+      const systemSettingsMock = sanitizeSystemSettings({ modelPricing: { overrides } } as any);
       const dashboard = resolveDashboardSettings({ systemSettings: { ...systemSettingsMock, defaults: buildDefaultProjectSettings(), mcpTools: [], customMcpServers: [] } as any });
-      expect(dashboard.settings.aiProvider.providers["jules"].tokenPricing).toEqual(tokenPricing);
+      expect(dashboard.settings.modelPricing.overrides).toEqual(overrides);
     });
   });
   describe("buildDefaultProjectSettings", () => {

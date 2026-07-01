@@ -67,7 +67,6 @@ export const ChatPage: FunctionComponent = () => {
     invocationMessages,
     input,
     setInput,
-    manualRefreshing,
     deletingThreadId,
     sending,
     compacting,
@@ -83,11 +82,11 @@ export const ChatPage: FunctionComponent = () => {
     connections,
     invocationsLoading,
     invocationMessagesLoading,
-    refreshThreads,
     activateThread,
     activateInvocation,
     handleCompactThread,
     handleSend,
+    navigateHistory,
     handleDeleteThread,
     createThreadForCompose,
     threadIndex,
@@ -324,6 +323,29 @@ export const ChatPage: FunctionComponent = () => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
                     void handleSend();
+                    return;
+                  }
+                  if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+                    const element = event.currentTarget;
+                    // Single-line content has no ambiguous cursor movement, so history
+                    // recall always applies there. Multi-line (Shift+Enter) text only
+                    // recalls history when the caret is at the true start/end of the
+                    // whole value — otherwise Up/Down should move between lines as usual.
+                    const isSingleLine = !element.value.includes("\n");
+                    const atStart = element.selectionStart === 0 && element.selectionEnd === 0;
+                    const atEnd = element.selectionStart === element.value.length && element.selectionEnd === element.value.length;
+                    const direction = event.key === "ArrowUp" ? "up" : "down";
+                    const shouldRecall = direction === "up" ? (isSingleLine || atStart) : (isSingleLine || atEnd);
+                    if (shouldRecall && navigateHistory(direction)) {
+                      event.preventDefault();
+                      requestAnimationFrame(() => {
+                        if (!composerRef.current) return;
+                        composerRef.current.style.height = "auto";
+                        composerRef.current.style.height = `${composerRef.current.scrollHeight}px`;
+                        const pos = direction === "up" ? 0 : composerRef.current.value.length;
+                        composerRef.current.setSelectionRange(pos, pos);
+                      });
+                    }
                   }
                 }}
               />
@@ -479,7 +501,7 @@ export const ChatPage: FunctionComponent = () => {
           </div>
         </div>
 
-        <div id="chat-panel" role="tabpanel" aria-labelledby="tab-threads" className="flex-1 min-h-0 flex flex-col overflow-y-auto">
+        <div id="chat-panel" role="tabpanel" aria-labelledby="tab-invocations" className="flex-1 min-h-0 flex flex-col overflow-y-auto">
           <div role="log" aria-label="Message history" aria-live={messages.length > 0 && !threadsLoading && !threadMessagesLoading ? "polite" : "off"} aria-atomic="false" aria-relevant="additions" ref={messagesRef} className="flex-1 min-h-0 space-y-6 px-6 py-6">
           {invocationsLoading ? (
             <LoadingChat label="Loading invocations" />
@@ -557,11 +579,8 @@ export const ChatPage: FunctionComponent = () => {
         selectedProject={null}
         chatMode={chatMode}
         onSetChatMode={setChatMode}
-        onRefresh={() => void refreshThreads({ manual: true })}
-        manualRefreshing={manualRefreshing}
         onCreateThread={() => void createThreadForCompose()}
         pendingDashboardMessages={pendingDashboardMessages}
-        activeConnectionLabel={activeConnection ? `${activeConnection.displayName} · ${activeConnection.status}` : undefined}
         error={error}
         railSlot={(
           <ChatRail title="Threads" count={0} secondaryTitle="Listeners" secondaryCount={0}>
@@ -588,11 +607,8 @@ export const ChatPage: FunctionComponent = () => {
       selectedProject={selectedProject}
       chatMode={chatMode}
       onSetChatMode={setChatMode}
-      onRefresh={() => void refreshThreads({ manual: true })}
-      manualRefreshing={manualRefreshing}
       onCreateThread={() => void createThreadForCompose()}
       pendingDashboardMessages={pendingDashboardMessages}
-      activeConnectionLabel={activeConnection ? `${activeConnection.displayName} · ${activeConnection.status}` : undefined}
       error={error}
       railSlot={renderRail()}
       detailSlot={renderDetail()}

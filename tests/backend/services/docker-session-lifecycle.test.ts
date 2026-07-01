@@ -61,10 +61,10 @@ describe("docker-session-lifecycle", () => {
       expect(runCommandStrict).not.toHaveBeenCalled();
     });
 
-    it("calls docker rm -f with the container ref", async () => {
+    it("calls docker rm -f -v with the container ref", async () => {
       vi.mocked(runCommandStrict).mockResolvedValue({ exitCode: 0, stdout: "", stderr: "", durationMs: 1 });
       await lifecycle.removeContainerIfPresent("my-container", "/tmp");
-      expect(runCommandStrict).toHaveBeenCalledWith("docker", ["rm", "-f", "my-container"], "/tmp");
+      expect(runCommandStrict).toHaveBeenCalledWith("docker", ["rm", "-f", "-v", "my-container"], "/tmp");
     });
 
     it("swallows errors if docker rm fails", async () => {

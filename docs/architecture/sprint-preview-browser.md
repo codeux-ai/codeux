@@ -142,10 +142,10 @@ Current preview controls include:
 
 Startup hygiene:
 - Docker session lifecycle management (such as `docker ps` parsing, lock acquisition for atomic container operations, container removal, and name sanitization) has been extracted to `DockerSessionLifecycle` in `src/services/docker-session-lifecycle.ts` so both preview and file-browser share identical mechanics without diverging.
-- Code UX now removes any existing `code-ux.preview=true` containers on server startup before the preview reconciliation loop begins
-- Code UX also removes orphaned unlabeled setup-helper containers that were created by older inline setup-image preview flows
+- preview and file-browser runtime volumes are created explicitly with deterministic `code-ux-preview-volume-<sprintId>` / `code-ux-file-browser-volume-<sprintId>` names and Code UX labels before any container mount, so Docker does not auto-create unlabeled named volumes for these sessions
+- Code UX removes existing `code-ux.preview=true` containers on server startup before the preview reconciliation loop begins, using a single batched Docker removal instead of one removal per container
+- preview and file-browser orphaned volume pruning uses Docker label filters (`code-ux.preview-volume=true` and `code-ux.file-browser-volume=true`) instead of broad prefix scans over every volume on the daemon
 - persisted preview sessions are reset back to `stopped` during that startup cleanup so stale containers do not survive process restarts
-- any legacy repo-local preview worktree directories under `.code-ux/worktrees/preview-*` are removed on startup so older preview implementations stop polluting the repository checkout
 - **Windows Workspace Deletion**: On Windows host environments, deeply nested `node_modules` folders from package managers like `pnpm` can exceed the `MAX_PATH` limitation, causing Node's recursive `fs.rm` to hang or loop indefinitely without throwing. To ensure robust cleanup, both `SprintPreviewService` and `SprintFileBrowserService` leverage a throwaway `alpine` Docker container to perform `rm -rf` over the bind-mounted workspace directory *first*, before performing a fallback host-side recursive removal.
 
 ## Dashboard Surface

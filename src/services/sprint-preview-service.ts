@@ -50,7 +50,6 @@ const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
 );
 const PREVIEW_READINESS_TIMEOUT_MS = 300_000;
 const PREVIEW_LOG_TAIL_LINES = 200;
-const ORPHANED_SETUP_CONTAINER_COMMAND = "bash /tmp/code-ux-setup.sh && rm -f /tmp/code-ux-setup.sh";
 
 export interface SprintPreviewProxyResponse {
   status: number;
@@ -119,8 +118,6 @@ export class SprintPreviewService {
       const containerName = this.buildContainerName(projectId, sprintId);
       const effectiveInstallCommand = preparedScript.installCommand;
       const completedTaskCount = this.countCompletedTasks(projectId, sprintId);
-
-      await this.cleanupOrphanedSetupContainers(project.baseDir);
 
       const existing = this.deps.sprintPreviewRepository.getSessionByProjectSprint(projectId, sprintId);
       if (existing && !options?.rebuild) {
@@ -234,6 +231,7 @@ export class SprintPreviewService {
 
         const userSpec = await this.resolveDockerUserSpec(workspacePath);
         const volumeName = `code-ux-preview-volume-${sprintId}`;
+        await this.ensureSprintVolume(volumeName, projectId, sprintId, session.id, project.baseDir);
         if (userSpec) {
           await runCommandStrict("docker", [
             "run",
@@ -315,10 +313,23 @@ export class SprintPreviewService {
   /**
    * Removes the per-sprint preview build-cache volume. A preview volume must live exactly as long
    * as its session row; every site that deletes a session row must also call this, otherwise the
-   * volume is orphaned forever (it carries no docker label, so it cannot be label-pruned later).
+   * volume is orphaned until the next label-based startup prune.
    */
   private async removeSprintVolume(sprintId: string): Promise<void> {
     await runCommandStrict("docker", ["volume", "rm", "-f", `code-ux-preview-volume-${sprintId}`], process.cwd()).catch(() => undefined);
+  }
+
+  private async ensureSprintVolume(volumeName: string, projectId: string, sprintId: string, sessionId: string, cwd: string): Promise<void> {
+    await runCommandStrict("docker", [
+      "volume",
+      "create",
+      "--label", "code-ux.preview-volume=true",
+      "--label", "code-ux.managed=true",
+      "--label", `code-ux.project-id=${projectId}`,
+      "--label", `code-ux.sprint-id=${sprintId}`,
+      "--label", `code-ux.session-id=${sessionId}`,
+      volumeName,
+    ], cwd);
   }
 
   /**
@@ -327,7 +338,11 @@ export class SprintPreviewService {
    * Keeping the volume tied to a live session row preserves build cache for sprints still tracked.
    */
   private async pruneOrphanedVolumes(): Promise<number> {
-    const result = await runCommandStrict("docker", ["volume", "ls", "-q"], process.cwd()).catch(() => null);
+    const result = await runCommandStrict(
+      "docker",
+      ["volume", "ls", "-q", "--filter", "label=code-ux.preview-volume=true"],
+      process.cwd(),
+    ).catch(() => null);
     if (!result?.ok) {
       return 0;
     }
@@ -337,8 +352,8 @@ export class SprintPreviewService {
       .split("\n")
       .map((line) => line.trim())
       .filter((name) => name.startsWith(prefix) && !liveSprintIds.has(name.slice(prefix.length)));
-    for (const name of orphans) {
-      await runCommandStrict("docker", ["volume", "rm", "-f", name], process.cwd()).catch(() => undefined);
+    if (orphans.length > 0) {
+      await runCommandStrict("docker", ["volume", "rm", "-f", ...orphans], process.cwd()).catch(() => undefined);
     }
     if (orphans.length > 0) {
       this.deps.logger?.info("Pruned orphaned sprint preview volumes on startup", { prunedCount: orphans.length });
@@ -348,14 +363,8 @@ export class SprintPreviewService {
 
   async cleanupStaleContainersOnStartup(): Promise<void> {
     const containerIds = await this.listPreviewContainerIds();
-    for (const containerId of containerIds) {
-      await runCommandStrict("docker", ["rm", "-f", containerId], process.cwd()).catch(() => undefined);
-    }
-    await this.cleanupOrphanedSetupContainers(process.cwd());
-
-    const projects = this.deps.projectManagementRepository.listProjects().projects;
-    for (const project of projects) {
-      await this.cleanupLegacyPreviewWorkspaces(project.baseDir);
+    if (containerIds.length > 0) {
+      await runCommandStrict("docker", ["rm", "-f", "-v", ...containerIds], process.cwd()).catch(() => undefined);
     }
 
     const sessions = this.deps.sprintPreviewRepository.listSessions();
@@ -917,76 +926,8 @@ export class SprintPreviewService {
     return lines.at(-1) || null;
   }
 
-  private async cleanupOrphanedSetupContainers(cwd: string): Promise<void> {
-    try {
-      const result = await runCommandStrict(
-        "docker",
-        [
-          "ps",
-          "-aq",
-          "--filter",
-          `status=running`,
-        ],
-        cwd,
-      );
-      const containerIds = result.stdout
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean);
-      for (const containerId of containerIds) {
-        const inspect = await runCommandStrict(
-          "docker",
-          [
-            "inspect",
-            "--format",
-            "{{json .Config.Labels}}\t{{json .Config.Cmd}}",
-            containerId,
-          ],
-          cwd,
-        ).catch(() => null);
-        if (!inspect) {
-          continue;
-        }
-        const [labelsJson = "{}", cmdJson = "[]"] = inspect.stdout.trim().split("\t");
-        const labels = JSON.parse(labelsJson) as Record<string, string> | null;
-        const command = JSON.parse(cmdJson) as string[];
-        if (labels && Object.keys(labels).length > 0) {
-          continue;
-        }
-        if (command.join(" ").includes(ORPHANED_SETUP_CONTAINER_COMMAND)) {
-          await this.lifecycle.removeContainerIfPresent(containerId, cwd);
-        }
-      }
-    } catch {
-      // Best effort cleanup only.
-    }
-  }
-
   private buildSessionLockKey(projectId: string, sprintId: string): string {
     return `${projectId}:${sprintId}`;
-  }
-
-
-
-  private async cleanupLegacyPreviewWorkspaces(repoPath: string): Promise<void> {
-    const legacyRoot = path.join(repoPath, ".code-ux", "worktrees");
-    let entries: Array<{ name: string; isDirectory(): boolean }> = [];
-    try {
-      entries = await fs.readdir(legacyRoot, { withFileTypes: true, encoding: "utf8" });
-    } catch {
-      return;
-    }
-
-    const previewEntries = entries.filter((entry) => entry.isDirectory() && entry.name.startsWith("preview-"));
-    for (const entry of previewEntries) {
-      const legacyPath = path.join(legacyRoot, entry.name);
-      await runCommandStrict("git", ["worktree", "remove", "--force", legacyPath], repoPath).catch(() => undefined);
-      await fs.rm(legacyPath, { recursive: true, force: true }).catch(() => undefined);
-    }
-
-    if (previewEntries.length > 0) {
-      await runCommandStrict("git", ["worktree", "prune"], repoPath).catch(() => undefined);
-    }
   }
 
   private async prepareStartupScript(repoPath: string, settings: SprintPreviewSettings): Promise<PreparedStartupScript> {

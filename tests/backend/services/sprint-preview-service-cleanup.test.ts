@@ -26,24 +26,13 @@ beforeEach(() => {
       if (args.includes("label=code-ux.preview=true")) {
         return { exitCode: 0, stdout: "container-1\ncontainer-2\n", stderr: "", durationMs: 1 };
       }
-      if (args.includes("status=running")) {
-        return { exitCode: 0, stdout: "helper-1\n", stderr: "", durationMs: 1 };
-      }
-    }
-    if (command === "docker" && args[0] === "inspect") {
-      return {
-        exitCode: 0,
-        stdout: "{}\t[\"/bin/sh\",\"-c\",\"bash /tmp/code-ux-setup.sh && rm -f /tmp/code-ux-setup.sh\"]\n",
-        stderr: "",
-        durationMs: 1,
-      };
     }
     return { exitCode: 0, stdout: "", stderr: "", durationMs: 1 };
   });
 });
 
 describe("SprintPreviewService startup cleanup", () => {
-  it("stops stale containers, resets persisted sessions, and removes legacy preview worktree directories", async () => {
+  it("stops stale containers and resets persisted sessions without legacy startup sweeps", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-preview-cleanup-"));
     tempDirs.push(root);
 
@@ -112,16 +101,11 @@ describe("SprintPreviewService startup cleanup", () => {
     expect(updatedSession?.status).toBe("stopped");
     expect(updatedSession?.containerId).toBeNull();
     expect(updatedSession?.containerName).toBeNull();
-    await expect(fs.access(legacyPreviewPath)).rejects.toThrow();
+    await expect(fs.access(legacyPreviewPath)).resolves.toBeUndefined();
 
-    expect(runCommandStrict).toHaveBeenCalledWith("docker", ["rm", "-f", "container-1"], process.cwd());
-    expect(runCommandStrict).toHaveBeenCalledWith("docker", ["rm", "-f", "container-2"], process.cwd());
-    expect(runCommandStrict).toHaveBeenCalledWith("docker", ["rm", "-f", "helper-1"], process.cwd());
-    expect(runCommandStrict).toHaveBeenCalledWith(
-      "git",
-      ["worktree", "remove", "--force", legacyPreviewPath],
-      repoPath,
-    );
-    expect(runCommandStrict).toHaveBeenCalledWith("git", ["worktree", "prune"], repoPath);
+    expect(runCommandStrict).toHaveBeenCalledWith("docker", ["rm", "-f", "-v", "container-1", "container-2"], process.cwd());
+    expect(runCommandStrict).not.toHaveBeenCalledWith("docker", expect.arrayContaining(["status=running"]), expect.any(String));
+    expect(runCommandStrict).not.toHaveBeenCalledWith("docker", expect.arrayContaining(["inspect"]), expect.any(String));
+    expect(runCommandStrict).not.toHaveBeenCalledWith("git", expect.arrayContaining(["worktree"]), expect.any(String));
   });
 });

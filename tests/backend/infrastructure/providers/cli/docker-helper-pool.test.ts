@@ -53,12 +53,13 @@ describe("DockerHelperContainerPool", () => {
     expect(creates).toHaveLength(2);
   });
 
-  it("release removes the container by deterministic name", async () => {
+  it("release removes the container and image-declared anonymous volumes by deterministic name", async () => {
     const { pool, calls } = makePool();
     await pool.ensure("k1");
     await pool.release("k1");
     const removals = calls.filter((c) => c.args[0] === "rm" && c.args.includes("helper-k1"));
     expect(removals.length).toBeGreaterThanOrEqual(1);
+    expect(removals.every((call) => call.args.includes("-v"))).toBe(true);
     // After release the next ensure creates a fresh container.
     await pool.ensure("k1");
     const creates = calls.filter((c) => c.args[0] === "run" && c.args.includes("-d"));
@@ -70,7 +71,7 @@ describe("DockerHelperContainerPool", () => {
     await pool.ensure("k1");
     await pool.ensure("k2");
     await pool.shutdown();
-    const removals = calls.filter((c) => c.args[0] === "rm" && c.args.includes("-f") && c.args.includes("cid"));
+    const removals = calls.filter((c) => c.args[0] === "rm" && c.args.includes("-f") && c.args.includes("-v") && c.args.includes("cid"));
     expect(removals.length).toBeGreaterThanOrEqual(2);
   });
 

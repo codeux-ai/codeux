@@ -24,14 +24,25 @@ export const MemorySearch: FunctionComponent = () => {
                         searchQuerySignal.value = "";
                     }
                 }}
-                onInput={(e) => searchQuerySignal.value = (e.target as HTMLInputElement).value}
+                onInput={(e) => {
+                    const value = (e.target as HTMLInputElement).value;
+                    if (value) {
+                        setClearAnnouncement("Searching...");
+                        setTimeout(() => setClearAnnouncement(""), 1000);
+                    }
+                    searchQuerySignal.value = value;
+                }}
                 className="w-full bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] rounded-xl pl-9 pr-4 py-2.5 text-sm outline-none focus:border-signal-500/40 focus:bg-signal-500/5 transition-all duration-200 text-slate-800 dark:text-slate-200 font-mono"
             />
             <div className="sr-only" aria-live="polite" aria-atomic="true">{clearAnnouncement}</div>
             {searchQuerySignal.value && (
                 <button
                     aria-label="Clear search"
-                    onClick={() => searchQuerySignal.value = ""}
+                    onClick={() => {
+                        setClearAnnouncement("Search cleared");
+                        setTimeout(() => setClearAnnouncement(""), 1000);
+                        searchQuerySignal.value = "";
+                    }}
                     className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center gap-1.5 px-1.5 py-1 rounded-md text-slate-400 hover:bg-black/[0.05] hover:text-slate-600 dark:hover:bg-white/[0.05] dark:hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-void-900 transition-colors duration-150"
                 >
                     <kbd className="hidden sm:inline-block text-[10px] font-mono border border-black/[0.1] dark:border-white/[0.1] rounded px-1 text-slate-400">Esc</kbd>

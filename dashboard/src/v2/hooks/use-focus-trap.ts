@@ -13,6 +13,7 @@ function getVisibleFocusableElements(container: HTMLElement): HTMLElement[] {
     if (el.getAttribute("aria-hidden") === "true") return false;
     if (el.hasAttribute("inert")) return false;
 
+    if (typeof window === "undefined") return false;
     // jsdom doesn't fully support computed styles in the same way, but it's good practice
     const style = window.getComputedStyle(el);
     if (style.display === "none" || style.visibility === "hidden") return false;

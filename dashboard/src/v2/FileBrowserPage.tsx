@@ -324,7 +324,7 @@ export const FileBrowserPage: FunctionComponent = () => {
       />
 
       {error && (
-        <div class="mb-5 rounded-2xl border border-status-red/25 bg-status-red/[0.12] px-4 py-3 text-sm text-status-red dark:border-status-red/30 dark:bg-status-red/[0.14]">
+        <div class="mb-5 rounded-2xl border border-status-red/25 bg-status-red/[0.12] px-4 py-3 text-sm text-status-red dark:border-status-red/30 dark:bg-status-red/[0.14]" role="alert">
           {error}
         </div>
       )}
@@ -556,7 +556,7 @@ const LaunchPanel: FunctionComponent<LaunchPanelProps> = ({
       </div>
 
       {lastError && (
-        <div class="w-full rounded-xl border border-status-red/25 bg-status-red/[0.12] px-3 py-2 text-xs text-status-red dark:border-status-red/30 dark:bg-status-red/[0.14]">
+        <div class="w-full rounded-xl border border-status-red/25 bg-status-red/[0.12] px-3 py-2 text-xs text-status-red dark:border-status-red/30 dark:bg-status-red/[0.14]" role="alert">
           {lastError}
         </div>
       )}

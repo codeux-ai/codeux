@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useRef } from "preact/hooks";
+import { useLayoutEffect, useEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { RobotLogo } from "../brand/RobotLogo.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
@@ -145,6 +145,17 @@ export const OnboardingIntro: FunctionComponent<OnboardingIntroProps> = ({ onExi
     onCompleteRef.current = onComplete;
 
     const reducedMotion = useReducedMotion();
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                onExitStartRef.current?.();
+                onCompleteRef.current?.();
+            }
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, []);
 
     useLayoutEffect(() => {
         const ctx = gsap.context(() => {

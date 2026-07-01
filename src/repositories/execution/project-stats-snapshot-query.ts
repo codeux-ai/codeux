@@ -115,7 +115,7 @@ export function queryProjectStatsSnapshot(
   for (const row of mainAggs) {
     const u = mapAggregatedUsage(row);
     if (row.provider) {
-      const pricing = deps.getProviderPricing?.(row.provider, row.model);
+      const pricing = deps.getModelPricing?.(row.provider, row.model);
       if (pricing) {
         u.inputCostUsd = (u.inputTokens / 1_000_000) * (pricing.inputTokens || 0);
         u.outputCostUsd = (u.outputTokens / 1_000_000) * (pricing.outputTokens || 0);
@@ -184,33 +184,41 @@ export function queryProjectStatsSnapshot(
 
   const sampleCap = getDurationSampleCap(deps);
 
-  // Duration distribution per model (percentiles need raw samples, not SUM aggregates)
-  // Bound to prevent unbounded memory growth. We use deterministic ordering.
-  const durationSampleRows = db.prepare(`
-    SELECT provider, model, duration_ms as durationMs
+  // Determine if we exceed the sample cap before materializing duration rows
+  const durationCountRow = db.prepare(`
+    SELECT COUNT(duration_ms) as count
     FROM provider_invocations
     WHERE project_id = ? AND started_at >= ? AND started_at < ?
       AND duration_ms IS NOT NULL AND duration_ms > 0
-    ORDER BY started_at DESC, id DESC
-    LIMIT ?
-  `).all(projectId, rangeStartIso, rangeEndIso, sampleCap) as Array<{ provider: string | null; model: string | null; durationMs: number | string }>;
+  `).get(projectId, rangeStartIso, rangeEndIso) as { count: number | string } | undefined;
+
+  const totalDurationSamples = toNumber(durationCountRow?.count || 0);
 
   const allDurations: number[] = [];
   const modelDurations = new Map<string, number[]>();
-  for (const row of durationSampleRows) {
-    const durationMs = toNumber(row.durationMs);
-    if (durationMs <= 0) continue;
-    allDurations.push(durationMs);
-    const key = buildModelStatsKey(row.provider, row.model);
-    const samples = modelDurations.get(key) || [];
-    samples.push(durationMs);
-    modelDurations.set(key, samples);
-  }
-
   const modelDurationAggs = new Map<string, ExecutionDurationAggregates>();
   let overallDurationAggs: ExecutionDurationAggregates;
 
-  if (durationSampleRows.length < sampleCap) {
+  if (totalDurationSamples <= sampleCap) {
+    // We are under or at the cap. Fetch all duration samples for precise percentiles.
+    const durationSampleRows = db.prepare(`
+      SELECT provider, model, duration_ms as durationMs
+      FROM provider_invocations
+      WHERE project_id = ? AND started_at >= ? AND started_at < ?
+        AND duration_ms IS NOT NULL AND duration_ms > 0
+      ORDER BY started_at DESC, id DESC
+    `).all(projectId, rangeStartIso, rangeEndIso) as Array<{ provider: string | null; model: string | null; durationMs: number | string }>;
+
+    for (const row of durationSampleRows) {
+      const durationMs = toNumber(row.durationMs);
+      if (durationMs <= 0) continue;
+      allDurations.push(durationMs);
+      const key = buildModelStatsKey(row.provider, row.model);
+      const samples = modelDurations.get(key) || [];
+      samples.push(durationMs);
+      modelDurations.set(key, samples);
+    }
+
     // We have all the duration samples for this period!
     // Skip the expensive aggregate GROUP BY query and compute aggregates directly from samples.
     let overallSampleCount = 0;

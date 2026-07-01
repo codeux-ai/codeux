@@ -58,7 +58,7 @@ When selected, setup can create or update:
 
 Agent setup also updates project agent routing:
 
-- planning defaults to `Project Setup Agent`
+- the existing Planning agent route is preserved and never changed to `Project Setup Agent`
 - task coding switches to `ORCHESTRATOR` when specialist worker agents are created
 - created worker specialists are added to the orchestrator roster
 

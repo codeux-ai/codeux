@@ -90,6 +90,77 @@ Package manager is **pnpm** (`pnpm@10.33.0`), Node **22+**. Use `pnpm`, not `npm
   - Add 👀 reaction to comments currently being reviewed.
   - After implementing fixes, reply on addressed inline comments and add ✅ reaction before merging.
 
+## Release Notes Formatting
+When creating or editing a GitHub Release, use polished user-facing release notes rather than raw PR summaries. The release notes must be accurate to the final tag and should be easy to skim on GitHub.
+
+Required format:
+
+````md
+## Code UX X.Y.Z
+
+One short paragraph describing the release theme and linking the release PR.
+
+### Release Snapshot
+
+| Item | Details |
+| --- | --- |
+| Version | `X.Y.Z` |
+| Release commit | `<full commit sha>` |
+| Release PR | [#NNNN](https://github.com/codeux-ai/codeux/pull/NNNN) |
+| Included dev sync | [#NNNN](https://github.com/codeux-ai/codeux/pull/NNNN) |
+| Scope | N files changed across <main areas> |
+
+## What’s New
+
+### <Feature Area>
+
+One concise sentence explaining the area.
+
+- User-facing capability or meaningful operational improvement.
+- Another feature or enhancement.
+
+## Fixes
+
+### <Fix Area>
+
+- Fixed <specific bug/regression/security issue> and its user-visible impact.
+- Fixed <specific operational or developer workflow issue>.
+
+## Validation
+
+| Check | Result |
+| --- | --- |
+| Typecheck & Lint | Passed |
+| Backend Tests & Coverage | Passed |
+| Dashboard Tests | Passed |
+| Security Audit | Passed |
+| Playwright E2E | Passed |
+| CodeQL Analysis | Passed |
+
+Additional local validation, if any:
+
+```bash
+pnpm run lint
+pnpm run test:backend
+pnpm run build
+```
+
+## Known Follow-Up
+
+- Clear, non-alarming follow-up item with the reason it was deferred.
+````
+
+Release note rules:
+- Always include both `## What’s New` and `## Fixes`.
+- Put new capabilities, performance work, and major behavior changes under `What’s New`.
+- Put bugs, regressions, CI repairs, security hardening, and operational reliability repairs under `Fixes`.
+- Keep bullets concrete and outcome-focused; avoid internal-only commit wording such as "refactor module X" unless it changes reliability, performance, or maintainability in a meaningful way.
+- Use a `Release Snapshot` table with exact version, commit, PR links, and scope.
+- Use a `Validation` table for GitHub checks; mention local validation separately.
+- Include `Known Follow-Up` for deferred alerts, incomplete hardening, or intentional post-release work.
+- Avoid emojis in release notes unless the project explicitly adopts them later.
+- Do not claim a check passed unless it actually passed for the release PR or was run locally.
+
 ## Collaboration Workflow
 - Default working flow for our collaboration:
   - Start every change on a new feature branch off `dev`.

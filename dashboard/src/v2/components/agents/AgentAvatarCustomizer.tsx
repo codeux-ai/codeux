@@ -1,5 +1,6 @@
 import { RefreshCw, Shapes, Palette } from "lucide-preact";
 import type { AgentAvatarConfig } from "../../types.js";
+import { useState, useEffect } from "preact/hooks";
 import {
   ROBOT_CHASSIS_OPTIONS,
   ROBOT_EYE_OPTIONS,
@@ -158,7 +159,10 @@ export function AgentAvatarCustomizer({
   className = "",
   disabled = false,
 }: AgentAvatarCustomizerProps) {
+  const [isRandomizing, setIsRandomizing] = useState(false);
   const handleRandomize = () => {
+    setIsRandomizing(true);
+    setTimeout(() => setIsRandomizing(false), 2000);
     const seed = Date.now().toString(36) + Math.random().toString(36).substring(2);
     onChange(generateRandomAgentAvatar(seed));
   };
@@ -182,6 +186,9 @@ export function AgentAvatarCustomizer({
           <RefreshCw className="h-3 w-3 transition-transform duration-500 group-hover/rnd:rotate-180" strokeWidth={2.4} />
           Randomize
         </button>
+        <span className="sr-only" aria-live="polite">
+          {isRandomizing ? "Avatar randomized" : ""}
+        </span>
       </div>
 
       <CustomizerGroup icon={Shapes} title="Form">

@@ -152,4 +152,91 @@ describe("AvantgardeSelect", () => {
     fireEvent.click(screen.getByText("Select\u2026"));
     expect(screen.getByText("No options available.")).toBeDefined();
   });
+
+  it("filters options by search text when searchable", () => {
+    const options = [
+      { value: "1", label: "Anthropic" },
+      { value: "2", label: "OpenAI" },
+    ];
+    render(<AvantgardeSelect value="" onChange={() => {}} options={options} searchable />);
+    fireEvent.click(screen.getByText("Select\u2026"));
+
+    const search = screen.getByPlaceholderText("Search...");
+    fireEvent.input(search, { target: { value: "open" } });
+
+    expect(screen.queryByText("OpenAI")).not.toBeNull();
+    expect(screen.queryByText("Anthropic")).toBeNull();
+  });
+
+  it("offers a custom-value option when nothing matches and allowCustomValue is set", () => {
+    const onChange = vi.fn();
+    const options = [{ value: "1", label: "Anthropic" }];
+    render(
+      <AvantgardeSelect value="" onChange={onChange} options={options} searchable allowCustomValue />
+    );
+    fireEvent.click(screen.getByText("Select\u2026"));
+
+    const search = screen.getByPlaceholderText("Search...");
+    fireEvent.input(search, { target: { value: "my-custom-model" } });
+
+    const customOption = screen.getByText('Use "my-custom-model"');
+    fireEvent.click(customOption);
+
+    expect(onChange).toHaveBeenCalledWith("my-custom-model");
+  });
+
+  it("does not offer a custom-value option when the search text already matches an option", () => {
+    const options = [{ value: "1", label: "Anthropic" }];
+    render(
+      <AvantgardeSelect value="" onChange={() => {}} options={options} searchable allowCustomValue />
+    );
+    fireEvent.click(screen.getByText("Select\u2026"));
+
+    const search = screen.getByPlaceholderText("Search...");
+    fireEvent.input(search, { target: { value: "Anthropic" } });
+
+    expect(screen.queryByText('Use "Anthropic"')).toBeNull();
+  });
+
+  it("caps rendered options via maxVisibleOptions without limiting what search can match", () => {
+    const options = Array.from({ length: 20 }, (_, i) => ({ value: `${i}`, label: `Option ${i}` }));
+    render(
+      <AvantgardeSelect value="" onChange={() => {}} options={options} searchable maxVisibleOptions={5} placeholder="Pick" />
+    );
+    fireEvent.click(screen.getByText("Pick"));
+
+    // Unfiltered: capped to 5 even though 20 options exist.
+    expect(screen.getAllByText(/^Option \d+$/).length).toBe(5);
+
+    // Still searchable across the full underlying set, just capped again after matching.
+    const search = screen.getByPlaceholderText("Search...");
+    fireEvent.input(search, { target: { value: "Option 1" } });
+    // Matches "Option 1", "Option 10".."Option 19" (11 matches) but stays capped at 5.
+    expect(screen.getAllByText(/^Option 1\d?$/).length).toBeLessThanOrEqual(5);
+    expect(screen.queryByText("Option 1")).not.toBeNull();
+  });
+
+  it("focuses the search input by default when a searchable select opens", async () => {
+    const options = [{ value: "1", label: "Anthropic" }, { value: "2", label: "OpenAI" }];
+    render(<AvantgardeSelect value="" onChange={() => {}} options={options} searchable placeholder="Pick" />);
+    fireEvent.click(screen.getByText("Pick"));
+
+    const search = await screen.findByPlaceholderText("Search...");
+    await waitFor(() => expect(document.activeElement).toBe(search));
+  });
+
+  it("keeps the search input focused through a reposition (scroll/resize) while typing", async () => {
+    const options = [{ value: "1", label: "Anthropic" }, { value: "2", label: "OpenAI" }];
+    render(<AvantgardeSelect value="" onChange={() => {}} options={options} searchable placeholder="Pick" />);
+    fireEvent.click(screen.getByText("Pick"));
+
+    const search = await screen.findByPlaceholderText("Search...");
+    await waitFor(() => expect(document.activeElement).toBe(search));
+
+    fireEvent.input(search, { target: { value: "o" } });
+    // A reposition (e.g. from the filtered list's height changing) must not steal focus back
+    // to the listbox container.
+    fireEvent.scroll(window);
+    expect(document.activeElement).toBe(search);
+  });
 });

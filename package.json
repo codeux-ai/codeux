@@ -1,6 +1,6 @@
 {
   "name": "@codeuxai/codeux",
-  "version": "0.8.6",
+  "version": "0.8.7",
   "description": "Containerized environment for running and managing AI sub-agents",
   "author": "Pierre Voss <p.voss@codeux.ai>",
   "license": "MIT",
@@ -23,6 +23,7 @@
     "dashboard/dist",
     ".code-ux",
     "docs",
+    "assets",
     "LICENSE",
     "README.md"
   ],
