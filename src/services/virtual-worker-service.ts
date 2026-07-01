@@ -1637,8 +1637,28 @@ export class VirtualWorkerService {
     const orphaned = this.deps.workerEndpointRepository.listWorkerEndpoints()
       .filter((endpoint) => endpoint.endpointType === "virtual_cli");
 
+    if (orphaned.length === 0) {
+      return;
+    }
+
+    const orphanedIds = orphaned.map((e) => e.id);
+    const activeAssignments = this.deps.projectWorkerAssignmentRepository.listActiveAssignmentsForWorkers(orphanedIds);
+
+    const assignmentsByEndpointId = new Map<string, typeof activeAssignments>();
+    for (const assignment of activeAssignments) {
+      if (assignment.workerEndpointId) {
+        let group = assignmentsByEndpointId.get(assignment.workerEndpointId);
+        if (!group) {
+          group = [];
+          assignmentsByEndpointId.set(assignment.workerEndpointId, group);
+        }
+        group.push(assignment);
+      }
+    }
+
     for (const endpoint of orphaned) {
-      for (const assignment of this.deps.projectWorkerAssignmentRepository.listActiveAssignmentsForWorker(endpoint.id)) {
+      const assignments = assignmentsByEndpointId.get(endpoint.id) || [];
+      for (const assignment of assignments) {
         this.deps.projectWorkerAssignmentService.releaseWorkerAssignment(assignment.projectId, endpoint.id, "virtual_worker_startup_prune");
       }
       this.deps.workerEndpointRepository.deleteWorkerEndpoint(endpoint.id);

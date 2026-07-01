@@ -143,6 +143,35 @@ export class ProjectWorkerAssignmentRepository {
     return rows.map((row) => this.mapRow(row));
   }
 
+  listActiveAssignmentsForWorkers(workerEndpointIds: string[]): ProjectWorkerAssignmentRecord[] {
+    if (workerEndpointIds.length === 0) {
+      return [];
+    }
+
+    const rows = this.storage.executeChunkedInQuery<ProjectWorkerAssignmentRow>({
+      sqlPrefix: `
+        SELECT
+          a.*,
+          we.status AS worker_status,
+          we.last_heartbeat_at AS worker_last_heartbeat_at,
+          we.capabilities_json
+        FROM project_worker_assignments a
+        LEFT JOIN worker_endpoints we ON we.id = a.worker_endpoint_id
+        WHERE a.status = 'active'
+          AND a.worker_endpoint_id
+      `,
+      sqlSuffix: `
+        ORDER BY
+          CASE a.assignment_role WHEN 'primary' THEN 0 ELSE 1 END ASC,
+          a.last_affinity_at DESC,
+          a.assigned_at ASC
+      `,
+      items: workerEndpointIds,
+    });
+
+    return rows.map((row) => this.mapRow(row));
+  }
+
   getActiveAssignment(projectId: string, workerEndpointId: string): ProjectWorkerAssignmentRecord | null {
     const row = this.db.prepare(`
       SELECT
