@@ -82,14 +82,8 @@ export interface SprintQaReviewOutcome {
   reportText: string;
 }
 
-export interface TaskQaMergeGateStatus {
-  mergeAllowed: boolean;
-  reason: "not_required" | "pending_review" | "review_running" | "passed" | "changes_requested" | "review_failed" | "retries_exhausted";
-  summary: string;
-  latestRun: QaReviewRunRecord | null;
-  runsUsed: number;
-  maxRuns: number;
-}
+import { type TaskQaMergeGateStatus, computeTaskMergeGateStatus } from "../domain/qa-review/task-merge-gate-status.js";
+export type { TaskQaMergeGateStatus };
 
 interface QualityAssuranceServiceDependencies {
   projectManagementRepository: ProjectManagementRepository;
@@ -689,128 +683,32 @@ export class QualityAssuranceService {
     task: Subtask;
   }): TaskQaMergeGateStatus {
     const taskId = args.task.record_id?.trim();
-    if (!taskId) {
-      return {
-        mergeAllowed: true,
-        reason: "not_required",
-        summary: "",
-        latestRun: null,
-        runsUsed: 0,
-        maxRuns: 0,
-      };
-    }
 
     const scope = { projectId: args.projectId, sprintId: args.sprintId };
     const settings = this.deps.getDashboardSettings(scope);
     const qaSettings = settings.agents.qualityAssurance;
     const triggerType = resolveTaskTriggerType(args.task, qaSettings);
-    if (!qaSettings.enabled || !triggerType) {
-      return {
-        mergeAllowed: true,
-        reason: "not_required",
-        summary: "",
-        latestRun: null,
-        runsUsed: 0,
-        maxRuns: qaSettings.maxTaskReviewRuns,
-      };
-    }
 
-    const latestRun = this.reconcileRunningQaRun(this.deps.qaReviewRepository.getLatestTaskRun(taskId));
-    const runsUsed = this.deps.qaReviewRepository.countTaskRuns(taskId);
-    const maxRuns = qaSettings.maxTaskReviewRuns;
+    const isReviewRequired = taskId && qaSettings.enabled && triggerType;
 
-    if (latestRun?.status === "running") {
-      return {
-        mergeAllowed: false,
-        reason: "review_running",
-        summary: latestRun.summaryMarkdown || "QA review is still running.",
-        latestRun,
-        runsUsed,
-        maxRuns,
-      };
-    }
+    const latestRun = isReviewRequired
+      ? this.reconcileRunningQaRun(this.deps.qaReviewRepository.getLatestTaskRun(taskId))
+      : null;
+    const runsUsed = isReviewRequired
+      ? this.deps.qaReviewRepository.countTaskRuns(taskId)
+      : 0;
+    const decisiveRuns = isReviewRequired
+      ? this.deps.qaReviewRepository.countDecisiveTaskRuns(taskId)
+      : 0;
 
-    if (latestRun?.outcome === "pass") {
-      return {
-        mergeAllowed: true,
-        reason: "passed",
-        summary: latestRun.summaryMarkdown || "QA review passed.",
-        latestRun,
-        runsUsed,
-        maxRuns,
-      };
-    }
-
-    const recoveredStaleLatestRun = isRecoveredStaleQaRun(latestRun);
-
-    // Only runs that produced a real verdict (pass / changes_requested) spend
-    // the review budget. Reviewer crashes (missing auth, container/parse
-    // failures) are infra noise that produced no judgement, so they are retried
-    // — bounded by an infra ceiling so a permanently broken reviewer still
-    // stops and escalates instead of looping or failing open.
-    const decisiveRuns = this.deps.qaReviewRepository.countDecisiveTaskRuns(taskId);
-    const infraCeiling = maxRuns + QA_INFRA_FAILURE_GRACE;
-    const budgetExhausted = (maxRuns > 0 && decisiveRuns >= maxRuns) || runsUsed >= infraCeiling;
-
-    // Exhaustion is checked BEFORE the changes_requested verdict on purpose: a
-    // task that keeps getting "changes requested" until its budget is spent must
-    // surface as `retries_exhausted` so the orchestrator can apply the configured
-    // exhaustion policy. Otherwise the gate stays on `changes_requested` forever
-    // (the bug that hung sprints when a weak agent never landed the change).
-    // A genuine pass returns above, so reaching here means QA never cleared it.
-    if (budgetExhausted) {
-      return {
-        mergeAllowed: false,
-        reason: "retries_exhausted",
-        summary: latestRun?.summaryMarkdown
-          || `QA could not clear this task (${decisiveRuns}/${maxRuns} verdicts, ${runsUsed} attempts) — human attention required.`,
-        latestRun,
-        runsUsed,
-        maxRuns,
-      };
-    }
-
-    if (latestRun?.outcome === "changes_requested") {
-      return {
-        mergeAllowed: false,
-        reason: "changes_requested",
-        summary: latestRun.summaryMarkdown || "QA requested follow-up fixes.",
-        latestRun,
-        runsUsed,
-        maxRuns,
-      };
-    }
-
-    if (latestRun?.status === "failed" && recoveredStaleLatestRun) {
-      return {
-        mergeAllowed: false,
-        reason: "review_failed",
-        summary: latestRun.summaryMarkdown || "QA review failed and must be retried before merge.",
-        latestRun,
-        runsUsed,
-        maxRuns,
-      };
-    }
-
-    if (latestRun?.status === "failed") {
-      return {
-        mergeAllowed: false,
-        reason: "review_failed",
-        summary: latestRun.summaryMarkdown || "QA review failed and must be retried before merge.",
-        latestRun,
-        runsUsed,
-        maxRuns,
-      };
-    }
-
-    return {
-      mergeAllowed: false,
-      reason: "pending_review",
-      summary: "QA review is required before merge.",
+    return computeTaskMergeGateStatus({
+      taskId: taskId || null,
+      triggerType,
+      qaSettings,
       latestRun,
       runsUsed,
-      maxRuns,
-    };
+      decisiveRuns,
+    });
   }
 
   private async runReview(args: {
