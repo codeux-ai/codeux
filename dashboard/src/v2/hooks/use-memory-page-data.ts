@@ -3,10 +3,9 @@ import { listMemories, listEmbeddingModels, getMemoryStats, getEmbeddingMap, typ
 import type { MemoryRecord, MemoryScope } from "../memory-types.js";
 import { prepareMemoryGraph, type GraphMetadata } from "../lib/memory-graph.js";
 import { useActionFeedback } from "./use-action-feedback.js";
-import { createMemory, deleteMemory, type CreateMemoryInput } from "../lib/memory-api.js";
-import type { ActionFeedbackState } from "./use-action-feedback.js";
+import { createMemory, deleteMemory, deleteMemories, type CreateMemoryInput, type MemoryDeleteResult } from "../lib/memory-api.js";
 
-import { memoryMutationsSignal } from "../components/memory/memoryState.js";
+import { clearSelectedMemoryIds, memoryMutationsSignal, setSelectedMemoryIds } from "../components/memory/memoryState.js";
 
 export function useMemoryPageData(
     pid: string,
@@ -32,6 +31,23 @@ export function useMemoryPageData(
     const { feedback, setWarning, setSuccess, setError, clearFeedback, clearError, setPending } = useActionFeedback(5000);
     const removeTimers = useRef<Record<string, number>>({});
 
+    const syncRecordsAndGraph = useCallback((next: MemoryRecord[]) => {
+        setRecords(next);
+        setMemoryCount(next.length);
+        const graph = prepareMemoryGraph(next, graphData?.map || null);
+        setGraphData({ graph, map: graphData?.map || null });
+    }, [graphData?.map]);
+
+    const updateRecordsAndGraph = useCallback((updater: (current: MemoryRecord[]) => MemoryRecord[]) => {
+        setRecords((current) => {
+            const next = updater(current);
+            setMemoryCount(next.length);
+            const graph = prepareMemoryGraph(next, graphData?.map || null);
+            setGraphData({ graph, map: graphData?.map || null });
+            return next;
+        });
+    }, [graphData?.map]);
+
     const addMemory = useCallback(async (input: CreateMemoryInput, pid: string) => {
         const tempId = `temp-${Date.now()}`;
         const tempRecord: MemoryRecord = {
@@ -54,46 +70,23 @@ export function useMemoryPageData(
         };
 
         setPending("Adding memory...");
-        setRecords(prev => {
-            const next = [tempRecord, ...prev];
-            setMemoryCount(next.length);
-            const graph = prepareMemoryGraph(next, graphData?.map || null);
-            setGraphData({ graph, map: graphData?.map || null });
-            return next;
-        });
+        updateRecordsAndGraph((current) => [tempRecord, ...current]);
 
         try {
             const created = await createMemory(pid, input);
-            setRecords(prev => {
-                const next = prev.map(r => r.id === tempId ? created : r);
-                const graph = prepareMemoryGraph(next, graphData?.map || null);
-                setGraphData({ graph, map: graphData?.map || null });
-                return next;
-            });
+            updateRecordsAndGraph((current) => current.map(r => r.id === tempId ? created : r));
             setSuccess("Memory added successfully");
         } catch (e: any) {
-            setRecords(prev => {
-                const next = prev.filter(r => r.id !== tempId);
-                setMemoryCount(next.length);
-                const graph = prepareMemoryGraph(next, graphData?.map || null);
-                setGraphData({ graph, map: graphData?.map || null });
-                return next;
-            });
+            updateRecordsAndGraph((current) => current.filter(r => r.id !== tempId));
             setError(e.message || "Failed to add memory");
         }
-    }, [graphData?.map, setSuccess, setError]);
+    }, [updateRecordsAndGraph, setSuccess, setError]);
 
     const removeMemory = useCallback((id: string) => {
         const recordToRestore = records.find(r => r.id === id);
         if (!recordToRestore) return;
 
-        setRecords(prev => {
-            const next = prev.filter(r => r.id !== id);
-            setMemoryCount(next.length);
-            const graph = prepareMemoryGraph(next, graphData?.map || null);
-            setGraphData({ graph, map: graphData?.map || null });
-            return next;
-        });
+        updateRecordsAndGraph((current) => current.filter(r => r.id !== id));
 
         let executed = false;
 
@@ -103,17 +96,14 @@ export function useMemoryPageData(
             try {
                 await deleteMemory(id);
             } catch (e: any) {
-                setRecords(prev => {
-                    const next = [...prev];
+                updateRecordsAndGraph((current) => {
+                    const next = [...current];
                     const restoreIdx = records.findIndex(r => r.id === id);
                     if (restoreIdx >= 0) {
                         next.splice(restoreIdx, 0, recordToRestore);
                     } else {
                         next.push(recordToRestore);
                     }
-                    setMemoryCount(next.length);
-                    const graph = prepareMemoryGraph(next, graphData?.map || null);
-                    setGraphData({ graph, map: graphData?.map || null });
                     return next;
                 });
                 setError(e.message || "Failed to delete memory");
@@ -127,17 +117,14 @@ export function useMemoryPageData(
             }
             if (!executed) {
                 executed = true;
-                setRecords(prev => {
-                    const next = [...prev];
-                    const restoreIdx = records.findIndex(r => r.id === id);
+                updateRecordsAndGraph((current) => {
+                    const next = [...current];
+                    const restoreIdx = current.findIndex(r => r.id === id);
                     if (restoreIdx >= 0) {
                         next.splice(restoreIdx, 0, recordToRestore);
                     } else {
                         next.push(recordToRestore);
                     }
-                    setMemoryCount(next.length);
-                    const graph = prepareMemoryGraph(next, graphData?.map || null);
-                    setGraphData({ graph, map: graphData?.map || null });
                     return next;
                 });
                 clearFeedback();
@@ -162,17 +149,71 @@ export function useMemoryPageData(
             delete removeTimers.current[id];
         }, 5000);
 
-    }, [records, graphData?.map, setWarning, setError, clearFeedback, addMemory]);
+    }, [records, updateRecordsAndGraph, setWarning, setError, clearFeedback, addMemory]);
+
+    const removeMemories = useCallback(async (ids: string[]) => {
+        const uniqueIds = Array.from(new Set(ids));
+        if (uniqueIds.length === 0) {
+            return [] as MemoryDeleteResult[];
+        }
+
+        uniqueIds.forEach((memoryId) => {
+            if (removeTimers.current[memoryId]) {
+                window.clearTimeout(removeTimers.current[memoryId]);
+                delete removeTimers.current[memoryId];
+            }
+        });
+
+        const snapshot = records;
+        const selectedRecords = snapshot.filter((record) => uniqueIds.includes(record.id));
+        if (selectedRecords.length === 0) {
+            clearSelectedMemoryIds();
+            return [] as MemoryDeleteResult[];
+        }
+
+        setPending(`Deleting ${selectedRecords.length} ${selectedRecords.length === 1 ? "memory" : "memories"}...`);
+        const optimistic = snapshot.filter((record) => !uniqueIds.includes(record.id));
+        updateRecordsAndGraph((current) => current.filter((record) => !uniqueIds.includes(record.id)));
+        clearSelectedMemoryIds();
+
+        const results = await deleteMemories(uniqueIds);
+        const failedIds = results.filter((result) => !result.ok).map((result) => result.memoryId);
+
+        if (failedIds.length > 0) {
+            const failedSet = new Set(failedIds);
+            const restored = snapshot.filter((record) => !uniqueIds.includes(record.id) || failedSet.has(record.id));
+            syncRecordsAndGraph(restored);
+            setSelectedMemoryIds(failedIds);
+
+            const failureMessages = results
+                .filter((result) => !result.ok)
+                .map((result) => result.error)
+                .filter((error): error is string => Boolean(error));
+            const failureLabel = failedIds.length === 1 ? "memory" : "memories";
+            const deletedCount = selectedRecords.length - failedIds.length;
+            setError(`Deleted ${deletedCount} ${deletedCount === 1 ? "memory" : "memories"}, but ${failedIds.length} ${failureLabel} failed to delete.${failureMessages.length > 0 ? ` ${failureMessages[0]}` : ""}`, {
+                retryAction: () => {
+                    void removeMemories(failedIds);
+                },
+                retryLabel: "Retry delete",
+            });
+        } else {
+            setSuccess(`Deleted ${selectedRecords.length} ${selectedRecords.length === 1 ? "memory" : "memories"}`);
+        }
+
+        return results;
+    }, [records, syncRecordsAndGraph, updateRecordsAndGraph, setPending, setError, setSuccess]);
 
     useEffect(() => {
         memoryMutationsSignal.value = {
             addMemory,
             removeMemory,
+            removeMemories,
             feedback,
             clearFeedback,
             clearError
         };
-    }, [addMemory, removeMemory, feedback, clearFeedback, clearError]);
+    }, [addMemory, removeMemory, removeMemories, feedback, clearFeedback, clearError]);
 
     const loadData = useCallback(async () => {
         if (!pid || !enabled) return;

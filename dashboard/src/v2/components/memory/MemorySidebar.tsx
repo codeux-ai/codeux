@@ -1,7 +1,7 @@
 import { h } from "preact";
 import { useEffect, useRef } from "preact/hooks";
 import { ChevronDown, ChevronRight } from "lucide-preact";
-import { memorySidebarExpandedSignal, searchQuerySignal } from "./memoryState.js";
+import { clearSelectedMemoryIds, memorySidebarExpandedSignal, searchQuerySignal } from "./memoryState.js";
 import { MemorySearch } from "./MemorySearch.js";
 import { MemoryList } from "./MemoryList.js";
 import type { MemNode } from "../../lib/memory-graph.js";
@@ -18,6 +18,7 @@ const MemorySidebar = ({ nodes, onSelectNode }: MemorySidebarProps) => {
   useEffect(() => {
     if (previousExpanded.current && !isExpanded) {
       searchQuerySignal.value = "";
+      clearSelectedMemoryIds();
     }
     previousExpanded.current = isExpanded;
   }, [isExpanded]);

@@ -73,6 +73,28 @@ export const deleteMemory = async (memoryId: string): Promise<void> => {
   return fetchVoid(`/api/memories/${memoryId}`, { method: "DELETE" });
 };
 
+export interface MemoryDeleteResult {
+  memoryId: string;
+  ok: boolean;
+  error: string | null;
+}
+
+export const deleteMemories = async (memoryIds: string[]): Promise<MemoryDeleteResult[]> => {
+  const uniqueIds = Array.from(new Set(memoryIds));
+  return Promise.all(uniqueIds.map(async (memoryId) => {
+    try {
+      await deleteMemory(memoryId);
+      return { memoryId, ok: true, error: null };
+    } catch (error) {
+      return {
+        memoryId,
+        ok: false,
+        error: error instanceof Error ? error.message : `Request failed: /api/memories/${memoryId}`,
+      };
+    }
+  }));
+};
+
 // --- Bulk memory clear (danger zone) ---
 
 export type MemoryClearTier = "short_term" | "long_term" | "all";

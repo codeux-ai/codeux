@@ -4,7 +4,7 @@ import { fireEvent, render } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import MemorySidebar from "../MemorySidebar.js";
-import { memorySidebarExpandedSignal, searchQuerySignal } from "../memoryState.js";
+import { memorySidebarExpandedSignal, searchQuerySignal, selectedMemoryIdsSignal } from "../memoryState.js";
 import type { MemNode } from "../../../lib/memory-graph.js";
 
 expect.extend(matchers);
@@ -36,6 +36,7 @@ describe("MemorySidebar", () => {
         document.body.innerHTML = "";
         memorySidebarExpandedSignal.value = false;
         searchQuerySignal.value = "";
+        selectedMemoryIdsSignal.value = [];
     });
 
     test("starts collapsed with an open action and a left-facing desktop arrow", () => {
@@ -54,6 +55,7 @@ describe("MemorySidebar", () => {
     test("expands, collapses, and clears the search query when closing", () => {
         memorySidebarExpandedSignal.value = true;
         searchQuerySignal.value = "alpha";
+        selectedMemoryIdsSignal.value = ["memory-1"];
 
         const { getByRole, queryByRole, container } = render(
             <MemorySidebar nodes={[buildNode()]} onSelectNode={vi.fn()} />
@@ -67,6 +69,7 @@ describe("MemorySidebar", () => {
 
         expect(memorySidebarExpandedSignal.value).toBe(false);
         expect(searchQuerySignal.value).toBe("");
+        expect(selectedMemoryIdsSignal.value).toEqual([]);
         expect(getByRole("button", { name: "Open memory sidebar" })).toHaveAttribute("aria-expanded", "false");
         expect(queryByRole("textbox", { name: "Search memories" })).toBeNull();
         expect(container.querySelector("[data-sidebar-toggle-icon]")).toHaveClass("rotate-180");

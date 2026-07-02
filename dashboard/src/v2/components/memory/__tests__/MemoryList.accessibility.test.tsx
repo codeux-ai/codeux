@@ -4,7 +4,7 @@ import { render } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { expect, test, describe, vi, afterEach } from "vitest";
 import { MemoryList } from "../MemoryList.js";
-import { searchQuerySignal } from "../memoryState.js";
+import { memoryMutationsSignal, searchQuerySignal, selectedMemoryIdsSignal } from "../memoryState.js";
 import type { MemNode } from "../../../lib/memory-graph.js";
 
 expect.extend(matchers);
@@ -35,7 +35,17 @@ describe("MemoryList", () => {
     afterEach(() => {
         document.body.innerHTML = "";
         searchQuerySignal.value = "";
+        selectedMemoryIdsSignal.value = [];
     });
+
+    memoryMutationsSignal.value = {
+        addMemory: vi.fn(),
+        removeMemory: vi.fn(),
+        removeMemories: vi.fn().mockResolvedValue([]),
+        feedback: { status: "idle", message: null },
+        clearFeedback: vi.fn(),
+        clearError: vi.fn(),
+    };
 
     test("renders empty state polite announcement", () => {
         searchQuerySignal.value = "nonexistent query";
@@ -57,5 +67,25 @@ describe("MemoryList", () => {
         );
 
         expect(getByText("Showing 1 of 2 memories")).toBeInTheDocument();
+    });
+
+    test("select all visible only targets currently filtered nodes", () => {
+        searchQuerySignal.value = "alpha";
+        const { getByRole } = render(
+            <MemoryList
+                nodes={[
+                    buildNode({ id: "memory-1", content: "Alpha project memory" }),
+                    buildNode({ id: "memory-2", content: "Beta note" }),
+                ]}
+                onSelectNode={vi.fn()}
+            />
+        );
+
+        const selectAll = getByRole("button", { name: "Select all visible" });
+        expect(selectAll).toBeInTheDocument();
+
+        selectAll.click();
+
+        expect(selectedMemoryIdsSignal.value).toEqual(["memory-1"]);
     });
 });
