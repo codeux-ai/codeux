@@ -4,6 +4,11 @@ import type { PrUsageStats } from "./pr-description-composer.js";
 export type PrBillingMode = "billed" | "subscription";
 
 export interface PrBillingModeProviderConfig {
+  provider?: string;
+  model?: string;
+  customModel?: string;
+  qwenModelId?: string;
+  openCodeModelId?: string;
   authType?: "apiKey" | "localAuth" | "dashboardAuth";
   mountAuth?: boolean;
 }
@@ -23,6 +28,60 @@ export function classifyProviderBilling(
 
   const authType = providerConfig?.authType || (providerConfig?.mountAuth ? "localAuth" : "apiKey");
   return authType === "apiKey" ? "billed" : "subscription";
+}
+
+function normalized(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed.toLowerCase() : null;
+}
+
+function configProviderMatches(
+  provider: string,
+  configId: string,
+  config: PrBillingModeProviderConfig | undefined,
+): boolean {
+  return normalized(config?.provider) === normalized(provider) || normalized(configId) === normalized(provider);
+}
+
+function configModelCandidates(config: PrBillingModeProviderConfig): string[] {
+  return [
+    config.model,
+    config.customModel,
+    config.qwenModelId,
+    config.openCodeModelId,
+  ].flatMap((value) => {
+    const candidate = normalized(value);
+    return candidate ? [candidate] : [];
+  });
+}
+
+function hasProviderConfig(
+  entry: [string, PrBillingModeProviderConfig | undefined],
+): entry is [string, PrBillingModeProviderConfig] {
+  return Boolean(entry[1]);
+}
+
+function classifyUsageGroupBilling(
+  group: PrUsageGroup,
+  providerConfigs: Record<string, PrBillingModeProviderConfig | undefined>,
+): PrBillingMode {
+  if (group.provider === "jules") return "subscription";
+
+  const groupModel = normalized(group.model);
+  if (groupModel) {
+    const modelMatches = Object.entries(providerConfigs)
+      .filter(hasProviderConfig)
+      .filter(([configId, config]) => configProviderMatches(group.provider, configId, config))
+      .filter(([, config]) => configModelCandidates(config).includes(groupModel));
+
+    if (modelMatches.length > 0) {
+      return modelMatches.some(([configId, config]) => classifyProviderBilling(config?.provider || configId, config) === "billed")
+        ? "billed"
+        : "subscription";
+    }
+  }
+
+  return classifyProviderBilling(group.provider, providerConfigs[group.provider]);
 }
 
 /**
@@ -63,7 +122,7 @@ export function foldUsageGroups(
     stats.toolCallCount += group.usage.toolCallCount ?? 0;
     stats.activeTimeMs += group.usage.activeTimeMs;
 
-    const mode = classifyProviderBilling(group.provider, providerConfigs[group.provider]);
+    const mode = classifyUsageGroupBilling(group, providerConfigs);
     if (mode === "billed") {
       stats.billedInvocationCount += group.usage.invocationCount;
       billedCost += group.usage.totalCostUsd;

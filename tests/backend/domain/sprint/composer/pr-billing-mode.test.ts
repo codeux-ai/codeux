@@ -82,6 +82,29 @@ describe("foldUsageGroups", () => {
     expect(folded.costUsd).toBe(0.8);
   });
 
+  it("matches provider instances by model before falling back to provider-family auth", () => {
+    const groups: PrUsageGroup[] = [
+      { provider: "codex", model: "google/gemma-4-26b-a4b-qat", usage: usage({ invocationCount: 1, totalCostUsd: 0.01 }) },
+      { provider: "claude-code", model: "google/gemma-4-26b-a4b-qat", usage: usage({ invocationCount: 2, totalCostUsd: 0.02 }) },
+      { provider: "opencode", model: "google/gemma-4-26b-a4b-qat", usage: usage({ invocationCount: 2, totalCostUsd: 0.03 }) },
+      { provider: "qwen-code", model: "google/gemma-4-26b-a4b-qat", usage: usage({ invocationCount: 1, totalCostUsd: 0.04 }) },
+    ];
+
+    const folded = foldUsageGroups(groups, {
+      codex: { provider: "codex", model: "gpt-5.5", authType: "dashboardAuth", mountAuth: true },
+      "codex-local": { provider: "codex", customModel: "google/gemma-4-26b-a4b-qat", authType: "apiKey", mountAuth: false },
+      "claude-code": { provider: "claude-code", model: "claude-sonnet-5", authType: "dashboardAuth", mountAuth: true },
+      "claude-code-local": { provider: "claude-code", customModel: "google/gemma-4-26b-a4b-qat", authType: "apiKey", mountAuth: false },
+      opencode: { provider: "opencode", model: "google/gemma-4-26b-a4b-qat", openCodeModelId: "gemma-4-26b-a4b-qat", authType: "apiKey" },
+      "qwen-code-local": { provider: "qwen-code", qwenModelId: "google/gemma-4-26b-a4b-qat", authType: "apiKey" },
+    });
+
+    expect(folded.billedInvocationCount).toBe(6);
+    expect(folded.subscriptionInvocationCount).toBe(0);
+    expect(folded.costUsd).toBeCloseTo(0.1, 5);
+    expect(folded.includedCostUsd).toBeNull();
+  });
+
   it("prices subscription groups at the same catalog rate into includedCostUsd, separate from costUsd", () => {
     const groups: PrUsageGroup[] = [
       { provider: "claude-code", model: "claude-opus-4-6", usage: usage({ invocationCount: 3, totalCostUsd: 1.5 }) },

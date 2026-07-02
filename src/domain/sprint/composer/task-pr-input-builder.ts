@@ -20,14 +20,15 @@ export interface BuildTaskPrComposerInputArgs {
 }
 
 export function buildTaskPrComposerInput(args: BuildTaskPrComposerInputArgs): TaskPrComposerInput {
-  const groups = args.executionRepository ? args.executionRepository.getTaskUsageGroups(args.projectId, args.task.id) : [];
+  const telemetryTaskId = args.task.record_id?.trim() || args.task.id;
+  const groups = args.executionRepository ? args.executionRepository.getTaskUsageGroups(args.projectId, telemetryTaskId) : [];
   const providerConfigs = Object.fromEntries(
     Object.entries(args.aiProviderSettings.providers || {}).map(([id, config]) => [id, config]),
   );
   const usage = groups.length > 0 ? foldUsageGroups(groups, providerConfigs) : null;
 
   const invocations = args.executionRepository
-    ? args.executionRepository.listProviderInvocationsForTask(args.projectId, args.task.id)
+    ? args.executionRepository.listProviderInvocationsForTask(args.projectId, telemetryTaskId)
     : [];
   const latestModel = invocations.length > 0 ? invocations[invocations.length - 1].model : null;
 
