@@ -192,6 +192,26 @@ interface TaskRunEventRow {
   created_at: string;
 }
 
+interface TaskWorkspaceResumeTargetRow {
+  task_run_id: string;
+  provider: string | null;
+  session_id: string | null;
+  session_name: string | null;
+  worker_branch: string | null;
+  pr_url: string | null;
+  payload_json: string | null;
+}
+
+export interface TaskWorkspaceResumeTarget {
+  taskRunId: string;
+  provider: string | null;
+  sessionId: string;
+  sessionName: string | null;
+  workerBranch: string | null;
+  prUrl: string | null;
+  worktreePath: string | null;
+}
+
 interface SprintRunEventRow {
   id: string;
   sprint_run_id: string;
@@ -1047,6 +1067,91 @@ export class ExecutionRepository {
         LIMIT 1
       `).get(taskId) as TaskRunRow | undefined;
     return row ? this.mapTaskRunRow(row) : null;
+  }
+
+  getLatestTaskRunWithWorkspace(taskId: string, sprintRunId?: string): TaskRunRecord | null {
+    requireTask(this.db, taskId);
+    const row = sprintRunId
+      ? this.db.prepare(`
+        SELECT *
+        FROM task_runs
+        WHERE task_id = ?
+        AND sprint_run_id = ?
+        AND worker_branch IS NOT NULL
+        ORDER BY rowid DESC
+        LIMIT 1
+      `).get(taskId, sprintRunId) as TaskRunRow | undefined
+      : this.db.prepare(`
+        SELECT *
+        FROM task_runs
+        WHERE task_id = ?
+        AND worker_branch IS NOT NULL
+        ORDER BY rowid DESC
+        LIMIT 1
+      `).get(taskId) as TaskRunRow | undefined;
+    return row ? this.mapTaskRunRow(row) : null;
+  }
+
+  getLatestTaskWorkspaceResumeTarget(taskId: string, sprintRunId?: string): TaskWorkspaceResumeTarget | null {
+    requireTask(this.db, taskId);
+    const row = sprintRunId
+      ? this.db.prepare(`
+        SELECT
+          tr.id AS task_run_id,
+          tr.provider,
+          tr.session_id,
+          tr.session_name,
+          tr.worker_branch,
+          tr.pr_url,
+          e.payload_json
+        FROM task_run_events e
+        INNER JOIN task_runs tr ON tr.id = e.task_run_id
+        WHERE tr.task_id = ?
+        AND tr.sprint_run_id = ?
+        AND e.event_type = 'cli_workspace_bound'
+        ORDER BY e.created_at DESC, e.rowid DESC
+        LIMIT 1
+      `).get(taskId, sprintRunId) as TaskWorkspaceResumeTargetRow | undefined
+      : this.db.prepare(`
+        SELECT
+          tr.id AS task_run_id,
+          tr.provider,
+          tr.session_id,
+          tr.session_name,
+          tr.worker_branch,
+          tr.pr_url,
+          e.payload_json
+        FROM task_run_events e
+        INNER JOIN task_runs tr ON tr.id = e.task_run_id
+        WHERE tr.task_id = ?
+        AND e.event_type = 'cli_workspace_bound'
+        ORDER BY e.created_at DESC, e.rowid DESC
+        LIMIT 1
+      `).get(taskId) as TaskWorkspaceResumeTargetRow | undefined;
+
+    if (!row) {
+      return null;
+    }
+
+    const payload = parsePayloadJson(row.payload_json);
+    const workspaceSessionId = asNonEmptyString(payload?.workspaceSessionId) || asNonEmptyString(row.session_id);
+    if (!workspaceSessionId) {
+      return null;
+    }
+
+    const sessionName = workspaceSessionId === row.session_id
+      ? row.session_name
+      : `sessions/${workspaceSessionId}`;
+
+    return {
+      taskRunId: row.task_run_id,
+      provider: row.provider,
+      sessionId: workspaceSessionId,
+      sessionName,
+      workerBranch: row.worker_branch,
+      prUrl: row.pr_url,
+      worktreePath: asNonEmptyString(payload?.worktreePath),
+    };
   }
 
   getProjectExecutionSnapshot(

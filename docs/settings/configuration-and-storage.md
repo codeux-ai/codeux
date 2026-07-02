@@ -489,7 +489,7 @@ Runtime cleanup notes:
 - cleanup treats expired sprint leases as stale, not active ownership
 - when a stale `running` sprint run has no active dispatches and its heartbeat is older than the cleanup cutoff, Code UX fails that run and releases the expired sprint lease in the same sweep
 - startup now prunes orphaned virtual worker endpoints before new virtual cycles begin
-- startup schedules a fast, label-filtered stale Docker workspace prune for failed, finished, unrecoverable, and outdated sessions while preserving content-addressed setup-cache images for reuse
+- startup schedules a fast, label-filtered stale Docker workspace prune for untracked, unrecoverable, and outdated sessions while preserving content-addressed setup-cache images for reuse. Tracked CLI sessions marked `FAILED` remain protected so same-workspace task retry can resume their Docker workspace/runtime volumes.
 - successful CLI task runs now preserve their workspace while the owning sprint is still non-terminal (so QA follow-up and sprint-side retries can continue in the same workspace handle)
 - preserved workspaces are tagged by persisted task-run workspace metadata (including Docker `docker-volume://...` handles) and cleaned when the sprint reaches a terminal state (`completed`, `failed`, or `cancelled`); cleanup removes both the workspace volume and its `-runtime` provider-state volume
 - terminal sprint completion/failure/cancellation removes those retained CLI task workspaces immediately instead of waiting for the next restart sweep

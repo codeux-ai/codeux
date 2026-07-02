@@ -432,6 +432,80 @@ describe("RuntimeStartupRecoveryService", () => {
     });
   });
 
+  it("fails orphaned running task coding provider invocations when the linked task run already failed", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Failed Provider Orphan Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/failed-provider-orphan-recovery-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Failed Provider Orphan Recovery Sprint",
+      number: 12,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Failed task with orphaned provider",
+      executorType: "docker_cli",
+      status: "pending",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "docker_cli",
+      status: "paused",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "failed",
+      finishedAt: "2026-03-29T10:03:00.000Z",
+    } as any);
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "codex",
+      mode: "docker_cli",
+      sessionId: "cli-codex-orphaned",
+      state: "FAILED",
+      startedAt: "2026-03-29T10:00:00.000Z",
+      finishedAt: "2026-03-29T10:03:00.000Z",
+    });
+    const providerInvocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      taskRunId: taskRun.id,
+      sessionId: "cli-codex-orphaned",
+      provider: "codex",
+      purpose: "task_coding",
+      status: "running",
+      startedAt: "2026-03-29T10:00:00.000Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledTaskCodingProviderIds).toEqual(expect.arrayContaining([providerInvocation.id]));
+    expect(executionRepository.getProviderInvocationUsage(providerInvocation.id)).toMatchObject({
+      status: "failed",
+      finishedAt: expect.any(String),
+    });
+  });
+
   it("fails paused sprint runs whose associated sprint reached a terminal state", async () => {
     const {
       projectRepository,
