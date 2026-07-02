@@ -35,6 +35,7 @@ import {
 } from "./provider-runtime-artifacts.js";
 import { readQwenLogData, readCodexLatestSessionJson, readClaudeSessionJsonl, parseAntigravityConversationId, readAntigravityTranscript } from "./provider-transcripts.js";
 import { parseOpenCodeJsonLines } from "./provider-logs/opencode-log-parser.js";
+import { parseAntigravityDatabase } from "./provider-logs/antigravity-log-parser.js";
 import {
   collectProviderUsageTelemetry,
   readQwenOpenAiLogRecords,
@@ -278,6 +279,27 @@ export class ProviderRunner implements IProviderRunner {
       localMcpCleanup.push(...entries);
     }
 
+    // A resumed antigravity conversation (`--conversation=<id>`) keeps appending to
+    // the same gen_metadata table across separate CLI invocations, so read the
+    // highest idx already present *before* this run so only the generations this
+    // run adds get summed afterward — otherwise a follow-up would re-report every
+    // earlier generation's tokens too (see parseAntigravityDatabase).
+    let antigravityBaselineIdx: number | null = null;
+    if (provider === "antigravity" && continueSession && nativeSessionId) {
+      const peekDbPath = path.join(os.tmpdir(), `agy-baseline-${nativeSessionId.replace(/[^A-Za-z0-9_-]/g, "_")}-${randomUUID()}.db`);
+      try {
+        const resolved = await this.resolveAntigravityDatabase(cwd, nativeSessionId, workflowSettings.executionMode, peekDbPath);
+        if (resolved) {
+          antigravityBaselineIdx = parseAntigravityDatabase(peekDbPath)?.lastIdx ?? null;
+        }
+      } catch {
+        // Best-effort: if this fails, the run falls back to summing the whole
+        // conversation, which just re-reports rather than losing usage.
+      } finally {
+        await fs.rm(peekDbPath, { force: true }).catch(() => undefined);
+      }
+    }
+
     // Start each qwen run from an empty log directory so usage aggregation only
     // counts this invocation (the directory is reused across a session's runs).
     if (provider === "qwen-code") {
@@ -487,6 +509,7 @@ export class ProviderRunner implements IProviderRunner {
         startTimeMs: startedMs,
         executionMode: workflowSettings.executionMode,
         antigravitySessionDbPath: tempDbPath,
+        antigravitySinceIdx: antigravityBaselineIdx,
         antigravityTranscriptJsonl,
         opencodeExportJson,
         opencodeBaselineUsage: input.openCodeBaselineUsage,

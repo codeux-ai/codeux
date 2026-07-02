@@ -109,10 +109,11 @@ For Docker-backed Claude Code runs, Code UX reads the same session JSONL from th
 Antigravity runs with `agy` CLI commands.
 
 Code UX parses session data from two sources:
-- **Token usage**: reads the conversation's SQLite database file (`~/.gemini/antigravity-cli/conversations/<id>.db` or fallback path `~/.gemini/antigravity/conversations/<id>.db`). It decodes the custom Protobuf data stored in the latest row of the `gen_metadata` table to extract:
+- **Token usage**: reads the conversation's SQLite database file (`~/.gemini/antigravity-cli/conversations/<id>.db` or fallback path `~/.gemini/antigravity/conversations/<id>.db`). It decodes the custom Protobuf data stored in **every** row of the `gen_metadata` table and sums across them to extract:
   - `inputTokens`
-  - `outputTokens` (falling back to reasoning + candidates if output tokens are zero or missing)
+  - `outputTokens` (falling back to reasoning + candidates if output tokens are zero or missing, per row)
   - `reasoningTokens`
+  - `cachedInputTokens` (inferred field mapping — see below)
 - **Full conversation transcript**: reads the JSONL transcript file (`~/.gemini/antigravity-cli/brain/<id>/.system_generated/logs/transcript.jsonl` or fallback path under `antigravity`). The transcript parser processes:
   - `user` turns from `USER_INPUT` entry types (stripping `<USER_REQUEST>` wrapper tags).
   - `assistant` and `tool_call` turns from `PLANNER_RESPONSE` entry types.
@@ -121,7 +122,11 @@ Code UX parses session data from two sources:
 
 For Docker-backed Antigravity runs, the SQLite database is encoded to Base64 within the container first, and then decoded to a temporary file on the host before parsing to bypass Docker named volume permission issues.
 
-Antigravity does not currently track cached tokens (`AntigravityUsageTotals` has no cached field, so `cachedInputTokens` always reports `0` for this provider) — the protobuf field mapping for a cache counter (if `agy` even reports one) has not been reverse-engineered against live data, so it's left unimplemented rather than guessed.
+Each `gen_metadata` row is **one model call**, not a running session total — confirmed empirically against live conversation databases, where a single conversation can carry anywhere from a handful to several hundred rows and consecutive rows' input-token fields fluctuate rather than grow monotonically. The original implementation read only the *latest* row, which under-reported total usage by roughly the number of generations in the run (verified against real data: a 203-generation conversation showed 1,268 input tokens under the old logic vs. 2,372,421 actually used). `parseAntigravityDatabase` now sums every row instead.
+
+There is no official schema for this internal protobuf, so the field mapping is inferred rather than documented: input/output/reasoning/candidates are the same fields the original implementation used, and a new field (proto field 5) is treated as **cached/reused-context tokens** — it's present only on some rows (consistent with proto3 omitting zero-valued fields, i.e. "no cache hit this turn"), and where present its value closely tracks the *previous* row's input tokens (that turn's context, now served from cache on the next one).
+
+Because `agy --conversation=<id>` resumes the same conversation db across follow-up/retry invocations — accumulating `gen_metadata` rows across separate CLI runs just like Codex's rollout file or OpenCode's session store — a resumed run must not re-sum generations an earlier invocation already reported. There's no timestamp column to window by, so instead `ProviderRunner` peeks the db's current highest `idx` *before* a resumed run starts (a lightweight read-only query, self-contained to `provider-runner.ts`/`antigravity-log-parser.ts` — no cross-invocation baseline needs to be persisted or threaded through callers, unlike the OpenCode fix) and only sums rows past that cutoff afterward.
 
 ### OpenCode
 

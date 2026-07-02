@@ -345,6 +345,12 @@ export async function collectProviderUsageTelemetry(args: {
   executionMode?: "HOST" | "DOCKER";
   antigravitySessionDbPath?: string | null;
   antigravityTranscriptJsonl?: string | null;
+  /** The highest `gen_metadata` idx already summed by a previous invocation of
+   *  this same antigravity conversation (when `--conversation=<id>` resumes
+   *  it). Only rows with a higher idx are summed, so a follow-up run reports
+   *  only the generations it added — the conversation db otherwise
+   *  accumulates rows across resumes just like Codex's rollout file. */
+  antigravitySinceIdx?: number | null;
   /** stdout of `opencode export <sessionID>`, the authoritative usage source for
    *  opencode (the `run --format json` stream carries no token usage). */
   opencodeExportJson?: string | null;
@@ -487,7 +493,7 @@ export async function collectProviderUsageTelemetry(args: {
     }
 
     if (args.antigravitySessionDbPath) {
-      const dbResult = parseAntigravityDatabase(args.antigravitySessionDbPath);
+      const dbResult = parseAntigravityDatabase(args.antigravitySessionDbPath, args.antigravitySinceIdx ?? undefined);
       if (dbResult) {
         usage = dbResult.usage;
         rawUsageJson = dbResult.rawUsageJson;
@@ -507,6 +513,7 @@ export async function collectProviderUsageTelemetry(args: {
       return {
         ...emptyTelemetry(),
         inputTokens: usage.inputTokens,
+        cachedInputTokens: usage.cachedInputTokens,
         outputTokens: usage.outputTokens,
         reasoningOutputTokens: usage.reasoningTokens,
         totalTokens: usage.inputTokens + usage.outputTokens,
