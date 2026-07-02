@@ -1,8 +1,18 @@
 import type {
+  ScheduleRecurrenceFrequency,
   ScheduleRecurrenceRule,
   SchedulerEntryRecord,
   SchedulerOccurrence,
 } from "../../contracts/scheduler-types.js";
+
+function isRecurrenceFrequency(value: unknown): value is ScheduleRecurrenceFrequency {
+  return value === "none"
+    || value === "minutely"
+    || value === "hourly"
+    || value === "daily"
+    || value === "weekly"
+    || value === "monthly";
+}
 
 const DEFAULT_RECURRENCE: ScheduleRecurrenceRule = {
   frequency: "none",
@@ -13,7 +23,7 @@ const DEFAULT_RECURRENCE: ScheduleRecurrenceRule = {
 };
 
 export function normalizeRecurrenceRule(input?: Partial<ScheduleRecurrenceRule> | null): ScheduleRecurrenceRule {
-  const frequency = input?.frequency ?? "none";
+  const frequency = isRecurrenceFrequency(input?.frequency) ? input.frequency : "none";
   const interval = Math.max(1, Math.floor(Number(input?.interval ?? 1)) || 1);
   const endMode = input?.endMode ?? "never";
   const count = endMode === "after_count"
@@ -45,6 +55,9 @@ export function addRecurrenceInterval(dateIso: string, recurrence: ScheduleRecur
   }
 
   switch (recurrence.frequency) {
+    case "minutely":
+      date.setUTCMinutes(date.getUTCMinutes() + recurrence.interval);
+      break;
     case "hourly":
       date.setUTCHours(date.getUTCHours() + recurrence.interval);
       break;

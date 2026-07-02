@@ -537,11 +537,16 @@ export class ProviderExecutionService {
       }
 
       const classification = classifyProviderError(args.provider, providerResult);
+      const retryDecision = resolveProviderRetryDecision(classification, args.workflowSettings);
+      const retryAfterIso = retryDecision
+        && !(retryDecision.kind === "rate_limit" && rateLimitRetryCount >= args.workflowSettings.maxRateLimitRetries)
+        ? retryDecision.retryAtIso
+        : null;
       if (execInvocationId) {
         this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
           lastErrorCategory: classification.category,
           lastErrorMessage: classification.userMessage,
-          lastRetryAfterIso: classification.resetAtIso,
+          lastRetryAfterIso: retryAfterIso,
         });
         this.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
           role: "system",
@@ -550,12 +555,11 @@ export class ProviderExecutionService {
             provider: args.provider,
             model: args.model,
             errorCategory: classification.category,
-            retryAfterIso: classification.resetAtIso,
+            retryAfterIso,
           },
         });
       }
 
-      const retryDecision = resolveProviderRetryDecision(classification, args.workflowSettings);
       if (retryDecision) {
         if (retryDecision.kind === "rate_limit" && rateLimitRetryCount >= args.workflowSettings.maxRateLimitRetries) {
           // fall through to terminal classified error handling below
@@ -564,8 +568,8 @@ export class ProviderExecutionService {
             rateLimitRetryCount += 1;
           }
           const retryMessage = retryDecision.kind === "quota_reset"
-            ? `Waiting for provider quota reset. Retrying at ${retryDecision.retryAtIso}.`
-            : `Provider rate-limited. Retrying at ${retryDecision.retryAtIso}.`;
+            ? `Waiting for provider quota reset. Retrying at ${retryAfterIso}.`
+            : `Provider rate-limited. Retrying at ${retryAfterIso}.`;
 
           if (args.onActivity) {
             args.onActivity(retryMessage, "system");
@@ -584,7 +588,7 @@ export class ProviderExecutionService {
                 provider: args.provider,
                 model: args.model,
                 errorCategory: classification.category,
-                retryAfterIso: retryDecision.retryAtIso,
+                retryAfterIso,
               },
             });
           }
@@ -598,9 +602,9 @@ export class ProviderExecutionService {
               purpose: args.purpose,
               kind: retryDecision.kind,
               errorCategory: classification.category,
-              retryAfterIso: retryDecision.retryAtIso,
+              retryAfterIso,
             }, {
-              sourceEventKey: `cli:provider:quota-wait:${execInvocationId ?? args.sessionId}:${retryDecision.retryAtIso}`,
+              sourceEventKey: `cli:provider:quota-wait:${execInvocationId ?? args.sessionId}:${retryAfterIso}`,
             });
           }
           continueSessionId = providerResult.nativeSessionId || (args.provider === "claude-code" ? null : args.sessionId);
@@ -610,7 +614,10 @@ export class ProviderExecutionService {
       }
 
       if (classification.category !== "UNKNOWN") {
-        throw new ProviderQuotaError(classification);
+        throw new ProviderQuotaError({
+          ...classification,
+          resetAtIso: retryAfterIso,
+        });
       }
 
       // If no retry policy handles the failure, propagate it to the caller if not OK

@@ -21,6 +21,7 @@ This document defines the visual patterns and rules for the Settings workspace. 
 4.  **Metadata and Hierarchy**:
     *   Metadata chips (`visible categories`, `unsaved edits`) and badges leverage standard tokens to maintain visual rhythm.
     *   Headers and contextual information (e.g., `SettingsHeader`) separate sections with thin borders (`--border-hairline`).
+    *   The Quality Assurance section belongs in `Settings > Sprint & Git`, directly below `Merge Gates & Autofix`, even though its persisted settings path remains `agents.qualityAssurance`.
 
 5.  **Modals**:
     *   Modals launched from settings (e.g., `TerminalLoginModal`, `TokenPricingModal`) adhere strictly to `design-system-feedback-overlays.md`: `bg-white dark:bg-void-800`, `rounded-2xl`, `shadow-[var(--elevation-floating)]`, and `border-[var(--border-hairline)]`.

@@ -57,7 +57,7 @@ describe("SchedulerActions", () => {
       scheduledFor: "2026-06-09T12:00:00.000Z",
       timezone: "Europe/Berlin",
       title: "Daily check-in",
-      recurrence: { frequency: "daily", interval: 1, endMode: "never" },
+      recurrence: { frequency: "daily", interval: 1, endMode: "never", count: null, until: null },
       chatTarget: {
         bodyMarkdown: "Please summarize progress.",
         title: "Daily check-in",
@@ -66,6 +66,24 @@ describe("SchedulerActions", () => {
       },
     });
     expect(result.result).toEqual({ entry: { id: "entry-1" } });
+  });
+
+  it("schedules sprint entries with minute-based recurrence", async () => {
+    vi.mocked(schedulerService.createEntry).mockReturnValue({ id: "entry-1" } as any);
+
+    await actions.handleSchedulerAction(makeArgs("schedule_sprint", {
+      projectId: "p1",
+      scheduledFor: "2026-06-09T12:00:00.000Z",
+      sprintId: "sprint-1",
+      recurrence: { frequency: "minutely", interval: 15, endMode: "never" },
+    }));
+
+    expect(schedulerService.createEntry).toHaveBeenCalledWith("p1", {
+      targetType: "sprint",
+      scheduledFor: "2026-06-09T12:00:00.000Z",
+      recurrence: { frequency: "minutely", interval: 15, endMode: "never", count: null, until: null },
+      sprintTarget: { sprintId: "sprint-1" },
+    });
   });
 
   it("schedules quicksprints from flattened MCP fields", async () => {
@@ -129,6 +147,19 @@ describe("SchedulerActions", () => {
       },
     });
     expect(result.result).toEqual({ entry: { id: "entry-1", chatTarget: { bodyMarkdown: "new" } } });
+  });
+
+  it("normalizes minute-based recurrence on update", async () => {
+    vi.mocked(schedulerService.updateEntry).mockReturnValue({ id: "entry-1" } as any);
+
+    await actions.handleSchedulerAction(makeArgs("update", {
+      entryId: "entry-1",
+      recurrence: { frequency: "minutely", interval: 30, endMode: "after_count", count: 3 },
+    }));
+
+    expect(schedulerService.updateEntry).toHaveBeenCalledWith("entry-1", {
+      recurrence: { frequency: "minutely", interval: 30, endMode: "after_count", count: 3, until: null },
+    });
   });
 
   it("requires approval before deleting a scheduler entry", async () => {

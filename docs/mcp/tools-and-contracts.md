@@ -22,6 +22,8 @@ These cover:
 - `manage_preview`
 - `manage_telemetry`
 
+The same management domains are also exposed through the direct `codeux` CLI management surface. See [CLI Commands Reference](../reference/cli-commands.md) for the command syntax, aliases, interactive prompting behavior, and approval handling.
+
 ### Core tools
 Implemented in:
 - `src/mcp/core-tool-handler.ts`
@@ -183,6 +185,8 @@ For scheduler calls:
 - `manage_scheduler` supports `list`, `create`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `update`, `delete`, and `run_due`.
 - Generic `create` requires `targetType: "sprint" | "quicksprint" | "chat"`.
 - The `schedule_*` aliases infer the target type and accept flattened target fields.
+- Recurrence `frequency` accepts `minutely`, `hourly`, `daily`, `weekly`, and `monthly`; the dashboard renders `minutely` as `Minutes` and the matching recurrence summaries use labels such as `Every minute` and `Every 15 minutes`.
+- Minute recurrence uses the same UTC scheduler math as longer intervals, so the normalized rule advances `nextRunAt` and expands occurrences exactly like other frequencies once the minute literal has been parsed.
 - Scheduled quicksprints use the same `taskCount` number or numeric-string normalization as direct quicksprints.
 - Scheduled chat messages use `bodyMarkdown`, optional `threadId`, optional `connectionId`, and optional `title`. When due, the scheduler posts through the same chat runtime used by dashboard conversations.
 - `update` supports pausing and resuming entries via the `status` field. Resuming a `paused` entry to `scheduled` recomputes the next run time to the next future occurrence, preventing immediate execution of missed runs. Pause/resume acts as automation gating and does not manually trigger the target.

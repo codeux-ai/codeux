@@ -597,10 +597,16 @@ describe("classifyProviderError", () => {
       expect(computeResetAfterFromClockTime("try again at 3:54 AM.", now)).toBe("2h54m0s");
     });
 
-    it("rolls a clock time that already passed today to tomorrow", () => {
-      // Now: 05:00, reset at 3:54 AM → already passed, so next 3:54 AM is ~21h57m away.
-      const now = new Date(2026, 5, 2, 5, 0, 30, 0).getTime();
-      expect(computeResetAfterFromClockTime("try again at 3:54 AM.", now)).toBe("22h53m30s");
+    it("resolves a plausible next-day Codex reset from an evening runtime", () => {
+      // Now: 20:45, reset at 3:54 AM tomorrow → 7h09m0s away, which is still plausible.
+      const now = new Date(2026, 5, 2, 20, 45, 0, 0).getTime();
+      expect(computeResetAfterFromClockTime("try again at 3:54 AM.", now)).toBe("7h9m0s");
+    });
+
+    it("rejects a next-day rollover that would be nearly a full day away", () => {
+      // Now: 20:45, reset at 8:00 PM tomorrow → the clock-only hint is too ambiguous.
+      const now = new Date(2026, 5, 2, 20, 45, 0, 0).getTime();
+      expect(computeResetAfterFromClockTime("try again at 8:00 PM.", now)).toBeNull();
     });
 
     it("handles 12-hour PM conversion", () => {

@@ -275,7 +275,7 @@ The Agents page now shows:
 - out-of-sync state for changed markdown
 - `Import` action for linked markdown agents
 - `Sync All` action for pulling all out-of-sync local markdown back into sqlite
-- agent preset management only; QA execution settings live under `Settings -> Agents`
+- agent preset management only; QA execution settings live under `Settings -> Sprint & Git`
 
 ### Sprints page
 

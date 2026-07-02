@@ -2,7 +2,7 @@ import type { QuicksprintExecutionInput } from "./quicksprint-types.js";
 
 export type ScheduleTargetType = "sprint" | "quicksprint" | "chat" | "memory_remediation";
 export type ScheduleStatus = "scheduled" | "paused" | "completed" | "failed" | "cancelled";
-export type ScheduleRecurrenceFrequency = "none" | "hourly" | "daily" | "weekly" | "monthly";
+export type ScheduleRecurrenceFrequency = "none" | "minutely" | "hourly" | "daily" | "weekly" | "monthly";
 export type ScheduleRecurrenceEndMode = "never" | "after_count" | "on_date";
 
 export interface ScheduleRecurrenceRule {

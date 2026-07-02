@@ -127,11 +127,21 @@ const targetLabel = (targetType: ScheduleTargetType): string => (
   targetType === "sprint" ? "Sprint" : targetType === "quicksprint" ? "Quicksprint" : targetType === "memory_remediation" ? "Memory" : "Chat"
 );
 
+const recurrenceFrequencyLabel = (frequency: ScheduleRecurrenceRule["frequency"], interval: number): string => {
+  if (frequency === "minutely") {
+    return interval === 1 ? "minute" : `${interval} minutes`;
+  }
+  if (interval === 1) {
+    return frequency;
+  }
+  return `${interval} ${frequency}`;
+};
+
 const recurrenceSummary = (recurrence: ScheduleRecurrenceRule): string => {
   if (recurrence.frequency === "none") {
     return "One time";
   }
-  const every = recurrence.interval === 1 ? recurrence.frequency : `${recurrence.interval} ${recurrence.frequency}`;
+  const every = recurrenceFrequencyLabel(recurrence.frequency, recurrence.interval);
   if (recurrence.endMode === "after_count" && recurrence.count) {
     return `Every ${every}, ${recurrence.count} runs`;
   }
@@ -740,6 +750,7 @@ export const SchedulerPage: FunctionComponent = () => {
                       value={frequency}
                       onChange={(value) => setFrequency(value as ScheduleRecurrenceRule["frequency"])}
                       options={[
+                        { value: "minutely", label: "Minutes" },
                         { value: "hourly", label: "Hours" },
                         { value: "daily", label: "Days" },
                         { value: "weekly", label: "Weeks" },
