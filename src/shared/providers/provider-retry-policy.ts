@@ -7,22 +7,36 @@ export interface ProviderRetryDecision {
   retryAtIso: string;
 }
 
+const UNCERTAIN_QUOTA_RETRY_DELAY_MS = 30 * 60 * 1000;
+
+const buildUncertainQuotaDecision = (nowMs: number): ProviderRetryDecision => ({
+  kind: "quota_reset",
+  delayMs: UNCERTAIN_QUOTA_RETRY_DELAY_MS,
+  retryAtIso: new Date(nowMs + UNCERTAIN_QUOTA_RETRY_DELAY_MS).toISOString(),
+});
+
 export function resolveProviderRetryDecision(
   classification: ProviderErrorClassification,
   workflowSettings: Pick<CliWorkflowSettings, "retryOnQuotaReset" | "retryOnRateLimit" | "rateLimitRetryDelaySeconds">,
   nowMs: number = Date.now(),
 ): ProviderRetryDecision | null {
   if (classification.category === "QUOTA_EXHAUSTED") {
-    if (!workflowSettings.retryOnQuotaReset || !classification.resetAtIso) {
+    if (!workflowSettings.retryOnQuotaReset) {
       return null;
+    }
+    if (!classification.resetAtIso) {
+      return buildUncertainQuotaDecision(nowMs);
     }
     const retryAtMs = new Date(classification.resetAtIso).getTime();
     if (!Number.isFinite(retryAtMs)) {
-      return null;
+      return buildUncertainQuotaDecision(nowMs);
+    }
+    if (retryAtMs <= nowMs) {
+      return buildUncertainQuotaDecision(nowMs);
     }
     return {
       kind: "quota_reset",
-      delayMs: Math.max(0, retryAtMs - nowMs),
+      delayMs: retryAtMs - nowMs,
       retryAtIso: new Date(retryAtMs).toISOString(),
     };
   }
