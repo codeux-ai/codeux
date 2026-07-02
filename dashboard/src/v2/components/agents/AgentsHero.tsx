@@ -1,4 +1,4 @@
-import type { FunctionComponent } from "preact";
+import type { ComponentChildren, FunctionComponent } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { Bot, Plus, RefreshCw, Sparkles } from "lucide-preact";
@@ -13,8 +13,9 @@ export const AgentsHero: FunctionComponent<{
   presets?: AgentPreset[];
   onCreate: () => void;
   onSyncAll: () => void;
+  extraActions?: ComponentChildren;
   syncingAll: boolean;
-}> = ({ selectedProject, presets, onCreate, onSyncAll, syncingAll }) => {
+}> = ({ selectedProject, presets, onCreate, onSyncAll, extraActions, syncingAll }) => {
   const heroRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
@@ -48,6 +49,7 @@ export const AgentsHero: FunctionComponent<{
               <RefreshCw className={`h-3.5 w-3.5 ${syncingAll ? "animate-spin" : ""}`} strokeWidth={2.3} />
               Sync All
             </button>
+            {extraActions}
             <button
               type="button"
               onClick={onCreate}

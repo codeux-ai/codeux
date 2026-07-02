@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { Bot, Plus, Info, ShieldCheck, AlertTriangle, Database, FileText } from "lucide-preact";
+import { Bot, Plus, Info, ShieldCheck, AlertTriangle, Database, FileText, CheckCircle2, GitBranch, Loader2, ExternalLink } from "lucide-preact";
 import type { AgentPreset } from "./types.js";
 import type { InstructionFileSummary, InstructionFileContent } from "./lib/instruction-file-api.js";
 import { fetchInstructionFiles } from "./lib/instruction-file-api.js";
@@ -11,6 +11,7 @@ import {
   deleteAgentPreset,
   fetchAgentPresets,
   importAgentPresetFromMarkdown,
+  pushAgentPresetsToRepository,
   syncAllAgentPresetsFromMarkdown,
   updateAgentPreset,
 } from "./lib/agent-preset-api.js";
@@ -66,10 +67,21 @@ const normalizeAgentName = (value: string): string => (
   value.trim().replace(/[_-]+/g, " ").replace(/\s+/g, " ").toLowerCase()
 );
 
+type PushAgentMode = "commit_only" | "commit_and_push" | "pull_request";
+
+type PushAgentResult = {
+  mode: PushAgentMode;
+  committed: boolean;
+  pushedBranch?: string;
+  pullRequestUrl?: string;
+};
+
 
 /* ── Main Page ── */
 export const AgentsPage: FunctionComponent = () => {
   const contentRef = useRef<HTMLElement>(null);
+  const pushButtonRef = useRef<HTMLButtonElement>(null);
+  const pushPickerRef = useRef<HTMLDivElement>(null);
   const { selectedProject, loading: projectLoading } = useProjectData();
   const [presets, setPresets] = useState<AgentPreset[]>([]);
   const [loading, setLoading] = useState(false);
@@ -78,6 +90,11 @@ export const AgentsPage: FunctionComponent = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [importingId, setImportingId] = useState<string | null>(null);
   const [syncingAll, setSyncingAll] = useState(false);
+  const [pushing, setPushing] = useState(false);
+  const [pushPickerOpen, setPushPickerOpen] = useState(false);
+  const [pushMode, setPushMode] = useState<PushAgentMode>("commit_only");
+  const [pushBranchName, setPushBranchName] = useState("");
+  const [pushResult, setPushResult] = useState<PushAgentResult | null>(null);
   const [projectFileSavingEnabled, setProjectFileSavingEnabled] = useState(true);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -95,6 +112,13 @@ export const AgentsPage: FunctionComponent = () => {
       setProjectFileSavingEnabled(true);
     }
   }, [effectiveSettings, selectedProject]);
+
+  useEffect(() => {
+    setPushPickerOpen(false);
+    setPushResult(null);
+    setPushMode("commit_only");
+    setPushBranchName("");
+  }, [selectedProject?.id]);
 
   const refreshPresets = async (): Promise<void> => {
     if (!selectedProject) {
@@ -166,6 +190,32 @@ export const AgentsPage: FunctionComponent = () => {
     return () => ctx.revert();
   }, []);
 
+  useEffect(() => {
+    if (!pushPickerOpen) return undefined;
+
+    const handlePointerDown = (event: MouseEvent): void => {
+      const target = event.target as Node;
+      if (pushPickerRef.current?.contains(target) || pushButtonRef.current?.contains(target)) {
+        return;
+      }
+      setPushPickerOpen(false);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        setPushPickerOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [pushPickerOpen]);
+
   const handleCreate = async (): Promise<void> => {
     if (!selectedProject) return;
     try {
@@ -207,6 +257,62 @@ export const AgentsPage: FunctionComponent = () => {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSyncingAll(false);
+    }
+  };
+
+  const handlePushAgents = (): void => {
+    if (!selectedProject || pushing) return;
+    setError(null);
+    setPushResult(null);
+    setPushPickerOpen(true);
+  };
+
+  const submitPushAgents = async (): Promise<void> => {
+    if (!selectedProject || pushing) return;
+    setPushing(true);
+    setPushPickerOpen(false);
+
+    try {
+      const result = await pushAgentPresetsToRepository(selectedProject.id, {
+        mode: pushMode,
+        branchName: pushBranchName.trim() || undefined,
+      });
+
+      if (pushMode === "commit_only") {
+        setPushResult({
+          mode: pushMode,
+          committed: result.committed,
+        });
+        setError(null);
+      } else if (pushMode === "commit_and_push") {
+        if (!result.pushedBranch) {
+          setPushResult(null);
+          setError("Agent presets were committed locally, but no remote origin is configured for this repository.");
+        } else {
+          setPushResult({
+            mode: pushMode,
+            committed: result.committed,
+            pushedBranch: result.pushedBranch,
+          });
+          setError(null);
+        }
+      } else if (!result.pullRequestUrl) {
+        setPushResult(null);
+        setError("Agent presets were committed locally, but no pull request URL was returned.");
+      } else {
+        setPushResult({
+          mode: pushMode,
+          committed: result.committed,
+          pushedBranch: result.pushedBranch,
+          pullRequestUrl: result.pullRequestUrl,
+        });
+        setError(null);
+      }
+    } catch (e) {
+      setPushResult(null);
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPushing(false);
     }
   };
 
@@ -324,6 +430,36 @@ export const AgentsPage: FunctionComponent = () => {
     return { total: presets.length, synced, drift, local };
   }, [presets]);
 
+  const pushFeedback = useMemo(() => {
+    if (!pushResult) return null;
+
+    if (pushResult.mode === "commit_only") {
+      return pushResult.committed
+        ? "Agent presets were committed locally."
+        : "No agent preset changes were available to commit.";
+    }
+
+    if (pushResult.mode === "commit_and_push") {
+      return pushResult.pushedBranch ? `Pushed agent presets to ${pushResult.pushedBranch}.` : null;
+    }
+
+    return pushResult.pullRequestUrl ? (
+      <>
+        Opened a pull request at{" "}
+        <a
+          href={pushResult.pullRequestUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 font-semibold text-status-green underline decoration-status-green/40 underline-offset-2 hover:decoration-status-green"
+        >
+          {pushResult.pullRequestUrl}
+          <ExternalLink className="h-3.5 w-3.5" strokeWidth={2.2} />
+        </a>
+        .
+      </>
+    ) : null;
+  }, [pushResult]);
+
   return (
     <PageContainer containerRef={contentRef} padding="agents" className="gap-10 md:gap-14">
       <AgentsHero
@@ -332,6 +468,121 @@ export const AgentsPage: FunctionComponent = () => {
         loading={loading}
         syncingAll={syncingAll}
         presets={presets}
+        extraActions={
+          <div className="relative">
+            <button
+              ref={pushButtonRef}
+              type="button"
+              onClick={handlePushAgents}
+              disabled={!selectedProject || pushing}
+              className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 backdrop-blur-md transition-all hover:bg-white hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white/70 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white disabled:dark:hover:bg-white/[0.03] disabled:dark:hover:text-slate-300"
+            >
+              {pushing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.3} />
+              ) : (
+                <GitBranch className="h-3.5 w-3.5" strokeWidth={2.3} />
+              )}
+              {pushing ? "Pushing..." : "Push Agents"}
+            </button>
+
+            {pushPickerOpen && (
+              <div
+                ref={pushPickerRef}
+                role="dialog"
+                aria-label="Push Agents"
+                className="absolute right-0 top-full z-20 mt-3 w-[min(92vw,24rem)] rounded-2xl border border-black/[0.08] bg-white/95 p-4 shadow-[0_16px_36px_rgba(15,23,42,0.14)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-void-800/95 dark:shadow-[0_16px_36px_rgba(0,0,0,0.4)]"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-500">
+                      Push Agents
+                    </div>
+                    <p className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                      Choose where to send the current .code-ux/agents changes.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPushPickerOpen(false)}
+                    className="rounded-full border border-black/[0.06] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-black/[0.03] hover:text-slate-800 dark:border-white/[0.08] dark:text-slate-400 dark:hover:bg-white/[0.05] dark:hover:text-white"
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  {([
+                    { value: "commit_only", label: "Commit locally", description: "Create a local commit only." },
+                    { value: "commit_and_push", label: "Push to branch", description: "Commit, then push the branch to origin." },
+                    { value: "pull_request", label: "Open pull request", description: "Commit, push, and open a PR." },
+                  ] as const).map((option) => (
+                    <label
+                      key={option.value}
+                      className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-3 py-3 transition-colors ${
+                        pushMode === option.value
+                          ? "border-signal-500/30 bg-signal-500/[0.08] text-slate-900 dark:bg-signal-500/10 dark:text-white"
+                          : "border-black/[0.06] bg-white/70 text-slate-600 hover:bg-black/[0.02] dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.05]"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="push-mode"
+                        value={option.value}
+                        checked={pushMode === option.value}
+                        onChange={() => setPushMode(option.value)}
+                        className="mt-1 h-4 w-4 shrink-0 border-slate-300 text-signal-500 focus:ring-signal-500/30"
+                      />
+                      <div className="min-w-0">
+                        <div className="text-sm font-bold">{option.label}</div>
+                        <div className="mt-0.5 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
+                          {option.description}
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+
+                {pushMode !== "commit_only" && (
+                  <label className="mt-4 flex flex-col gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                      Branch name
+                    </span>
+                    <input
+                      type="text"
+                      value={pushBranchName}
+                      onInput={(event) => setPushBranchName((event.currentTarget as HTMLInputElement).value)}
+                      placeholder="feature/agents-update"
+                      className="rounded-xl border border-black/[0.08] bg-white/85 px-4 py-2.5 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-signal-500/40 focus:ring-2 focus:ring-signal-500/20 dark:border-white/[0.08] dark:bg-void-900/60 dark:text-white dark:placeholder:text-slate-500"
+                    />
+                  </label>
+                )}
+
+                <div className="mt-4 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPushPickerOpen(false)}
+                    className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-black/[0.03] hover:text-slate-900 dark:border-white/[0.06] dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void submitPushAgents()}
+                    disabled={pushing}
+                    className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.22)] transition-all hover:bg-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {pushing ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.4} />
+                    ) : (
+                      <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2.4} />
+                    )}
+                    {pushing ? "Pushing..." : "Push"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        }
         onSyncAll={() => void handleSyncAll()}
         onCreate={() => void handleCreate()}
       />
@@ -350,6 +601,19 @@ export const AgentsPage: FunctionComponent = () => {
       {(error || effectiveSettingsError) && (
         <div className="rounded-2xl border border-status-red/30 bg-status-red/[0.08] px-5 py-4 text-sm font-medium text-status-red backdrop-blur-md shadow-[0_0_20px_rgba(255,0,0,0.05)]">
           {error || effectiveSettingsError}
+        </div>
+      )}
+
+      {pushFeedback && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="rounded-2xl border border-status-green/20 bg-status-green/[0.08] px-5 py-4 text-sm font-medium text-status-green backdrop-blur-md shadow-[0_0_20px_rgba(0,171,132,0.05)]"
+        >
+          <div className="flex items-start gap-3">
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.2} />
+            <div className="min-w-0">{pushFeedback}</div>
+          </div>
         </div>
       )}
 
