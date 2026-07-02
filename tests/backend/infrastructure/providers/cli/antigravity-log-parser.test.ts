@@ -79,29 +79,52 @@ describe("Antigravity Log Parser - parseAntigravityTranscript", () => {
     });
   });
 
-  it("parses planner response and tool calls", () => {
-    const jsonl = JSON.stringify({
-      type: "PLANNER_RESPONSE",
-      content: "Let me check the directory.",
-      tool_calls: [
-        { name: "list_dir", args: { path: "/workspace" } }
-      ],
-      created_at: "2026-06-01T10:00:00.000Z",
-    });
+  it("parses planner response tool calls and keeps toolCallId ordering", () => {
+    const jsonl = [
+      JSON.stringify({
+        type: "PLANNER_RESPONSE",
+        reasoning: "I should list the directory before editing.",
+        content: "Let me check the directory.",
+        tool_calls: [
+          { id: "call-1", name: "list_dir", args: { path: "/workspace" } }
+        ],
+        created_at: "2026-06-01T10:00:00.000Z",
+      }),
+      JSON.stringify({
+        type: "RUN_COMMAND",
+        content: "ls /workspace",
+        tool_call_id: "call-1",
+        tool_name: "list_dir",
+        created_at: "2026-06-01T10:00:01.000Z",
+      }),
+    ].join("\n");
 
     const turns = parseAntigravityTranscript(jsonl);
-    expect(turns).toHaveLength(2);
+    expect(turns).toHaveLength(4);
     expect(turns[0]).toEqual({
+      kind: "reasoning",
+      text: "I should list the directory before editing.",
+      timestampMs: Date.parse("2026-06-01T10:00:00.000Z"),
+    });
+    expect(turns[1]).toEqual({
       kind: "assistant",
       text: "Let me check the directory.",
       timestampMs: Date.parse("2026-06-01T10:00:00.000Z"),
     });
-    expect(turns[1]).toEqual({
+    expect(turns[2]).toEqual({
       kind: "tool_call",
       text: "Calling tool list_dir",
       toolName: "list_dir",
+      toolCallId: "call-1",
       toolArguments: JSON.stringify({ path: "/workspace" }),
       timestampMs: Date.parse("2026-06-01T10:00:00.000Z"),
+    });
+    expect(turns[3]).toEqual({
+      kind: "tool_result",
+      text: "ls /workspace",
+      toolName: "list_dir",
+      toolCallId: "call-1",
+      timestampMs: Date.parse("2026-06-01T10:00:01.000Z"),
     });
   });
 
@@ -110,11 +133,15 @@ describe("Antigravity Log Parser - parseAntigravityTranscript", () => {
       JSON.stringify({
         type: "RUN_COMMAND",
         content: "npm test output",
+        call_id: "call-2",
+        name: "run_command",
         created_at: "2026-06-01T10:00:00.000Z",
       }),
       JSON.stringify({
         type: "TOOL_RESPONSE",
         content: "File written successfully",
+        toolCallId: "call-3",
+        toolName: "write_file",
         created_at: "2026-06-01T10:00:01.000Z",
       }),
       JSON.stringify({
@@ -129,11 +156,15 @@ describe("Antigravity Log Parser - parseAntigravityTranscript", () => {
     expect(turns[0]).toEqual({
       kind: "tool_result",
       text: "npm test output",
+      toolName: "run_command",
+      toolCallId: "call-2",
       timestampMs: Date.parse("2026-06-01T10:00:00.000Z"),
     });
     expect(turns[1]).toEqual({
       kind: "tool_result",
       text: "File written successfully",
+      toolName: "write_file",
+      toolCallId: "call-3",
       timestampMs: Date.parse("2026-06-01T10:00:01.000Z"),
     });
     expect(turns[2]).toEqual({

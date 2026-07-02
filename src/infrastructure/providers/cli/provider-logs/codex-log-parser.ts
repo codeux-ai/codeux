@@ -54,6 +54,13 @@ function flattenReasoningSummary(summary: unknown): string {
   return parts.join("\n\n").trim();
 }
 
+function extractVisibleReasoningText(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  return flattenReasoningSummary(value) || flattenContent(value);
+}
+
 function stringifyOutput(value: unknown): string {
   if (typeof value === "string") {
     return value;
@@ -158,7 +165,9 @@ export function parseCodexRolloutJsonl(jsonl: string, sinceMs?: number): CodexLo
     }
 
     if (payloadType === "reasoning") {
-      const text = flattenReasoningSummary(payload.summary) || flattenContent(payload.content);
+      const text = extractVisibleReasoningText(
+        payload.summary ?? payload.summary_text ?? payload.reasoning ?? payload.content ?? payload.text,
+      );
       // Reasoning is encrypted by default (empty summary); only surface readable summaries.
       if (text) {
         conversation.push({ kind: "reasoning", text, timestampMs });
@@ -216,9 +225,7 @@ function streamItemToTurns(item: Record<string, unknown>, timestampMs: number | 
   }
 
   if (type === "reasoning") {
-    const text = typeof item.text === "string"
-      ? item.text.trim()
-      : flattenReasoningSummary(item.summary);
+    const text = extractVisibleReasoningText(item.text ?? item.summary ?? item.summary_text ?? item.reasoning ?? item.content);
     return text ? [{ kind: "reasoning", text, timestampMs }] : [];
   }
 

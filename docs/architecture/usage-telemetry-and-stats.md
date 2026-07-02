@@ -66,6 +66,7 @@ Gemini CLI runs with structured JSON output enabled.
 Code UX reads provider-reported token counts directly from the JSON response stats block and treats them as `reported`.
 Gemini usage now passes through a shared normalization adapter that maps provider payloads into a canonical `prompt/completion/total` model before persistence. This keeps token accounting stable across `stats.tokens` variants (including partial fields and explicit total fields) while preserving `cached` and `thoughts` as separate tracked dimensions.
 Gemini must keep `--output-format json` enabled even when native MCP settings are injected; current Gemini CLI versions still load MCP settings in JSON mode and include the authoritative `stats` block. The collector records model-level `input`, `cached`, `candidates`, and `thoughts` counts, mapping `thoughts` into `reasoningOutputTokens`.
+When Gemini's JSON response includes a structured readable candidate transcript, Code UX also reconstructs conversation turns from those parts and surfaces visible thinking as `reasoning` turns. Plain text response blobs do not synthesize reasoning turns on their own.
 Docker-backed Gemini invocations also carry the selected provider instance's `mountAuth` and `authPath` through task, QA, dashboard-chat, and compaction paths before the runner builds credential mounts. That keeps JSON-mode telemetry compatible with copied local Gemini OAuth credentials and prevents fallback to an unrelated Google Cloud project.
 If a historical or failed run lacks the structured stats envelope, Code UX can still estimate from prompt and transcript text so Docker-backed runs do not remain `unavailable`.
 
@@ -74,6 +75,7 @@ If a historical or failed run lacks the structured stats envelope, Code UX can s
 Codex runs with `codex exec --json`.
 
 Code UX first looks for `token_count` JSONL events, then normalizes the usage payload via the same shared `prompt/completion/total` adapter used by other providers. This includes safe fallback handling when Codex payloads omit completion counts but provide prompt and total tokens. If JSONL usage is missing, Code UX falls back to session JSON usage, then token estimation using `js-tiktoken` over the prompt plus captured transcript.
+Visible Codex reasoning summaries are also preserved as `reasoning` turns when the rollout JSONL or exec stream exposes them, but encrypted or empty reasoning blobs are skipped.
 
 Codex's rollout file (`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`) is cumulative for the whole session and keeps accumulating across `codex exec resume --last` (used for follow-up/QA-reopened runs and multi-turn retries). `parseCodexRolloutJsonl` isolates each run's own usage by treating the last `total_token_usage` snapshot *before* the run's time window as a baseline and subtracting it from the final cumulative snapshot — otherwise a follow-up would re-report every earlier turn's tokens too, inflating that run's persisted usage.
 
@@ -93,7 +95,7 @@ The parser handles:
 - **Token usage**: accumulates `input_tokens`, `output_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens` across all unique assistant messages (deduplicated by `message.id` to avoid double-counting streaming fragments).
 - **Full conversation transcript**: extracts ordered turns of all kinds:
   - `assistant` turns from `type: "text"` content blocks.
-  - `reasoning` turns from `type: "thinking"` blocks (only when non-empty; encrypted thinking blocks are silently skipped).
+  - `reasoning` turns from `type: "thinking"` blocks and other visible thinking fields on assistant messages (only when non-empty; encrypted thinking blocks are silently skipped).
   - `tool_call` turns from `type: "tool_use"` blocks with tool name, id, and JSON-serialized input.
   - `tool_result` turns from user-entry `type: "tool_result"` content with output and error status.
   - `user` turns from plain user text entries.
@@ -116,8 +118,8 @@ Code UX parses session data from two sources:
   - `cachedInputTokens` (inferred field mapping — see below)
 - **Full conversation transcript**: reads the JSONL transcript file (`~/.gemini/antigravity-cli/brain/<id>/.system_generated/logs/transcript.jsonl` or fallback path under `antigravity`). The transcript parser processes:
   - `user` turns from `USER_INPUT` entry types (stripping `<USER_REQUEST>` wrapper tags).
-  - `assistant` and `tool_call` turns from `PLANNER_RESPONSE` entry types.
-  - `tool_result` turns from `RUN_COMMAND` or `TOOL_RESPONSE` entries.
+  - `reasoning`, `assistant`, and `tool_call` turns from `PLANNER_RESPONSE` entry types, keeping visible planner reasoning ahead of the response text and tool calls it produced.
+  - `tool_result` turns from `RUN_COMMAND` or `TOOL_RESPONSE` entries, preserving any available correlation ids and tool names so the matching call/result pair stays traceable in the reconstructed transcript.
   - `reasoning` turns from `SYSTEM` source events.
 
 For Docker-backed Antigravity runs, the SQLite database is encoded to Base64 within the container first, and then decoded to a temporary file on the host before parsing to bypass Docker named volume permission issues.

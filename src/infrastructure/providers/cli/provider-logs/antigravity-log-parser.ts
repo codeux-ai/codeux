@@ -173,6 +173,44 @@ function extractAntigravityUsageFromProto(fields: ProtoField[]): {
   return { usage, rawUsageJson };
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? value as Record<string, unknown> : null;
+}
+
+function readFirstStringField(value: unknown, fieldNames: string[]): string | undefined {
+  const record = asRecord(value);
+  if (!record) {
+    return undefined;
+  }
+  for (const fieldName of fieldNames) {
+    const fieldValue = record[fieldName];
+    if (typeof fieldValue === "string" && fieldValue) {
+      return fieldValue;
+    }
+  }
+  return undefined;
+}
+
+function extractToolCallId(value: unknown): string | undefined {
+  return readFirstStringField(value, [
+    "toolCallId",
+    "tool_call_id",
+    "call_id",
+    "callId",
+    "toolCallID",
+    "tool_callID",
+    "id",
+  ]);
+}
+
+function extractToolName(value: unknown): string | undefined {
+  return readFirstStringField(value, [
+    "toolName",
+    "tool_name",
+    "name",
+  ]);
+}
+
 /**
  * Parses the raw SQLite data from the conversation's DB file to extract token
  * usage totals, summed across every `gen_metadata` row (one per model call —
@@ -262,25 +300,53 @@ export function parseAntigravityTranscript(
         }
         conversation.push({ kind: "user", text, timestampMs });
       } else if (entry.type === "PLANNER_RESPONSE") {
+        const reasoningText = extractVisibleTranscriptText(entry.reasoning ?? entry.planner_reasoning ?? entry.summary ?? entry.thinking);
+        if (reasoningText) {
+          conversation.push({ kind: "reasoning", text: reasoningText, timestampMs });
+        }
         if (entry.content) {
-          conversation.push({ kind: "assistant", text: entry.content, timestampMs });
+          const text = extractVisibleTranscriptText(entry.content);
+          if (text) {
+            conversation.push({ kind: "assistant", text, timestampMs });
+          }
         }
         if (Array.isArray(entry.tool_calls)) {
           for (const tc of entry.tool_calls) {
-            conversation.push({
+            const toolName = extractToolName(tc);
+            const toolCall: ParsedConversationTurn = {
               kind: "tool_call",
-              text: `Calling tool ${tc.name}`,
-              toolName: tc.name,
+              text: toolName ? `Calling tool ${toolName}` : "Calling tool",
+              toolName,
               toolArguments: typeof tc.args === "object" ? JSON.stringify(tc.args) : String(tc.args || ""),
               timestampMs,
-            });
+            };
+            const toolCallId = extractToolCallId(tc);
+            if (toolCallId) {
+              toolCall.toolCallId = toolCallId;
+            }
+            conversation.push(toolCall);
           }
         }
       } else if (entry.type === "RUN_COMMAND" || entry.type === "TOOL_RESPONSE" || (entry.source === "SYSTEM" && entry.content)) {
         const text = entry.content || "";
-        if (text) {
+        if (entry.type === "RUN_COMMAND" || entry.type === "TOOL_RESPONSE") {
+          const toolResult: ParsedConversationTurn = {
+            kind: "tool_result",
+            text,
+            timestampMs,
+          };
+          const toolCallId = extractToolCallId(entry);
+          if (toolCallId) {
+            toolResult.toolCallId = toolCallId;
+          }
+          const toolName = extractToolName(entry);
+          if (toolName) {
+            toolResult.toolName = toolName;
+          }
+          conversation.push(toolResult);
+        } else if (text) {
           conversation.push({
-            kind: (entry.type === "RUN_COMMAND" || entry.type === "TOOL_RESPONSE") ? "tool_result" : "reasoning",
+            kind: "reasoning",
             text,
             timestampMs,
           });
@@ -292,4 +358,29 @@ export function parseAntigravityTranscript(
   }
 
   return conversation;
+}
+
+function extractVisibleTranscriptText(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  if (Array.isArray(value)) {
+    const parts: string[] = [];
+    for (const item of value) {
+      const text = extractVisibleTranscriptText(item);
+      if (text) {
+        parts.push(text);
+      }
+    }
+    return parts.join("\n").trim();
+  }
+  if (value && typeof value === "object") {
+    const rec = value as Record<string, unknown>;
+    const candidate = rec.reasoning ?? rec.summary ?? rec.text ?? rec.content ?? rec.thinking ?? rec.planner_reasoning;
+    const text = extractVisibleTranscriptText(candidate);
+    if (text) {
+      return text;
+    }
+  }
+  return "";
 }

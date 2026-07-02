@@ -38,8 +38,14 @@ export const fetchProjectInvocationsQuery = async (
   return fetchProjectInvocations(projectId, query, init) as Promise<ProjectInvocationsQueryResult>;
 };
 
-export const fetchInvocationMessages = async (invocationId: string): Promise<ExecutionInvocationMessageRecord[]> => {
-  return fetchJson<ExecutionInvocationMessageRecord[]>(`/api/execution/invocations/${encodeURIComponent(invocationId)}/messages`);
+export const fetchInvocationMessages = async (
+  invocationId: string,
+  init?: RequestInit,
+): Promise<ExecutionInvocationMessageRecord[]> => {
+  return fetchJson<ExecutionInvocationMessageRecord[]>(
+    `/api/execution/invocations/${encodeURIComponent(invocationId)}/messages`,
+    init,
+  );
 };
 
 export type InvocationRestartMode = "retry_full_prompt" | "continue_session";

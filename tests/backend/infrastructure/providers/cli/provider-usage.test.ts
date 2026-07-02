@@ -89,6 +89,74 @@ describe("collectProviderUsageTelemetry", () => {
     });
   });
 
+  it("extracts Gemini reasoning turns only from structured transcript parts", async () => {
+    const result = await collectProviderUsageTelemetry({
+      provider: "gemini",
+      model: "gemini-2.5-pro",
+      prompt: "Summarize the diff.",
+      cwd: "/workspace/repo",
+      stdout: JSON.stringify({
+        response: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  { thought: true, text: "I should inspect the change first." },
+                  { text: "Applied the edit." },
+                ],
+              },
+            },
+          ],
+        },
+        stats: {
+          tokens: {
+            input: 90,
+            cached: 10,
+            candidates: 20,
+            thoughts: 4,
+          },
+        },
+      }),
+      stderr: "",
+    });
+
+    expect(result).toMatchObject({
+      inputTokens: 90,
+      cachedInputTokens: 10,
+      outputTokens: 20,
+      reasoningOutputTokens: 4,
+      totalTokens: 114,
+      usageSource: "reported",
+      transcriptText: "Applied the edit.",
+    });
+    expect(result.conversation.map((t) => t.kind)).toEqual(["reasoning", "assistant"]);
+    expect(result.conversation[0]).toMatchObject({ kind: "reasoning", text: "I should inspect the change first." });
+  });
+
+  it("does not synthesize Gemini reasoning turns from a plain response string", async () => {
+    const result = await collectProviderUsageTelemetry({
+      provider: "gemini",
+      model: "gemini-2.5-pro",
+      prompt: "Summarize the diff.",
+      cwd: "/workspace/repo",
+      stdout: JSON.stringify({
+        response: "Applied the edit.",
+        stats: {
+          tokens: {
+            input: 50,
+            cached: 0,
+            candidates: 12,
+            thoughts: 3,
+          },
+        },
+      }),
+      stderr: "",
+    });
+
+    expect(result.conversation).toEqual([]);
+    expect(result.reasoningOutputTokens).toBe(3);
+  });
+
   it("parses provider-reported Gemini usage across model stats", async () => {
     const result = await collectProviderUsageTelemetry({
       provider: "gemini",

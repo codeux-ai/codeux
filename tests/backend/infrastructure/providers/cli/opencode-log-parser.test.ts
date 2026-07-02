@@ -14,7 +14,7 @@ describe("parseOpenCodeJsonLines", () => {
 
   it("extracts reported usage from step-finish parts (input/output/reasoning/cache)", () => {
     const stream = ndjson([
-      { type: "reasoning", part: { type: "reasoning", sessionID: "ses_abc123", text: "thinking about it" } },
+      { type: "reasoning", part: { type: "reasoning", sessionID: "ses_abc123", summary: [{ text: "thinking about it" }] } },
       { type: "text", part: { type: "text", sessionID: "ses_abc123", text: "PONG" } },
       {
         type: "step-finish",
@@ -41,6 +41,17 @@ describe("parseOpenCodeJsonLines", () => {
       cost: 0.0123,
     });
     expect(result!.conversation.map((t) => t.kind)).toEqual(["reasoning", "assistant"]);
+  });
+
+  it("extracts visible reasoning from OpenCode reasoning parts that use summary fields", () => {
+    const stream = ndjson([
+      { type: "reasoning", part: { type: "reasoning", sessionID: "ses_reason", summary: [{ type: "summary_text", text: "I should inspect the logs first." }] } },
+      { type: "text", part: { type: "text", sessionID: "ses_reason", text: "I found the issue." } },
+    ]);
+
+    const result = parseOpenCodeJsonLines(stream)!;
+    expect(result.conversation.map((t) => t.kind)).toEqual(["reasoning", "assistant"]);
+    expect(result.conversation[0]).toMatchObject({ kind: "reasoning", text: "I should inspect the logs first." });
   });
 
   it("sums usage across multiple step-finish parts (one per LLM call)", () => {

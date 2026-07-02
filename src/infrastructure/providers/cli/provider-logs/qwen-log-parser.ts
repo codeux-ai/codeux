@@ -91,7 +91,35 @@ function responseMessageFromRecord(record: unknown): Record<string, unknown> | n
 
 /** Pulls the chain-of-thought text from a message's `reasoning_content`/`reasoning` field. */
 function reasoningFromMessage(message: Record<string, unknown>): string {
-  return flattenOpenAiContent(message.reasoning_content ?? message.reasoning);
+  const reasoningContent = message.reasoning_content ?? message.reasoning ?? message.thinking ?? message.summary;
+  if (typeof reasoningContent === "string") {
+    return reasoningContent.trim();
+  }
+  if (!Array.isArray(reasoningContent)) {
+    return "";
+  }
+  const parts: string[] = [];
+  for (const item of reasoningContent) {
+    const rec = asRecord(item);
+    if (!rec) {
+      if (typeof item === "string") {
+        parts.push(item);
+      }
+      continue;
+    }
+    if (typeof rec.text === "string") {
+      parts.push(rec.text);
+    } else if (typeof rec.summary_text === "string") {
+      parts.push(rec.summary_text);
+    } else if (typeof rec.summary === "string") {
+      parts.push(rec.summary);
+    } else if (typeof rec.reasoning === "string") {
+      parts.push(rec.reasoning);
+    } else if (typeof rec.thinking === "string") {
+      parts.push(rec.thinking);
+    }
+  }
+  return parts.join("").trim();
 }
 
 /** Reads the id of an OpenAI tool-call entry. */

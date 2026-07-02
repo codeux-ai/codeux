@@ -2,7 +2,11 @@ import { type FunctionComponent } from "preact";
 import { Cloud } from "lucide-preact";
 import type { ExecutionInvocationMessageRecord } from "../../types.js";
 import { renderMarkdown } from "../../../lib/markdown.js";
-import { getInvocationWidgetData, sanitizeInvocationOutputText } from "../../lib/chat-widget-view-models.js";
+import {
+  getInvocationWidgetData,
+  getReasoningWidgetData,
+  sanitizeInvocationOutputText,
+} from "../../lib/chat-widget-view-models.js";
 import { formatChatTime } from "../../lib/chat-time.js";
 import { PlanningRequestWidget } from "./widgets/PlanningRequestWidget.js";
 import { ToolCallWidget } from "./widgets/ToolCallWidget.js";
@@ -46,6 +50,7 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
   const fromSystem = message.role === "system";
   const widgetData = getInvocationWidgetData(message);
   const kind = asString(message.metadata?.kind);
+  const reasoningWidgetData = getReasoningWidgetData(message);
 
   // Reasoning and tool turns render as compact, full-width activity cards
   // rather than chat bubbles, so the transcript reads like the real session.
@@ -53,7 +58,7 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
     return (
       <div class="flex justify-start">
         <div class="w-full max-w-full lg:max-w-[760px] min-w-0 pl-11">
-          <ReasoningWidget text={message.contentMarkdown || ""} />
+          <ReasoningWidget {...reasoningWidgetData} />
         </div>
       </div>
     );
