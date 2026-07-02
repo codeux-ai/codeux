@@ -215,20 +215,59 @@ export function parseAntigravityTranscript(
         }
         if (Array.isArray(entry.tool_calls)) {
           for (const tc of entry.tool_calls) {
-            conversation.push({
+            const toolCall = tc && typeof tc === "object" ? tc as Record<string, unknown> : null;
+            if (!toolCall) {
+              continue;
+            }
+            const toolName = extractToolName(toolCall);
+            const toolCallId = extractCorrelationId(toolCall);
+            const toolArguments = stringifyToolArguments(toolCall.args ?? toolCall.arguments ?? toolCall.input);
+            if (!toolName && !toolCallId && !toolArguments) {
+              continue;
+            }
+            const turn: ParsedConversationTurn = {
               kind: "tool_call",
-              text: `Calling tool ${tc.name}`,
-              toolName: tc.name,
-              toolArguments: typeof tc.args === "object" ? JSON.stringify(tc.args) : String(tc.args || ""),
+              text: toolName ? `Calling tool ${toolName}` : "Calling tool",
               timestampMs,
-            });
+            };
+            if (toolName) {
+              turn.toolName = toolName;
+            }
+            if (toolCallId) {
+              turn.toolCallId = toolCallId;
+            }
+            if (toolArguments !== undefined) {
+              turn.toolArguments = toolArguments;
+            }
+            conversation.push(turn);
           }
         }
-      } else if (entry.type === "RUN_COMMAND" || entry.type === "TOOL_RESPONSE" || (entry.source === "SYSTEM" && entry.content)) {
-        const text = entry.content || "";
+      } else if (entry.type === "RUN_COMMAND" || entry.type === "TOOL_RESPONSE") {
+        const text = extractVisibleTranscriptText(entry.content);
+        const toolCallId = extractCorrelationId(entry);
+        const toolName = extractToolName(entry);
+        if (text || toolCallId || toolName) {
+          const turn: ParsedConversationTurn = {
+            kind: "tool_result",
+            text,
+            timestampMs,
+          };
+          if (toolCallId) {
+            turn.toolCallId = toolCallId;
+          }
+          if (toolName) {
+            turn.toolName = toolName;
+          }
+          if (text) {
+            turn.toolOutput = text;
+          }
+          conversation.push(turn);
+        }
+      } else if (entry.source === "SYSTEM" && entry.content) {
+        const text = extractVisibleTranscriptText(entry.content);
         if (text) {
           conversation.push({
-            kind: (entry.type === "RUN_COMMAND" || entry.type === "TOOL_RESPONSE") ? "tool_result" : "reasoning",
+            kind: "reasoning",
             text,
             timestampMs,
           });
@@ -265,4 +304,48 @@ function extractVisibleTranscriptText(value: unknown): string {
     }
   }
   return "";
+}
+
+function firstStringField(record: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function extractCorrelationId(record: Record<string, unknown>): string | undefined {
+  return firstStringField(record, [
+    "toolCallId",
+    "tool_call_id",
+    "callId",
+    "call_id",
+    "callID",
+    "id",
+  ]);
+}
+
+function extractToolName(record: Record<string, unknown>): string | undefined {
+  return firstStringField(record, [
+    "toolName",
+    "tool_name",
+    "name",
+    "tool",
+  ]);
+}
+
+function stringifyToolArguments(value: unknown): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }

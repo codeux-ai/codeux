@@ -108,6 +108,53 @@ describe("Antigravity Log Parser - parseAntigravityTranscript", () => {
     });
   });
 
+  it("preserves toolCallId and toolName across planner and tool-result turns", () => {
+    const jsonl = [
+      JSON.stringify({
+        type: "PLANNER_RESPONSE",
+        tool_calls: [
+          { id: "call_1", name: "list_dir", args: { path: "/workspace" } },
+        ],
+        created_at: "2026-06-01T10:00:00.000Z",
+      }),
+      JSON.stringify({
+        type: "RUN_COMMAND",
+        content: "ls output",
+        tool_call_id: "call_1",
+        tool_name: "list_dir",
+        created_at: "2026-06-01T10:00:01.000Z",
+      }),
+      JSON.stringify({
+        type: "TOOL_RESPONSE",
+        content: "done",
+        call_id: "call_1",
+        toolName: "list_dir",
+        created_at: "2026-06-01T10:00:02.000Z",
+      }),
+    ].join("\n");
+
+    const turns = parseAntigravityTranscript(jsonl);
+    expect(turns.map((t) => t.kind)).toEqual(["tool_call", "tool_result", "tool_result"]);
+    expect(turns[0]).toMatchObject({
+      kind: "tool_call",
+      toolName: "list_dir",
+      toolCallId: "call_1",
+      toolArguments: JSON.stringify({ path: "/workspace" }),
+    });
+    expect(turns[1]).toMatchObject({
+      kind: "tool_result",
+      toolName: "list_dir",
+      toolCallId: "call_1",
+      toolOutput: "ls output",
+    });
+    expect(turns[2]).toMatchObject({
+      kind: "tool_result",
+      toolName: "list_dir",
+      toolCallId: "call_1",
+      toolOutput: "done",
+    });
+  });
+
   it("parses RUN_COMMAND, TOOL_RESPONSE, and SYSTEM source turns", () => {
     const jsonl = [
       JSON.stringify({
@@ -132,11 +179,13 @@ describe("Antigravity Log Parser - parseAntigravityTranscript", () => {
     expect(turns[0]).toEqual({
       kind: "tool_result",
       text: "npm test output",
+      toolOutput: "npm test output",
       timestampMs: Date.parse("2026-06-01T10:00:00.000Z"),
     });
     expect(turns[1]).toEqual({
       kind: "tool_result",
       text: "File written successfully",
+      toolOutput: "File written successfully",
       timestampMs: Date.parse("2026-06-01T10:00:01.000Z"),
     });
     expect(turns[2]).toEqual({
