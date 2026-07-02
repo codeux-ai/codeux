@@ -50954,6 +50954,84 @@
         "structured_output": true,
         "temperature": false,
         "tool_call": true
+      },
+      "kimi-k2.7-code": {
+        "attachment": true,
+        "cost": {
+          "cache_read": 0.19,
+          "input": 0.95,
+          "output": 4
+        },
+        "description": "Coding-focused Kimi model, stronger on long-horizon repo work with less overthinking",
+        "family": "kimi-k2",
+        "id": "kimi-k2.7-code",
+        "knowledge": "2025-01",
+        "last_updated": "2026-06-12",
+        "limit": {
+          "context": 256000,
+          "input": 224000,
+          "output": 32000
+        },
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Kimi K2.7 Code",
+        "open_weights": true,
+        "reasoning": true,
+        "reasoning_options": [],
+        "release_date": "2026-06-12",
+        "structured_output": true,
+        "temperature": false,
+        "tool_call": true
+      },
+      "mai-code-1-flash-picker": {
+        "attachment": false,
+        "cost": {
+          "cache_read": 0.075,
+          "input": 0.75,
+          "output": 4.5
+        },
+        "description": "Microsoft coding model built for fast, efficient assistance in everyday developer workflows",
+        "family": "mai",
+        "id": "mai-code-1-flash-picker",
+        "knowledge": "2025-12",
+        "last_updated": "2026-06-08",
+        "limit": {
+          "context": 256000,
+          "input": 128000,
+          "output": 128000
+        },
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "MAI-Code-1-Flash",
+        "open_weights": false,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high"
+            ]
+          }
+        ],
+        "release_date": "2026-06-02",
+        "structured_output": true,
+        "temperature": true,
+        "tool_call": true
       }
     },
     "name": "GitHub Copilot",
@@ -52696,6 +52774,52 @@
     ],
     "id": "gitlab",
     "models": {
+      "duo-chat-fable-5": {
+        "attachment": true,
+        "cost": {
+          "cache_read": 0,
+          "cache_write": 0,
+          "input": 0,
+          "output": 0
+        },
+        "description": "Claude model for creative writing, analysis, and controlled agent workflows",
+        "family": "claude-fable",
+        "id": "duo-chat-fable-5",
+        "knowledge": "2026-01-31",
+        "last_updated": "2026-06-09",
+        "limit": {
+          "context": 1000000,
+          "output": 128000
+        },
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Agentic Chat (Claude Fable 5)",
+        "open_weights": false,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          }
+        ],
+        "release_date": "2026-06-09",
+        "temperature": false,
+        "tool_call": true
+      },
       "duo-chat-gpt-5-1": {
         "attachment": true,
         "cost": {
@@ -53283,6 +53407,55 @@
         "reasoning_options": [],
         "release_date": "2026-02-17",
         "temperature": true,
+        "tool_call": true
+      },
+      "duo-chat-sonnet-5": {
+        "attachment": true,
+        "cost": {
+          "cache_read": 0,
+          "cache_write": 0,
+          "input": 0,
+          "output": 0
+        },
+        "description": "Everyday Claude agent model for coding, planning, browsing, and general work",
+        "family": "claude-sonnet",
+        "id": "duo-chat-sonnet-5",
+        "knowledge": "2026-01-31",
+        "last_updated": "2026-06-30",
+        "limit": {
+          "context": 1000000,
+          "output": 64000
+        },
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Agentic Chat (Claude Sonnet 5)",
+        "open_weights": false,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          }
+        ],
+        "release_date": "2026-06-30",
+        "temperature": false,
         "tool_call": true
       }
     },
@@ -78929,10 +79102,10 @@
       "claude-sonnet-5": {
         "attachment": true,
         "cost": {
-          "cache_read": 0.3,
-          "cache_write": 3.75,
-          "input": 3,
-          "output": 15
+          "cache_read": 0.2,
+          "cache_write": 2.5,
+          "input": 2,
+          "output": 10
         },
         "description": "Everyday Claude agent model for coding, planning, browsing, and general work",
         "family": "claude-sonnet",
@@ -133704,7 +133877,7 @@
         "attachment": false,
         "cost": {
           "cache_read": 0.018,
-          "input": 0.09,
+          "input": 0.089,
           "output": 0.18
         },
         "description": "Fast DeepSeek V4 lane for economical reasoning, coding, and long-context work",
@@ -136935,9 +137108,9 @@
       "moonshotai/kimi-k2.6": {
         "attachment": true,
         "cost": {
-          "cache_read": 0.11,
-          "input": 0.55,
-          "output": 3.2
+          "cache_read": 0.14,
+          "input": 0.66,
+          "output": 3.41
         },
         "description": "Multimodal Kimi workhorse for agent loops, coding tasks, and visual context",
         "family": "kimi-k2",
@@ -140452,6 +140625,67 @@
         "temperature": true,
         "tool_call": true
       },
+      "poolside/laguna-xs-2.1": {
+        "attachment": false,
+        "cost": {
+          "cache_read": 0.03,
+          "input": 0.06,
+          "output": 0.12
+        },
+        "description": "Reasoning model for deliberate analysis, multi-step problem solving, and tool use",
+        "id": "poolside/laguna-xs-2.1",
+        "last_updated": "2026-07-02",
+        "limit": {
+          "context": 262144,
+          "output": 32768
+        },
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Laguna XS 2.1",
+        "open_weights": true,
+        "reasoning": true,
+        "reasoning_options": [],
+        "release_date": "2026-07-02",
+        "structured_output": false,
+        "temperature": true,
+        "tool_call": true
+      },
+      "poolside/laguna-xs-2.1:free": {
+        "attachment": false,
+        "cost": {
+          "input": 0,
+          "output": 0
+        },
+        "description": "Free provider route for experiments, demos, and cost-sensitive chat workloads",
+        "id": "poolside/laguna-xs-2.1:free",
+        "last_updated": "2026-07-02",
+        "limit": {
+          "context": 262144,
+          "output": 32768
+        },
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Laguna XS 2.1 (free)",
+        "open_weights": true,
+        "reasoning": true,
+        "reasoning_options": [],
+        "release_date": "2026-07-02",
+        "structured_output": false,
+        "temperature": true,
+        "tool_call": true
+      },
       "poolside/laguna-xs.2": {
         "attachment": false,
         "cost": {
@@ -141575,8 +141809,8 @@
       "qwen/qwen3-vl-8b-instruct": {
         "attachment": true,
         "cost": {
-          "input": 0.08,
-          "output": 0.5
+          "input": 0.117,
+          "output": 0.455
         },
         "description": "Qwen vision-language model for visual reasoning, documents, and agent tasks",
         "family": "qwen",
@@ -143895,9 +144129,9 @@
       "~moonshotai/kimi-latest": {
         "attachment": true,
         "cost": {
-          "cache_read": 0.11,
-          "input": 0.55,
-          "output": 3.2
+          "cache_read": 0.14,
+          "input": 0.66,
+          "output": 3.41
         },
         "description": "Kimi multimodal agent model for visual understanding, coding, and planning",
         "family": "kimi",
@@ -165906,6 +166140,81 @@
         "release_date": "2026-05-29",
         "temperature": true,
         "tool_call": true
+      },
+      "step-tts-2": {
+        "attachment": false,
+        "description": "Speech generation model for controllable voice, narration, and audio delivery",
+        "family": "step",
+        "id": "step-tts-2",
+        "last_updated": "2026-07-02",
+        "limit": {
+          "context": 0,
+          "output": 0
+        },
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "audio"
+          ]
+        },
+        "name": "Step TTS 2",
+        "open_weights": false,
+        "reasoning": false,
+        "release_date": "2026-03-01",
+        "temperature": false,
+        "tool_call": false
+      },
+      "stepaudio-2.5-asr": {
+        "attachment": false,
+        "description": "Speech transcription model for accurate audio-to-text and captioning workflows",
+        "family": "step",
+        "id": "stepaudio-2.5-asr",
+        "last_updated": "2026-07-02",
+        "limit": {
+          "context": 0,
+          "output": 0
+        },
+        "modalities": {
+          "input": [
+            "audio"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "StepAudio 2.5 ASR",
+        "open_weights": false,
+        "reasoning": false,
+        "release_date": "2026-04-24",
+        "temperature": false,
+        "tool_call": false
+      },
+      "stepaudio-2.5-tts": {
+        "attachment": false,
+        "description": "Speech generation model for controllable voice, narration, and audio delivery",
+        "family": "step",
+        "id": "stepaudio-2.5-tts",
+        "last_updated": "2026-07-02",
+        "limit": {
+          "context": 0,
+          "output": 0
+        },
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "audio"
+          ]
+        },
+        "name": "StepAudio 2.5 TTS",
+        "open_weights": false,
+        "reasoning": false,
+        "release_date": "2026-04-16",
+        "temperature": false,
+        "tool_call": false
       }
     },
     "name": "StepFun",
@@ -165919,6 +166228,70 @@
     ],
     "id": "stepfun-ai",
     "models": {
+      "step-1-32k": {
+        "attachment": false,
+        "cost": {
+          "cache_read": 0.41,
+          "input": 2.05,
+          "output": 9.59
+        },
+        "description": "StepFun flash model for efficient multimodal reasoning, coding, and tool use",
+        "id": "step-1-32k",
+        "knowledge": "2024-06",
+        "last_updated": "2026-02-13",
+        "limit": {
+          "context": 32768,
+          "input": 32768,
+          "output": 32768
+        },
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Step 1 (32K)",
+        "open_weights": false,
+        "reasoning": true,
+        "reasoning_options": [],
+        "release_date": "2025-01-01",
+        "temperature": true,
+        "tool_call": true
+      },
+      "step-2-16k": {
+        "attachment": false,
+        "cost": {
+          "cache_read": 1.04,
+          "input": 5.21,
+          "output": 16.44
+        },
+        "description": "StepFun flash model for efficient multimodal reasoning, coding, and tool use",
+        "id": "step-2-16k",
+        "knowledge": "2024-06",
+        "last_updated": "2026-02-13",
+        "limit": {
+          "context": 16384,
+          "input": 16384,
+          "output": 8192
+        },
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Step 2 (16K)",
+        "open_weights": false,
+        "reasoning": true,
+        "reasoning_options": [],
+        "release_date": "2025-01-01",
+        "temperature": true,
+        "tool_call": true
+      },
       "step-3.5-flash": {
         "attachment": false,
         "cost": {
@@ -165926,7 +166299,7 @@
           "input": 0.1,
           "output": 0.3
         },
-        "description": "StepFun flash model for efficient multimodal reasoning, coding, and tool use",
+        "description": "StepFun flash lane for quick multimodal reasoning and coding assistance",
         "id": "step-3.5-flash",
         "knowledge": "2025-01",
         "last_updated": "2026-06-15",
@@ -165990,6 +166363,123 @@
         "release_date": "2026-04-02",
         "temperature": true,
         "tool_call": true
+      },
+      "step-3.7-flash": {
+        "attachment": true,
+        "cost": {
+          "cache_read": 0.04,
+          "input": 0.2,
+          "output": 1.15
+        },
+        "description": "Newer StepFun flash model for faster agents, coding, and multimodal prompts",
+        "id": "step-3.7-flash",
+        "knowledge": "2026-01-01",
+        "last_updated": "2026-06-29",
+        "limit": {
+          "context": 256000,
+          "input": 256000,
+          "output": 256000
+        },
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Step 3.7 Flash",
+        "open_weights": true,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high"
+            ]
+          }
+        ],
+        "release_date": "2026-05-29",
+        "temperature": true,
+        "tool_call": true
+      },
+      "step-tts-2": {
+        "attachment": false,
+        "description": "Speech generation model for controllable voice, narration, and audio delivery",
+        "family": "step",
+        "id": "step-tts-2",
+        "last_updated": "2026-07-02",
+        "limit": {
+          "context": 0,
+          "output": 0
+        },
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "audio"
+          ]
+        },
+        "name": "Step TTS 2",
+        "open_weights": false,
+        "reasoning": false,
+        "release_date": "2026-03-01",
+        "temperature": false,
+        "tool_call": false
+      },
+      "stepaudio-2.5-asr": {
+        "attachment": false,
+        "description": "Speech transcription model for accurate audio-to-text and captioning workflows",
+        "family": "step",
+        "id": "stepaudio-2.5-asr",
+        "last_updated": "2026-07-02",
+        "limit": {
+          "context": 0,
+          "output": 0
+        },
+        "modalities": {
+          "input": [
+            "audio"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "StepAudio 2.5 ASR",
+        "open_weights": false,
+        "reasoning": false,
+        "release_date": "2026-04-24",
+        "temperature": false,
+        "tool_call": false
+      },
+      "stepaudio-2.5-tts": {
+        "attachment": false,
+        "description": "Speech generation model for controllable voice, narration, and audio delivery",
+        "family": "step",
+        "id": "stepaudio-2.5-tts",
+        "last_updated": "2026-07-02",
+        "limit": {
+          "context": 0,
+          "output": 0
+        },
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "audio"
+          ]
+        },
+        "name": "StepAudio 2.5 TTS",
+        "open_weights": false,
+        "reasoning": false,
+        "release_date": "2026-04-16",
+        "temperature": false,
+        "tool_call": false
       }
     },
     "name": "StepFun AI",
@@ -167907,7 +168397,7 @@
         "description": "Flagship Qwen model for complex reasoning, coding, and agentic workflows",
         "family": "qwen",
         "id": "Qwen/Qwen3.7-Max",
-        "last_updated": "2026-06-15",
+        "last_updated": "2026-07-02",
         "limit": {
           "context": 1000000,
           "output": 500000
@@ -168202,14 +168692,14 @@
       "meta-llama/Llama-3.3-70B-Instruct-Turbo": {
         "attachment": false,
         "cost": {
-          "input": 0.88,
-          "output": 0.88
+          "input": 1.04,
+          "output": 1.04
         },
         "description": "Compact Llama instruction model for fast chat and local deployment",
         "family": "llama",
         "id": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
         "knowledge": "2023-12",
-        "last_updated": "2024-12-06",
+        "last_updated": "2026-07-02",
         "limit": {
           "context": 131072,
           "output": 131072
@@ -168561,7 +169051,7 @@
         "family": "glm",
         "id": "zai-org/GLM-5.1",
         "knowledge": "2025-11",
-        "last_updated": "2026-04-07",
+        "last_updated": "2026-07-02",
         "limit": {
           "context": 202752,
           "output": 131072
@@ -187185,6 +187675,102 @@
         ],
         "release_date": "2026-02-18",
         "temperature": true,
+        "tool_call": true
+      },
+      "anthropic/claude-sonnet-5": {
+        "attachment": true,
+        "cost": {
+          "cache_read": 0.2,
+          "cache_write": 4,
+          "input": 2,
+          "output": 10
+        },
+        "description": "Everyday Claude agent model for coding, planning, browsing, and general work",
+        "family": "claude-sonnet",
+        "id": "anthropic/claude-sonnet-5",
+        "knowledge": "2026-01-31",
+        "last_updated": "2026-06-30",
+        "limit": {
+          "context": 1000000,
+          "output": 128000
+        },
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Sonnet 5",
+        "open_weights": false,
+        "provider": {
+          "api": "https://zenmux.ai/api/anthropic/v1",
+          "npm": "@ai-sdk/anthropic"
+        },
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high"
+            ]
+          }
+        ],
+        "release_date": "2026-06-30",
+        "temperature": false,
+        "tool_call": true
+      },
+      "anthropic/claude-sonnet-5-free": {
+        "attachment": true,
+        "cost": {
+          "cache_read": 0,
+          "cache_write": 0,
+          "input": 0,
+          "output": 0
+        },
+        "description": "Everyday Claude agent model for coding, planning, browsing, and general work",
+        "family": "claude-sonnet",
+        "id": "anthropic/claude-sonnet-5-free",
+        "knowledge": "2026-01-31",
+        "last_updated": "2026-06-30",
+        "limit": {
+          "context": 1000000,
+          "output": 128000
+        },
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Sonnet 5 (Free)",
+        "open_weights": false,
+        "provider": {
+          "api": "https://zenmux.ai/api/anthropic/v1",
+          "npm": "@ai-sdk/anthropic"
+        },
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high"
+            ]
+          }
+        ],
+        "release_date": "2026-06-30",
+        "temperature": false,
         "tool_call": true
       },
       "baidu/ernie-5.0-thinking-preview": {
