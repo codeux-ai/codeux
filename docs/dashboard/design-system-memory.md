@@ -19,6 +19,13 @@ The Memory UI relies on specific hex colors that match existing app accents:
 - **Memory Cards:** Memory cards must not be pointer-only. They should announce context, including scope and origin (e.g., via visually hidden instructional text like "Press Enter to open details" and explicitly mentioning the scope in the card's accessible label).
 - **Search & Filtering:** Escape to clear behavior in the search box should update `aria-live` regions ("Search cleared") without unexpectedly blurring focus.
 
+## Camera Contract
+- **Overview Zoom:** The canvas opens at the default overview zoom and uses a lower entry zoom only for the initial entrance animation.
+- **Selection Zoom:** Clicking a node or choosing it from the list recenters the map on that node at a readable focus zoom, while preserving the current zoom if the user has already zoomed in further.
+- **Deep Readability:** The zoom buttons and wheel can reach a much deeper zoom than the old `2.5` cap so an individual memory can be read on dense 200+ node maps.
+- **Pointer Zoom:** Wheel zoom should preserve the world point under the cursor instead of always scaling around the viewport center.
+- **Focused Labels:** High-zoom canvas labels should prefer a single focused, wrapped label for the hovered or selected node instead of rendering full text for every node at once.
+
 ## Responsive Layout Guidelines
 - **Main Canvas:** Uses dynamic viewport height `h-[calc(100dvh-12rem)] min-h-[500px]` to prevent clipping and scrolling issues.
 - **Sidebar & Details:** Stacks to the bottom on mobile (`h-[50vh]`) and anchors to the side on desktop.

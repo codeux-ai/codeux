@@ -48,6 +48,15 @@ When the UI generates visual graphs of memory items:
 - If a valid memory embedding map is present, the layout and edges match the exact vectors provided by the embedding model.
 - If no embedding map is present (or embeddings are still generating), a local fallback algorithm creates a deterministic layout. To preserve front-end performance on dense graphs, fallback category edges are bounded using a deterministic ring topology. Rather than computing $O(N^2)$ all-pairs edges within a category, it calculates exactly $N$ sequential edges per category, limiting memory and rendering bottlenecks.
 
+## Map Camera Behavior
+
+The memory map uses a pointer-centered camera so users can inspect dense graphs without losing spatial context:
+- Mouse wheel zoom keeps the world point under the cursor stable as closely as possible while clamping to the configured zoom range.
+- The zoom controls step through the same range as the wheel and can reach a deep-readability zoom for dense maps.
+- Selecting a node from the canvas or list recenters the camera on that memory at a readable zoom level, and Reset returns to the default overview without leaving a stale selection behind.
+- At higher zoom levels the canvas renders a focused label bubble for the selected or hovered memory instead of flooding the graph with full text at every node.
+- Dense maps are expected to remain navigable at 200+ memories without forcing every memory label to render at once.
+
 ## Storage Requirements
 
 Memory records encapsulate the base `content` string alongside its vectorized byte representation (`embeddingBlob`). The byte buffer must correctly decode based on its stored `embeddingDimension`. The system expects IEEE 754 32-bit floats.
@@ -112,4 +121,5 @@ The Memory settings panel also manages one project-scoped scheduler entry for lo
 - Added keyboard-accessible clear search functionality to `MemorySearch.tsx` (supports clearing via `Escape` and a dedicated clear button with an explicit `<kbd>Esc</kbd>` visual affordance).
 - Enhanced `MemoryList.tsx` to prominently display active search result counts directly in the UI instead of relying solely on `sr-only` live regions.
 - Improved memory list accessibility and reduced motion fallbacks in `MemoryList.tsx`, utilizing `useInteractionTokens` to respect OS-level reduced motion preferences.
+- Updated the memory map camera so wheel, button, and click focus interactions all preserve readable navigation on dense graphs.
 - `MemoryFilters.tsx` implements proper tab semantics and uses clear, high-contrast danger state indicators (`bg-status-red`) for lobotomize (delete) mode to prevent accidental removals.
