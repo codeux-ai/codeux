@@ -142,6 +142,17 @@ describe("Quicksprint Panel State", () => {
       expect(result).toContain("Produce exactly 3 subtasks.");
     });
 
+    it("uses an unlimited-task instruction when noTaskLimit is enabled", () => {
+      const template = createTemplate({
+        agentInstructionMarkdown: "Template instructions.",
+      });
+
+      const result = getCombinedPrompt(template, [], "", 3, true);
+      expect(result).toContain("Template instructions.");
+      expect(result).toContain("Decide the appropriate number of subtasks needed for full coverage. Do not impose an artificial cap.");
+      expect(result).not.toContain("Produce exactly 3 subtasks.");
+    });
+
     it("handles missing agent gracefully", () => {
       const template = createTemplate({
         agentInstructionMarkdown: "Template instructions.",

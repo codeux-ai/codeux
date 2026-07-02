@@ -127,32 +127,43 @@ export const TemplateCard: FunctionComponent<{
 export const SubtaskSlider: FunctionComponent<{
   value: number;
   onChange: (v: number) => void;
-}> = ({ value, onChange }) => {
+  disabled?: boolean;
+}> = ({ value, onChange, disabled = false }) => {
   const min = 1;
-  const max = 15;
+  const max = 30;
   const pct = ((value - min) / (max - min)) * 100;
   const trackRef = useRef<HTMLDivElement>(null);
 
   const handlePointer = useCallback((e: PointerEvent) => {
-    if (!trackRef.current) return;
+    if (disabled || !trackRef.current) return;
     const rect = trackRef.current.getBoundingClientRect();
     const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     onChange(Math.round(min + x * (max - min)));
-  }, [onChange]);
+  }, [disabled, onChange]);
 
   const handlePointerDown = useCallback((e: PointerEvent) => {
+    if (disabled) return;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     handlePointer(e);
-  }, [handlePointer]);
+  }, [disabled, handlePointer]);
+
+  const handlePointerMove = useCallback((e: PointerEvent) => {
+    if (disabled) return;
+    if (e.buttons === 1) {
+      handlePointer(e);
+    }
+  }, [disabled, handlePointer]);
 
   return (
-    <div className="select-none">
+    <div className={`select-none ${disabled ? "opacity-55" : ""}`}>
       {/* Large number display */}
       <div className="flex items-baseline gap-2 mb-6">
-        <span className="font-mono text-[3.5rem] font-black leading-none tracking-tighter text-slate-900 dark:text-white tabular-nums">
+        <span className={`font-mono text-[3.5rem] font-black leading-none tracking-tighter tabular-nums ${
+          disabled ? "text-slate-400 dark:text-slate-500" : "text-slate-900 dark:text-white"
+        }`}>
           {String(value).padStart(2, "0")}
         </span>
-        <span className="text-sm font-medium text-slate-400">
+        <span className={`text-sm font-medium ${disabled ? "text-slate-400 dark:text-slate-500" : "text-slate-400"}`}>
           subtask{value !== 1 ? "s" : ""}
         </span>
       </div>
@@ -160,12 +171,12 @@ export const SubtaskSlider: FunctionComponent<{
       {/* Track */}
       <div
         ref={trackRef}
-        className="relative h-10 cursor-pointer touch-none"
+        className={`relative h-10 ${disabled ? "cursor-not-allowed pointer-events-none" : "cursor-pointer touch-none"}`}
         onPointerDown={handlePointerDown}
-        onPointerMove={(e: PointerEvent) => { if (e.buttons === 1) handlePointer(e); }}
+        onPointerMove={handlePointerMove}
       >
         {/* Background track */}
-        <div className="absolute top-1/2 left-0 right-0 h-2 -translate-y-1/2 rounded-full bg-black/[0.06] dark:bg-white/[0.06] overflow-hidden">
+        <div className="absolute top-1/2 left-0 right-0 h-2 -translate-y-1/2 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.06]">
           {/* Fill */}
           <div
             className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-ember-500 to-ember-400 transition-[width] duration-75"
@@ -178,7 +189,7 @@ export const SubtaskSlider: FunctionComponent<{
           {Array.from({ length: max - min + 1 }, (_, i) => {
             const n = min + i;
             const isActive = n <= value;
-            const isMajor = n === 1 || n === 5 || n === 10 || n === 15;
+            const isMajor = n === 1 || n === 5 || n === 10 || n === 15 || n === 20 || n === 25 || n === 30;
             return (
               <div
                 key={n}
@@ -196,7 +207,9 @@ export const SubtaskSlider: FunctionComponent<{
           style={{ left: `${pct}%` }}
         >
           <div className="relative">
-            <div className="h-6 w-6 rounded-full border-[3px] border-ember-500 bg-white shadow-[0_0_12px_rgba(255,107,0,0.3)] dark:bg-void-800" />
+            <div className={`h-6 w-6 rounded-full border-[3px] bg-white shadow-[0_0_12px_rgba(255,107,0,0.3)] dark:bg-void-800 ${
+              disabled ? "border-slate-300 dark:border-slate-600" : "border-ember-500"
+            }`} />
             <div className="absolute -inset-2 rounded-full bg-ember-500/10 animate-pulse" style={{ animationDuration: "2s" }} />
           </div>
         </div>
@@ -208,6 +221,9 @@ export const SubtaskSlider: FunctionComponent<{
         <span>5</span>
         <span>10</span>
         <span>15</span>
+        <span>20</span>
+        <span>25</span>
+        <span>30</span>
       </div>
     </div>
   );

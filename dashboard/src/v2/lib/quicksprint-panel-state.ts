@@ -49,7 +49,8 @@ export function getCombinedPrompt(
   selectedTemplate: QuicksprintTemplateRecord | null,
   agentPresets: AgentPreset[],
   additionalPrompt: string,
-  taskCount: number
+  taskCount: number,
+  noTaskLimit = false,
 ): string {
   if (!selectedTemplate) return "";
   const parts: string[] = [];
@@ -70,7 +71,11 @@ export function getCombinedPrompt(
     parts.push(`## Additional Instructions\n\n${additionalPrompt.trim()}`);
   }
 
-  parts.push(`Produce exactly ${taskCount} subtasks.`);
+  if (noTaskLimit) {
+    parts.push("Decide the appropriate number of subtasks needed for full coverage. Do not impose an artificial cap.");
+  } else {
+    parts.push(`Produce exactly ${taskCount} subtasks.`);
+  }
 
   return parts.join("\n\n");
 }

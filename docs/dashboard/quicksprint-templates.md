@@ -56,6 +56,8 @@ The Quicksprint panel separates templates into two groups:
 
 Default templates are now organized by `purpose`.
 
+The execution sidebar now lets operators raise the subtask count up to 30 or switch on `No limit`, which disables the slider and asks the planner to choose an appropriate task count for the run.
+
 Current built-in purpose set:
 - `Fullstack JS App`
 
