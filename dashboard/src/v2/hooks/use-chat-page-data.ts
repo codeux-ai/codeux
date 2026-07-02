@@ -106,6 +106,20 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
       .join(",");
   }, [invocationData.invocations]);
 
+  const selectedInvocationRefreshKey = useMemo(() => {
+    const selectedInvocation = invocationData.selectedInvocation;
+    if (!selectedInvocation) {
+      return null;
+    }
+    return [
+      selectedInvocation.id,
+      selectedInvocation.status,
+      selectedInvocation.messageCount,
+      selectedInvocation.lastMessageAt || "",
+      selectedInvocation.updatedAt,
+    ].join("|");
+  }, [invocationData.selectedInvocation]);
+
   useEffect(() => {
     if (!selectedProject || !activeInvocationKey) {
       return;
@@ -126,6 +140,7 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
     };
   }, [
     activeInvocationKey,
+    selectedInvocationRefreshKey,
     selectedProject,
     invocationData.selectedInvocationId,
     invocationData.refreshInvocationMessages,
