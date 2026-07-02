@@ -1,7 +1,20 @@
-import { useEffect, useState, useRef } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import type { ProjectExecutionStatsSnapshot } from "../../types.js";
 import type { ChartZoomRange, StatsVisualMode } from "./components/StatsShared.js";
 import { calculateChartMetrics } from "./chart-view-models.js";
+
+const DEFAULT_STORAGE_SCOPE = "default";
+const SERIES_STORAGE_PREFIX = "codeux_stats_enabled_series";
+const LEGACY_SERIES_STORAGE_PREFIX = "jules_stats_enabled_series";
+const VISUAL_MODE_STORAGE_PREFIX = "codeux_stats_visual_mode";
+const VALID_VISUAL_MODES: StatsVisualMode[] = [
+  "trend",
+  "composition",
+  "models",
+  "reliability",
+  "ledgers",
+  "system",
+];
 
 export function parseEnabledSeries(stored: string | null): Record<string, boolean> {
   if (!stored) return {};
@@ -56,6 +69,57 @@ export function reconcileSeries(
   return changed ? next : current;
 }
 
+function getStorageScope(projectId: string | null): string {
+  return projectId || DEFAULT_STORAGE_SCOPE;
+}
+
+function getStorageKey(prefix: string, projectId: string | null): string {
+  return `${prefix}_${getStorageScope(projectId)}`;
+}
+
+function readStorageValue(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStorageValue(key: string, value: string): void {
+  try {
+    if (readStorageValue(key) !== value) {
+      localStorage.setItem(key, value);
+    }
+  } catch {
+    // Ignore restricted storage environments.
+  }
+}
+
+function parseVisualMode(stored: string | null): StatsVisualMode | null {
+  if (!stored || !VALID_VISUAL_MODES.includes(stored as StatsVisualMode)) {
+    return null;
+  }
+
+  return stored as StatsVisualMode;
+}
+
+function readStoredVisualMode(projectId: string | null): StatsVisualMode {
+  return parseVisualMode(readStorageValue(getStorageKey(VISUAL_MODE_STORAGE_PREFIX, projectId))) || "composition";
+}
+
+function readStoredSeries(projectId: string | null): Record<string, boolean> {
+  const storageKey = getStorageKey(SERIES_STORAGE_PREFIX, projectId);
+  const legacyStorageKey = getStorageKey(LEGACY_SERIES_STORAGE_PREFIX, projectId);
+  const storedSeries = readStorageValue(storageKey) ?? readStorageValue(legacyStorageKey);
+  const parsedSeries = parseEnabledSeries(storedSeries);
+
+  if (storedSeries && storageKey !== legacyStorageKey) {
+    writeStorageValue(storageKey, JSON.stringify(parsedSeries));
+  }
+
+  return parsedSeries;
+}
+
 export interface UsageChartState {
   visualMode: StatsVisualMode;
   setVisualMode: (mode: StatsVisualMode) => void;
@@ -76,55 +140,38 @@ export function useUsageChartState(
   projectId: string | null,
   stats: ProjectExecutionStatsSnapshot | null
 ): UsageChartState {
-  const [visualMode, setVisualMode] = useState<StatsVisualMode>("composition");
+  const [visualMode, setVisualModeState] = useState<StatsVisualMode>(() => readStoredVisualMode(projectId));
   const [zoomRange, setZoomRange] = useState<ChartZoomRange | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [dragStartIndex, setDragStartIndex] = useState<number | null>(null);
   const [dragCurrentIndex, setDragCurrentIndex] = useState<number | null>(null);
-  
-  const activeProjectRef = useRef<string | null>(projectId);
-  const [enabledSeries, setEnabledSeries] = useState<Record<string, boolean>>(() => {
-    const storageKey = `jules_stats_enabled_series_${projectId || 'default'}`;
-    try {
-      return parseEnabledSeries(localStorage.getItem(storageKey));
-    } catch (e) {
-      return {};
-    }
-  });
+  const [enabledSeriesState, setEnabledSeriesState] = useState<Record<string, boolean>>(() => readStoredSeries(projectId));
+
+  const setVisualMode = (mode: StatsVisualMode) => {
+    setVisualModeState(mode);
+    writeStorageValue(getStorageKey(VISUAL_MODE_STORAGE_PREFIX, projectId), mode);
+  };
+
+  const setEnabledSeries: UsageChartState["setEnabledSeries"] = (value) => {
+    setEnabledSeriesState((current) => {
+      const next = typeof value === "function" ? value(current) : value;
+      writeStorageValue(getStorageKey(SERIES_STORAGE_PREFIX, projectId), JSON.stringify(next));
+      return next;
+    });
+  };
 
   useEffect(() => {
-    if (activeProjectRef.current !== projectId) return;
-    if (Object.keys(enabledSeries).length === 0) return;
-
-    const storageKey = `jules_stats_enabled_series_${projectId || 'default'}`;
-    const serialized = JSON.stringify(enabledSeries);
-    try {
-      if (localStorage.getItem(storageKey) !== serialized) {
-        localStorage.setItem(storageKey, serialized);
-      }
-    } catch (e) {
-      // ignore
-    }
-  }, [enabledSeries, projectId]);
-
-  // Load project-specific series config when project changes
-  useEffect(() => {
-    activeProjectRef.current = projectId;
-    const storageKey = `jules_stats_enabled_series_${projectId || 'default'}`;
-    try {
-      setEnabledSeries(parseEnabledSeries(localStorage.getItem(storageKey)));
-    } catch (e) {
-      setEnabledSeries({});
-    }
+    setVisualModeState(readStoredVisualMode(projectId));
+    setEnabledSeriesState(readStoredSeries(projectId));
   }, [projectId]);
 
-  // Reconcile and initialize series on stats load
   useEffect(() => {
     if (!stats) return;
+    setEnabledSeries((curr) => {
+      const next = reconcileSeries(curr, stats.chartSeries);
+      return next;
+    });
 
-    setEnabledSeries((curr) => reconcileSeries(curr, stats.chartSeries));
-
-    // Constrain zoom range to current buckets
     setZoomRange((curr) => {
       if (!curr) return null;
       const maxIdx = Math.max(0, stats.buckets.length - 1);
@@ -167,7 +214,7 @@ export function useUsageChartState(
     setDragStartIndex,
     dragCurrentIndex,
     setDragCurrentIndex,
-    enabledSeries,
+    enabledSeries: enabledSeriesState,
     setEnabledSeries,
     metrics,
   };
