@@ -29,6 +29,50 @@ describe("project-stats-aggregation", () => {
     expect(mapped.inputTokens).toBe(0);
   });
 
+  it("uses provider-reported cost when no token pricing is available", () => {
+    const mapped = mapAggregatedUsage({
+      invocationCount: 1,
+      activeTimeMs: 1000,
+      inputTokens: 1000,
+      cachedInputTokens: 0,
+      outputTokens: 500,
+      reasoningOutputTokens: 0,
+      totalTokens: 1500,
+      toolCallCount: 0,
+      reportedCostUsd: 0.42,
+      reportedInvocationCount: 1,
+      estimatedInvocationCount: 0,
+      unsupportedInvocationCount: 0,
+      unavailableInvocationCount: 0,
+    });
+
+    expect(mapped.inputCostUsd).toBe(0);
+    expect(mapped.outputCostUsd).toBe(0);
+    expect(mapped.totalCostUsd).toBeCloseTo(0.42);
+  });
+
+  it("prefers token pricing over provider-reported cost when pricing is available", () => {
+    const mapped = mapAggregatedUsage({
+      invocationCount: 1,
+      activeTimeMs: 1000,
+      inputTokens: 1_000_000,
+      cachedInputTokens: 0,
+      outputTokens: 1_000_000,
+      reasoningOutputTokens: 0,
+      totalTokens: 2_000_000,
+      toolCallCount: 0,
+      reportedCostUsd: 999,
+      reportedInvocationCount: 1,
+      estimatedInvocationCount: 0,
+      unsupportedInvocationCount: 0,
+      unavailableInvocationCount: 0,
+    }, () => ({ inputTokens: 2, outputTokens: 3, cachedInputTokens: 0 }), "opencode", "some/model");
+
+    expect(mapped.inputCostUsd).toBe(2);
+    expect(mapped.outputCostUsd).toBe(3);
+    expect(mapped.totalCostUsd).toBe(5);
+  });
+
   it("mergeAggregatedUsage sums fields accurately", () => {
     const target = createEmptyUsageTotals();
     const source = createEmptyUsageTotals();

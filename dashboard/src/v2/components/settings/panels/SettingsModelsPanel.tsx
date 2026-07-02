@@ -5,6 +5,7 @@ import type { SettingsPageState } from "../../../hooks/use-settings-page-state.j
 import { NoticePanel } from "../SettingsSurface.js";
 import { NumberInput, PillChoiceGroup, ProviderLogo, Row, SelectInput, Toggle } from "../SettingsFormFields.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
+import { SettingsModelPricingPanel } from "./SettingsModelPricingPanel.js";
 import { ProviderBrandIcon } from "../../providers/ProviderBrandIcon.js";
 import type {
   InvocationRoutingId,
@@ -927,6 +928,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
           </div>
         </div>
       </SectionCard>
+      <SettingsModelPricingPanel state={state} />
     </div>
   );
 };

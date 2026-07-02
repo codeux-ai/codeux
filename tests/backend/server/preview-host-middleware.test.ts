@@ -3,6 +3,15 @@ import express from "express";
 import request from "supertest";
 import { createPreviewHostMiddleware } from "../../../src/server/preview-host-middleware.js";
 import type { DashboardServerOptions } from "../../../src/server/dashboard-server.js";
+import type { AddressInfo } from "node:net";
+
+function getServerPort(server: { address(): string | AddressInfo | null }): number {
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("Expected server to be listening on a TCP port");
+  }
+  return address.port;
+}
 
 describe("preview-host-middleware", () => {
   it("rejects hostile origin for preview control paths with 403", async () => {
@@ -82,14 +91,15 @@ describe("preview-host-middleware", () => {
   });
 
   it("rejects request if body exceeds PREVIEW_MAX_REQUEST_BODY_BYTES", async () => {
+    const session = {
+      id: "session-1",
+      projectId: "proj-1",
+      sprintId: "sprint-1",
+      status: "running",
+      hostPort: 0,
+    };
     const options = {
-      getSprintPreviewSession: vi.fn().mockResolvedValue({
-        id: "session-1",
-        projectId: "proj-1",
-        sprintId: "sprint-1",
-        status: "running",
-        hostPort: 3334,
-      }),
+      getSprintPreviewSession: vi.fn().mockResolvedValue(session),
     } as unknown as DashboardServerOptions;
 
     const app = express();
@@ -99,16 +109,18 @@ describe("preview-host-middleware", () => {
     const server = http.createServer((req, res) => {
       req.on('data', () => {});
     });
-    await new Promise<void>((resolve) => server.listen(3334, "127.0.0.1", () => resolve()));
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    session.hostPort = getServerPort(server);
 
-    const appServer = app.listen(4445);
+    const appServer = app.listen(0);
     await new Promise<void>(resolve => appServer.on('listening', resolve));
+    const appPort = getServerPort(appServer);
 
     try {
       await new Promise<void>((resolve, reject) => {
         const req = http.request({
           hostname: '127.0.0.1',
-          port: 4445,
+          port: appPort,
           method: 'POST',
           path: '/upload',
           headers: { 'Host': 'preview-session-1.localhost:4444' }
@@ -150,14 +162,15 @@ describe("preview-host-middleware", () => {
   });
 
   it("rejects response if HTML exceeds PREVIEW_MAX_STREAMED_HTML_BYTES", async () => {
+    const session = {
+      id: "session-1",
+      projectId: "proj-1",
+      sprintId: "sprint-1",
+      status: "running",
+      hostPort: 0,
+    };
     const options = {
-      getSprintPreviewSession: vi.fn().mockResolvedValue({
-        id: "session-1",
-        projectId: "proj-1",
-        sprintId: "sprint-1",
-        status: "running",
-        hostPort: 3333,
-      }),
+      getSprintPreviewSession: vi.fn().mockResolvedValue(session),
     } as unknown as DashboardServerOptions;
 
     const app = express();
@@ -181,16 +194,18 @@ describe("preview-host-middleware", () => {
       };
       writeNext();
     });
-    await new Promise<void>((resolve) => server.listen(3333, "127.0.0.1", () => resolve()));
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    session.hostPort = getServerPort(server);
 
-    const appServer = app.listen(4446);
+    const appServer = app.listen(0);
     await new Promise<void>(resolve => appServer.on('listening', resolve));
+    const appPort = getServerPort(appServer);
 
     try {
       await new Promise<void>((resolve, reject) => {
         const req = http.request({
           hostname: '127.0.0.1',
-          port: 4446,
+          port: appPort,
           method: 'GET',
           path: '/something',
           headers: { 'Host': 'preview-session-1.localhost:4444' }
@@ -217,14 +232,15 @@ describe("preview-host-middleware", () => {
   });
 
   it("rejects response if binary exceeds PREVIEW_MAX_BUFFERED_RESPONSE_BYTES", async () => {
+    const session = {
+      id: "session-1",
+      projectId: "proj-1",
+      sprintId: "sprint-1",
+      status: "running",
+      hostPort: 0,
+    };
     const options = {
-      getSprintPreviewSession: vi.fn().mockResolvedValue({
-        id: "session-1",
-        projectId: "proj-1",
-        sprintId: "sprint-1",
-        status: "running",
-        hostPort: 3335,
-      }),
+      getSprintPreviewSession: vi.fn().mockResolvedValue(session),
     } as unknown as DashboardServerOptions;
 
     const app = express();
@@ -248,16 +264,18 @@ describe("preview-host-middleware", () => {
       };
       writeNext();
     });
-    await new Promise<void>((resolve) => server.listen(3335, "127.0.0.1", () => resolve()));
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    session.hostPort = getServerPort(server);
 
-    const appServer = app.listen(4448);
+    const appServer = app.listen(0);
     await new Promise<void>(resolve => appServer.on('listening', resolve));
+    const appPort = getServerPort(appServer);
 
     try {
       await new Promise<void>((resolve, reject) => {
         const req = http.request({
           hostname: '127.0.0.1',
-          port: 4448,
+          port: appPort,
           method: 'GET',
           path: '/something.bin',
           headers: { 'Host': 'preview-session-1.localhost:4444' }
