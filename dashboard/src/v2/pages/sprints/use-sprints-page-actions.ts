@@ -3,6 +3,7 @@ import type {
   CreateTaskInput,
   ImprovePromptInput,
   Sprint,
+  SprintImportedTaskInput,
   SprintLinkedIssueInput,
   SprintStatus,
 } from "../../types.js";
@@ -20,6 +21,7 @@ import {
   planSprint,
   updateSprint,
   cancelPlanningRequest,
+  addImportedTasksToSprint,
 } from "../../lib/project-api.js";
 import {
   buildTaskBundle,
@@ -300,6 +302,7 @@ export function useSprintsPageActions({
       agentRoutingMode: "MANUAL" | "ORCHESTRATOR";
       workerAgentPresetId: string | null;
       linkedIssues?: SprintLinkedIssueInput[];
+      importedTasks?: SprintImportedTaskInput[];
       clientRequestId?: string;
       sprintKeyOverride?: string;
       signal?: AbortSignal;
@@ -316,6 +319,7 @@ export function useSprintsPageActions({
         payload.workerAgentPresetId,
       );
       const linkedIssues = payload.linkedIssues || [];
+      const importedTasks = payload.importedTasks || [];
       const goal = mergePromptWithLinkedIssues(payload.goal, linkedIssues);
 
       let numberOverride: number | null | undefined = undefined;
@@ -346,6 +350,10 @@ export function useSprintsPageActions({
           ...(numberOverride !== undefined ? { number: numberOverride } : {}),
           ...(slugOverride !== undefined ? { slug: slugOverride } : {}),
         });
+
+        if (importedTasks.length > 0) {
+          await addImportedTasksToSprint(selectedProject.id, editingSprint.id, importedTasks);
+        }
 
         if (
           payload.submitMode === "plan_only" ||
@@ -393,6 +401,7 @@ export function useSprintsPageActions({
           goal,
           originalPrompt: payload.originalPrompt,
           linkedIssues,
+          importedTasks,
           number:
             numberOverride !== undefined ? numberOverride : reservedNumber,
           ...(slugOverride !== undefined ? { slug: slugOverride } : {}),
