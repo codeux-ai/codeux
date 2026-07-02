@@ -152,6 +152,45 @@ describe("DockerRunner", () => {
     expect(cacheInstance.resolveImage).toHaveBeenCalledWith(expect.objectContaining({ runtimeRoot: "/runtime-root" }));
   });
 
+  it("kills the backing container directly when an aborted run is cancelled", async () => {
+    let releaseRun: ((result: any) => void) | undefined;
+    vi.mocked(runStreamingCommand).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releaseRun = resolve;
+        }),
+    );
+
+    const controller = new AbortController();
+
+    const runPromise = runner.runProviderInDocker({
+      command: "gemini",
+      args: ["--yolo"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: "session-1",
+      providerLabel: "gemini",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      signal: controller.signal,
+      onActivity: vi.fn(),
+    });
+
+    controller.abort("test abort");
+
+    await vi.waitFor(() => {
+      expect(runCommandStrict).toHaveBeenCalledWith("docker", ["kill", "code-ux-gemini-session-1"], process.cwd());
+    });
+
+    releaseRun?.({ ok: false, code: null, stdout: "", stderr: "aborted" });
+    await runPromise;
+  });
+
   it("mounts provider argv from a file so long prompts do not enter the host docker command line", async () => {
     const longPrompt = `plan ${"x".repeat(64_000)} with 'quotes'`;
 

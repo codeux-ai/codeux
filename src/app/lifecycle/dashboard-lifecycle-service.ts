@@ -56,12 +56,15 @@ import type { EmbeddingModelManager } from "../../services/embedding-model-manag
 import type { EmbeddingService } from "../../services/embedding-service.js";
 import type { MemoryRepository } from "../../repositories/memory-repository.js";
 import type { GuardrailService } from "../../services/guardrail-service.js";
+import { UpdateCheckerService } from "../../services/update-checker-service.js";
 import { GUARDRAIL_LEDGER_PURPOSES, type GuardrailLedgerPurpose } from "../../repositories/guardrail-repository.js";
 import { getRepoDebugLogPath, CODE_UX_SERVICE_NAME } from "../../shared/config/code-ux-paths.js";
 import { getProjectLiveSnapshot } from "../live/project-live-snapshot.js";
 import { DashboardSnapshotCache, mapAssignedWorkers } from "./dashboard-snapshot-cache.js";
 import { prepareGitProjectCreateInput } from "../../services/project-git-clone-service.js";
 import { getOnboardingRuntimeReadiness } from "../../services/onboarding-readiness-service.js";
+
+const updateCheckerService = new UpdateCheckerService();
 
 export interface BootDashboardDeps {
   app: Express;
@@ -395,6 +398,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     getGitStatus: deps.getGitStatus,
     getExternalSettingsHints: () => deps.externalSettingsHints,
     getSystemSettings: () => deps.settingsRepository.getSystemSettings(),
+    getUpdateStatus: () => updateCheckerService.checkForUpdate(),
     saveSystemSettings: (settings) => {
       const saved = deps.settingsRepository.saveSystemSettings(settings);
       deps.runtimeContext.dashboardSettings = deps.settingsRepository.getDefaultDashboardSettings();
@@ -559,6 +563,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     deleteAgentPreset: async (agentPresetId) => await deps.agentPresetSyncService.deleteAgentPreset(agentPresetId),
     importAgentPresetFromMarkdown: async (agentPresetId) => await deps.agentPresetSyncService.importAgentPresetFromMarkdown(agentPresetId),
     syncAllAgentPresetsFromMarkdown: async (projectId) => await deps.agentPresetSyncService.syncAllAgentPresetsFromMarkdown(projectId),
+    pushAgentPresetsToRepository: async (projectId, options) => await deps.agentPresetSyncService.pushAgentPresetsToRepository(projectId, options),
     listInstructionFiles: (projectId) => instructionFileService.listInstructionFiles(projectId),
     readInstructionFile: (projectId, fileId) => instructionFileService.readInstructionFile(projectId, fileId),
     writeInstructionFile: (projectId, fileId, content) => instructionFileService.writeInstructionFile(projectId, fileId, content),
@@ -567,6 +572,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     updateConversationThread: (threadId, input) => deps.connectionChatRepository.updateThread(threadId, input),
     updateThreadRoute: (threadId, input) => deps.chatThreadRuntimeService.updateThreadRoute(threadId, input),
     compactThreadSession: (threadId) => deps.chatThreadRuntimeService.compactThreadSession(threadId),
+    cancelThreadTurn: (threadId) => deps.chatThreadRuntimeService.cancelInFlightTurn(threadId),
     deleteConversationThread: (threadId) => deps.connectionChatRepository.deleteThread(threadId),
     listConversationMessages: (threadId) => deps.connectionChatRepository.listMessages(threadId),
     postConversationMessage: (projectId, input) => deps.chatThreadRuntimeService.postMessage(projectId, input),
@@ -651,5 +657,17 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
   });
 
   deps.runtimeContext.dashboardRuntimePort = handle.port;
+  void updateCheckerService.checkForUpdate(true).then((status) => {
+    if (status.updateAvailable && status.latestVersion) {
+      deps.logger.info("Code UX update available", {
+        currentVersion: status.currentVersion,
+        latestVersion: status.latestVersion,
+      });
+    }
+  }).catch((error) => {
+    deps.logger.warn("Failed to check for Code UX updates during startup", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
   return handle;
 }

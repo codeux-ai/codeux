@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { Minus, Square, Copy, X } from "lucide-preact";
 import { RobotLogo } from "./brand/RobotLogo.js";
+import { fetchUpdateStatus } from "../lib/system-api.js";
 
 declare const __APP_VERSION__: string;
 
@@ -16,11 +17,20 @@ interface TitleBarProps {
   appearanceVariant?: "default" | "translucent";
 }
 
+type UpdateStatus = {
+  currentVersion: string;
+  latestVersion: string | null;
+  updateAvailable: boolean;
+  checkedAt: string;
+  error?: string;
+};
+
 export const TitleBar: FunctionComponent<TitleBarProps> = ({ appearanceVariant = "translucent" }) => {
   const desktop = typeof window !== "undefined" ? window.codeUxDesktop : undefined;
   const windowApi = desktop?.window;
   const [platform, setPlatform] = useState<Platform>(() => resolvePlatform(desktop?.platform));
   const [isMaximized, setIsMaximized] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
 
   useEffect(() => {
     if (!windowApi) return;
@@ -36,6 +46,35 @@ export const TitleBar: FunctionComponent<TitleBarProps> = ({ appearanceVariant =
     return () => {
       cancelled = true;
       off();
+    };
+  }, [windowApi]);
+
+  useEffect(() => {
+    if (!windowApi) return;
+
+    let cancelled = false;
+
+    const loadUpdateStatus = async (): Promise<void> => {
+      try {
+        const status = await fetchUpdateStatus();
+        if (!cancelled) {
+          setUpdateStatus(status);
+        }
+      } catch {
+        if (!cancelled) {
+          setUpdateStatus(null);
+        }
+      }
+    };
+
+    void loadUpdateStatus();
+    const intervalId = window.setInterval(() => {
+      void loadUpdateStatus();
+    }, 30 * 60 * 1000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
     };
   }, [windowApi]);
 
@@ -100,7 +139,17 @@ export const TitleBar: FunctionComponent<TitleBarProps> = ({ appearanceVariant =
         <span className="text-[11px] font-semibold tracking-[0.08em] text-slate-600 dark:text-slate-300 truncate">
           Code<span className="text-signal-500">UX</span>
           <span className="mx-2 text-slate-300 dark:text-slate-600">·</span>
-          <span className="text-slate-400 dark:text-slate-500 font-medium">v{__APP_VERSION__}</span>
+          <span className="text-slate-400 dark:text-slate-500 font-medium">
+            v{__APP_VERSION__}
+            {updateStatus?.updateAvailable ? (
+              <span
+                title={updateStatus.latestVersion ? `Latest version: ${updateStatus.latestVersion}` : "Latest version unavailable"}
+                className="titlebar-no-drag ml-2 inline-flex items-center rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-600 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-400"
+              >
+                Update available
+              </span>
+            ) : null}
+          </span>
         </span>
       </div>
       {controls}

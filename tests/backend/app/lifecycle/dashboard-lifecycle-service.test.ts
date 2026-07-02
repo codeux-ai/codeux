@@ -13,6 +13,14 @@ vi.mock("../../../../src/server/memory-routes.js", () => ({
 vi.mock("../../../../src/server/knowledge-routes.js", () => ({
   registerKnowledgeRoutes: vi.fn(),
 }));
+const updateCheckerServiceMock = vi.hoisted(() => ({
+  checkForUpdate: vi.fn(),
+}));
+vi.mock("../../../../src/services/update-checker-service.js", () => ({
+  UpdateCheckerService: vi.fn(function UpdateCheckerService() {
+    return updateCheckerServiceMock;
+  }),
+}));
 
 describe("dashboard-lifecycle-service", () => {
   let mockDeps: BootDashboardDeps;
@@ -194,6 +202,9 @@ describe("dashboard-lifecycle-service", () => {
       } as any,
       logger: {
         child: vi.fn().mockReturnValue({}),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
       } as any,
       getLiveActivitiesForActiveTasks: vi.fn(),
       getGitStatus: vi.fn(),
@@ -213,7 +224,15 @@ describe("dashboard-lifecycle-service", () => {
       embeddingModelManager: { restorePreviousModel: vi.fn().mockResolvedValue(undefined) } as any,
       embeddingService: {} as any,
       memoryRepository: {} as any,
+      knowledgeService: {} as any,
     };
+
+    updateCheckerServiceMock.checkForUpdate.mockResolvedValue({
+      currentVersion: "0.8.9",
+      latestVersion: "0.9.0",
+      updateAvailable: true,
+      checkedAt: "2026-07-02T00:00:00.000Z",
+    });
 
     vi.mocked(setupDashboardServer).mockResolvedValue({ port: 3000 } as any);
   });
@@ -247,10 +266,26 @@ describe("dashboard-lifecycle-service", () => {
           port: 3000,
           liveActivityCacheMs: 500,
           realtimeService: mockDeps.dashboardRealtimeService,
+          getUpdateStatus: expect.any(Function),
+          cancelThreadTurn: expect.any(Function),
         })
       );
       expect(mockDeps.dashboardRealtimeService.setSnapshotLoaders).toHaveBeenCalled();
       expect(mockDeps.runtimeContext.dashboardRuntimePort).toBe(3000);
+    });
+
+    it("checks for updates once at startup and logs when a newer version exists", async () => {
+      await bootDashboard(mockDeps);
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(updateCheckerServiceMock.checkForUpdate).toHaveBeenCalledWith(true);
+      expect(mockDeps.logger.info).toHaveBeenCalledWith(
+        "Code UX update available",
+        expect.objectContaining({
+          currentVersion: "0.8.9",
+          latestVersion: "0.9.0",
+        }),
+      );
     });
 
     it("resets the source guardrail when a human escalation is resolved", async () => {

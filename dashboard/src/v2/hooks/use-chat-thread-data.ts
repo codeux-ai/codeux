@@ -8,6 +8,7 @@ import {
   postConversationMessage,
   updateConversationThread,
   compactThreadSession,
+  cancelThreadTurn,
 } from "../lib/connection-api.js";
 import { resolveSelectedItemId } from "../lib/chat-page-state-utils.js";
 import { upsertChatThread } from "../lib/chat-thread-utils.js";
@@ -132,6 +133,7 @@ export const useChatThreadData = (options: {
   const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [compacting, setCompacting] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const selectedThreadIdRef = useRef<string | null>(null);
@@ -335,6 +337,38 @@ export const useChatThreadData = (options: {
     }
   }, [cache, refreshMessages, requestConfirm, selectedProject, selectedThread, setSuccess, setThreadsSnapshot]);
 
+  const handleCancelActiveTurn = useCallback(async (): Promise<void> => {
+    if (!selectedThread) {
+      return;
+    }
+
+    setIsCancelling(true);
+    try {
+      const result = await cancelThreadTurn(selectedThread.id);
+      if (!result.cancelled) {
+        return;
+      }
+
+      const nextThreads = (cache.getThreads(selectedProject?.id || "") || threadsRef.current).map((thread) => (
+        thread.id === selectedThread.id
+          ? { ...thread, pendingMessageCount: 0 }
+          : thread
+      ));
+
+      if (selectedProject) {
+        cache.setThreads(selectedProject.id, nextThreads);
+      }
+      setThreadsSnapshot(nextThreads);
+      await refreshMessages(selectedThread.id, { force: true });
+      setError(null);
+      setSuccess("Turn cancelled.");
+    } catch (cancelError) {
+      setError(cancelError instanceof Error ? cancelError.message : String(cancelError));
+    } finally {
+      setIsCancelling(false);
+    }
+  }, [cache, refreshMessages, selectedProject, selectedThread, setSuccess, setThreadsSnapshot]);
+
   const recordSentMessage = useCallback((message: string): void => {
     sentHistoryRef.current = [...sentHistoryRef.current.filter((entry) => entry !== message), message].slice(-50);
     historyIndexRef.current = -1;
@@ -463,6 +497,7 @@ export const useChatThreadData = (options: {
     deletingThreadId,
     sending,
     compacting,
+    isCancelling,
     error,
     setError,
     selectedThread,
@@ -480,5 +515,6 @@ export const useChatThreadData = (options: {
     confirmOptions,
     handleConfirm,
     handleCancel,
+    handleCancelActiveTurn,
   };
 };

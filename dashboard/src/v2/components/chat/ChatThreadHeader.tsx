@@ -1,5 +1,5 @@
 import { h, type FunctionComponent } from "preact";
-import { AlertCircle, Zap, Activity } from "lucide-preact";
+import { AlertCircle, Zap, Activity, XCircle } from "lucide-preact";
 import type { ChatThread } from "../../types.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
@@ -31,13 +31,17 @@ const resolveAssignedLabel = (thread: ChatThread | null): string => {
 interface ChatThreadHeaderProps {
   thread: ChatThread | null;
   onCompact: () => void;
+  onCancelActiveTurn: () => void;
   isCompacting: boolean;
+  isCancelling: boolean;
 }
 
 export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
   thread,
   onCompact,
+  onCancelActiveTurn,
   isCompacting,
+  isCancelling,
 }) => {
   const assignedLabel = resolveAssignedLabel(thread);
   const interactionTokens = useInteractionTokens();
@@ -79,6 +83,24 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
             {thread ? `${thread.messageCount} messages` : "0 messages"}
           </div>
           <div className="flex flex-wrap items-center sm:justify-end gap-2 min-w-0">
+            {thread && thread.pendingMessageCount > 0 && (
+              <button
+                type="button"
+                onClick={onCancelActiveTurn}
+                disabled={isCancelling}
+                aria-busy={isCancelling}
+                style={{
+                  transitionProperty: "color, background-color, border-color, text-decoration-color, fill, stroke",
+                  transitionDuration: interactionTokens.controlFeedback.duration,
+                  transitionTimingFunction: interactionTokens.controlFeedback.ease,
+                }}
+                className={`inline-flex min-w-[160px] justify-center items-center gap-1.5 rounded-full border border-status-red/30 bg-status-red/[0.06] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-status-red hover:bg-status-red/[0.12] dark:border-status-red/30 dark:bg-status-red/[0.08] dark:hover:bg-status-red/[0.16] ${isCancelling ? 'cursor-wait opacity-70' : ''}`}
+                title="Cancel Request"
+              >
+                <XCircle className={`h-3.5 w-3.5 ${isCancelling ? "animate-pulse text-status-red" : ""}`} />
+                {isCancelling ? "Cancelling..." : "Cancel Request"}
+              </button>
+            )}
             {thread && thread.messageCount > 0 && (
               <button
                 type="button"

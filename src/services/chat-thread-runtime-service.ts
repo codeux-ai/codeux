@@ -222,6 +222,16 @@ export class ChatThreadRuntimeService {
     });
   }
 
+  public cancelInFlightTurn(threadId: string): { cancelled: boolean } {
+    const existingTurn = this.inFlightTurns.get(threadId);
+    if (!existingTurn) {
+      return { cancelled: false };
+    }
+
+    existingTurn.abortController.abort(new Error("Cancelled from the dashboard"));
+    return { cancelled: true };
+  }
+
   async postMessage(projectId: string, input: CreateDashboardConversationMessageInput): Promise<ConversationMessageRecord> {
     const userMessage = this.deps.connectionChatRepository.postDashboardMessage(projectId, input);
     const thread = this.deps.connectionChatRepository.getThread(userMessage.threadId);

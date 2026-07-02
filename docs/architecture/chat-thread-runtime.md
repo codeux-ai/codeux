@@ -40,6 +40,8 @@ This keeps the chat page's explicit route selector authoritative for new-thread 
 
 Message posting is an awaited runtime operation. `POST /api/projects/:projectId/conversations/messages` waits for the chat runtime to finish routing the dashboard turn before returning the stored dashboard message, so provider/runtime errors are handled inside the same request lifecycle instead of continuing as detached background work.
 
+The dashboard can also cancel the currently running turn for a specific thread through `POST /api/conversations/threads/:threadId/cancel`. That aborts only the matching in-flight thread turn and leaves other thread executions alone.
+
 Virtual chat failures are terminal for that dashboard turn:
 - the dashboard message is moved from `pending`/`delivered` to `failed`
 - a visible system message is appended with the worker execution error

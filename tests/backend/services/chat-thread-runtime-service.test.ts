@@ -46,6 +46,20 @@ describe("ChatThreadRuntimeService", () => {
     service = new ChatThreadRuntimeService(deps);
   });
 
+  it("cancels an in-flight turn for the exact thread only", () => {
+    const turnHandle = {
+      abortController: new AbortController(),
+      latestMessage: { id: "msg-live" },
+    } as any;
+    (service as any).inFlightTurns.set("t1", turnHandle);
+
+    expect(service.cancelInFlightTurn("missing-thread")).toEqual({ cancelled: false });
+    expect(service.cancelInFlightTurn("t1")).toEqual({ cancelled: true });
+    expect(turnHandle.abortController.signal.aborted).toBe(true);
+    expect(turnHandle.abortController.signal.reason).toBeInstanceOf(Error);
+    expect((turnHandle.abortController.signal.reason as Error).message).toBe("Cancelled from the dashboard");
+  });
+
   it("throws an error if thread is not found when posting a message", async () => {
     deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-missing", threadId: "t-missing", bodyMarkdown: "hello" });
     deps.connectionChatRepository.getThread.mockReturnValue(undefined); // Simulate missing thread

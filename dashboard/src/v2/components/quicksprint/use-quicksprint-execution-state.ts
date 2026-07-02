@@ -18,6 +18,7 @@ interface VirtualProviderOption {
 
 interface QuicksprintExecutionOptions {
   shouldHandleResult?: () => boolean;
+  noTaskLimit?: boolean;
 }
 
 export function useQuicksprintExecutionState({
@@ -28,6 +29,7 @@ export function useQuicksprintExecutionState({
   selectedTemplate,
   additionalPrompt,
   taskCount,
+  noTaskLimit,
   agentPresets,
   onClose,
 }: {
@@ -38,6 +40,7 @@ export function useQuicksprintExecutionState({
   selectedTemplate: QuicksprintTemplateRecord | null;
   additionalPrompt: string;
   taskCount: number;
+  noTaskLimit: boolean;
   agentPresets: AgentPreset[];
   onClose: () => void;
 }) {
@@ -80,8 +83,8 @@ export function useQuicksprintExecutionState({
   );
 
   const combinedPrompt = useMemo(
-    () => getCombinedPrompt(selectedTemplate, agentPresets, additionalPrompt, taskCount),
-    [selectedTemplate, agentPresets, additionalPrompt, taskCount]
+    () => getCombinedPrompt(selectedTemplate, agentPresets, additionalPrompt, taskCount, noTaskLimit),
+    [selectedTemplate, agentPresets, additionalPrompt, taskCount, noTaskLimit]
   );
 
   const handleExecute = useCallback(
@@ -112,6 +115,7 @@ export function useQuicksprintExecutionState({
           modelOverride,
           ac.signal,
           {
+            noTaskLimit,
             shouldHandleResult: () => {
               if (activeRequestRef.current?.id !== reqId) return false;
               if (activeRequestRef.current?.detached || activeRequestRef.current?.cancelled) return false;
@@ -140,7 +144,7 @@ export function useQuicksprintExecutionState({
         }
       }
     },
-    [onExecute, selectedTemplate, taskCount, additionalPrompt, routeOverride, modelOverride, onClose],
+    [onExecute, selectedTemplate, taskCount, noTaskLimit, additionalPrompt, routeOverride, modelOverride, onClose],
   );
 
   const handleNewQuicksprint = useCallback(() => {

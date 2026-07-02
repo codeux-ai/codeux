@@ -77,6 +77,8 @@ Project management:
   - Re-imports a linked markdown agent into sqlite
 - `POST /api/projects/:projectId/agent-presets/sync-markdown`
   - Re-imports every out-of-sync linked markdown agent for the selected project
+- `POST /api/projects/:projectId/agent-presets/push`
+  - Commits `.code-ux/agents/*.md` changes from the selected project, optionally pushes the branch, and can open a pull request against the default branch when repository remotes are available
 - `POST /api/projects/:projectId/planning/improve-sprint-prompt`
   - Sends a draft sprint prompt to the Planning agent through the configured virtual worker provider and returns the improved prompt
   - Planning overrides may explicitly target a specific `planningAgentPresetId`, as well as a virtual CLI provider/model for that one request. The composer defaults to the project Agent Routing planning preset.
@@ -88,6 +90,11 @@ Project management:
   - Lists project conversation threads
 - `POST /api/projects/:projectId/conversations/threads`
   - Creates a new project conversation thread
+- `POST /api/conversations/threads/:threadId/compact`
+  - Compacts a thread's conversation history into a stored handoff summary
+- `POST /api/conversations/threads/:threadId/cancel`
+  - Cancels the currently running dashboard turn for a thread
+  - The active thread header renders a `Cancel Request` button only while the selected thread still has pending dashboard messages
 - `GET /api/conversations/threads/:threadId/messages`
   - Lists stored messages for one thread
 - `POST /api/projects/:projectId/conversations/messages`
@@ -201,6 +208,7 @@ Legacy runtime:
 - Global Search preserves previous results during debounce to avoid layout shift, only polls for container previews when opened, and uses `aria-activedescendant` for keyboard navigation.
 - Shared dropdown menus enhance nested menu items inside layout wrappers, so keyboard navigation and item entrance animation remain consistent when menu content is grouped.
 - Shared popovers own trigger open/close toggling; feature triggers such as Agent Memory avoid duplicate local toggles that can immediately close the panel after opening.
+- The Agents page now includes a Push Agents header action with an inline destination picker, so users explicitly choose between a local commit, branch push, or pull request before dispatching the backend push request.
 - The Live Sprint Clock card in the Sprint Stats deck now shows a six-tile grid with Finished, Avg Finish, Accumulated, Input, Output, and Cached values, and the token tiles reuse the shared compact formatter from the Stats page.
 - Live runtime pages now use the persisted top-nav sprint selection as the page scope, so the Live view follows the selected sprint from the header menu
 - That selection is view-only for the dashboard surface; it does not change which sprint run is actually executing in the backend

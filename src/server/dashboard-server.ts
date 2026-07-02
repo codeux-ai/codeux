@@ -114,6 +114,8 @@ import type { MemoryPromotionService } from "../services/memory-promotion-servic
 import type { EmbeddingModelManager } from "../services/embedding-model-manager.js";
 import type { EmbeddingService } from "../services/embedding-service.js";
 import type { KnowledgeService } from "../services/knowledge-service.js";
+import type { UpdateStatus } from "../services/update-checker-service.js";
+import { CODE_UX_VERSION } from "../shared/config/code-ux-paths.js";
 import { asyncRoute, syncRoute, toErrorResponse } from "./route-utils.js";
 import { parseTrimmedString, requireTrimmedString } from "./request-parsers.js";
 import { parsePreviewSessionIdFromHost, pipePreviewUpgradeRequest } from "./preview-host-utils.js";
@@ -124,7 +126,10 @@ export type DashboardDependencies = Omit<
   | "dashboardDir"
   | "port"
   | "liveActivityCacheMs"
->;
+  | "getUpdateStatus"
+> & {
+  getUpdateStatus: () => Promise<UpdateStatus>;
+};
 
 export interface DashboardServerOptions {
   app: Express;
@@ -172,6 +177,7 @@ export interface DashboardServerOptions {
   getGitStatus: () => Promise<GitTrackingStatus>;
   getExternalSettingsHints: () => ExternalSettingsHints;
   getSystemSettings: () => SystemSettings;
+  getUpdateStatus?: () => Promise<UpdateStatus>;
   saveSystemSettings: (settings: SystemSettings) => SystemSettings;
   resetDatabase: () => Promise<void> | void;
   getProjectSettings: (projectId: string) => ProjectSettingsOverride;
@@ -214,6 +220,14 @@ export interface DashboardServerOptions {
   deleteAgentPreset: (agentPresetId: string) => Promise<void> | void;
   importAgentPresetFromMarkdown?: (agentPresetId: string) => Promise<AgentPresetRecord> | AgentPresetRecord;
   syncAllAgentPresetsFromMarkdown?: (projectId: string) => Promise<AgentPresetRecord[]> | AgentPresetRecord[];
+  pushAgentPresetsToRepository?: (projectId: string, options: {
+    mode: "commit_only" | "commit_and_push" | "pull_request";
+    branchName?: string;
+  }) => Promise<{
+    committed: boolean;
+    pushedBranch?: string;
+    pullRequestUrl?: string;
+  }>;
   listInstructionFiles: (projectId: string) => Promise<InstructionFileSummary[]> | InstructionFileSummary[];
   readInstructionFile: (projectId: string, fileId: string) => Promise<InstructionFileContent> | InstructionFileContent;
   writeInstructionFile: (projectId: string, fileId: string, content: string) => Promise<InstructionFileContent> | InstructionFileContent;
@@ -222,6 +236,7 @@ export interface DashboardServerOptions {
   updateConversationThread: (threadId: string, input: UpdateConversationThreadInput) => ConversationThreadRecord;
   updateThreadRoute: (threadId: string, input: UpdateConversationThreadRouteInput) => ConversationThreadRecord;
   compactThreadSession: (threadId: string) => Promise<ConversationThreadRecord> | ConversationThreadRecord;
+  cancelThreadTurn?: (threadId: string) => Promise<{ cancelled: boolean }> | { cancelled: boolean };
   deleteConversationThread: (threadId: string) => void;
   listConversationMessages: (threadId: string) => ConversationMessageRecord[];
   postConversationMessage: (projectId: string, input: CreateDashboardConversationMessageInput) => Promise<ConversationMessageRecord> | ConversationMessageRecord;
@@ -318,7 +333,13 @@ export const configureDashboardApp = (options: DashboardServerOptions): Logger =
     }
   });
 
-  const deps: DashboardDependencies = options;
+  const deps: DashboardDependencies = Object.create(options) as unknown as DashboardDependencies;
+  deps.getUpdateStatus = options.getUpdateStatus ?? (async () => ({
+    currentVersion: CODE_UX_VERSION,
+    latestVersion: null,
+    updateAvailable: false,
+    checkedAt: new Date().toISOString(),
+  }));
   registerDashboardRoutes(app, deps, liveActivityCacheMs);
 
   applyDashboardPostRouteMiddleware(app, dashboardDir);

@@ -35,6 +35,7 @@ interface VirtualProviderOption {
 
 interface QuicksprintExecutionOptions {
   shouldHandleResult?: () => boolean;
+  noTaskLimit?: boolean;
 }
 
 interface QuicksprintPanelProps {
@@ -99,6 +100,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
 
   /* ── Configure state ────────────────────────────────────────────── */
   const [taskCount, setTaskCount] = useState(5);
+  const [noTaskLimit, setNoTaskLimit] = useState(false);
   const [routeOverride, setRouteOverride] = useState<PlanningRouteOption | null>(null);
   const [modelOverride, setModelOverride] = useState<string | null>(null);
   const [showPrompt, setShowPrompt] = useState(false);
@@ -151,6 +153,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   const handleSelectTemplate = (t: QuicksprintTemplateRecord) => {
     setSelectedTemplateId(t.id);
     setTaskCount(t.defaultTaskCount || 5);
+    setNoTaskLimit(false);
     setPhase("configure");
     setRouteOverride(null);
     setModelOverride(null);
@@ -180,6 +183,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     selectedTemplate,
     additionalPrompt,
     taskCount,
+    noTaskLimit,
     agentPresets,
     onClose,
   });
@@ -249,6 +253,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
             selectedTemplateId={selectedTemplateId}
             selectedTemplate={selectedTemplate}
             taskCount={taskCount} setTaskCount={setTaskCount}
+            noTaskLimit={noTaskLimit} setNoTaskLimit={setNoTaskLimit}
             routeOverride={routeOverride} setRouteOverride={setRouteOverride}
             modelOverride={modelOverride} setModelOverride={setModelOverride}
             showPrompt={showPrompt} setShowPrompt={setShowPrompt}

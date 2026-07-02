@@ -5,6 +5,7 @@ import { useMessageCache } from "../../../dashboard/src/v2/hooks/useMessageCache
 import { useChatThreadData } from "../../../dashboard/src/v2/hooks/use-chat-thread-data.js";
 import { useChatPageResources } from "../../../dashboard/src/v2/hooks/use-chat-page-resources.js";
 import { renderHook, act } from "@testing-library/preact";
+import { cancelThreadTurn } from "../../../dashboard/src/v2/lib/connection-api.js";
 
 // Mock connection-api calls to prevent external requests
 vi.mock("../../../dashboard/src/v2/lib/connection-api.js", () => ({
@@ -19,7 +20,8 @@ vi.mock("../../../dashboard/src/v2/lib/connection-api.js", () => ({
     id: "thread-new", messageCount: 0, projectId: "project-1", scope: "project"
   })),
   updateThreadRoute: vi.fn(),
-  updateConversationThread: vi.fn()
+  updateConversationThread: vi.fn(),
+  cancelThreadTurn: vi.fn(() => Promise.resolve({ cancelled: true }))
 }));
 
 vi.mock("../../../dashboard/src/v2/lib/invocation-api.js", () => ({
@@ -333,5 +335,56 @@ describe("useChatPageResources integration", () => {
     expect(result.current.threadData.input).toBe("");
     expect(result.current.threadData.messages.length).toBe(1);
     expect(result.current.threadData.messages[0].id).toBe("msg-new");
+  });
+
+  it("cancels the active turn and clears the pending badge locally", async () => {
+    const { result } = renderHook(() => {
+      const cache = useMessageCache();
+      const threadData = useChatThreadData({
+        selectedProject: { id: "proj-1" },
+        cache,
+        execution: null,
+        workerRouting: null,
+      });
+
+      return { cache, threadData };
+    });
+
+    await act(async () => {
+      const threads = [
+        {
+          id: "thread-1",
+          scope: "project",
+          title: "Thread",
+          updatedAt: "2026-03-10T12:00:00.000Z",
+          pendingMessageCount: 1,
+        } as any,
+      ];
+      result.current.cache.setThreads("proj-1", threads);
+      result.current.threadData.setThreadsSnapshot(threads);
+      result.current.threadData.setSelectedThreadId("thread-1");
+      result.current.threadData.selectedThreadIdRef.current = "thread-1";
+      result.current.threadData.setMessagesSnapshot([
+        {
+          id: "msg-dash-1",
+          threadId: "thread-1",
+          direction: "dashboard_to_connection",
+          authorType: "dashboard_user",
+          authorConnectionId: null,
+          bodyMarkdown: "Hello",
+          deliveryStatus: "delivered",
+          metadata: null,
+          createdAt: "2026-03-10T12:00:00.000Z",
+        } as any,
+      ]);
+    });
+
+    await act(async () => {
+      await result.current.threadData.handleCancelActiveTurn();
+    });
+
+    expect(cancelThreadTurn).toHaveBeenCalledWith("thread-1");
+    expect(result.current.threadData.isCancelling).toBe(false);
+    expect(result.current.threadData.threads[0].pendingMessageCount).toBe(0);
   });
 });
