@@ -88,6 +88,10 @@ Project management:
   - Lists project conversation threads
 - `POST /api/projects/:projectId/conversations/threads`
   - Creates a new project conversation thread
+- `POST /api/conversations/threads/:threadId/compact`
+  - Compacts a thread's conversation history into a stored handoff summary
+- `POST /api/conversations/threads/:threadId/cancel`
+  - Cancels the currently running dashboard turn for a thread
 - `GET /api/conversations/threads/:threadId/messages`
   - Lists stored messages for one thread
 - `POST /api/projects/:projectId/conversations/messages`
