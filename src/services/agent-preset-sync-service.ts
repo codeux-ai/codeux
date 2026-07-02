@@ -17,6 +17,7 @@ interface AgentPresetSyncServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
   agentPresetRepository: AgentPresetRepository;
   settingsRepository: SettingsRepository;
+  getGithubToken?: () => string | undefined;
   projectRoot: string;
   logger?: Logger;
   knowledgeService?: KnowledgeService;
@@ -396,6 +397,7 @@ export class AgentPresetSyncService {
     }
 
     const defaultBranch = this.resolveDefaultBranch(projectId);
+    const effectiveSettings = this.deps.settingsRepository.resolveProjectDashboardSettings(projectId).settings;
     const pullRequestUrl = await new PrService().resolveOrCreateFeaturePr({
       taskId: `agent-preset-push:${projectId}`,
       provider: "codex",
@@ -404,7 +406,10 @@ export class AgentPresetSyncService {
       workerBranch: branchToPush,
       taskDescription: "Push the project's .code-ux/agents markdown files into the repository.",
       sprintDescription: `Project: ${project.name}`,
-    }, project.baseDir);
+    }, project.baseDir, {
+      githubToken: this.deps.getGithubToken?.() || effectiveSettings.git.githubToken,
+      gitlabToken: effectiveSettings.git.gitlabToken,
+    });
 
     return {
       committed: true,

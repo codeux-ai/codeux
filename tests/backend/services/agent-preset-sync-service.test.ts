@@ -39,7 +39,11 @@ async function initializeGitRepo(repoPath: string, branch = "main"): Promise<voi
   await runGit(["config", "user.email", "codeux-test@example.com"], repoPath);
 }
 
-async function createRepoProject(dir: string, repoPath: string): Promise<{
+async function createRepoProject(
+  dir: string,
+  repoPath: string,
+  getGithubToken?: () => string | undefined,
+): Promise<{
   projectRepository: ProjectManagementRepository;
   agentPresetRepository: AgentPresetRepository;
   settingsRepository: SettingsRepository;
@@ -54,6 +58,7 @@ async function createRepoProject(dir: string, repoPath: string): Promise<{
     projectManagementRepository: projectRepository,
     agentPresetRepository,
     settingsRepository,
+    getGithubToken,
     projectRoot: dir,
   });
   const project = projectRepository.createProject({
@@ -578,7 +583,13 @@ describe("AgentPresetSyncService", () => {
     const prUrl = "https://example.com/acme/repo/pull/7";
     const prSpy = vi.spyOn(PrService.prototype, "resolveOrCreateFeaturePr").mockResolvedValue(prUrl);
 
-    const { syncService, project } = await createRepoProject(dir, repoPath);
+    const { syncService, project, settingsRepository } = await createRepoProject(dir, repoPath, () => "runtime-github-token");
+    const settings = settingsRepository.saveProjectSettings(project.id, {
+      git: {
+        githubToken: "settings-github-token",
+        gitlabToken: "settings-gitlab-token",
+      },
+    });
     const result = await syncService.pushAgentPresetsToRepository(project.id, {
       mode: "pull_request",
     });
@@ -602,7 +613,10 @@ describe("AgentPresetSyncService", () => {
       workerBranch: pushedBranch,
       taskDescription: "Push the project's .code-ux/agents markdown files into the repository.",
       sprintDescription: `Project: ${project.name}`,
-    }, repoPath);
+    }, repoPath, {
+      githubToken: "runtime-github-token",
+      gitlabToken: settings.git.gitlabToken,
+    });
     const remoteHead = await runCommandStrict("git", ["ls-remote", "--heads", "origin", pushedBranch!], repoPath);
     expect(remoteHead.stdout.trim()).toContain(`refs/heads/${pushedBranch}`);
     prSpy.mockRestore();
