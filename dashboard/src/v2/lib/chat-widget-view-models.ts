@@ -1,6 +1,7 @@
 import type { ChatMessageRecord, ExecutionInvocationMessageRecord } from "../types.js";
 import type { ConversationRuntimeState } from "../types.js";
 import type { ExecutionStatus } from "../components/chat/widgets/ChatWidgetFrame.js";
+import { formatChatTime } from "./chat-time.js";
 
 export type ChatWidgetType = "planning" | "none";
 
@@ -26,6 +27,15 @@ export interface WorkingBubbleState {
   planName?: string;
   providerLabel?: string;
   modelLabel?: string;
+}
+
+export interface ReasoningWidgetState {
+  text: string;
+  providerLabel: string | null;
+  modelLabel: string | null;
+  tokens: ParsedTurnTokens | null;
+  createdAtLabel: string;
+  ariaLabel: string;
 }
 
 const BOOTSTRAP_BRANCH_FATAL_LINE_PATTERN =
@@ -93,6 +103,70 @@ const metaKind = (message: ExecutionInvocationMessageRecord): string | undefined
 
 const metaCallId = (message: ExecutionInvocationMessageRecord): string | undefined =>
   typeof message.metadata?.toolCallId === "string" ? message.metadata.toolCallId : undefined;
+
+const reasoningTokenCount = (tokens: ParsedTurnTokens | null): number | null => {
+  if (!tokens) {
+    return null;
+  }
+
+  if (typeof tokens.reasoning === "number") {
+    return tokens.reasoning;
+  }
+
+  if (typeof tokens.total === "number") {
+    return tokens.total;
+  }
+
+  const total = (tokens.input ?? 0) + (tokens.cached ?? 0) + (tokens.output ?? 0);
+  return total > 0 ? total : null;
+};
+
+const buildReasoningAriaLabel = (
+  providerLabel: string | null,
+  modelLabel: string | null,
+  tokens: ParsedTurnTokens | null,
+  createdAtLabel: string,
+): string => {
+  const parts = ["Reasoning turn"];
+
+  if (providerLabel) {
+    parts.push(providerLabel);
+  }
+
+  if (modelLabel) {
+    parts.push(modelLabel);
+  }
+
+  const tokenCount = reasoningTokenCount(tokens);
+  if (tokenCount !== null) {
+    parts.push(`${TOKEN_COUNT_FORMATTER.format(tokenCount)} tokens`);
+  }
+
+  if (createdAtLabel) {
+    parts.push(createdAtLabel);
+  }
+
+  return parts.join(" · ");
+};
+
+export const getReasoningWidgetData = (message: ExecutionInvocationMessageRecord): ReasoningWidgetState => {
+  const metadata = message.metadata ?? null;
+  const providerLabel = typeof metadata?.provider === "string" ? metadata.provider : null;
+  const modelLabel = typeof metadata?.model === "string" ? metadata.model : null;
+  const tokens = metadata && typeof metadata.tokens === "object" && metadata.tokens !== null
+    ? (metadata.tokens as ParsedTurnTokens)
+    : null;
+  const createdAtLabel = formatChatTime(message.createdAt);
+
+  return {
+    text: sanitizeInvocationOutputText(message.contentMarkdown || ""),
+    providerLabel,
+    modelLabel,
+    tokens,
+    createdAtLabel,
+    ariaLabel: buildReasoningAriaLabel(providerLabel, modelLabel, tokens, createdAtLabel),
+  };
+};
 
 /**
  * Collapses a `tool_call` message and its matching `tool_result` (correlated by

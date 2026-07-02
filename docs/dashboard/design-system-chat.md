@@ -15,6 +15,7 @@ The chat and invocation design system for the Code UX dashboard defines the layo
   - **System**: Rendered distinctly (e.g., dashed borders, monospaced headers, truncated views) to separate internal instructions from standard dialogue.
   - **Tool Calls / Reasoning**: Presented as full-width, compact cards rather than standard bubbles to clearly differentiate them as structural operations or internal thoughts rather than user-facing dialogue.
 - **Widgets**: specialized components (Routing, Planning, Container) embedded within the stream to provide rich status and execution context without cluttering the text transcript. They use a unified visual language (`ChatWidgetFrame`).
+  - **Reasoning turns**: internal thinking output renders as a dedicated expandable card with provider, model, timing, and token context so long traces stay readable without collapsing back into a generic assistant bubble.
 
 ## States
 - **Loading**: Use `LoadingChat` for initial data fetches. Provide pulsating dots or skeleton lines.
