@@ -93,6 +93,11 @@ export interface ProviderRunInput {
    *  Claude Code: uses --resume. Gemini: adds --resume. Codex: uses exec resume --last.
    *  Qwen Code uses project-scoped --continue because Code UX logical ids are not Qwen saved-session ids. */
   continueSessionId?: string | null;
+  /** The previous invocation's raw opencode export snapshot (`{ tokens, cost }`)
+   *  for this same session, when `continueSessionId` resumes it. `opencode
+   *  export` reports cumulative session totals, so this is subtracted out to
+   *  isolate the current run's own usage. No-op for other providers. */
+  openCodeBaselineUsage?: Record<string, unknown> | null;
   /** MCP server connection info for injecting management tools into the CLI provider. */
   mcpConnection?: McpConnectionInfo | null;
   /** User-defined custom MCP servers injected into the CLI provider alongside code_ux. */
@@ -210,6 +215,7 @@ export class ProviderRunner implements IProviderRunner {
     onTelemetry?: (telemetry: ProviderUsageTelemetry) => void;
     codexOutputPath?: string | null;
     continueSessionId?: string | null;
+    openCodeBaselineUsage?: Record<string, unknown> | null;
     mcpConnection?: McpConnectionInfo | null;
     customMcpServers?: CustomMcpServer[];
   }): Promise<ProviderRunResult> {
@@ -483,6 +489,7 @@ export class ProviderRunner implements IProviderRunner {
         antigravitySessionDbPath: tempDbPath,
         antigravityTranscriptJsonl,
         opencodeExportJson,
+        opencodeBaselineUsage: input.openCodeBaselineUsage,
       });
       return {
         ...result,

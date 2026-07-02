@@ -84,6 +84,9 @@ export interface ProcessManagementActionArgs {
   customModel?: string;
   sessionId: string;
   continueSessionId?: string | null;
+  /** Baseline for opencode's cumulative session export, when `continueSessionId`
+   *  resumes an earlier chat turn's session. See chat-thread-runtime-service.ts. */
+  openCodeBaselineRawUsageJson?: Record<string, unknown> | null;
   settings: DashboardSettings;
   prompt: string;
   repoPath: string;
@@ -209,6 +212,7 @@ export class ChatManagementActionService {
         customModel: args.customModel,
         sessionId: args.sessionId,
         continueSessionId: args.continueSessionId,
+        openCodeBaselineRawUsageJson: args.openCodeBaselineRawUsageJson,
         workflowSettings: args.settings.cliWorkflow,
         repoPath: args.repoPath,
         invocationId: execInvocationId,
@@ -313,6 +317,7 @@ export class ChatManagementActionService {
         customModel: args.customModel,
         sessionId: args.sessionId,
         continueSessionId: args.continueSessionId,
+        openCodeBaselineRawUsageJson: args.openCodeBaselineRawUsageJson,
         workflowSettings: args.settings.cliWorkflow,
         repoPath: args.repoPath,
         settings: args.settings,

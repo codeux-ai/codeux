@@ -1487,6 +1487,12 @@ export class QualityAssuranceService {
       workflowSettings,
       repoPath: args.repoPath,
       continueSessionId: previousInvocation?.nativeSessionId || (args.provider === "claude-code" ? null : args.sessionId),
+      // opencode's `export <sessionID>` is cumulative for the whole session, so
+      // this follow-up (which resumes the same session) needs the prior
+      // invocation's raw snapshot as a baseline to subtract out — otherwise it
+      // would re-report every earlier turn's tokens too. See
+      // execute-provider-stage.ts for the analogous first-pass wiring.
+      openCodeBaselineRawUsageJson: args.provider === "opencode" ? (previousInvocation?.rawUsageJson ?? null) : null,
     });
 
     if (!result.ok) {

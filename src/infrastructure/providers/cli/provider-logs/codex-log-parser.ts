@@ -3,6 +3,7 @@ import {
   parseJsonObject,
   parseTimestampMs,
   parseUsageObject,
+  subtractUsageCounts,
   type ParsedUsageCounts,
 } from "./usage-parse-utils.js";
 
@@ -78,7 +79,12 @@ function stringifyOutput(value: unknown): string {
  * `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl`.
  *
  * - Token usage: the LAST `event_msg`/`token_count` event's
- *   `payload.info.total_token_usage` (cumulative for the session).
+ *   `payload.info.total_token_usage` (cumulative for the session). When
+ *   `sinceMs` is provided, this cumulative total is reduced by the most
+ *   recent `total_token_usage` snapshot seen *before* the window opened, so a
+ *   resumed session reports only the tokens the current run added instead of
+ *   re-reporting every prior turn's tokens too (which would double-count them
+ *   against the earlier run's already-persisted usage).
  * - Conversation: built from `response_item` payloads (the canonical model
  *   transcript): `message`, `reasoning`, `function_call`(+output),
  *   `custom_tool_call`(+output). `event_msg` duplicates (agent_message /
@@ -90,6 +96,7 @@ function stringifyOutput(value: unknown): string {
 export function parseCodexRolloutJsonl(jsonl: string, sinceMs?: number): CodexLogResult {
   const lines = jsonl.split("\n");
   let latestUsage: Record<string, unknown> | null = null;
+  let baselineUsage: Record<string, unknown> | null = null;
   let nativeSessionId: string | null = null;
   const conversation: ParsedConversationTurn[] = [];
   const minMs = typeof sinceMs === "number" ? sinceMs - 2000 : null;
@@ -117,6 +124,11 @@ export function parseCodexRolloutJsonl(jsonl: string, sinceMs?: number): CodexLo
       const totalUsage = asRecord(info?.total_token_usage);
       if (totalUsage) {
         latestUsage = totalUsage;
+        // Keep the latest snapshot seen strictly before this run's window as
+        // the baseline to subtract out below.
+        if (minMs !== null && timestampMs !== null && timestampMs < minMs) {
+          baselineUsage = totalUsage;
+        }
       }
       continue;
     }
@@ -183,7 +195,10 @@ export function parseCodexRolloutJsonl(jsonl: string, sinceMs?: number): CodexLo
     }
   }
 
-  const usage = latestUsage ? parseUsageObject(latestUsage) : null;
+  let usage = latestUsage ? parseUsageObject(latestUsage) : null;
+  if (usage && baselineUsage) {
+    usage = subtractUsageCounts(usage, parseUsageObject(baselineUsage));
+  }
   return { usage, rawUsageJson: latestUsage, conversation, nativeSessionId };
 }
 
