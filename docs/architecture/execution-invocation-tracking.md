@@ -21,6 +21,8 @@ This table records each granular interaction loop in an invocation, preserving t
 
 Before being written to the database, provider-specific conversation turns are normalized and mapped into a standard message format within `src/services/provider-conversation-message-mapper.ts`. This ensures that specialized kinds like reasoning and tool interactions are mapped to correct unified schema values (e.g. keeping reasoning distinct without changing core DB schemas).
 
+During live telemetry, `ProviderExecutionService` rewrites invocation messages from the parsed provider conversation for every agentic provider purpose, not just coding loops. The rewrite signature is derived from the persisted message payloads so changes in reasoning text, tool arguments, tool output, or metadata trigger a refresh even when the transcript length does not change; when no structured conversation is available at completion time, text-output runs append the sanitized assistant text instead of replacing earlier retry/history messages.
+
 Invocation persistence applies a narrow hygiene sanitizer for one known noisy bootstrap case: lines matching `fatal: your current branch 'code-ux-bootstrap-*' does not have any commits yet` are removed before chat-facing invocation message content is written. Other `fatal:` lines and unrelated stderr/stdout remain unchanged so real failures still surface.
 
 ## Chat Thread Usage

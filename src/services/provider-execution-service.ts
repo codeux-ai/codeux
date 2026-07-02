@@ -30,6 +30,45 @@ function countConversationToolCalls(conversation: ParsedConversationTurn[] | und
   return conversation.reduce((count, turn) => (turn.kind === "tool_call" ? count + 1 : count), 0);
 }
 
+function buildPersistedInvocationMessages(
+  provider: CliProviderId,
+  model: string,
+  prompt: string,
+  conversation: ParsedConversationTurn[] | undefined | null,
+  transcriptText: string,
+  trackPromptInInvocation: boolean | undefined,
+): AppendExecutionInvocationMessageInput[] {
+  if (conversation && conversation.length > 0) {
+    return conversation.map((turn) => conversationTurnToMessage(turn, provider, model));
+  }
+
+  const messages: AppendExecutionInvocationMessageInput[] = [];
+  if (trackPromptInInvocation !== false) {
+    messages.push({
+      role: "user",
+      contentMarkdown: prompt,
+    });
+  }
+  if (transcriptText) {
+    messages.push({
+      role: "assistant",
+      contentMarkdown: sanitizeInvocationOutputText(transcriptText),
+    });
+  }
+  return messages;
+}
+
+function persistInvocationMessages(
+  executionRepository: ExecutionRepository,
+  execInvocationId: string,
+  messages: AppendExecutionInvocationMessageInput[],
+): void {
+  executionRepository.clearExecutionInvocationMessages?.(execInvocationId);
+  for (const message of messages) {
+    executionRepository.appendExecutionInvocationMessage?.(execInvocationId, message);
+  }
+}
+
 function isRestartInterruptedDockerInvocation(error: unknown, args: ExecutionProviderRunArgs): boolean {
   if (args.workflowSettings.executionMode !== "DOCKER") {
     return false;
@@ -331,39 +370,18 @@ export class ProviderExecutionService {
               // just as agentic but were previously collapsed to prompt + final
               // answer. The structured callers parse their result from the
               // returned text, not from these messages, so this is display-only.
-              //
-              // Cheap signature of the about-to-be-persisted state. The conversation only grows
-              // within a run, so identical signatures across ticks mean nothing changed and the
-              // O(turns) clear+reinsert below can be skipped entirely.
-              const turnCount = telemetry.conversation?.length ?? 0;
-              const signature = turnCount > 0
-                ? `conv:${turnCount}:${telemetry.transcriptText.length}:${countConversationToolCalls(telemetry.conversation)}`
-                : `text:${args.trackPromptInInvocation !== false ? "p" : ""}:${telemetry.transcriptText.length}`;
+              const messages = buildPersistedInvocationMessages(
+                args.provider,
+                effectiveModel,
+                p,
+                telemetry.conversation,
+                telemetry.transcriptText,
+                args.trackPromptInInvocation,
+              );
+              const signature = JSON.stringify(messages);
 
               if (signature !== lastPersistedMessagesSignature) {
-                if (telemetry.conversation && telemetry.conversation.length > 0) {
-                  this.deps.executionRepository.clearExecutionInvocationMessages(execInvocationId);
-                  for (const turn of telemetry.conversation) {
-                    this.deps.executionRepository.appendExecutionInvocationMessage(
-                      execInvocationId,
-                      conversationTurnToMessage(turn, args.provider, effectiveModel),
-                    );
-                  }
-                } else {
-                  this.deps.executionRepository.clearExecutionInvocationMessages(execInvocationId);
-                  if (args.trackPromptInInvocation !== false) {
-                    this.deps.executionRepository.appendExecutionInvocationMessage(execInvocationId, {
-                      role: "user",
-                      contentMarkdown: p,
-                    });
-                  }
-                  if (telemetry.transcriptText) {
-                    this.deps.executionRepository.appendExecutionInvocationMessage(execInvocationId, {
-                      role: "assistant",
-                      contentMarkdown: sanitizeInvocationOutputText(telemetry.transcriptText),
-                    });
-                  }
-                }
+                persistInvocationMessages(this.deps.executionRepository, execInvocationId, messages);
                 lastPersistedMessagesSignature = signature;
               }
             }
@@ -513,23 +531,27 @@ export class ProviderExecutionService {
           if (args.trackAssistantInInvocation !== false) {
             const conversation = providerResult.usageTelemetry.conversation;
             if (conversation && conversation.length > 0) {
-              // Replace the placeholder message(s) with the full parsed agent
-              // session (user prompt, reasoning, tool calls/results, assistant)
-              // for every invocation type, not just coding runs.
-              this.deps.executionRepository?.clearExecutionInvocationMessages(execInvocationId);
-              for (const turn of conversation) {
-                this.deps.executionRepository?.appendExecutionInvocationMessage(
-                  execInvocationId,
-                  conversationTurnToMessage(turn, args.provider, effectiveModel),
-                );
+              const messages = buildPersistedInvocationMessages(
+                args.provider,
+                effectiveModel,
+                currentPrompt,
+                conversation,
+                providerResult.usageTelemetry.transcriptText,
+                args.trackPromptInInvocation,
+              );
+              if (this.deps.executionRepository) {
+                persistInvocationMessages(this.deps.executionRepository, execInvocationId, messages);
               }
             } else {
-              this.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
-                role: "assistant",
-                contentMarkdown: sanitizeInvocationOutputText(
-                  args.expectTextOutput ? (providerResult as any).text : providerResult.usageTelemetry.transcriptText,
-                ),
-              });
+              const fallbackText = args.expectTextOutput
+                ? ((providerResult as { text?: string }).text ?? providerResult.usageTelemetry.transcriptText)
+                : providerResult.usageTelemetry.transcriptText;
+              if (fallbackText) {
+                this.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
+                  role: "assistant",
+                  contentMarkdown: sanitizeInvocationOutputText(fallbackText),
+                });
+              }
             }
           }
         }
