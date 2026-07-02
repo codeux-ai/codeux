@@ -3,6 +3,10 @@ import type {
   IssuePromptContextInput,
   LinkedIssueProvider,
   ProjectSummary,
+  RepositoryIssueSearchInput,
+  RepositoryIssueSearchResult,
+  JiraIssueSearchInput,
+  JiraIssueSearchResult,
   SprintLinkedIssueInput,
   SprintLinkedIssueRecord,
 } from "../contracts/project-management-types.js";
@@ -14,19 +18,24 @@ import { execFile } from "child_process";
 import * as jiraApiClient from "./jira-api-client.js";
 
 export interface IssueSearchInput {
-  provider?: LinkedIssueProvider;
+  provider?: RepositoryIssueSearchInput["provider"];
   repository?: string;
   hostDomain?: string;
   search?: string;
-  state?: "open" | "closed" | "all";
+  state?: RepositoryIssueSearchInput["state"];
   labels?: string[];
   assignee?: string;
+  author?: string;
+  reporter?: string;
+  milestone?: string;
+  issueText?: string;
+  createdAfter?: string;
+  createdBefore?: string;
+  updatedAfter?: string;
+  updatedBefore?: string;
+  sortField?: RepositoryIssueSearchInput["sortField"];
+  sortDirection?: RepositoryIssueSearchInput["sortDirection"];
   limit?: number;
-}
-
-export interface RemoteIssueSummary extends SprintLinkedIssueInput {
-  bodyPreview: string;
-  updatedAt: string | null;
 }
 
 interface IssueServiceDeps {
@@ -54,9 +63,9 @@ export class SprintIssueService {
     host: string,
     email: string,
     apiToken: string,
-    input: string | jiraApiClient.JiraIssueSearchInput,
+    input: string | JiraIssueSearchInput,
     defaultProjectKey = '',
-  ): Promise<jiraApiClient.JiraIssueSearchResult[]> {
+  ): Promise<JiraIssueSearchResult[]> {
     if (!this.deps.jiraApiClient) {
       throw new Error("Jira API client is not injected.");
     }
@@ -81,7 +90,7 @@ export class SprintIssueService {
     return this.deps.projectManagementRepository.listSprintLinkedIssues(sprint.projectId, sprintId);
   }
 
-  async searchIssues(projectId: string, input: IssueSearchInput): Promise<RemoteIssueSummary[]> {
+  async searchIssues(projectId: string, input: IssueSearchInput): Promise<RepositoryIssueSearchResult[]> {
     const project = this.requireProject(projectId);
     const target = resolveIssueTarget(project, input);
     const settings = this.deps.getDashboardSettings({ projectId });
@@ -95,6 +104,16 @@ export class SprintIssueService {
         state: input.state || "open",
         labels: input.labels || [],
         assignee: input.assignee,
+        author: input.author,
+        reporter: input.reporter,
+        milestone: input.milestone,
+        issueText: input.issueText,
+        createdAfter: input.createdAfter,
+        createdBefore: input.createdBefore,
+        updatedAfter: input.updatedAfter,
+        updatedBefore: input.updatedBefore,
+        sortField: input.sortField,
+        sortDirection: input.sortDirection,
         limit,
       });
     }
@@ -106,6 +125,16 @@ export class SprintIssueService {
       state: input.state || "open",
       labels: input.labels || [],
       assignee: input.assignee,
+      author: input.author,
+      reporter: input.reporter,
+      milestone: input.milestone,
+      issueText: input.issueText,
+      createdAfter: input.createdAfter,
+      createdBefore: input.createdBefore,
+      updatedAfter: input.updatedAfter,
+      updatedBefore: input.updatedBefore,
+      sortField: input.sortField,
+      sortDirection: input.sortDirection,
       limit,
     });
   }
@@ -250,7 +279,7 @@ export class SprintIssueService {
     });
   }
 
-  private async searchGitHubIssues(args: ResolvedIssueTarget & SearchRuntimeOptions): Promise<RemoteIssueSummary[]> {
+  private async searchGitHubIssues(args: ResolvedIssueTarget & SearchRuntimeOptions): Promise<RepositoryIssueSearchResult[]> {
     const token = args.token?.trim();
     if (!token) {
       throw new Error("GitHub token is not configured.");
@@ -261,13 +290,21 @@ export class SprintIssueService {
       args.state === "all" ? "" : `state:${args.state}`,
       ...args.labels.map((label) => `label:${quoteSearchValue(label)}`),
       args.assignee ? `assignee:${quoteSearchValue(args.assignee)}` : "",
+      args.author ? `author:${quoteSearchValue(args.author)}` : "",
+      args.reporter ? `author:${quoteSearchValue(args.reporter)}` : "",
+      args.milestone ? `milestone:${quoteSearchValue(args.milestone)}` : "",
+      args.createdAfter ? `created:>=${args.createdAfter}` : "",
+      args.createdBefore ? `created:<=${args.createdBefore}` : "",
+      args.updatedAfter ? `updated:>=${args.updatedAfter}` : "",
+      args.updatedBefore ? `updated:<=${args.updatedBefore}` : "",
+      args.issueText?.trim() || "",
       args.search?.trim() || "",
     ].filter(Boolean).join(" ");
     const url = new URL("https://api.github.com/search/issues");
     url.searchParams.set("q", qualifiers);
     url.searchParams.set("per_page", String(args.limit));
-    url.searchParams.set("sort", "updated");
-    url.searchParams.set("order", "desc");
+    url.searchParams.set("sort", mapGitHubSortField(args.sortField));
+    url.searchParams.set("order", args.sortDirection || "desc");
 
     const payload = await requestJson<{ items?: GitHubIssue[] }>(url.toString(), { token });
     return (payload.items || [])
@@ -288,7 +325,15 @@ export class SprintIssueService {
           .map((assignee) => assignee.login)
           .filter((assignee): assignee is string => typeof assignee === "string" && assignee.trim().length > 0),
         bodyPreview: truncatePreview(issue.body || ""),
+        createdAt: issue.created_at || null,
         updatedAt: issue.updated_at || null,
+        issueAuthor: issue.user?.login || null,
+        issueReporter: issue.user?.login || null,
+        issueMilestone: issue.milestone?.title || null,
+        issueType: null,
+        issuePriority: null,
+        issueCommentCount: typeof issue.comments === "number" ? issue.comments : null,
+        sourceProvider: "github",
       }));
   }
 
@@ -335,7 +380,7 @@ export class SprintIssueService {
     });
   }
 
-  private async searchGitLabIssues(args: ResolvedIssueTarget & SearchRuntimeOptions): Promise<RemoteIssueSummary[]> {
+  private async searchGitLabIssues(args: ResolvedIssueTarget & SearchRuntimeOptions): Promise<RepositoryIssueSearchResult[]> {
     const token = args.token?.trim();
     if (!token) {
       throw new Error("GitLab token is not configured.");
@@ -349,12 +394,43 @@ export class SprintIssueService {
     if (args.search?.trim()) {
       url.searchParams.set("search", args.search.trim());
     }
+    if (args.issueText?.trim()) {
+      const issueText = args.issueText.trim();
+      if (/^#?\d+$/.test(issueText)) {
+        url.searchParams.set("iids[]", issueText.replace(/^#/, ""));
+      } else if (!args.search?.trim()) {
+        url.searchParams.set("search", issueText);
+      } else {
+        url.searchParams.set("search", `${url.searchParams.get("search") || ""} ${issueText}`.trim());
+      }
+    }
     if (args.labels.length > 0) {
       url.searchParams.set("labels", args.labels.join(","));
     }
     if (args.assignee?.trim()) {
       url.searchParams.set("assignee_username", args.assignee.trim());
     }
+    const author = args.reporter?.trim() || args.author?.trim();
+    if (author) {
+      url.searchParams.set("author_username", author);
+    }
+    if (args.milestone?.trim()) {
+      url.searchParams.set("milestone", args.milestone.trim());
+    }
+    if (args.createdAfter?.trim()) {
+      url.searchParams.set("created_after", args.createdAfter.trim());
+    }
+    if (args.createdBefore?.trim()) {
+      url.searchParams.set("created_before", args.createdBefore.trim());
+    }
+    if (args.updatedAfter?.trim()) {
+      url.searchParams.set("updated_after", args.updatedAfter.trim());
+    }
+    if (args.updatedBefore?.trim()) {
+      url.searchParams.set("updated_before", args.updatedBefore.trim());
+    }
+    url.searchParams.set("order_by", mapGitLabSortField(args.sortField));
+    url.searchParams.set("sort", args.sortDirection || "desc");
 
     const payload = await requestJson<GitLabIssue[]>(url.toString(), { token, gitlab: true });
     return payload.map((issue) => ({
@@ -371,7 +447,19 @@ export class SprintIssueService {
         .map((assignee) => assignee.username || assignee.name)
         .filter((assignee): assignee is string => typeof assignee === "string" && assignee.trim().length > 0),
       bodyPreview: truncatePreview(issue.description || ""),
+      createdAt: issue.created_at || null,
       updatedAt: issue.updated_at || null,
+      issueAuthor: issue.author?.username || issue.author?.name || null,
+      issueReporter: issue.author?.username || issue.author?.name || null,
+      issueMilestone: issue.milestone?.title || issue.milestone?.name || null,
+      issueType: issue.issue_type || null,
+      issuePriority: issue.priority || null,
+      issueCommentCount: typeof issue.user_notes_count === "number"
+        ? issue.user_notes_count
+        : typeof issue.comments_count === "number"
+          ? issue.comments_count
+          : null,
+      sourceProvider: "gitlab",
     }));
   }
 
@@ -476,6 +564,16 @@ interface SearchRuntimeOptions {
   state: "open" | "closed" | "all";
   labels: string[];
   assignee?: string;
+  author?: string;
+  reporter?: string;
+  milestone?: string;
+  issueText?: string;
+  createdAfter?: string;
+  createdBefore?: string;
+  updatedAfter?: string;
+  updatedBefore?: string;
+  sortField?: RepositoryIssueSearchInput["sortField"];
+  sortDirection?: RepositoryIssueSearchInput["sortDirection"];
   limit: number;
 }
 
@@ -485,10 +583,14 @@ interface GitHubIssue {
   html_url: string;
   state: string;
   body?: string | null;
+  created_at?: string | null;
   updated_at?: string | null;
   pull_request?: unknown;
   labels?: Array<string | { name?: string }>;
   assignees?: Array<{ login?: string }>;
+  user?: { login?: string } | null;
+  milestone?: { title?: string | null } | null;
+  comments?: number;
 }
 
 interface GitHubIssueDetail extends GitHubIssue {
@@ -510,9 +612,16 @@ interface GitLabIssue {
   web_url: string;
   state: string;
   description?: string | null;
+  created_at?: string | null;
   updated_at?: string | null;
   labels?: unknown[];
   assignees?: Array<{ username?: string; name?: string }>;
+  author?: { username?: string; name?: string } | null;
+  milestone?: { title?: string | null; name?: string | null } | null;
+  issue_type?: string | null;
+  priority?: string | null;
+  user_notes_count?: number;
+  comments_count?: number;
 }
 
 interface GitLabIssueDetail extends GitLabIssue {
@@ -625,6 +734,23 @@ function clampLimit(limit: number | undefined): number {
     return 30;
   }
   return Math.max(1, Math.min(100, Math.trunc(limit as number)));
+}
+
+function mapGitHubSortField(sortField?: RepositoryIssueSearchInput["sortField"]): "comments" | "created" | "updated" {
+  if (sortField === "comments" || sortField === "created" || sortField === "updated") {
+    return sortField;
+  }
+  return "updated";
+}
+
+function mapGitLabSortField(sortField?: RepositoryIssueSearchInput["sortField"]): "created_at" | "updated_at" | "popularity" {
+  if (sortField === "created") {
+    return "created_at";
+  }
+  if (sortField === "comments") {
+    return "popularity";
+  }
+  return "updated_at";
 }
 
 function quoteSearchValue(value: string): string {
