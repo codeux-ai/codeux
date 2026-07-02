@@ -31,7 +31,9 @@ describe("ChatThreadHeader", () => {
       <ChatThreadHeader
         thread={baseThread}
         onCompact={() => {}}
+        onCancelActiveTurn={() => {}}
         isCompacting={false}
+        isCancelling={false}
       />
     );
     expect(screen.getByText("Test Thread")).toBeInTheDocument();
@@ -44,7 +46,9 @@ describe("ChatThreadHeader", () => {
       <ChatThreadHeader
         thread={thread}
         onCompact={() => {}}
+        onCancelActiveTurn={() => {}}
         isCompacting={false}
+        isCancelling={false}
       />
     );
     expect(screen.getAllByText("Replay Required")[0]).toBeInTheDocument();
@@ -56,7 +60,9 @@ describe("ChatThreadHeader", () => {
       <ChatThreadHeader
         thread={threadActive}
         onCompact={() => {}}
+        onCancelActiveTurn={() => {}}
         isCompacting={false}
+        isCancelling={false}
       />
     );
     expect(screen.getByText("Active Session")).toBeInTheDocument();
@@ -66,7 +72,9 @@ describe("ChatThreadHeader", () => {
       <ChatThreadHeader
         thread={threadReplay}
         onCompact={() => {}}
+        onCancelActiveTurn={() => {}}
         isCompacting={false}
+        isCancelling={false}
       />
     );
     expect(screen.getAllByText("Replay Required")[0]).toBeInTheDocument();
@@ -78,7 +86,9 @@ describe("ChatThreadHeader", () => {
       <ChatThreadHeader
         thread={baseThread}
         onCompact={() => {}}
+        onCancelActiveTurn={() => {}}
         isCompacting={true}
+        isCancelling={false}
       />
     );
     const compactButton = container.querySelector('button[title="Compact Conversation"]');
@@ -93,7 +103,9 @@ describe("ChatThreadHeader", () => {
       <ChatThreadHeader
         thread={baseThread}
         onCompact={onCompact}
+        onCancelActiveTurn={() => {}}
         isCompacting={false}
+        isCancelling={false}
       />
     );
     const compactButton = container.querySelector('button[title="Compact Conversation"]');
@@ -116,7 +128,9 @@ describe("ChatThreadHeader", () => {
       <ChatThreadHeader
         thread={thread}
         onCompact={() => {}}
+        onCancelActiveTurn={() => {}}
         isCompacting={false}
+        isCancelling={false}
       />
     );
 
@@ -129,10 +143,57 @@ describe("ChatThreadHeader", () => {
       <ChatThreadHeader
         thread={thread}
         onCompact={() => {}}
+        onCancelActiveTurn={() => {}}
         isCompacting={false}
+        isCancelling={false}
       />
     );
 
     expect(screen.getAllByText("Unassigned")[0]).toBeInTheDocument();
+  });
+
+  it("shows cancel request only while a thread has pending messages", () => {
+    const onCancelActiveTurn = vi.fn();
+
+    const { rerender } = render(
+      <ChatThreadHeader
+        thread={baseThread}
+        onCompact={() => {}}
+        onCancelActiveTurn={onCancelActiveTurn}
+        isCompacting={false}
+        isCancelling={false}
+      />
+    );
+
+    expect(screen.queryByRole("button", { name: "Cancel Request" })).not.toBeInTheDocument();
+
+    rerender(
+      <ChatThreadHeader
+        thread={{ ...baseThread, pendingMessageCount: 1 }}
+        onCompact={() => {}}
+        onCancelActiveTurn={onCancelActiveTurn}
+        isCompacting={false}
+        isCancelling={false}
+      />
+    );
+
+    const cancelButton = screen.getByRole("button", { name: "Cancel Request" });
+    expect(cancelButton).toBeInTheDocument();
+    fireEvent.click(cancelButton);
+    expect(onCancelActiveTurn).toHaveBeenCalledOnce();
+
+    rerender(
+      <ChatThreadHeader
+        thread={{ ...baseThread, pendingMessageCount: 1 }}
+        onCompact={() => {}}
+        onCancelActiveTurn={onCancelActiveTurn}
+        isCompacting={false}
+        isCancelling={true}
+      />
+    );
+
+    const cancellingButton = screen.getByRole("button", { name: "Cancelling..." });
+    expect(cancellingButton).toBeDisabled();
+    expect(cancellingButton).toHaveAttribute("aria-busy", "true");
   });
 });

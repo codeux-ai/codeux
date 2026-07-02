@@ -94,6 +94,7 @@ Project management:
   - Compacts a thread's conversation history into a stored handoff summary
 - `POST /api/conversations/threads/:threadId/cancel`
   - Cancels the currently running dashboard turn for a thread
+  - The active thread header renders a `Cancel Request` button only while the selected thread still has pending dashboard messages
 - `GET /api/conversations/threads/:threadId/messages`
   - Lists stored messages for one thread
 - `POST /api/projects/:projectId/conversations/messages`
