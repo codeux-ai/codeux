@@ -225,8 +225,6 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
       <div className="relative min-h-[480px] max-h-[calc(100dvh-12rem)]" ref={fieldsRef}>
         {phase === "browse" && (
           <QuicksprintBrowseView
-            templates={templates}
-            builtinTemplates={builtinTemplates}
             customTemplates={customTemplates}
             visibleBuiltinTemplates={visibleBuiltinTemplates}
             builtinPurposeOptions={builtinPurposeOptions}

@@ -31,24 +31,34 @@ describe("QuicksprintPanel", () => {
     cleanup();
   });
 
+  const fullstackPurpose = {
+    purpose: "fullstack-js-app",
+    purposeLabel: "Fullstack JS App",
+    purposeDescription: "Default Quicksprint templates for JavaScript and TypeScript products spanning frontend, backend, data, and UX surfaces.",
+  };
+
+  const pythonPurpose = {
+    purpose: "python-service",
+    purposeLabel: "Python Service",
+    purposeDescription: "Purpose set for backend-heavy Python services.",
+  };
+
   const mockTemplates = [
-    {
-      id: "tpl-1",
-      name: "API Tests",
-      description: "Generate API tests",
-      icon: "Zap",
-      category: "testing",
-      categoryColor: "#ef4444",
+    ...Array.from({ length: 13 }, (_, index) => ({
+      id: `tpl-${index + 1}`,
+      name: index === 0 ? "API Tests" : `Default Template ${index + 1}`,
+      description: `Generate template ${index + 1}`,
+      icon: index % 2 === 0 ? "Zap" : "Sparkles",
+      category: index % 2 === 0 ? "testing" : "engineering",
+      categoryColor: index % 2 === 0 ? "#ef4444" : "#22c55e",
       agentInstructionMarkdown: "Write tests",
       defaultTaskCount: 5,
       isBuiltIn: true,
       agentPresetId: undefined,
-      purpose: "fullstack-js-app",
-      purposeLabel: "Fullstack JS App",
-      purposeDescription: "Default Quicksprint templates for JavaScript and TypeScript products spanning frontend, backend, data, and UX surfaces.",
-    },
+      ...fullstackPurpose,
+    })),
     {
-      id: "tpl-2",
+      id: "tpl-python",
       name: "Python Service Audit",
       description: "Audit a Python service",
       icon: "Sparkles",
@@ -58,9 +68,31 @@ describe("QuicksprintPanel", () => {
       defaultTaskCount: 4,
       isBuiltIn: true,
       agentPresetId: undefined,
-      purpose: "python-service",
-      purposeLabel: "Python Service",
-      purposeDescription: "Purpose set for backend-heavy Python services.",
+      ...pythonPurpose,
+    },
+    {
+      id: "tpl-custom-1",
+      name: "Custom Sprint Flow",
+      description: "Reusable custom sprint flow",
+      icon: "Zap",
+      category: "custom",
+      categoryColor: "#f59e0b",
+      agentInstructionMarkdown: "Custom instructions",
+      defaultTaskCount: 3,
+      isBuiltIn: false,
+      agentPresetId: undefined,
+    },
+    {
+      id: "tpl-custom-2",
+      name: "Custom Review Flow",
+      description: "Custom review and QA flow",
+      icon: "Compass",
+      category: "custom",
+      categoryColor: "#0ea5e9",
+      agentInstructionMarkdown: "Custom review instructions",
+      defaultTaskCount: 4,
+      isBuiltIn: false,
+      agentPresetId: undefined,
     },
   ];
 
@@ -163,6 +195,61 @@ describe("QuicksprintPanel", () => {
       expect(getByText("Python Service Audit")).toBeInTheDocument();
     });
     expect(queryByText("API Tests")).not.toBeInTheDocument();
+  });
+
+  it("renders scrollable template rails with controls and stable overflow hooks", () => {
+    const { container, getByRole } = render(<QuicksprintPanel {...defaultProps} />);
+
+    const builtinRail = container.querySelector('[data-qs-template-rail="builtin-template-rail"]') as HTMLElement | null;
+    const customRail = container.querySelector('[data-qs-template-rail="custom-template-rail"]') as HTMLElement | null;
+
+    expect(builtinRail).toBeInTheDocument();
+    expect(customRail).toBeInTheDocument();
+    expect(builtinRail?.className).toContain("overflow-x-auto");
+    expect(builtinRail?.className).toContain("overflow-y-visible");
+    expect(builtinRail?.className).toContain("grid-rows-1");
+    expect(builtinRail?.className).toContain("lg:grid-rows-3");
+    expect(customRail?.className).toContain("touch-pan-x");
+    expect(customRail?.className).toContain("scrollbar-hide");
+
+    expect(getByRole("button", { name: "Scroll default templates left" })).toBeInTheDocument();
+    expect(getByRole("button", { name: "Scroll default templates right" })).toBeInTheDocument();
+    expect(getByRole("button", { name: "Scroll custom templates left" })).toBeInTheDocument();
+    expect(getByRole("button", { name: "Scroll custom templates right" })).toBeInTheDocument();
+
+    expect(container.querySelectorAll('[data-qs-template-rail="builtin-template-rail"] [role="button"]')).toHaveLength(13);
+    expect(container.querySelectorAll('[data-qs-template-rail="custom-template-rail"] [role="button"]')).toHaveLength(2);
+    expect(builtinRail?.className).not.toContain("overflow-hidden");
+  });
+
+  it("scrolls the built-in rail without triggering template selection", () => {
+    const { container, getByRole, queryByText } = render(<QuicksprintPanel {...defaultProps} />);
+    const builtinRail = container.querySelector('[data-qs-template-rail="builtin-template-rail"]') as HTMLDivElement;
+    const scrollBy = vi.fn();
+    Object.defineProperty(builtinRail, "scrollBy", {
+      value: scrollBy,
+      configurable: true,
+    });
+
+    fireEvent.click(getByRole("button", { name: "Scroll default templates right" }));
+
+    expect(scrollBy).toHaveBeenCalled();
+    expect(queryByText("Configure Quicksprint")).not.toBeInTheDocument();
+  });
+
+  it("opens the editor when the custom template edit button is used", async () => {
+    const { getByRole, getByText, queryByText } = render(<QuicksprintPanel {...defaultProps} />);
+
+    const editButtons = getByRole("region", { name: "custom templates" }).querySelectorAll('button[title="Edit template"]');
+    expect(editButtons).toHaveLength(2);
+
+    fireEvent.click(editButtons[0] as HTMLButtonElement);
+
+    await waitFor(() => {
+      expect(getByText("Edit Template")).toBeInTheDocument();
+    });
+    expect(queryByText("Configure Quicksprint")).not.toBeInTheDocument();
+    expect(queryByText("New Template")).not.toBeInTheDocument();
   });
 
   it("shows planning overlay on execute and allows dismiss", async () => {
