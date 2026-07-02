@@ -90,6 +90,7 @@ describe("QuicksprintActions", () => {
     expect(quicksprintService.executeQuicksprint).toHaveBeenCalledWith("p1", {
       templateId: "builtin-maintenance",
       taskCount: 4,
+      noTaskLimit: false,
       submitMode: "plan_and_start",
       additionalPrompt: "Focus API",
     });
@@ -108,6 +109,7 @@ describe("QuicksprintActions", () => {
     expect(quicksprintService.executeQuicksprint).toHaveBeenCalledWith("p1", {
       templateId: "builtin-maintenance",
       taskCount: 6,
+      noTaskLimit: false,
       submitMode: "plan_only",
     });
   });
@@ -187,6 +189,7 @@ describe("QuicksprintActions", () => {
     expect(quicksprintService.executeQuicksprint).toHaveBeenCalledWith("p1", {
       templateId: "t1",
       taskCount: 5,
+      noTaskLimit: false,
       submitMode: "plan_and_start",
       routeOverride: "route",
       modelOverride: "model",
@@ -199,7 +202,23 @@ describe("QuicksprintActions", () => {
   it("falls back to the default task count when the value is unparseable", async () => {
     vi.mocked(quicksprintService.executeQuicksprint).mockResolvedValue({ id: "s1" } as any);
     await actions.handleQuicksprintAction(makeArgs("execute", { projectId: "p1", templateId: "t1", taskCount: "not-a-number" }));
-    expect(quicksprintService.executeQuicksprint).toHaveBeenCalledWith("p1", expect.objectContaining({ taskCount: 5 }));
+    expect(quicksprintService.executeQuicksprint).toHaveBeenCalledWith("p1", expect.objectContaining({ taskCount: 5, noTaskLimit: false }));
+  });
+
+  it("allows noTaskLimit to skip the fixed task count prompt", async () => {
+    vi.mocked(quicksprintService.executeQuicksprint).mockResolvedValue({ id: "s1" } as any);
+    await actions.handleQuicksprintAction(makeArgs("execute", {
+      projectId: "p1",
+      templateId: "t1",
+      noTaskLimit: true,
+    }));
+
+    expect(quicksprintService.executeQuicksprint).toHaveBeenCalledWith("p1", {
+      templateId: "t1",
+      taskCount: 5,
+      noTaskLimit: true,
+      submitMode: "plan_only",
+    });
   });
 
   it("throws for an unknown quicksprint action", async () => {

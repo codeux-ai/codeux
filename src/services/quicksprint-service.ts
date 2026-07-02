@@ -286,9 +286,12 @@ export class QuicksprintService {
     const additionalContext = input.additionalPrompt
       ? `\n\n## Additional Instructions\n\n${input.additionalPrompt}`
       : "";
+    const taskCountInstruction = input.noTaskLimit
+      ? "Decide the appropriate number of subtasks needed for full coverage. Do not impose an artificial cap."
+      : `Produce exactly ${input.taskCount} subtasks.`;
 
     const sprintName = `QS: ${template.name}`;
-    const sprintGoal = `${agentContext}${template.agentInstructionMarkdown}${additionalContext}\n\nProduce exactly ${input.taskCount} subtasks.`;
+    const sprintGoal = `${agentContext}${template.agentInstructionMarkdown}${additionalContext}\n\n${taskCountInstruction}`;
 
     const sprint = this.createSprint(projectId, {
       name: sprintName,

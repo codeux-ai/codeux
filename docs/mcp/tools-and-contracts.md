@@ -176,6 +176,7 @@ For quicksprint calls:
 - `start` is an MCP-friendly alias for execution with `submitMode: "plan_and_start"`.
 - `execute` defaults to `submitMode: "plan_only"` when no submit mode is supplied.
 - `taskCount` is the canonical task-number field for execution. MCP accepts it as a number or numeric string.
+- `noTaskLimit: true` lets the planner choose the number of subtasks and disables the fixed-count prompt.
 - `delete_template` requires approval confirmation and only applies to custom templates; built-in templates remain protected by the quicksprint service.
 
 For scheduler calls:
