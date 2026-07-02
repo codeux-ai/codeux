@@ -38,6 +38,7 @@ Analytics components draw from `stats-theme.css`, which maps specifically back t
 *   **Row Interactions**: Rows must rely on global `var(--fill-muted-hover)` patterns rather than arbitrary hardcoded highlights.
 *   **Status Indicators**: Status chips (Completed, Running, Failed, Cancelled) should be distinct and legible, but avoid visually competing with actual data or error states.
 *   **System Workspaces**: Split sprint state, invocation health, failure analysis, external APIs, filters, and the invocation table into separate sections when the system surface gets dense enough that a single card would become unreadable.
+*   **Filter Counts**: The system filter bar should report `Showing X of Y` using the rendered tab subset for `X` while keeping the server-projected or local-total result count for `Y`, so tab switches do not blur pagination semantics.
 
 ### Accessibility Rules
 *   **Charts**: Chart regions must provide accessible names, descriptions, and keyboard-reachable summaries. Provide data-table or text alternatives for usage trends. For SVG sparklines or micro-charts, avoid hiding them completely with `aria-hidden="true"`. Instead, set `role="img"` and provide an `aria-label` that describes the overall computed trend (e.g., 'increasing', 'decreasing', or 'stable'). When composing dense metric cards with multiple visual elements (labels, values, trends), apply `aria-hidden="true"` to the internal visual components and provide a single coherent `aria-label` on the parent container to prevent fragmented screen reader announcements.

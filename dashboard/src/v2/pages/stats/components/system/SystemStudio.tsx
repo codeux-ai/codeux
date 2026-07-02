@@ -168,6 +168,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
 
     return invocations;
   }, [activeTab, invocations]);
+  const visibleInvocationCount = tabbedInvocations.length;
 
   const successRateLabel = summaryMetrics.successRate !== null
     ? `${Math.round(summaryMetrics.successRate * 100)}%`
@@ -434,7 +435,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
           availablePurposes={availablePurposes}
           availableProviders={availableProviders}
           totalCount={totalCount}
-          filteredCount={tabbedInvocations.length}
+          filteredCount={visibleInvocationCount}
           page={page}
           onPageChange={setPage}
           hasMore={hasMore}
@@ -450,7 +451,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
           />
           <div className="flex flex-wrap gap-2">
             <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ${CHIP_CLASS}`}>
-              Rows · {tabbedInvocations.length.toLocaleString()}
+              Rows · {visibleInvocationCount.toLocaleString()}
             </div>
             <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ${CHIP_CLASS}`}>
               Page · {page + 1}

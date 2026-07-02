@@ -1,0 +1,1 @@
+I caught one formatting regression in `SystemStudio` while reviewing the diff. I’m correcting that JSX indentation now so the file stays consistent with the repo’s style before I wrap up.
