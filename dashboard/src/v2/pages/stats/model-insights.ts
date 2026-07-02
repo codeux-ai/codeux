@@ -2,6 +2,7 @@ import type {
   ExecutionModelStatsSummary,
   ExecutionUsageTotals,
   SegmentDefinition,
+  TokenUsageSource,
 } from "../../types.js";
 
 export interface ModelEfficiencyMetrics {
@@ -15,6 +16,7 @@ export interface ModelEfficiencyMetrics {
 export interface ModelHighlight {
   model: ExecutionModelStatsSummary;
   value: string;
+  detail?: string;
 }
 
 export interface ModelHighlights {
@@ -22,6 +24,29 @@ export interface ModelHighlights {
   fastest: ModelHighlight | null;
   mostReliable: ModelHighlight | null;
   bestCache: ModelHighlight | null;
+  highestVelocity: ModelHighlight | null;
+  strongestReasoning: ModelHighlight | null;
+}
+
+export interface TelemetrySourceMix {
+  reported: number;
+  estimated: number;
+  unavailable: number;
+  unsupported: number;
+  total: number;
+  reportedShare: number | null;
+  estimatedShare: number | null;
+  unavailableShare: number | null;
+  unsupportedShare: number | null;
+  dominant: TokenUsageSource | "unknown";
+}
+
+export interface TelemetrySourceSummary {
+  label: string;
+  tone: "strong" | "warn" | "critical" | "neutral";
+  detail: string;
+  caveat: string;
+  mix: TelemetrySourceMix;
 }
 
 export function computeUsageEfficiency(usage: ExecutionUsageTotals): ModelEfficiencyMetrics {
@@ -36,6 +61,99 @@ export function computeUsageEfficiency(usage: ExecutionUsageTotals): ModelEffici
       : null,
     outputInputRatio: cacheDenominator > 0 ? usage.outputTokens / cacheDenominator : null,
   };
+}
+
+export function buildTelemetrySourceMix(usage: Pick<ExecutionUsageTotals, "reportedInvocationCount" | "estimatedInvocationCount" | "unavailableInvocationCount" | "unsupportedInvocationCount">): TelemetrySourceMix {
+  const reported = usage.reportedInvocationCount || 0;
+  const estimated = usage.estimatedInvocationCount || 0;
+  const unavailable = usage.unavailableInvocationCount || 0;
+  const unsupported = usage.unsupportedInvocationCount || 0;
+  const total = reported + estimated + unavailable + unsupported;
+
+  const reportedShare = total > 0 ? reported / total : null;
+  const estimatedShare = total > 0 ? estimated / total : null;
+  const unavailableShare = total > 0 ? unavailable / total : null;
+  const unsupportedShare = total > 0 ? unsupported / total : null;
+  const dominant = reported > 0
+    ? "reported"
+    : estimated > 0
+      ? "estimated"
+      : unavailable > 0
+        ? "unavailable"
+        : unsupported > 0
+          ? "unsupported"
+          : "unknown";
+
+  return {
+    reported,
+    estimated,
+    unavailable,
+    unsupported,
+    total,
+    reportedShare,
+    estimatedShare,
+    unavailableShare,
+    unsupportedShare,
+    dominant,
+  };
+}
+
+export function buildTelemetrySourceSummary(usage: Pick<ExecutionUsageTotals, "reportedInvocationCount" | "estimatedInvocationCount" | "unavailableInvocationCount" | "unsupportedInvocationCount">): TelemetrySourceSummary {
+  const mix = buildTelemetrySourceMix(usage);
+  const dominant = mix.dominant;
+
+  if (mix.total === 0) {
+    return {
+      label: "Unavailable",
+      tone: "neutral",
+      detail: "No telemetry counts were recorded for this window.",
+      caveat: "There is no invocation-source telemetry to compare yet.",
+      mix,
+    };
+  }
+
+  const reportedLabel = `${mix.reported} reported`;
+  const fallbackLabel = [
+    mix.estimated > 0 ? `${mix.estimated} estimated` : null,
+    mix.unavailable > 0 ? `${mix.unavailable} unavailable` : null,
+    mix.unsupported > 0 ? `${mix.unsupported} unsupported` : null,
+  ].filter(Boolean).join(", ");
+
+  const label = dominant === "reported"
+    ? "Reported"
+    : dominant === "estimated"
+      ? "Estimated"
+      : dominant === "unavailable"
+        ? "Unavailable"
+        : dominant === "unsupported"
+          ? "Unsupported"
+          : "Unknown";
+
+  const tone = mix.reportedShare !== null && mix.reportedShare >= 0.8 && mix.unavailable === 0 && mix.unsupported === 0
+    ? "strong"
+    : mix.reportedShare !== null && mix.reportedShare >= 0.5
+      ? "warn"
+      : mix.reportedShare !== null && mix.reportedShare > 0
+        ? "critical"
+        : mix.estimated > 0
+          ? "warn"
+          : mix.unavailable > 0 || mix.unsupported > 0
+            ? "critical"
+            : "neutral";
+
+  const detail = fallbackLabel.length > 0
+    ? `${reportedLabel}${reportedLabel && fallbackLabel ? " · " : ""}${fallbackLabel}`
+    : reportedLabel;
+
+  const caveat = mix.reportedShare === null
+    ? "Telemetry counts are missing for this window."
+    : mix.reportedShare === 1
+      ? "All counted invocations were reported directly."
+      : mix.estimated > 0 || mix.unavailable > 0 || mix.unsupported > 0
+        ? "Fallback and unsupported sources are included in the count, so reported quality is only partial."
+        : "Reported counts dominate this window.";
+
+  return { label, tone, detail, caveat, mix };
 }
 
 export function formatSuccessRate(successRate: number | null): string {
@@ -90,12 +208,66 @@ export function buildModelHighlights(models: ExecutionModelStatsSummary[]): Mode
     })
     : null;
 
+  const withVelocity = pool.filter((model) => model.usage.outputTokens > 0 && model.usage.activeTimeMs > 0);
+  const highestVelocity = withVelocity.length > 0
+    ? withVelocity.reduce((best, model) => {
+      const bestVelocity = best.usage.outputTokens / Math.max(1, best.usage.activeTimeMs / 1000);
+      const velocity = model.usage.outputTokens / Math.max(1, model.usage.activeTimeMs / 1000);
+      return velocity > bestVelocity ? model : best;
+    })
+    : null;
+
+  const withReasoning = pool.filter((model) => model.usage.reasoningOutputTokens > 0 && model.usage.outputTokens > 0);
+  const strongestReasoning = withReasoning.length > 0
+    ? withReasoning.reduce((best, model) => {
+      const bestShare = best.usage.reasoningOutputTokens / Math.max(1, best.usage.outputTokens);
+      const share = model.usage.reasoningOutputTokens / Math.max(1, model.usage.outputTokens);
+      return share > bestShare ? model : best;
+    })
+    : null;
+
   return {
-    busiest: busiest ? { model: busiest, value: `${formatCompactTokens(busiest.usage.totalTokens)} tokens` } : null,
-    fastest: fastest ? { model: fastest, value: `${formatCompactDuration(fastest.duration.p50Ms)} median` } : null,
-    mostReliable: mostReliable ? { model: mostReliable, value: `${formatSuccessRate(mostReliable.successRate)} success` } : null,
+    busiest: busiest
+      ? {
+          model: busiest,
+          value: `${formatCompactTokens(busiest.usage.totalTokens)} tokens`,
+          detail: `${busiest.usage.invocationCount.toLocaleString()} calls`,
+        }
+      : null,
+    fastest: fastest
+      ? {
+          model: fastest,
+          value: `${formatCompactDuration(fastest.duration.p50Ms)} median`,
+          detail: `p95 ${formatCompactDuration(fastest.duration.p95Ms)}`,
+        }
+      : null,
+    mostReliable: mostReliable
+      ? {
+          model: mostReliable,
+          value: `${formatSuccessRate(mostReliable.successRate)} success`,
+          detail: `${mostReliable.statusCounts.failed.toLocaleString()} failed`,
+        }
+      : null,
     bestCache: bestCache
-      ? { model: bestCache, value: `${Math.round((computeUsageEfficiency(bestCache.usage).cacheHitRate ?? 0) * 100)}% cache hits` }
+      ? {
+          model: bestCache,
+          value: `${Math.round((computeUsageEfficiency(bestCache.usage).cacheHitRate ?? 0) * 100)}% cache hits`,
+          detail: `${formatCompactTokens(bestCache.usage.cachedInputTokens)} cached`,
+        }
+      : null,
+    highestVelocity: highestVelocity
+      ? {
+          model: highestVelocity,
+          value: `${Math.round(highestVelocity.usage.outputTokens / Math.max(1, highestVelocity.usage.activeTimeMs / 1000))} tok/s`,
+          detail: `${formatCompactDuration(highestVelocity.usage.activeTimeMs)} active`,
+        }
+      : null,
+    strongestReasoning: strongestReasoning
+      ? {
+          model: strongestReasoning,
+          value: `${Math.round((strongestReasoning.usage.reasoningOutputTokens / Math.max(1, strongestReasoning.usage.outputTokens)) * 100)}% reasoning`,
+          detail: `${formatCompactTokens(strongestReasoning.usage.reasoningOutputTokens)} reasoning tokens`,
+        }
       : null,
   };
 }
@@ -132,7 +304,7 @@ export function buildVelocityHighlight(models: ExecutionModelStatsSummary[]): Mo
   });
 
   const velocity = Math.round(best.usage.outputTokens / Math.max(1, best.usage.activeTimeMs / 1000));
-  return { model: best, value: `${velocity} tok/s` };
+  return { model: best, value: `${velocity} tok/s`, detail: `${formatCompactDuration(best.usage.activeTimeMs)} active` };
 }
 
 export function buildReasoningHighlight(models: ExecutionModelStatsSummary[]): ModelHighlight | null {
@@ -151,11 +323,14 @@ export function buildReasoningHighlight(models: ExecutionModelStatsSummary[]): M
   });
 
   const share = Math.round((best.usage.reasoningOutputTokens / Math.max(1, best.usage.outputTokens)) * 100);
-  return { model: best, value: `${share}% reasoning` };
+  return { model: best, value: `${share}% reasoning`, detail: `${formatCompactTokens(best.usage.reasoningOutputTokens)} reasoning tokens` };
 }
 
 export function buildModelSegments(models: ExecutionModelStatsSummary[], top = 5): SegmentDefinition[] {
-  const sorted = [...models].sort((left, right) => right.usage.totalTokens - left.usage.totalTokens);
+  const sorted = [...models].sort((left, right) => {
+    const tokenDelta = right.usage.totalTokens - left.usage.totalTokens;
+    return tokenDelta !== 0 ? tokenDelta : left.label.localeCompare(right.label);
+  });
   const head = sorted.slice(0, top);
   const tail = sorted.slice(top);
 

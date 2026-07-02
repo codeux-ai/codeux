@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 .card {
-  @apply relative overflow-hidden flex flex-col justify-between motion-safe:transition-all duration-300;
+  @apply relative overflow-hidden flex flex-col justify-between motion-safe:transform-gpu motion-safe:transition-[transform,box-shadow,border-color] duration-300;
   background: var(--stats-card-bg);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -13,6 +13,12 @@
 
 .card:hover {
   @apply -translate-y-0.5;
+  box-shadow: var(--elevation-raised);
+}
+
+.card:focus-within {
+  outline: 2px solid var(--stats-accent-signal);
+  outline-offset: 2px;
   box-shadow: var(--elevation-raised);
 }
 
@@ -85,9 +91,31 @@
 .card.accentCyan:hover .title { color: var(--stats-accent-cyan); }
 .card.accentRose:hover .title { color: var(--stats-accent-rose); }
 .card.accentEmerald:hover .title { color: var(--stats-accent-emerald); }
+.card.accentSignal:focus-within .title { color: var(--stats-accent-signal); }
+.card.accentAmber:focus-within .title { color: var(--stats-accent-amber); }
+.card.accentCyan:focus-within .title { color: var(--stats-accent-cyan); }
+.card.accentRose:focus-within .title { color: var(--stats-accent-rose); }
+.card.accentEmerald:focus-within .title { color: var(--stats-accent-emerald); }
 
 .accentSignal .iconContainer { color: var(--stats-accent-signal); }
 .accentAmber .iconContainer { color: var(--stats-accent-amber); }
 .accentCyan .iconContainer { color: var(--stats-accent-cyan); }
 .accentRose .iconContainer { color: var(--stats-accent-rose); }
 .accentEmerald .iconContainer { color: var(--stats-accent-emerald); }
+
+.children {
+  @apply relative z-10;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .tint,
+  .iconContainer {
+    transition-duration: 0ms;
+    animation-duration: 0ms;
+  }
+
+  .card:hover {
+    transform: none;
+  }
+}

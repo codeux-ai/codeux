@@ -23,8 +23,6 @@ import {
 } from "./StatsShared.js";
 import {
   buildModelHighlights,
-  buildVelocityHighlight,
-  buildReasoningHighlight,
   buildModelSegments,
   computeUsageEfficiency,
   formatSuccessRate,
@@ -50,12 +48,13 @@ const HighlightTile: FunctionComponent<{
       <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
       {label}
     </div>
-    <div className="mt-3 truncate text-lg font-black text-slate-900 dark:text-white">
+    <div className="mt-3 break-words text-lg font-black text-slate-900 dark:text-white">
       {highlight ? highlight.model.label : "—"}
     </div>
     <div className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
       {highlight ? highlight.value : "Not enough telemetry yet"}
     </div>
+    {highlight?.detail ? <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{highlight.detail}</div> : null}
   </div>
 );
 
@@ -79,6 +78,7 @@ const ModelCard: FunctionComponent<{
   const { icon: Icon, bg, text } = getProviderIcon(model.provider);
   const efficiency = computeUsageEfficiency(model.usage);
   const successTone = getSuccessTone(model.successRate);
+  const statusSummary = `${model.statusCounts.completed} completed · ${model.statusCounts.failed} failed · ${model.statusCounts.running} running · ${model.statusCounts.cancelled} cancelled`;
 
   return (
     <div className={`${PANEL_CLASS} p-5`}>
@@ -88,17 +88,17 @@ const ModelCard: FunctionComponent<{
             <Icon className="h-4 w-4" strokeWidth={2.1} />
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">#{rank}</span>
-              <span className="truncate text-base font-black text-slate-900 dark:text-white">{model.label}</span>
+              <span className="break-words text-base font-black text-slate-900 dark:text-white">{model.label}</span>
             </div>
-            <div className="mt-1 text-sm text-slate-500 dark:text-slate-400 capitalize">
+            <div className="mt-1 break-words text-sm text-slate-500 dark:text-slate-400 capitalize">
               {model.provider} · {shareOfTotal > 0 ? `${shareOfTotal.toFixed(1)}% of window volume` : "no token volume"}
             </div>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 self-start">
-<div className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${CHIP_CLASS}`}>
+          <div className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${CHIP_CLASS}`}>
             #{rank} by volume
           </div>
           <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
@@ -114,11 +114,11 @@ const ModelCard: FunctionComponent<{
         </div>
       </div>
 
-      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-3">
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <ModelMetric
           label="Invocations"
           value={model.usage.invocationCount.toLocaleString()}
-          detail={`${model.statusCounts.failed > 0 ? `${model.statusCounts.failed} failed` : "no failures"}`}
+          detail={model.statusCounts.failed > 0 ? `${model.statusCounts.failed} failed` : "no failures"}
         />
         <ModelMetric
           label="Median Latency"
@@ -137,7 +137,7 @@ const ModelCard: FunctionComponent<{
         />
         <ModelMetric
           label="Output Velocity"
-          value={model.usage.outputTokens > 0 && model.usage.activeTimeMs > 0 ? formatTokens(Math.round(model.usage.outputTokens / (model.usage.activeTimeMs / 1000))) + "/s" : "—"}
+          value={model.usage.outputTokens > 0 && model.usage.activeTimeMs > 0 ? `${formatTokens(Math.round(model.usage.outputTokens / (model.usage.activeTimeMs / 1000)))} tok/s` : "—"}
           detail="tok/s output"
         />
         <ModelMetric
@@ -147,18 +147,18 @@ const ModelCard: FunctionComponent<{
         />
       </div>
 
-
-      <div className={`${SUBPANEL_CLASS} mt-5 grid grid-cols-2 p-4`}>
-        <div>
-          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">p50</div>
-          <div className="mt-1 text-base font-black text-slate-900 dark:text-white">
-            {model.duration.sampleCount > 0 ? formatStatsDuration(model.duration.p50Ms) : "—"}
-          </div>
+      <div className="mt-5 grid grid-cols-2 gap-3">
+        <div className={`${SUBPANEL_CLASS} p-4`}>
+          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Status Counts</div>
+          <div className="mt-2 text-sm font-black text-slate-900 dark:text-white">{statusSummary}</div>
         </div>
-        <div>
-          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">p95</div>
-          <div className="mt-1 text-base font-black text-slate-900 dark:text-white">
-            {model.duration.sampleCount > 0 ? formatStatsDuration(model.duration.p95Ms) : "—"}
+        <div className={`${SUBPANEL_CLASS} p-4`}>
+          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Latency Span</div>
+          <div className="mt-2 text-sm font-black text-slate-900 dark:text-white">
+            {model.duration.sampleCount > 0 ? `${formatStatsDuration(model.duration.p50Ms)} median` : "No samples"}
+          </div>
+          <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+            {model.duration.sampleCount > 0 ? `p95 ${formatStatsDuration(model.duration.p95Ms)}` : "duration unavailable"}
           </div>
         </div>
       </div>
@@ -208,10 +208,11 @@ export const ModelsStudio: FunctionComponent<{
   const models = stats.models || [];
   const segments = buildModelSegments(models);
   const highlights = buildModelHighlights(models);
-  const velocityHighlight = buildVelocityHighlight(models);
-  const reasoningHighlight = buildReasoningHighlight(models);
   const totalTokens = models.reduce((sum, model) => sum + model.usage.totalTokens, 0);
-  const sorted = [...models].sort((left, right) => right.usage.totalTokens - left.usage.totalTokens);
+  const sorted = [...models].sort((left, right) => {
+    const delta = right.usage.totalTokens - left.usage.totalTokens;
+    return delta !== 0 ? delta : left.label.localeCompare(right.label);
+  });
 
   return (
     <section className="space-y-6">
@@ -272,13 +273,13 @@ export const ModelsStudio: FunctionComponent<{
                 <HighlightTile
                   icon={Zap}
                   label="Highest Velocity"
-                  highlight={velocityHighlight}
+                  highlight={highlights.highestVelocity}
                   tone="text-cyan-600 dark:text-cyan-400"
                 />
                 <HighlightTile
                   icon={Brain}
                   label="Highest Reasoning"
-                  highlight={reasoningHighlight}
+                  highlight={highlights.strongestReasoning}
                   tone="text-rose-600 dark:text-rose-400"
                 />
               </div>

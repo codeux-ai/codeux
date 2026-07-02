@@ -220,8 +220,9 @@ It focuses on:
 - the metric-series flyout groups series under labelled headers for Core, Purposes, Providers, and Git so related worker/provider series stay discoverable as the catalog grows
 - hourly windows keep one-hour hover buckets while rendering visible axis labels every three hours
 - alternate composition and reliability views with donut charts
-- reliability mode now ends with a provider breakdown grid that exposes token anatomy, invocation volume, active time, and telemetry source quality per provider
-- the Composition Studio now adds cache-efficiency insight, a token-flow bar, active-versus-wall-time comparison, and a per-provider activity ledger so the provider picture stays visible without switching tabs
+- the Composition Studio now begins with provider-share, purpose-distribution, cache-efficiency, and active-vs-wall-time decision tiles, then follows with donut summaries and a per-provider activity ledger so the provider picture stays visible without switching tabs
+- the Models Studio now frames model telemetry as a decision surface with busiest/fastest/reliable/cache/velocity/reasoning highlights, stable responsive leaderboard cards, and per-model status, latency, cache, and tokens-per-call metrics
+- reliability mode now starts with explicit telemetry-confidence and status summaries, then ends with a provider breakdown grid that exposes token anatomy, invocation volume, active time, duration samples, success rate, and telemetry source quality per provider
 - the System stats view uses a controlled filter bar that keeps status, purpose, provider, and search state outside the component so the host view can own query state and result counting explicitly
 - that filter bar renders status toggle chips, purpose/provider multi-select chips, a searchable text field with inline clear affordance, and a result-count badge so the system list can stay reactive without local state
 - task, sprint, provider, and purpose leaderboards
