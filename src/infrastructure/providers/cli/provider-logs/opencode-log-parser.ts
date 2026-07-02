@@ -134,6 +134,38 @@ export function parseOpenCodeExport(exportStdout: string): OpenCodeExportUsage |
 }
 
 /**
+ * Subtracts a previous invocation's cumulative export snapshot (the same
+ * `rawUsageJson` shape this module persists, i.e. `{ tokens: {...}, cost }`)
+ * from a freshly exported cumulative usage. `opencode export` always reports
+ * totals for the *whole session*, not just the current run (see
+ * {@link parseOpenCodeExport}'s doc comment) — so on a resumed/follow-up run
+ * this isolates just the tokens the current run added, matching the numeric
+ * fields against what was NOT already persisted by the prior invocation.
+ * `rawUsageJson` on the result stays the fresh, unadjusted export snapshot so
+ * it can itself serve as the next follow-up's baseline.
+ */
+export function subtractOpenCodeBaseline(
+  current: OpenCodeExportUsage,
+  baselineRawUsageJson: Record<string, unknown> | null | undefined,
+): OpenCodeExportUsage {
+  const baselineRecord = asRecord(baselineRawUsageJson);
+  const baselineTokens = asRecord(baselineRecord?.tokens);
+  if (!baselineTokens) {
+    return current;
+  }
+  const baseline = readOpenCodeTokens(baselineTokens);
+  const baselineCost = toNumber(baselineRecord?.cost ?? 0);
+  return {
+    inputTokens: Math.max(0, current.inputTokens - baseline.input),
+    cachedInputTokens: Math.max(0, current.cachedInputTokens - baseline.cacheRead),
+    outputTokens: Math.max(0, current.outputTokens - baseline.output),
+    reasoningOutputTokens: Math.max(0, current.reasoningOutputTokens - baseline.reasoning),
+    cost: Math.max(0, current.cost - baselineCost),
+    rawUsageJson: current.rawUsageJson,
+  };
+}
+
+/**
  * Parses the `opencode run --format json` event stream (NDJSON). Extracts the
  * assistant transcript, provider-reported usage, native session id, and a
  * structured conversation including tool calls and reasoning, in stream order.

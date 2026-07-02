@@ -52,6 +52,11 @@ export class StructuredProviderResponseService {
     let parseRetriesUsed = 0;
     let providerAttempts = 0;
     let continueSessionId = args.continueSessionId;
+    // opencode's `export <sessionID>` is cumulative for the whole session, so
+    // a retry that resumes the same session (line ~128 below) needs the prior
+    // attempt's raw snapshot as a baseline, updated after every attempt —
+    // otherwise attempt 2+ would re-report attempt 1's tokens too.
+    let openCodeBaselineRawUsageJson = args.openCodeBaselineRawUsageJson ?? null;
     let lastError: Error | null = null;
     let nativeSessionId: string | null = null;
     let bodyMarkdown = "";
@@ -76,9 +81,13 @@ export class StructuredProviderResponseService {
         ...args,
         prompt: currentPrompt,
         continueSessionId,
+        openCodeBaselineRawUsageJson,
         expectTextOutput: true,
       });
       providerAttempts++;
+      if (args.provider === "opencode" && result.usageTelemetry?.rawUsageJson) {
+        openCodeBaselineRawUsageJson = result.usageTelemetry.rawUsageJson;
+      }
 
       bodyMarkdown = result.text?.trim() || "";
       if (!result.ok) {

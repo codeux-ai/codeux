@@ -97,6 +97,12 @@ export interface ExecutionProviderRunArgs {
   onActivity?: (description: string, originator?: string) => void;
   signal?: AbortSignal;
   continueSessionId?: string | null;
+  /** The previous invocation's raw opencode export snapshot for this session,
+   *  when `continueSessionId` resumes it. Ignored for other providers. See
+   *  {@link https://opencode.ai} `export` semantics: totals are cumulative for
+   *  the whole session, so this baseline is subtracted from each follow-up's
+   *  freshly exported usage. */
+  openCodeBaselineRawUsageJson?: Record<string, unknown> | null;
 
   // Option to return ProviderResult with string `text` rather than standard ProviderResult
   expectTextOutput?: boolean;
@@ -154,7 +160,7 @@ export class ProviderExecutionService {
       mcpConnection: args.mcpConnection ?? null,
     });
 
-    const runProviderInner = async (p: string, retrySystemMessage?: string, continueSessionId?: string | null): Promise<ProviderRunResult> => {
+    const runProviderInner = async (p: string, retrySystemMessage?: string, continueSessionId?: string | null, openCodeBaselineRawUsageJson?: Record<string, unknown> | null): Promise<ProviderRunResult> => {
       const startedAt = new Date().toISOString();
 
       // Coalesce the per-line streaming activity firehose into batched transactions so concurrent
@@ -291,6 +297,7 @@ export class ProviderExecutionService {
         gitlabToken: args.gitlabToken,
         signal: args.signal,
         continueSessionId,
+        openCodeBaselineUsage: openCodeBaselineRawUsageJson,
         mcpConnection: resolvedMcp.mcpConnection,
         customMcpServers: resolvedMcp.customMcpServers,
         onActivity: (desc: string, originator?: string) => {
@@ -478,13 +485,21 @@ export class ProviderExecutionService {
     let usedReadFileRetry = false;
     let continueSessionId: string | null = args.continueSessionId || null;
     let rateLimitRetryCount = 0;
+    let openCodeBaselineRawUsageJson: Record<string, unknown> | null = args.openCodeBaselineRawUsageJson || null;
 
     while (true) {
       providerResult = await runProviderInner(
         currentPrompt,
         usedReadFileRetry ? "Retrying with file-discovery guidance." : undefined,
         continueSessionId,
+        openCodeBaselineRawUsageJson,
       );
+      // Each attempt's raw export snapshot becomes the baseline for the next
+      // retry, since a retry that resumes the same opencode session would
+      // otherwise re-report this attempt's tokens too (export is cumulative).
+      if (args.provider === "opencode" && providerResult.usageTelemetry?.rawUsageJson) {
+        openCodeBaselineRawUsageJson = providerResult.usageTelemetry.rawUsageJson;
+      }
 
       if (!providerResult.ok && args.workflowSettings.retryOnReadFileNotFound && !usedReadFileRetry && isReadFileNotFoundToolError(providerResult)) {
         if (args.onActivity) {
