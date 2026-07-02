@@ -146,6 +146,25 @@ describe("parseClaudeCodeSessionJsonl", () => {
     expect(assistantTurns[0].text).toBe("Here is my answer.");
   });
 
+  it("extracts direct visible thinking fields on assistant messages", () => {
+    const jsonl = JSON.stringify({
+      type: "assistant",
+      sessionId: "test-session",
+      timestamp: "2026-06-01T10:00:00.000Z",
+      message: {
+        id: "msg_direct_thinking",
+        role: "assistant",
+        content: [{ type: "text", text: "I have a plan." }],
+        thinking: "I should inspect the failing test first.",
+        usage: { input_tokens: 15, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+      },
+    });
+
+    const result = parseClaudeCodeSessionJsonl(jsonl);
+    expect(result.conversation.map((t) => t.kind)).toEqual(["reasoning", "assistant"]);
+    expect(result.conversation[0]).toMatchObject({ kind: "reasoning", text: "I should inspect the failing test first." });
+  });
+
   it("skips encrypted (empty) thinking blocks", () => {
     const jsonl = makeAssistantEntry({
       messageId: "msg_enc",

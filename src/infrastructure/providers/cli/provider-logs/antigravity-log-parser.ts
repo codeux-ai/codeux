@@ -203,8 +203,15 @@ export function parseAntigravityTranscript(
         }
         conversation.push({ kind: "user", text, timestampMs });
       } else if (entry.type === "PLANNER_RESPONSE") {
+        const reasoningText = extractVisibleTranscriptText(entry.reasoning ?? entry.planner_reasoning ?? entry.summary ?? entry.thinking);
+        if (reasoningText) {
+          conversation.push({ kind: "reasoning", text: reasoningText, timestampMs });
+        }
         if (entry.content) {
-          conversation.push({ kind: "assistant", text: entry.content, timestampMs });
+          const text = extractVisibleTranscriptText(entry.content);
+          if (text) {
+            conversation.push({ kind: "assistant", text, timestampMs });
+          }
         }
         if (Array.isArray(entry.tool_calls)) {
           for (const tc of entry.tool_calls) {
@@ -233,4 +240,29 @@ export function parseAntigravityTranscript(
   }
 
   return conversation;
+}
+
+function extractVisibleTranscriptText(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  if (Array.isArray(value)) {
+    const parts: string[] = [];
+    for (const item of value) {
+      const text = extractVisibleTranscriptText(item);
+      if (text) {
+        parts.push(text);
+      }
+    }
+    return parts.join("\n").trim();
+  }
+  if (value && typeof value === "object") {
+    const rec = value as Record<string, unknown>;
+    const candidate = rec.reasoning ?? rec.summary ?? rec.text ?? rec.content ?? rec.thinking ?? rec.planner_reasoning;
+    const text = extractVisibleTranscriptText(candidate);
+    if (text) {
+      return text;
+    }
+  }
+  return "";
 }

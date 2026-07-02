@@ -29,6 +29,37 @@ function stringify(value: unknown): string {
   }
 }
 
+function flattenVisibleReasoning(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  if (!Array.isArray(value)) {
+    return "";
+  }
+  const parts: string[] = [];
+  for (const item of value) {
+    const rec = asRecord(item);
+    if (!rec) {
+      if (typeof item === "string") {
+        parts.push(item);
+      }
+      continue;
+    }
+    if (typeof rec.text === "string") {
+      parts.push(rec.text);
+    } else if (typeof rec.summary_text === "string") {
+      parts.push(rec.summary_text);
+    } else if (typeof rec.summary === "string") {
+      parts.push(rec.summary);
+    } else if (typeof rec.reasoning === "string") {
+      parts.push(rec.reasoning);
+    } else if (typeof rec.thinking === "string") {
+      parts.push(rec.thinking);
+    }
+  }
+  return parts.join("").trim();
+}
+
 interface OpenCodeTokens {
   input: number;
   output: number;
@@ -198,8 +229,11 @@ export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult | null
       continue;
     }
 
-    if (partType === "reasoning" && typeof part?.text === "string" && part.text.trim()) {
-      conversation.push({ kind: "reasoning", text: part.text.trim() });
+    if (partType === "reasoning" && part) {
+      const visibleReasoning = flattenVisibleReasoning(part.reasoning ?? part.thinking ?? part.summary ?? part.text);
+      if (visibleReasoning) {
+        conversation.push({ kind: "reasoning", text: visibleReasoning });
+      }
       continue;
     }
 

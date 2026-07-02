@@ -68,6 +68,11 @@ function contentItemsOfType(content: unknown, type: string): Record<string, unkn
   return result;
 }
 
+function extractVisibleClaudeText(value: unknown): string {
+  const text = flattenClaudeContent(value);
+  return text.trim();
+}
+
 /** Stringify a tool-call input object into a compact JSON string. */
 function stringifyInput(input: unknown): string | undefined {
   if (input === undefined || input === null) return undefined;
@@ -193,6 +198,13 @@ export function parseClaudeCodeSessionJsonl(
           ? legacyContent.filter((item) => asRecord(item)?.type === "text")
           : legacyContent,
       );
+      const legacyThinkingBlocks = contentItemsOfType(legacyContent, "thinking");
+      for (const block of legacyThinkingBlocks) {
+        const text = extractVisibleClaudeText(block.thinking ?? block.reasoning ?? block.summary ?? block.content ?? block.text);
+        if (text) {
+          conversation.push({ kind: "reasoning", text, timestampMs });
+        }
+      }
       if (legacyText) {
         conversation.push({ kind: "assistant", text: legacyText, timestampMs });
       }
@@ -237,10 +249,15 @@ export function parseClaudeCodeSessionJsonl(
       // encrypts them and returns an empty string for the `thinking` field).
       const thinkingBlocks = contentItemsOfType(content, "thinking");
       for (const block of thinkingBlocks) {
-        const text = typeof block.thinking === "string" ? block.thinking.trim() : "";
+        const text = extractVisibleClaudeText(block.thinking ?? block.reasoning ?? block.summary ?? block.content ?? block.text);
         if (text) {
           conversation.push({ kind: "reasoning", text, timestampMs });
         }
+      }
+
+      const directThinking = extractVisibleClaudeText(message.thinking ?? message.reasoning ?? message.summary);
+      if (directThinking && thinkingBlocks.length === 0) {
+        conversation.push({ kind: "reasoning", text: directThinking, timestampMs });
       }
 
       // Text blocks → assistant turns.

@@ -79,6 +79,7 @@ describe("Antigravity Log Parser - parseAntigravityTranscript", () => {
   it("parses planner response and tool calls", () => {
     const jsonl = JSON.stringify({
       type: "PLANNER_RESPONSE",
+      reasoning: "I should list the directory before editing.",
       content: "Let me check the directory.",
       tool_calls: [
         { name: "list_dir", args: { path: "/workspace" } }
@@ -87,13 +88,18 @@ describe("Antigravity Log Parser - parseAntigravityTranscript", () => {
     });
 
     const turns = parseAntigravityTranscript(jsonl);
-    expect(turns).toHaveLength(2);
+    expect(turns).toHaveLength(3);
     expect(turns[0]).toEqual({
+      kind: "reasoning",
+      text: "I should list the directory before editing.",
+      timestampMs: Date.parse("2026-06-01T10:00:00.000Z"),
+    });
+    expect(turns[1]).toEqual({
       kind: "assistant",
       text: "Let me check the directory.",
       timestampMs: Date.parse("2026-06-01T10:00:00.000Z"),
     });
-    expect(turns[1]).toEqual({
+    expect(turns[2]).toEqual({
       kind: "tool_call",
       text: "Calling tool list_dir",
       toolName: "list_dir",
