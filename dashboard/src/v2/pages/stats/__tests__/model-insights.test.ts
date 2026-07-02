@@ -3,6 +3,7 @@ import type { ExecutionModelStatsSummary, ExecutionUsageTotals } from "../../../
 import {
   buildModelHighlights,
   buildModelSegments,
+  buildTelemetrySourceSummary,
   computeUsageEfficiency,
   formatSuccessRate,
   getSuccessTone,
@@ -108,6 +109,8 @@ describe("buildModelHighlights", () => {
     expect(highlights.fastest?.model.id).toBe(fastReliable.id);
     expect(highlights.mostReliable?.model.id).toBe(fastReliable.id);
     expect(highlights.bestCache?.model.id).toBe(busyCached.id);
+    expect(highlights.highestVelocity).not.toBeNull();
+    expect(highlights.strongestReasoning).not.toBeNull();
   });
 
   it("ignores low-volume models when higher-volume candidates exist", () => {
@@ -132,6 +135,83 @@ describe("buildModelHighlights", () => {
     expect(highlights.fastest).toBeNull();
     expect(highlights.mostReliable).toBeNull();
     expect(highlights.bestCache).toBeNull();
+    expect(highlights.highestVelocity).toBeNull();
+    expect(highlights.strongestReasoning).toBeNull();
+  });
+});
+
+describe("buildTelemetrySourceSummary", () => {
+  it("summarizes empty telemetry as unavailable", () => {
+    const summary = buildTelemetrySourceSummary({
+      reportedInvocationCount: 0,
+      estimatedInvocationCount: 0,
+      unavailableInvocationCount: 0,
+      unsupportedInvocationCount: 0,
+    });
+
+    expect(summary.label).toBe("Unavailable");
+    expect(summary.tone).toBe("neutral");
+    expect(summary.mix.total).toBe(0);
+    expect(summary.caveat).toMatch(/missing/i);
+  });
+
+  it("describes mixed telemetry with a clear caveat", () => {
+    const summary = buildTelemetrySourceSummary({
+      reportedInvocationCount: 8,
+      estimatedInvocationCount: 3,
+      unavailableInvocationCount: 1,
+      unsupportedInvocationCount: 2,
+    });
+
+    expect(summary.label).toBe("Reported");
+    expect(summary.tone).toBe("warn");
+    expect(summary.detail).toContain("8 reported");
+    expect(summary.detail).toContain("3 estimated");
+    expect(summary.caveat).toMatch(/fallback/i);
+  });
+});
+
+describe("buildModelHighlights velocity and reasoning", () => {
+  it("prefers the fastest and most reasoning-heavy models when data is available", () => {
+    const velocityLeader = createModel({
+      id: "fast::model",
+      label: "fast-model",
+      usage: createUsage({ outputTokens: 900, activeTimeMs: 90000, reasoningOutputTokens: 90, totalTokens: 2000 }),
+    });
+    const reasoningLeader = createModel({
+      id: "think::model",
+      label: "think-model",
+      usage: createUsage({ outputTokens: 1000, activeTimeMs: 300000, reasoningOutputTokens: 400, totalTokens: 2200 }),
+    });
+
+    const highlights = buildModelHighlights([velocityLeader, reasoningLeader]);
+
+    expect(highlights.highestVelocity?.model.id).toBe(velocityLeader.id);
+    expect(highlights.strongestReasoning?.model.id).toBe(reasoningLeader.id);
+  });
+
+  it("handles zero-invocation models and missing duration samples without invalid rankings", () => {
+    const sparseModel = createModel({
+      id: "sparse::model",
+      label: "sparse-model",
+      usage: createUsage({
+        invocationCount: 0,
+        totalTokens: 0,
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        reasoningOutputTokens: 0,
+        activeTimeMs: 0,
+      }),
+      duration: { sampleCount: 0, avgMs: 0, p50Ms: 0, p95Ms: 0, maxMs: 0 },
+      successRate: null,
+    });
+
+    const highlights = buildModelHighlights([sparseModel]);
+
+    expect(highlights.fastest).toBeNull();
+    expect(highlights.highestVelocity).toBeNull();
+    expect(highlights.strongestReasoning).toBeNull();
   });
 });
 

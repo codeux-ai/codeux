@@ -1,13 +1,43 @@
 import { useMemo, useState } from "preact/hooks";
 import { useProjectStats } from "../../hooks/use-project-stats.js";
 import type {
+  ExecutionStatsEntitySummary,
+  ExecutionUsageTotals,
   ProjectStatsQuery,
   ProjectStatsWindow,
+  SegmentDefinition,
 } from "../../types.js";
-import { createStatsSegments, createSeries, EMPTY_USAGE } from "./stats-utils.js";
+import { createStatsSegments, createSeries, EMPTY_USAGE, isValidCustomRange } from "./stats-utils.js";
 import { useUsageChartState } from "./use-usage-chart-state.js";
 
-export function useStatsPageData(projectId: string | null) {
+export interface StatsPageData {
+  stats: import("../../types.js").ProjectExecutionStatsSnapshot | null;
+  loading: boolean;
+  error: string | null;
+  refresh: () => Promise<void>;
+  usage: ExecutionUsageTotals;
+  tokenSeries: number[];
+  activeTimeSeries: number[];
+  wallTimeSeries: number[];
+  planningUsage: ExecutionStatsEntitySummary | null;
+  activeQuery: ProjectStatsQuery;
+  customFrom: string;
+  setCustomFrom: (value: string) => void;
+  customTo: string;
+  setCustomTo: (value: string) => void;
+  applyCustomWindow?: () => void;
+  visualMode: import("./components/StatsShared.js").StatsVisualMode;
+  setVisualMode: (mode: import("./components/StatsShared.js").StatsVisualMode) => void;
+  chartState: ReturnType<typeof useUsageChartState>;
+  providerSegments: SegmentDefinition[];
+  sourceSegments: SegmentDefinition[];
+  tokenSegments: SegmentDefinition[];
+  applyPresetWindow: (window: Exclude<ProjectStatsWindow, "custom">) => void;
+  applyCustomRange: () => void;
+  completionConfidence: string;
+}
+
+export function useStatsPageData(projectId: string | null): StatsPageData {
   const [activeQuery, setActiveQuery] = useState<ProjectStatsQuery>({ window: "7d" });
   const [customFrom, setCustomFrom] = useState(() => {
     const from = new Date();
@@ -59,8 +89,16 @@ export function useStatsPageData(projectId: string | null) {
     setActiveQuery({ window });
   };
 
+  const applyCustomWindow = () => {
+    setActiveQuery({
+      window: "custom",
+      from: customFrom,
+      to: customTo,
+    });
+  };
+
   const applyCustomRange = () => {
-    if (!customFrom || !customTo) {
+    if (!isValidCustomRange(customFrom, customTo)) {
       return;
     }
     setActiveQuery({
@@ -85,6 +123,7 @@ export function useStatsPageData(projectId: string | null) {
     setCustomFrom,
     customTo,
     setCustomTo,
+    applyCustomWindow,
     visualMode: chartState.visualMode,
     setVisualMode: chartState.setVisualMode,
     chartState,

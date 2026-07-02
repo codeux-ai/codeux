@@ -59,7 +59,7 @@ describe("TelemetryLedgerTabs", () => {
     // Assert "Task Telemetry" ledger is visible by default
     expect(screen.getByText("Task Ledger")).toBeInTheDocument();
     expect(screen.queryByText("Sprint Ledger")).not.toBeInTheDocument();
-    expect(screen.getByText("Task 1")).toBeInTheDocument();
+    expect(screen.getAllByText("Task 1").length).toBeGreaterThan(0);
 
     // Click on Sprint Telemetry tab
     fireEvent.click(screen.getByText("Sprint Telemetry"));
@@ -67,6 +67,6 @@ describe("TelemetryLedgerTabs", () => {
     // Assert "Task Telemetry" ledger is hidden and "Sprint Telemetry" ledger is visible
     expect(screen.queryByText("Task Ledger")).not.toBeInTheDocument();
     expect(screen.getByText("Sprint Ledger")).toBeInTheDocument();
-    expect(screen.getByText("Sprint 1")).toBeInTheDocument();
+    expect(screen.getAllByText("Sprint 1").length).toBeGreaterThan(0);
   });
 });

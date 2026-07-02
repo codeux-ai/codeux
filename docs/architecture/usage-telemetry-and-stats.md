@@ -192,14 +192,14 @@ The dashboard must show these states explicitly and must not invent fake precisi
 
 ## Dashboard API Surface
 
-Overview telemetry uses chunk-safe event loading, preventing the risk of hitting SQLite placeholder limits for large active sprint sets. The duration aggregation strategy bounds memory usage by first executing a lightweight count query (e.g. bounded to 10000 rows by default). To optimize database performance, it calculates perfect percentiles and aggregates directly in memory only if the sample volume is below this cap. If the count exceeds the cap, it falls back to a secondary database scan for exact min/max/avg aggregates, intentionally bypassing detailed sample materialization and percentile calculation to ensure unbounded large histories don't cause OOM errors.
+Overview telemetry uses chunk-safe event loading, preventing the risk of hitting SQLite placeholder limits for large active sprint sets. The duration aggregation strategy still bounds memory usage by counting first and only materializing detailed samples when the result set is small enough to do so safely.
 
 Usage data now appears in two read models:
 
 - `GET /api/projects/:projectId/execution`
   - task and sprint execution summaries now include usage rollups
 - `GET /api/projects/:projectId/stats?window=24h|7d|30d|all|custom&from=YYYY-MM-DD&to=YYYY-MM-DD`
-  - project-scoped statistics snapshot for the Stats page. Custom ranges must be parseable dates, where from <= to, and must remain within documented historical (e.g. Jan 1 2000) and future limits. Invalid, incomplete, inverted, or out-of-bounds custom ranges will fail consistently with validation errors.
+  - project-scoped statistics snapshot for the Stats page. Custom ranges must be parseable dates, where `from <= to`, and invalid or incomplete ranges fail with validation errors.
 
 Historical Docker-backed CLI invocations that were persisted as `unavailable` before container telemetry fallback support are backfilled at startup when they have prompt or transcript character counts. The backfill marks them as `estimated` using the same conservative character heuristic, preserving rows that already have provider-reported or provider-specific estimated usage.
 
@@ -221,6 +221,10 @@ The stats snapshot includes:
 - provider split
 - execution-purpose split
 - token-source mix
+- the trend workspace now presents a compact metric strip, an interactive plot, and a persistent control rail with grouped series switches, zoom controls, and an accessible live summary for the focused bucket
+- the usage chart summary surfaces selected-window averages, invocation density, peak active time, and total cost directly from bucket telemetry so the analysis surface reads like a telemetry panel instead of a single-scale line graph
+- the graph filter reset action restores chart-series defaults from the snapshot and keeps at least one series enabled so the chart never collapses to an empty state
+- the stats refactor did not change the snapshot contract or route shape; it only changed how the frontend composes the same project stats payload
 
 ## PR Description Rollups
 
@@ -232,46 +236,20 @@ Billing labels in PR descriptions resolve usage against configured provider inst
 
 The dashboard now has a dedicated `/stats` page.
 
-It focuses on:
+The page focuses on:
 
-- uses standard T01 Interaction Motion Tokens (like `MODAL_MOTION.dropdown` and `MODAL_MOTION.fieldStagger`) to preserve layout and respect `prefers-reduced-motion` constraints during graph filter or stat card mode transitions.
-- uses standard T04 Feedback Surfaces (`ActionFeedbackRegion`) to provide accessible loading, error, and empty-state recovery paths directly within the page, stats graph, and mode containers.
-- explicitly validates custom date ranges in the Hero header and exposes clear accessible error messages immediately when ranges are inverted or incomplete.
-- total cost
-- total tokens
-- The Overview page now reuses project stats telemetry to display a 7-day Total Tokens card for the selected project, maintaining consistency with the Stats page without introducing a separate query path.
-- active AI time
-- wall runtime
-- telemetry confidence
-- planning-lane usage
-- token anatomy
-- source mix
-- unified Analysis Studio UX with analysis-mode controls that focus the workspace on trend, composition, or reliability
-- standalone execution-purpose telemetry cards in the trend view so purpose context is visible before entering detailed chart analysis
-- a richer Trend Studio that adds a window-level summary band, period context chips, the interactive usage chart, and a purpose activity section in a single self-contained analytical flow
-- a full-width interactive trend graph (Usage Graph) with hover bucket inspection, staged smooth line-draw animation, and mouse drag zoom selection
-- a usage-graph filter submenu (time-window + metric-series controls) that opens inline from the graph header instead of separate execution-lane wrappers
-- an embedded grouped metric selector and a persistent right-side selected-metrics rail for configuring the chart series (including Token, Time, and Git series); same-window refreshes preserve user chart selection
-- the metric-series flyout groups series under labelled headers for Core, Purposes, Providers, and Git so related worker/provider series stay discoverable as the catalog grows
-- hourly windows keep one-hour hover buckets while rendering visible axis labels every three hours
-- alternate composition and reliability views with donut charts
-- reliability mode now ends with a provider breakdown grid that exposes token anatomy, invocation volume, active time, and telemetry source quality per provider
-- the Composition Studio now adds cache-efficiency insight, a token-flow bar, active-versus-wall-time comparison, and a per-provider activity ledger so the provider picture stays visible without switching tabs
-- the System stats view uses a controlled filter bar that keeps status, purpose, provider, and search state outside the component so the host view can own query state and result counting explicitly
-- that filter bar renders status toggle chips, purpose/provider multi-select chips, a searchable text field with inline clear affordance, and a result-count badge so the system list can stay reactive without local state
-- task, sprint, provider, and purpose leaderboards
-- tabbed task and sprint telemetry sections integrated into the Analysis Studio, complete with search, recency, richer token breakdowns, and client-side sorting by date and usage dimensions
-- a System mode entry in the analysis toggle that provides a dedicated system workspace with a dense ledger surface
-- the dedicated SystemStudio workspace now renders a telemetry header, five summary metric cards, the shared system filter bar, and the invocations table in one stacked analysis surface so operational logs stay readable at a glance
-- the SystemStudio ledger now includes All, Errors, and System Msgs tabs that pre-filter the already-filtered invocation set before it reaches the table, which keeps the result-count badge and the visible rows aligned
-- the system invocation table exposes sortable per-invocation token columns, sticky header controls, status color-coding, sprint/task context chips, loading skeletons, empty states, and expandable detail placeholders for future message panels
-- expanded invocation rows now lazy-load a dedicated transcript panel that renders role-specific message cards, preserves long system messages with an inline expand toggle, and falls back to an empty-state message when no transcript exists
-- animated donut charts now expose slice-level hover focus with center-detail readouts instead of only static composition rings
-- the System stats view uses a dedicated invocation hook that fetches the server-side projected project invocation ledger and trusts the server summary and paginated items for rendering, keeping the frontend main-thread free from large-array processing
-- Heavy stats ledger views are backed by a page-scoped progressive list strategy (`useProgressiveList`) that renders items in batches to optimize performance. The Sprints page ledger instead keeps the full sprint collection in its table state and uses its own `Show` selector for deterministic row windowing, so sprint/task totals remain accurate before rows are limited.
-- Backend read-model optimizations efficiently supply data to these page-scoped modules, ensuring fast telemetry rendering while **API contracts and routes remain completely unchanged**.
-- The Stats page header owns the time-window chips and custom range inputs so the window selector stays visible across all analysis tabs and the shared trend-chart flyout can focus exclusively on metric-series toggles.
-- The Live Sprint Clock card now surfaces sprint token totals inline, using compact token formatting for input, output, and cached input values so the live orchestration view can show usage rollups without leaving the sprint surface.
+- the hero keeps the project and window context visible, with preset chips and custom date inputs always available above the mode toggle
+- the mode toggle exposes trend, composition, models, reliability, ledgers, and system as primary analysis surfaces
+- trend mode uses a compact metric strip, an interactive usage chart, a persistent side rail, and a graph filter menu that only controls series visibility
+- chart controls keep hover, keyboard focus, and drag zoom synchronized so the accessible summary and the plot always describe the same bucket
+- composition mode emphasizes provider share, token anatomy, and summary cards before deeper ledgers
+- models mode emphasizes throughput, success rate, latency, cache efficiency, and model highlights
+- reliability mode emphasizes telemetry confidence and provider/source quality before the provider breakdown
+- ledgers mode uses tabbed task, sprint, and git ledgers with roving focus and stable badge counts
+- system mode uses a controlled filter bar, explicit result counts, and a sortable invocation table with expandable rows for transcript detail
+- the system ledger keeps status, purpose, provider, and search outside the table so the operator can reason about the filtered set before reading rows
+- loading, error, and empty states use semantic feedback regions and preserve the surrounding layout instead of collapsing the workspace
+- the page uses the same stats snapshot contract as before; the sprint refactor only changed presentation and local client state, not the backend route shape or payload fields
 
 This page is intentionally separate from the live execution view so the live dashboard can stay optimized for orchestration while the Stats page handles historical analysis.
 

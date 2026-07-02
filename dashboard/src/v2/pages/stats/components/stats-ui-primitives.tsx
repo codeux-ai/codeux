@@ -170,7 +170,9 @@ export const RangeToggle: FunctionComponent<{
 export const ViewToggle: FunctionComponent<{
   value: StatsVisualMode;
   onChange: (value: StatsVisualMode) => void;
-}> = ({ value, onChange }) => {
+  ariaLabel?: string;
+  className?: string;
+}> = ({ value, onChange, ariaLabel = "Analytics modes", className = "" }) => {
   const modes: Array<{ id: StatsVisualMode; label: string; icon: any }> = [
     { id: "trend", label: "Trend", icon: BarChart3 },
     { id: "composition", label: "Composition", icon: PieChart },
@@ -181,7 +183,7 @@ export const ViewToggle: FunctionComponent<{
   ];
 
   return (
-    <div role="group" aria-label="Visual Modes" className={`inline-flex p-1 ${CHIP_CLASS}`}>
+    <div role="group" aria-label={ariaLabel} className={`inline-flex flex-wrap p-1 ${CHIP_CLASS} ${className}`.trim()}>
       {modes.map((mode) => {
         const Icon = mode.icon;
         return (
@@ -190,7 +192,7 @@ export const ViewToggle: FunctionComponent<{
             type="button"
             onClick={() => onChange(mode.id)}
             aria-pressed={value === mode.id}
-            className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] transition-all ${
+            className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] ${
               value === mode.id
                 ? "bg-amber-500 text-white shadow-[0_2px_8px_rgba(255,184,0,0.35)] dark:bg-amber-500 dark:text-white"
                 : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
@@ -270,18 +272,22 @@ export const TokenFlowBar: FunctionComponent<{
   reasoning: number;
   total: number;
 }> = ({ input, cached, output, reasoning, total }) => {
-  if (total <= 0) return <div className="h-2 w-full rounded-full bg-black/[0.05] dark:bg-white/[0.05]" />;
+  const summary = total > 0
+    ? `Input ${formatTokens(input)}; cached ${formatTokens(cached)}; output ${formatTokens(output)}; reasoning ${formatTokens(reasoning)}; total ${formatTokens(total)}.`
+    : "No token flow data available.";
+
+  if (total <= 0) return <div role="img" aria-label={summary} className="h-2 w-full rounded-full bg-black/[0.05] dark:bg-white/[0.05]" />;
   const inPct = (input / total) * 100;
   const cachedPct = (cached / total) * 100;
   const outPct = (output / total) * 100;
   const reasonPct = (reasoning / total) * 100;
 
   return (
-    <div className="flex h-2 w-full overflow-hidden rounded-full bg-black/[0.05] dark:bg-white/[0.05]">
-      {inPct > 0 && <div className="h-full bg-signal-500 transition-all duration-500" style={{ width: `${inPct}%` }} title={`Input: ${inPct.toFixed(1)}%`} />}
-      {cachedPct > 0 && <div className="h-full bg-cyan-500 transition-all duration-500" style={{ width: `${cachedPct}%` }} title={`Cached: ${cachedPct.toFixed(1)}%`} />}
-      {outPct > 0 && <div className="h-full bg-amber-500 transition-all duration-500" style={{ width: `${outPct}%` }} title={`Output: ${outPct.toFixed(1)}%`} />}
-      {reasonPct > 0 && <div className="h-full bg-rose-500 transition-all duration-500" style={{ width: `${reasonPct}%` }} title={`Reasoning: ${reasonPct.toFixed(1)}%`} />}
+    <div role="img" aria-label={summary} className="flex h-2 w-full overflow-hidden rounded-full bg-black/[0.05] dark:bg-white/[0.05]">
+      {inPct > 0 && <div aria-hidden="true" className="h-full bg-signal-500 motion-safe:transition-all motion-safe:duration-500" style={{ width: `${inPct}%` }} title={`Input: ${inPct.toFixed(1)}%`} />}
+      {cachedPct > 0 && <div aria-hidden="true" className="h-full bg-cyan-500 motion-safe:transition-all motion-safe:duration-500" style={{ width: `${cachedPct}%` }} title={`Cached: ${cachedPct.toFixed(1)}%`} />}
+      {outPct > 0 && <div aria-hidden="true" className="h-full bg-amber-500 motion-safe:transition-all motion-safe:duration-500" style={{ width: `${outPct}%` }} title={`Output: ${outPct.toFixed(1)}%`} />}
+      {reasonPct > 0 && <div aria-hidden="true" className="h-full bg-rose-500 motion-safe:transition-all motion-safe:duration-500" style={{ width: `${reasonPct}%` }} title={`Reasoning: ${reasonPct.toFixed(1)}%`} />}
     </div>
   );
 };
@@ -343,11 +349,30 @@ export const DonutCard: FunctionComponent<{
   const cardRef = useRef<HTMLDivElement>(null);
   const wheelRef = useRef<SVGSVGElement>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const slices = useMemo(() => buildDonutSlices(segments), [segments]);
   const activeSegment = hoveredIndex === null ? null : slices[hoveredIndex] || null;
 
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return;
+    }
+
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const updatePreference = () => setPrefersReducedMotion(media.matches);
+
+    updatePreference();
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", updatePreference);
+      return () => media.removeEventListener("change", updatePreference);
+    }
+
+    media.addListener(updatePreference);
+    return () => media.removeListener(updatePreference);
+  }, []);
+
   useLayoutEffect(() => {
-    if (!cardRef.current || !wheelRef.current) {
+    if (!cardRef.current || !wheelRef.current || prefersReducedMotion) {
       return;
     }
 
@@ -376,7 +401,7 @@ export const DonutCard: FunctionComponent<{
       );
     }
     return () => timeline.kill();
-  }, [segments.length]);
+  }, [prefersReducedMotion, segments.length]);
 
   return (
     <div ref={cardRef} className={`${PANEL_CLASS} h-full p-6`}>
@@ -424,7 +449,7 @@ export const DonutCard: FunctionComponent<{
                         transform: `translate(${offsetX}px, ${offsetY}px)`,
                         transformOrigin: "120px 120px",
                         opacity: hoveredIndex === null || hoveredIndex === index ? 1 : 0.58,
-                        transition: "transform 220ms ease, opacity 220ms ease, stroke-width 220ms ease",
+                        transition: prefersReducedMotion ? "none" : "transform 220ms ease, opacity 220ms ease, stroke-width 220ms ease",
                       }}
                       onMouseEnter={() => setHoveredIndex(index)}
                       onMouseLeave={() => setHoveredIndex(null)}

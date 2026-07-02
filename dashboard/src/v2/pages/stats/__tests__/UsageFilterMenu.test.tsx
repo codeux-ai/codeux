@@ -47,8 +47,8 @@ describe('UsageFilterMenu', () => {
   });
 
   it('should call setEnabledSeries when a metric button is clicked', () => {
-    const { getAllByText } = render(<UsageFilterMenu {...mockProps} />);
-    const metricButton = getAllByText('Tokens')[0];
+    const { getAllByRole } = render(<UsageFilterMenu {...mockProps} />);
+    const metricButton = getAllByRole('switch').find((button) => button.getAttribute('aria-label') === 'Tokens, enabled')!;
     fireEvent.click(metricButton);
     expect(mockProps.setEnabledSeries).toHaveBeenCalled();
   });
@@ -60,15 +60,16 @@ describe('UsageFilterMenu', () => {
       ...mockProps,
       enabledSeries: { tokens: true, active: false }, setEnabledSeries: setEnabledSeriesSpy
     };
-    const { getAllByText, getByText } = render(<UsageFilterMenu {...singleSeriesProps} />);
+    const { getByRole, getByText } = render(<UsageFilterMenu {...singleSeriesProps} />);
     setEnabledSeriesSpy.mockClear();
 
     // Check live region
     expect(getByText('Showing 1 filter')).toBeTruthy();
 
-    const tokensButton = getAllByText('Tokens')[0].closest('button');
-    expect(tokensButton!.getAttribute('aria-disabled')).toBe('true');
-    fireEvent.click(tokensButton!);
+    const tokensButton = getByRole('switch', { name: /tokens/i });
+    expect(tokensButton.getAttribute('aria-disabled')).toBe('true');
+    expect(tokensButton.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(tokensButton);
     expect(setEnabledSeriesSpy).not.toHaveBeenCalled();
   });
 });

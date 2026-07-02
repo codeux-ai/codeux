@@ -2,6 +2,14 @@
   width: 100%;
 }
 
+.workspaceSection {
+  min-height: 4rem;
+}
+
+.statePanel {
+  min-height: 18rem;
+}
+
 .purposeSection {
   border: 1px solid var(--stats-card-border);
   background: var(--stats-card-bg);
