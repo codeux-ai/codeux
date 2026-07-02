@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute } from "./route-utils.js";
-import { requireTrimmedString } from "./request-parsers.js";
+import { parseOptionalBoolean, requireTrimmedString } from "./request-parsers.js";
 import type {
   CreateQuicksprintTemplateInput,
   QuicksprintExecutionInput,
@@ -22,7 +22,8 @@ function parseQuicksprintExecutionInput(body: unknown): QuicksprintExecutionInpu
   const taskCount = typeof input.taskCount === "number" && Number.isFinite(input.taskCount)
     ? Math.floor(input.taskCount)
     : undefined;
-  if (taskCount === undefined || taskCount <= 0) {
+  const noTaskLimit = parseOptionalBoolean(input.noTaskLimit, "noTaskLimit") ?? false;
+  if (!noTaskLimit && (taskCount === undefined || taskCount <= 0)) {
     throw new Error("Missing or invalid required field: taskCount");
   }
 
@@ -32,7 +33,8 @@ function parseQuicksprintExecutionInput(body: unknown): QuicksprintExecutionInpu
 
   return {
     templateId,
-    taskCount,
+    taskCount: taskCount ?? 5,
+    noTaskLimit,
     submitMode: input.submitMode,
     routeOverride: typeof input.routeOverride === "string" ? input.routeOverride : undefined,
     modelOverride: typeof input.modelOverride === "string" ? input.modelOverride : undefined,

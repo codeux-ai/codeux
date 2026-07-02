@@ -280,8 +280,17 @@ export function parseQuicksprintExecutionInput(body: unknown): QuicksprintExecut
   const templateId = typeof input.templateId === "string" ? input.templateId.trim() : "";
   if (!templateId) throw new Error("Missing or empty required field: templateId");
 
-  const taskCount = parseOptionalInteger(input.taskCount, 1, 1000, "taskCount");
-  if (taskCount === undefined) {
+  const noTaskLimit = parseOptionalBoolean(input.noTaskLimit, "noTaskLimit") ?? false;
+  let taskCount: number | undefined;
+  try {
+    taskCount = parseOptionalInteger(input.taskCount, 1, 1000, "taskCount");
+  } catch (error) {
+    if (!noTaskLimit) {
+      throw error;
+    }
+  }
+
+  if (taskCount === undefined && !noTaskLimit) {
     throw new Error("Missing or invalid required field: taskCount");
   }
 
@@ -291,7 +300,8 @@ export function parseQuicksprintExecutionInput(body: unknown): QuicksprintExecut
 
   return {
     templateId,
-    taskCount,
+    taskCount: taskCount ?? 5,
+    noTaskLimit,
     submitMode: input.submitMode,
     routeOverride: typeof input.routeOverride === "string" ? input.routeOverride : undefined,
     modelOverride: typeof input.modelOverride === "string" ? input.modelOverride : undefined,

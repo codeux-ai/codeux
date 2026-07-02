@@ -159,7 +159,15 @@ describe("dashboard-server quicksprint routes", () => {
     const res = await request(app).post("/api/projects/p1/quicksprints/execute").send(input);
     expect(res.status).toBe(201);
     expect(res.body).toEqual({ id: "s1" });
-    expect(quicksprintService.executeQuicksprint).toHaveBeenCalledWith("p1", input, expect.any(AbortSignal));
+    expect(quicksprintService.executeQuicksprint).toHaveBeenCalledWith("p1", { ...input, noTaskLimit: false }, expect.any(AbortSignal));
+  });
+
+  it("POST /api/projects/:projectId/quicksprints/execute supports noTaskLimit", async () => {
+    const input = { templateId: "t1", noTaskLimit: true, submitMode: "plan_only" };
+    const res = await request(app).post("/api/projects/p1/quicksprints/execute").send(input);
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual({ id: "s1" });
+    expect(quicksprintService.executeQuicksprint).toHaveBeenCalledWith("p1", { ...input, taskCount: 5 }, expect.any(AbortSignal));
   });
 
   it("POST /api/projects/:projectId/quicksprints/execute rejects missing JSON payload before service access", async () => {

@@ -259,6 +259,23 @@ describe("QuicksprintService", () => {
       }, undefined);
     });
 
+    it("should let the planner choose the number of subtasks when noTaskLimit is set", async () => {
+      const templateId = BUILTIN_QUICKSPRINT_TEMPLATES[0].id;
+
+      await service.executeQuicksprint(projectId, {
+        templateId,
+        taskCount: 3,
+        noTaskLimit: true,
+        submitMode: "plan_only",
+      });
+
+      expect(createSprintMock).toHaveBeenCalledWith(projectId, {
+        name: `QS: ${BUILTIN_QUICKSPRINT_TEMPLATES[0].name}`,
+        goal: `${BUILTIN_QUICKSPRINT_TEMPLATES[0].agentInstructionMarkdown}\n\nDecide the appropriate number of subtasks needed for full coverage. Do not impose an artificial cap.`,
+        showcasePinned: true,
+      });
+    });
+
     it("should throw if template does not exist", async () => {
       (fs.readFile as any).mockRejectedValue(new Error("ENOENT"));
       await expect(
