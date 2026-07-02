@@ -29,6 +29,10 @@ describe("SprintImportMenu", () => {
     fireEvent.click(trigger);
 
     expect(screen.getAllByText("GitHub Issues")[0]).toBeInTheDocument();
+    expect(screen.getByText("Structured sprint and task bundle")).toBeInTheDocument();
+    expect(screen.getByText("Search, filter, and multi-select")).toBeInTheDocument();
+    expect(screen.getByText("Import issue scope from GitLab")).toBeInTheDocument();
+    expect(screen.getByText("Import issue scope from Jira")).toBeInTheDocument();
 
     const markdownBtn = screen.getByRole("menuitem", { name: /markdown/i });
     fireEvent.click(markdownBtn);
