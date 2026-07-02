@@ -882,7 +882,7 @@ export const runSessionSyncStep = async (
       const maxRetries = context.maxQuotaRetriesWithoutTimer ?? 5;
       if (cooldownActive) {
         task.status = "QUOTA";
-      } else if (retryFailed && quotaRetriesWithoutTimer < maxRetries) {
+      } else if (quotaRetriesWithoutTimer < maxRetries) {
         applyPendingTaskRuntimeReset(task, {
           preserveProvider: true,
         });

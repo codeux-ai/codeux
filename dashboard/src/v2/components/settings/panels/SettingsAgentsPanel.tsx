@@ -3,7 +3,6 @@ import type { SettingsPageState } from "../../../hooks/use-settings-page-state.j
 import { Row, Toggle, SelectInput, PillChoiceGroup } from "../SettingsFormFields.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
 import { FileText, Route } from "lucide-preact";
-import { QAPanel } from "./QAPanel.js";
 import type { ProjectSettings } from "../../../../types.js";
 import { AgentSelectAvatarIcon } from "../../agents/AgentSelectAvatarIcon.js";
 
@@ -54,49 +53,14 @@ export const SettingsAgentsPanel: FunctionComponent<{ state: SettingsPageState }
   }
 
   const agentRoutingSettings = normalizeAgentRoutingSettings(projectSettings?.agents.routing ?? editableSettings.agents.routing);
-  const qaSettings = projectSettings?.agents.qualityAssurance ?? editableSettings.agents.qualityAssurance;
   const projectAgentSelectOptions = projectAgentPresetOptions.map((option) => ({
     ...option,
     icon: () => <AgentSelectAvatarIcon avatarConfig={option.avatarConfig} seed={`${option.value}:${option.label}`} />,
   }));
-  const qaPresetOptions = [{ value: "", label: "Built-in QA agent", icon: () => <AgentSelectAvatarIcon seed="built-in:qa" /> }, ...projectAgentSelectOptions];
   const agentPresetSelectorsDisabled = !selectedProject || !projectSettings;
-  const qaPresetSelectorsDisabled = agentPresetSelectorsDisabled;
   const agentSectionBadge = selectedProject
     ? getBadgeHelper("project", projectSources, "agents.routing")
     : getBadge("agents.routing");
-  const qaSectionBadge = selectedProject
-    ? getBadgeHelper("project", projectSources, "agents", "agents.qualityAssurance")
-    : getBadge("agents", "agents.qualityAssurance");
-  const qaFieldBadge = (path: string) => (
-    selectedProject
-      ? getFieldBadgeHelper("project", projectSources, path)
-      : getFieldBadge(path)
-  );
-
-  const updateQaSettings = (recipe: (current: typeof qaSettings) => typeof qaSettings) => {
-    if (selectedProject && projectSettings) {
-      if (activeScope !== "project") {
-        setActiveScope("project");
-      }
-      updateProject((current) => ({
-        ...current,
-        agents: {
-          ...current.agents,
-          qualityAssurance: recipe(current.agents.qualityAssurance),
-        },
-      }));
-      return;
-    }
-
-    updateEditableSettings((current) => ({
-      ...current,
-      agents: {
-        ...current.agents,
-        qualityAssurance: recipe(current.agents.qualityAssurance),
-      },
-    }));
-  };
   const updateAgentRoutingSettings = (recipe: (current: typeof agentRoutingSettings) => typeof agentRoutingSettings) => {
     if (selectedProject && projectSettings) {
       if (activeScope !== "project") {
@@ -267,17 +231,6 @@ export const SettingsAgentsPanel: FunctionComponent<{ state: SettingsPageState }
           </div>
         </div>
       </SectionCard>
-
-      <QAPanel
-        settings={qaSettings}
-        update={(patch) => updateQaSettings((current) => ({ ...current, ...patch }))}
-        getBadge={qaFieldBadge}
-        sectionBadge={qaSectionBadge}
-        presetOptions={qaPresetOptions}
-        selectorsDisabled={qaPresetSelectorsDisabled}
-        selectedProjectName={selectedProject?.name}
-        activeScope={activeScope}
-      />
     </div>
   );
 };

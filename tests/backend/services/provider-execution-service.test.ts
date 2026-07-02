@@ -341,13 +341,27 @@ describe("ProviderExecutionService", () => {
     vi.mocked(resolveProviderRetryDecision).mockReturnValue({
       kind: "quota_reset",
       delayMs: 1000,
-      retryAtIso: "2026-06-01T12:00:00.000Z",
+      retryAtIso: "2026-06-01T12:30:00.000Z",
     });
 
     const result = await service.executeProvider({ ...defaultArgs, taskRunId: "run-1" });
 
     expect(result).toBe(mockResult);
     expect(sleepWithSignal).toHaveBeenCalledTimes(1);
+    expect(executionRepository.updateExecutionInvocation).toHaveBeenCalledWith(
+      "exec-inv-1",
+      expect.objectContaining({
+        lastRetryAfterIso: "2026-06-01T12:30:00.000Z",
+      }),
+    );
+    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
+      "exec-inv-1",
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          retryAfterIso: "2026-06-01T12:30:00.000Z",
+        }),
+      }),
+    );
     expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
       "run-1",
       "cli_provider_quota_wait",
@@ -355,9 +369,43 @@ describe("ProviderExecutionService", () => {
       expect.objectContaining({
         kind: "quota_reset",
         errorCategory: "QUOTA_EXHAUSTED",
-        retryAfterIso: "2026-06-01T12:00:00.000Z",
+        retryAfterIso: "2026-06-01T12:30:00.000Z",
       }),
       expect.objectContaining({ sourceEventKey: expect.stringContaining("quota-wait") }),
+    );
+  });
+
+  it("Quota-reset propagation: omits misleading retry metadata when no retry is scheduled", async () => {
+    const failedResult = { ...mockResult, ok: false };
+    providerRunner.runProvider.mockResolvedValue(failedResult);
+
+    vi.mocked(classifyProviderError).mockReturnValue({
+      category: "QUOTA_EXHAUSTED",
+      userMessage: "Quota exceeded",
+      resetAtIso: "2026-06-01T12:00:00.000Z",
+      provider: "claude-code",
+      resetAfter: "2h0m0s",
+    });
+    vi.mocked(resolveProviderRetryDecision).mockReturnValue(null);
+
+    await expect(service.executeProvider(defaultArgs)).rejects.toMatchObject({
+      name: "ProviderQuotaError",
+      retryAfterIso: null,
+    });
+
+    expect(executionRepository.updateExecutionInvocation).toHaveBeenCalledWith(
+      "exec-inv-1",
+      expect.objectContaining({
+        lastRetryAfterIso: null,
+      }),
+    );
+    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
+      "exec-inv-1",
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          retryAfterIso: null,
+        }),
+      }),
     );
   });
 

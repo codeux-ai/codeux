@@ -9,11 +9,15 @@ import { getHomeCodeUxPath, getRepoCodeUxPath } from "../shared/config/code-ux-p
 import type { Logger } from "../shared/logging/logger.js";
 import { ensureDefaultCodeUxAssetsInstalled } from "./code-ux-default-assets-service.js";
 import { CODE_UX_INTERNAL_DOCS_SOURCE_REF, type KnowledgeService } from "./knowledge-service.js";
+import { runCommandStrict } from "./cli-process-runner.js";
+import { readLocalGitOriginUrl } from "../infrastructure/git/local-git-origin.js";
+import { PrService } from "../infrastructure/providers/cli/pr-service.js";
 
 interface AgentPresetSyncServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
   agentPresetRepository: AgentPresetRepository;
   settingsRepository: SettingsRepository;
+  getGithubToken?: () => string | undefined;
   projectRoot: string;
   logger?: Logger;
   knowledgeService?: KnowledgeService;
@@ -339,6 +343,78 @@ export class AgentPresetSyncService {
     }
 
     return await this.decorateProjectAgentPresets(projectId);
+  }
+
+  async pushAgentPresetsToRepository(projectId: string, options: {
+    mode: "commit_only" | "commit_and_push" | "pull_request";
+    branchName?: string;
+  }): Promise<{
+    committed: boolean;
+    pushedBranch?: string;
+    pullRequestUrl?: string;
+  }> {
+    const project = this.requireProject(projectId);
+    const agentsDir = getRepoCodeUxPath(project.baseDir, "agents");
+    const statusResult = await runCommandStrict("git", ["status", "--porcelain", "--", agentsDir], project.baseDir);
+    if (!statusResult.stdout.trim()) {
+      return { committed: false };
+    }
+
+    let targetBranch = options.branchName?.trim() || null;
+    if (options.mode === "pull_request" && !targetBranch) {
+      targetBranch = `agents/push-${Date.now()}`;
+    }
+    if (options.mode !== "commit_only") {
+      targetBranch = await this.resolvePushTargetBranch(project.baseDir, targetBranch);
+      await this.checkoutBranch(project.baseDir, targetBranch);
+    }
+
+    await runCommandStrict("git", ["add", agentsDir], project.baseDir);
+
+    const hasStagedChanges = await runCommandStrict("git", ["diff", "--cached", "--quiet", "--", agentsDir], project.baseDir)
+      .then(() => false)
+      .catch(() => true);
+    if (!hasStagedChanges) {
+      return { committed: false };
+    }
+
+    await runCommandStrict("git", ["commit", "-m", "chore: push agent presets", "--", agentsDir], project.baseDir);
+
+    if (options.mode === "commit_only") {
+      return { committed: true };
+    }
+
+    const branchToPush = targetBranch || await this.getCurrentBranch(project.baseDir);
+    const originUrl = readLocalGitOriginUrl(project.baseDir);
+    if (!originUrl) {
+      return { committed: true };
+    }
+
+    await runCommandStrict("git", ["push", "origin", branchToPush], project.baseDir);
+
+    if (options.mode === "commit_and_push") {
+      return { committed: true, pushedBranch: branchToPush };
+    }
+
+    const defaultBranch = this.resolveDefaultBranch(projectId);
+    const effectiveSettings = this.deps.settingsRepository.resolveProjectDashboardSettings(projectId).settings;
+    const pullRequestUrl = await new PrService().resolveOrCreateFeaturePr({
+      taskId: `agent-preset-push:${projectId}`,
+      provider: "codex",
+      title: "Push agent presets",
+      featureBranch: defaultBranch,
+      workerBranch: branchToPush,
+      body: `Project: ${project.name}\n\nPush the project's .code-ux/agents markdown files into the repository.`,
+    }, project.baseDir, {
+      githubToken: this.deps.getGithubToken?.() || effectiveSettings.git.githubToken,
+      gitlabToken: effectiveSettings.git.gitlabToken,
+    });
+
+    return {
+      committed: true,
+      pushedBranch: branchToPush,
+      pullRequestUrl,
+    };
   }
 
   async getPlanningAgent(projectId: string): Promise<AgentPresetRecord> {
@@ -758,5 +834,40 @@ export class AgentPresetSyncService {
       throw new Error(`Project not found: ${projectId}`);
     }
     return project;
+  }
+
+  private async getCurrentBranch(repoPath: string): Promise<string> {
+    const result = await runCommandStrict("git", ["branch", "--show-current"], repoPath);
+    const branch = result.stdout.trim();
+    if (!branch) {
+      throw new Error("Unable to resolve the current git branch.");
+    }
+    return branch;
+  }
+
+  private async resolvePushTargetBranch(repoPath: string, branchName: string | null): Promise<string> {
+    if (branchName) {
+      return branchName;
+    }
+    return await this.getCurrentBranch(repoPath);
+  }
+
+  private async checkoutBranch(repoPath: string, branchName: string): Promise<void> {
+    const currentBranch = await this.getCurrentBranch(repoPath);
+    if (currentBranch === branchName) {
+      return;
+    }
+    const branchExists = await runCommandStrict("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branchName}`], repoPath)
+      .then(() => true)
+      .catch(() => false);
+    if (branchExists) {
+      await runCommandStrict("git", ["switch", branchName], repoPath);
+      return;
+    }
+    await runCommandStrict("git", ["switch", "-c", branchName], repoPath);
+  }
+
+  private resolveDefaultBranch(projectId: string): string {
+    return this.deps.settingsRepository.resolveProjectDashboardSettings(projectId).settings.git.defaultBranch?.trim() || "main";
   }
 }

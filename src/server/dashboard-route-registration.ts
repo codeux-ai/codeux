@@ -22,6 +22,7 @@ import { registerSchedulerRoutes } from "./scheduler-routes.js";
 import { registerTerminalRoutes } from "./terminal-routes.js";
 import { registerSprintComposerRoutes } from "./routes/sprint-composer.js";
 import { registerGitProviderRoutes } from "./git-provider-routes.js";
+import { registerUpdateStatusRoutes } from "./update-status-routes.js";
 import { registerMemoryRoutes } from "./memory-routes.js";
 import { registerKnowledgeRoutes } from "./knowledge-routes.js";
 
@@ -51,6 +52,7 @@ export const registerDashboardRoutes = (
   registerSchedulerRoutes(app, deps);
   registerTerminalRoutes(app, deps);
   registerGitProviderRoutes(app, deps);
+  registerUpdateStatusRoutes(app, deps);
   if (
     deps.memoryService &&
     deps.memoryPromotionService &&

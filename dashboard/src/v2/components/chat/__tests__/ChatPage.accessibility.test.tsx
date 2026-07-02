@@ -39,7 +39,9 @@ vi.mock('../../../hooks/use-chat-page-data.js', () => ({
     isConfirmOpen: false,
     confirmOptions: null,
     handleConfirm: vi.fn(),
-    handleCancel: vi.fn()
+    handleCancel: vi.fn(),
+    handleCancelActiveTurn: vi.fn(),
+    isCancelling: false,
   })
 }));
 

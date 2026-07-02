@@ -132,6 +132,23 @@ const HookHarness = () => {
       >
         quicksprint
       </button>
+      <button
+        type="button"
+        onClick={() => {
+          void data.handleQuicksprintExecute(
+            "template-1",
+            4,
+            "plan_only",
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            { noTaskLimit: true },
+          ).catch(() => undefined);
+        }}
+      >
+        quicksprint-unlimited
+      </button>
     </div>
   );
 };
@@ -221,6 +238,26 @@ describe("useSprintsPageData sprint-number reservations", () => {
     await waitFor(() => {
       expect(screen.getByTestId("next-id")).toHaveTextContent("SPR-02");
     });
+  });
+
+  it("includes noTaskLimit in the quicksprint execution payload", async () => {
+    const deferred = createDeferred<{ id: string }>();
+    executeQuicksprintMock.mockReturnValueOnce(deferred.promise);
+    render(<HookHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "quicksprint-unlimited" }));
+
+    await waitFor(() => {
+      expect(executeQuicksprintMock).toHaveBeenCalledTimes(1);
+    });
+    expect(executeQuicksprintMock.mock.calls[0]?.[1]).toMatchObject({
+      templateId: "template-1",
+      taskCount: 4,
+      noTaskLimit: true,
+      submitMode: "plan_only",
+    });
+
+    deferred.reject(new Error("quicksprint failed"));
   });
 
   it("reserves distinct sprint numbers for multiple unresolved quicksprint executions", async () => {

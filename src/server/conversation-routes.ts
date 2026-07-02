@@ -41,6 +41,14 @@ export function registerConversationRoutes(app: Express, options: DashboardDepen
     res.json(await options.compactThreadSession(requireTrimmedString(req.params.threadId, "threadId")));
   }));
 
+  app.post("/api/conversations/threads/:threadId/cancel", asyncRoute(async (req, res) => {
+    if (!options.cancelThreadTurn) {
+      res.status(404).json({ error: "Thread cancellation is not enabled." });
+      return;
+    }
+    res.json(await options.cancelThreadTurn(requireTrimmedString(req.params.threadId, "threadId")));
+  }));
+
   app.delete("/api/conversations/threads/:threadId", syncRoute((req, res) => {
     options.deleteConversationThread(requireTrimmedString(req.params.threadId, "threadId"));
     res.json({ ok: true });

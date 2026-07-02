@@ -73,6 +73,13 @@ export const compactThreadSession = async (threadId: string): Promise<ChatThread
   });
 };
 
+export const cancelThreadTurn = async (threadId: string): Promise<{ cancelled: boolean }> => {
+  return fetchJson<{ cancelled: boolean }>(`/api/conversations/threads/${encodeURIComponent(threadId)}/cancel`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+};
+
 export const deleteConversationThread = async (threadId: string): Promise<void> => {
   await fetchJson<{ ok: true }>(`/api/conversations/threads/${encodeURIComponent(threadId)}`, {
     method: "DELETE",

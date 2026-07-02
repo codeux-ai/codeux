@@ -35,21 +35,27 @@ const App = () => (
       <ChatThreadHeader
         thread={mockThreadActive}
         onCompact={() => {}}
+        onCancelActiveTurn={() => {}}
         isCompacting={false}
+        isCancelling={false}
       />
     </div>
     <div className="border border-white/10 rounded-xl overflow-hidden bg-black dark:bg-void-900">
       <ChatThreadHeader
         thread={mockThreadReplay}
         onCompact={() => {}}
+        onCancelActiveTurn={() => {}}
         isCompacting={false}
+        isCancelling={false}
       />
     </div>
     <div className="border border-white/10 rounded-xl overflow-hidden bg-black dark:bg-void-900">
       <ChatThreadHeader
         thread={mockThreadNew}
         onCompact={() => {}}
+        onCancelActiveTurn={() => {}}
         isCompacting={false}
+        isCancelling={false}
       />
     </div>
   </div>

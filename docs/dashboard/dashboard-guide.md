@@ -77,6 +77,8 @@ Project management:
   - Re-imports a linked markdown agent into sqlite
 - `POST /api/projects/:projectId/agent-presets/sync-markdown`
   - Re-imports every out-of-sync linked markdown agent for the selected project
+- `POST /api/projects/:projectId/agent-presets/push`
+  - Commits `.code-ux/agents/*.md` changes from the selected project, optionally pushes the branch, and can open a pull request against the default branch when repository remotes are available
 - `POST /api/projects/:projectId/planning/improve-sprint-prompt`
   - Sends a draft sprint prompt to the Planning agent through the configured virtual worker provider and returns the improved prompt
   - Planning overrides may explicitly target a specific `planningAgentPresetId`, as well as a virtual CLI provider/model for that one request. The composer defaults to the project Agent Routing planning preset.
@@ -88,6 +90,11 @@ Project management:
   - Lists project conversation threads
 - `POST /api/projects/:projectId/conversations/threads`
   - Creates a new project conversation thread
+- `POST /api/conversations/threads/:threadId/compact`
+  - Compacts a thread's conversation history into a stored handoff summary
+- `POST /api/conversations/threads/:threadId/cancel`
+  - Cancels the currently running dashboard turn for a thread
+  - The active thread header renders a `Cancel Request` button only while the selected thread still has pending dashboard messages
 - `GET /api/conversations/threads/:threadId/messages`
   - Lists stored messages for one thread
 - `POST /api/projects/:projectId/conversations/messages`
@@ -201,6 +208,7 @@ Legacy runtime:
 - Global Search preserves previous results during debounce to avoid layout shift, only polls for container previews when opened, and uses `aria-activedescendant` for keyboard navigation.
 - Shared dropdown menus enhance nested menu items inside layout wrappers, so keyboard navigation and item entrance animation remain consistent when menu content is grouped.
 - Shared popovers own trigger open/close toggling; feature triggers such as Agent Memory avoid duplicate local toggles that can immediately close the panel after opening.
+- The Agents page now includes a Push Agents header action with an inline destination picker, so users explicitly choose between a local commit, branch push, or pull request before dispatching the backend push request.
 - The Live Sprint Clock card in the Sprint Stats deck now shows a six-tile grid with Finished, Avg Finish, Accumulated, Input, Output, and Cached values, and the token tiles reuse the shared compact formatter from the Stats page.
 - Live runtime pages now use the persisted top-nav sprint selection as the page scope, so the Live view follows the selected sprint from the header menu
 - That selection is view-only for the dashboard surface; it does not change which sprint run is actually executing in the backend
@@ -255,7 +263,7 @@ Legacy runtime:
 - Planning and prompt-improvement requests continue server-side if the browser tab is refreshed or closed. The overlay's `Cancel Active Request` action now sends an explicit cancellation request and leaves visible UI feedback in the composer. Form validation ensuring required sprint name and goal appear interactively post-interaction rather than silently disabling actions. The `Save Draft` and `Append Tasks` modes now also have defined progressive text for planning feedback, while `New Sprint` and `New Quicksprint` detach the current planning run from the visible composer, immediately reset the form controls, and leave the old run to finish without closing or mutating the fresh composer.
 - Clicking `Minimize` fully dismisses the planning overlay action row (`Minimize`, secondary action, and overlay cancel button). Any progress restore affordance remains inside the composer/quicksprint panel layout instead of floating over unrelated page content.
 - Sprints page `View Tasks`/`Open` links pass the sprint id to the Tasks page and the Tasks page persists that sprint as the global selected sprint scope, keeping the top navigation selector and page-wide task filtering aligned.
-- Settings now expose separate CLI retry controls for quota resets and rate limits, including the rate-limit delay and a max rate-limit retry count (`5` by default). Session sync preserves quota/rate-limit dispatch errors so active retry timers remain visible, while expired or missing cooldown metadata requeues the task instead of leaving it stuck in `QUOTA`.
+- Settings now expose separate CLI retry controls for quota resets and rate limits, including the rate-limit delay and a max rate-limit retry count (`5` by default). Exact provider reset timestamps are honored, while ambiguous Codex wall-clock hints fall back to a bounded 30-minute retry. Session sync preserves quota/rate-limit dispatch errors so active retry timers remain visible, and runtime events plus invocation records surface the same `retryAfterIso` metadata the worker actually uses. Expired or missing cooldown metadata still requeues the task instead of leaving it stuck in `QUOTA`.
 - The v2 settings workspace restores the full Git Flow and Git host controls:
   - Git Flow lives in the Sprint tab with default branch, branch prefix, sprint branch scheme, remote/local mode, and auto-create PR
   - Integrations exposes system GitHub, GitLab, and Jira credentials plus per-scope GitHub auth-copy mounts and Docker git identity; local `.gitconfig` copying hides the editable name/email fields when enabled
@@ -295,7 +303,8 @@ Legacy runtime:
 - QA review badge overlays on sprint cells and ledger rows render beside the badge icon through a viewport-level overlay, so review summaries and findings are not clipped by the ledger controls or table layout.
 - Sprint markdown export now includes direct download actions and per-section copy-to-clipboard buttons (with brief `Copied` confirmation) in the export modal
 - The in-page sprint composer collapses into a stacked single-column layout on smaller screens, and both create and edit now use that same inline flow. The Quicksprint panel and the Sprint Composer are mutually exclusive; opening one automatically dismisses the other to maintain focus.
-- The Quicksprint panel separates `Default Templates` from custom templates and includes a purpose selector for built-in template sets. The first shipped built-in purpose is `Fullstack JS App`, which groups six project-agnostic engineering and UI quicksprint templates loaded from `.code-ux/quicksprints/templates` and overrideable from project or home `.code-ux` directories. See [Quicksprint Templates](./quicksprint-templates.md).
+- The Quicksprint panel separates `Default Templates` from custom templates and includes a purpose selector for built-in template sets. The first shipped built-in purpose is `Fullstack JS App`, which groups six project-agnostic engineering and UI quicksprint templates loaded from `.code-ux/quicksprints/templates` and overrideable from project or home `.code-ux` directories. The default browse rails use a three-row horizontal slider with left/right paging controls and native touch / trackpad scrolling. See [Quicksprint Templates](./quicksprint-templates.md).
+- Quicksprint browse mode is browse-only: it changes how templates are discovered, but template execution still uses the same planning flow and the same subtask-count controls as before.
 - The refreshed sprint ledger below the showcase renders as a responsive card/table hybrid: mobile rows collapse into touch-friendly sprint cards, desktop keeps sortable table scanning, and the header includes live visible/pinned/active/completed counters.
 - The sprint ledger receives the full project sprint collection for counting, searching, sorting, selection, and task-count/progress accounting; the local `Show` selector is the only row-windowing layer, so large projects do not under-report sprints or task totals during initial render.
 - The desktop ledger table now enforces mirrored per-column width guards (`w-*` + `min-w-*`) with a container-scoped horizontal scroller, preventing header/body overlap at narrow widths while avoiding page-level horizontal overflow.
@@ -324,7 +333,7 @@ Legacy runtime:
 - Tasks page stores explicit task executor preference (`auto`, `docker_cli`, `jules`)
 - The Tasks board entrance animation now replays only for project/view/filter changes instead of every background task refresh
 - Stats page is project-scoped and visualizes tracked token, time, and Git usage (insertions, deletions, PRs) for the selected project with `24h`, `7d`, `30d`, `all time`, and custom date windows
-- Scheduler page is project-scoped and provides a calendar plus 24-hour day view for timed sprint starts, quicksprint launches, and `/chat` messages. Recurring entries expand into every visible day in the calendar and support endless, fixed-count, and end-date/time recurrence. It also supports editing existing entries directly from scheduled entries or occurrences with full form hydration, title customization, and cancellation support. See [Scheduler](./scheduler.md).
+- Scheduler page is project-scoped and provides a calendar plus 24-hour day view for timed sprint starts, quicksprint launches, and `/chat` messages. Recurring entries expand into every visible day in the calendar and support minute-level recurrence (`minutely` in API/MCP payloads, `Minutes` in the form) plus endless, fixed-count, and end-date/time recurrence. It also supports editing existing entries directly from scheduled entries or occurrences with full form hydration, title customization, and cancellation support. See [Scheduler](./scheduler.md).
 - Browser page is project-scoped and provides a polished in-app browser surface for sprint preview containers:
   - floating horizontal slider in its own top strip, with large-screen five-card visibility for preview selection
   - the browser window starts directly below the slider instead of sharing a stretched first-row layout with the sprint controls
@@ -375,7 +384,7 @@ Legacy runtime:
 - Project-local markdown mirroring is enabled by default through project settings, so dashboard edits create/update `.code-ux/agents/*.md` in the selected repo without touching shipped defaults
 - Markdown-backed agents now show sync state and support both manual single-agent re-import and bulk `Sync All`
 - The first built-in role is `Planning agent`, which is editable under Agents like any other DB-backed agent
-- `Settings -> Agents` now includes the QA controls above instruction templates, with per-trigger agent selection across all project agents and QA-labeled presets floated to the top
+- `Settings > Sprint & Git` now includes the QA controls immediately below `Merge Gates & Autofix`, with per-trigger agent selection across all project agents, QA-labeled presets floated to the top, the same project-scope behavior preserved for local QA edits, and the persisted settings path still anchored at `agents.qualityAssurance`
 - Chat page is DB-backed and stores project conversation threads/messages in sqlite
 - Chat page now provides a `Threads / Invocations` toggle to switch between human conversation threads and read-only execution invocations.
 - Chat page UI is redesigned with animated identities, structured widgets for rich messages, and automatic worker pickup derived from active project routing.

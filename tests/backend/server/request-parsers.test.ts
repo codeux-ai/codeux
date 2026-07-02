@@ -329,6 +329,7 @@ describe("Request Parsers", () => {
       expect(() => parseQuicksprintExecutionInput({ templateId: "t", taskCount: 2, submitMode: "bad" })).toThrow(/submitMode/);
       expect(parseQuicksprintExecutionInput({ templateId: "t", taskCount: 2.8, submitMode: "plan_and_start" })).toMatchObject({ taskCount: 2, submitMode: "plan_and_start" });
       expect(parseQuicksprintExecutionInput({ templateId: "t", taskCount: "2", submitMode: "plan_and_start" })).toMatchObject({ taskCount: 2, submitMode: "plan_and_start" });
+      expect(parseQuicksprintExecutionInput({ templateId: "t", submitMode: "plan_only", noTaskLimit: true })).toMatchObject({ taskCount: 5, noTaskLimit: true, submitMode: "plan_only" });
     });
   });
 

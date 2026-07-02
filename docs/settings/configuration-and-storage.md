@@ -72,6 +72,7 @@ Runtime resolution:
 - if Docker is unavailable during a CI autofix follow-up, Code UX falls back to a host-backed git worktree for that repair run instead of escalating immediately or creating another doomed Docker attempt.
 - Merge-conflict resolution remains isolated in its own Docker workspace even when the underlying task already has a reusable task workspace.
 - Docker provider runs use readable container names such as `code-ux-codex-<session>` and stage provider argv in a temporary host file mounted at `/opt/code-ux/provider-argv.sh`; only the provider command name remains in the host `docker run` argv. This avoids Windows command-line length failures when prompts include large task context.
+- When a Docker-backed provider run is cancelled, Code UX now kills the backing container directly on abort instead of relying on the local `docker run` client to tear it down. This keeps deterministic container names safe for retries while ensuring the daemon-side container stops promptly.
 - Interactive provider login containers use readable names such as `code-ux-login-<provider>-<session>` and run on a small cached prerequisite image named like `code-ux-login-base-node-24-bookworm-slim:<hash>`.
 - Packaged Windows Electron uses an opaque BrowserWindow and Chromium GPU memory hints to mitigate tile-memory pressure. All animated backgrounds render at full fidelity; WebGL backgrounds use `powerPreference: "low-power"` and 0.5× render scale, and all background layers apply CSS `contain: strict` to limit compositor tile scope.
 - On startup, Code UX schedules Docker asset pruning in the background so dashboard boot is not blocked by Docker cleanup. The prune path uses label-filtered Docker queries for managed workspace/runtime volumes plus helper/login containers, removes containers and volumes in batches, and applies a short per-command timeout. Helper/login container cleanup uses `docker rm -f -v` so anonymous image-declared volumes are removed with the container. Cached setup-script images are content-addressed and are intentionally preserved across dashboard restarts so provider launches can reuse them until the base image, setup script content, or setup Dockerfile changes.
@@ -301,7 +302,7 @@ Dashboard behavior:
     - `enabled`
     - `agentPresetId`
 
-Quality assurance settings are project-scoped today and are edited from `Settings -> Agents`. When task-level QA is enabled, successful CLI task runs preserve their worktree long enough for a QA follow-up pass to resume the same session/worktree if fixes are required.
+Quality assurance settings are project-scoped today and are edited from `Settings -> Sprint & Git`, immediately below `Merge Gates & Autofix`. When task-level QA is enabled, successful CLI task runs preserve their worktree long enough for a QA follow-up pass to resume the same session/worktree if fixes are required.
 
 QA merge-gate notes:
 - task QA now runs on code-complete tasks before Code UX auto-merges their feature PRs

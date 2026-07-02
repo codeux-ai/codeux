@@ -15,6 +15,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
   selectedTemplateId: string | null;
   selectedTemplate: QuicksprintTemplateRecord | null;
   taskCount: number; setTaskCount: (v: number) => void;
+  noTaskLimit: boolean; setNoTaskLimit: (v: boolean) => void;
   routeOverride: PlanningRouteOption | null; setRouteOverride: (v: PlanningRouteOption | null) => void;
   modelOverride: string | null; setModelOverride: (v: string | null) => void;
   showPrompt: boolean; setShowPrompt: (v: boolean) => void;
@@ -37,6 +38,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
   selectedTemplateId,
   selectedTemplate,
   taskCount, setTaskCount,
+  noTaskLimit, setNoTaskLimit,
   routeOverride, setRouteOverride,
   modelOverride, setModelOverride,
   showPrompt, setShowPrompt,
@@ -221,7 +223,24 @@ export const QuicksprintExecutionView: FunctionComponent<{
               {/* Subtask count */}
               <div data-qs-stagger>
                 <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-4">Subtask Count</div>
-                <SubtaskSlider value={taskCount} onChange={setTaskCount} />
+                <label
+                  className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors ${
+                    noTaskLimit
+                      ? "border-ember-500/20 bg-ember-500/[0.06] text-ember-600 dark:text-ember-400"
+                      : "border-black/[0.06] bg-black/[0.025] text-slate-500 hover:bg-black/[0.04] dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:bg-white/[0.05]"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={noTaskLimit}
+                    onChange={(e) => setNoTaskLimit((e.target as HTMLInputElement).checked)}
+                    className="h-4 w-4 rounded border-black/20 text-ember-600 focus:ring-ember-500/30"
+                  />
+                  No limit
+                </label>
+                <div className="mt-5">
+                  <SubtaskSlider value={taskCount} onChange={setTaskCount} disabled={noTaskLimit} />
+                </div>
               </div>
 
               {/* Spacer */}

@@ -57,6 +57,34 @@ describe("SchedulerRepository", () => {
     expect(listed.id).toBe(entry.id);
   });
 
+  it("round-trips minute-based recurrence entries through persistence", async () => {
+    const { dir, projectRepository, schedulerRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Scheduler Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+
+    const entry = schedulerRepository.createEntry(project.id, {
+      targetType: "chat",
+      scheduledFor: "2026-05-18T09:00:00.000Z",
+      recurrence: { frequency: "minutely", interval: 15, endMode: "after_count", count: 4 },
+      chatTarget: { bodyMarkdown: "Check in" },
+    });
+
+    expect(entry.recurrence).toEqual({
+      frequency: "minutely",
+      interval: 15,
+      endMode: "after_count",
+      count: 4,
+      until: null,
+    });
+
+    const stored = schedulerRepository.getEntry(entry.id);
+    expect(stored?.recurrence).toEqual(entry.recurrence);
+    expect(schedulerRepository.listEntries(project.id)[0]?.recurrence).toEqual(entry.recurrence);
+  });
+
   it("marks successful runs and completes one-time entries", async () => {
     const { dir, projectRepository, schedulerRepository } = await createRepositories();
     const project = projectRepository.createProject({
@@ -102,7 +130,7 @@ describe("SchedulerRepository", () => {
     });
   });
 
-  it("recomputes nextRunAt to the next future occurrence when resuming a paused entry", async () => {
+  it("recomputes nextRunAt to the next future occurrence when resuming a paused minute entry", async () => {
     const { dir, projectRepository, schedulerRepository } = await createRepositories();
     const project = projectRepository.createProject({
       name: "Scheduler Project",
@@ -110,15 +138,15 @@ describe("SchedulerRepository", () => {
       sourceRef: dir,
     });
 
-    const pastDate = "2026-05-18T09:00:00.000Z";
-    const now = new Date("2026-06-11T10:00:00.000Z");
-    const nextFutureDate = "2026-06-12T09:00:00.000Z";
+    const pastDate = "2026-06-11T10:00:00.000Z";
+    const now = new Date("2026-06-11T10:06:30.000Z");
+    const nextFutureDate = "2026-06-11T10:07:00.000Z";
 
     // Create a daily entry that started in the past
     const entry = schedulerRepository.createEntry(project.id, {
       targetType: "chat",
       scheduledFor: pastDate,
-      recurrence: { frequency: "daily", interval: 1 },
+      recurrence: { frequency: "minutely", interval: 1 },
       chatTarget: { bodyMarkdown: "Daily Ping" },
     });
 

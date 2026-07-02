@@ -40,12 +40,12 @@ The current settings are:
 
 Dashboard surface:
 
-- `dashboard/src/v2/components/settings/panels/SettingsAgentsPanel.tsx`
+- `dashboard/src/v2/components/settings/panels/SettingsSprintPanel.tsx`
 
-The `Settings -> Agents` panel includes a dedicated `Quality Assurance` section that:
+The `Settings -> Sprint & Git` panel includes a dedicated `Quality Assurance` section that:
 
 - stays compact when QA is disabled
-- appears above instruction templates in the Agents settings stack
+- appears immediately below `Merge Gates & Autofix` in the Sprint & Git settings stack
 - exposes the three QA triggers when enabled
 - allows per-trigger agent preset selection across all project agent presets
 - sorts presets labeled for QA ahead of other agent presets

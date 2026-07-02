@@ -21,6 +21,7 @@ import { prepareMemoryGraph, type MemNode, type Edge, type GraphMetadata, CLUSTE
 import type { SprintRecord, AgentPreset } from "./types.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
 import { PageHeader } from "./components/layout/PageHeader.js";
+import { MEMORY_CAMERA, focusCameraOnPoint, zoomCameraTowardPoint, type CameraState } from "./lib/memory-camera.js";
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 
@@ -46,6 +47,8 @@ const TIER_TABS: { key: MemTier; label: string; scope: MemoryScope }[] = [
 ];
 
 const CATEGORIES: MemoryCategory[] = ["architecture", "codebase", "context", "preferences", "patterns", "decision", "error", "learning"];
+const AMBIENT_LABEL_MIN_ZOOM = 1.05;
+const SEARCH_FOCUS_ZOOM = 1.1;
 
 /* ─── Build nodes + edges from API data ─────────────────────────────────── */
 
@@ -78,6 +81,110 @@ function formatBytes(bytes: number): string {
     if (bytes < 1e6) return `${(bytes / 1024).toFixed(0)} KB`;
     if (bytes < 1e9) return `${(bytes / 1e6).toFixed(0)} MB`;
     return `${(bytes / 1e9).toFixed(1)} GB`;
+}
+
+function wrapCanvasText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines: number): string[] {
+    const words = text.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return [""];
+
+    const lines: string[] = [];
+    let line = words[0]!;
+
+    for (let i = 1; i < words.length; i++) {
+        const candidate = `${line} ${words[i]}`;
+        if (ctx.measureText(candidate).width <= maxWidth || line.length === 0) {
+            line = candidate;
+            continue;
+        }
+
+        lines.push(line);
+        if (lines.length >= maxLines - 1) {
+            line = words.slice(i).join(" ");
+            break;
+        }
+        line = words[i]!;
+    }
+
+    lines.push(line);
+
+    if (lines.length > maxLines) {
+        const kept = lines.slice(0, maxLines);
+        kept[maxLines - 1] = `${kept[maxLines - 1]!.replace(/\s+$/, "")}…`;
+        return kept;
+    }
+
+    if (lines.length === maxLines && ctx.measureText(lines[maxLines - 1]!).width > maxWidth) {
+        lines[maxLines - 1] = `${lines[maxLines - 1]!.replace(/\s+$/, "")}…`;
+    }
+
+    return lines;
+}
+
+function drawFocusedLabel(
+    ctx: CanvasRenderingContext2D,
+    node: MemNode,
+    label: string,
+    dark: boolean,
+    lob: boolean,
+    camZoom: number,
+    anchorSide: -1 | 1,
+    maxLines: number,
+): void {
+    const paddingX = 12 / camZoom;
+    const paddingY = 10 / camZoom;
+    const lineGap = 4 / camZoom;
+    const fontSize = (camZoom >= MEMORY_CAMERA.deepReadableZoom ? 13 : 12) / camZoom;
+    const titleSize = 10 / camZoom;
+    const maxWidth = (camZoom >= MEMORY_CAMERA.deepReadableZoom ? 240 : 190) / camZoom;
+    const r = node.radius * node.scale;
+    const offsetX = (r + 20 / camZoom) * anchorSide;
+    const anchorX = node.x + offsetX;
+    const anchorY = node.y - r - 18 / camZoom;
+    const boxWidth = maxWidth + paddingX * 2;
+    const title = `${label.toUpperCase()} · ${Math.round(node.strength * 100)}%`;
+    const lineHeight = fontSize + lineGap;
+    const bodyFont = `600 ${fontSize}px "Plus Jakarta Sans", sans-serif`;
+    ctx.font = bodyFont;
+    const lines = wrapCanvasText(ctx, node.content, maxWidth, maxLines);
+    const boxHeight = paddingY * 2 + titleSize + 6 / camZoom + (lines.length * lineHeight);
+    const boxLeft = anchorSide < 0 ? anchorX - boxWidth : anchorX;
+    const boxTop = anchorY - 2 / camZoom;
+
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.textAlign = anchorSide < 0 ? "right" : "left";
+    ctx.textBaseline = "top";
+
+    ctx.fillStyle = dark ? "rgba(9,12,18,0.92)" : "rgba(255,255,255,0.95)";
+    ctx.strokeStyle = lob
+        ? "rgba(227,0,15,0.55)"
+        : "rgba(0,224,160,0.22)";
+    ctx.lineWidth = 1 / camZoom;
+    ctx.beginPath();
+    ctx.roundRect(boxLeft, boxTop, boxWidth, boxHeight, 10 / camZoom);
+    ctx.fill();
+    ctx.stroke();
+
+    const textX = anchorSide < 0 ? boxLeft + boxWidth - paddingX : boxLeft + paddingX;
+    const titleColor = lob
+        ? `rgba(227,0,15,0.95)`
+        : "rgba(0,224,160,0.9)";
+    const bodyColor = dark
+        ? "rgba(241,245,249,0.95)"
+        : "rgba(15,23,42,0.9)";
+
+    ctx.font = `700 ${titleSize}px "Plus Jakarta Sans", sans-serif`;
+    ctx.fillStyle = titleColor;
+    ctx.fillText(title, textX, boxTop + paddingY);
+
+    ctx.font = bodyFont;
+    ctx.fillStyle = bodyColor;
+    const bodyTop = boxTop + paddingY + titleSize + 6 / camZoom;
+    for (let i = 0; i < lines.length; i++) {
+        ctx.fillText(lines[i] || "", textX, bodyTop + i * lineHeight);
+    }
+
+    ctx.restore();
 }
 
 /* ─── Memory Page ────────────────────────────────────────────────────────── */
@@ -150,7 +257,7 @@ export const MemoryPage: FunctionComponent = () => {
     const S = useRef({
         graph: { nodes: [], edges: [], catCentroids: {} } as GraphMetadata,
         embeddingMap: null as EmbeddingMapResult | null,
-        cam: { x: 0, y: 0, zoom: 0.55 },
+        cam: { x: 0, y: 0, zoom: MEMORY_CAMERA.entryZoom } as CameraState,
         hoveredIdx: -1,
         selectedIdx: -1,
         pulses: [] as Pulse[],
@@ -166,6 +273,7 @@ export const MemoryPage: FunctionComponent = () => {
 
     const lobRef = useRef(lobotomize);
     lobRef.current = lobotomize;
+    const inspectorOpen = activeMemoryIdSignal.value !== null;
 
     /* ── Fetch agent presets on project change ─────────────── */
     useEffect(() => {
@@ -199,7 +307,7 @@ export const MemoryPage: FunctionComponent = () => {
         if (prefersReducedMotion) {
             s.cam.x = 0;
             s.cam.y = 0;
-            s.cam.zoom = 1;
+            s.cam.zoom = MEMORY_CAMERA.defaultZoom;
             s.graph.nodes.forEach(node => {
                 node.x = node.targetX;
                 node.y = node.targetY;
@@ -208,9 +316,9 @@ export const MemoryPage: FunctionComponent = () => {
             });
             s.entranceDone = true;
         } else {
-            gsap.to(s.cam, { x: 0, y: 0, zoom: 0.55, duration: 0.01, overwrite: true });
+            gsap.to(s.cam, { x: 0, y: 0, zoom: MEMORY_CAMERA.entryZoom, duration: 0.01, overwrite: true });
             const tl = gsap.timeline();
-            tl.to(s.cam, { zoom: 1, duration: 1.8, ease: "power2.out" }, 0);
+            tl.to(s.cam, { zoom: MEMORY_CAMERA.defaultZoom, duration: 1.8, ease: "power2.out" }, 0);
             s.graph.nodes.forEach((node, i) => {
                 tl.to(node, {
                     x: node.targetX, y: node.targetY,
@@ -285,7 +393,7 @@ export const MemoryPage: FunctionComponent = () => {
                 ctx.fill();
             }
 
-            if (cam.zoom > 0.55) {
+            if (cam.zoom >= MEMORY_CAMERA.defaultZoom) {
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
                 for (const [cat, centroid] of Object.entries(catCentroids)) {
@@ -440,7 +548,7 @@ export const MemoryPage: FunctionComponent = () => {
                     ctx.setLineDash([]);
                 }
 
-                if (cam.zoom > 0.65 && !dimmed) {
+                if (cam.zoom >= AMBIENT_LABEL_MIN_ZOOM && cam.zoom < MEMORY_CAMERA.selectedNodeZoom && !dimmed) {
                     const label = n.content.length > 28 ? n.content.slice(0, 28) + "…" : n.content;
                     ctx.font = `600 ${10}px "Plus Jakarta Sans", sans-serif`;
                     ctx.textAlign = "left";
@@ -449,6 +557,20 @@ export const MemoryPage: FunctionComponent = () => {
                         ? `rgba(255,255,255,${0.55 * effOpacity})`
                         : `rgba(0,0,0,${0.45 * effOpacity})`;
                     ctx.fillText(label, n.x + r + 10, n.y);
+                }
+
+                if ((isHov || isSel) && cam.zoom >= MEMORY_CAMERA.selectedNodeZoom && !dimmed) {
+                    const anchorSide: -1 | 1 = n.x >= cam.x ? -1 : 1;
+                    drawFocusedLabel(
+                        ctx,
+                        n,
+                        cc.label,
+                        dark,
+                        lob,
+                        cam.zoom,
+                        anchorSide,
+                        cam.zoom >= MEMORY_CAMERA.deepReadableZoom ? 4 : 2,
+                    );
                 }
 
                 if (s.entranceDone && n.alive) {
@@ -509,8 +631,10 @@ export const MemoryPage: FunctionComponent = () => {
                 const idx = hitTest(wx, wy, s.graph.nodes);
                 if (idx >= 0) {
                     s.selectedIdx = idx;
-                    activeMemoryIdSignal.value = s.graph.nodes[idx].id;
-                    gsap.to(s.cam, { x: s.graph.nodes[idx].x, y: s.graph.nodes[idx].y, zoom: 1.4, duration: 1, ease: "power3.out", overwrite: true });
+                    const node = s.graph.nodes[idx];
+                    activeMemoryIdSignal.value = node.id;
+                    const target = focusCameraOnPoint(node, Math.max(s.cam.zoom, MEMORY_CAMERA.selectedNodeZoom));
+                    gsap.to(s.cam, { ...target, duration: 1, ease: "power3.out", overwrite: true });
                 } else {
                     s.selectedIdx = -1;
                     activeMemoryIdSignal.value = null;
@@ -523,9 +647,19 @@ export const MemoryPage: FunctionComponent = () => {
 
         const onWheel = (e: WheelEvent) => {
             e.preventDefault();
-            const delta = e.deltaY > 0 ? -0.08 : 0.08;
-            const z = Math.max(0.3, Math.min(2.5, s.cam.zoom + delta));
-            gsap.to(s.cam, { zoom: z, duration: 0.35, ease: "power2.out", overwrite: true });
+            const rect = canvas.getBoundingClientRect();
+            const focus = {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top,
+            };
+            const delta = e.deltaY > 0 ? -MEMORY_CAMERA.wheelStep : MEMORY_CAMERA.wheelStep;
+            const target = zoomCameraTowardPoint(
+                s.cam,
+                { width: rect.width, height: rect.height },
+                focus,
+                s.cam.zoom + delta,
+            );
+            gsap.to(s.cam, { ...target, duration: 0.35, ease: "power2.out", overwrite: true });
         };
 
         canvas.addEventListener("mousemove", onMove);
@@ -598,7 +732,7 @@ export const MemoryPage: FunctionComponent = () => {
             let cx = 0, cy = 0;
             matches.forEach(i => { cx += s.graph.nodes[i].x; cy += s.graph.nodes[i].y; });
             cx /= matches.size; cy /= matches.size;
-            gsap.to(s.cam, { x: cx, y: cy, zoom: 1.1, duration: 0.8, ease: "power3.out", overwrite: true });
+            gsap.to(s.cam, { x: cx, y: cy, zoom: SEARCH_FOCUS_ZOOM, duration: 0.8, ease: "power3.out", overwrite: true });
         }
     }, []);
 
@@ -646,13 +780,31 @@ export const MemoryPage: FunctionComponent = () => {
 
     /* ── Camera controls ──────────────────────────────────────────────── */
     const zoomIn = useCallback(() => {
-        gsap.to(S.current.cam, { zoom: Math.min(2.5, S.current.cam.zoom + 0.3), duration: 0.5, ease: "power2.out", overwrite: true });
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        const target = zoomCameraTowardPoint(
+            S.current.cam,
+            { width: rect.width, height: rect.height },
+            { x: rect.width / 2, y: rect.height / 2 },
+            S.current.cam.zoom + MEMORY_CAMERA.buttonStep,
+        );
+        gsap.to(S.current.cam, { ...target, duration: 0.5, ease: "power2.out", overwrite: true });
     }, []);
     const zoomOut = useCallback(() => {
-        gsap.to(S.current.cam, { zoom: Math.max(0.3, S.current.cam.zoom - 0.3), duration: 0.5, ease: "power2.out", overwrite: true });
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        const target = zoomCameraTowardPoint(
+            S.current.cam,
+            { width: rect.width, height: rect.height },
+            { x: rect.width / 2, y: rect.height / 2 },
+            S.current.cam.zoom - MEMORY_CAMERA.buttonStep,
+        );
+        gsap.to(S.current.cam, { ...target, duration: 0.5, ease: "power2.out", overwrite: true });
     }, []);
     const zoomReset = useCallback(() => {
-        gsap.to(S.current.cam, { x: 0, y: 0, zoom: 1, duration: 0.8, ease: "power3.out", overwrite: true });
+        gsap.to(S.current.cam, { x: 0, y: 0, zoom: MEMORY_CAMERA.defaultZoom, duration: 0.8, ease: "power3.out", overwrite: true });
         S.current.selectedIdx = -1;
         activeMemoryIdSignal.value = null;
     }, []);
@@ -708,8 +860,10 @@ export const MemoryPage: FunctionComponent = () => {
         const s = S.current;
         if (idx >= 0 && idx < s.graph.nodes.length) {
             s.selectedIdx = idx;
-            activeMemoryIdSignal.value = s.graph.nodes[idx].id;
-            gsap.to(s.cam, { x: s.graph.nodes[idx].x, y: s.graph.nodes[idx].y, zoom: 1.4, duration: 1, ease: "power3.out", overwrite: true });
+            const node = s.graph.nodes[idx];
+            activeMemoryIdSignal.value = node.id;
+            const target = focusCameraOnPoint(node, Math.max(s.cam.zoom, MEMORY_CAMERA.selectedNodeZoom));
+            gsap.to(s.cam, { ...target, duration: 1, ease: "power3.out", overwrite: true });
         } else {
             S.current.selectedIdx = -1;
             activeMemoryIdSignal.value = null;
@@ -859,8 +1013,14 @@ export const MemoryPage: FunctionComponent = () => {
                 <div ref={wrapRef} className="flex-1 relative overflow-hidden">
                     <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
 
-                {/* Zoom controls */}
-                <div className="absolute bottom-5 right-5 z-20 flex flex-col gap-1.5">
+                    {/* Zoom controls */}
+                    <div
+                        className={`absolute z-20 flex flex-col gap-1.5 ${
+                            inspectorOpen
+                                ? "right-4 top-4 lg:bottom-5 lg:right-[calc(300px+1.25rem)] lg:top-auto"
+                                : "bottom-5 right-5"
+                        }`}
+                    >
                     {[
                         { icon: ZoomIn, fn: zoomIn, title: "Zoom in" },
                         { icon: ZoomOut, fn: zoomOut, title: "Zoom out" },
@@ -876,10 +1036,16 @@ export const MemoryPage: FunctionComponent = () => {
                             <Icon className="w-4 h-4" strokeWidth={1.5} />
                         </button>
                     ))}
-                </div>
+                    </div>
 
-                {/* Legend */}
-                <div className="absolute bottom-5 left-5 z-20 flex flex-wrap gap-x-4 gap-y-1.5">
+                    {/* Legend */}
+                    <div
+                        className={`absolute z-20 flex max-w-[min(100%-2rem,48rem)] flex-wrap gap-x-4 gap-y-1.5 ${
+                            inspectorOpen
+                                ? "left-4 top-4 lg:bottom-5 lg:left-5 lg:top-auto"
+                                : "bottom-5 left-5"
+                        }`}
+                    >
                     {Object.entries(CAT).map(([, cfg]) => (
                         <div key={cfg.label} className="flex items-center gap-1.5">
                             <div className="w-2 h-2 rounded-full" style={{ background: cfg.hex, boxShadow: `0 0 6px ${cfg.hex}` }} />
@@ -889,14 +1055,20 @@ export const MemoryPage: FunctionComponent = () => {
                             </span>
                         </div>
                     ))}
-                </div>
+                    </div>
 
-                {/* Node count */}
-                <div className="absolute top-5 right-5 z-20 pointer-events-none">
+                    {/* Node count */}
+                    <div
+                        className={`absolute z-20 pointer-events-none ${
+                            inspectorOpen
+                                ? "right-4 top-16 lg:right-[calc(300px+1.25rem)] lg:top-5"
+                                : "right-5 top-5"
+                        }`}
+                    >
                     <span className="text-[9px] font-mono text-slate-300 dark:text-slate-600">
                         {memoryCount} nodes
                     </span>
-                </div>
+                    </div>
 
                 {/* Empty state */}
                 {!loading && memoryCount === 0 && (

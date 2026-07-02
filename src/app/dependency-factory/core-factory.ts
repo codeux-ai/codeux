@@ -280,6 +280,7 @@ export function createCoreDependencies(
     projectManagementRepository,
     agentPresetRepository,
     settingsRepository,
+    getGithubToken: () => context.getEffectiveGithubToken(),
     projectRoot: options.projectRoot,
     logger: logger.child({ component: "agent-preset-sync-service" }),
     knowledgeService,

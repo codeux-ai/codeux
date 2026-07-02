@@ -78,6 +78,7 @@ export interface ManageQuicksprintsArgs {
   agentInstructionMarkdown?: string;
   defaultTaskCount?: number | string;
   taskCount?: number | string;
+  noTaskLimit?: boolean;
   submitMode?: "plan_only" | "plan_and_start";
   routeOverride?: string;
   modelOverride?: string;

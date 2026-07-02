@@ -60,6 +60,8 @@ That means:
 - editing a default or home-backed agent from the dashboard creates a project-local override file instead of modifying the default/home source
 - if the linked markdown file later differs from the DB copy, the agent is marked `out_of_sync`
 - the dashboard can re-import one agent or bulk-sync all out-of-sync project agents back into sqlite on demand
+- the dashboard can push `.code-ux/agents/*.md` back into git, either as a local commit, a commit plus branch push, or a feature-branch pull request into the default branch
+- when opening a pull request, Code UX resolves the effective dashboard GitHub/GitLab host tokens and forwards them to the PR service so repository-host authentication stays aligned with the current project settings
 
 ## Agent Metadata
 
@@ -273,7 +275,7 @@ The Agents page now shows:
 - out-of-sync state for changed markdown
 - `Import` action for linked markdown agents
 - `Sync All` action for pulling all out-of-sync local markdown back into sqlite
-- agent preset management only; QA execution settings live under `Settings -> Agents`
+- agent preset management only; QA execution settings live under `Settings -> Sprint & Git`
 
 ### Sprints page
 

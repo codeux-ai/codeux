@@ -4,7 +4,7 @@ import { SelectInput, Toggle, NumberInput } from "../SettingsFormFields.js";
 import { SectionCard, Row } from "./SharedPanelComponents.js";
 import { ShieldCheck } from "lucide-preact";
 
-// Taking the QA section from SettingsAgentsPanel.tsx
+// Shared QA section rendered by the settings panels that own QA configuration.
 export const QAPanel: FunctionComponent<{
   settings: ProjectSettings["agents"]["qualityAssurance"];
   update: (patch: Partial<ProjectSettings["agents"]["qualityAssurance"]>) => void;

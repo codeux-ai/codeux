@@ -7,12 +7,7 @@ describe("SprintPreviewDockerPlanBuilder", () => {
   beforeEach(() => {
     vi.stubGlobal("process", {
       ...process,
-      env: {
-        ...originalEnv,
-        GITHUB_TOKEN: undefined,
-        GH_TOKEN: undefined,
-        GEMINI_CLI_TRUST_WORKSPACE: undefined,
-      },
+      env: {},
     });
   });
 

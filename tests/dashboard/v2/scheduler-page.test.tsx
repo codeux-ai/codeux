@@ -4,7 +4,7 @@ import { h } from "preact";
 // @ts-ignore
 globalThis.React = { createElement: h };
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/preact";
+import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 expect.extend(matchers);
 
@@ -96,18 +96,18 @@ describe("SchedulerPage", () => {
       { id: "template-1", name: "Quicksprint Template 1" },
     ];
     const mockSchedule = {
-      entries: [
-        {
-          id: "entry-1",
-          projectId: "proj-1",
-          title: "Scheduled Run Sprint 1",
-          targetType: "sprint",
-          status: "scheduled",
-          runCount: 1,
-          nextRunAt: "2026-06-01T12:00:00Z",
-          recurrence: { frequency: "daily", interval: 1, endMode: "never" },
-        },
-      ],
+        entries: [
+          {
+            id: "entry-1",
+            projectId: "proj-1",
+            title: "Scheduled Run Sprint 1",
+            targetType: "sprint",
+            status: "scheduled",
+            runCount: 1,
+            nextRunAt: "2026-06-01T12:00:00Z",
+            recurrence: { frequency: "minutely", interval: 15, endMode: "never" },
+          },
+        ],
       occurrences: [
         {
           id: "occurrence-1",
@@ -158,12 +158,13 @@ describe("SchedulerPage", () => {
     // Verify scheduled entries section
     expect(screen.getByText("Scheduled entries")).toBeInTheDocument();
     expect(screen.getAllByText("Scheduled Run Sprint 1").length).toBeGreaterThan(0);
+    expect(pageRoot.textContent).toContain("Every 15 minutes");
     expect(pageRoot.innerHTML).not.toContain("#f5f1e8");
     expect(pageRoot.innerHTML).not.toContain("#f7f3ea");
   });
 
   it("handles switching target types and scheduler submissions", async () => {
-    vi.mocked(fetchSprints).mockResolvedValue({ sprints: [] } as any);
+    vi.mocked(fetchSprints).mockResolvedValue({ sprints: [{ id: "sprint-1", name: "Sprint 1", status: "active" }] } as any);
     vi.mocked(fetchQuicksprintTemplates).mockResolvedValue([] as any);
     vi.mocked(fetchProjectSchedule).mockResolvedValue({ entries: [], occurrences: [] } as any);
 
@@ -184,6 +185,45 @@ describe("SchedulerPage", () => {
     fireEvent.click(chatTab);
 
     expect(screen.getByPlaceholderText(/Ask the chat agent to check status/i)).toBeInTheDocument();
+  });
+
+  it("submits minute-based recurrence payloads from the form", async () => {
+    vi.mocked(fetchSprints).mockResolvedValue({ sprints: [{ id: "sprint-1", name: "Sprint 1", status: "active" }] } as any);
+    vi.mocked(fetchQuicksprintTemplates).mockResolvedValue([] as any);
+    vi.mocked(fetchProjectSchedule).mockResolvedValue({ entries: [], occurrences: [] } as any);
+
+    renderSchedulerPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Runtime Scheduler")).toBeInTheDocument();
+    });
+
+    const formPanel = screen.getByTestId("scheduler-form-panel");
+    const scoped = within(formPanel);
+
+    fireEvent.click(scoped.getByRole("checkbox"));
+
+    const frequencyTrigger = scoped.getByRole("button", { name: /^days$/i });
+    fireEvent.click(frequencyTrigger);
+
+    await waitFor(() => {
+      expect(screen.getByRole("option", { name: /^Minutes$/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("option", { name: /^Minutes$/i }));
+
+    const intervalInput = formPanel.querySelector('input[type="number"]') as HTMLInputElement;
+    fireEvent.input(intervalInput, { target: { value: "15" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /schedule/i }));
+
+    await waitFor(() => {
+      expect(createSchedulerEntry).toHaveBeenCalledWith("proj-1", expect.objectContaining({
+        targetType: "sprint",
+        sprintTarget: { sprintId: "sprint-1" },
+        recurrence: { frequency: "minutely", interval: 15, endMode: "never", count: null, until: null },
+      }));
+    });
   });
 
   it("toggles view between calendar and 24 hours", async () => {
@@ -253,7 +293,7 @@ describe("SchedulerPage", () => {
           scheduledFor: "2026-06-01T12:00:00.000Z",
           timezone: "UTC",
           sprintTarget: { sprintId: "sprint-1" },
-          recurrence: { frequency: "none", interval: 1, endMode: "never" },
+          recurrence: { frequency: "minutely", interval: 15, endMode: "never" },
           runCount: 0,
         },
       ],
@@ -279,6 +319,8 @@ describe("SchedulerPage", () => {
     // Verify form header updates to "Edit entry"
     expect(screen.getByText("Edit entry")).toBeInTheDocument();
 
+    expect(screen.getByRole("button", { name: /^Minutes$/i })).toBeInTheDocument();
+
     // The title field should be hydrated with the current title
     const titleInput = screen.getByPlaceholderText("Optional description/title") as HTMLInputElement;
     expect(titleInput.value).toBe("Original Sprint Title");
@@ -302,7 +344,7 @@ describe("SchedulerPage", () => {
         scheduledFor: new Date("2026-06-02T15:30").toISOString(),
         timezone: "UTC",
         sprintTarget: { sprintId: "sprint-1" },
-        recurrence: { frequency: "none", interval: 1, endMode: "never" },
+        recurrence: { frequency: "minutely", interval: 15, endMode: "never", count: null, until: null },
       });
     });
 

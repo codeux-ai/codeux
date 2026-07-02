@@ -110,4 +110,23 @@ describe("MemoryFilters Accessibility", () => {
         const toggleBtn = getByRole("button", { name: "Toggle Danger Delete Mode" });
         expect(toggleBtn).toHaveAttribute("aria-pressed", "true");
     });
+
+    test("critical controls expose accessible names", () => {
+        const { getByRole } = render(
+            <MemoryFilters
+                stats={{ sprint: 5, agent: 2, project: 10, activeModel: "test", staleEmbeddings: 0 }}
+                sprints={[]}
+                agentPresets={[]}
+                showModels={false}
+                setShowModels={() => {}}
+                setShowAddModal={() => {}}
+                lobotomize={false}
+                handleLobotomizeToggle={() => {}}
+            />
+        );
+
+        expect(getByRole("button", { name: "Add Memory" })).toBeInTheDocument();
+        expect(getByRole("button", { name: "Toggle embedding model catalog" })).toBeInTheDocument();
+        expect(getByRole("button", { name: "Toggle Danger Delete Mode" })).toBeInTheDocument();
+    });
 });

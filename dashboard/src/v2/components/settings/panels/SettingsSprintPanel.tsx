@@ -4,7 +4,12 @@ import type { SettingsPageState } from "../../../hooks/use-settings-page-state.j
 import { NumberInput, Row, Toggle, TextInput, PillChoiceGroup } from "../SettingsFormFields.js";
 import type { ProjectSettings, GuardrailJobType, GuardrailOnLimitAction } from "../../../../types.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
+import { QAPanel } from "./QAPanel.js";
 import { Eye, GitBranch, GitMerge, GitPullRequest, PlayCircle, ShieldAlert, Sparkles, Timer } from "lucide-preact";
+import { AgentSelectAvatarIcon } from "../../agents/AgentSelectAvatarIcon.js";
+import { SprintKeyEditor } from "../SprintKeyEditor.js";
+import { InfoIconPopover } from "../../ui/InfoIconPopover.js";
+import { BranchNameSchemeEditor } from "../BranchNameSchemeEditor.js";
 import { PrTemplateEditorModal } from "../PrTemplateEditorModal.js";
 
 const GUARDRAIL_JOB_META: Array<{ key: GuardrailJobType; label: string; description: string }> = [
@@ -21,16 +26,17 @@ const GUARDRAIL_ACTION_OPTIONS: Array<{ value: GuardrailOnLimitAction; label: st
   { value: "STOP_AND_WAIT", label: "Stop + wait", hint: "Stop auto-handling and wait for a human." },
   { value: "WARN_ONLY", label: "Warn only", hint: "Log a warning but keep going." },
 ];
-import { SprintKeyEditor } from "../SprintKeyEditor.js";
-import { InfoIconPopover } from "../../ui/InfoIconPopover.js";
-import { BranchNameSchemeEditor } from "../BranchNameSchemeEditor.js";
-
 
 export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
   const {
     activeScope,
+    setActiveScope,
+    selectedProject,
     editableSettings,
+    projectSettings,
     projectSources,
+    projectAgentPresetOptions,
+    updateProject,
     updateEditableSettings,
   } = state;
 
@@ -41,6 +47,49 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
   if (!editableSettings) {
     return null;
   }
+
+  const qaSettings = projectSettings?.agents.qualityAssurance ?? editableSettings.agents.qualityAssurance;
+  const projectAgentSelectOptions = projectAgentPresetOptions.map((option) => ({
+    ...option,
+    icon: () => <AgentSelectAvatarIcon avatarConfig={option.avatarConfig} seed={`${option.value}:${option.label}`} />,
+  }));
+  const qaPresetOptions = [
+    { value: "", label: "Built-in QA agent", icon: () => <AgentSelectAvatarIcon seed="built-in:qa" /> },
+    ...projectAgentSelectOptions,
+  ];
+  const qaPresetSelectorsDisabled = !selectedProject || !projectSettings;
+  const qaSectionBadge = selectedProject
+    ? getBadgeHelper("project", projectSources, "agents", "agents.qualityAssurance")
+    : getBadge("agents", "agents.qualityAssurance");
+  const qaFieldBadge = (path: string) => (
+    selectedProject
+      ? getFieldBadgeHelper("project", projectSources, path)
+      : getFieldBadge(path)
+  );
+
+  const updateQaSettings = (recipe: (current: typeof qaSettings) => typeof qaSettings): void => {
+    if (selectedProject && projectSettings) {
+      if (activeScope !== "project") {
+        setActiveScope("project");
+      }
+      updateProject((current) => ({
+        ...current,
+        agents: {
+          ...current.agents,
+          qualityAssurance: recipe(current.agents.qualityAssurance),
+        },
+      }));
+      return;
+    }
+
+    updateEditableSettings((current) => ({
+      ...current,
+      agents: {
+        ...current.agents,
+        qualityAssurance: recipe(current.agents.qualityAssurance),
+      },
+    }));
+  };
 
   return (
     <div className="flex flex-col gap-5">
@@ -303,10 +352,21 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
               { value: "ALWAYS", label: "Always", hint: "Merge as soon as policy allows." },
             ]}
           />
-        </Row>
-      </SectionCard>
+          </Row>
+        </SectionCard>
 
-        <SectionCard title="Guardrails" watermark="CAP" badge={getBadge("guardrails")} icon={<ShieldAlert strokeWidth={2.4} />}>
+      <QAPanel
+        settings={qaSettings}
+        update={(patch) => updateQaSettings((current) => ({ ...current, ...patch }))}
+        getBadge={qaFieldBadge}
+        sectionBadge={qaSectionBadge}
+        presetOptions={qaPresetOptions}
+        selectorsDisabled={qaPresetSelectorsDisabled}
+        selectedProjectName={selectedProject?.name}
+        activeScope={activeScope}
+      />
+
+      <SectionCard title="Guardrails" watermark="CAP" badge={getBadge("guardrails")} icon={<ShieldAlert strokeWidth={2.4} />}>
           <Row label="Guardrails enabled" description="Cap how many times each agent job type runs per task to stop runaway loops. Counts persist per task across restarts." badge={getFieldBadge("guardrails.enabled")}>
             <Toggle aria-label="Toggle setting"               value={editableSettings.guardrails.enabled}
               onChange={() => updateEditableSettings((current) => ({
