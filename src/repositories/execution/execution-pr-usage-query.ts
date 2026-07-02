@@ -75,7 +75,7 @@ export function queryProviderInvocationsForTask(
     SELECT *
     FROM provider_invocations
     WHERE project_id = ? AND task_id = ?
-    ORDER BY started_at ASC
+    ORDER BY started_at ASC, rowid ASC
   `).all(projectId, taskId) as ProviderInvocationUsageRow[];
 
   return rows.map(mapProviderInvocationUsageRow);
@@ -94,7 +94,7 @@ export function queryProviderInvocationsForSprint(
     SELECT *
     FROM provider_invocations
     WHERE project_id = ? AND sprint_id = ? ${purposeClause}
-    ORDER BY started_at ASC
+    ORDER BY started_at ASC, rowid ASC
   `).all(...params) as ProviderInvocationUsageRow[];
 
   return rows.map(mapProviderInvocationUsageRow);

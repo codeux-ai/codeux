@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sanitizeGit } from "../../../../../src/domain/settings/settings-sanitizers/git-sanitizer.js";
+import { sanitizeGit, sanitizePrDescriptionSections } from "../../../../../src/domain/settings/settings-sanitizers/git-sanitizer.js";
 
 describe("sanitizeGit", () => {
   it("resolves github token from external hints", () => {
@@ -18,5 +18,41 @@ describe("sanitizeGit", () => {
       settingsJson: {},
     });
     expect(result.githubToken).toBe("explicit-gh-token");
+  });
+
+  it("defaults prDescription to all-enabled when not stored (backward compat)", () => {
+    const result = sanitizeGit({});
+    expect(result.prDescription.task.summary).toBe(true);
+    expect(result.prDescription.task.fullPrompt).toBe(true);
+    expect(result.prDescription.sprint.planningModel).toBe(true);
+    expect(result.prDescription.sprint.mainPrompt).toBe(true);
+  });
+});
+
+describe("sanitizePrDescriptionSections", () => {
+  it("defaults every field to true when input is undefined", () => {
+    const result = sanitizePrDescriptionSections(undefined);
+    expect(Object.values(result.task).every((v) => v === true)).toBe(true);
+    expect(Object.values(result.sprint).every((v) => v === true)).toBe(true);
+  });
+
+  it("preserves explicit false values", () => {
+    const result = sanitizePrDescriptionSections({
+      task: { tokenUsage: false } as any,
+      sprint: { qaFindings: false } as any,
+    });
+    expect(result.task.tokenUsage).toBe(false);
+    expect(result.task.summary).toBe(true);
+    expect(result.sprint.qaFindings).toBe(false);
+    expect(result.sprint.summary).toBe(true);
+  });
+
+  it("defaults non-boolean garbage values to true", () => {
+    const result = sanitizePrDescriptionSections({
+      task: { fullPrompt: "nope" } as any,
+      sprint: { mainPrompt: 0 } as any,
+    });
+    expect(result.task.fullPrompt).toBe(true);
+    expect(result.sprint.mainPrompt).toBe(true);
   });
 });
