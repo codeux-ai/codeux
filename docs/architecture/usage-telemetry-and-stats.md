@@ -113,6 +113,14 @@ Code UX parses session data from two sources:
 
 For Docker-backed Antigravity runs, the SQLite database is encoded to Base64 within the container first, and then decoded to a temporary file on the host before parsing to bypass Docker named volume permission issues.
 
+### OpenCode
+
+OpenCode runs with `opencode run --format json`.
+
+Code UX reads the JSON event stream for the transcript, structured conversation turns, and native `ses_...` session id. Because recent OpenCode builds expose authoritative token and cost totals through `opencode export <sessionID>`, Code UX captures that export after the run and stores `info.tokens` plus `info.cost` in `raw_usage_json`.
+
+Stats pricing still prefers configured model-pricing overrides and catalogue token rates. If those are unavailable for an OpenCode model, the stats aggregation falls back to the provider-reported `raw_usage_json.cost` total so OpenCode runs with gateway-specific or hosted model ids do not display as zero-cost when the provider reported a cost.
+
 ### Jules
 
 Jules does not expose a compatible native token contract. Instead of excluding it, Code UX computes **estimated** tokens for Jules by accumulating input and output characters divided by 4 (the characters-per-token heuristic).

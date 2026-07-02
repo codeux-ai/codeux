@@ -56,8 +56,13 @@ export function resolveCatalogModelId(providerId: ProviderId, rawModel: string):
   }
 
   if (providerId === "opencode") {
-    // OpenCode model ids are already "<provider>/<model>", matching the catalogue format.
-    return getModelCatalogEntry(model) ? model : null;
+    // OpenCode commonly stores models as "<provider>/<model>", but its hosted
+    // Zen catalog also exposes bare model slugs under the "opencode" provider.
+    if (getModelCatalogEntry(model)) {
+      return model;
+    }
+    const openCodeHostedId = `opencode/${model}`;
+    return getModelCatalogEntry(openCodeHostedId) ? openCodeHostedId : null;
   }
 
   const catalogProvider = PROVIDER_TO_CATALOG_PROVIDER[providerId];
@@ -106,8 +111,15 @@ export function resolveCustomProviderModelId(
     if (providerId === "qwen-code" && instance.qwenModelId === model) {
       return `${instance.qwenApiProviderId || "custom"}/${model}`;
     }
-    if (providerId === "opencode" && instance.openCodeModelId === model) {
-      return `${instance.openCodeProviderId || "custom"}/${model}`;
+    if (providerId === "opencode") {
+      const customProviderId = instance.openCodeProviderId || "custom";
+      if (instance.openCodeModelId === model) {
+        return `${customProviderId}/${model}`;
+      }
+      const configuredCanonicalId = `${customProviderId}/${instance.openCodeModelId || ""}`;
+      if (configuredCanonicalId === model) {
+        return configuredCanonicalId;
+      }
     }
     if ((providerId === "claude-code" || providerId === "codex") && instance.customModel === model) {
       return `${instance.customProviderId || "custom"}/${model}`;

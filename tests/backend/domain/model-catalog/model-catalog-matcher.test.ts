@@ -24,6 +24,7 @@ describe("resolveCatalogModelId", () => {
 
   it("treats opencode model ids as already-canonical provider/model pairs", () => {
     expect(resolveCatalogModelId("opencode", "anthropic/claude-sonnet-4-5")).toBe("anthropic/claude-sonnet-4-5");
+    expect(resolveCatalogModelId("opencode", "claude-sonnet-4-5")).toBe("opencode/claude-sonnet-4-5");
     expect(resolveCatalogModelId("opencode", "not-a-real-provider/not-a-real-model")).toBeNull();
   });
 
@@ -72,6 +73,7 @@ describe("resolveCustomProviderModelId", () => {
     });
     expect(resolveCustomProviderModelId("qwen-code", "glm-4.7-flash", settings)).toBe("alibaba/glm-4.7-flash");
     expect(resolveCustomProviderModelId("opencode", "llama3.3", settings)).toBe("ollama/llama3.3");
+    expect(resolveCustomProviderModelId("opencode", "ollama/llama3.3", settings)).toBe("ollama/llama3.3");
   });
 
   it("returns null when no configured instance of that provider type matches the model", () => {
