@@ -121,9 +121,9 @@ export interface ExecutionProviderRunArgs {
 }
 
 /** Resolves the effective model name to use for telemetry and recording. */
-export function resolveEffectiveModel(args: Pick<ExecutionProviderRunArgs, "provider" | "model" | "customModel" | "qwenAuthMode" | "qwenModelId" | "openCodeAuthMode" | "openCodeProviderId" | "openCodeModelId">): string {
-  const { provider, model, customModel } = args;
-  if ((provider === "claude-code" || provider === "codex") && customModel && customModel.trim().length > 0) {
+export function resolveEffectiveModel(args: Pick<ExecutionProviderRunArgs, "provider" | "model" | "providerMountAuth" | "customModel" | "qwenAuthMode" | "qwenModelId" | "openCodeAuthMode" | "openCodeProviderId" | "openCodeModelId">): string {
+  const { provider, model, providerMountAuth, customModel } = args;
+  if (!providerMountAuth && (provider === "claude-code" || provider === "codex") && customModel && customModel.trim().length > 0) {
     return customModel.trim();
   }
   if (provider === "qwen-code" && args.qwenAuthMode === "MODEL_PROVIDER") {

@@ -1360,6 +1360,7 @@ export class VirtualWorkerService {
     const effectiveModel = resolveEffectiveModel({
       provider: args.provider,
       model: args.model,
+      providerMountAuth: args.providerMountAuth,
       customModel: args.customModel,
       qwenAuthMode: args.qwenAuthMode,
       qwenModelId: args.qwenModelId,

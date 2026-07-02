@@ -1450,6 +1450,7 @@ export class QualityAssuranceService {
     const effectiveModel = resolveEffectiveModel({
       provider: args.provider,
       model: followUpProviderSettings.model,
+      providerMountAuth: followUpProviderSettings.mountAuth,
       customModel: followUpProviderSettings.customModel,
       qwenAuthMode: followUpProviderSettings.qwenAuthMode,
       qwenModelId: followUpProviderSettings.qwenModelId,

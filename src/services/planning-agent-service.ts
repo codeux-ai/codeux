@@ -515,6 +515,7 @@ export class PlanningAgentService {
     const effectiveModel = resolveEffectiveModel({
       provider,
       model: providerSettings.model,
+      providerMountAuth: providerSettings.mountAuth,
       customModel: providerSettings.customModel,
       qwenAuthMode: providerSettings.qwenAuthMode,
       qwenModelId: providerSettings.qwenModelId,
