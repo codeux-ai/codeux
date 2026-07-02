@@ -254,6 +254,134 @@ function parseGeminiTokens(stats: Record<string, unknown> | null): ProviderUsage
   return null;
 }
 
+function flattenGeminiText(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  if (Array.isArray(value)) {
+    const parts: string[] = [];
+    for (const item of value) {
+      const rec = item && typeof item === "object" ? item as Record<string, unknown> : null;
+      if (rec && typeof rec.text === "string") {
+        parts.push(rec.text);
+      } else if (rec && typeof rec.output_text === "string") {
+        parts.push(rec.output_text);
+      } else if (typeof item === "string") {
+        parts.push(item);
+      }
+    }
+    return parts.join("").trim();
+  }
+  return "";
+}
+
+function geminiPartIsReasoning(part: Record<string, unknown>): boolean {
+  const partType = typeof part.type === "string" ? part.type : null;
+  return partType === "thinking"
+    || partType === "reasoning"
+    || partType === "thought"
+    || part.thought === true
+    || part.thought === "true"
+    || part.reasoning != null
+    || part.reasoning_content != null
+    || part.thinking != null
+    || part.summary != null
+    || part.summary_text != null;
+}
+
+function geminiPartReasoningText(part: Record<string, unknown>): string {
+  return flattenGeminiText(
+    part.reasoning_content ?? part.reasoning ?? part.thinking ?? part.summary ?? part.summary_text ?? part.text,
+  );
+}
+
+function geminiPartAssistantText(part: Record<string, unknown>): string {
+  const partType = typeof part.type === "string" ? part.type : null;
+  if (partType === "text" || partType === "output_text" || partType === "message") {
+    return flattenGeminiText(part.text ?? part.output_text ?? part.content);
+  }
+  if (typeof part.text === "string" && !geminiPartIsReasoning(part)) {
+    return part.text.trim();
+  }
+  return "";
+}
+
+function parseGeminiConversation(parsed: Record<string, unknown>): ParsedConversationTurn[] {
+  const response = parsed.response && typeof parsed.response === "object" ? parsed.response as Record<string, unknown> : null;
+  const candidates = Array.isArray(response?.candidates)
+    ? response!.candidates
+    : Array.isArray(parsed.candidates)
+      ? parsed.candidates
+      : [];
+  const conversation: ParsedConversationTurn[] = [];
+
+  for (const candidate of candidates) {
+    const candidateRec = candidate && typeof candidate === "object" ? candidate as Record<string, unknown> : null;
+    const content = candidateRec?.content && typeof candidateRec.content === "object"
+      ? candidateRec.content as Record<string, unknown>
+      : null;
+    const parts = Array.isArray(content?.parts)
+      ? content!.parts
+      : Array.isArray(candidateRec?.parts)
+        ? candidateRec!.parts
+        : [];
+    if (parts.length === 0) {
+      continue;
+    }
+
+    let assistantText = "";
+    for (const part of parts) {
+      const rec = part && typeof part === "object" ? part as Record<string, unknown> : null;
+      if (!rec) {
+        continue;
+      }
+      const reasoningText = geminiPartReasoningText(rec);
+      if (geminiPartIsReasoning(rec) && reasoningText) {
+        conversation.push({ kind: "reasoning", text: reasoningText });
+        continue;
+      }
+      const assistantPartText = geminiPartAssistantText(rec);
+      if (assistantPartText) {
+        assistantText += assistantPartText;
+      }
+    }
+
+    if (assistantText.trim()) {
+      conversation.push({ kind: "assistant", text: assistantText.trim() });
+    }
+  }
+
+  if (conversation.length > 0) {
+    return conversation;
+  }
+
+  const fallbackContent = response?.content && typeof response.content === "object" ? response.content as Record<string, unknown> : null;
+  const fallbackParts = Array.isArray(fallbackContent?.parts) ? fallbackContent!.parts : [];
+  if (fallbackParts.length === 0) {
+    return conversation;
+  }
+
+  let assistantText = "";
+  for (const part of fallbackParts) {
+    const rec = part && typeof part === "object" ? part as Record<string, unknown> : null;
+    if (!rec) continue;
+    const reasoningText = geminiPartReasoningText(rec);
+    if (geminiPartIsReasoning(rec) && reasoningText) {
+      conversation.push({ kind: "reasoning", text: reasoningText });
+      continue;
+    }
+    const assistantPartText = geminiPartAssistantText(rec);
+    if (assistantPartText) {
+      assistantText += assistantPartText;
+    }
+  }
+  if (assistantText.trim()) {
+    conversation.push({ kind: "assistant", text: assistantText.trim() });
+  }
+
+  return conversation;
+}
+
 /**
  * Reads the Claude Code session JSONL from the host ~/.claude/projects directory
  * and delegates to the dedicated parser (now in claude-code-log-parser.ts).
@@ -355,13 +483,35 @@ export async function collectProviderUsageTelemetry(args: {
     const parsed = parseJsonObject(args.stdout);
     const stats = parsed?.stats && typeof parsed.stats === "object" ? parsed.stats as Record<string, unknown> : null;
     const usage = parseGeminiTokens(stats);
+    const structuredConversation = parsed ? parseGeminiConversation(parsed) : [];
+    const transcriptFromStructuredConversation = structuredConversation
+      .filter((turn) => turn.kind === "assistant")
+      .map((turn) => turn.text)
+      .filter(Boolean)
+      .join("\n")
+      .trim();
     if (usage) {
-      usage.transcriptText = typeof parsed?.response === "string" ? parsed.response : fallbackOutput;
+      usage.transcriptText = typeof parsed?.response === "string"
+        ? parsed.response
+        : transcriptFromStructuredConversation || fallbackOutput;
       usage.nativeSessionId = typeof parsed?.session_id === "string" ? parsed.session_id : null;
+      if (structuredConversation.length > 0) {
+        usage.conversation = structuredConversation;
+      }
       return usage;
     }
-    const estimated = estimateTelemetry("gemini", args.model, args.prompt, typeof parsed?.response === "string" ? parsed.response : fallbackOutput);
+    const estimated = estimateTelemetry(
+      "gemini",
+      args.model,
+      args.prompt,
+      typeof parsed?.response === "string"
+        ? parsed.response
+        : transcriptFromStructuredConversation || fallbackOutput,
+    );
     estimated.nativeSessionId = typeof parsed?.session_id === "string" ? parsed.session_id : null;
+    if (structuredConversation.length > 0) {
+      estimated.conversation = structuredConversation;
+    }
     return estimated;
   }
 
