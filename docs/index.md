@@ -73,7 +73,8 @@ Use this page as the main entrypoint.
 4. [Operations Runbook](./operations/runbook.md)
 5. [Security Hardening](./operations/security-hardening.md)
 6. [Logging and Correlation IDs](./operations/logging-and-correlation.md)
-7. [CLI Management Surface](./operations/management-cli.md)
+7. [CLI Commands Reference](./reference/cli-commands.md) - `codeux` management syntax, aliases, prompting, JSON payloads, and approvals
+8. [CLI Management Surface](./operations/management-cli.md)
 
 ## Full Table of Contents
 
@@ -139,6 +140,7 @@ Use this page as the main entrypoint.
 - [Operations Runbook](./operations/runbook.md)
 - [Security Hardening](./operations/security-hardening.md)
 - [Logging and Correlation IDs](./operations/logging-and-correlation.md)
+- [CLI Commands Reference](./reference/cli-commands.md) - `codeux` management syntax, aliases, prompting, JSON payloads, and approvals
 - [CLI Management Surface](./operations/management-cli.md)
 - [Testing and Quality](./development/testing-and-quality.md)
 - [Electron Desktop App](./deployment/electron-desktop.md)
