@@ -65,6 +65,7 @@ export const SprintJiraImportModal = ({
   onImport,
   onImportSpecialTasks,
 }: SprintJiraImportModalProps) => {
+  const allowSpecialTasks = Boolean(onImportSpecialTasks);
   const [projectKey, setProjectKey] = useState("");
   const [issueKey, setIssueKey] = useState("");
   const [search, setSearch] = useState("");
@@ -95,18 +96,18 @@ export const SprintJiraImportModal = ({
   ), [results, selectedKeys]);
 
   const selectedLinkedIssues = useMemo(() => (
-    selectedIssues.filter((issue) => (importModes[issue.key] ?? inferImportedTaskMode(issue, Boolean(onImportSpecialTasks))) === "linked")
-  ), [importModes, onImportSpecialTasks, selectedIssues]);
+    selectedIssues.filter((issue) => getIssueImportMode(issue) === "linked")
+  ), [allowSpecialTasks, importModes, selectedIssues]);
 
   const selectedSpecialTaskPayloads = useMemo(() => (
     selectedIssues.flatMap((issue) => {
-      const mode = importModes[issue.key] ?? inferImportedTaskMode(issue, Boolean(onImportSpecialTasks));
+      const mode = getIssueImportMode(issue);
       if (mode === "linked") {
         return [];
       }
       return [buildImportedTaskPayload(issue, mode, projectKey)];
     })
-  ), [importModes, onImportSpecialTasks, projectKey, selectedIssues]);
+  ), [allowSpecialTasks, importModes, projectKey, selectedIssues]);
 
   const selectedSpecialTaskCount = selectedSpecialTaskPayloads.length;
   const selectedLinkedIssueCount = selectedLinkedIssues.length;
@@ -248,10 +249,10 @@ export const SprintJiraImportModal = ({
       return;
     }
 
-    if (onImportSpecialTasks) {
+    if (allowSpecialTasks) {
       setImportModes((currentModes) => ({
         ...currentModes,
-        [issue.key]: inferImportedTaskMode(issue, true),
+        [issue.key]: inferImportedTaskMode(issue, allowSpecialTasks),
       }));
     }
   };
@@ -270,11 +271,11 @@ export const SprintJiraImportModal = ({
 
   const selectAllVisible = (): void => {
     setSelectedKeys(new Set(results.map((issue) => issue.key)));
-    if (onImportSpecialTasks) {
+    if (allowSpecialTasks) {
       setImportModes((current) => {
         const next = { ...current };
         for (const issue of results) {
-          next[issue.key] = inferImportedTaskMode(issue, true);
+          next[issue.key] = inferImportedTaskMode(issue, allowSpecialTasks);
         }
         return next;
       });
@@ -308,11 +309,11 @@ export const SprintJiraImportModal = ({
       return;
     }
 
-    const issuesToLink = onImportSpecialTasks
-      ? selectedIssues.filter((issue) => (importModes[issue.key] ?? inferImportedTaskMode(issue, true)) === "linked")
+    const issuesToLink = allowSpecialTasks
+      ? selectedIssues.filter((issue) => getIssueImportMode(issue) === "linked")
       : selectedIssues;
-    const issuesToImportAsTasks = onImportSpecialTasks
-      ? selectedIssues.filter((issue) => (importModes[issue.key] ?? inferImportedTaskMode(issue, true)) !== "linked")
+    const issuesToImportAsTasks = allowSpecialTasks
+      ? selectedIssues.filter((issue) => getIssueImportMode(issue) !== "linked")
       : [];
 
     setImporting(true);
@@ -320,7 +321,7 @@ export const SprintJiraImportModal = ({
     try {
       if (issuesToImportAsTasks.length > 0 && onImportSpecialTasks) {
         onImportSpecialTasks(issuesToImportAsTasks.map((issue) => (
-          buildImportedTaskPayload(issue, inferImportedTaskMode(issue, true) as SprintImportedTaskInput["kind"], projectKey)
+          buildImportedTaskPayload(issue, getIssueImportMode(issue) as SprintImportedTaskInput["kind"], projectKey)
         )));
       }
 
@@ -337,6 +338,10 @@ export const SprintJiraImportModal = ({
       setImporting(false);
     }
   };
+
+  function getIssueImportMode(issue: JiraIssueSearchResult): ImportedTaskMode {
+    return importModes[issue.key] ?? inferImportedTaskMode(issue, allowSpecialTasks);
+  }
 
   return (
     <div className="fixed inset-0 z-[230] flex items-center justify-center bg-black/55 px-4 py-6 backdrop-blur-xl dark:bg-black/75">
@@ -642,7 +647,7 @@ export const SprintJiraImportModal = ({
                   {results.map((issue) => {
                     const selected = selectedKeys.has(issue.key);
                     const safeUrl = getSafeUrl(issue.url);
-                    const importMode = importModes[issue.key] ?? inferImportedTaskMode(issue, Boolean(onImportSpecialTasks));
+                    const importMode = getIssueImportMode(issue);
                     const isSpecialTask = importMode !== "linked";
                     const updatedLabel = formatTimestamp(issue.updatedAt);
                     return (

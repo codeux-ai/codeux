@@ -274,4 +274,69 @@ describe("SprintJiraImportModal", () => {
       ]);
     });
   });
+
+  it("preserves the stored imported-task mode across refreshed Jira results", async () => {
+    vi.mocked(fetchProjectEffectiveSettings).mockResolvedValue({
+      settings: { jira: { defaultProject: "OPS" } },
+    } as never);
+    const storedModeIssue = {
+      ...baseIssue,
+      key: "OPS-13",
+      title: "Security hardening follow-up",
+      url: "https://acme.atlassian.net/browse/OPS-13",
+      issueType: "Security",
+      priority: "High",
+      labels: ["security", "hardening"],
+      bodyPreview: "This issue tracks a security fix.",
+    };
+    const refreshedIssue = {
+      ...storedModeIssue,
+      issueType: "Task",
+      priority: "Low",
+      labels: ["ops"],
+      bodyPreview: "This issue now looks like ordinary backlog.",
+    };
+    vi.mocked(searchJiraIssues)
+      .mockResolvedValueOnce([storedModeIssue])
+      .mockResolvedValueOnce([refreshedIssue]);
+    vi.mocked(fetchProjectIssuePromptContexts).mockResolvedValue([] as never);
+    const onImport = vi.fn();
+    const onImportSpecialTasks = vi.fn();
+
+    render(
+      <SprintJiraImportModal
+        projectId="project-1"
+        onClose={vi.fn()}
+        onImport={onImport}
+        onImportSpecialTasks={onImportSpecialTasks}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Security hardening follow-up")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /select all visible/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^search$/i }));
+
+    await waitFor(() => {
+      expect(searchJiraIssues).toHaveBeenCalledTimes(2);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /import issues/i }));
+
+    await waitFor(() => {
+      expect(onImportSpecialTasks).toHaveBeenCalledWith([
+        expect.objectContaining({
+          kind: "security",
+          title: "Security hardening follow-up",
+          sourceUrl: "https://acme.atlassian.net/browse/OPS-13",
+          provider: "jira",
+          repository: "OPS",
+        }),
+      ]);
+      expect(fetchProjectIssuePromptContexts).not.toHaveBeenCalled();
+      expect(onImport).not.toHaveBeenCalled();
+    });
+  });
 });

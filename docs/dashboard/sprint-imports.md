@@ -78,6 +78,8 @@ Selected Jira issues are loaded through the same prompt-context path as GitHub/G
 
 When the dashboard also has special imported-task contracts available, Jira issues that look like security or quality follow-ups can be emitted as imported task payloads instead of linked issue contexts. That keeps remediation work attached to the sprint immediately while preserving linked-issue imports for ordinary backlog items.
 
+Selected Jira cards keep their chosen linked-issue or special-task lane while they remain visible in refreshed search results, so operators can refine filters without losing the import mode they already picked.
+
 ## Auto-Close
 
 `Settings -> Sprint -> Git Flow -> Auto-close linked issues` controls whether imported GitHub/GitLab issues are closed automatically. `Settings -> Integrations -> Jira -> Auto-close Jira issues` separately controls Jira transitions.
