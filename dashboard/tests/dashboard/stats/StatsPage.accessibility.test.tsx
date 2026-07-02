@@ -371,4 +371,27 @@ describe("StatsPage accessibility", () => {
     expect(srTable).toHaveTextContent("Jun 30");
     expect(srTable).toHaveTextContent("1.3k");
   });
+
+  it("keeps at least one series enabled when graph filters are reset", () => {
+    function ChartHarness() {
+      const chartState = createChartState();
+      return (
+        <InteractiveUsageChart
+          stats={chartStats as any}
+          loading={false}
+          error={null}
+          refresh={async () => {}}
+          chartState={chartState}
+        />
+      );
+    }
+
+    render(<ChartHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Filters" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset filters" }));
+
+    const switches = screen.getAllByRole("switch");
+    expect(switches.some((button) => button.getAttribute("aria-checked") === "true")).toBe(true);
+  });
 });
