@@ -61,6 +61,7 @@ That means:
 - if the linked markdown file later differs from the DB copy, the agent is marked `out_of_sync`
 - the dashboard can re-import one agent or bulk-sync all out-of-sync project agents back into sqlite on demand
 - the dashboard can push `.code-ux/agents/*.md` back into git, either as a local commit, a commit plus branch push, or a feature-branch pull request into the default branch
+- when opening a pull request, Code UX resolves the effective dashboard GitHub/GitLab host tokens and forwards them to the PR service so repository-host authentication stays aligned with the current project settings
 
 ## Agent Metadata
 
