@@ -6,7 +6,6 @@ import { createServer, request as httpRequest } from "http";
 import type { IncomingMessage } from "http";
 import net from "net";
 import type { Duplex } from "stream";
-import type { JiraIssueSearchInput, JiraIssueSearchResult } from "../services/jira-api-client.js";
 import type {
   DashboardStatus,
   ExecutionAttentionItemSummary,
@@ -88,6 +87,7 @@ import type {
   ProjectSummary,
   SprintMarkdownExportBundle,
   SprintMarkdownImportInput,
+  SprintImportedTaskInput,
   SprintRecord,
   TaskRecord,
   UpdateProjectInput,
@@ -95,6 +95,8 @@ import type {
   UpdateTaskInput,
   SprintLinkedIssueInput,
   SprintLinkedIssueRecord,
+  JiraIssueSearchInput,
+  JiraIssueSearchResult,
 } from "../contracts/project-management-types.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
@@ -208,6 +210,7 @@ export interface DashboardServerOptions {
   listTasks: (projectId: string, sprintId?: string) => TaskRecord[];
   getTask: (taskId: string) => TaskRecord | null;
   createTask: (projectId: string, input: CreateTaskInput) => TaskRecord;
+  createImportedTasks?: (projectId: string, sprintId: string, inputs: SprintImportedTaskInput[]) => TaskRecord[];
   updateTask: (taskId: string, input: UpdateTaskInput) => TaskRecord;
   deleteTask: (taskId: string) => void;
   searchJiraIssues: (projectId: string, input: JiraIssueSearchInput) => Promise<JiraIssueSearchResult[]>;

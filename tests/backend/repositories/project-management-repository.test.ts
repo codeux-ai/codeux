@@ -254,6 +254,107 @@ describe("ProjectManagementRepository", () => {
     });
   });
 
+  it("creates imported special tasks with source metadata and prompt sections", async () => {
+    const { repository } = await createRepository();
+
+    const project = repository.createProject({
+      name: "Imported Tasks Project",
+      sourceType: "local",
+      sourceRef: "/workspace/imported-tasks-project",
+    });
+    const sprint = repository.createSprint(project.id, {
+      name: "Imported Tasks Sprint",
+    });
+    const prerequisite = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Prerequisite task",
+    });
+
+    const [securityTask, mergeConflictTask, failedCiTask] = repository.createImportedTasks(project.id, sprint.id, [
+      {
+        kind: "security",
+        title: "Security review import",
+        sourceUrl: "https://github.com/acme/widgets/issues/12",
+        provider: "github",
+        repository: "acme/widgets",
+        labels: ["security", "urgent"],
+        priority: "critical",
+      },
+      {
+        kind: "merge_conflict",
+        title: "Merge conflict import",
+        sourcePath: "/tmp/merge-conflict.log",
+        provider: "github",
+        repository: "acme/widgets",
+        branch: "feature/imported-task",
+        baseBranch: "main",
+        pullRequestNumber: 17,
+        pullRequestUrl: "https://github.com/acme/widgets/pull/17",
+        commitSha: "abc1234",
+        errorMessage: "Auto-merge failed with conflict markers.",
+      },
+      {
+        kind: "failed_ci",
+        title: "Failed CI import",
+        sourceUrl: "https://github.com/acme/widgets/actions/runs/55",
+        provider: "github",
+        repository: "acme/widgets",
+        branch: "feature/imported-task",
+        baseBranch: "main",
+        workflowRunId: "55",
+        workflowRunUrl: "https://github.com/acme/widgets/actions/runs/55",
+        commitSha: "def5678",
+        errorMessage: "npm test failed with exit code 1",
+        dependsOnTaskIds: [prerequisite.id],
+      },
+    ]);
+
+    expect(securityTask).toMatchObject({
+      priority: "critical",
+      executorType: "auto",
+      sourceType: "import:security",
+      sourcePath: "https://github.com/acme/widgets/issues/12",
+      agentPresetId: null,
+      isIndependent: true,
+      dependsOnTaskIds: [],
+    });
+    expect(securityTask.promptMarkdown).toContain("## Objective");
+    expect(securityTask.promptMarkdown).toContain("## Source");
+    expect(securityTask.promptMarkdown).toContain("## Context");
+    expect(securityTask.promptMarkdown).toContain("Imported security work item.");
+    expect(securityTask.promptMarkdown).toContain("acme/widgets");
+    expect(securityTask.promptMarkdown).toContain("Priority: critical");
+
+    expect(mergeConflictTask).toMatchObject({
+      priority: "critical",
+      executorType: "auto",
+      sourceType: "import:merge_conflict",
+      sourcePath: "/tmp/merge-conflict.log",
+      isIndependent: true,
+      dependsOnTaskIds: [],
+    });
+    expect(mergeConflictTask.promptMarkdown).toContain("### Branch Details");
+    expect(mergeConflictTask.promptMarkdown).toContain("feature/imported-task");
+    expect(mergeConflictTask.promptMarkdown).toContain("main");
+    expect(mergeConflictTask.promptMarkdown).toContain("Pull request: #17");
+
+    expect(failedCiTask).toMatchObject({
+      priority: "high",
+      executorType: "auto",
+      sourceType: "import:failed_ci",
+      sourcePath: "https://github.com/acme/widgets/actions/runs/55",
+      isIndependent: false,
+      dependsOnTaskIds: [prerequisite.id],
+    });
+    expect(failedCiTask.promptMarkdown).toContain("### CI Run Details");
+    expect(failedCiTask.promptMarkdown).toContain("Workflow run ID: 55");
+    expect(failedCiTask.promptMarkdown).toContain("npm test failed with exit code 1");
+
+    const tasks = repository.listTasks(project.id, sprint.id);
+    expect(tasks).toHaveLength(4);
+    expect(repository.listSprintLinkedIssues(project.id, sprint.id)).toHaveLength(0);
+  });
+
   it("infers remote GitHub metadata for local projects from origin", async () => {
     const { repository } = await createRepository();
     const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-local-origin-"));

@@ -3,6 +3,7 @@ import type {
   CreateTaskInput,
   ImprovePromptInput,
   Sprint,
+  SprintImportedTaskInput,
   SprintLinkedIssueInput,
   SprintStatus,
 } from "../../types.js";
@@ -20,6 +21,7 @@ import {
   planSprint,
   updateSprint,
   cancelPlanningRequest,
+  addImportedTasksToSprint,
 } from "../../lib/project-api.js";
 import {
   buildTaskBundle,
@@ -77,6 +79,12 @@ export interface SprintsPageActionsDeps {
   setAddTaskForSprint: (sprint: Sprint | null) => void;
   reloadQuicksprintTemplates: () => Promise<void>;
   createProject: any;
+}
+
+interface ImportedTaskSubmissionCallbacks {
+  onPending?: (count: number) => void;
+  onSuccess?: (count: number) => void;
+  onError?: (message: string) => void;
 }
 
 export function useSprintsPageActions({
@@ -300,6 +308,8 @@ export function useSprintsPageActions({
       agentRoutingMode: "MANUAL" | "ORCHESTRATOR";
       workerAgentPresetId: string | null;
       linkedIssues?: SprintLinkedIssueInput[];
+      importedTasks?: SprintImportedTaskInput[];
+      importedTaskCallbacks?: ImportedTaskSubmissionCallbacks;
       clientRequestId?: string;
       sprintKeyOverride?: string;
       signal?: AbortSignal;
@@ -316,6 +326,8 @@ export function useSprintsPageActions({
         payload.workerAgentPresetId,
       );
       const linkedIssues = payload.linkedIssues || [];
+      const importedTasks = payload.importedTasks || [];
+      const importedTaskCallbacks = payload.importedTaskCallbacks;
       const goal = mergePromptWithLinkedIssues(payload.goal, linkedIssues);
 
       let numberOverride: number | null | undefined = undefined;
@@ -346,6 +358,17 @@ export function useSprintsPageActions({
           ...(numberOverride !== undefined ? { number: numberOverride } : {}),
           ...(slugOverride !== undefined ? { slug: slugOverride } : {}),
         });
+
+        if (importedTasks.length > 0) {
+          importedTaskCallbacks?.onPending?.(importedTasks.length);
+          try {
+            await addImportedTasksToSprint(selectedProject.id, editingSprint.id, importedTasks);
+            importedTaskCallbacks?.onSuccess?.(importedTasks.length);
+          } catch (error) {
+            importedTaskCallbacks?.onError?.(error instanceof Error ? error.message : String(error));
+            throw error;
+          }
+        }
 
         if (
           payload.submitMode === "plan_only" ||
@@ -401,6 +424,17 @@ export function useSprintsPageActions({
           startDate: null,
           endDate: null,
         });
+
+        if (importedTasks.length > 0) {
+          importedTaskCallbacks?.onPending?.(importedTasks.length);
+          try {
+            await addImportedTasksToSprint(selectedProject.id, created.id, importedTasks);
+            importedTaskCallbacks?.onSuccess?.(importedTasks.length);
+          } catch (error) {
+            importedTaskCallbacks?.onError?.(error instanceof Error ? error.message : String(error));
+            throw error;
+          }
+        }
 
         if (payload.submitMode === "plan_only") {
           await planSprint(

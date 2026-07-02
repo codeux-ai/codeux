@@ -48,6 +48,48 @@ export interface SprintReviewSummary {
 
 export type LinkedIssueProvider = "github" | "gitlab" | "jira";
 export type LinkedIssueCloseState = "open" | "closed" | "close_failed";
+export type SprintImportedTaskKind = "security" | "quality" | "merge_conflict" | "failed_ci";
+export type RepositoryIssueSearchState = "open" | "closed" | "all";
+export type RepositoryIssueSearchSortField = "updated" | "created" | "comments";
+export type RepositoryIssueSearchSortDirection = "asc" | "desc";
+export type JiraIssueSearchStatus = "open" | "in_progress" | "done" | "all";
+export type JiraIssueSearchAssignee = "any" | "me" | "unassigned";
+export type JiraIssueSearchSortField = "updated" | "created" | "priority" | "status" | "assignee" | "reporter";
+export type JiraIssueSearchSortDirection = "asc" | "desc";
+
+export interface RepositoryIssueSearchInput {
+  provider?: Exclude<LinkedIssueProvider, "jira">;
+  repository?: string;
+  hostDomain?: string;
+  search?: string;
+  state?: RepositoryIssueSearchState;
+  labels?: string[];
+  assignee?: string;
+  author?: string;
+  reporter?: string;
+  milestone?: string;
+  issueText?: string;
+  createdAfter?: string;
+  createdBefore?: string;
+  updatedAfter?: string;
+  updatedBefore?: string;
+  sortField?: RepositoryIssueSearchSortField;
+  sortDirection?: RepositoryIssueSearchSortDirection;
+  limit?: number;
+}
+
+export interface RepositoryIssueSearchResult extends SprintLinkedIssueInput {
+  bodyPreview: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  issueAuthor: string | null;
+  issueReporter: string | null;
+  issueMilestone: string | null;
+  issueType: string | null;
+  issuePriority: string | null;
+  issueCommentCount: number | null;
+  sourceProvider: Exclude<LinkedIssueProvider, "jira">;
+}
 
 export interface SprintLinkedIssueRecord {
   id: string;
@@ -91,6 +133,27 @@ export interface SprintLinkedIssueInput {
   issueUpdatedAt?: string | null;
 }
 
+export interface SprintImportedTaskInput {
+  kind: SprintImportedTaskKind;
+  title: string;
+  sourceUrl?: string | null;
+  sourcePath?: string | null;
+  provider?: string | null;
+  repository?: string | null;
+  branch?: string | null;
+  baseBranch?: string | null;
+  pullRequestNumber?: number | null;
+  pullRequestUrl?: string | null;
+  workflowRunId?: string | null;
+  workflowRunUrl?: string | null;
+  commitSha?: string | null;
+  errorMessage?: string | null;
+  labels?: string[];
+  priority?: TaskPriority;
+  agentPresetId?: string | null;
+  dependsOnTaskIds?: string[];
+}
+
 export interface IssuePromptContextInput extends SprintLinkedIssueInput {
   includeConversation?: boolean;
 }
@@ -102,6 +165,46 @@ export interface IssuePromptContext extends SprintLinkedIssueInput {
   issueAuthor: string | null;
   issueCreatedAt: string | null;
   issueUpdatedAt: string | null;
+}
+
+export interface JiraIssueSearchInput {
+  jql?: string;
+  projectKey?: string;
+  search?: string;
+  issueKey?: string;
+  status?: JiraIssueSearchStatus;
+  assignee?: JiraIssueSearchAssignee;
+  assigneeText?: string;
+  reporterText?: string;
+  issueType?: string;
+  priority?: string;
+  labels?: string[];
+  updatedAfter?: string;
+  updatedBefore?: string;
+  sortField?: JiraIssueSearchSortField;
+  sortDirection?: JiraIssueSearchSortDirection;
+  limit?: number;
+  maxResults?: number;
+}
+
+export interface JiraIssueSearchResult {
+  key: string;
+  title: string;
+  url: string;
+  state: string;
+  labels: string[];
+  assignees: string[];
+  projectKey: string;
+  issueType: string | null;
+  priority: string | null;
+  bodyPreview: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  issueAuthor: string | null;
+  issueReporter: string | null;
+  issueMilestone: string | null;
+  issueCommentCount: number | null;
+  sourceProvider: "jira";
 }
 
 export interface SprintRecord {
@@ -194,6 +297,7 @@ export interface CreateSprintInput {
   originalPrompt?: string | null;
   goal?: string;
   linkedIssues?: SprintLinkedIssueInput[];
+  importedTasks?: SprintImportedTaskInput[];
   number?: number | null;
   slug?: string;
   status?: SprintStatus;

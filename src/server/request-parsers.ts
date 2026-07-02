@@ -17,6 +17,7 @@ import type {
   TaskPriority,
   TaskExecutorType,
   SprintLinkedIssueInput,
+  SprintImportedTaskInput,
   ProjectSetupRequestInput,
 } from "../contracts/project-management-types.js";
 import type {
@@ -127,6 +128,9 @@ export function parseCreateSprintInput(body: unknown): CreateSprintInput {
     originalPrompt: parseOptionalString(input.originalPrompt) ?? (input.originalPrompt === null ? null : undefined),
     goal: parseOptionalString(input.goal),
     linkedIssues: input.linkedIssues as SprintLinkedIssueInput[] | undefined,
+    importedTasks: Array.isArray(input.importedTasks)
+      ? input.importedTasks.map((task, index) => parseSprintImportedTaskInput(task, index))
+      : undefined,
     number: parseOptionalInteger(input.number, -1000000, 1000000, "number") ?? (input.number === null ? null : undefined),
     slug: parseOptionalString(input.slug),
     status: parseEnum(input.status, ["running", "paused", "completed", "failed", "cancelled", "idle"], "status"),
@@ -135,6 +139,58 @@ export function parseCreateSprintInput(body: unknown): CreateSprintInput {
     endDate: parseOptionalString(input.endDate) ?? (input.endDate === null ? null : undefined),
     featureBranch: parseOptionalString(input.featureBranch) ?? (input.featureBranch === null ? null : undefined),
     baseCommitSha: parseOptionalString(input.baseCommitSha) ?? (input.baseCommitSha === null ? null : undefined),
+  };
+}
+
+export function parseSprintImportedTaskInput(body: unknown, index: number): SprintImportedTaskInput {
+  if (!body || typeof body !== "object") {
+    throw new Error(`Imported task at index ${index} must be an object.`);
+  }
+  const input = body as Record<string, unknown>;
+
+  const kind = parseEnum(input.kind, ["security", "quality", "merge_conflict", "failed_ci"], "kind");
+  if (!kind) {
+    throw new Error(`Imported task at index ${index} must have a valid kind.`);
+  }
+
+  const title = typeof input.title === "string" ? input.title.trim() : "";
+  if (!title) {
+    throw new Error(`Imported task at index ${index} must have a non-empty title.`);
+  }
+
+  return {
+    kind,
+    title,
+    sourceUrl: parseOptionalString(input.sourceUrl) ?? (input.sourceUrl === null ? null : undefined),
+    sourcePath: parseOptionalString(input.sourcePath) ?? (input.sourcePath === null ? null : undefined),
+    provider: parseOptionalString(input.provider) ?? (input.provider === null ? null : undefined),
+    repository: parseOptionalString(input.repository) ?? (input.repository === null ? null : undefined),
+    branch: parseOptionalString(input.branch) ?? (input.branch === null ? null : undefined),
+    baseBranch: parseOptionalString(input.baseBranch) ?? (input.baseBranch === null ? null : undefined),
+    pullRequestNumber: parseOptionalInteger(input.pullRequestNumber, -1000000, 1000000, "pullRequestNumber") ?? (input.pullRequestNumber === null ? null : undefined),
+    pullRequestUrl: parseOptionalString(input.pullRequestUrl) ?? (input.pullRequestUrl === null ? null : undefined),
+    workflowRunId: parseOptionalString(input.workflowRunId) ?? (input.workflowRunId === null ? null : undefined),
+    workflowRunUrl: parseOptionalString(input.workflowRunUrl) ?? (input.workflowRunUrl === null ? null : undefined),
+    commitSha: parseOptionalString(input.commitSha) ?? (input.commitSha === null ? null : undefined),
+    errorMessage: parseOptionalString(input.errorMessage) ?? (input.errorMessage === null ? null : undefined),
+    labels: Array.isArray(input.labels)
+      ? input.labels.map((label) => {
+          if (typeof label !== "string") {
+            throw new Error(`Imported task at index ${index} has an invalid labels entry.`);
+          }
+          return label;
+        })
+      : undefined,
+    priority: parseEnum(input.priority, ["critical", "high", "medium", "low"], "priority"),
+    agentPresetId: parseOptionalString(input.agentPresetId) ?? (input.agentPresetId === null ? null : undefined),
+    dependsOnTaskIds: Array.isArray(input.dependsOnTaskIds)
+      ? input.dependsOnTaskIds.map((id) => {
+          if (typeof id !== "string") {
+            throw new Error(`Imported task at index ${index} has an invalid dependency entry.`);
+          }
+          return id;
+        })
+      : undefined,
   };
 }
 

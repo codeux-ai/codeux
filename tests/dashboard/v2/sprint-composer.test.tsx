@@ -108,6 +108,39 @@ describe("SprintComposer", () => {
     expect(onSubmit.mock.calls[0]?.[0].linkedIssues).toEqual([issue]);
   });
 
+  it("renders imported special tasks with metadata, removal controls, and task-import feedback", async () => {
+    const onRemoveImportedTask = vi.fn();
+    const task = {
+      kind: "security" as const,
+      title: "Security follow-up: Fix CI",
+      sourceUrl: "https://github.com/openai/example/issues/12",
+      sourcePath: "https://github.com/openai/example/issues/12",
+      provider: "github",
+      repository: "openai/example",
+      priority: "high" as const,
+    };
+
+    const { getByText, getByRole, getAllByText } = render(
+      <SprintComposer
+        {...defaultProps}
+        importedTasks={[task]}
+        onRemoveImportedTask={onRemoveImportedTask}
+        importedTaskFeedback={{ status: "error", message: "Special imported tasks were not added: API error" }}
+        onClearImportedTaskFeedback={vi.fn()}
+        clearImportedTaskError={vi.fn()}
+      />
+    );
+
+    expect(getByText("Special Imported Tasks")).toBeInTheDocument();
+    expect(getByText("Security")).toBeInTheDocument();
+    expect(getAllByText("High").length).toBeGreaterThan(0);
+    expect(getByRole("link", { name: task.sourceUrl! })).toBeInTheDocument();
+    expect(getByText("Special imported tasks were not added: API error")).toBeInTheDocument();
+
+    fireEvent.click(getByRole("button", { name: /remove task/i }));
+    expect(onRemoveImportedTask).toHaveBeenCalledWith(task);
+  });
+
   it("uses default planning and worker agents for new sprint submissions", async () => {
     const onSubmit = vi.fn();
     const agentPresets = [

@@ -33,6 +33,63 @@ vi.mock("../../../dashboard/src/v2/components/ui/SprintMarkdownModal", () => ({
   )
 }));
 
+let issueImportModalProps: any = null;
+vi.mock("../../../dashboard/src/v2/components/sprints/SprintIssueImportModal", () => ({
+  SprintIssueImportModal: (props: any) => {
+    issueImportModalProps = props;
+    return (
+      <div data-testid="sprint-issue-import-modal">
+        <button
+          type="button"
+          data-testid="issue-import-linked"
+          onClick={() => props.onImport?.([
+            {
+              provider: "github",
+              hostDomain: "github.com",
+              repository: "acme/widgets",
+              issueNumber: 42,
+              issueKey: "#42",
+              title: "Fix CI",
+              url: "https://github.com/acme/widgets/issues/42",
+              state: "open",
+              labels: [],
+              assignees: [],
+            },
+          ])}
+        >
+          Import linked
+        </button>
+        <button
+          type="button"
+          data-testid="issue-import-special"
+          onClick={() => props.onImportSpecialTasks?.([
+            {
+              kind: "security",
+              title: "Security follow-up: Fix CI",
+              sourceUrl: "https://github.com/acme/widgets/issues/42",
+              sourcePath: "https://github.com/acme/widgets/issues/42",
+              provider: "github",
+              repository: "acme/widgets",
+              labels: ["security"],
+            },
+            {
+              kind: "security",
+              title: "Security follow-up: Fix CI",
+              sourceUrl: "https://github.com/acme/widgets/issues/42",
+              sourcePath: "https://github.com/acme/widgets/issues/42",
+              provider: "github",
+              repository: "acme/widgets",
+              labels: ["security"],
+            },
+          ])}
+        >
+          Import special
+        </button>
+      </div>
+    );
+  }
+}));
+
 vi.mock("../../../dashboard/src/v2/components/sprints/SprintJiraImportModal", () => ({
   SprintJiraImportModal: ({ onClose }: { onClose: () => void }) => (
     <div data-testid="sprint-jira-import-modal">
@@ -45,6 +102,7 @@ describe("SprintsPage", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    issueImportModalProps = null;
     window.localStorage.clear();
   });
 
@@ -167,6 +225,136 @@ describe("SprintsPage", () => {
     fireEvent.click(jiraOption);
 
     expect(screen.getByTestId("sprint-jira-import-modal")).toBeInTheDocument();
+  });
+
+  it("passes special imported task selections through the issue import modal callback", () => {
+    const setShowCreateComposer = vi.fn();
+
+    vi.mocked(useSprintsPageData).mockReturnValue({
+      selectedProject: { id: "proj-1" },
+      planningRoute: { available: true },
+      sortedSprints: [],
+      showcaseSprints: [],
+      activeRunsBySprintId: new Map(),
+      interventionBySprintId: new Map(),
+      nextId: "spr-123",
+      virtualProviders: [],
+      pendingActionIds: new Set(),
+      planningPresets: [],
+      quicksprintTemplates: [],
+      showImportModal: false,
+      setShowImportModal: vi.fn(),
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
+      showCreateComposer: false,
+      setShowCreateComposer,
+      showQuicksprint: false,
+      setShowQuicksprint: vi.fn(),
+      editingSprint: null,
+      handleSubmitSprint: vi.fn(),
+    } as any);
+
+    render(<SprintsPage />);
+
+    const importTriggers = screen.getAllByRole("button");
+    const importTrigger = importTriggers.find((btn) => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown")) || importTriggers.find((btn) => btn.textContent?.includes("Import"))!;
+    fireEvent.click(importTrigger);
+    fireEvent.click(screen.getByRole("menuitem", { name: /github issues/i }));
+
+    expect(screen.getByTestId("sprint-issue-import-modal")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("issue-import-special"));
+
+    expect(setShowCreateComposer).toHaveBeenCalledWith(true);
+    expect(issueImportModalProps).toEqual(expect.objectContaining({
+      onImportSpecialTasks: expect.any(Function),
+    }));
+
+    expect(screen.getByText("Special Imported Tasks")).toBeInTheDocument();
+    expect(screen.getAllByText("Security follow-up: Fix CI")).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /remove task/i }));
+
+    expect(screen.queryByText("Security follow-up: Fix CI")).not.toBeInTheDocument();
+  });
+
+  it("clears imported task drafts when the selected project changes", () => {
+    const setShowCreateComposer = vi.fn();
+    const useSprintsPageDataMock = vi.mocked(useSprintsPageData);
+
+    useSprintsPageDataMock.mockReturnValue({
+      selectedProject: { id: "proj-1" },
+      planningRoute: { available: true },
+      sortedSprints: [],
+      showcaseSprints: [],
+      activeRunsBySprintId: new Map(),
+      interventionBySprintId: new Map(),
+      nextId: "spr-123",
+      virtualProviders: [],
+      pendingActionIds: new Set(),
+      planningPresets: [],
+      quicksprintTemplates: [],
+      planningEta: 60000,
+      agentPresets: [],
+      defaultPlanningAgentPresetId: null,
+      defaultAgentRoutingMode: "MANUAL",
+      defaultWorkerAgentPresetId: null,
+      showCreateComposer: true,
+      setShowCreateComposer,
+      showQuicksprint: false,
+      setShowQuicksprint: vi.fn(),
+      editingSprint: null,
+      setEditingSprint: vi.fn(),
+      showImportModal: false,
+      setShowImportModal: vi.fn(),
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
+      clearError: vi.fn(),
+      handleSubmitSprint: vi.fn(),
+    } as any);
+
+    const { rerender } = render(<SprintsPage />);
+
+    const importTrigger = screen.getAllByRole("button").find((btn) => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown")) || screen.getAllByRole("button").find((btn) => btn.textContent?.includes("Import"))!;
+    fireEvent.click(importTrigger);
+    fireEvent.click(screen.getByRole("menuitem", { name: /github issues/i }));
+    fireEvent.click(screen.getByTestId("issue-import-special"));
+
+    expect(screen.getAllByText("Security follow-up: Fix CI")).toHaveLength(1);
+
+    useSprintsPageDataMock.mockReturnValue({
+      selectedProject: { id: "proj-2" },
+      planningRoute: { available: true },
+      sortedSprints: [],
+      showcaseSprints: [],
+      activeRunsBySprintId: new Map(),
+      interventionBySprintId: new Map(),
+      nextId: "spr-123",
+      virtualProviders: [],
+      pendingActionIds: new Set(),
+      planningPresets: [],
+      quicksprintTemplates: [],
+      planningEta: 60000,
+      agentPresets: [],
+      defaultPlanningAgentPresetId: null,
+      defaultAgentRoutingMode: "MANUAL",
+      defaultWorkerAgentPresetId: null,
+      showCreateComposer: true,
+      setShowCreateComposer,
+      showQuicksprint: false,
+      setShowQuicksprint: vi.fn(),
+      editingSprint: null,
+      setEditingSprint: vi.fn(),
+      showImportModal: false,
+      setShowImportModal: vi.fn(),
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
+      clearError: vi.fn(),
+      handleSubmitSprint: vi.fn(),
+    } as any);
+
+    rerender(<SprintsPage />);
+
+    expect(screen.queryByText("Security follow-up: Fix CI")).not.toBeInTheDocument();
   });
 
   it("closes the import menu on escape key press or outside click", () => {
