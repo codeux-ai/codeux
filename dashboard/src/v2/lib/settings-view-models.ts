@@ -135,6 +135,7 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
     featureBranchPrefix: settings.git.featureBranchPrefix,
     sprintBranchScheme: settings.git.sprintBranchScheme,
     sprintKeyPrefix: settings.git.sprintKeyPrefix,
+    prDescription: settings.git.prDescription,
   },
   jira: cloneJiraSettings(settings.jira),
   ciIntelligence: {

@@ -79,6 +79,9 @@ export class WatchLoopRunner {
     private readonly cycleRunner: CycleRunner,
     private readonly renderMainMergeCiFeedback: (args: {
       repoPath: string;
+      projectId: string;
+      sprintId: string;
+      sprintRunId: string;
       featureBranch: string;
       defaultBranch: string;
       featureBranchPrefix: string;
@@ -481,6 +484,9 @@ export class WatchLoopRunner {
         });
         const mergeFeedback = await this.renderMainMergeCiFeedback({
           repoPath,
+          projectId: scopedExecutionContext.project.id,
+          sprintId: scopedExecutionContext.sprint.id,
+          sprintRunId,
           featureBranch: defaultFeatureBranch,
           defaultBranch,
           featureBranchPrefix,

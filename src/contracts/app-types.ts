@@ -708,6 +708,42 @@ export interface AiProviderSettings {
   invocationRouting: Record<InvocationRoutingId, InvocationRoutingSettings>;
 }
 
+/** Toggles for what appears in an automated Task PR description. See src/domain/sprint/composer/pr-description-composer.ts. */
+export interface TaskPrTemplateSections {
+  summary: boolean;
+  modelAndProvider: boolean;
+  timing: boolean;
+  fullPrompt: boolean;
+  tokenUsage: boolean;
+  qaFindings: boolean;
+  branchInfo: boolean;
+}
+
+/** Toggles for what appears in an automated Sprint (main-merge) PR description. */
+export interface SprintPrTemplateSections {
+  summary: boolean;
+  taskChecklist: boolean;
+  providerBreakdown: boolean;
+  planningModel: boolean;
+  mainPrompt: boolean;
+  timing: boolean;
+  tokenUsage: boolean;
+  qaFindings: boolean;
+  branchInfo: boolean;
+}
+
+export type TaskPrSectionKey = keyof TaskPrTemplateSections;
+export type SprintPrSectionKey = keyof SprintPrTemplateSections;
+
+export interface PrDescriptionSettings {
+  task: TaskPrTemplateSections;
+  sprint: SprintPrTemplateSections;
+  /** Display order for enabled Task PR sections. See DEFAULT_TASK_SECTION_ORDER for the default. */
+  taskSectionOrder: TaskPrSectionKey[];
+  /** Display order for enabled Sprint PR sections. See DEFAULT_SPRINT_SECTION_ORDER for the default. */
+  sprintSectionOrder: SprintPrSectionKey[];
+}
+
 export interface GitSettings {
   githubMode: "REMOTE" | "LOCAL";
   githubToken: string;
@@ -726,6 +762,7 @@ export interface GitSettings {
   featureBranchPrefix: string;
   sprintBranchScheme: string;
   sprintKeyPrefix: string;
+  prDescription: PrDescriptionSettings;
 }
 
 export interface JiraSettings {

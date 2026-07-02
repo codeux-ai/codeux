@@ -33,6 +33,8 @@ import type { Logger } from "../shared/logging/logger.js";
 import { runCommandStrict } from "./cli-process-runner.js";
 import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from "./git-http-auth.js";
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
+import { buildTaskPrComposerInput } from "../domain/sprint/composer/task-pr-input-builder.js";
+import { composeTaskPrBody, composeTaskPrTitle } from "../domain/sprint/composer/pr-description-composer.js";
 import type { MemoryService } from "./memory-service.js";
 import { syncRemoteBranchIfAvailable } from "./git-branch-sync-service.js";
 import {
@@ -1542,15 +1544,27 @@ export class QualityAssuranceService {
     if (hasUnpushed || hasAhead) {
       if (settings.git.autoCreatePr && settings.git.githubMode !== "LOCAL") {
         const sprint = args.task.sprint_id ? this.deps.projectManagementRepository.getSprint(args.task.sprint_id) : null;
+        const composerInput = buildTaskPrComposerInput({
+          projectId: args.scope.projectId!,
+          task: args.task,
+          sprint,
+          provider: args.provider,
+          featureBranch: args.featureBranch,
+          workerBranch,
+          taskRun: args.taskRun ?? null,
+          aiProviderSettings: settings.aiProvider,
+          sections: settings.git.prDescription.task,
+          sectionOrder: settings.git.prDescription.taskSectionOrder,
+          executionRepository: this.deps.executionRepository,
+        });
         prUrl = (await this.prService.resolveOrCreateFeaturePr(
           {
             taskId: args.task.id,
             provider: args.provider,
-            title: args.task.title,
+            title: composeTaskPrTitle(composerInput),
+            body: composeTaskPrBody(composerInput),
             featureBranch: args.featureBranch,
             workerBranch,
-            taskDescription: args.task.prompt,
-            sprintDescription: sprint?.goal,
           },
           args.repoPath,
           this.deps.getGithubToken(),
