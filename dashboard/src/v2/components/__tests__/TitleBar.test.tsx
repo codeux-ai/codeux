@@ -19,7 +19,8 @@ describe("TitleBar", () => {
     vi.stubGlobal("__APP_VERSION__", "0.8.9");
     window.codeUxDesktop = {
       platform: "linux",
-      renderProfile: "normal",
+      renderProfile: "standard",
+      pickDirectory: vi.fn(),
       window: {
         getState: vi.fn().mockResolvedValue({ isMaximized: false, platform: "linux" }),
         onStateChange: vi.fn(() => () => {}),
@@ -27,7 +28,7 @@ describe("TitleBar", () => {
         toggleMaximize: vi.fn(),
         close: vi.fn(),
       },
-    } as typeof window.codeUxDesktop;
+    } as unknown as typeof window.codeUxDesktop;
   });
 
   afterEach(() => {
