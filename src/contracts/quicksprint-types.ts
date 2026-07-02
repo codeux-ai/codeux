@@ -41,7 +41,9 @@ export interface UpdateQuicksprintTemplateInput {
 
 export interface QuicksprintExecutionInput {
   templateId: string;
+  /** Ignored when noTaskLimit is set; kept required for backward compatibility. */
   taskCount: number;
+  noTaskLimit?: boolean;
   submitMode: "plan_only" | "plan_and_start";
   routeOverride?: string;
   modelOverride?: string;

@@ -35,6 +35,10 @@ function readPositiveInteger(payload: Record<string, unknown>, key: string, fall
   return parsePositiveInteger(payload[key]) ?? fallback;
 }
 
+function readBoolean(payload: Record<string, unknown>, key: string, fallback = false): boolean {
+  return typeof payload[key] === "boolean" ? payload[key] : fallback;
+}
+
 function readSubmitMode(value: unknown, fallback: QuicksprintExecutionInput["submitMode"]): QuicksprintExecutionInput["submitMode"] {
   return value === "plan_only" || value === "plan_and_start" ? value : fallback;
 }
@@ -80,6 +84,7 @@ function normalizeExecutionInput(payload: Record<string, unknown>, fallbackSubmi
   const input: QuicksprintExecutionInput = {
     templateId: readRequiredString(payload, "templateId"),
     taskCount: readPositiveInteger(payload, "taskCount", 5),
+    noTaskLimit: readBoolean(payload, "noTaskLimit"),
     submitMode: readSubmitMode(payload.submitMode, fallbackSubmitMode),
   };
   const routeOverride = readString(payload, "routeOverride");

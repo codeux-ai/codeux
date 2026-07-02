@@ -267,6 +267,7 @@ describe("dashboard-lifecycle-service", () => {
           liveActivityCacheMs: 500,
           realtimeService: mockDeps.dashboardRealtimeService,
           getUpdateStatus: expect.any(Function),
+          cancelThreadTurn: expect.any(Function),
         })
       );
       expect(mockDeps.dashboardRealtimeService.setSnapshotLoaders).toHaveBeenCalled();
