@@ -320,7 +320,8 @@ async function ingestRepoPath(
 ): Promise<RepoIngestResult> {
   const resolvedBase = path.resolve(baseDir);
   const target = path.resolve(resolvedBase, relativePath);
-  if (target !== resolvedBase && !target.startsWith(resolvedBase + path.sep)) {
+  const targetWithinBase = target === resolvedBase || target.startsWith(resolvedBase + path.sep);
+  if (!targetWithinBase) {
     throw new Error("Path must be inside the project directory.");
   }
 
@@ -331,7 +332,8 @@ async function ingestRepoPath(
     throw new Error("Path not found");
   }
 
-  if (realTarget !== realBase && !realTarget.startsWith(realBase + path.sep)) {
+  const realTargetWithinBase = realTarget === realBase || realTarget.startsWith(realBase + path.sep);
+  if (!realTargetWithinBase) {
     throw new Error("Path must be inside the project directory.");
   }
 

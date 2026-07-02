@@ -23,9 +23,11 @@ export async function initializeProject(
     // but the review noted "Rigid Root Assumption" because cloneDir might be outside cwd.
     // Let's use cloneDir if provided, else cwd.
     const allowedRoot = input.cloneDir ?? process.cwd();
-    validateSafeClonePath(input.sourceRef, allowedRoot);
-    validateNonEmptyDir(input.sourceRef);
-    await initLocalRepo(input.sourceRef, input.defaultBranch ?? "main", input.name);
+    // Use the validator's own resolved, root-checked path for every subsequent
+    // operation rather than re-deriving it from the raw request input.
+    const safeSourceRef = validateSafeClonePath(input.sourceRef, allowedRoot);
+    validateNonEmptyDir(safeSourceRef);
+    await initLocalRepo(safeSourceRef, input.defaultBranch ?? "main", input.name);
     return deps.createProject({ ...input, sourceType: "local", initMode: undefined });
   }
 

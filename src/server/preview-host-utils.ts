@@ -4,6 +4,7 @@ import type { IncomingMessage } from "http";
 import net from "net";
 import type { Duplex } from "stream";
 import path from "path";
+import escapeHtmlLib from "escape-html";
 import type { SprintPreviewSession } from "../contracts/app-types.js";
 
 export const PREVIEW_BRIDGE_PATH = "/_code_ux/preview-bridge.js";
@@ -17,12 +18,7 @@ export const PREVIEW_MAX_REQUEST_BODY_BYTES = 5 * 1024 * 1024;
 export const PREVIEW_UPSTREAM_TIMEOUT_MS = 60000;
 
 export function escapeHtml(value: string | null | undefined): string {
-  return String(value || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll("\"", "&quot;")
-    .replaceAll("'", "&#39;");
+  return escapeHtmlLib(String(value || ""));
 }
 
 /**

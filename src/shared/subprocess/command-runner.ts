@@ -47,6 +47,21 @@ interface GitContainerPathMapping {
 const GIT_HELPER_IMAGE = "alpine/git";
 const CONTAINER_REPO_ROOT = "/workspace";
 const CONTAINER_GIT_MOUNT_ROOT = "/mnt/code-ux/git-paths";
+
+/**
+ * Builds a `--mount` flag value. Docker's `--mount` syntax is a comma-separated
+ * list of `key=value` fields with no escape mechanism for a literal comma inside
+ * a value, so a host path containing a comma (e.g. from a crafted
+ * GIT_ALTERNATE_OBJECT_DIRECTORIES env value) could inject extra mount options
+ * such as `readonly` or `bind-propagation=...`. Reject any host path or
+ * container path containing a comma before it reaches the docker CLI.
+ */
+function formatBindMountArg(hostPath: string, containerPath: string): string {
+  if (hostPath.includes(",") || containerPath.includes(",")) {
+    throw new Error(`Cannot mount path containing a comma: ${hostPath.includes(",") ? hostPath : containerPath}`);
+  }
+  return `type=bind,source=${hostPath},target=${containerPath}`;
+}
 const GIT_PATH_ENV_KEYS = new Set([
   "GIT_INDEX_FILE",
   "GIT_OBJECT_DIRECTORY",
@@ -83,7 +98,7 @@ function getGitHelperPool(): DockerHelperContainerPool {
           "--workdir",
           CONTAINER_REPO_ROOT,
           "--mount",
-          `type=bind,source=${parsed.cwd},target=${CONTAINER_REPO_ROOT}`,
+          formatBindMountArg(parsed.cwd, CONTAINER_REPO_ROOT),
           "--mount",
           "type=tmpfs,target=/git",
           ...userArgs,
@@ -548,7 +563,7 @@ export class CommandRunner {
         "--workdir",
         CONTAINER_REPO_ROOT,
         "--mount",
-        `type=bind,source=${cwd},target=${CONTAINER_REPO_ROOT}`,
+        formatBindMountArg(cwd, CONTAINER_REPO_ROOT),
         "--mount",
         "type=tmpfs,target=/git",
         ...mounts,
@@ -649,7 +664,7 @@ export class CommandRunner {
   private buildGitContainerMountArgs(pathMappings: GitContainerPathMapping[]): string[] {
     return pathMappings.flatMap((mapping) => [
       "--mount",
-      `type=bind,source=${mapping.hostPath},target=${mapping.containerPath}`,
+      formatBindMountArg(mapping.hostPath, mapping.containerPath),
     ]);
   }
 
