@@ -167,6 +167,7 @@ export interface ExecutionInvocationRow {
   last_error_category: string | null;
   last_error_message: string | null;
   last_retry_after_iso: string | null;
+  preserved_at?: string | null;
   message_count: number | string;
   last_message_at: string | null;
   invocation_source?: string;

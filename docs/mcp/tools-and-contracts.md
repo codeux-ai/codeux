@@ -147,6 +147,10 @@ The action runs the Project Setup Agent and returns the applied artifact summary
 
 Dashboard calls can add `background: true` to the HTTP setup request. In that mode Code UX returns the created `invocationId` immediately and the invocation rail becomes the live tracking surface while setup continues.
 
+### Project Creation Paths
+
+`manage_projects` and `manage_code_ux` project creation use the same initialization path as the dashboard. Git URL projects are cloned into the selected `cloneDir`, or `~/.code-ux/projects/<repo-name>` when `cloneDir` is omitted. `new-remote` project creation treats `cloneDir` as the clone parent directory and stores the project base directory as the single repository checkout root.
+
 ### Sprint, Task, and Settings Payload Normalization
 
 For payload normalization in management tools, Code UX centralizes parsing behavior:

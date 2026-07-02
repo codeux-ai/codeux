@@ -161,6 +161,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureColumn(db, "execution_invocations", "last_error_category", "TEXT");
   ensureColumn(db, "execution_invocations", "last_error_message", "TEXT");
   ensureColumn(db, "execution_invocations", "last_retry_after_iso", "TEXT");
+  ensureColumn(db, "execution_invocations", "preserved_at", "TEXT");
   ensureColumn(db, "execution_invocations", "invocation_source", "TEXT NOT NULL DEFAULT 'internal'");
   ensureColumn(db, "execution_invocations", "agent_preset_id", "TEXT");
 

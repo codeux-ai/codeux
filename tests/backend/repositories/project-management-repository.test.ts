@@ -93,6 +93,28 @@ describe("ProjectManagementRepository", () => {
     expect(repository.getSelectedSprintId(project.id)).toBeNull();
   });
 
+  it("blocks sprint deletion when it would prune a preserved invocation transcript", async () => {
+    const { repository, executionRepository } = await createRepository();
+    const project = repository.createProject({
+      name: "Preserved Invocation Project",
+      sourceType: "local",
+      sourceRef: "/workspace/preserved-invocation-project",
+    });
+    const sprint = repository.createSprint(project.id, {
+      name: "Planning Sprint",
+    });
+    const invocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: sprint.id,
+      type: "planning",
+      status: "failed",
+      preservedAt: "2026-07-02T22:20:00.000Z",
+    });
+
+    expect(() => repository.deleteSprint(sprint.id)).toThrow(`Sprint ${sprint.id} has preserved execution invocation ${invocation.id}`);
+    expect(repository.getSprint(sprint.id)).not.toBeNull();
+  });
+
   it("normalizes stale provided sprint numbers to the next project number", async () => {
     const { repository } = await createRepository();
     const project = repository.createProject({
@@ -134,7 +156,7 @@ describe("ProjectManagementRepository", () => {
     expect(sprint2.number).toBe(8);
   });
 
-  it("defaults blank local projects into the codex ux projects folder", async () => {
+  it("defaults blank local projects into the Code UX projects folder", async () => {
     const { repository } = await createRepository();
     const project = repository.createProject({
       name: "Blank Local Project",
@@ -142,9 +164,20 @@ describe("ProjectManagementRepository", () => {
       sourceRef: "",
     });
 
-    expect(project.baseDir).toBe(path.join(os.homedir(), ".codex-ux", "projects", project.slug));
+    expect(project.baseDir).toBe(path.join(os.homedir(), ".code-ux", "projects", project.slug));
     expect(project.lastRunAt).toBeNull();
     expect(project.lastRunStatus).toBeNull();
+  });
+
+  it("defaults Git projects into the Code UX projects folder", async () => {
+    const { repository } = await createRepository();
+    const project = repository.createProject({
+      name: "Git Project",
+      sourceType: "git",
+      sourceRef: "https://github.com/codeux-ai/example-project.git",
+    });
+
+    expect(project.baseDir).toBe(path.join(os.homedir(), ".code-ux", "projects", "example-project"));
   });
 
   it("creates projects, sprints, tasks, and dependency summaries in sqlite", async () => {

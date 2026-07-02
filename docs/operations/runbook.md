@@ -162,7 +162,15 @@ Checks:
   - Check if the provider CLI is still available and functioning on the host machine.
 - Verify provider API keys or auth mounts are correct and the provider service is not experiencing downtime.
 
-### 6. Orchestration stuck with blocked tasks
+### 6. Restart a failed planning invocation
+Checks:
+- Open Chat -> Invocations, select the failed planning invocation, then choose one of the header actions.
+- **Restart** marks the original failed transcript as preserved, creates a replacement invocation row, resumes the failed provider session, and sends the full planning prompt again.
+- **Continue** marks the original failed transcript as preserved, creates a replacement invocation row, resumes the failed provider session, and sends a compact continuation prompt asking for the complete JSON plan.
+- Preserved sprint-scoped invocation rows block sprint deletion so the quota/error transcript is not removed by a cascade.
+- If the restart or continuation fails, retry from the original failed row or inspect the new failed row depending on which invocation produced the latest error.
+
+### 7. Orchestration stuck with blocked tasks
 Checks:
 - Are dependencies in final `completed`, or in `coding_completed` with no remaining merge work?
 - Any action-required session states (`AWAITING_*`, `PAUSED`)?
@@ -177,7 +185,7 @@ Checks:
 - For Jules-backed tasks stuck in `RUNNING`, compare the recorded task session with the live Jules API. If the session is absent from both the list snapshot and a direct `getSession` lookup returns not found, session sync now fails the stale provider/execution/task-run rows and requeues the task when failed-task retry is enabled.
 - If provider concurrency repeatedly logs that the cap is reached but no provider containers are running, inspect `provider_invocations` for old `status = running` rows. Code UX now reconciles stale rows via a shared recovery helper during provider slot waits and startup so orphaned provider slots are failed and new work can claim the slot. Recovery waits for linked execution activity to go idle, so a newly claimed provider slot is not failed merely because its container has not appeared yet.
 
-### 7. Tasks completed but pipeline not progressing
+### 8. Tasks completed but pipeline not progressing
 Checks:
 - Does the DB task record still show `coding_completed` because a feature PR or worker branch is still unresolved?
 - Did the merge settle on the feature branch, or was this a no-output task that should auto-promote to final `completed`?
@@ -188,7 +196,7 @@ Checks:
 - If QA still appears running but no QA container exists, the watch loop should reconcile the stale QA invocation and retry the review rather than leaving `merge_indicator = QA_PENDING`.
 - If the provider session actually ended `FAILED`, Code UX should now clear the stale session/PR runtime state and requeue the task instead of treating the task as completed just because a PR artifact exists.
 
-### 8. Tasks show RUNNING after MCP was interrupted
+### 9. Tasks show RUNNING after MCP was interrupted
 Symptoms:
 - Old activity logs keep appearing.
 - New orchestration cycles do not start fresh background CLI runs.
@@ -239,7 +247,7 @@ Transient provider failures are classified and managed in `src/shared/providers/
   - optional downstream reset rewrites dependent tasks to fresh pending execution snapshots so old completed/running descendants do not keep stale runtime metadata
   - if a task already merged code, operators can check the **Undo the Git merge** option to automatically revert the merge commit programmatically in the feature branch before restarting the task cleanly.
 
-### 9. Accidentally Exposed Dashboard or MCP Endpoints
+### 10. Accidentally Exposed Dashboard or MCP Endpoints
 Symptoms:
 - Unexpected or unauthorized activities appearing in the dashboard logs.
 - Connections originating from unknown IP addresses.

@@ -3,13 +3,16 @@ import type { ManagementResponseEnvelope, ManagementApproval } from "../../contr
 import type { CreateProjectInput, ProjectSetupRequestInput, UpdateProjectInput } from "../../contracts/project-management-types.js";
 import type { ProjectSetupService } from "../../services/project-setup-service.js";
 
+export type ProjectCreateHandler = (input: CreateProjectInput) => Promise<unknown> | unknown;
+
 export function handleProjectAction(
   action: string,
   payload: Record<string, unknown>,
   repository: ProjectManagementRepository,
   domain: string,
   approval?: ManagementApproval,
-  projectSetupService?: ProjectSetupService
+  projectSetupService?: ProjectSetupService,
+  createProject?: ProjectCreateHandler,
 ): Promise<ManagementResponseEnvelope> | ManagementResponseEnvelope {
   switch (action) {
     case "list": {
@@ -26,7 +29,11 @@ export function handleProjectAction(
     }
     case "create": {
       const input = payload as unknown as CreateProjectInput;
-      const result = repository.createProject(input);
+      const create = createProject ?? ((projectInput: CreateProjectInput) => repository.createProject(projectInput));
+      const result = create(input);
+      if (result instanceof Promise) {
+        return result.then((created) => ({ result: created }));
+      }
       return { result };
     }
     case "setup": {

@@ -194,6 +194,7 @@ export function mapExecutionInvocationRow(row: ExecutionInvocationRow): Executio
     lastErrorCategory: row.last_error_category as any,
     lastErrorMessage: row.last_error_message,
     lastRetryAfterIso: row.last_retry_after_iso,
+    preservedAt: row.preserved_at ?? null,
     messageCount: toNumber(row.message_count),
     lastMessageAt: row.last_message_at,
     invocationSource: row.invocation_source as any,

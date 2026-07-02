@@ -12,6 +12,7 @@ export const areInvocationsEqual = (left: ExecutionInvocationRecord[], right: Ex
       && candidate.id === invocation.id
       && candidate.status === invocation.status
       && candidate.updatedAt === invocation.updatedAt
+      && candidate.preservedAt === invocation.preservedAt
       && candidate.messageCount === invocation.messageCount
       && candidate.lastMessageAt === invocation.lastMessageAt;
   })
@@ -122,6 +123,7 @@ export const useInvocationPaneData = (options: {
       lastErrorCategory: null,
       lastErrorMessage: null,
       lastRetryAfterIso: null,
+      preservedAt: null,
       messageCount: 0,
       lastMessageAt: createdAt,
       invocationSource: "internal",

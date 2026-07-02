@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+
+vi.mock("../../../src/services/project-git-clone-service.js", () => ({
+  prepareGitProjectCreateInput: vi.fn(async (input: unknown) => input),
+}));
+
 import { ManagementToolHandler } from "../../../src/mcp/management-tool-handler.js";
+import { prepareGitProjectCreateInput } from "../../../src/services/project-git-clone-service.js";
 import type { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import type { SprintPreviewService } from "../../../src/services/sprint-preview-service.js";
 import type { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
@@ -18,6 +24,7 @@ describe("ManagementToolHandler", () => {
   let deps: any;
 
   beforeEach(() => {
+    vi.mocked(prepareGitProjectCreateInput).mockImplementation(async (input) => input);
     deps = {
       projectManagementRepository: {
         listProjects: vi.fn(),
@@ -33,7 +40,16 @@ describe("ManagementToolHandler", () => {
       executionRepository: {
         listSprintRuns: vi.fn(),
       },
-      getDashboardSettings: vi.fn(),
+      getDashboardSettings: vi.fn(() => ({
+        git: {
+          githubToken: "",
+          gitlabToken: "",
+        },
+        integrations: {
+          githubToken: "",
+          gitlabToken: "",
+        },
+      })),
       executionControlService: {
         orchestrateSprint: vi.fn(),
       },
@@ -185,6 +201,56 @@ describe("ManagementToolHandler", () => {
     response = await handler.handleManageProjects({ action: "update", projectId: "p1", name: "updated-project" });
     parsed = JSON.parse(response.content[0].text);
     expect(parsed.result).toEqual({ id: "p1", name: "updated-project" });
+  });
+
+  it("prepares Git projects before creating them through manage_projects", async () => {
+    const preparedInput = {
+      action: "create",
+      name: "Remote Project",
+      sourceType: "git",
+      sourceRef: "https://github.com/codeux-ai/example-project.git",
+      cloneDir: "/home/test/.code-ux/projects",
+    };
+    vi.mocked(prepareGitProjectCreateInput).mockResolvedValue(preparedInput as any);
+    deps.getDashboardSettings.mockReturnValue({
+      git: {
+        githubToken: "git-token",
+        gitlabToken: "lab-token",
+      },
+      integrations: {
+        githubToken: "",
+        gitlabToken: "",
+      },
+    });
+    deps.projectManagementRepository.createProject.mockReturnValue({
+      id: "p1",
+      name: "Remote Project",
+      baseDir: "/home/test/.code-ux/projects/example-project",
+    });
+
+    const response = await handler.handleManageProjects({
+      action: "create",
+      name: "Remote Project",
+      sourceType: "git",
+      sourceRef: "https://github.com/codeux-ai/example-project.git",
+    });
+    const parsed = JSON.parse(response.content[0].text);
+
+    expect(prepareGitProjectCreateInput).toHaveBeenCalledWith(expect.objectContaining({
+      action: "create",
+      name: "Remote Project",
+      sourceType: "git",
+      sourceRef: "https://github.com/codeux-ai/example-project.git",
+    }), {
+      githubToken: "git-token",
+      gitlabToken: "lab-token",
+    });
+    expect(deps.projectManagementRepository.createProject).toHaveBeenCalledWith(preparedInput);
+    expect(parsed.result).toEqual({
+      id: "p1",
+      name: "Remote Project",
+      baseDir: "/home/test/.code-ux/projects/example-project",
+    });
   });
 
   it("should cover the full lifecycle of sprint management and require approval for delete", async () => {

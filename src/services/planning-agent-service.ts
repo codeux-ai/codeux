@@ -91,6 +91,15 @@ interface PlanningResultContext {
   cleanupWorkspace?: () => Promise<void>;
 }
 
+export type PlanningInvocationRestartMode = "retry_full_prompt" | "continue_session";
+
+interface PlanningContinuationContext {
+  promptOverride?: string;
+  continueSessionId: string;
+  logicalSessionId: string;
+  openCodeBaselineRawUsageJson?: Record<string, unknown> | null;
+}
+
 export class PlanningAgentService {
   private readonly providerRunner: IProviderRunner;
   private readonly providerExecutionService: ProviderExecutionService;
@@ -140,6 +149,7 @@ export class PlanningAgentService {
       status: "running",
       provider: runtime.settings.workers.virtualWorkerProvider,
       systemPrompt: null,
+      agentPresetId: planningAgent.id,
     });
 
     const memoryContext = this.buildMemoryContext(projectId, null, planningAgent.id);
@@ -239,7 +249,58 @@ export class PlanningAgentService {
     };
   }
 
+  async restartInvocation(invocationId: string, mode: PlanningInvocationRestartMode = "retry_full_prompt", signal?: AbortSignal): Promise<PlanSprintResult> {
+    const invocation = this.deps.executionRepository?.getExecutionInvocation(invocationId);
+    if (!invocation) {
+      throw new Error(`Execution invocation not found: ${invocationId}`);
+    }
+    if (invocation.status !== "failed") {
+      throw new Error("Only failed planning invocations can be restarted.");
+    }
+    if (invocation.type !== "planning") {
+      throw new Error(`Invocation type "${invocation.type}" does not support manual restart yet.`);
+    }
+    if (!invocation.sprintId) {
+      throw new Error("Failed planning invocation is not linked to a sprint.");
+    }
+    const providerUsage = invocation.providerInvocationId
+      ? this.deps.executionRepository?.getProviderInvocationUsage(invocation.providerInvocationId)
+      : null;
+    if (!providerUsage) {
+      throw new Error("Failed planning invocation is not linked to provider session metadata.");
+    }
+    const continueSessionId = providerUsage.nativeSessionId || (providerUsage.provider === "claude-code" ? null : providerUsage.sessionId);
+    if (!continueSessionId) {
+      throw new Error("Failed planning invocation does not have a resumable provider session id.");
+    }
+
+    this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
+      preservedAt: invocation.preservedAt || new Date().toISOString(),
+    });
+
+    return await this.runPlanSprint(invocation.projectId, invocation.sprintId, {
+      autoStart: false,
+      replan: true,
+      planningAgentPresetId: invocation.agentPresetId || undefined,
+    }, signal, {
+      continueSessionId,
+      logicalSessionId: providerUsage.sessionId,
+      openCodeBaselineRawUsageJson: providerUsage.provider === "opencode" ? providerUsage.rawUsageJson : null,
+      promptOverride: mode === "continue_session" ? this.buildPlanningContinuationPrompt() : undefined,
+    });
+  }
+
   async planSprint(projectId: string, sprintId: string, options: PlanSprintOptions, signal?: AbortSignal): Promise<PlanSprintResult> {
+    return await this.runPlanSprint(projectId, sprintId, options, signal);
+  }
+
+  private async runPlanSprint(
+    projectId: string,
+    sprintId: string,
+    options: PlanSprintOptions,
+    signal?: AbortSignal,
+    continuation?: PlanningContinuationContext,
+  ): Promise<PlanSprintResult> {
     const project = this.requireProject(projectId);
     const sprint = this.requireSprint(projectId, sprintId);
     const runtime = this.resolvePlanningRuntime(projectId, options.overrides);
@@ -264,6 +325,7 @@ export class PlanningAgentService {
       status: "running",
       provider: runtime.settings.workers.virtualWorkerProvider,
       systemPrompt: null,
+      agentPresetId: planningAgent.id,
     });
 
     signal?.throwIfAborted();
@@ -275,7 +337,7 @@ export class PlanningAgentService {
     const allowedAgentPresetIds = codingAgentRoster.map((agent) => agent.id);
     const manualCodingAgent = await this.resolveManualCodingAgent(projectId, runtime.settings, options.overrides);
 
-    const prompt = PlanningPromptBuilder.buildPlanPrompt({
+    const fullPlanningPrompt = PlanningPromptBuilder.buildPlanPrompt({
       projectName: project.name,
       planningAgent,
       codingAgentRoster,
@@ -285,6 +347,7 @@ export class PlanningAgentService {
       memoryContext,
       learningsInstruction,
     });
+    const prompt = continuation?.promptOverride || fullPlanningPrompt;
 
     const isMemoryCaptureEnabled = !!learningsInstruction;
 
@@ -306,6 +369,7 @@ export class PlanningAgentService {
         settings: runtime.settings,
         rawPrompt: prompt,
         overrides: options.overrides,
+        continuation,
         signal,
         parseFn: (bodyMarkdown) => parsePlannedSprintReply(bodyMarkdown, { allowedAgentPresetIds }),
         buildRetryPrompt: (lastError) => [
@@ -400,6 +464,17 @@ export class PlanningAgentService {
     };
   }
 
+  private buildPlanningContinuationPrompt(): string {
+    return [
+      "Continue the previous planning attempt in this same provider session.",
+      "",
+      "Output the complete valid JSON sprint definition now. Requirements:",
+      "- Output raw JSON only — no markdown fences, no commentary, no prose before or after.",
+      "- Use the exact schema from the original planning instructions: {\"goal\":\"...\",\"tasks\":[...]}",
+      "- Include the full final task list, not a partial diff or summary.",
+    ].join("\n");
+  }
+
   private resolvePlanningRuntime(projectId: string, overrides?: PlanningOverrides): {
     mode: "VIRTUAL";
     settings: DashboardSettings;
@@ -474,6 +549,7 @@ export class PlanningAgentService {
     signal?: AbortSignal;
     parseFn: (bodyMarkdown: string) => T;
     buildRetryPrompt: (lastError: Error) => string;
+    continuation?: PlanningContinuationContext;
   }): Promise<StructuredAgentRequestResult<T> & PlanningResultContext> {
     const routingTask: Subtask = {
       id: args.sprintId || "planning",
@@ -603,6 +679,9 @@ export class PlanningAgentService {
         buildRetryPrompt: args.buildRetryPrompt,
         providerLabel: this.getProviderLabel(provider),
         sessionIdPrefix: "planning",
+        logicalSessionId: args.continuation?.logicalSessionId,
+        continueSessionId: args.continuation?.continueSessionId,
+        openCodeBaselineRawUsageJson: args.continuation?.openCodeBaselineRawUsageJson,
         invocationId: args.invocationId,
         systemRoutingMessage,
         githubToken: args.settings.git.githubToken,

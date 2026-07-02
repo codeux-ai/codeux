@@ -1,5 +1,5 @@
 import type { ComponentChildren, FunctionComponent } from "preact";
-import { useEffect, useRef, useState, useMemo } from "preact/hooks";
+import { useCallback, useEffect, useRef, useState, useMemo } from "preact/hooks";
 import {
   ArrowUp,
   RefreshCw,
@@ -28,6 +28,8 @@ import { ProviderLogo } from "./components/ui/ProviderLogo.js";
 import { AgentAvatarSvg } from "./components/agents/AgentAvatarSvg.js";
 import { generateRandomAgentAvatar } from "./lib/agent-avatar.js";
 import type { ExecutionInvocationRecord } from "./types.js";
+import { restartExecutionInvocation, type InvocationRestartMode } from "./lib/invocation-api.js";
+import { useActionFeedback } from "./hooks/use-action-feedback.js";
 import {
   formatTokenCount,
   mergeInvocationToolMessages
@@ -55,6 +57,8 @@ export const ChatPage: FunctionComponent = () => {
   const messagesRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const [workingTimerPhase, setWorkingTimerPhase] = useState<"starting" | "working" | null>(null);
+  const [restartingInvocation, setRestartingInvocation] = useState<{ id: string; mode: InvocationRestartMode } | null>(null);
+  const invocationFeedback = useActionFeedback();
 
   const {
     chatMode,
@@ -82,6 +86,7 @@ export const ChatPage: FunctionComponent = () => {
     connections,
     invocationsLoading,
     invocationMessagesLoading,
+    refreshThreads,
     activateThread,
     activateInvocation,
     handleCompactThread,
@@ -103,6 +108,30 @@ export const ChatPage: FunctionComponent = () => {
 
   const effectiveSettings = useProjectEffectiveSettings(selectedProject?.id ?? null);
   const sprintKeyPrefix = effectiveSettings.data?.settings?.git?.sprintKeyPrefix || "SPR";
+
+  const handleRestartInvocation = useCallback(async (mode: InvocationRestartMode = "retry_full_prompt") => {
+    if (!selectedInvocation || selectedInvocation.status !== "failed") {
+      return;
+    }
+    setRestartingInvocation({ id: selectedInvocation.id, mode });
+    invocationFeedback.setPending(mode === "continue_session" ? "Continuing planning session..." : "Restarting planning session...", { autoDismiss: false });
+    try {
+      const result = await restartExecutionInvocation(selectedInvocation.id, mode);
+      invocationFeedback.setSuccess(mode === "continue_session" ? "Planning continuation queued." : "Planning restart queued.");
+      await refreshThreads({ mode: "invocations" });
+      if (result.invocationId) {
+        void activateInvocation(result.invocationId, { foreground: true });
+      }
+    } catch (error) {
+      invocationFeedback.setError(error instanceof Error ? error.message : String(error), {
+        retryAction: () => void handleRestartInvocation(mode),
+        retryLabel: "Retry",
+        autoDismiss: false,
+      });
+    } finally {
+      setRestartingInvocation(null);
+    }
+  }, [activateInvocation, invocationFeedback, refreshThreads, selectedInvocation]);
 
   // Build lookups from agentPresets
   const presetIdMap = useMemo(() => {
@@ -384,6 +413,7 @@ export const ChatPage: FunctionComponent = () => {
     // Clean horizontal stat strip for the active invocation header — mirrors the
     // list card's label/value table, only meaningful entries are shown.
     const inv = selectedInvocation;
+    const canRestartInvocation = inv?.status === "failed" && inv.type === "planning";
     const headerStatus = inv
       ? inv.status === "failed"
         ? { dot: "bg-status-red shadow-[0_0_6px_rgba(227,0,15,0.5)]", text: "text-status-red" }
@@ -416,6 +446,18 @@ export const ChatPage: FunctionComponent = () => {
 
     return (
       <>
+        {invocationFeedback.feedback.status !== "idle" && (
+          <div className="absolute top-4 right-4 z-50 shadow-lg">
+            <ActionFeedbackRegion
+              status={invocationFeedback.feedback.status}
+              message={invocationFeedback.feedback.message}
+              onDismiss={invocationFeedback.clearFeedback}
+              retryAction={invocationFeedback.feedback.retryAction}
+              retryLabel={invocationFeedback.feedback.retryLabel}
+              autoDismiss={invocationFeedback.feedback.autoDismiss}
+            />
+          </div>
+        )}
         <div className="shrink-0 border-b border-black/[0.05] px-6 py-6 dark:border-white/[0.05]">
           <div className="flex items-start gap-4">
             {/* Agent avatar or provider icon */}
@@ -430,12 +472,41 @@ export const ChatPage: FunctionComponent = () => {
             ) : null}
 
             <div className="min-w-0 flex-1 break-words">
-              <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500">
-                <span>Active Invocation</span>
-                {formatInvocationErrorCategory(selectedInvocation?.lastErrorCategory || null) && (
-                  <span className="rounded-full border border-status-amber/25 bg-status-amber/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-status-amber">
-                    {formatInvocationErrorCategory(selectedInvocation?.lastErrorCategory || null)}
-                  </span>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500">
+                  <span>Active Invocation</span>
+                  {formatInvocationErrorCategory(selectedInvocation?.lastErrorCategory || null) && (
+                    <span className="rounded-full border border-status-amber/25 bg-status-amber/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-status-amber">
+                      {formatInvocationErrorCategory(selectedInvocation?.lastErrorCategory || null)}
+                    </span>
+                  )}
+                  {selectedInvocation?.preservedAt && (
+                    <span className="rounded-full border border-signal-500/25 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-400">
+                      Preserved
+                    </span>
+                  )}
+                </div>
+                {canRestartInvocation && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleRestartInvocation("retry_full_prompt")}
+                      disabled={restartingInvocation?.id === inv.id}
+                      className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-status-amber/25 bg-status-amber/10 px-3 py-2 text-[12px] font-bold text-status-amber transition hover:border-status-amber/40 hover:bg-status-amber/15 disabled:cursor-wait disabled:opacity-60"
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${restartingInvocation?.id === inv.id && restartingInvocation.mode === "retry_full_prompt" ? "animate-spin" : ""}`} />
+                      Restart
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleRestartInvocation("continue_session")}
+                      disabled={restartingInvocation?.id === inv.id}
+                      className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-signal-500/25 bg-signal-500/10 px-3 py-2 text-[12px] font-bold text-signal-700 transition hover:border-signal-500/40 hover:bg-signal-500/15 disabled:cursor-wait disabled:opacity-60 dark:text-signal-400"
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${restartingInvocation?.id === inv.id && restartingInvocation.mode === "continue_session" ? "animate-spin" : ""}`} />
+                      Continue
+                    </button>
+                  </div>
                 )}
               </div>
 
