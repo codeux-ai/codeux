@@ -9,6 +9,7 @@ import type {
   ScheduleTargetType,
   UpdateSchedulerEntryInput,
 } from "../../contracts/scheduler-types.js";
+import { normalizeRecurrenceRule } from "../../domain/scheduler/schedule-time.js";
 import type { SchedulerService } from "../../services/scheduler-service.js";
 
 const VALID_TARGET_TYPES: ScheduleTargetType[] = ["sprint", "quicksprint", "chat"];
@@ -80,7 +81,8 @@ function readSubmitMode(value: unknown): ScheduleQuicksprintTarget["submitMode"]
 }
 
 function readRecurrence(payload: Record<string, unknown>): Partial<ScheduleRecurrenceRule> | undefined {
-  return readObject(payload, "recurrence") as Partial<ScheduleRecurrenceRule> | undefined;
+  const recurrence = readObject(payload, "recurrence");
+  return recurrence ? normalizeRecurrenceRule(recurrence) : undefined;
 }
 
 function normalizeSprintTarget(payload: Record<string, unknown>): ScheduleSprintTarget {

@@ -23,10 +23,12 @@ Scheduler target selectors, recurrence indicators, and repeating-count summary i
 
 Repeating entries support:
 - no recurrence
-- hourly, daily, weekly, or monthly recurrence
+- minutely, hourly, daily, weekly, or monthly recurrence
 - endless recurrence
 - a fixed number of iterations
 - an explicit end date/time
+
+Minute-based entries render summary labels such as `Every 15 minutes` and can be edited back into the same interval form state.
 
 ## Backend Contract
 
