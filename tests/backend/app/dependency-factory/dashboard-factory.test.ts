@@ -77,6 +77,8 @@ describe("Dashboard Factory", () => {
         createSprintRun: vi.fn(),
         updateSprintRun: vi.fn(),
         getLatestTaskRun: vi.fn().mockReturnValue(null),
+        getLatestTaskWorkspaceResumeTarget: vi.fn().mockReturnValue(null),
+        getLatestTaskRunWithWorkspace: vi.fn().mockReturnValue(null),
         createTaskRun: vi.fn().mockReturnValue({ id: "reset-run-1" }),
         appendTaskRunEvent: vi.fn(),
         getTaskRunByDispatchId: vi.fn().mockReturnValue(null),
@@ -254,6 +256,135 @@ describe("Dashboard Factory", () => {
     expect(ctx!.featureBranch).toBe("feature/sprint3");
     expect(ctx!.repoPath).toBe("/repo");
     expect(ctx!.sprintNumber).toBe(3);
+  });
+
+  it("resolveTaskContext recovers the previous bound CLI workspace when the latest runtime task lost session evidence", () => {
+    mockCoreDeps.projectRuntimeRepository.getProjectStatus.mockReturnValue({
+      project_id: "project-1",
+      sprint_id: "sprint-1",
+      sprint_number: 3,
+      source_id: "source-1",
+      feature_branch: "feature/sprint3",
+      repo_path: "/repo",
+      subtasks: [{
+        record_id: "task1",
+        id: "T1",
+        title: "Task",
+        prompt: "Do it",
+        depends_on: [],
+        status: "BLOCKED",
+        session_id: undefined,
+        worker_branch: undefined,
+      }],
+    });
+    mockCoreDeps.executionRepository.getLatestTaskWorkspaceResumeTarget.mockReturnValue({
+      sessionId: "cli-codex-workspace",
+      sessionName: "sessions/cli-codex-workspace",
+      workerBranch: "task/worker-old",
+      prUrl: "https://example.com/pr/1",
+    });
+
+    createDashboardDependencies(
+      mockContext as unknown as ServerContext,
+      mockCoreDeps as unknown as CoreDependencies,
+      mockSprintDeps as unknown as SprintDependencies
+    );
+
+    const taskRerunArgs = vi.mocked(TaskRerunService).mock.calls[0][0];
+    const ctx = taskRerunArgs.resolveTaskContext("task1");
+
+    expect(mockCoreDeps.executionRepository.getLatestTaskWorkspaceResumeTarget).toHaveBeenCalledWith("task1");
+    expect(mockCoreDeps.executionRepository.getLatestTaskRunWithWorkspace).not.toHaveBeenCalled();
+    expect(ctx!.task.session_id).toBe("cli-codex-workspace");
+    expect(ctx!.task.session_name).toBe("sessions/cli-codex-workspace");
+    expect(ctx!.task.worker_branch).toBe("task/worker-old");
+    expect(ctx!.task.pr_url).toBe("https://example.com/pr/1");
+  });
+
+  it("resolveTaskContext falls back to the latest worker branch run when no workspace binding exists", () => {
+    mockCoreDeps.projectRuntimeRepository.getProjectStatus.mockReturnValue({
+      project_id: "project-1",
+      sprint_id: "sprint-1",
+      sprint_number: 3,
+      source_id: "source-1",
+      feature_branch: "feature/sprint3",
+      repo_path: "/repo",
+      subtasks: [{
+        record_id: "task1",
+        id: "T1",
+        title: "Task",
+        prompt: "Do it",
+        depends_on: [],
+        status: "BLOCKED",
+        session_id: undefined,
+        worker_branch: undefined,
+      }],
+    });
+    mockCoreDeps.executionRepository.getLatestTaskRunWithWorkspace.mockReturnValue({
+      sessionId: "cli-codex-old",
+      sessionName: "sessions/cli-codex-old",
+      workerBranch: "task/worker-old",
+      prUrl: "https://example.com/pr/1",
+    });
+
+    createDashboardDependencies(
+      mockContext as unknown as ServerContext,
+      mockCoreDeps as unknown as CoreDependencies,
+      mockSprintDeps as unknown as SprintDependencies
+    );
+
+    const taskRerunArgs = vi.mocked(TaskRerunService).mock.calls[0][0];
+    const ctx = taskRerunArgs.resolveTaskContext("task1");
+
+    expect(mockCoreDeps.executionRepository.getLatestTaskWorkspaceResumeTarget).toHaveBeenCalledWith("task1");
+    expect(mockCoreDeps.executionRepository.getLatestTaskRunWithWorkspace).toHaveBeenCalledWith("task1");
+    expect(ctx!.task.session_id).toBe("cli-codex-old");
+    expect(ctx!.task.session_name).toBe("sessions/cli-codex-old");
+    expect(ctx!.task.worker_branch).toBe("task/worker-old");
+    expect(ctx!.task.pr_url).toBe("https://example.com/pr/1");
+  });
+
+  it("resolveTaskContext lets the latest workspace binding override stale runtime session metadata", () => {
+    mockCoreDeps.projectRuntimeRepository.getProjectStatus.mockReturnValue({
+      project_id: "project-1",
+      sprint_id: "sprint-1",
+      sprint_number: 3,
+      source_id: "source-1",
+      feature_branch: "feature/sprint3",
+      repo_path: "/repo",
+      subtasks: [{
+        record_id: "task1",
+        id: "T1",
+        title: "Task",
+        prompt: "Do it",
+        depends_on: [],
+        status: "FAILED",
+        session_id: "cli-codex-provider-session",
+        session_name: "sessions/cli-codex-provider-session",
+        worker_branch: "task/stale-worker",
+        pr_url: "https://example.com/pr/stale",
+      }],
+    });
+    mockCoreDeps.executionRepository.getLatestTaskWorkspaceResumeTarget.mockReturnValue({
+      sessionId: "cli-codex-workspace-session",
+      sessionName: "sessions/cli-codex-workspace-session",
+      workerBranch: "task/workspace-worker",
+      prUrl: "https://example.com/pr/workspace",
+    });
+
+    createDashboardDependencies(
+      mockContext as unknown as ServerContext,
+      mockCoreDeps as unknown as CoreDependencies,
+      mockSprintDeps as unknown as SprintDependencies
+    );
+
+    const taskRerunArgs = vi.mocked(TaskRerunService).mock.calls[0][0];
+    const ctx = taskRerunArgs.resolveTaskContext("task1");
+
+    expect(ctx!.task.session_id).toBe("cli-codex-workspace-session");
+    expect(ctx!.task.session_name).toBe("sessions/cli-codex-workspace-session");
+    expect(ctx!.task.worker_branch).toBe("task/workspace-worker");
+    expect(ctx!.task.pr_url).toBe("https://example.com/pr/workspace");
   });
 
   it("resolveTaskContext derives the sprint branch instead of reusing stale project runtime data", () => {

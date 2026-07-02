@@ -80,6 +80,65 @@ describe("DockerAssetPruneService", () => {
     expect(runCommandStrict).not.toHaveBeenCalledWith("docker", ["image", "rm", "-f", expect.any(String)], expect.any(String), process.env, { timeout: 10_000 });
   });
 
+  it("preserves failed tracked CLI workspace volumes so startup retries can resume them", async () => {
+    const sessionTracking = {
+      listTrackedCliSessions: vi.fn(() => [
+        { id: "cli-codex-interrupted", state: "FAILED", provider: "codex", repoPath: "/repo/a", updateTime: "" },
+      ]),
+    } as unknown as SessionTrackingRepository;
+
+    vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
+      if (args[0] === "volume" && args[1] === "ls" && args.includes("label=code-ux.workspace=true")) {
+        return {
+          ok: true,
+          stdout: [
+            "code-ux-repo-aaaaaaaaaaaa-cli-codex-interrupted",
+            "code-ux-repo-aaaaaaaaaaaa-cli-codex-orphaned",
+          ].join("\n"),
+          stderr: "",
+          code: 0,
+        } as any;
+      }
+      if (args[0] === "volume" && args[1] === "ls" && args.includes("label=code-ux.workspace-runtime=true")) {
+        return {
+          ok: true,
+          stdout: [
+            "code-ux-repo-aaaaaaaaaaaa-cli-codex-interrupted-runtime",
+            "code-ux-repo-aaaaaaaaaaaa-cli-codex-orphaned-runtime",
+          ].join("\n"),
+          stderr: "",
+          code: 0,
+        } as any;
+      }
+      return {
+        ok: true,
+        stdout: "",
+        stderr: "",
+        code: 0,
+      } as any;
+    });
+
+    const result = await new DockerAssetPruneService(sessionTracking).cleanupOnStartup();
+
+    expect(result.prunedWorkspaceVolumes).toEqual([
+      "code-ux-repo-aaaaaaaaaaaa-cli-codex-orphaned",
+      "code-ux-repo-aaaaaaaaaaaa-cli-codex-orphaned-runtime",
+    ]);
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "docker",
+      [
+        "volume",
+        "rm",
+        "-f",
+        "code-ux-repo-aaaaaaaaaaaa-cli-codex-orphaned",
+        "code-ux-repo-aaaaaaaaaaaa-cli-codex-orphaned-runtime",
+      ],
+      expect.any(String),
+      process.env,
+      { timeout: 10_000 },
+    );
+  });
+
   it("prunes orphaned login containers on startup", async () => {
     const sessionTracking = {
       listTrackedCliSessions: vi.fn(() => []),

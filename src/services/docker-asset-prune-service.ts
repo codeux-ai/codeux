@@ -27,10 +27,9 @@ export class DockerAssetPruneService {
   ) {}
 
   async cleanupOnStartup(): Promise<DockerAssetPruneResult> {
-    const activeSessionIds = new Set(
+    const trackedSessionIds = new Set(
       this.sessionTrackingRepository
         .listTrackedCliSessions()
-        .filter((session) => session.state === "RUNNING")
         .map((session) => session.id),
     );
 
@@ -46,7 +45,7 @@ export class DockerAssetPruneService {
 
     // Remove helper containers before workspace volumes: a surviving helper keeps its volume
     // mounted, which would otherwise block the volume removal below.
-    const prunedWorkspaceVolumes = await this.pruneWorkspaceVolumes(activeSessionIds);
+    const prunedWorkspaceVolumes = await this.pruneWorkspaceVolumes(trackedSessionIds);
     const prunedSetupImages: string[] = [];
 
     if (
