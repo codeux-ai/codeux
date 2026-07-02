@@ -368,8 +368,8 @@ Legacy runtime:
   - donut-style composition charts for providers, token anatomy, and telemetry-source mix now animate as interactive slices with hover emphasis and center-detail readouts
   - Models and Providers/Reliability tracking specifically surface model performance, API error rates, and retry counts
   - tabbed Ledgers telemetry section replaces the always-visible ledger layout, complete with search, sort-by-recency/tokens/time/input/output/name, and richer token/time breakdowns
-  - System subpage for deeper debugging and internal telemetry info, exposing internal cache hit rates, pub/sub connection stability, worker execution loops, queue lengths, and unhandled exception traces
-  - Git stats (Insertions, Deletions, Files Changed, Pull Requests, Merged PRs) are integrated directly alongside Tokens, Time, and Cost metrics in the Analysis Studio
+  - System subpage for deeper debugging and internal telemetry info, now split into sprint state, invocation health, failure analysis, external API metrics, filters, and the invocation table so each operational concern stays scannable
+  - Git stats (Insertions, Deletions, Files Changed, Pull Requests, Merged PRs, and merge conflicts) are integrated directly alongside Tokens, Time, and Cost metrics in the Analysis Studio, with bucket and entity rankings surfaced next to the tabbed ledgers
 - The Stats page uses the same project realtime invalidation channels as the rest of the v2 dashboard, then falls back to polling so usage graphs and tables stay current during active sprint execution
 - Overview widgets and headline stat cards now read project/task data from the same project-management API surface, and task streams are filtered to the currently selected active sprint only (a frontend-only view change with no API contract change)
 - Agents page features an immersive, showcase-first layout that defaults to presenting the selected agent's 3D animated avatar, details, and route-assignment tags, rather than a raw edit form.

@@ -91,6 +91,24 @@ const StatusDistributionBar: FunctionComponent<{ metrics: SystemSummaryMetrics }
   );
 };
 
+const StudioSectionHeader: FunctionComponent<{
+  eyebrow: string;
+  title: string;
+  description?: string;
+}> = ({ eyebrow, title, description }) => (
+  <div className="flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-500 ${CHIP_CLASS}`}>
+        {eyebrow}
+      </div>
+      <div className="mt-3 text-xl font-black text-slate-900 dark:text-white">{title}</div>
+      {description ? (
+        <div className="mt-1.5 max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">{description}</div>
+      ) : null}
+    </div>
+  </div>
+);
+
 export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ projectId }) => {
   const {
     invocations,
@@ -118,6 +136,17 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
   const [activeTab, setActiveTab] = useState<SystemTab>("all");
 
   void refetch;
+
+  const errorCount = useMemo(() => {
+    return invocations.filter((invocation) => invocation.status === "failed" || invocation.status === "cancelled").length;
+  }, [invocations]);
+
+  const systemCount = useMemo(() => {
+    return invocations.filter((invocation) => {
+      const type = (invocation.type || "").toLowerCase();
+      return type.includes("system") || type.includes("message") || Boolean(invocation.lastErrorMessage);
+    }).length;
+  }, [invocations]);
 
   const tabbedInvocations = useMemo(() => {
     if (activeTab === "errors") {
@@ -168,24 +197,23 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
   const totalErrors = errorEntries.reduce((sum, [_, count]) => sum + count, 0);
 
   return (
-    <div className="space-y-8">
-      <div className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7 mb-8`}>
+    <div className="space-y-6">
+      <section className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7`}>
         <StudioHeader
           icon={Terminal}
           eyebrow="System Telemetry"
           title="Invocations & System Logs"
           description="Full operational log of every invocation across this project — filterable by status, type, and provider, with reliability and latency metrics computed live over the filtered set."
         />
-      </div>
+      </section>
 
-      <section className="space-y-4">
-        <div className="flex items-center gap-3">
-          <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-500 ${CHIP_CLASS}`}>
-            Sprint Overview
-          </div>
-          <div className="text-xl font-black text-slate-900 dark:text-white">Active State</div>
-        </div>
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <section className={`${PANEL_CLASS} p-6 md:p-7`}>
+        <StudioSectionHeader
+          eyebrow="Sprint Overview"
+          title="Sprint State"
+          description="Active sprint shape, task load, and blocked work are summarized independently from the invocation stream so the operational picture stays readable."
+        />
+        <div className="mt-6 grid grid-cols-2 gap-3 xl:grid-cols-4">
           <SystemMetricCard
             icon={Activity}
             label="Total Sprints"
@@ -217,19 +245,13 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
         </div>
       </section>
 
-      <section className="space-y-4">
-        <div className="flex items-center gap-3">
-          <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-500 ${CHIP_CLASS}`}>
-            Status Distribution
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="text-xl font-black text-slate-900 dark:text-white">Invocations</div>
-            {summaryMetrics.runningCount > 0 && (
-              <div className="h-2 w-2 animate-pulse rounded-full bg-blue-400" />
-            )}
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6 mb-4">
+      <section className={`${PANEL_CLASS} p-6 md:p-7`}>
+        <StudioSectionHeader
+          eyebrow="Invocation Health"
+          title="Invocation Health"
+          description="Current volume, success rate, latency, cache efficiency, and in-flight work are derived from the server-projected summary for the current filter set."
+        />
+        <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           <SystemMetricCard
             icon={Activity}
             label="Invocations"
@@ -275,23 +297,25 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             valueClassName={summaryMetrics.runningCount > 0 ? "text-blue-600 dark:text-blue-300" : undefined}
           />
         </div>
-        <StatusDistributionBar metrics={summaryMetrics} />
+        <div className="mt-4">
+          <StatusDistributionBar metrics={summaryMetrics} />
+        </div>
       </section>
 
-      <section className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-500 ${CHIP_CLASS}`}>
-              Error Log
-            </div>
-            <div className="text-xl font-black text-slate-900 dark:text-white">Failure Analysis</div>
-          </div>
-          {totalErrors > 0 && (
+      <section className={`${PANEL_CLASS} p-6 md:p-7`}>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <StudioSectionHeader
+            eyebrow="Failure Analysis"
+            title="Failure Analysis"
+            description="Error classes are grouped so operators can separate transient issues from provider, model, and cancellation problems at a glance."
+          />
+          {totalErrors > 0 ? (
             <div className="flex h-8 items-center justify-center rounded-full border-2 border-amber-500/30 bg-amber-500/10 px-3 text-[11px] font-bold text-amber-600 dark:text-amber-400">
               {totalErrors} total failures
             </div>
-          )}
+          ) : null}
         </div>
+        <div className="mt-6">
         {errorEntries.length === 0 ? (
           <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center py-12 text-center`}>
             <ShieldCheck className="mb-3 h-8 w-8 text-emerald-500/50" />
@@ -315,16 +339,16 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             })}
           </div>
         )}
+        </div>
       </section>
 
-      <section className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-500 ${CHIP_CLASS}`}>
-              Invocations
-            </div>
-            <div className="text-xl font-black text-slate-900 dark:text-white">Detailed Log</div>
-          </div>
+      <section className={`${PANEL_CLASS} p-6 md:p-7`}>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <StudioSectionHeader
+            eyebrow="External APIs"
+            title="External API Metrics"
+            description="Git, Jules, Jira, and other integrations are isolated from the main invocation table so external traffic stays easy to audit."
+          />
           <div className="flex flex-wrap gap-2">
             {(Object.entries(apiData) as [keyof typeof apiData, any][]).filter(([_, metrics]) => metrics.calls > 0).map(([key, metrics]) => (
               <div key={key} className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ${CHIP_CLASS}`}>
@@ -333,23 +357,63 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             ))}
           </div>
         </div>
+        <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+          {Object.entries(apiData).map(([key, metrics]) => (
+            <SystemMetricCard
+              key={key}
+              icon={Database}
+              label={key.charAt(0).toUpperCase() + key.slice(1)}
+              value={metrics.calls.toLocaleString()}
+              detail={metrics.calls > 0 ? formatStatsDuration(metrics.avgDurationMs) : "No calls"}
+              circleClassName="bg-slate-500/10 text-slate-500 dark:text-slate-400"
+            />
+          ))}
+        </div>
+      </section>
 
-        <div className="space-y-4">
-          <div className="flex gap-1 rounded-2xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-1 self-start">
-            {(["all", "errors", "system"] as SystemTab[]).map((tab) => (
+      <section className={`${PANEL_CLASS} p-6 md:p-7`}>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <StudioSectionHeader
+            eyebrow="Filters"
+            title="Invocation Filters"
+            description="Search and filter controls stay separate from the table so the result counts and page controls remain easy to scan."
+          />
+          <div className="flex flex-wrap gap-2">
+            <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ${CHIP_CLASS}`}>
+              All · {invocations.length.toLocaleString()}
+            </div>
+            <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ${CHIP_CLASS}`}>
+              Errors · {errorCount.toLocaleString()}
+            </div>
+            <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ${CHIP_CLASS}`}>
+              System · {systemCount.toLocaleString()}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 space-y-4">
+          <div className="flex max-w-full gap-1 overflow-x-auto rounded-2xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-1 self-start">
+            {(["all", "errors", "system"] as SystemTab[]).map((tab) => {
+              const tabCount = tab === "all" ? invocations.length : tab === "errors" ? errorCount : systemCount;
+              return (
               <button
                 key={tab}
                 type="button"
                 onClick={() => setActiveTab(tab)}
-                className={`rounded-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-all ${
+                aria-pressed={activeTab === tab}
+                className={`inline-flex min-w-max items-center gap-2 rounded-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-all ${
                   activeTab === tab
                     ? "bg-amber-500 text-white shadow-sm ring-2 ring-amber-500/30"
                     : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
                 }`}
               >
                 {tab === "all" ? "All" : tab === "errors" ? "Errors" : "System Msgs"}
+                <span className="rounded-full bg-white/15 px-2 py-0.5 text-[9px] font-black tabular-nums tracking-[0.12em] text-current">
+                  {tabCount.toLocaleString()}
+                </span>
               </button>
-            ))}
+              );
+            })}
           </div>
 
           <SystemFilterBar
@@ -360,7 +424,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             availablePurposes={availablePurposes}
             availableProviders={availableProviders}
             totalCount={totalCount}
-            filteredCount={tabbedInvocations.length}
+            filteredCount={invocations.length}
             page={page}
             onPageChange={setPage}
             hasMore={hasMore}

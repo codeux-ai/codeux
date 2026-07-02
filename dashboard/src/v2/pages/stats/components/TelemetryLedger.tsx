@@ -1,6 +1,17 @@
 import type { FunctionComponent } from "preact";
 import { useMemo, useState } from "preact/hooks";
-import { ArrowDownRight, ArrowUpRight, Brain, Database, Activity, Clock3, Hash, Zap, Search } from "lucide-preact";
+import {
+  Activity,
+  ArrowDownRight,
+  ArrowUpRight,
+  Brain,
+  Clock3,
+  Database,
+  Hash,
+  Search,
+  X,
+  Zap,
+} from "lucide-preact";
 import { useProgressiveList } from "../../../../hooks/use-progressive-list.js";
 import type { ExecutionStatsEntitySummary } from "../../../types.js";
 import { formatTokens, formatStatsDuration, formatDateTime, formatPercent } from "../stats-utils.js";
@@ -15,7 +26,7 @@ import {
   TokenFlowBar,
   getProviderIcon,
   getLedgerSortValue,
-  type LedgerSortKey
+  type LedgerSortKey,
 } from "./StatsShared.js";
 
 function getStatusChipTone(status: string): string {
@@ -35,21 +46,97 @@ function getStatusChipTone(status: string): string {
   return "bg-slate-500/10 text-slate-500 dark:text-slate-300";
 }
 
-const LedgerSummaryTile: FunctionComponent<{
+const LedgerSummaryCard: FunctionComponent<{
   icon: typeof Zap;
   label: string;
   value: string;
   detail: string;
-}> = ({ icon: Icon, label, value, detail }) => (
+  tone?: string;
+}> = ({ icon: Icon, label, value, detail, tone = "text-signal-500" }) => (
   <div className={`${SUBPANEL_CLASS} p-4`}>
     <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
-      <Icon className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.2} />
+      <Icon className={`h-3.5 w-3.5 ${tone}`} strokeWidth={2.2} />
       {label}
     </div>
     <div className="mt-2 text-xl font-black tracking-tight text-slate-900 dark:text-white">{value}</div>
     <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{detail}</div>
   </div>
 );
+
+const LedgerComparisonCard: FunctionComponent<{
+  kindLabel: string;
+  filteredItems: ExecutionStatsEntitySummary[];
+  totals: {
+    filteredInputTokens: number;
+    filteredCachedTokens: number;
+    filteredOutputTokens: number;
+    filteredReasoningTokens: number;
+    filteredTokens: number;
+    totalTokens: number;
+  };
+}> = ({ kindLabel, filteredItems, totals }) => {
+  const topItem = filteredItems[0] ?? null;
+
+  return (
+    <div className={`${SUBPANEL_CLASS} p-4 lg:col-span-2`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Token Flow Comparison</div>
+          <div className="mt-2 text-sm font-bold text-slate-900 dark:text-white">
+            Filtered {kindLabel} vs leading lane
+          </div>
+        </div>
+        <div className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+          {filteredItems.length.toLocaleString()} visible
+        </div>
+      </div>
+
+      <div className="mt-4 space-y-4">
+        <div>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+            <span>Filtered mix</span>
+            <span>{formatTokens(totals.filteredTokens)} total tokens</span>
+          </div>
+          <TokenFlowBar
+            input={totals.filteredInputTokens}
+            cached={totals.filteredCachedTokens}
+            output={totals.filteredOutputTokens}
+            reasoning={totals.filteredReasoningTokens}
+            total={Math.max(1, totals.filteredTokens)}
+          />
+          <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+            Combined filtered throughput across the current view.
+          </div>
+        </div>
+
+        <div>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+            <span>Top lane</span>
+            <span>{topItem ? topItem.label : "No lane yet"}</span>
+          </div>
+          {topItem ? (
+            <>
+              <TokenFlowBar
+                input={topItem.usage.inputTokens}
+                cached={topItem.usage.cachedInputTokens}
+                output={topItem.usage.outputTokens}
+                reasoning={topItem.usage.reasoningOutputTokens}
+                total={topItem.usage.totalTokens}
+              />
+              <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                {formatTokens(topItem.usage.totalTokens)} tokens, {formatPercent(totals.totalTokens > 0 ? (topItem.usage.totalTokens / totals.totalTokens) * 100 : 0)} of the visible set.
+              </div>
+            </>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-5 text-sm text-slate-400 dark:border-white/[0.08]">
+              No top lane to compare yet.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export const TelemetryLedger: FunctionComponent<{
   title: string;
@@ -91,7 +178,6 @@ export const TelemetryLedger: FunctionComponent<{
       const rightValue = getLedgerSortValue(right, sortKey);
 
       if (typeof leftValue === "string" && typeof rightValue === "string") {
-        // First click on a text sort reads A→Z; toggling flips it.
         return leftValue.localeCompare(rightValue) * (sortDir === "desc" ? 1 : -1);
       }
 
@@ -99,29 +185,41 @@ export const TelemetryLedger: FunctionComponent<{
     });
   }, [items, query, sortKey, sortDir]);
 
-  const globalTotals = useMemo(() => {
+  const totals = useMemo(() => {
     let totalTokens = 0;
     let totalActiveMs = 0;
-    for (const item of items) {
-      totalTokens += item.usage.totalTokens;
-      totalActiveMs += item.usage.activeTimeMs;
-    }
-    return { totalTokens, totalActiveMs };
-  }, [items]);
-
-  const totals = useMemo(() => {
-    let tokens = 0;
-    let activeTimeMs = 0;
     let calls = 0;
     let leaderTokens = 0;
+    let inputTokens = 0;
+    let cachedTokens = 0;
+    let outputTokens = 0;
+    let reasoningTokens = 0;
+
     for (const item of filteredItems) {
-      tokens += item.usage.totalTokens;
-      activeTimeMs += item.usage.activeTimeMs;
+      totalTokens += item.usage.totalTokens;
+      totalActiveMs += item.usage.activeTimeMs;
       calls += item.usage.invocationCount;
       leaderTokens = Math.max(leaderTokens, item.usage.totalTokens);
+      inputTokens += item.usage.inputTokens;
+      cachedTokens += item.usage.cachedInputTokens;
+      outputTokens += item.usage.outputTokens;
+      reasoningTokens += item.usage.reasoningOutputTokens;
     }
-    return { tokens, activeTimeMs, calls, leaderTokens };
+
+    return { totalTokens, totalActiveMs, calls, leaderTokens, inputTokens, cachedTokens, outputTokens, reasoningTokens };
   }, [filteredItems]);
+
+  const overallTotals = useMemo(() => {
+    let totalTokens = 0;
+    let totalActiveTimeMs = 0;
+
+    for (const item of items) {
+      totalTokens += item.usage.totalTokens;
+      totalActiveTimeMs += item.usage.activeTimeMs;
+    }
+
+    return { totalTokens, totalActiveTimeMs };
+  }, [items]);
 
   const topItem = useMemo(() => {
     return filteredItems.reduce<ExecutionStatsEntitySummary | null>(
@@ -145,54 +243,62 @@ export const TelemetryLedger: FunctionComponent<{
     scrollContainerRef,
   } = useProgressiveList(filteredItems, { initialCount: 12, stepCount: 8 });
 
+  const searchHasResults = filteredItems.length > 0;
+  const queryIsActive = query.trim().length > 0;
+  const averageTokens = items.length > 0 ? overallTotals.totalTokens / items.length : 0;
+  const averageActiveTime = items.length > 0 ? overallTotals.totalActiveTimeMs / items.length : 0;
+
   return (
-    <div className={`${PANEL_CLASS} p-6`}>
-      <div className="flex flex-col gap-5">
+    <div className={`${PANEL_CLASS} p-6 md:p-7`}>
+      <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">{eyebrow}</div>
             <div className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</div>
-            <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+            <div className="mt-2 max-w-3xl text-sm text-slate-500 dark:text-slate-400">
               Search, sort, and compare {kindLabel} by recency, tokens, active time, and directional token flow.
             </div>
           </div>
-          <div className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
-            {filteredItems.length} {kindLabel}
+          <div className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/72 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300">
+            <Hash className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.2} />
+            {filteredItems.length.toLocaleString()} visible / {items.length.toLocaleString()} total
           </div>
         </div>
 
         {items.length > 0 ? (
-          <div className={`${SUBPANEL_CLASS} p-2`}>
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <LedgerSummaryTile
-                icon={Hash}
-                label="Total"
-                value={items.length.toLocaleString()}
-                detail={kindLabel}
-              />
-              <LedgerSummaryTile
-                icon={Zap}
-                label="Avg Tokens"
-                value={formatTokens(globalTotals.totalTokens / Math.max(1, items.length))}
-                detail={`per ${kindLabel.replace(/s$/, "")}`}
-              />
-              <LedgerSummaryTile
-                icon={Clock3}
-                label="Avg Active"
-                value={formatStatsDuration(globalTotals.totalActiveMs / Math.max(1, items.length))}
-                detail={`per ${kindLabel.replace(/s$/, "")}`}
-              />
-              <LedgerSummaryTile
-                icon={Activity}
-                label="Most Recent"
-                value={items[0]?.lastActivityAt ? formatDateTime(items[0].lastActivityAt) : "—"}
-                detail="last activity"
-              />
-            </div>
+          <div className="grid gap-3 lg:grid-cols-4">
+            <LedgerSummaryCard
+              icon={Hash}
+              label="Total"
+              value={items.length.toLocaleString()}
+              detail={kindLabel}
+            />
+            <LedgerSummaryCard
+              icon={Zap}
+              label="Average Tokens"
+              value={formatTokens(averageTokens)}
+              detail={`per ${kindLabel.replace(/s$/, "")}`}
+            />
+            <LedgerSummaryCard
+              icon={Clock3}
+              label="Average Active"
+              value={formatStatsDuration(averageActiveTime)}
+              detail={`per ${kindLabel.replace(/s$/, "")}`}
+            />
+            <LedgerSummaryCard
+              icon={Activity}
+              label="Most Recent"
+              value={items[0]?.lastActivityAt ? formatDateTime(items[0].lastActivityAt) : "—"}
+              detail="last activity"
+            />
           </div>
-        ) : null}
+        ) : (
+          <div className={`${SUBPANEL_CLASS} px-4 py-8 text-center text-sm text-slate-400`}>
+            No {kindLabel} telemetry is available in this window yet.
+          </div>
+        )}
 
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div className="relative">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" strokeWidth={2} />
             <input
@@ -200,10 +306,20 @@ export const TelemetryLedger: FunctionComponent<{
               value={query}
               onInput={(event) => setQuery((event.currentTarget as HTMLInputElement).value)}
               placeholder={`Search ${kindLabel}`}
-              className={`${INPUT_CLASS} w-full pl-10`}
+              className={`${INPUT_CLASS} w-full pl-10 pr-10`}
             />
+            {queryIsActive ? (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:hover:bg-white/[0.06] dark:hover:text-slate-200 dark:focus-visible:ring-offset-void-900"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : null}
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex max-w-full gap-2 overflow-x-auto pb-1 pr-1 scrollbar-hide lg:flex-wrap lg:justify-end">
             {([
               ["last", "Latest"],
               ["tokens", "Tokens"],
@@ -225,15 +341,68 @@ export const TelemetryLedger: FunctionComponent<{
           </div>
         </div>
 
-        {filteredItems.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-12 text-center text-sm text-slate-400 dark:border-white/[0.08]">
-            {emptyLabel}
-          </div>
-        ) : (
+        {items.length > 0 ? (
+          searchHasResults ? (
+            <div className="grid gap-3 xl:grid-cols-[1.05fr_0.95fr]">
+              <LedgerComparisonCard
+                kindLabel={kindLabel}
+                filteredItems={filteredItems}
+                totals={{
+                  filteredInputTokens: totals.inputTokens,
+                  filteredCachedTokens: totals.cachedTokens,
+                  filteredOutputTokens: totals.outputTokens,
+                  filteredReasoningTokens: totals.reasoningTokens,
+                  filteredTokens: totals.totalTokens,
+                  totalTokens: overallTotals.totalTokens,
+                }}
+              />
+              <div className="grid gap-3 sm:grid-cols-3">
+                <LedgerSummaryCard
+                  icon={Activity}
+                  label="Search Results"
+                  value={filteredItems.length.toLocaleString()}
+                  detail={queryIsActive ? `matching "${query.trim()}"` : "all visible"}
+                  tone="text-amber-500"
+                />
+                <LedgerSummaryCard
+                  icon={Brain}
+                  label="Top Lane"
+                  value={topItem ? topItem.label : "—"}
+                  detail={topItem ? `${formatTokens(topItem.usage.totalTokens)} tokens` : "no lane yet"}
+                  tone="text-indigo-500"
+                />
+                <LedgerSummaryCard
+                  icon={Database}
+                  label="Visible Share"
+                  value={totals.totalTokens > 0 ? formatPercent((totals.totalTokens / Math.max(1, overallTotals.totalTokens)) * 100) : "—"}
+                  detail="of current window tokens"
+                  tone="text-cyan-500"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-12 text-center text-sm text-slate-400 dark:border-white/[0.08]">
+              {queryIsActive ? (
+                <div className="space-y-3">
+                  <div>No {kindLabel} match “{query.trim()}”.</div>
+                  <button
+                    type="button"
+                    onClick={() => setQuery("")}
+                    className="inline-flex items-center rounded-full border border-black/[0.06] bg-white/72 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300 dark:hover:text-white"
+                  >
+                    Clear search
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          )
+        ) : null}
+
+        {searchHasResults ? (
           <div ref={scrollContainerRef} className="max-h-[42rem] overflow-y-auto pr-2 dashboard-scrollbar">
             <div className="space-y-3">
               {visibleItems.map((item, index) => {
-                const shareOfTotal = totals.tokens > 0 ? (item.usage.totalTokens / totals.tokens) * 100 : 0;
+                const shareOfTotal = totals.totalTokens > 0 ? (item.usage.totalTokens / totals.totalTokens) * 100 : 0;
                 const shareOfLeader = totals.leaderTokens > 0 ? (item.usage.totalTokens / totals.leaderTokens) * 100 : 0;
 
                 return (
@@ -322,20 +491,19 @@ export const TelemetryLedger: FunctionComponent<{
                         />
                         <div className="h-1 rounded-full bg-black/[0.04] dark:bg-white/[0.05]">
                           <div
-                            className="h-1 rounded-full bg-signal-500/60 transition-all duration-500"
+                            className="h-1 rounded-full bg-emerald-500/60 transition-all duration-500"
                             style={{ width: `${Math.min(100, Math.max(shareOfLeader > 0 ? 3 : 0, shareOfLeader))}%` }}
                           />
                         </div>
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <div className="flex flex-wrap gap-2">
-                            <TokenChip icon={ArrowDownRight} label="In" value={item.usage.inputTokens} tone="border-signal-500/16 bg-signal-500/8 text-signal-600 dark:text-signal-400" />
+                            <TokenChip icon={ArrowDownRight} label="Input" value={item.usage.inputTokens} tone="border-signal-500/16 bg-signal-500/8 text-signal-600 dark:text-signal-400" />
                             <TokenChip icon={Database} label="Cached" value={item.usage.cachedInputTokens} tone="border-cyan-500/16 bg-cyan-500/8 text-cyan-600 dark:text-cyan-400" />
-                            <TokenChip icon={ArrowUpRight} label="Out" value={item.usage.outputTokens} tone="border-amber-500/16 bg-amber-500/8 text-amber-600 dark:text-amber-400" />
-                            <TokenChip icon={Brain} label="Reason" value={item.usage.reasoningOutputTokens} tone="border-rose-500/16 bg-rose-500/8 text-rose-600 dark:text-rose-400" />
+                            <TokenChip icon={ArrowUpRight} label="Output" value={item.usage.outputTokens} tone="border-amber-500/16 bg-amber-500/8 text-amber-600 dark:text-amber-400" />
+                            <TokenChip icon={Brain} label="Reasoning" value={item.usage.reasoningOutputTokens} tone="border-rose-500/16 bg-rose-500/8 text-rose-600 dark:text-rose-400" />
                           </div>
-                          <div className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                            <span>{formatPercent(shareOfTotal)} of volume</span>
-                            <span className="hidden sm:inline">{formatDateTime(item.lastActivityAt)}</span>
+                          <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                            {formatPercent(shareOfTotal)} of visible tokens
                           </div>
                         </div>
                       </div>
@@ -350,7 +518,24 @@ export const TelemetryLedger: FunctionComponent<{
               ) : null}
             </div>
           </div>
-        )}
+        ) : items.length > 0 && queryIsActive ? (
+          <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-12 text-center text-sm text-slate-400 dark:border-white/[0.08]">
+            <div className="space-y-3">
+              <div>No {kindLabel} match “{query.trim()}”.</div>
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                className="inline-flex items-center rounded-full border border-black/[0.06] bg-white/72 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300 dark:hover:text-white"
+              >
+                Clear search
+              </button>
+            </div>
+          </div>
+        ) : items.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-12 text-center text-sm text-slate-400 dark:border-white/[0.08]">
+            {emptyLabel}
+          </div>
+        ) : null}
       </div>
     </div>
   );

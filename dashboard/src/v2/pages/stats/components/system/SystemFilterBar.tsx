@@ -62,154 +62,165 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
   hasMore,
 }) => {
   const hasActiveFilters = filters.status.length > 0 || filters.purpose.length > 0 || filters.provider.length > 0 || (filters.errorCategories && filters.errorCategories.length > 0) || search !== "";
+  const shownCount = filteredCount.toLocaleString();
+  const totalShown = totalCount.toLocaleString();
 
   return (
-    <div className={`${SUBPANEL_CLASS} flex flex-nowrap items-center gap-3 p-3 overflow-x-auto whitespace-nowrap scrollbar-hide min-w-0`}>
-      <div className="relative min-w-0 w-full lg:flex-1 lg:basis-[18rem]">
-        <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" strokeWidth={2} />
-        <input
-          type="search"
-          value={search}
-          onInput={(event) => onSearchChange((event.currentTarget as HTMLInputElement).value)}
-          placeholder="Search system stats"
-          className={`${INPUT_CLASS} w-full pl-10 pr-10`}
-        />
-        {search !== "" ? (
-          <button
-            type="button"
-            onClick={() => onSearchChange("")}
-            aria-label="Clear search"
-            className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-700 dark:hover:bg-white/[0.06] dark:hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        ) : null}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Status filters">
-        <div className={`inline-flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
-          <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={2.2} />
-          Status
-        </div>
-        {STATUS_OPTIONS.map((status) => {
-          const active = filters.status.includes(status.value);
-          return (
+    <div className={`${SUBPANEL_CLASS} flex min-w-0 flex-col gap-4 p-4 md:p-5`}>
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+        <div className="relative min-w-0">
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" strokeWidth={2} />
+          <input
+            type="search"
+            value={search}
+            onInput={(event) => onSearchChange((event.currentTarget as HTMLInputElement).value)}
+            placeholder="Search system stats"
+            className={`${INPUT_CLASS} w-full pl-10 pr-10`}
+          />
+          {search !== "" ? (
             <button
-              key={status.value}
               type="button"
-              aria-pressed={active}
-              onClick={() => onFiltersChange({ ...filters, status: toggleValue(filters.status, status.value) })}
-              className={buildChipClass(active, status.activeClass)}
+              onClick={() => onSearchChange("")}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:hover:bg-white/[0.06] dark:hover:text-slate-200 dark:focus-visible:ring-offset-void-900"
             >
-              {status.label}
+              <X className="h-4 w-4" />
             </button>
-          );
-        })}
-      </div>
+          ) : null}
+        </div>
 
-      {availablePurposes.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Purposes filters">
-          <div className={`px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
-            Purposes
+        <div className="flex flex-wrap items-center justify-start gap-2 lg:justify-end">
+          <div className={`inline-flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
+            <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={2.2} />
+            Status
           </div>
-          {availablePurposes.map((purpose) => {
-            const active = filters.purpose.includes(purpose);
+          {STATUS_OPTIONS.map((status) => {
+            const active = filters.status.includes(status.value);
             return (
               <button
-                key={purpose}
+                key={status.value}
                 type="button"
                 aria-pressed={active}
-                onClick={() => onFiltersChange({ ...filters, purpose: toggleValue(filters.purpose, purpose) })}
-                className={buildChipClass(active, "border-signal-500/40 bg-signal-500/15 text-signal-400")}
+                onClick={() => onFiltersChange({ ...filters, status: toggleValue(filters.status, status.value) })}
+                className={buildChipClass(active, status.activeClass)}
               >
-                {formatChipLabel(purpose)}
+                {status.label}
               </button>
             );
           })}
         </div>
-      ) : null}
+      </div>
 
-      {availableProviders.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Providers filters">
-          <div className={`px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
-            Providers
+      <div className="flex flex-wrap items-start gap-3">
+        {availablePurposes.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Purposes filters">
+            <div className={`px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
+              Purposes
+            </div>
+            {availablePurposes.map((purpose) => {
+              const active = filters.purpose.includes(purpose);
+              return (
+                <button
+                  key={purpose}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => onFiltersChange({ ...filters, purpose: toggleValue(filters.purpose, purpose) })}
+                  className={buildChipClass(active, "border-signal-500/40 bg-signal-500/15 text-signal-400")}
+                >
+                  {formatChipLabel(purpose)}
+                </button>
+              );
+            })}
           </div>
-          {availableProviders.map((provider) => {
-            const active = filters.provider.includes(provider);
+        ) : null}
+
+        {availableProviders.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Providers filters">
+            <div className={`px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
+              Providers
+            </div>
+            {availableProviders.map((provider) => {
+              const active = filters.provider.includes(provider);
+              return (
+                <button
+                  key={provider}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => onFiltersChange({ ...filters, provider: toggleValue(filters.provider, provider) })}
+                  className={buildChipClass(active, "border-indigo-500/40 bg-indigo-500/15 text-indigo-300")}
+                >
+                  {formatChipLabel(provider)}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Error Category filters">
+          <div className={`inline-flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
+            Error Category
+          </div>
+          {["timeout", "rateLimit", "apiError", "modelError", "cancelled"].map((errorCat) => {
+            const active = filters.errorCategories?.includes(errorCat) ?? false;
             return (
               <button
-                key={provider}
+                key={errorCat}
                 type="button"
                 aria-pressed={active}
-                onClick={() => onFiltersChange({ ...filters, provider: toggleValue(filters.provider, provider) })}
-                className={buildChipClass(active, "border-indigo-500/40 bg-indigo-500/15 text-indigo-300")}
+                onClick={() => onFiltersChange({ ...filters, errorCategories: toggleValue(filters.errorCategories || [], errorCat) })}
+                className={buildChipClass(active, "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300")}
               >
-                {formatChipLabel(provider)}
+                {formatChipLabel(errorCat)}
               </button>
             );
           })}
         </div>
-      ) : null}
-
-      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Error Category filters">
-        <div className={`inline-flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
-          Error Category
-        </div>
-        {["timeout", "rateLimit", "apiError", "modelError", "cancelled"].map((errorCat) => {
-          const active = filters.errorCategories?.includes(errorCat) ?? false;
-          return (
-            <button
-              key={errorCat}
-              type="button"
-              aria-pressed={active}
-              onClick={() => onFiltersChange({ ...filters, errorCategories: toggleValue(filters.errorCategories || [], errorCat) })}
-              className={buildChipClass(active, "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300")}
-            >
-              {formatChipLabel(errorCat)}
-            </button>
-          );
-        })}
       </div>
 
-      <div className="flex w-full items-center justify-between gap-2 lg:ml-auto lg:w-auto lg:justify-end">
-        {hasActiveFilters ? (
-          <button
-            type="button"
-            onClick={() => {
-              onFiltersChange({ status: [], purpose: [], provider: [], errorCategories: [] });
-              onSearchChange("");
-            }}
-            className="text-xs text-slate-400 hover:text-slate-700"
-          >
-            Clear all
-          </button>
-        ) : null}
-        <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
-          Showing {filteredCount} {page !== undefined ? `of ${totalCount}` : `of ${totalCount}`}
+      <div className="flex flex-col gap-3 border-t border-black/[0.06] pt-3 dark:border-white/[0.06] lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
+          {hasActiveFilters ? (
+            <button
+              type="button"
+              onClick={() => {
+                onFiltersChange({ status: [], purpose: [], provider: [], errorCategories: [] });
+                onSearchChange("");
+              }}
+              className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400 transition-colors hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:hover:text-slate-200 dark:focus-visible:ring-offset-void-900"
+            >
+              Clear all
+            </button>
+          ) : null}
+          <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
+            Showing {shownCount} of {totalShown}
+          </div>
+          {page !== undefined ? (
+            <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
+              Page {page + 1}
+            </div>
+          ) : null}
         </div>
-        {page !== undefined && onPageChange && (
-          <div className="flex items-center gap-2 border-l border-slate-200 pl-4 dark:border-white/10">
+
+        {page !== undefined && onPageChange ? (
+          <div className="flex items-center gap-2 lg:justify-end">
             <button
               type="button"
               disabled={page === 0}
               onClick={() => onPageChange(page - 1)}
-              className="text-xs font-bold text-slate-500 hover:text-slate-700 disabled:opacity-50 dark:text-slate-400 dark:hover:text-slate-300"
+              className="rounded-full border border-black/[0.06] bg-white/72 px-3 py-1.5 text-xs font-bold text-slate-500 transition-colors hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-400 dark:hover:text-slate-300 dark:focus-visible:ring-offset-void-900"
             >
               Prev
             </button>
-            <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
-              Page {page + 1}
-            </span>
             <button
               type="button"
               disabled={!hasMore}
               onClick={() => onPageChange(page + 1)}
-              className="text-xs font-bold text-slate-500 hover:text-slate-700 disabled:opacity-50 dark:text-slate-400 dark:hover:text-slate-300"
+              className="rounded-full border border-black/[0.06] bg-white/72 px-3 py-1.5 text-xs font-bold text-slate-500 transition-colors hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-400 dark:hover:text-slate-300 dark:focus-visible:ring-offset-void-900"
             >
               Next
             </button>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );
