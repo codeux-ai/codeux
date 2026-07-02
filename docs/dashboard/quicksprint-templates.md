@@ -55,6 +55,7 @@ The Quicksprint panel separates templates into two groups:
 - `Custom Templates`
 
 Default templates are now organized by `purpose`.
+The browse panel renders both groups in horizontally scrollable rails so large catalogs stay readable without cutting off rows on smaller viewports. Each rail exposes left/right controls for page-style scrolling while still allowing normal touch and keyboard navigation.
 
 The execution sidebar now lets operators raise the subtask count up to 30 or switch on `No limit`, which disables the slider and asks the planner to choose an appropriate task count for the run.
 
