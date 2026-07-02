@@ -6,6 +6,8 @@ Sprint imports support three production paths from the Sprints page: structured 
 
 Use `Import -> Markdown` to create a sprint from a sprint metadata document plus an optional task bundle.
 
+The Import flyout stays in the sprint page overlay layer while open, so it remains above the sprint gallery cells and their hover controls without covering full-screen import modals.
+
 Sprint markdown supports:
 
 ```md

@@ -28,6 +28,9 @@ describe("SprintImportMenu", () => {
     const trigger = screen.getAllByRole("button").find(btn => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown"));
     fireEvent.click(trigger);
 
+    const menu = screen.getByRole("menu");
+    expect(menu).toHaveClass("z-[230]");
+    expect(menu.parentElement).toHaveClass("z-[230]");
     expect(screen.getAllByText("GitHub Issues")[0]).toBeInTheDocument();
 
     const markdownBtn = screen.getByRole("menuitem", { name: /markdown/i });
