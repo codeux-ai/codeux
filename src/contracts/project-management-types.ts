@@ -48,6 +48,47 @@ export interface SprintReviewSummary {
 
 export type LinkedIssueProvider = "github" | "gitlab" | "jira";
 export type LinkedIssueCloseState = "open" | "closed" | "close_failed";
+export type RepositoryIssueSearchState = "open" | "closed" | "all";
+export type RepositoryIssueSearchSortField = "updated" | "created" | "comments";
+export type RepositoryIssueSearchSortDirection = "asc" | "desc";
+export type JiraIssueSearchStatus = "open" | "in_progress" | "done" | "all";
+export type JiraIssueSearchAssignee = "any" | "me" | "unassigned";
+export type JiraIssueSearchSortField = "updated" | "created" | "priority" | "status" | "assignee" | "reporter";
+export type JiraIssueSearchSortDirection = "asc" | "desc";
+
+export interface RepositoryIssueSearchInput {
+  provider?: Exclude<LinkedIssueProvider, "jira">;
+  repository?: string;
+  hostDomain?: string;
+  search?: string;
+  state?: RepositoryIssueSearchState;
+  labels?: string[];
+  assignee?: string;
+  author?: string;
+  reporter?: string;
+  milestone?: string;
+  issueText?: string;
+  createdAfter?: string;
+  createdBefore?: string;
+  updatedAfter?: string;
+  updatedBefore?: string;
+  sortField?: RepositoryIssueSearchSortField;
+  sortDirection?: RepositoryIssueSearchSortDirection;
+  limit?: number;
+}
+
+export interface RepositoryIssueSearchResult extends SprintLinkedIssueInput {
+  bodyPreview: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  issueAuthor: string | null;
+  issueReporter: string | null;
+  issueMilestone: string | null;
+  issueType: string | null;
+  issuePriority: string | null;
+  issueCommentCount: number | null;
+  sourceProvider: Exclude<LinkedIssueProvider, "jira">;
+}
 
 export interface SprintLinkedIssueRecord {
   id: string;
@@ -102,6 +143,46 @@ export interface IssuePromptContext extends SprintLinkedIssueInput {
   issueAuthor: string | null;
   issueCreatedAt: string | null;
   issueUpdatedAt: string | null;
+}
+
+export interface JiraIssueSearchInput {
+  jql?: string;
+  projectKey?: string;
+  search?: string;
+  issueKey?: string;
+  status?: JiraIssueSearchStatus;
+  assignee?: JiraIssueSearchAssignee;
+  assigneeText?: string;
+  reporterText?: string;
+  issueType?: string;
+  priority?: string;
+  labels?: string[];
+  updatedAfter?: string;
+  updatedBefore?: string;
+  sortField?: JiraIssueSearchSortField;
+  sortDirection?: JiraIssueSearchSortDirection;
+  limit?: number;
+  maxResults?: number;
+}
+
+export interface JiraIssueSearchResult {
+  key: string;
+  title: string;
+  url: string;
+  state: string;
+  labels: string[];
+  assignees: string[];
+  projectKey: string;
+  issueType: string | null;
+  priority: string | null;
+  bodyPreview: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  issueAuthor: string | null;
+  issueReporter: string | null;
+  issueMilestone: string | null;
+  issueCommentCount: number | null;
+  sourceProvider: "jira";
 }
 
 export interface SprintRecord {

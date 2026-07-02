@@ -2,9 +2,9 @@ import type { ProjectManagementRepository } from "../../repositories/project-man
 import type { ExecutionControlService } from "../../services/execution-control-service.js";
 import type { ExecutionRepository } from "../../repositories/execution-repository.js";
 import type { ManagementResponseEnvelope, ManagementApproval, ManageCodeUxArgs } from "../../contracts/internal-management-types.js";
-import type { CreateSprintInput, UpdateSprintInput, PlanSprintOptions, PlanningOverrides, LinkedIssueProvider } from "../../contracts/project-management-types.js";
+import type { CreateSprintInput, UpdateSprintInput, PlanSprintOptions, PlanningOverrides } from "../../contracts/project-management-types.js";
 import type { PlanningAgentService } from "../../services/planning-agent-service.js";
-import type { SprintIssueService } from "../../services/sprint-issue-service.js";
+import type { IssueSearchInput, SprintIssueService } from "../../services/sprint-issue-service.js";
 
 const VALID_SPRINT_STATUSES = ["running", "paused", "completed", "failed", "cancelled", "idle"] as const;
 
@@ -203,9 +203,11 @@ export class SprintActions {
       case "import_issues": {
         const projectId = readRequiredString(payload, "projectId");
         const sprintId = readString(payload, "sprintId");
-        const searchInput = {
+        const searchInput: IssueSearchInput = {
           search: readString(payload, "search"),
-          provider: payload.provider as LinkedIssueProvider | undefined,
+          provider: payload.provider === "github" || payload.provider === "gitlab"
+            ? payload.provider
+            : undefined,
           limit: typeof payload.limit === 'number' ? payload.limit : undefined,
         };
 

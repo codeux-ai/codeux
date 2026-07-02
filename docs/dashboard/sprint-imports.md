@@ -42,6 +42,8 @@ Supported task fields include `title`, `depends_on`, `is_independent`, `merged` 
 
 Use `Import -> GitHub Issues` or `Import -> GitLab Issues` to search the selected project's remote backlog. The import modal supports provider selection, repository override, full-text search, state filtering, label filtering, and multi-select.
 
+The underlying issue search APIs also support power-user filters for assignee, author/reporter text, milestone, direct issue-number lookup, created/updated date windows, sort field, sort direction, and bounded result limits. Imported search cards preserve the existing title, body preview, repository, issue key, labels, and assignee data while also surfacing richer metadata such as authors, milestones, timestamps, and comment counts when the provider returns it.
+
 For local projects, the dashboard reads the repository's `remote.origin.url` from `.git/config` when available. This pre-fills the provider and `owner/repository` target for projects that were added from a local checkout instead of a Git clone URL.
 
 Imported issues appear in the sprint composer under the Sprint Prompt field as linked issue cards. Each card shows the provider, repository, issue key, title, labels, assignees, and a direct link to the source issue. The import view includes an `Append Conversation` toggle on each issue card. When enabled, the sprint prompt receives the full issue body plus issue comments/notes; when disabled, it receives the full issue body without the conversation.
@@ -57,6 +59,8 @@ When the GitHub token is empty, GitHub issue search, issue context loading, and 
 ## Jira Issue Import
 
 Use `Import -> Jira Issues` to search Jira with guided filters, multi-select issues, and attach them to the sprint composer. The Jira modal follows the same interaction model as the GitHub/GitLab importer: project key, search text, status, assignee text, optional labels, selectable issue cards, source links, and per-issue `Append Conversation` toggles.
+
+The Jira search endpoint also accepts an exact issue key, reporter text, issue type, priority, updated-date windows, sort field, sort direction, and a bounded result limit. A raw JQL override remains available for advanced users who want to bypass guided filter composition.
 
 Operators do not need to write JQL in the dashboard. The server builds the Jira query from the selected filters, defaults to open issues sorted by recent updates, and uses `Settings -> Integrations -> Jira -> Default project` to prefill the project key when available.
 

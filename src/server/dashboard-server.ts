@@ -6,7 +6,6 @@ import { createServer, request as httpRequest } from "http";
 import type { IncomingMessage } from "http";
 import net from "net";
 import type { Duplex } from "stream";
-import type { JiraIssueSearchInput, JiraIssueSearchResult } from "../services/jira-api-client.js";
 import type {
   DashboardStatus,
   ExecutionAttentionItemSummary,
@@ -94,6 +93,8 @@ import type {
   UpdateTaskInput,
   SprintLinkedIssueInput,
   SprintLinkedIssueRecord,
+  JiraIssueSearchInput,
+  JiraIssueSearchResult,
 } from "../contracts/project-management-types.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";

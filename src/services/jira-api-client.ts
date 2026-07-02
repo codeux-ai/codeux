@@ -1,34 +1,14 @@
-export interface JiraIssueSearchResult {
-  key: string;
-  title: string;
-  url: string;
-  state: string;
-  labels: string[];
-  assignees: string[];
-  projectKey: string;
-  issueType: string | null;
-  priority: string | null;
-  bodyPreview: string;
-  updatedAt: string | null;
-}
+import type {
+  JiraIssueSearchAssignee,
+  JiraIssueSearchInput,
+  JiraIssueSearchResult,
+  JiraIssueSearchSortField,
+  JiraIssueSearchStatus,
+} from "../contracts/project-management-types.js";
 
 export interface JiraIssueDetail extends JiraIssueSearchResult {
   descriptionMarkdown: string | null;
   commentsMarkdown: string | null;
-}
-
-export type JiraIssueSearchStatus = "open" | "in_progress" | "done" | "all";
-export type JiraIssueSearchAssignee = "any" | "me" | "unassigned";
-
-export interface JiraIssueSearchInput {
-  jql?: string;
-  projectKey?: string;
-  search?: string;
-  status?: JiraIssueSearchStatus;
-  assignee?: JiraIssueSearchAssignee;
-  assigneeText?: string;
-  labels?: string[];
-  maxResults?: number;
 }
 
 export interface JiraTransition {
@@ -63,13 +43,17 @@ interface JiraIssueFields {
   summary?: string;
   status?: { name?: string; statusCategory?: { name?: string; key?: string } };
   assignee?: JiraUser;
+  reporter?: JiraUser;
   labels?: string[];
   project?: { key?: string };
   description?: JiraAdfNode;
   issuetype?: { name?: string };
   priority?: { name?: string };
+  created?: string;
   updated?: string;
+  fixVersions?: Array<{ name?: string }>;
   comment?: {
+    total?: number;
     comments?: Array<{ body?: JiraAdfNode }>;
   };
 }
@@ -175,9 +159,18 @@ export function buildJiraSearchJql(input: JiraIssueSearchInput, defaultProjectKe
     clauses.push(`project = ${projectKey}`);
   }
 
+  const issueKey = input.issueKey?.trim();
+  if (issueKey) {
+    clauses.push(`key = ${issueKey.toUpperCase()}`);
+  }
+
   const search = input.search?.trim();
   if (search) {
-    clauses.push(`text ~ ${quoteJqlString(search)}`);
+    if (!issueKey && isExactJiraIssueKey(search)) {
+      clauses.push(`key = ${search.toUpperCase()}`);
+    } else {
+      clauses.push(`text ~ ${quoteJqlString(search)}`);
+    }
   }
 
   const status = input.status || 'open';
@@ -205,12 +198,40 @@ export function buildJiraSearchJql(input: JiraIssueSearchInput, defaultProjectKe
     clauses.push('assignee is EMPTY');
   }
 
+  const reporterText = input.reporterText?.trim();
+  if (reporterText) {
+    const normalizedReporterText = reporterText.toLowerCase();
+    if (normalizedReporterText === 'me' || normalizedReporterText === 'currentuser()') {
+      clauses.push('reporter = currentUser()');
+    } else {
+      clauses.push(`reporter = ${quoteJqlString(reporterText)}`);
+    }
+  }
+
+  if (input.issueType?.trim()) {
+    clauses.push(`issuetype = ${quoteJqlString(input.issueType.trim())}`);
+  }
+
+  if (input.priority?.trim()) {
+    clauses.push(`priority = ${quoteJqlString(input.priority.trim())}`);
+  }
+
+  if (input.updatedAfter?.trim()) {
+    clauses.push(`updated >= ${quoteJqlString(input.updatedAfter.trim())}`);
+  }
+  if (input.updatedBefore?.trim()) {
+    clauses.push(`updated <= ${quoteJqlString(input.updatedBefore.trim())}`);
+  }
+
   const labels = Array.from(new Set((input.labels || []).map((label) => label.trim()).filter(Boolean))).slice(0, 12);
   if (labels.length > 0) {
     clauses.push(`labels in (${labels.map(quoteJqlString).join(', ')})`);
   }
 
-  return `${clauses.length > 0 ? clauses.join(' AND ') : 'ORDER BY updated DESC'}${clauses.length > 0 ? ' ORDER BY updated DESC' : ''}`;
+  const sortField = normalizeJiraSortField(input.sortField);
+  const sortDirection = input.sortDirection === 'asc' ? 'ASC' : 'DESC';
+  const orderClause = `ORDER BY ${sortField} ${sortDirection}`;
+  return `${clauses.length > 0 ? clauses.join(' AND ') : orderClause}${clauses.length > 0 ? ` ${orderClause}` : ''}`;
 }
 
 export async function searchIssues(
@@ -223,8 +244,8 @@ export async function searchIssues(
   const normalizedHost = normalizeHost(host);
   const searchInput = typeof input === 'string' ? { jql: input } : input;
   const jql = buildJiraSearchJql(searchInput);
-  const resultLimit = clampMaxResults(searchInput.maxResults || maxResults);
-  const fields = ['summary', 'status', 'assignee', 'labels', 'project', 'description', 'issuetype', 'priority', 'updated'];
+  const resultLimit = clampMaxResults(searchInput.limit ?? searchInput.maxResults ?? maxResults);
+  const fields = ['summary', 'status', 'assignee', 'labels', 'project', 'description', 'issuetype', 'priority', 'updated', 'created', 'reporter', 'fixVersions', 'comment'];
 
   const data = await fetchJira(`${normalizedHost}/rest/api/3/search/jql`, 'POST', email, apiToken, {
     jql,
@@ -234,6 +255,7 @@ export async function searchIssues(
 
   return (data.issues || []).map((issue: JiraIssueRaw) => {
     const assigneeName = issue.fields?.assignee?.displayName || issue.fields?.assignee?.accountId || issue.fields?.assignee?.name || '';
+    const reporterName = issue.fields?.reporter?.displayName || issue.fields?.reporter?.accountId || issue.fields?.reporter?.name || null;
     return {
       key: issue.key,
       title: issue.fields?.summary || '',
@@ -245,7 +267,17 @@ export async function searchIssues(
       issueType: issue.fields?.issuetype?.name || null,
       priority: issue.fields?.priority?.name || null,
       bodyPreview: truncatePreview(extractAdfText(issue.fields?.description) || ''),
+      createdAt: issue.fields?.created || null,
       updatedAt: issue.fields?.updated || null,
+      issueAuthor: reporterName,
+      issueReporter: reporterName,
+      issueMilestone: issue.fields?.fixVersions?.[0]?.name || null,
+      issueCommentCount: typeof issue.fields?.comment?.total === 'number'
+        ? issue.fields.comment.total
+        : Array.isArray(issue.fields?.comment?.comments)
+          ? issue.fields.comment.comments.length
+          : null,
+      sourceProvider: "jira",
     };
   });
 }
@@ -257,11 +289,12 @@ export async function getIssue(
   issueKey: string
 ): Promise<JiraIssueDetail> {
   const normalizedHost = normalizeHost(host);
-  const url = `${normalizedHost}/rest/api/3/issue/${issueKey}?fields=summary,status,assignee,labels,project,description,comment`;
+  const url = `${normalizedHost}/rest/api/3/issue/${issueKey}?fields=summary,status,assignee,labels,project,description,comment,created,reporter,issuetype,priority,fixVersions`;
 
   const data = await fetchJira(url, 'GET', email, apiToken) as JiraIssueRaw;
 
   const assigneeName = data.fields?.assignee?.displayName || data.fields?.assignee?.accountId || data.fields?.assignee?.name || '';
+  const reporterName = data.fields?.reporter?.displayName || data.fields?.reporter?.accountId || data.fields?.reporter?.name || null;
   const searchResult: JiraIssueSearchResult = {
     key: data.key,
     title: data.fields?.summary || '',
@@ -273,7 +306,17 @@ export async function getIssue(
     issueType: data.fields?.issuetype?.name || null,
     priority: data.fields?.priority?.name || null,
     bodyPreview: truncatePreview(extractAdfText(data.fields?.description) || ''),
+    createdAt: data.fields?.created || null,
     updatedAt: data.fields?.updated || null,
+    issueAuthor: reporterName,
+    issueReporter: reporterName,
+    issueMilestone: data.fields?.fixVersions?.[0]?.name || null,
+    issueCommentCount: typeof data.fields?.comment?.total === 'number'
+      ? data.fields.comment.total
+      : Array.isArray(data.fields?.comment?.comments)
+        ? data.fields.comment.comments.length
+        : null,
+    sourceProvider: "jira",
   };
 
   let commentsMarkdown: string | null = null;
@@ -300,6 +343,19 @@ function normalizeProjectKey(projectKey: string): string {
 
 function quoteJqlString(value: string): string {
   return `"${value.trim().replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+function isExactJiraIssueKey(value: string): boolean {
+  return /^[A-Z][A-Z0-9_]+-\d+$/i.test(value.trim());
+}
+
+function normalizeJiraSortField(value?: JiraIssueSearchSortField): string {
+  if (value === "created") return "created";
+  if (value === "priority") return "priority";
+  if (value === "status") return "status";
+  if (value === "assignee") return "assignee";
+  if (value === "reporter") return "reporter";
+  return "updated";
 }
 
 function clampMaxResults(value: number): number {
