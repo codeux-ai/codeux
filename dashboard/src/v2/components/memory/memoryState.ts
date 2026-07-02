@@ -8,7 +8,7 @@ export const selectedSprintIdSignal = signal<string | undefined>(undefined);
 export const selectedAgentPresetIdSignal = signal<string | undefined>(undefined);
 export const lobotomizeModeSignal = signal(false);
 export const memoriesSignal = signal<any[]>([]);
-export const memorySidebarExpandedSignal = signal<boolean>(true);
+export const memorySidebarExpandedSignal = signal<boolean>(false);
 
 export const memoryMutationsSignal = signal<any>({
     addMemory: async (input: any, pid: string) => {},
