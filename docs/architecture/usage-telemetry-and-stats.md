@@ -192,6 +192,8 @@ The stats snapshot includes:
 - provider split
 - execution-purpose split
 - token-source mix
+- the trend workspace now presents a compact metric strip, an interactive plot, and a persistent control rail with grouped series switches, zoom controls, and an accessible live summary for the focused bucket
+- the usage chart summary surfaces selected-window averages, invocation density, peak active time, and total cost directly from bucket telemetry so the analysis surface reads like a telemetry panel instead of a single-scale line graph
 
 ## UI Surface
 

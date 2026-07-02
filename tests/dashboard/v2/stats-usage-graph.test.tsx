@@ -89,6 +89,7 @@ describe("Chart View Models", () => {
     const metrics = calculateChartMetrics(buckets);
     expect(metrics.peakTokens).toBe(20);
     expect(metrics.peakTime).toBe(200);
+    expect(metrics.peakActiveTimeMs).toBe(200);
     expect(metrics.peakInvocations).toBe(2);
     expect(metrics.averageTokens).toBe(15);
   });
@@ -181,8 +182,8 @@ describe("UsageFilterMenu", () => {
       />
     );
 
-    const tokensBtn = getByRole("button", { name: /Tokens/i });
-    const activeBtn = getByRole("button", { name: /Active Time/i });
+    const tokensBtn = getByRole("switch", { name: /Tokens/i });
+    const activeBtn = getByRole("switch", { name: /Active Time/i });
 
     // Since tokens is the only active series, it should be disabled to prevent 0 active series
     expect(tokensBtn).toHaveAttribute("aria-disabled", "true");
@@ -335,7 +336,7 @@ describe("InteractiveUsageChart", () => {
 
     render(<InteractiveUsageChart stats={stats} loading={false} error={null} refresh={vi.fn()} chartState={chartState} />);
 
-    expect(screen.getByText(/No data for this window/i)).toBeInTheDocument();
+    expect(screen.getByText(/No telemetry buckets are available for this window yet/i)).toBeInTheDocument();
 
     // Check that we DO NOT show a reset button inside the empty state.
     // But since enabledSeries is {tokens: true}, the UsageFilterMenu will show "Reset filters" when opened.
