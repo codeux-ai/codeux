@@ -17,6 +17,7 @@ describe("Dashboard Execution Invocation API", () => {
       listProjectInvocations: vi.fn(),
       listInvocationMessages: vi.fn(),
       restartExecutionInvocation: vi.fn(),
+      cancelExecutionInvocation: vi.fn(),
       // Add required mocks to pass setupDashboardServer validation even if unused in these tests
       dashboardDir: "/mock/dir",
       port: 3000,
@@ -227,6 +228,35 @@ describe("Dashboard Execution Invocation API", () => {
 
       expect(response.status).toBe(404);
       expect(response.body).toEqual({ error: "Invocation restart is not enabled." });
+    });
+  });
+
+  describe("POST /api/execution/invocations/:invocationId/cancel", () => {
+    it("cancels a running invocation", async () => {
+      vi.mocked(mockOptions.cancelExecutionInvocation!).mockResolvedValue({
+        cancelled: true,
+        invocationId: "inv-1",
+        stoppedContainerIds: ["container-1"],
+      });
+
+      const response = await request(app).post("/api/execution/invocations/inv-1/cancel");
+
+      expect(response.status).toBe(202);
+      expect(response.body).toEqual({
+        cancelled: true,
+        invocationId: "inv-1",
+        stoppedContainerIds: ["container-1"],
+      });
+      expect(mockOptions.cancelExecutionInvocation).toHaveBeenCalledWith("inv-1");
+    });
+
+    it("reports when invocation cancellation is disabled", async () => {
+      mockOptions.cancelExecutionInvocation = undefined;
+
+      const response = await request(app).post("/api/execution/invocations/inv-1/cancel");
+
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({ error: "Invocation cancellation is not enabled." });
     });
   });
 });

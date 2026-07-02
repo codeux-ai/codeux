@@ -93,6 +93,20 @@ interface PlanningResultContext {
 
 export type PlanningInvocationRestartMode = "retry_full_prompt" | "continue_session";
 
+function isExecutionInvocationActiveForFinalize(
+  executionRepository: PlanningAgentServiceDeps["executionRepository"],
+  invocationId: string | undefined,
+): boolean {
+  if (!invocationId) {
+    return false;
+  }
+  if (typeof executionRepository?.getExecutionInvocation !== "function") {
+    return true;
+  }
+  const current = executionRepository?.getExecutionInvocation(invocationId);
+  return current?.status !== "cancelled";
+}
+
 interface PlanningContinuationContext {
   promptOverride?: string;
   continueSessionId: string;
@@ -200,7 +214,7 @@ export class PlanningAgentService {
       payload = virtualResult.parsed;
       cleanupWorkspace = virtualResult.cleanupWorkspace;
 
-      if (invocation) {
+      if (invocation && isExecutionInvocationActiveForFinalize(this.deps.executionRepository, invocation.id)) {
         this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
           status: "completed",
           finishedAt: new Date().toISOString(),
@@ -219,7 +233,7 @@ export class PlanningAgentService {
     } catch (error) {
 //
 
-      if (invocation) {
+      if (invocation && isExecutionInvocationActiveForFinalize(this.deps.executionRepository, invocation.id)) {
         this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
           status: "failed",
           errorMessage: error instanceof Error ? error.message : String(error),
@@ -385,7 +399,7 @@ export class PlanningAgentService {
       payload = virtualResult.parsed;
       cleanupWorkspace = virtualResult.cleanupWorkspace;
 
-      if (invocation) {
+      if (invocation && isExecutionInvocationActiveForFinalize(this.deps.executionRepository, invocation.id)) {
         this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
           status: "completed",
           finishedAt: new Date().toISOString(),
@@ -411,7 +425,7 @@ export class PlanningAgentService {
         );
       }
 
-      if (invocation) {
+      if (invocation && isExecutionInvocationActiveForFinalize(this.deps.executionRepository, invocation.id)) {
         this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
           status: "failed",
           errorMessage: error instanceof Error ? error.message : String(error),

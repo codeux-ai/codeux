@@ -191,6 +191,9 @@ describe("dashboard-lifecycle-service", () => {
         cancelTaskDispatch: vi.fn().mockResolvedValue({ id: "dispatch-1" }),
         retryTaskDispatch: vi.fn().mockResolvedValue({ id: "task-1" }),
       } as any,
+      executionInvocationControlService: {
+        cancelInvocation: vi.fn().mockResolvedValue({ cancelled: true, invocationId: "inv-1", stoppedContainerIds: [] }),
+      } as any,
       dashboardRealtimeService: {
         scheduleProjectLiveRefresh: vi.fn(),
         expediteProjectLiveRefresh: vi.fn(),
@@ -465,6 +468,13 @@ describe("dashboard-lifecycle-service", () => {
       const messages = setupArgs.listInvocationMessages!("inv-1");
       expect(mockDeps.executionRepository.listExecutionInvocationMessages).toHaveBeenCalledWith("inv-1");
       expect(messages).toEqual([{ id: "msg-1" }]);
+
+      await expect(setupArgs.cancelExecutionInvocation!("inv-1")).resolves.toEqual({
+        cancelled: true,
+        invocationId: "inv-1",
+        stoppedContainerIds: [],
+      });
+      expect(mockDeps.executionInvocationControlService.cancelInvocation).toHaveBeenCalledWith("inv-1");
     });
 
     describe("DashboardSnapshotCache Integration", () => {

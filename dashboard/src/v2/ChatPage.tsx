@@ -2,6 +2,7 @@ import type { ComponentChildren, FunctionComponent } from "preact";
 import { useCallback, useEffect, useRef, useState, useMemo } from "preact/hooks";
 import {
   ArrowUp,
+  Ban,
   RefreshCw,
 } from "lucide-preact";
 import { buildPresetIndex } from "./lib/chat-entity-index.js";
@@ -28,7 +29,7 @@ import { ProviderLogo } from "./components/ui/ProviderLogo.js";
 import { AgentAvatarSvg } from "./components/agents/AgentAvatarSvg.js";
 import { generateRandomAgentAvatar } from "./lib/agent-avatar.js";
 import type { ExecutionInvocationRecord } from "./types.js";
-import { restartExecutionInvocation, type InvocationRestartMode } from "./lib/invocation-api.js";
+import { cancelExecutionInvocation, restartExecutionInvocation, type InvocationRestartMode } from "./lib/invocation-api.js";
 import { useActionFeedback } from "./hooks/use-action-feedback.js";
 import {
   formatTokenCount,
@@ -58,6 +59,7 @@ export const ChatPage: FunctionComponent = () => {
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const [workingTimerPhase, setWorkingTimerPhase] = useState<"starting" | "working" | null>(null);
   const [restartingInvocation, setRestartingInvocation] = useState<{ id: string; mode: InvocationRestartMode } | null>(null);
+  const [cancellingInvocationId, setCancellingInvocationId] = useState<string | null>(null);
   const invocationFeedback = useActionFeedback();
 
   const {
@@ -132,6 +134,28 @@ export const ChatPage: FunctionComponent = () => {
       });
     } finally {
       setRestartingInvocation(null);
+    }
+  }, [activateInvocation, invocationFeedback, refreshThreads, selectedInvocation]);
+
+  const handleCancelInvocation = useCallback(async () => {
+    if (!selectedInvocation || selectedInvocation.status !== "running") {
+      return;
+    }
+    setCancellingInvocationId(selectedInvocation.id);
+    invocationFeedback.setPending("Cancelling invocation...", { autoDismiss: false });
+    try {
+      const result = await cancelExecutionInvocation(selectedInvocation.id);
+      invocationFeedback.setSuccess(result.cancelled ? "Invocation cancelled." : (result.message || "Invocation was already stopped."));
+      await refreshThreads({ mode: "invocations" });
+      void activateInvocation(selectedInvocation.id, { foreground: true });
+    } catch (error) {
+      invocationFeedback.setError(error instanceof Error ? error.message : String(error), {
+        retryAction: () => void handleCancelInvocation(),
+        retryLabel: "Retry",
+        autoDismiss: false,
+      });
+    } finally {
+      setCancellingInvocationId(null);
     }
   }, [activateInvocation, invocationFeedback, refreshThreads, selectedInvocation]);
 
@@ -418,6 +442,7 @@ export const ChatPage: FunctionComponent = () => {
     // list card's label/value table, only meaningful entries are shown.
     const inv = selectedInvocation;
     const canRestartInvocation = inv?.status === "failed" && inv.type === "planning";
+    const canCancelInvocation = inv?.status === "running";
     const headerStatus = inv
       ? inv.status === "failed"
         ? { dot: "bg-status-red shadow-[0_0_6px_rgba(227,0,15,0.5)]", text: "text-status-red" }
@@ -490,8 +515,21 @@ export const ChatPage: FunctionComponent = () => {
                     </span>
                   )}
                 </div>
-                {canRestartInvocation && (
+                {(canRestartInvocation || canCancelInvocation) && (
                   <div className="flex flex-wrap items-center gap-2">
+                    {canCancelInvocation && (
+                      <button
+                        type="button"
+                        onClick={() => void handleCancelInvocation()}
+                        disabled={cancellingInvocationId === inv.id}
+                        className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-status-red/25 bg-status-red/10 px-3 py-2 text-[12px] font-bold text-status-red transition hover:border-status-red/40 hover:bg-status-red/15 disabled:cursor-wait disabled:opacity-60"
+                      >
+                        <Ban className={`h-3.5 w-3.5 ${cancellingInvocationId === inv.id ? "animate-pulse" : ""}`} />
+                        Cancel
+                      </button>
+                    )}
+                    {canRestartInvocation && (
+                      <>
                     <button
                       type="button"
                       onClick={() => void handleRestartInvocation("retry_full_prompt")}
@@ -510,6 +548,8 @@ export const ChatPage: FunctionComponent = () => {
                       <RefreshCw className={`h-3.5 w-3.5 ${restartingInvocation?.id === inv.id && restartingInvocation.mode === "continue_session" ? "animate-spin" : ""}`} />
                       Continue
                     </button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
