@@ -443,9 +443,10 @@ function isCodexTransportServerError(text: string): boolean {
  * Parses Codex's "try again at 3:54 AM" wall-clock reset hint into the same
  * `HhMmSs` duration string the rest of the pipeline expects, measured from now.
  * Codex reports a clock time without a date, so we resolve it to the next future
- * occurrence of that time (rolling to tomorrow when it has already passed today).
- * The duration then flows through computeResetAtIso like every other provider's
- * reset hint. Returns null when no clock time is present.
+ * occurrence of that time when the resulting wait is still plausible. If that
+ * would roll almost a full day into the future, the hint is treated as uncertain
+ * instead of emitting a misleading next-day retry timestamp. Returns null when
+ * no clock time is present or when the hint looks ambiguous.
  */
 export function computeResetAfterFromClockTime(text: string, nowMs: number = Date.now()): string | null {
   const match = text.match(/try again at\s+(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
@@ -473,6 +474,13 @@ export function computeResetAfterFromClockTime(text: string, nowMs: number = Dat
 
   const diffSeconds = Math.round((target.getTime() - now.getTime()) / 1000);
   if (diffSeconds <= 0) {
+    return null;
+  }
+  // Clock-only hints are intentionally conservative: if the inferred wait is
+  // suspiciously close to a full day, the parser treats it as ambiguous rather
+  // than forcing a misleading next-day cooldown into the retry pipeline.
+  const maxPlausibleDelaySeconds = 18 * 60 * 60;
+  if (diffSeconds > maxPlausibleDelaySeconds) {
     return null;
   }
   const hours = Math.floor(diffSeconds / 3600);

@@ -1734,6 +1734,56 @@ describe("runSessionSyncStep", () => {
     expect(executionRepository.getTaskDispatch(dispatch.id)?.errorMessage).toBe("Provider session QUOTA");
   });
 
+  it("requeues quota sessions with missing cooldown metadata even when failed-task retries are disabled", async () => {
+    const subtasks: Subtask[] = [
+      {
+        id: "task-quota",
+        record_id: "task-rec-1",
+        project_id: "project-1",
+        title: "Quota task",
+        prompt: "",
+        depends_on: [],
+        is_independent: true,
+        status: "RUNNING",
+      },
+    ];
+
+    const deps = {
+      listSessions: vi.fn().mockResolvedValue({
+        sessions: [
+          {
+            id: "quota-session",
+            name: "sessions/quota-session",
+            title: "Sprint 1: [run:my-repo/s1/task-quota] [task-quota] Quota task",
+            state: "QUOTA",
+          },
+        ],
+      }),
+      resolveSessionName: (session: { name?: string }) => session.name,
+      extractSessionId: (session: { id?: string }) => session.id,
+      fetchRecentActivities: vi.fn().mockResolvedValue([]),
+      isActionRequiredState: vi.fn().mockReturnValue(false),
+      executionRepository: {
+        listTaskDispatches: vi.fn().mockReturnValue([
+          {
+            errorMessage: null,
+          },
+        ]),
+      },
+      logger: { warn: vi.fn() },
+    };
+
+    const result = await runSessionSyncStep(
+      subtasks.map((task) => ({ ...task })),
+      deps as any,
+      false,
+      { repoPath: "/tmp/my-repo", sprintNumber: 1 },
+    );
+
+    expect(result.subtasks[0]?.status).toBe("PENDING");
+    expect(result.subtasks[0]?.session_state).toBeUndefined();
+  });
+
   it("keeps quota sessions in QUOTA while a retry-after cooldown is active", async () => {
     const subtasks: Subtask[] = [
       {
