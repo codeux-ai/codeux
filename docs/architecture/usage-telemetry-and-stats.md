@@ -203,6 +203,12 @@ The stats snapshot includes:
 - execution-purpose split
 - token-source mix
 
+## PR Description Rollups
+
+Automated task and sprint PR descriptions read from the same `provider_invocations` table as the dashboard stats surface. Task PRs must query usage by the persisted task record id (`Subtask.record_id`) when it is present, while continuing to render the human task key (`T01`, `T02`, etc.) in the markdown. Runtime rows are written with the DB task id, so querying by the display key would incorrectly show `unknown` model and "No usage data recorded" for task PRs even though the sprint aggregate has usage.
+
+Billing labels in PR descriptions resolve usage against configured provider instances by provider family plus model before falling back to the family default. This matters when multiple `codex`, `claude-code`, `qwen-code`, or `opencode` instances exist: a primary dashboard-login instance and a custom API/local gateway instance can share the same provider family. The PR composer compares the usage row's model with instance-level `model`, `customModel`, `qwenModelId`, and `openCodeModelId` so Gemma or other gateway-backed usage is not attributed to an unrelated subscription/login instance.
+
 ## UI Surface
 
 The dashboard now has a dedicated `/stats` page.
