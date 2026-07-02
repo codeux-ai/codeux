@@ -194,23 +194,37 @@ describe("SprintJiraImportModal", () => {
     });
   });
 
-  it("imports selected Jira issues as linked contexts and emits special task payloads", async () => {
+  it("preserves stored special-task mode through refreshed results and emits special payloads", async () => {
     vi.mocked(fetchProjectEffectiveSettings).mockResolvedValue({
       settings: { jira: { defaultProject: "OPS" } },
     } as never);
-    vi.mocked(searchJiraIssues).mockResolvedValue([
-      baseIssue,
-      {
-        ...baseIssue,
-        key: "OPS-13",
-        title: "Security hardening follow-up",
-        url: "https://acme.atlassian.net/browse/OPS-13",
-        issueType: "Security",
-        priority: "High",
-        labels: ["security", "hardening"],
-        bodyPreview: "This issue tracks a security fix.",
-      },
-    ]);
+    vi.mocked(searchJiraIssues)
+      .mockResolvedValueOnce([
+        baseIssue,
+        {
+          ...baseIssue,
+          key: "OPS-13",
+          title: "Security hardening follow-up",
+          url: "https://acme.atlassian.net/browse/OPS-13",
+          issueType: "Security",
+          priority: "High",
+          labels: ["security", "hardening"],
+          bodyPreview: "This issue tracks a security fix.",
+        },
+      ])
+      .mockResolvedValueOnce([
+        baseIssue,
+        {
+          ...baseIssue,
+          key: "OPS-13",
+          title: "Security hardening follow-up",
+          url: "https://acme.atlassian.net/browse/OPS-13",
+          issueType: "Task",
+          priority: "Medium",
+          labels: ["ops"],
+          bodyPreview: "Routine follow-up work after the original review.",
+        },
+      ]);
     vi.mocked(fetchProjectIssuePromptContexts).mockResolvedValue([
       {
         provider: "jira",
@@ -248,6 +262,12 @@ describe("SprintJiraImportModal", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: /select all visible/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^search$/i }));
+
+    await waitFor(() => {
+      expect(searchJiraIssues).toHaveBeenCalledTimes(2);
+    });
+
     fireEvent.click(screen.getByRole("button", { name: /import issues/i }));
 
     await waitFor(() => {

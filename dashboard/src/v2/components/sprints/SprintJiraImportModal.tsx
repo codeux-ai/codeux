@@ -94,19 +94,23 @@ export const SprintJiraImportModal = ({
     results.filter((issue) => selectedKeys.has(issue.key))
   ), [results, selectedKeys]);
 
+  const getIssueImportMode = (issue: JiraIssueSearchResult): ImportedTaskMode => (
+    importModes[issue.key] ?? inferImportedTaskMode(issue, Boolean(onImportSpecialTasks))
+  );
+
   const selectedLinkedIssues = useMemo(() => (
-    selectedIssues.filter((issue) => (importModes[issue.key] ?? inferImportedTaskMode(issue, Boolean(onImportSpecialTasks))) === "linked")
-  ), [importModes, onImportSpecialTasks, selectedIssues]);
+    selectedIssues.filter((issue) => getIssueImportMode(issue) === "linked")
+  ), [getIssueImportMode, selectedIssues]);
 
   const selectedSpecialTaskPayloads = useMemo(() => (
     selectedIssues.flatMap((issue) => {
-      const mode = importModes[issue.key] ?? inferImportedTaskMode(issue, Boolean(onImportSpecialTasks));
+      const mode = getIssueImportMode(issue);
       if (mode === "linked") {
         return [];
       }
       return [buildImportedTaskPayload(issue, mode, projectKey)];
     })
-  ), [importModes, onImportSpecialTasks, projectKey, selectedIssues]);
+  ), [getIssueImportMode, projectKey, selectedIssues]);
 
   const selectedSpecialTaskCount = selectedSpecialTaskPayloads.length;
   const selectedLinkedIssueCount = selectedLinkedIssues.length;
@@ -274,7 +278,7 @@ export const SprintJiraImportModal = ({
       setImportModes((current) => {
         const next = { ...current };
         for (const issue of results) {
-          next[issue.key] = inferImportedTaskMode(issue, true);
+          next[issue.key] = getIssueImportMode(issue);
         }
         return next;
       });
@@ -309,10 +313,10 @@ export const SprintJiraImportModal = ({
     }
 
     const issuesToLink = onImportSpecialTasks
-      ? selectedIssues.filter((issue) => (importModes[issue.key] ?? inferImportedTaskMode(issue, true)) === "linked")
+      ? selectedIssues.filter((issue) => getIssueImportMode(issue) === "linked")
       : selectedIssues;
     const issuesToImportAsTasks = onImportSpecialTasks
-      ? selectedIssues.filter((issue) => (importModes[issue.key] ?? inferImportedTaskMode(issue, true)) !== "linked")
+      ? selectedIssues.filter((issue) => getIssueImportMode(issue) !== "linked")
       : [];
 
     setImporting(true);
@@ -320,7 +324,7 @@ export const SprintJiraImportModal = ({
     try {
       if (issuesToImportAsTasks.length > 0 && onImportSpecialTasks) {
         onImportSpecialTasks(issuesToImportAsTasks.map((issue) => (
-          buildImportedTaskPayload(issue, inferImportedTaskMode(issue, true) as SprintImportedTaskInput["kind"], projectKey)
+          buildImportedTaskPayload(issue, getIssueImportMode(issue) as SprintImportedTaskInput["kind"], projectKey)
         )));
       }
 
@@ -642,7 +646,7 @@ export const SprintJiraImportModal = ({
                   {results.map((issue) => {
                     const selected = selectedKeys.has(issue.key);
                     const safeUrl = getSafeUrl(issue.url);
-                    const importMode = importModes[issue.key] ?? inferImportedTaskMode(issue, Boolean(onImportSpecialTasks));
+                    const importMode = getIssueImportMode(issue);
                     const isSpecialTask = importMode !== "linked";
                     const updatedLabel = formatTimestamp(issue.updatedAt);
                     return (
