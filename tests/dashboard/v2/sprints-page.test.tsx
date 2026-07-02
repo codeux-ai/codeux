@@ -72,6 +72,15 @@ vi.mock("../../../dashboard/src/v2/components/sprints/SprintIssueImportModal", (
               repository: "acme/widgets",
               labels: ["security"],
             },
+            {
+              kind: "security",
+              title: "Security follow-up: Fix CI",
+              sourceUrl: "https://github.com/acme/widgets/issues/42",
+              sourcePath: "https://github.com/acme/widgets/issues/42",
+              provider: "github",
+              repository: "acme/widgets",
+              labels: ["security"],
+            },
           ])}
         >
           Import special
@@ -242,6 +251,7 @@ describe("SprintsPage", () => {
       showQuicksprint: false,
       setShowQuicksprint: vi.fn(),
       editingSprint: null,
+      handleSubmitSprint: vi.fn(),
     } as any);
 
     render(<SprintsPage />);
@@ -258,6 +268,93 @@ describe("SprintsPage", () => {
     expect(issueImportModalProps).toEqual(expect.objectContaining({
       onImportSpecialTasks: expect.any(Function),
     }));
+
+    expect(screen.getByText("Special Imported Tasks")).toBeInTheDocument();
+    expect(screen.getAllByText("Security follow-up: Fix CI")).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /remove task/i }));
+
+    expect(screen.queryByText("Security follow-up: Fix CI")).not.toBeInTheDocument();
+  });
+
+  it("clears imported task drafts when the selected project changes", () => {
+    const setShowCreateComposer = vi.fn();
+    const useSprintsPageDataMock = vi.mocked(useSprintsPageData);
+
+    useSprintsPageDataMock.mockReturnValue({
+      selectedProject: { id: "proj-1" },
+      planningRoute: { available: true },
+      sortedSprints: [],
+      showcaseSprints: [],
+      activeRunsBySprintId: new Map(),
+      interventionBySprintId: new Map(),
+      nextId: "spr-123",
+      virtualProviders: [],
+      pendingActionIds: new Set(),
+      planningPresets: [],
+      quicksprintTemplates: [],
+      planningEta: 60000,
+      agentPresets: [],
+      defaultPlanningAgentPresetId: null,
+      defaultAgentRoutingMode: "MANUAL",
+      defaultWorkerAgentPresetId: null,
+      showCreateComposer: true,
+      setShowCreateComposer,
+      showQuicksprint: false,
+      setShowQuicksprint: vi.fn(),
+      editingSprint: null,
+      setEditingSprint: vi.fn(),
+      showImportModal: false,
+      setShowImportModal: vi.fn(),
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
+      clearError: vi.fn(),
+      handleSubmitSprint: vi.fn(),
+    } as any);
+
+    const { rerender } = render(<SprintsPage />);
+
+    const importTrigger = screen.getAllByRole("button").find((btn) => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown")) || screen.getAllByRole("button").find((btn) => btn.textContent?.includes("Import"))!;
+    fireEvent.click(importTrigger);
+    fireEvent.click(screen.getByRole("menuitem", { name: /github issues/i }));
+    fireEvent.click(screen.getByTestId("issue-import-special"));
+
+    expect(screen.getAllByText("Security follow-up: Fix CI")).toHaveLength(1);
+
+    useSprintsPageDataMock.mockReturnValue({
+      selectedProject: { id: "proj-2" },
+      planningRoute: { available: true },
+      sortedSprints: [],
+      showcaseSprints: [],
+      activeRunsBySprintId: new Map(),
+      interventionBySprintId: new Map(),
+      nextId: "spr-123",
+      virtualProviders: [],
+      pendingActionIds: new Set(),
+      planningPresets: [],
+      quicksprintTemplates: [],
+      planningEta: 60000,
+      agentPresets: [],
+      defaultPlanningAgentPresetId: null,
+      defaultAgentRoutingMode: "MANUAL",
+      defaultWorkerAgentPresetId: null,
+      showCreateComposer: true,
+      setShowCreateComposer,
+      showQuicksprint: false,
+      setShowQuicksprint: vi.fn(),
+      editingSprint: null,
+      setEditingSprint: vi.fn(),
+      showImportModal: false,
+      setShowImportModal: vi.fn(),
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
+      clearError: vi.fn(),
+      handleSubmitSprint: vi.fn(),
+    } as any);
+
+    rerender(<SprintsPage />);
+
+    expect(screen.queryByText("Security follow-up: Fix CI")).not.toBeInTheDocument();
   });
 
   it("closes the import menu on escape key press or outside click", () => {

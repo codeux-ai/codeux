@@ -52,6 +52,8 @@ Imported issues appear in the sprint composer under the Sprint Prompt field as l
 
 When the sprint is submitted, selected issues are persisted as linked sprint issue records and the sprint prompt receives a structured `Linked Issues` markdown section. Each imported issue is appended with source metadata, labels, assignees, author/timestamps when available, the complete issue body, and the selected conversation context. This gives the Planning agent and task agents the actual issue text instead of only a remote link.
 
+Special imported tasks selected from the same import flows appear in their own composer tray instead of the linked-issue markdown section. The composer shows the task kind, source, priority, and removal controls so operators can review remediation work before the sprint is created or updated. Those tasks are persisted through the imported-task endpoint on submit, which keeps them attached to the sprint without routing them through planning prose.
+
 Issue import uses the saved integration tokens:
 - GitHub: system/project effective `git.githubToken`, usually configured in Settings -> Integrations.
 - GitLab: system/project effective `git.gitlabToken`, also available through `GITLAB_TOKEN` / `GLAB_TOKEN` host hints.
