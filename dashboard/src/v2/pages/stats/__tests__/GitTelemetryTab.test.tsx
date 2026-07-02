@@ -95,13 +95,13 @@ describe("GitTelemetryTab", () => {
   it("renders summary cards, rankings, and leaderboard tabs", () => {
     render(<GitTelemetryTab gitStats={mockGitStats} />);
 
-    expect(screen.getByText("Insertions")).toBeTruthy();
+    expect(screen.getAllByText("Insertions").length).toBeGreaterThan(0);
     expect(screen.getByText("Merge Conflicts")).toBeTruthy();
     expect(screen.getByText("Ranking Snapshot")).toBeTruthy();
-    expect(screen.getByText("Jun 1")).toBeTruthy();
-    expect(screen.getByText("TASK-1")).toBeTruthy();
+    expect(screen.getByText(/Jun 1/)).toBeTruthy();
+    expect(screen.getAllByText("TASK-1").length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: /Sprint Leaderboard/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /Sprint Leaderboard/i }));
     expect(screen.getByText("Sprint Git Telemetry")).toBeTruthy();
   });
 });

@@ -64,10 +64,16 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
   const hasActiveFilters = filters.status.length > 0 || filters.purpose.length > 0 || filters.provider.length > 0 || (filters.errorCategories && filters.errorCategories.length > 0) || search !== "";
   const shownCount = filteredCount.toLocaleString();
   const totalShown = totalCount.toLocaleString();
+  const pageLabel = page !== undefined ? `Page ${page + 1}` : null;
+  const pageStateLabel = page !== undefined
+    ? hasMore
+      ? "More pages available"
+      : "Final page"
+    : "Server filtered";
 
   return (
     <div className={`${SUBPANEL_CLASS} flex min-w-0 flex-col gap-4 p-4 md:p-5`}>
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
         <div className="relative min-w-0">
           <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" strokeWidth={2} />
           <input
@@ -89,31 +95,33 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center justify-start gap-2 lg:justify-end">
+        <div className="flex flex-wrap items-center justify-start gap-2 xl:justify-end">
           <div className={`inline-flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
             <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={2.2} />
             Status
           </div>
-          {STATUS_OPTIONS.map((status) => {
-            const active = filters.status.includes(status.value);
-            return (
-              <button
-                key={status.value}
-                type="button"
-                aria-pressed={active}
-                onClick={() => onFiltersChange({ ...filters, status: toggleValue(filters.status, status.value) })}
-                className={buildChipClass(active, status.activeClass)}
-              >
-                {status.label}
-              </button>
-            );
-          })}
+          <div className="flex max-w-full gap-2 overflow-x-auto pb-1 pr-1 scrollbar-hide sm:flex-wrap" role="group" aria-label="Status filters">
+            {STATUS_OPTIONS.map((status) => {
+              const active = filters.status.includes(status.value);
+              return (
+                <button
+                  key={status.value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => onFiltersChange({ ...filters, status: toggleValue(filters.status, status.value) })}
+                  className={buildChipClass(active, status.activeClass)}
+                >
+                  {status.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-start gap-3">
+      <div className="grid gap-3">
         {availablePurposes.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Purposes filters">
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Purpose filters">
             <div className={`px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
               Purposes
             </div>
@@ -135,7 +143,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
         ) : null}
 
         {availableProviders.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Providers filters">
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Provider filters">
             <div className={`px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
               Providers
             </div>
@@ -194,15 +202,18 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
           <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
             Showing {shownCount} of {totalShown}
           </div>
-          {page !== undefined ? (
+          {pageLabel ? (
             <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
-              Page {page + 1}
+              {pageLabel}
             </div>
           ) : null}
+          <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
+            {pageStateLabel}
+          </div>
         </div>
 
         {page !== undefined && onPageChange ? (
-          <div className="flex items-center gap-2 lg:justify-end">
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
             <button
               type="button"
               disabled={page === 0}

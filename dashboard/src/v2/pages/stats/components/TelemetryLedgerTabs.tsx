@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useMemo, useRef, useState, useLayoutEffect } from "preact/hooks";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { GitBranch, ListTodo, Rows3 } from "lucide-preact";
 import type { ProjectExecutionStatsSnapshot } from "../../../types.js";
@@ -37,6 +37,19 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
     ];
   }, [stats]);
 
+  useEffect(() => {
+    const activeTabButton = tabRefs.current[activeTab];
+    if (!activeTabButton || typeof activeTabButton.scrollIntoView !== "function") {
+      return;
+    }
+
+    activeTabButton.scrollIntoView({
+      block: "nearest",
+      inline: "center",
+      behavior: reducedMotion ? "auto" : "smooth",
+    });
+  }, [activeTab, reducedMotion]);
+
   useLayoutEffect(() => {
     if (!contentRef.current || prevTab.current === activeTab) return;
 
@@ -67,7 +80,7 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
         role="tablist"
         aria-orientation="horizontal"
         aria-label="Telemetry ledgers"
-        className="flex max-w-full gap-1 overflow-x-auto overscroll-x-contain rounded-2xl border border-black/[0.05] bg-white/68 p-1 shadow-[0_1px_0_rgba(255,255,255,0.55)_inset] scrollbar-hide dark:border-white/[0.05] dark:bg-void-900/35"
+        className="flex max-w-full snap-x snap-mandatory gap-1 overflow-x-auto overscroll-x-contain rounded-2xl border border-black/[0.05] bg-white/68 p-1 shadow-[0_1px_0_rgba(255,255,255,0.55)_inset] scrollbar-hide touch-pan-x dark:border-white/[0.05] dark:bg-void-900/35"
         onKeyDown={(e) => {
           if (tabs.length === 0) {
             return;
@@ -108,15 +121,17 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
               aria-controls={`tabpanel-${tab.id}`}
               tabIndex={isActive ? 0 : -1}
               onClick={() => setActiveTab(tab.id)}
-              className={`inline-flex min-w-max items-center gap-2 rounded-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-all motion-safe:duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 ${
+              className={`inline-flex min-w-[11rem] snap-start items-center justify-between gap-3 rounded-xl px-4 py-2 text-left text-[11px] font-bold uppercase tracking-[0.18em] transition-all motion-safe:duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 sm:min-w-[13rem] ${
                 isActive
                   ? "bg-slate-900 text-white shadow-sm dark:bg-white dark:text-void-900"
                   : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
               }`}
             >
-              <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
-              {tab.label}
-              <span className={`inline-flex min-w-10 justify-center px-2 py-0.5 text-[9px] font-black tabular-nums tracking-wider ${CHIP_CLASS} ${
+              <span className="inline-flex items-center gap-2">
+                <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2.2} />
+                <span className="truncate">{tab.label}</span>
+              </span>
+              <span className={`inline-flex min-w-10 justify-center rounded-full px-2 py-0.5 text-[9px] font-black tabular-nums tracking-wider ${CHIP_CLASS} ${
                   isActive
                     ? "bg-white/20 text-white dark:bg-void-900/15 dark:text-void-900"
                     : "text-slate-500 dark:text-slate-400"

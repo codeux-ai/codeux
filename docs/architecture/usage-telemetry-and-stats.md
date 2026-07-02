@@ -226,11 +226,13 @@ It focuses on:
 - that filter bar renders status toggle chips, purpose/provider multi-select chips, a searchable text field with inline clear affordance, and a result-count badge so the system list can stay reactive without local state
 - task, sprint, provider, and purpose leaderboards
 - tabbed task and sprint telemetry sections integrated into the Analysis Studio, complete with search, recency, richer token breakdowns, and client-side sorting by date and usage dimensions
+- semantic telemetry ledger tabs that keep task, sprint, and git counts stable while preserving horizontal scrolling and keyboard navigation on smaller screens
 - a System mode entry in the analysis toggle that provides a dedicated system workspace with a dense ledger surface
-- the dedicated SystemStudio workspace now renders a telemetry header, five summary metric cards, the shared system filter bar, and the invocations table in one stacked analysis surface so operational logs stay readable at a glance
+- the dedicated SystemStudio workspace now separates sprint state, invocation health, failure analysis, external API metrics, invocation filters, and the invocation table into distinct sections so the operational view does not collapse into a single overloaded card
 - the SystemStudio ledger now includes All, Errors, and System Msgs tabs that pre-filter the already-filtered invocation set before it reaches the table, which keeps the result-count badge and the visible rows aligned
 - the system invocation table exposes sortable per-invocation token columns, sticky header controls, status color-coding, sprint/task context chips, loading skeletons, empty states, and expandable detail placeholders for future message panels
 - expanded invocation rows now lazy-load a dedicated transcript panel that renders role-specific message cards, preserves long system messages with an inline expand toggle, and falls back to an empty-state message when no transcript exists
+- the git telemetry panel now combines total insertions, deletions, file changes, PRs, merges, merge conflicts, bucket rankings, and entity rankings into a single analytics workspace so git pressure is visible without switching away from the stats page
 - animated donut charts now expose slice-level hover focus with center-detail readouts instead of only static composition rings
 - the System stats view uses a dedicated invocation hook that fetches the server-side projected project invocation ledger and trusts the server summary and paginated items for rendering, keeping the frontend main-thread free from large-array processing
 - Heavy stats ledger views are backed by a page-scoped progressive list strategy (`useProgressiveList`) that renders items in batches to optimize performance. The Sprints page ledger instead keeps the full sprint collection in its table state and uses its own `Show` selector for deterministic row windowing, so sprint/task totals remain accurate before rows are limited.

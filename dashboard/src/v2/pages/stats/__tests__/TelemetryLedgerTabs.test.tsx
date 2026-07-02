@@ -10,6 +10,14 @@ import { TelemetryLedgerTabs } from "../components/TelemetryLedgerTabs.js";
 
 expect.extend(matchers);
 
+vi.mock("../components/TelemetryLedger.js", () => ({
+  TelemetryLedger: () => h("div", { "data-testid": "task-ledger" }),
+}));
+
+vi.mock("../components/GitTelemetryTab.js", () => ({
+  GitTelemetryTab: () => h("div", { "data-testid": "git-ledger" }),
+}));
+
 const mockStats = {
   tasks: [{ id: "task-1" }],
   sprints: [{ id: "sprint-1" }, { id: "sprint-2" }],

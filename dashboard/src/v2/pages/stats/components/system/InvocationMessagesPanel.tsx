@@ -119,7 +119,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
   };
 
   return (
-    <div className="mt-2 max-h-[500px] w-full min-w-0 max-w-full space-y-3 overflow-y-auto rounded-2xl border border-white/[0.05] bg-slate-950/70 p-4">
+    <div aria-busy={loading} className="mt-2 max-h-[500px] w-full min-w-0 max-w-full space-y-3 overflow-y-auto overflow-x-hidden rounded-2xl border border-white/[0.05] bg-slate-950/70 p-4">
       {invocation.lastErrorMessage ? (
         <details className="mb-4 group">
           <summary className="cursor-pointer list-none text-sm font-bold uppercase tracking-[0.16em] text-red-500 dark:text-red-400 hover:text-red-600 transition-colors">
@@ -143,7 +143,11 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
           </div>
           <button
             type="button"
-            onClick={() => navigator.clipboard.writeText(JSON.stringify(messages, null, 2))}
+            onClick={() => {
+              if (navigator.clipboard?.writeText) {
+                void navigator.clipboard.writeText(JSON.stringify(messages, null, 2));
+              }
+            }}
             aria-label="Copy as JSON"
             className="text-slate-400 hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 rounded p-1"
           >
@@ -221,7 +225,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
                   </div>
                 </div>
 
-                <pre className="mt-2 max-w-full whitespace-pre-wrap break-words text-xs text-slate-300" style={contentStyle}>
+                <pre className="mt-2 max-w-full whitespace-pre-wrap break-words text-xs leading-6 text-slate-300" style={contentStyle}>
                   {message.contentMarkdown}
                 </pre>
 

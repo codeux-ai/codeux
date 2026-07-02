@@ -94,7 +94,7 @@ export const GitTelemetryLedger: FunctionComponent<{
     visibleItems,
     sentinelRef,
     scrollContainerRef,
-  } = useProgressiveList(filteredItems, { initialCount: 12, stepCount: 8 });
+  } = useProgressiveList(filteredItems, { initialCount: 10, stepCount: 8 });
 
   const totalPRs = items.reduce((s, i) => s + i.metrics.prCount, 0);
   const mergedPRs = items.reduce((s, i) => s + i.metrics.mergedCount, 0);
@@ -394,6 +394,53 @@ const GitRankingPanel: FunctionComponent<{
   );
 };
 
+const GitSignalStrip: FunctionComponent<{
+  totals: ExecutionGitStatsSummary["totals"];
+  bucketCount: number;
+}> = ({ totals, bucketCount }) => {
+  const totalChurn = totals.insertions + totals.deletions;
+  const mergeRate = totals.prCount > 0 ? (totals.mergedCount / totals.prCount) * 100 : 0;
+  const conflictRate = totals.prCount > 0 ? (getMetricCount(totals.mergeConflictCount) / totals.prCount) * 100 : 0;
+
+  return (
+    <div className={`${SUBPANEL_CLASS} p-4`}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Git signal strip</div>
+          <div className="mt-1 text-sm font-bold text-slate-900 dark:text-white">
+            Churn, merge pressure, and bucket coverage in one view.
+          </div>
+        </div>
+        <div className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+          {bucketCount.toLocaleString()} buckets
+        </div>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Total churn</div>
+          <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">{totalChurn.toLocaleString()}</div>
+          <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Insertions plus deletions across the visible window.</div>
+        </div>
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Merge rate</div>
+          <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">{formatPercent(mergeRate)}</div>
+          <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{totals.mergedCount.toLocaleString()} merged PRs out of {totals.prCount.toLocaleString()}.</div>
+        </div>
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Conflict pressure</div>
+          <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">{formatPercent(conflictRate)}</div>
+          <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{getMetricCount(totals.mergeConflictCount).toLocaleString()} merge conflicts in scope.</div>
+        </div>
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Files changed</div>
+          <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">{totals.filesChanged.toLocaleString()}</div>
+          <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{totals.prCount.toLocaleString()} PRs across the same window.</div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSummary }> = ({ gitStats }) => {
   const [activeTab, setActiveTab] = useState<"tasks" | "sprints">("tasks");
 
@@ -457,9 +504,15 @@ export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSum
         />
       </section>
 
+      <GitSignalStrip totals={gitStats.totals} bucketCount={gitStats.buckets.length} />
+
       <GitRankingPanel buckets={gitStats.buckets} tasks={gitStats.tasks} sprints={gitStats.sprints} />
 
-      <div className="flex max-w-full gap-1 overflow-x-auto rounded-2xl border border-black/[0.05] bg-white/68 p-1 dark:border-white/[0.05] dark:bg-void-900/35">
+      <div
+        role="tablist"
+        aria-label="Git leaderboard views"
+        className="flex max-w-full gap-1 overflow-x-auto rounded-2xl border border-black/[0.05] bg-white/68 p-1 dark:border-white/[0.05] dark:bg-void-900/35"
+      >
         {leaderboardTabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -468,7 +521,11 @@ export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSum
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              aria-pressed={isActive}
+              role="tab"
+              aria-selected={isActive}
+              aria-controls={`git-leaderboard-${tab.id}`}
+              id={`git-leaderboard-tab-${tab.id}`}
+              tabIndex={isActive ? 0 : -1}
               className={`inline-flex min-w-max items-center gap-2 rounded-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-all motion-safe:duration-200 ${
                 isActive
                   ? "bg-slate-900 text-white shadow-sm dark:bg-white dark:text-void-900"
@@ -484,21 +541,25 @@ export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSum
 
       <div>
         {activeTab === "tasks" ? (
-          <GitTelemetryLedger
-            title="Task Git Telemetry"
-            eyebrow="Task Git Ledger"
-            items={gitStats.tasks}
-            kindLabel="tasks"
-            emptyLabel="No task git telemetry landed in this window yet."
-          />
+          <div id="git-leaderboard-tasks" role="tabpanel" aria-labelledby="git-leaderboard-tab-tasks">
+            <GitTelemetryLedger
+              title="Task Git Telemetry"
+              eyebrow="Task Git Ledger"
+              items={gitStats.tasks}
+              kindLabel="tasks"
+              emptyLabel="No task git telemetry landed in this window yet."
+            />
+          </div>
         ) : (
-          <GitTelemetryLedger
-            title="Sprint Git Telemetry"
-            eyebrow="Sprint Git Ledger"
-            items={gitStats.sprints}
-            kindLabel="sprints"
-            emptyLabel="No sprint git telemetry active in this window."
-          />
+          <div id="git-leaderboard-sprints" role="tabpanel" aria-labelledby="git-leaderboard-tab-sprints">
+            <GitTelemetryLedger
+              title="Sprint Git Telemetry"
+              eyebrow="Sprint Git Ledger"
+              items={gitStats.sprints}
+              kindLabel="sprints"
+              emptyLabel="No sprint git telemetry active in this window."
+            />
+          </div>
         )}
       </div>
     </div>

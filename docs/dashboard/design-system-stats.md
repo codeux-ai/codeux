@@ -34,8 +34,10 @@ Analytics components draw from `stats-theme.css`, which maps specifically back t
 *   **Controls**: Use standard semantic focus rings (`var(--accent-focus-ring)`) rather than custom rings per button.
 
 ### Ledgers & Tables (Telemetry & System)
+*   **Tabbed Ledgers**: Use semantic `role="tablist"` / `role="tab"` controls with stable badge counts and horizontal scroll affordances on mobile so dense ledger workspaces remain keyboard reachable.
 *   **Row Interactions**: Rows must rely on global `var(--fill-muted-hover)` patterns rather than arbitrary hardcoded highlights.
 *   **Status Indicators**: Status chips (Completed, Running, Failed, Cancelled) should be distinct and legible, but avoid visually competing with actual data or error states.
+*   **System Workspaces**: Split sprint state, invocation health, failure analysis, external APIs, filters, and the invocation table into separate sections when the system surface gets dense enough that a single card would become unreadable.
 
 ### Accessibility Rules
 *   **Charts**: Chart regions must provide accessible names, descriptions, and keyboard-reachable summaries. Provide data-table or text alternatives for usage trends. For SVG sparklines or micro-charts, avoid hiding them completely with `aria-hidden="true"`. Instead, set `role="img"` and provide an `aria-label` that describes the overall computed trend (e.g., 'increasing', 'decreasing', or 'stable'). When composing dense metric cards with multiple visual elements (labels, values, trends), apply `aria-hidden="true"` to the internal visual components and provide a single coherent `aria-label` on the parent container to prevent fragmented screen reader announcements.

@@ -391,17 +391,27 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
           </div>
         </div>
 
-        <div className="mt-6 space-y-4">
-          <div className="flex max-w-full gap-1 overflow-x-auto rounded-2xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-1 self-start">
-            {(["all", "errors", "system"] as SystemTab[]).map((tab) => {
-              const tabCount = tab === "all" ? invocations.length : tab === "errors" ? errorCount : systemCount;
-              return (
+        <div
+          role="tablist"
+          aria-label="Invocation views"
+          className="mt-6 flex max-w-full gap-1 overflow-x-auto rounded-2xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-1 self-start"
+        >
+          {(["all", "errors", "system"] as SystemTab[]).map((tab) => {
+            const tabCount = tab === "all" ? invocations.length : tab === "errors" ? errorCount : systemCount;
+            const tabId = `system-tab-${tab}`;
+            const panelId = "system-invocation-panel";
+
+            return (
               <button
                 key={tab}
+                id={tabId}
                 type="button"
+                role="tab"
+                aria-selected={activeTab === tab}
+                aria-controls={panelId}
+                tabIndex={activeTab === tab ? 0 : -1}
                 onClick={() => setActiveTab(tab)}
-                aria-pressed={activeTab === tab}
-                className={`inline-flex min-w-max items-center gap-2 rounded-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-all ${
+                className={`inline-flex min-w-max items-center gap-2 rounded-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 ${
                   activeTab === tab
                     ? "bg-amber-500 text-white shadow-sm ring-2 ring-amber-500/30"
                     : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
@@ -412,24 +422,51 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
                   {tabCount.toLocaleString()}
                 </span>
               </button>
-              );
-            })}
-          </div>
+            );
+          })}
+        </div>
 
-          <SystemFilterBar
-            filters={filters}
-            onFiltersChange={setFilters}
-            search={search}
-            onSearchChange={setSearch}
-            availablePurposes={availablePurposes}
-            availableProviders={availableProviders}
-            totalCount={totalCount}
-            filteredCount={invocations.length}
-            page={page}
-            onPageChange={setPage}
-            hasMore={hasMore}
+        <SystemFilterBar
+          filters={filters}
+          onFiltersChange={setFilters}
+          search={search}
+          onSearchChange={setSearch}
+          availablePurposes={availablePurposes}
+          availableProviders={availableProviders}
+          totalCount={totalCount}
+          filteredCount={tabbedInvocations.length}
+          page={page}
+          onPageChange={setPage}
+          hasMore={hasMore}
+        />
+      </section>
+
+      <section className={`${PANEL_CLASS} p-6 md:p-7`}>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <StudioSectionHeader
+            eyebrow="Invocation Table"
+            title="Invocation Ledger"
+            description="The current server page is rendered below, with expandable transcripts fetched only when a row is opened."
           />
+          <div className="flex flex-wrap gap-2">
+            <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ${CHIP_CLASS}`}>
+              Rows · {tabbedInvocations.length.toLocaleString()}
+            </div>
+            <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ${CHIP_CLASS}`}>
+              Page · {page + 1}
+            </div>
+            <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ${CHIP_CLASS}`}>
+              {hasMore ? "More pages" : "Final page"}
+            </div>
+          </div>
+        </div>
 
+        <div
+          id="system-invocation-panel"
+          role="tabpanel"
+          aria-labelledby={`system-tab-${activeTab}`}
+          className="mt-6 space-y-4"
+        >
           {error ? (
             <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">
               Failed to load invocations — {error}

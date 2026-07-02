@@ -1,4 +1,4 @@
-import type { FunctionComponent } from "preact";
+import { Fragment, type FunctionComponent } from "preact";
 import { useState, useMemo } from "preact/hooks";
 import {
   ChevronRight,
@@ -225,16 +225,17 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
         <tbody className="block lg:table-row-group">
           {visibleInvocations.map((invocation) => {
             const isExpanded = expandedId === invocation.id;
+            const transcriptPanelId = `invocation-transcript-${invocation.id}`;
             const { icon: ProviderIcon, bg: providerBg, text: providerText } = getProviderIcon(invocation.provider);
             const duration = invocation.finishedAt
               ? formatStatsDuration(Date.parse(invocation.finishedAt) - Date.parse(invocation.startedAt))
               : "running";
 
             return (
-              <>
+              <Fragment key={invocation.id}>
                 <tr key={invocation.id} className="block lg:table-row">
                   <td colSpan={11} className="p-0 block lg:table-cell">
-                    <div className={`${LEDGER_ROW_MODERN_CLASS} flex items-center p-4 lg:p-6 ${invocation.status === "running" ? "border-l-2 border-l-blue-400 bg-blue-500/[0.02]" : invocation.status === "failed" ? "border-l-2 border-l-red-400 bg-red-500/[0.02]" : ""}`}>
+                    <div className={`${LEDGER_ROW_MODERN_CLASS} flex items-center overflow-hidden p-4 lg:p-6 ${invocation.status === "running" ? "border-l-2 border-l-blue-400 bg-blue-500/[0.02]" : invocation.status === "failed" ? "border-l-2 border-l-red-400 bg-red-500/[0.02]" : ""}`}>
                       <div className="flex flex-col gap-3 lg:grid lg:w-full lg:grid-cols-[1.2fr_1fr_1fr_1.4fr_0.6fr_0.6fr_0.6fr_0.8fr_0.8fr_1fr_0.4fr] lg:items-center lg:gap-2">
                         {/* Header Row: Time and Expand */}
                         <div className="flex items-center justify-between lg:contents">
@@ -252,6 +253,8 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                             <button
                               type="button"
                               onClick={() => onRowExpand(isExpanded ? null : invocation.id)}
+                              aria-expanded={isExpanded}
+                              aria-controls={transcriptPanelId}
                               aria-label={isExpanded ? `Collapse invocation ${invocation.id}` : `Expand invocation ${invocation.id}`}
                               className={`rounded-full p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 hover:bg-black/[0.04] dark:hover:bg-white/5 ${
                                 isExpanded ? "text-signal-500" : "text-slate-400"
@@ -369,6 +372,8 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                           <button
                             type="button"
                             onClick={() => onRowExpand(isExpanded ? null : invocation.id)}
+                            aria-expanded={isExpanded}
+                            aria-controls={transcriptPanelId}
                             aria-label={isExpanded ? `Collapse invocation ${invocation.id}` : `Expand invocation ${invocation.id}`}
                             className={`rounded-full p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 hover:bg-black/[0.04] dark:hover:bg-white/5 ${
                               isExpanded ? "text-signal-500" : "text-slate-400"
@@ -395,12 +400,12 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                 {/* Expanded Detail Row */}
                 {isExpanded && expandedInvocation ? (
                   <tr key={`${invocation.id}-detail`} className="block lg:table-row">
-                    <td colSpan={11} className="px-0 pb-2 lg:px-6 block lg:table-cell">
+                    <td colSpan={11} id={transcriptPanelId} className="px-0 pb-2 lg:px-6 block lg:table-cell">
                       <InvocationMessagesPanel invocation={expandedInvocation} />
                     </td>
                   </tr>
                 ) : null}
-              </>
+              </Fragment>
             );
           })}
         </tbody>

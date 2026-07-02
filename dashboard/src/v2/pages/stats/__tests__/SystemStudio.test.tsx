@@ -98,9 +98,9 @@ describe("SystemStudio", () => {
       expect(screen.getByText("Invocations & System Logs")).toBeTruthy();
     });
 
-    expect(screen.getByRole("button", { name: /^All\b/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^Errors\b/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^System Msgs\b/ })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /^All/ })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /^Errors/ })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /^System Msgs/ })).toBeTruthy();
     expect(container.textContent).toContain("1.3k");
     expect(container.textContent).toContain("9m 0s");
     expect(container.textContent).toContain("Showing 2 of 2");
@@ -112,24 +112,24 @@ describe("SystemStudio", () => {
     expect(container.textContent).toContain("Sprint Overview");
     expect(container.textContent).toContain("Status Distribution");
     expect(container.textContent).toContain("Success Rate");
-    expect(container.textContent).toContain("Error Log");
-    expect(container.textContent).toContain("Detailed Log");
+    expect(container.textContent).toContain("External API Metrics");
+    expect(container.textContent).toContain("Invocation Ledger");
 
-    fireEvent.click(screen.getByRole("button", { name: /^Errors\b/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /^Errors/ }));
 
     await waitFor(() => {
       expect(screen.getByText("Showing 1 of 2")).toBeTruthy();
       expect(container.textContent).toContain("Rate limited");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /^System Msgs\b/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /^System Msgs/ }));
 
     await waitFor(() => {
       expect(screen.getByText("Showing 1 of 2")).toBeTruthy();
       expect(container.textContent).toContain("System Msgs");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /^All\b/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /^All/ }));
 
     await waitFor(() => {
       expect(screen.getByText("Showing 2 of 2")).toBeTruthy();

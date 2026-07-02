@@ -29,6 +29,8 @@ import {
   type LedgerSortKey,
 } from "./StatsShared.js";
 
+const FACET_LIMIT = 4;
+
 function getStatusChipTone(status: string): string {
   const normalized = status.toLowerCase();
   if (normalized.includes("complete") || normalized.includes("done") || normalized.includes("merged")) {
@@ -209,6 +211,30 @@ export const TelemetryLedger: FunctionComponent<{
     return { totalTokens, totalActiveMs, calls, leaderTokens, inputTokens, cachedTokens, outputTokens, reasoningTokens };
   }, [filteredItems]);
 
+  const facetBreakdown = useMemo(() => {
+    const statusCounts = new Map<string, number>();
+    const providerCounts = new Map<string, number>();
+    const purposeCounts = new Map<string, number>();
+
+    for (const item of filteredItems) {
+      if (item.status) {
+        statusCounts.set(item.status, (statusCounts.get(item.status) ?? 0) + 1);
+      }
+      if (item.provider) {
+        providerCounts.set(item.provider, (providerCounts.get(item.provider) ?? 0) + 1);
+      }
+      if (item.purpose) {
+        purposeCounts.set(item.purpose, (purposeCounts.get(item.purpose) ?? 0) + 1);
+      }
+    }
+
+    return {
+      status: Array.from(statusCounts.entries()).sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0])).slice(0, FACET_LIMIT),
+      provider: Array.from(providerCounts.entries()).sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0])).slice(0, FACET_LIMIT),
+      purpose: Array.from(purposeCounts.entries()).sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0])).slice(0, FACET_LIMIT),
+    };
+  }, [filteredItems]);
+
   const overallTotals = useMemo(() => {
     let totalTokens = 0;
     let totalActiveTimeMs = 0;
@@ -241,7 +267,7 @@ export const TelemetryLedger: FunctionComponent<{
     visibleItems,
     sentinelRef,
     scrollContainerRef,
-  } = useProgressiveList(filteredItems, { initialCount: 12, stepCount: 8 });
+  } = useProgressiveList(filteredItems, { initialCount: 10, stepCount: 8 });
 
   const searchHasResults = filteredItems.length > 0;
   const queryIsActive = query.trim().length > 0;
@@ -298,6 +324,107 @@ export const TelemetryLedger: FunctionComponent<{
           </div>
         )}
 
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className={`${SUBPANEL_CLASS} p-4`}>
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Visible Summary</div>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Results</div>
+                  <div className="mt-1 text-2xl font-black tracking-tight text-slate-900 dark:text-white">{filteredItems.length.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Tokens</div>
+                  <div className="mt-1 text-2xl font-black tracking-tight text-slate-900 dark:text-white">{formatTokens(totals.totalTokens)}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Active</div>
+                  <div className="mt-1 text-base font-black tracking-tight text-slate-900 dark:text-white">{formatStatsDuration(totals.totalActiveMs)}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Calls</div>
+                  <div className="mt-1 text-base font-black tracking-tight text-slate-900 dark:text-white">{totals.calls.toLocaleString()}</div>
+                </div>
+              </div>
+            </div>
+
+            <LedgerComparisonCard
+              kindLabel={kindLabel}
+              filteredItems={filteredItems}
+              totals={{
+                filteredInputTokens: totals.inputTokens,
+                filteredCachedTokens: totals.cachedTokens,
+                filteredOutputTokens: totals.outputTokens,
+                filteredReasoningTokens: totals.reasoningTokens,
+                filteredTokens: totals.totalTokens,
+                totalTokens: overallTotals.totalTokens,
+              }}
+            />
+          </div>
+
+          <div className="space-y-3">
+            <div className={`${SUBPANEL_CLASS} p-4`}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Facet Summary</div>
+                <div className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+                  {queryIsActive ? "Filtered view" : "All visible"}
+                </div>
+              </div>
+              <div className="mt-4 space-y-3">
+                {([
+                  ["Status", facetBreakdown.status, (value: string) => getStatusChipTone(value)],
+                  ["Provider", facetBreakdown.provider, (value: string) => {
+                    const providerIcon = getProviderIcon(value);
+                    return `${providerIcon.bg} ${providerIcon.text}`;
+                  }],
+                  ["Purpose", facetBreakdown.purpose, () => "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"],
+                ] as const).map(([label, entries, toneResolver]) => (
+                  <div key={label}>
+                    <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{label}</div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {entries.length > 0 ? entries.map(([value, count]) => {
+                        const tone = toneResolver(value);
+                        return (
+                          <span key={value} className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${CHIP_CLASS} ${tone}`}>
+                            <span className="tabular-nums">{count.toLocaleString()}</span>
+                            <span className="max-w-32 truncate">{value.replace(/_/g, " ")}</span>
+                          </span>
+                        );
+                      }) : (
+                        <span className="text-[11px] text-slate-400">None in the current selection.</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <LedgerSummaryCard
+                icon={Activity}
+                label="Search Results"
+                value={filteredItems.length.toLocaleString()}
+                detail={queryIsActive ? `matching "${query.trim()}"` : "all visible"}
+                tone="text-amber-500"
+              />
+              <LedgerSummaryCard
+                icon={Brain}
+                label="Top Lane"
+                value={topItem ? topItem.label : "—"}
+                detail={topItem ? `${formatTokens(topItem.usage.totalTokens)} tokens` : "no lane yet"}
+                tone="text-indigo-500"
+              />
+              <LedgerSummaryCard
+                icon={Database}
+                label="Visible Share"
+                value={totals.totalTokens > 0 ? formatPercent((totals.totalTokens / Math.max(1, overallTotals.totalTokens)) * 100) : "—"}
+                detail="of current window tokens"
+                tone="text-cyan-500"
+              />
+            </div>
+          </div>
+        </div>
+
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div className="relative">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" strokeWidth={2} />
@@ -341,61 +468,26 @@ export const TelemetryLedger: FunctionComponent<{
           </div>
         </div>
 
-        {items.length > 0 ? (
-          searchHasResults ? (
-            <div className="grid gap-3 xl:grid-cols-[1.05fr_0.95fr]">
-              <LedgerComparisonCard
-                kindLabel={kindLabel}
-                filteredItems={filteredItems}
-                totals={{
-                  filteredInputTokens: totals.inputTokens,
-                  filteredCachedTokens: totals.cachedTokens,
-                  filteredOutputTokens: totals.outputTokens,
-                  filteredReasoningTokens: totals.reasoningTokens,
-                  filteredTokens: totals.totalTokens,
-                  totalTokens: overallTotals.totalTokens,
-                }}
-              />
-              <div className="grid gap-3 sm:grid-cols-3">
-                <LedgerSummaryCard
-                  icon={Activity}
-                  label="Search Results"
-                  value={filteredItems.length.toLocaleString()}
-                  detail={queryIsActive ? `matching "${query.trim()}"` : "all visible"}
-                  tone="text-amber-500"
-                />
-                <LedgerSummaryCard
-                  icon={Brain}
-                  label="Top Lane"
-                  value={topItem ? topItem.label : "—"}
-                  detail={topItem ? `${formatTokens(topItem.usage.totalTokens)} tokens` : "no lane yet"}
-                  tone="text-indigo-500"
-                />
-                <LedgerSummaryCard
-                  icon={Database}
-                  label="Visible Share"
-                  value={totals.totalTokens > 0 ? formatPercent((totals.totalTokens / Math.max(1, overallTotals.totalTokens)) * 100) : "—"}
-                  detail="of current window tokens"
-                  tone="text-cyan-500"
-                />
+        {items.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-12 text-center text-sm text-slate-400 dark:border-white/[0.08]">
+            {emptyLabel}
+          </div>
+        ) : !searchHasResults ? (
+          <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-12 text-center text-sm text-slate-400 dark:border-white/[0.08]">
+            <div className="space-y-3">
+              <div>No {kindLabel} match “{query.trim()}”.</div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                Try a broader search or clear the current search term.
               </div>
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                className="inline-flex items-center rounded-full border border-black/[0.06] bg-white/72 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300 dark:hover:text-white"
+              >
+                Clear search
+              </button>
             </div>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-12 text-center text-sm text-slate-400 dark:border-white/[0.08]">
-              {queryIsActive ? (
-                <div className="space-y-3">
-                  <div>No {kindLabel} match “{query.trim()}”.</div>
-                  <button
-                    type="button"
-                    onClick={() => setQuery("")}
-                    className="inline-flex items-center rounded-full border border-black/[0.06] bg-white/72 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300 dark:hover:text-white"
-                  >
-                    Clear search
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          )
+          </div>
         ) : null}
 
         {searchHasResults ? (
