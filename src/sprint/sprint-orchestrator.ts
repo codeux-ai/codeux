@@ -236,6 +236,9 @@ export class SprintOrchestrator {
 
   private async renderMainMergeCiFeedback(args: {
     repoPath: string;
+    projectId: string;
+    sprintId: string;
+    sprintRunId: string;
     featureBranch: string;
     defaultBranch: string;
     featureBranchPrefix: string;
@@ -287,12 +290,26 @@ export class SprintOrchestrator {
       && args.ciIntelligence.mainBranchAutoMergeMode !== "OFF"
       && this.deps.resolveOrCreateMainBranchPr
     ) {
+      const freshSprint = this.deps.projectManagementRepository.getSprint(args.sprintId);
+      const dashboardSettings = this.deps.getDashboardSettings({ projectId: args.projectId, sprintId: args.sprintId });
+      const composerInput = freshSprint
+        ? buildSprintPrComposerInput({
+          sprint: freshSprint,
+          sprintRunId: args.sprintRunId,
+          subtasks: args.subtasks || [],
+          featureBranch: args.featureBranch,
+          defaultBranch: args.defaultBranch,
+          aiProviderSettings: dashboardSettings.aiProvider,
+          sections: dashboardSettings.git.prDescription.sprint,
+          executionRepository: this.deps.executionRepository,
+        })
+        : null;
       const pr = await this.deps.resolveOrCreateMainBranchPr({
         repoPath: args.repoPath,
         featureBranch: args.featureBranch,
         defaultBranch: args.defaultBranch,
-        title: resolveMainBranchPrTitle(args),
-        body: resolveMainBranchPrBody({ ...args, subtasks: args.subtasks }),
+        title: composerInput ? composeSprintPrTitle(composerInput) : resolveMainBranchPrTitle(args),
+        body: composerInput ? composeSprintPrBody(composerInput) : resolveMainBranchPrBody({ ...args, subtasks: args.subtasks }),
       });
       if (pr?.prUrl || pr?.prNumber) {
         createdPrNote = `\n🤖 **Main PR ${pr.created ? "Created" : "Resolved"}:** ${formatMainPrReference(pr, args.featureBranch, args.defaultBranch)}\n`;

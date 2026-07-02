@@ -255,6 +255,45 @@ const validateGitSettings = (
   } else if (value.sprintKeyPrefix !== value.sprintKeyPrefix.toUpperCase()) {
     issues.push({ path: `${path}.sprintKeyPrefix`, message: "Expected an uppercase string" });
   }
+  if (value.prDescription !== undefined) {
+    validatePrDescriptionSettings(value.prDescription, `${path}.prDescription`, issues);
+  }
+};
+
+const TASK_PR_TEMPLATE_SECTION_FIELDS = ["summary", "modelAndProvider", "timing", "fullPrompt", "tokenUsage", "qaFindings", "branchInfo"] as const;
+const SPRINT_PR_TEMPLATE_SECTION_FIELDS = ["summary", "taskChecklist", "providerBreakdown", "planningModel", "mainPrompt", "timing", "tokenUsage", "qaFindings", "branchInfo"] as const;
+
+const validatePrDescriptionSettings = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[]
+) => {
+  if (!isRecord(value)) {
+    issues.push({ path, message: "Expected an object" });
+    return;
+  }
+  if (value.task !== undefined) {
+    if (!isRecord(value.task)) {
+      issues.push({ path: `${path}.task`, message: "Expected an object" });
+    } else {
+      for (const field of TASK_PR_TEMPLATE_SECTION_FIELDS) {
+        if (value.task[field] !== undefined && typeof value.task[field] !== "boolean") {
+          issues.push({ path: `${path}.task.${field}`, message: "Expected a boolean" });
+        }
+      }
+    }
+  }
+  if (value.sprint !== undefined) {
+    if (!isRecord(value.sprint)) {
+      issues.push({ path: `${path}.sprint`, message: "Expected an object" });
+    } else {
+      for (const field of SPRINT_PR_TEMPLATE_SECTION_FIELDS) {
+        if (value.sprint[field] !== undefined && typeof value.sprint[field] !== "boolean") {
+          issues.push({ path: `${path}.sprint.${field}`, message: "Expected a boolean" });
+        }
+      }
+    }
+  }
 };
 
 const validateJiraSettings = (
