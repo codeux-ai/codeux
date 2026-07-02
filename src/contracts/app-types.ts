@@ -732,9 +732,16 @@ export interface SprintPrTemplateSections {
   branchInfo: boolean;
 }
 
+export type TaskPrSectionKey = keyof TaskPrTemplateSections;
+export type SprintPrSectionKey = keyof SprintPrTemplateSections;
+
 export interface PrDescriptionSettings {
   task: TaskPrTemplateSections;
   sprint: SprintPrTemplateSections;
+  /** Display order for enabled Task PR sections. See DEFAULT_TASK_SECTION_ORDER for the default. */
+  taskSectionOrder: TaskPrSectionKey[];
+  /** Display order for enabled Sprint PR sections. See DEFAULT_SPRINT_SECTION_ORDER for the default. */
+  sprintSectionOrder: SprintPrSectionKey[];
 }
 
 export interface GitSettings {

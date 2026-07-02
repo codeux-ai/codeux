@@ -24,6 +24,7 @@ export async function executePrFinalizeStage(ctx: PipelineContext): Promise<{ pr
       taskRun,
       aiProviderSettings: ctx.settings.aiProvider,
       sections: ctx.settings.git.prDescription.task,
+      sectionOrder: ctx.settings.git.prDescription.taskSectionOrder,
       executionRepository: ctx.deps.executionRepository,
     });
     prUrl = await ctx.prService.resolveOrCreateFeaturePr(

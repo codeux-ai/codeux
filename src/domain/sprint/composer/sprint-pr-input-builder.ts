@@ -1,4 +1,4 @@
-import type { AiProviderSettings, SprintPrTemplateSections, Subtask } from "../../../contracts/app-types.js";
+import type { AiProviderSettings, SprintPrSectionKey, SprintPrTemplateSections, Subtask } from "../../../contracts/app-types.js";
 import type { SprintRecord } from "../../../contracts/project-management-types.js";
 import type { ExecutionRepository } from "../../../repositories/execution-repository.js";
 import type { SprintPrComposerInput, SprintPrSubtaskSummary } from "./pr-description-composer.js";
@@ -12,6 +12,7 @@ export interface BuildSprintPrComposerInputArgs {
   defaultBranch: string;
   aiProviderSettings: AiProviderSettings;
   sections: SprintPrTemplateSections;
+  sectionOrder?: SprintPrSectionKey[];
   executionRepository: ExecutionRepository;
 }
 
@@ -73,5 +74,6 @@ export function buildSprintPrComposerInput(args: BuildSprintPrComposerInputArgs)
     finishedAt: sprintRun?.finishedAt ?? null,
     qa,
     sections: args.sections,
+    sectionOrder: args.sectionOrder,
   };
 }

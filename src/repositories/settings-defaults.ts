@@ -19,6 +19,7 @@ import type {
   ThinkingMode,
 } from "../contracts/app-types.js";
 import { DEFAULT_SPRINT_BRANCH_SCHEME } from "../domain/sprint/branch-name-generator.js";
+import { DEFAULT_TASK_SECTION_ORDER, DEFAULT_SPRINT_SECTION_ORDER } from "../domain/sprint/composer/pr-description-composer.js";
 import { DEFAULT_INSTRUCTION_TEMPLATES } from "../instructions/instruction-template-catalog.js";
 import { DEFAULT_MCP_TOOL_TOGGLES } from "../mcp/mcp-tool-availability.js";
 
@@ -57,6 +58,8 @@ export const DEFAULT_PR_DESCRIPTION_SETTINGS: PrDescriptionSettings = {
     qaFindings: true,
     branchInfo: true,
   },
+  taskSectionOrder: [...DEFAULT_TASK_SECTION_ORDER],
+  sprintSectionOrder: [...DEFAULT_SPRINT_SECTION_ORDER],
 };
 
 export const PROVIDER_IDS: ProviderId[] = ["jules", "gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"];

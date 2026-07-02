@@ -55,4 +55,31 @@ describe("sanitizePrDescriptionSections", () => {
     expect(result.task.fullPrompt).toBe(true);
     expect(result.sprint.mainPrompt).toBe(true);
   });
+
+  it("defaults section order to the natural default order when not stored", () => {
+    const result = sanitizePrDescriptionSections(undefined);
+    expect(result.taskSectionOrder).toEqual(["summary", "modelAndProvider", "timing", "tokenUsage", "qaFindings", "fullPrompt", "branchInfo"]);
+    expect(result.sprintSectionOrder[0]).toBe("summary");
+  });
+
+  it("preserves a valid custom section order", () => {
+    const result = sanitizePrDescriptionSections({
+      taskSectionOrder: ["branchInfo", "summary", "timing", "tokenUsage", "qaFindings", "fullPrompt", "modelAndProvider"] as any,
+    });
+    expect(result.taskSectionOrder).toEqual(["branchInfo", "summary", "timing", "tokenUsage", "qaFindings", "fullPrompt", "modelAndProvider"]);
+  });
+
+  it("drops unknown keys and appends missing known keys for a partial/garbage order", () => {
+    const result = sanitizePrDescriptionSections({
+      taskSectionOrder: ["summary", "not-a-real-section", "summary"] as any,
+    });
+    expect(result.taskSectionOrder[0]).toBe("summary");
+    expect(result.taskSectionOrder).not.toContain("not-a-real-section");
+    expect(result.taskSectionOrder).toHaveLength(7);
+  });
+
+  it("falls back to the default order when the stored value isn't an array", () => {
+    const result = sanitizePrDescriptionSections({ sprintSectionOrder: "nope" as any });
+    expect(result.sprintSectionOrder).toHaveLength(9);
+  });
 });

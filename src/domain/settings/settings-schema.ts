@@ -294,7 +294,17 @@ const validatePrDescriptionSettings = (
       }
     }
   }
+  if (value.taskSectionOrder !== undefined && !isStringArray(value.taskSectionOrder)) {
+    issues.push({ path: `${path}.taskSectionOrder`, message: "Expected an array of strings" });
+  }
+  if (value.sprintSectionOrder !== undefined && !isStringArray(value.sprintSectionOrder)) {
+    issues.push({ path: `${path}.sprintSectionOrder`, message: "Expected an array of strings" });
+  }
 };
+
+const isStringArray = (value: unknown): value is string[] => (
+  Array.isArray(value) && value.every((v) => typeof v === "string")
+);
 
 const validateJiraSettings = (
   value: unknown,

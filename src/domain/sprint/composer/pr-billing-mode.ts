@@ -44,12 +44,15 @@ export function foldUsageGroups(
     toolCallCount: 0,
     activeTimeMs: 0,
     costUsd: null,
+    includedCostUsd: null,
     billedInvocationCount: 0,
     subscriptionInvocationCount: 0,
   };
 
   let billedCost = 0;
   let hasBilled = false;
+  let includedCost = 0;
+  let hasIncluded = false;
 
   for (const group of groups) {
     stats.invocationCount += group.usage.invocationCount;
@@ -67,9 +70,14 @@ export function foldUsageGroups(
       hasBilled = true;
     } else {
       stats.subscriptionInvocationCount += group.usage.invocationCount;
+      // Reference-priced at the same catalog rate as billed usage, for comparison only —
+      // subscription/flat-fee usage was not actually charged per token.
+      includedCost += group.usage.totalCostUsd;
+      hasIncluded = true;
     }
   }
 
   stats.costUsd = hasBilled ? billedCost : null;
+  stats.includedCostUsd = hasIncluded ? includedCost : null;
   return stats;
 }

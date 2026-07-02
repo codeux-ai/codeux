@@ -1,7 +1,12 @@
-import type { DashboardSettings, ExternalSettingsHints, PrDescriptionSettings, SprintPrTemplateSections, TaskPrTemplateSections } from "../../../contracts/app-types.js";
+import type { DashboardSettings, ExternalSettingsHints, PrDescriptionSettings, SprintPrSectionKey, SprintPrTemplateSections, TaskPrSectionKey, TaskPrTemplateSections } from "../../../contracts/app-types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../repositories/settings-defaults.js";
+import { resolveSectionOrder } from "../../sprint/composer/pr-description-composer.js";
 
 const boolOrDefault = (value: unknown, fallback: boolean): boolean => typeof value === "boolean" ? value : fallback;
+
+const sanitizeOrder = <K extends string>(input: unknown, defaultOrder: K[]): K[] => (
+  resolveSectionOrder(Array.isArray(input) ? (input.filter((v) => typeof v === "string") as K[]) : undefined, defaultOrder)
+);
 
 /** Coerces every field to boolean, defaulting missing/non-boolean values to `true` so settings
  *  rows saved before this feature existed still load with everything enabled. */
@@ -34,6 +39,8 @@ export const sanitizePrDescriptionSections = (
       qaFindings: boolOrDefault(sprintInput.qaFindings, sprintDefaults.qaFindings),
       branchInfo: boolOrDefault(sprintInput.branchInfo, sprintDefaults.branchInfo),
     },
+    taskSectionOrder: sanitizeOrder<TaskPrSectionKey>(input?.taskSectionOrder, DEFAULT_DASHBOARD_SETTINGS.git.prDescription.taskSectionOrder),
+    sprintSectionOrder: sanitizeOrder<SprintPrSectionKey>(input?.sprintSectionOrder, DEFAULT_DASHBOARD_SETTINGS.git.prDescription.sprintSectionOrder),
   };
 };
 

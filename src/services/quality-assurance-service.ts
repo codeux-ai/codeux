@@ -1554,6 +1554,7 @@ export class QualityAssuranceService {
           taskRun: args.taskRun ?? null,
           aiProviderSettings: settings.aiProvider,
           sections: settings.git.prDescription.task,
+          sectionOrder: settings.git.prDescription.taskSectionOrder,
           executionRepository: this.deps.executionRepository,
         });
         prUrl = (await this.prService.resolveOrCreateFeaturePr(

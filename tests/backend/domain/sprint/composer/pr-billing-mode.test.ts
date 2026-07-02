@@ -82,6 +82,19 @@ describe("foldUsageGroups", () => {
     expect(folded.costUsd).toBe(0.8);
   });
 
+  it("prices subscription groups at the same catalog rate into includedCostUsd, separate from costUsd", () => {
+    const groups: PrUsageGroup[] = [
+      { provider: "claude-code", model: "claude-opus-4-6", usage: usage({ invocationCount: 3, totalCostUsd: 1.5 }) },
+      { provider: "codex", model: "gpt-6-codex", usage: usage({ invocationCount: 2, totalCostUsd: 0.8 }) },
+    ];
+    const folded = foldUsageGroups(groups, {
+      "claude-code": { authType: "localAuth" },
+      codex: { authType: "apiKey" },
+    });
+    expect(folded.includedCostUsd).toBe(1.5);
+    expect(folded.costUsd).toBe(0.8);
+  });
+
   it("returns costUsd null when nothing in the fold was billed", () => {
     const groups: PrUsageGroup[] = [
       { provider: "jules", model: null, usage: usage({ invocationCount: 4, totalCostUsd: 0 }) },
@@ -92,9 +105,18 @@ describe("foldUsageGroups", () => {
     expect(folded.subscriptionInvocationCount).toBe(4);
   });
 
+  it("returns includedCostUsd null when there is no subscription usage in the fold", () => {
+    const groups: PrUsageGroup[] = [
+      { provider: "claude-code", model: "claude-opus-4-6", usage: usage({ invocationCount: 2, totalCostUsd: 1.0 }) },
+    ];
+    const folded = foldUsageGroups(groups, { "claude-code": { authType: "apiKey" } });
+    expect(folded.includedCostUsd).toBeNull();
+  });
+
   it("returns an empty-but-defined stats object for an empty group list", () => {
     const folded = foldUsageGroups([], {});
     expect(folded.invocationCount).toBe(0);
     expect(folded.costUsd).toBeNull();
+    expect(folded.includedCostUsd).toBeNull();
   });
 });

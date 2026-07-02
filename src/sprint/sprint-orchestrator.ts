@@ -309,6 +309,7 @@ export class SprintOrchestrator {
           defaultBranch: args.defaultBranch,
           aiProviderSettings: dashboardSettings.aiProvider,
           sections: dashboardSettings.git.prDescription.sprint,
+          sectionOrder: dashboardSettings.git.prDescription.sprintSectionOrder,
           executionRepository: this.deps.executionRepository,
         }))
         : `Automated sprint completion PR opened by Code UX.\n\nBase: \`${args.defaultBranch}\`\nHead: \`${args.featureBranch}\``;

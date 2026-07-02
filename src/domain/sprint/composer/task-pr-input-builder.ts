@@ -1,4 +1,4 @@
-import type { AiProviderSettings, ProviderId, Subtask, TaskPrTemplateSections } from "../../../contracts/app-types.js";
+import type { AiProviderSettings, ProviderId, Subtask, TaskPrSectionKey, TaskPrTemplateSections } from "../../../contracts/app-types.js";
 import type { SprintRecord } from "../../../contracts/project-management-types.js";
 import type { TaskRunRecord } from "../../../contracts/execution-types.js";
 import type { ExecutionRepository } from "../../../repositories/execution-repository.js";
@@ -15,6 +15,7 @@ export interface BuildTaskPrComposerInputArgs {
   taskRun: TaskRunRecord | null;
   aiProviderSettings: AiProviderSettings;
   sections: TaskPrTemplateSections;
+  sectionOrder?: TaskPrSectionKey[];
   executionRepository?: ExecutionRepository;
 }
 
@@ -57,5 +58,6 @@ export function buildTaskPrComposerInput(args: BuildTaskPrComposerInputArgs): Ta
     usage,
     qa,
     sections: args.sections,
+    sectionOrder: args.sectionOrder,
   };
 }

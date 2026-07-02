@@ -4,6 +4,9 @@ import {
   composeTaskPrTitle,
   composeSprintPrBody,
   composeSprintPrTitle,
+  resolveSectionOrder,
+  DEFAULT_TASK_SECTION_ORDER,
+  DEFAULT_SPRINT_SECTION_ORDER,
   type TaskPrComposerInput,
   type SprintPrComposerInput,
 } from "../../../../../src/domain/sprint/composer/pr-description-composer.js";
@@ -53,6 +56,7 @@ const baseTaskInput: TaskPrComposerInput = {
     toolCallCount: 12,
     activeTimeMs: 14 * 60 * 1000,
     costUsd: 0.42,
+    includedCostUsd: null,
     billedInvocationCount: 2,
     subscriptionInvocationCount: 0,
   },
@@ -90,6 +94,7 @@ const baseSprintInput: SprintPrComposerInput = {
       toolCallCount: 2,
       activeTimeMs: 30000,
       costUsd: 0.1,
+      includedCostUsd: null,
       billedInvocationCount: 1,
       subscriptionInvocationCount: 0,
     },
@@ -103,6 +108,7 @@ const baseSprintInput: SprintPrComposerInput = {
     toolCallCount: 40,
     activeTimeMs: 3600000,
     costUsd: 1.8,
+    includedCostUsd: 0.35,
     billedInvocationCount: 4,
     subscriptionInvocationCount: 2,
   },
@@ -190,6 +196,38 @@ describe("composeTaskPrBody", () => {
     expect(body).toContain("ran via subscription/local login");
     expect(body).toContain("Total tokens");
   });
+
+  it("shows Est. cost, Included cost, and Total cost rows when usage is a mix of billed and subscription", () => {
+    const body = composeTaskPrBody({
+      ...baseTaskInput,
+      usage: {
+        ...baseTaskInput.usage!,
+        costUsd: 0.42,
+        includedCostUsd: 0.1,
+        billedInvocationCount: 2,
+        subscriptionInvocationCount: 1,
+      },
+    });
+    expect(body).toContain("**Est. cost (API-billed):** $0.42");
+    expect(body).toContain("**Included cost (subscription):** $0.10");
+    expect(body).toContain("**Total cost:** $0.52");
+  });
+
+  it("shows only Included cost, no Total cost row, when usage is entirely subscription-priced", () => {
+    const body = composeTaskPrBody({
+      ...baseTaskInput,
+      usage: {
+        ...baseTaskInput.usage!,
+        costUsd: null,
+        includedCostUsd: 0.25,
+        billedInvocationCount: 0,
+        subscriptionInvocationCount: 2,
+      },
+    });
+    expect(body).not.toContain("Est. cost");
+    expect(body).toContain("**Included cost (subscription):** $0.25");
+    expect(body).not.toContain("Total cost");
+  });
 });
 
 describe("composeSprintPrBody", () => {
@@ -259,19 +297,29 @@ describe("composeSprintPrBody", () => {
     expect(body).toContain("did not run a QA review");
   });
 
-  it("omits the cost line when aggregate usage was entirely subscription-based", () => {
+  it("omits all cost lines when aggregate usage was entirely subscription-based with no known pricing", () => {
     const body = composeSprintPrBody({
       ...baseSprintInput,
       planning: null,
       aggregateUsage: {
         ...baseSprintInput.aggregateUsage!,
         costUsd: null,
+        includedCostUsd: null,
         billedInvocationCount: 0,
         subscriptionInvocationCount: 6,
       },
     });
     expect(body).not.toContain("Est. cost");
+    expect(body).not.toContain("Included cost");
+    expect(body).not.toContain("Total cost");
     expect(body).toContain("ran via subscription/local login");
+  });
+
+  it("shows Est. cost, Included cost, and Total cost rows for the aggregate sprint usage mix", () => {
+    const body = composeSprintPrBody(baseSprintInput);
+    expect(body).toContain("**Est. cost (API-billed):** $1.80");
+    expect(body).toContain("**Included cost (subscription):** $0.35");
+    expect(body).toContain("**Total cost:** $2.15");
   });
 });
 
@@ -300,5 +348,64 @@ describe("composeSprintPrTitle", () => {
       defaultBranch: "main",
     });
     expect(title).toBe("Sprint 5 — merge sprint/5-x into main");
+  });
+});
+
+describe("resolveSectionOrder", () => {
+  it("returns the default order when no order is given", () => {
+    expect(resolveSectionOrder(undefined, DEFAULT_TASK_SECTION_ORDER)).toEqual(DEFAULT_TASK_SECTION_ORDER);
+  });
+
+  it("preserves a valid custom order as-is", () => {
+    const custom = ["branchInfo", "summary", "tokenUsage", "modelAndProvider", "timing", "qaFindings", "fullPrompt"];
+    expect(resolveSectionOrder(custom, DEFAULT_TASK_SECTION_ORDER)).toEqual(custom);
+  });
+
+  it("drops unknown keys and de-duplicates", () => {
+    const result = resolveSectionOrder(["summary", "bogus", "summary", "timing"], DEFAULT_TASK_SECTION_ORDER);
+    expect(result).not.toContain("bogus");
+    expect(result.filter((k) => k === "summary")).toHaveLength(1);
+  });
+
+  it("appends known keys missing from a partial/stale saved order", () => {
+    const result = resolveSectionOrder(["timing", "summary"], DEFAULT_TASK_SECTION_ORDER);
+    expect(result.slice(0, 2)).toEqual(["timing", "summary"]);
+    expect(new Set(result)).toEqual(new Set(DEFAULT_TASK_SECTION_ORDER));
+  });
+});
+
+describe("section reordering", () => {
+  it("composeTaskPrBody renders enabled sections in the given sectionOrder", () => {
+    const body = composeTaskPrBody({
+      ...baseTaskInput,
+      sectionOrder: ["branchInfo", "modelAndProvider", "summary"],
+      sections: { ...ALL_TASK_SECTIONS_ON, timing: false, fullPrompt: false, tokenUsage: false, qaFindings: false },
+    });
+    const branchIndex = body.indexOf("🌿 Branch Info");
+    const modelIndex = body.indexOf("### 🤖 Model & Provider");
+    const summaryIndex = body.indexOf("### 📋 Summary");
+    expect(branchIndex).toBeGreaterThan(-1);
+    expect(modelIndex).toBeGreaterThan(branchIndex);
+    expect(summaryIndex).toBeGreaterThan(modelIndex);
+  });
+
+  it("composeSprintPrBody renders enabled sections in the given sectionOrder", () => {
+    const body = composeSprintPrBody({
+      ...baseSprintInput,
+      sectionOrder: ["qaFindings", "taskChecklist", "summary"],
+      sections: { ...ALL_SPRINT_SECTIONS_ON, planningModel: false, mainPrompt: false, providerBreakdown: false, timing: false, tokenUsage: false, branchInfo: false },
+    });
+    const qaIndex = body.indexOf("### 🕵️ QA Review Summary");
+    const checklistIndex = body.indexOf("### ✅ Task Checklist");
+    const summaryIndex = body.indexOf("### 📋 Summary");
+    expect(qaIndex).toBeGreaterThan(-1);
+    expect(checklistIndex).toBeGreaterThan(qaIndex);
+    expect(summaryIndex).toBeGreaterThan(checklistIndex);
+  });
+
+  it("falls back to the default order when sectionOrder is omitted", () => {
+    const withDefaultOrder = composeTaskPrBody(baseTaskInput);
+    const withExplicitDefaultOrder = composeTaskPrBody({ ...baseTaskInput, sectionOrder: [...DEFAULT_TASK_SECTION_ORDER] });
+    expect(withDefaultOrder).toBe(withExplicitDefaultOrder);
   });
 });
