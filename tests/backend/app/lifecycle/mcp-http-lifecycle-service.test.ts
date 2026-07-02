@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -46,6 +46,37 @@ function createTestServer(): Server {
 }
 
 describe("bootMcpHttpTransport", () => {
+  it("can bind without awaiting startup recovery", async () => {
+    const recover = vi.fn().mockResolvedValue({ resumedSprintRunIds: [] });
+    const handle = await bootMcpHttpTransport({
+      enabled: true,
+      host: "127.0.0.1",
+      port: 0,
+      path: "/mcp",
+      authToken: null,
+      logger: {
+        info: () => undefined,
+        warn: () => undefined,
+        error: () => undefined,
+        debug: () => undefined,
+        child: () => ({
+          info: () => undefined,
+          warn: () => undefined,
+          error: () => undefined,
+          debug: () => undefined,
+          child: () => undefined as never,
+        }),
+      } as any,
+      createServer: createTestServer,
+      recoveryService: { recover } as any,
+      runStartupRecovery: false,
+    });
+    handles.push(handle!);
+
+    expect(handle).not.toBeNull();
+    expect(recover).not.toHaveBeenCalled();
+  });
+
   it("rejects unauthorized missing token", async () => {
     const handle = await bootMcpHttpTransport({
       enabled: true,
