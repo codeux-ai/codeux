@@ -556,6 +556,7 @@ describe("ProviderRunner", () => {
       onActivity: vi.fn(),
     };
     const model = resolveEffectiveModel(runArgs);
+    expect(model).toBe("gpt-5-codex");
     await runner.runProvider({ ...runArgs, model });
 
     expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
@@ -566,7 +567,11 @@ describe("ProviderRunner", () => {
       }),
     }));
 
+    const env = dockerRunner.runProviderInDocker.mock.calls[0][0].providerEnv;
+    expect(env.CODEX_MODEL).toBe("gpt-5-codex");
     const args: string[] = dockerRunner.runProviderInDocker.mock.calls[0][0].args;
+    expect(args).toContain("gpt-5-codex");
+    expect(args).not.toContain("openai/gpt-5-codex");
     expect(args).not.toContain("-c");
     expect(args).not.toContain(`model_provider="custom_gateway"`);
   });

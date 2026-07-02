@@ -32,18 +32,24 @@ export function buildProviderSettingsOverride(
   resolvedModel: string,
   providerSettings: ProviderSettings
 ): ProviderSettingsOverride {
+  const usesMountedAuth = providerSettings.mountAuth === true;
+
   return {
     model: resolvedModel,
     thinkingMode: providerSettings.thinkingMode,
-    apiKey: providerSettings.apiKey,
-    qwenAuthMode: providerSettings.qwenAuthMode,
+    apiKey: usesMountedAuth ? "" : providerSettings.apiKey,
+    qwenAuthMode: usesMountedAuth && providerSettings.provider === "qwen-code"
+      ? "LOCAL_AUTH"
+      : providerSettings.qwenAuthMode,
     qwenRegion: providerSettings.qwenRegion,
     qwenBaseUrl: providerSettings.qwenBaseUrl,
     qwenEnvKey: providerSettings.qwenEnvKey,
     qwenModelId: providerSettings.qwenModelId,
     qwenProtocol: providerSettings.qwenProtocol,
     qwenAdditionalModelProviders: providerSettings.qwenAdditionalModelProviders,
-    openCodeAuthMode: providerSettings.openCodeAuthMode,
+    openCodeAuthMode: usesMountedAuth && providerSettings.provider === "opencode"
+      ? "LOCAL_AUTH"
+      : providerSettings.openCodeAuthMode,
     openCodeProviderId: providerSettings.openCodeProviderId,
     openCodeModelId: providerSettings.openCodeModelId,
     openCodeBaseUrl: providerSettings.openCodeBaseUrl,
@@ -51,7 +57,7 @@ export function buildProviderSettingsOverride(
     openCodePackage: providerSettings.openCodePackage,
     providerMountAuth: providerSettings.mountAuth,
     providerAuthPath: providerSettings.authPath,
-    customBaseUrl: providerSettings.customBaseUrl,
-    customModel: providerSettings.customModel,
+    customBaseUrl: usesMountedAuth ? undefined : providerSettings.customBaseUrl,
+    customModel: usesMountedAuth ? undefined : providerSettings.customModel,
   };
 }

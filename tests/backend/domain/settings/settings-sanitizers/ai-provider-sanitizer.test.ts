@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { sanitizeAiProvider } from "../../../../../src/domain/settings/settings-sanitizers/ai-provider-sanitizer.js";
-import { buildDefaultIntegrationProviders, normalizeSystemIntegrationProviders } from "../../../../../src/domain/settings/provider-config-utils.js";
+import { buildDashboardProviderSettings, buildDefaultIntegrationProviders, buildProjectProviderSettings, normalizeSystemIntegrationProviders } from "../../../../../src/domain/settings/provider-config-utils.js";
 
 describe("sanitizeAiProvider", () => {
   it("uses external hints to build the default instance catalog", () => {
@@ -167,6 +167,74 @@ describe("sanitizeAiProvider", () => {
       expect(result.gemini.authType).toBe("dashboardAuth");
       expect(result.gemini.mountAuth).toBe(true);
       expect(result.gemini.authPath).toBe("~/.code-ux/credentials/gemini");
+    });
+
+    it("drops stale custom endpoint settings when Codex uses dashboard login", () => {
+      const input = {
+        providers: {
+          codex: {
+            provider: "codex",
+            name: "Codex Primary",
+            apiKey: "sk-local",
+            mountAuth: false,
+            authType: "dashboardAuth",
+            customBaseUrl: "http://192.168.0.38:1234/v1",
+            customModel: "local-model",
+          },
+        },
+      };
+
+      const result = normalizeSystemIntegrationProviders(input);
+
+      expect(result.codex.authType).toBe("dashboardAuth");
+      expect(result.codex.mountAuth).toBe(true);
+      expect(result.codex.apiKey).toBe("");
+      expect(result.codex.customBaseUrl).toBeUndefined();
+      expect(result.codex.customModel).toBeUndefined();
+    });
+
+    it("keeps Codex Primary isolated from a separate Codex Local instance", () => {
+      const integrationProviders = normalizeSystemIntegrationProviders({
+        providers: {
+          codex: {
+            provider: "codex",
+            name: "Codex Primary",
+            authType: "dashboardAuth",
+          },
+          "codex-local": {
+            provider: "codex",
+            name: "Codex Local",
+            authType: "apiKey",
+            apiKey: "sk-local",
+            customBaseUrl: "http://192.168.0.38:1234/v1",
+            customModel: "local-model",
+          },
+        },
+      });
+      const projectProviders = buildProjectProviderSettings({
+        codex: {
+          provider: "codex",
+          name: "Codex Primary",
+          model: "gpt-5.5",
+          enabled: true,
+        },
+        "codex-local": {
+          provider: "codex",
+          name: "Codex Local",
+          model: "gpt-5-codex",
+          enabled: true,
+        },
+      }, integrationProviders);
+
+      const result = buildDashboardProviderSettings(projectProviders, integrationProviders);
+
+      expect(result.codex.apiKey).toBe("");
+      expect(result.codex.customBaseUrl).toBeUndefined();
+      expect(result.codex.customModel).toBeUndefined();
+      expect(result.codex.model).toBe("gpt-5.5");
+      expect(result["codex-local"].apiKey).toBe("sk-local");
+      expect(result["codex-local"].customBaseUrl).toBe("http://192.168.0.38:1234/v1");
+      expect(result["codex-local"].customModel).toBe("local-model");
     });
 
     it("does not automatically readd default providers like gemini when they are omitted in a modern providers payload", () => {

@@ -14,6 +14,7 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
   const effectiveModel = resolveEffectiveModel({
     provider: ctx.provider,
     model: providerSettings.model,
+    providerMountAuth: providerSettings.providerMountAuth,
     customModel: providerSettings.customModel,
     qwenAuthMode: providerSettings.qwenAuthMode,
     qwenModelId: providerSettings.qwenModelId,

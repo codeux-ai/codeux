@@ -207,10 +207,12 @@ export const normalizeSystemIntegrationProviders = (
       }
     }
 
+    const usesApiKeyAuth = authType === "apiKey";
+
     result[providerConfigId] = {
       provider: providerId,
       name: normalizeProviderName(providerId, rawValue.name),
-      apiKey: typeof rawValue.apiKey === "string" ? rawValue.apiKey : "",
+      apiKey: usesApiKeyAuth && typeof rawValue.apiKey === "string" ? rawValue.apiKey : "",
       mountAuth: providerId === "jules"
         ? false
         // Dashboard login exists solely to mount the credentials it saves under
@@ -226,17 +228,17 @@ export const normalizeSystemIntegrationProviders = (
         : normalizeProviderAuthPath(providerId, rawValue.authPath),
       authType,
       ...(typeof rawValue.lastLoginAt === "number" ? { lastLoginAt: rawValue.lastLoginAt } : {}),
-      ...(typeof rawValue.customBaseUrl === "string" && rawValue.customBaseUrl.trim().length > 0
+      ...(usesApiKeyAuth && typeof rawValue.customBaseUrl === "string" && rawValue.customBaseUrl.trim().length > 0
         ? { customBaseUrl: rawValue.customBaseUrl.trim() }
         : {}),
-      ...(typeof rawValue.customModel === "string" && rawValue.customModel.trim().length > 0
+      ...(usesApiKeyAuth && typeof rawValue.customModel === "string" && rawValue.customModel.trim().length > 0
         ? { customModel: rawValue.customModel.trim() }
         : {}),
-      ...(typeof rawValue.customProviderId === "string" && rawValue.customProviderId.trim().length > 0
+      ...(usesApiKeyAuth && typeof rawValue.customProviderId === "string" && rawValue.customProviderId.trim().length > 0
         ? { customProviderId: rawValue.customProviderId.trim() }
         : {}),
       ...(providerId === "qwen-code" ? {
-        qwenAuthMode: normalizeQwenAuthMode(rawValue.qwenAuthMode),
+        qwenAuthMode: usesApiKeyAuth ? normalizeQwenAuthMode(rawValue.qwenAuthMode) : "LOCAL_AUTH",
         qwenRegion: normalizeQwenRegion(rawValue.qwenRegion),
         qwenBaseUrl: typeof rawValue.qwenBaseUrl === "string" && rawValue.qwenBaseUrl.trim().length > 0
           ? rawValue.qwenBaseUrl.trim()
@@ -265,7 +267,7 @@ export const normalizeSystemIntegrationProviders = (
           : [],
       } : {}),
       ...(providerId === "opencode" ? {
-        openCodeAuthMode: normalizeOpenCodeAuthMode(rawValue.openCodeAuthMode),
+        openCodeAuthMode: usesApiKeyAuth ? normalizeOpenCodeAuthMode(rawValue.openCodeAuthMode) : "LOCAL_AUTH",
         openCodeProviderId: normalizeNonEmptyString(rawValue.openCodeProviderId, "ollama"),
         openCodeModelId: normalizeNonEmptyString(rawValue.openCodeModelId, "glm-4.7-flash"),
         openCodeBaseUrl: normalizeNonEmptyString(rawValue.openCodeBaseUrl, "http://127.0.0.1:11434/v1"),
@@ -382,9 +384,7 @@ export const buildDashboardProviderSettings = (
           weight: normalizeWeight(projectProvider.weight, defaults.weight),
           thinkingMode: normalizeThinkingMode(projectProvider.thinkingMode, defaults.thinkingMode),
           maxConcurrentTasks: normalizeMaxConcurrentTasks(projectProvider.maxConcurrentTasks, defaults.maxConcurrentTasks),
-          apiKey: integrationProviders[providerConfigId]?.apiKey
-            || Object.entries(integrationProviders).find(([, integrationProvider]) => integrationProvider.provider === providerId)?.[1]?.apiKey
-            || "",
+          apiKey: integrationProviders[providerConfigId]?.apiKey || "",
           mountAuth: integrationProviders[providerConfigId]?.mountAuth
             || false,
           authPath: integrationProviders[providerConfigId]?.authPath
