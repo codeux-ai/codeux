@@ -601,7 +601,7 @@ export function useSprintsPageActions({
       routeOverride?: PlanningRouteOption | null,
       modelOverride?: string | null,
       signal?: AbortSignal,
-      options?: { shouldHandleResult?: () => boolean },
+      options?: { shouldHandleResult?: () => boolean; noTaskLimit?: boolean },
     ) => {
       if (!selectedProject) return;
       const reservedNumber = reserveNextSprintNumber();
@@ -611,6 +611,7 @@ export function useSprintsPageActions({
           {
             templateId,
             taskCount,
+            noTaskLimit: options?.noTaskLimit ?? false,
             submitMode: submitMode as "plan_only" | "plan_and_start",
             additionalPrompt,
             planningOverrides: toPlanningOverrides(

@@ -91,6 +91,32 @@ describe("QuicksprintPanel", () => {
     expect(getByText("Plan & Start")).toBeInTheDocument();
   });
 
+  it("supports unlimited subtasks and disables the slider interaction state", async () => {
+    const mockOnExecute = vi.fn().mockResolvedValue(undefined);
+    const { getByText, getByRole, container } = render(
+      <QuicksprintPanel {...defaultProps} onExecute={mockOnExecute} />
+    );
+
+    fireEvent.click(getByText("API Tests"));
+
+    expect(getByText("30")).toBeInTheDocument();
+
+    const noLimitToggle = getByRole("checkbox", { name: /no limit/i });
+    expect(noLimitToggle).not.toBeChecked();
+
+    fireEvent.click(noLimitToggle);
+
+    expect(noLimitToggle).toBeChecked();
+    expect(container.querySelector(".pointer-events-none")).not.toBeNull();
+
+    fireEvent.click(getByText("Plan & Start"));
+
+    await waitFor(() => {
+      expect(mockOnExecute).toHaveBeenCalled();
+    });
+    expect(mockOnExecute.mock.calls[0]?.[7]).toMatchObject({ noTaskLimit: true });
+  });
+
   it("renders provider instance route labels, default models, and brand icons", async () => {
     const { getByText, queryByText } = render(
       <QuicksprintPanel
