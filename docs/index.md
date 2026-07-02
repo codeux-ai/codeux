@@ -73,6 +73,7 @@ Use this page as the main entrypoint.
 4. [Operations Runbook](./operations/runbook.md)
 5. [Security Hardening](./operations/security-hardening.md)
 6. [Logging and Correlation IDs](./operations/logging-and-correlation.md)
+7. [CLI Management Surface](./operations/management-cli.md)
 
 ## Full Table of Contents
 
@@ -138,6 +139,7 @@ Use this page as the main entrypoint.
 - [Operations Runbook](./operations/runbook.md)
 - [Security Hardening](./operations/security-hardening.md)
 - [Logging and Correlation IDs](./operations/logging-and-correlation.md)
+- [CLI Management Surface](./operations/management-cli.md)
 - [Testing and Quality](./development/testing-and-quality.md)
 - [Electron Desktop App](./deployment/electron-desktop.md)
 - [Documentation Standards](./development/documentation-standards.md)
