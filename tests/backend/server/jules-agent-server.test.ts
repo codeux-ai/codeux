@@ -793,6 +793,9 @@ describe("CodeUxServer", () => {
       expect(bootDashboard).toHaveBeenCalled();
       expect(bootMcpTransport).toHaveBeenCalled();
       expect(bootMcpHttpTransport).toHaveBeenCalled();
+      expect((bootMcpHttpTransport as any).mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({
+        runStartupRecovery: false,
+      }));
       expect(refreshJulesApiKeySpy).toHaveBeenCalled();
 
       refreshJulesApiKeySpy.mockRestore();
