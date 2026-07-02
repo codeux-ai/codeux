@@ -324,15 +324,13 @@ export const configureDashboardApp = (options: DashboardServerOptions): Logger =
     }
   });
 
-  const deps: DashboardDependencies = {
-    ...options,
-    getUpdateStatus: options.getUpdateStatus ?? (async () => ({
-      currentVersion: CODE_UX_VERSION,
-      latestVersion: null,
-      updateAvailable: false,
-      checkedAt: new Date().toISOString(),
-    })),
-  };
+  const deps: DashboardDependencies = Object.create(options) as unknown as DashboardDependencies;
+  deps.getUpdateStatus = options.getUpdateStatus ?? (async () => ({
+    currentVersion: CODE_UX_VERSION,
+    latestVersion: null,
+    updateAvailable: false,
+    checkedAt: new Date().toISOString(),
+  }));
   registerDashboardRoutes(app, deps, liveActivityCacheMs);
 
   applyDashboardPostRouteMiddleware(app, dashboardDir);
