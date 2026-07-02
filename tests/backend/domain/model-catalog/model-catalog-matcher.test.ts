@@ -28,6 +28,11 @@ describe("resolveCatalogModelId", () => {
     expect(resolveCatalogModelId("opencode", "not-a-real-provider/not-a-real-model")).toBeNull();
   });
 
+  it("preserves catalogue-backed canonical provider/model ids for any Code UX provider", () => {
+    expect(resolveCatalogModelId("qwen-code", "deepseek/deepseek-v4-flash")).toBe("deepseek/deepseek-v4-flash");
+    expect(resolveCatalogModelId("claude-code", "deepseek/deepseek-v4-flash")).toBe("deepseek/deepseek-v4-flash");
+  });
+
   it("returns null for providers/models with no catalogue match", () => {
     expect(resolveCatalogModelId("jules", "default")).toBeNull();
     expect(resolveCatalogModelId("codex", "totally-made-up-model")).toBeNull();
@@ -58,6 +63,21 @@ describe("resolveCustomProviderModelId", () => {
       },
     });
     expect(resolveCustomProviderModelId("claude-code", "my-local-model", settings)).toBe("custom/my-local-model");
+  });
+
+  it("preserves canonical provider/model override keys when no API provider was selected", () => {
+    const settings = buildSettings({
+      "qwen-local": {
+        provider: "qwen-code", name: "Qwen Local", apiKey: "", mountAuth: false, authPath: "",
+        qwenModelId: "google/gemma-4-26b-a4b-qat",
+      },
+      "codex-local": {
+        provider: "codex", name: "Codex Local", apiKey: "", mountAuth: false, authPath: "",
+        customModel: "deepseek/deepseek-v4-flash",
+      },
+    });
+    expect(resolveCustomProviderModelId("qwen-code", "google/gemma-4-26b-a4b-qat", settings)).toBe("google/gemma-4-26b-a4b-qat");
+    expect(resolveCustomProviderModelId("codex", "deepseek/deepseek-v4-flash", settings)).toBe("deepseek/deepseek-v4-flash");
   });
 
   it("reconstructs the override key for Qwen and OpenCode instances", () => {

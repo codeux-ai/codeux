@@ -216,6 +216,65 @@ describe("ExecutionRepository model pricing", () => {
     expect(snapshot.usage.totalCostUsd).toBeCloseTo(1.25, 5);
   });
 
+  it("prices provider/model rows from legacy custom/provider/model override keys", async () => {
+    const { projectRepository, executionRepository, settingsRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Legacy Custom Override Pricing Project",
+      sourceType: "local",
+      sourceRef: "/workspace/model-pricing-legacy-custom-override",
+    });
+
+    const baseSettings = settingsRepository.getSystemSettings();
+    settingsRepository.saveSystemSettings({
+      ...baseSettings,
+      integrations: {
+        ...baseSettings.integrations,
+        providers: {
+          ...baseSettings.integrations.providers,
+          opencode: {
+            ...baseSettings.integrations.providers.opencode,
+            provider: "opencode",
+            name: "OpenCode Local",
+            apiKey: "",
+            mountAuth: false,
+            authPath: "~/.local/share/opencode",
+            openCodeAuthMode: "CUSTOM_PROVIDER",
+            openCodeProviderId: "google",
+            openCodeModelId: "gemma-4-26b-a4b-qat",
+          },
+        },
+      },
+      modelPricing: {
+        overrides: {
+          "custom/google/gemma-4-26b-a4b-qat": { inputTokens: 0.25, outputTokens: 0.75, cachedInputTokens: 0 },
+        },
+      },
+    });
+
+    const invocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sessionId: "session-opencode-legacy-custom",
+      provider: "opencode",
+      purpose: "task_coding",
+      model: "google/gemma-4-26b-a4b-qat",
+    });
+    executionRepository.updateProviderInvocationUsage(invocation.id, {
+      status: "completed",
+      finishedAt: new Date().toISOString(),
+      inputTokens: 2_000_000,
+      cachedInputTokens: 0,
+      outputTokens: 1_000_000,
+      reasoningOutputTokens: 0,
+      totalTokens: 3_000_000,
+      usageSource: "reported",
+    });
+
+    const snapshot = executionRepository.getProjectStatsSnapshot(project.id, "24h");
+    expect(snapshot.usage.inputCostUsd).toBeCloseTo(0.5, 5);
+    expect(snapshot.usage.outputCostUsd).toBeCloseTo(0.75, 5);
+    expect(snapshot.usage.totalCostUsd).toBeCloseTo(1.25, 5);
+  });
+
   it("uses provider-reported OpenCode cost when token-rate pricing is unavailable", async () => {
     const { projectRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({

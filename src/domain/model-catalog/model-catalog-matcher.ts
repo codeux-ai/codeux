@@ -44,6 +44,12 @@ const MODEL_SLUG_ALIASES: Partial<Record<ProviderId, Record<string, string>>> = 
   },
 };
 
+const splitCanonicalModelId = (model: string): { providerId: string; modelId: string } | null => {
+  const [providerId, ...modelParts] = model.split("/");
+  const modelId = modelParts.join("/");
+  return providerId && modelId ? { providerId, modelId } : null;
+};
+
 /**
  * Resolves a Code UX provider + CLI-facing model slug to a canonical models.dev catalogue id
  * ("<provider>/<model>"), or null if no match exists (the caller falls back to a manual
@@ -53,6 +59,10 @@ export function resolveCatalogModelId(providerId: ProviderId, rawModel: string):
   const model = rawModel.trim();
   if (!model) {
     return null;
+  }
+
+  if (splitCanonicalModelId(model) && getModelCatalogEntry(model)) {
+    return model;
   }
 
   if (providerId === "opencode") {
@@ -109,7 +119,9 @@ export function resolveCustomProviderModelId(
       continue;
     }
     if (providerId === "qwen-code" && instance.qwenModelId === model) {
-      return `${instance.qwenApiProviderId || "custom"}/${model}`;
+      return instance.qwenApiProviderId
+        ? `${instance.qwenApiProviderId}/${model}`
+        : splitCanonicalModelId(model) ? model : `custom/${model}`;
     }
     if (providerId === "opencode") {
       const customProviderId = instance.openCodeProviderId || "custom";
@@ -122,7 +134,9 @@ export function resolveCustomProviderModelId(
       }
     }
     if ((providerId === "claude-code" || providerId === "codex") && instance.customModel === model) {
-      return `${instance.customProviderId || "custom"}/${model}`;
+      return instance.customProviderId
+        ? `${instance.customProviderId}/${model}`
+        : splitCanonicalModelId(model) ? model : `custom/${model}`;
     }
   }
 
