@@ -29,8 +29,10 @@ describe("SprintImportMenu", () => {
     fireEvent.click(trigger);
 
     const menu = screen.getByRole("menu");
-    expect(menu).toHaveClass("z-[230]");
-    expect(menu.parentElement).toHaveClass("z-[230]");
+    expect(menu).toHaveClass("fixed", "z-[9999]");
+    expect(menu).not.toHaveClass("transition-all");
+    expect(menu).toHaveStyle({ top: "8px", left: "16px" });
+    expect(menu.parentElement).toBe(document.body);
     expect(screen.getAllByText("GitHub Issues")[0]).toBeInTheDocument();
 
     const markdownBtn = screen.getByRole("menuitem", { name: /markdown/i });
