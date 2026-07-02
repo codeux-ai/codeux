@@ -119,7 +119,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
   };
 
   return (
-    <div className="mt-2 rounded-2xl bg-slate-950/70 border border-white/[0.05] p-4 space-y-3 w-full min-w-0 max-w-full max-h-[500px] overflow-y-auto">
+    <div className="mt-2 max-h-[500px] w-full min-w-0 max-w-full space-y-3 overflow-y-auto rounded-2xl border border-white/[0.05] bg-slate-950/70 p-4">
       {invocation.lastErrorMessage ? (
         <details className="mb-4 group">
           <summary className="cursor-pointer list-none text-sm font-bold uppercase tracking-[0.16em] text-red-500 dark:text-red-400 hover:text-red-600 transition-colors">
@@ -221,7 +221,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
                   </div>
                 </div>
 
-                <pre className="whitespace-pre-wrap break-words text-xs text-slate-300 mt-2 overflow-x-auto" style={contentStyle}>
+                <pre className="mt-2 max-w-full whitespace-pre-wrap break-words text-xs text-slate-300" style={contentStyle}>
                   {message.contentMarkdown}
                 </pre>
 

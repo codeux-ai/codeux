@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useState, useRef, useLayoutEffect } from "preact/hooks";
+import { useMemo, useRef, useState, useLayoutEffect } from "preact/hooks";
 import gsap from "gsap";
 import { GitBranch, ListTodo, Rows3 } from "lucide-preact";
 import type { ProjectExecutionStatsSnapshot } from "../../../types.js";
@@ -17,8 +17,25 @@ type LedgerTab = "tasks" | "sprints" | "git";
 export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = ({ stats }) => {
   const [activeTab, setActiveTab] = useState<LedgerTab>("tasks");
   const contentRef = useRef<HTMLDivElement>(null);
+  const tabRefs = useRef<Record<LedgerTab, HTMLButtonElement | null>>({
+    tasks: null,
+    sprints: null,
+    git: null,
+  });
   const reducedMotion = useReducedMotion();
   const prevTab = useRef(activeTab);
+
+  const tabs = useMemo(() => {
+    const taskCount = stats.tasks.length;
+    const sprintCount = stats.sprints.length;
+    const gitCount = stats.git ? stats.git.tasks.length + stats.git.sprints.length : 0;
+
+    return [
+      { id: "tasks" as const, label: "Task Telemetry", icon: ListTodo, count: taskCount },
+      { id: "sprints" as const, label: "Sprint Telemetry", icon: Rows3, count: sprintCount },
+      ...(stats.git ? [{ id: "git" as const, label: "Git Telemetry", icon: GitBranch, count: gitCount }] : []),
+    ];
+  }, [stats]);
 
   useLayoutEffect(() => {
     if (!contentRef.current || prevTab.current === activeTab) return;
@@ -37,30 +54,41 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
     prevTab.current = activeTab;
   }, [activeTab, reducedMotion]);
 
-  const tabs: Array<{ id: LedgerTab; label: string; icon: typeof ListTodo; badge: string | null }> = [
-    { id: "tasks", label: "Task Telemetry", icon: ListTodo, badge: `${stats.tasks.length} tasks` },
-    { id: "sprints", label: "Sprint Telemetry", icon: Rows3, badge: `${stats.sprints.length} sprints` },
-    ...(stats.git ? [{ id: "git" as const, label: "Git Telemetry", icon: GitBranch, badge: null }] : []),
-  ];
+  const focusTab = (index: number) => {
+    const tab = tabs[index];
+    if (!tab) return;
+    setActiveTab(tab.id);
+    tabRefs.current[tab.id]?.focus();
+  };
 
   return (
     <div className="flex flex-col gap-6">
       <div
         role="tablist"
+        aria-orientation="horizontal"
         aria-label="Telemetry ledgers"
-        className="flex gap-1 self-start max-w-full overflow-x-auto rounded-2xl border border-black/[0.05] bg-white/68 p-1 dark:border-white/[0.05] dark:bg-void-900/35"
+        className="flex max-w-full gap-1 overflow-x-auto overscroll-x-contain rounded-2xl border border-black/[0.05] bg-white/68 p-1 shadow-[0_1px_0_rgba(255,255,255,0.55)_inset] scrollbar-hide dark:border-white/[0.05] dark:bg-void-900/35"
         onKeyDown={(e) => {
-          if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+          if (tabs.length === 0) {
+            return;
+          }
+
+          if (e.key === "ArrowRight" || e.key === "ArrowLeft" || e.key === "Home" || e.key === "End") {
             e.preventDefault();
             const currentIndex = tabs.findIndex(t => t.id === activeTab);
-            let nextIndex = e.key === "ArrowRight" ? currentIndex + 1 : currentIndex - 1;
+            let nextIndex = currentIndex;
+            if (e.key === "Home") {
+              nextIndex = 0;
+            } else if (e.key === "End") {
+              nextIndex = tabs.length - 1;
+            } else if (e.key === "ArrowRight") {
+              nextIndex = currentIndex + 1;
+            } else {
+              nextIndex = currentIndex - 1;
+            }
             if (nextIndex >= tabs.length) nextIndex = 0;
             if (nextIndex < 0) nextIndex = tabs.length - 1;
-            setActiveTab(tabs[nextIndex].id);
-            // Delay the focus by a microtask to allow render to complete
-            Promise.resolve().then(() => {
-              document.getElementById(`tab-${tabs[nextIndex].id}`)?.focus();
-            });
+            focusTab(nextIndex);
           }
         }}
       >
@@ -72,12 +100,15 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
               key={tab.id}
               type="button"
               id={`tab-${tab.id}`}
+              ref={(node) => {
+                tabRefs.current[tab.id] = node;
+              }}
               role="tab"
               aria-selected={isActive}
               aria-controls={`tabpanel-${tab.id}`}
               tabIndex={isActive ? 0 : -1}
               onClick={() => setActiveTab(tab.id)}
-              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 ${
+              className={`inline-flex min-w-max items-center gap-2 rounded-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-all motion-safe:duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 ${
                 isActive
                   ? "bg-slate-900 text-white shadow-sm dark:bg-white dark:text-void-900"
                   : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
@@ -85,15 +116,13 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
             >
               <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
               {tab.label}
-              {tab.badge !== null ? (
-                <span className={`px-2 py-0.5 text-[9px] font-black tracking-wider ${CHIP_CLASS} ${
+              <span className={`inline-flex min-w-10 justify-center px-2 py-0.5 text-[9px] font-black tabular-nums tracking-wider ${CHIP_CLASS} ${
                   isActive
                     ? "bg-white/20 text-white dark:bg-void-900/15 dark:text-void-900"
                     : "text-slate-500 dark:text-slate-400"
-                }`}>
-                  {tab.badge}
-                </span>
-              ) : null}
+              }`}>
+                {tab.count.toLocaleString()}
+              </span>
             </button>
           );
         })}
@@ -105,6 +134,7 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
         aria-labelledby={`tab-${activeTab}`}
         tabIndex={0}
         ref={contentRef}
+        className="min-w-0 focus-visible:outline-none"
       >
         {activeTab === "git" && stats.git ? (
           <GitTelemetryTab gitStats={stats.git} />

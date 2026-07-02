@@ -98,9 +98,9 @@ describe("SystemStudio", () => {
       expect(screen.getByText("Invocations & System Logs")).toBeTruthy();
     });
 
-    expect(screen.getByRole("button", { name: "All" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Errors" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "System Msgs" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^All\b/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Errors\b/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^System Msgs\b/ })).toBeTruthy();
     expect(container.textContent).toContain("1.3k");
     expect(container.textContent).toContain("9m 0s");
     expect(container.textContent).toContain("Showing 2 of 2");
@@ -115,21 +115,21 @@ describe("SystemStudio", () => {
     expect(container.textContent).toContain("Error Log");
     expect(container.textContent).toContain("Detailed Log");
 
-    fireEvent.click(screen.getByRole("button", { name: "Errors" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Errors\b/ }));
 
     await waitFor(() => {
       expect(screen.getByText("Showing 1 of 2")).toBeTruthy();
       expect(container.textContent).toContain("Rate limited");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "System Msgs" }));
+    fireEvent.click(screen.getByRole("button", { name: /^System Msgs\b/ }));
 
     await waitFor(() => {
       expect(screen.getByText("Showing 1 of 2")).toBeTruthy();
       expect(container.textContent).toContain("System Msgs");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    fireEvent.click(screen.getByRole("button", { name: /^All\b/ }));
 
     await waitFor(() => {
       expect(screen.getByText("Showing 2 of 2")).toBeTruthy();

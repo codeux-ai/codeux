@@ -1,6 +1,6 @@
-import type { FunctionComponent } from "preact";
+import type { ComponentType, FunctionComponent } from "preact";
 import { useMemo, useState } from "preact/hooks";
-import { GitMerge, GitPullRequest, FileEdit, Flag, ListTodo, PlusSquare, MinusSquare, Search } from "lucide-preact";
+import { AlertTriangle, GitMerge, GitPullRequest, FileEdit, Flag, ListTodo, PlusSquare, MinusSquare, Search } from "lucide-preact";
 import { useProgressiveList } from "../../../../hooks/use-progressive-list.js";
 import type { ExecutionGitStatsEntitySummary, ExecutionGitStatsSummary } from "../../../types.js";
 import { formatPercent } from "../stats-utils.js";
@@ -10,13 +10,14 @@ import {
   LEDGER_ROW_MODERN_CLASS,
   PANEL_CLASS,
   SUBPANEL_CLASS,
-  SignalMetricCard,
   SortButton,
   TokenChip,
   ChurnFlowBar,
 } from "./StatsShared.js";
 
 type GitLedgerSortKey = "insertions" | "deletions" | "filesChanged" | "prCount" | "mergedCount" | "name";
+
+const getMetricCount = (value: number | null | undefined): number => value ?? 0;
 
 export const GitTelemetryLedger: FunctionComponent<{
   title: string;
@@ -258,6 +259,7 @@ export const GitTelemetryLedger: FunctionComponent<{
                             <TokenChip icon={FileEdit} label="Files" value={item.metrics.filesChanged.toLocaleString()} tone="border-cyan-500/16 bg-cyan-500/8 text-cyan-600 dark:text-cyan-400" />
                             <TokenChip icon={GitPullRequest} label="PRs" value={item.metrics.prCount.toLocaleString()} tone="border-amber-500/16 bg-amber-500/8 text-amber-600 dark:text-amber-400" />
                             <TokenChip icon={GitMerge} label="Merged" value={item.metrics.mergedCount.toLocaleString()} tone="border-indigo-500/16 bg-indigo-500/8 text-indigo-600 dark:text-indigo-400" />
+                            <TokenChip icon={AlertTriangle} label="Conflicts" value={getMetricCount(item.metrics.mergeConflictCount).toLocaleString()} tone="border-orange-500/16 bg-orange-500/8 text-orange-600 dark:text-orange-400" />
                           </div>
                           <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
                             {formatPercent(shareOfTotal)} of churn
@@ -281,23 +283,119 @@ export const GitTelemetryLedger: FunctionComponent<{
   );
 };
 
+const GitStatCard: FunctionComponent<{
+  icon: ComponentType<any>;
+  label: string;
+  value: string;
+  detail: string;
+  tone: string;
+}> = ({ icon: Icon, label, value, detail, tone }) => (
+  <div className={`${SUBPANEL_CLASS} p-4`}>
+    <div className="flex items-center gap-3">
+      <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${tone}`}>
+        <Icon className="h-4 w-4" strokeWidth={2.25} />
+      </div>
+      <div>
+        <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">{label}</div>
+        <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">{value}</div>
+      </div>
+    </div>
+    <div className="mt-3 text-[11px] font-medium text-slate-500 dark:text-slate-400">{detail}</div>
+  </div>
+);
+
+const GitRankingPanel: FunctionComponent<{
+  buckets: ExecutionGitStatsSummary["buckets"];
+  tasks: ExecutionGitStatsSummary["tasks"];
+  sprints: ExecutionGitStatsSummary["sprints"];
+}> = ({ buckets, tasks, sprints }) => {
+  const rankedBuckets = [...buckets]
+    .sort((left, right) => (right.metrics.insertions + right.metrics.deletions) - (left.metrics.insertions + left.metrics.deletions))
+    .slice(0, 4);
+  const topTask = [...tasks]
+    .sort((left, right) => (right.metrics.insertions + right.metrics.deletions) - (left.metrics.insertions + left.metrics.deletions))[0] ?? null;
+  const topSprint = [...sprints]
+    .sort((left, right) => (right.metrics.insertions + right.metrics.deletions) - (left.metrics.insertions + left.metrics.deletions))[0] ?? null;
+
+  return (
+    <div className={`${SUBPANEL_CLASS} p-4 lg:p-5`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Ranking Snapshot</div>
+          <div className="mt-2 text-sm font-bold text-slate-900 dark:text-white">Buckets and entity leaders</div>
+        </div>
+        <div className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+          {rankedBuckets.length} buckets
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_0.95fr]">
+        <div>
+          <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Busiest buckets</div>
+          <div className="space-y-2">
+            {rankedBuckets.map((bucket, index) => {
+              const churn = bucket.metrics.insertions + bucket.metrics.deletions;
+              return (
+                <div key={bucket.bucketStart} className="rounded-2xl border border-black/[0.05] bg-white/60 p-3 dark:border-white/[0.05] dark:bg-void-900/30">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-bold text-slate-900 dark:text-white">
+                        {index + 1}. {bucket.label}
+                      </div>
+                      <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                        {bucket.metrics.prCount.toLocaleString()} PRs · {getMetricCount(bucket.metrics.mergeConflictCount).toLocaleString()} conflicts
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-black text-slate-900 dark:text-white">{churn.toLocaleString()}</div>
+                      <div className="text-[10px] uppercase tracking-[0.16em] text-slate-400">churn</div>
+                    </div>
+                  </div>
+                  <div className="mt-2 grid grid-cols-4 gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                    <span>+{bucket.metrics.insertions.toLocaleString()}</span>
+                    <span>-{bucket.metrics.deletions.toLocaleString()}</span>
+                    <span>{bucket.metrics.filesChanged.toLocaleString()} files</span>
+                    <span>{bucket.metrics.mergedCount.toLocaleString()} merged</span>
+                  </div>
+                </div>
+              );
+            })}
+            {rankedBuckets.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-6 text-sm text-slate-400 dark:border-white/[0.08]">
+                No bucket data is available yet.
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Entity leaders</div>
+          <div className="rounded-2xl border border-black/[0.05] bg-white/60 p-3 dark:border-white/[0.05] dark:bg-void-900/30">
+            <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Top task</div>
+            <div className="mt-1 text-sm font-bold text-slate-900 dark:text-white">{topTask ? topTask.label : "No task leader yet"}</div>
+            {topTask ? (
+              <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                {topTask.metrics.prCount.toLocaleString()} PRs · {topTask.metrics.mergedCount.toLocaleString()} merged · {getMetricCount(topTask.metrics.mergeConflictCount).toLocaleString()} conflicts
+              </div>
+            ) : null}
+          </div>
+          <div className="rounded-2xl border border-black/[0.05] bg-white/60 p-3 dark:border-white/[0.05] dark:bg-void-900/30">
+            <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Top sprint</div>
+            <div className="mt-1 text-sm font-bold text-slate-900 dark:text-white">{topSprint ? topSprint.label : "No sprint leader yet"}</div>
+            {topSprint ? (
+              <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                {topSprint.metrics.prCount.toLocaleString()} PRs · {topSprint.metrics.filesChanged.toLocaleString()} files changed
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSummary }> = ({ gitStats }) => {
   const [activeTab, setActiveTab] = useState<"tasks" | "sprints">("tasks");
-
-  const codeChurnSeries = useMemo(() => {
-    const values = gitStats.buckets.map((b) => b.metrics.insertions + b.metrics.deletions);
-    return values.some((v) => v > 0) ? values : new Array(Math.max(gitStats.buckets.length, 7)).fill(0);
-  }, [gitStats.buckets]);
-
-  const prSeries = useMemo(() => {
-    const values = gitStats.buckets.map((b) => b.metrics.prCount);
-    return values.some((v) => v > 0) ? values : new Array(Math.max(gitStats.buckets.length, 7)).fill(0);
-  }, [gitStats.buckets]);
-
-  const mergeSeries = useMemo(() => {
-    const values = gitStats.buckets.map((b) => b.metrics.mergedCount);
-    return values.some((v) => v > 0) ? values : new Array(Math.max(gitStats.buckets.length, 7)).fill(0);
-  }, [gitStats.buckets]);
 
   if (!gitStats.totals.insertions && !gitStats.totals.deletions && !gitStats.totals.filesChanged && !gitStats.totals.prCount && !gitStats.totals.mergedCount && !gitStats.tasks.length && !gitStats.sprints.length) {
     return (
@@ -314,37 +412,54 @@ export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSum
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-        <SignalMetricCard
-          label="Code Churn"
-          value={(gitStats.totals.insertions + gitStats.totals.deletions).toLocaleString()}
-          detail={`+${gitStats.totals.insertions.toLocaleString()} insertions · -${gitStats.totals.deletions.toLocaleString()} deletions`}
-          accentHex="#10B981"
-          hoverTint="group-hover:bg-emerald-500/[0.03]"
-          sparkline={codeChurnSeries}
-          signalLabel="Lines"
+      <section className="grid grid-cols-2 gap-4 xl:grid-cols-3">
+        <GitStatCard
+          icon={PlusSquare}
+          label="Insertions"
+          value={gitStats.totals.insertions.toLocaleString()}
+          detail={`${(gitStats.totals.insertions + gitStats.totals.deletions).toLocaleString()} total churn`}
+          tone="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
         />
-        <SignalMetricCard
+        <GitStatCard
+          icon={MinusSquare}
+          label="Deletions"
+          value={gitStats.totals.deletions.toLocaleString()}
+          detail={`${gitStats.totals.filesChanged.toLocaleString()} files changed`}
+          tone="bg-rose-500/10 text-rose-600 dark:text-rose-400"
+        />
+        <GitStatCard
+          icon={FileEdit}
+          label="Files Changed"
+          value={gitStats.totals.filesChanged.toLocaleString()}
+          detail={`${gitStats.totals.prCount.toLocaleString()} PRs in scope`}
+          tone="bg-cyan-500/10 text-cyan-600 dark:text-cyan-400"
+        />
+        <GitStatCard
+          icon={GitPullRequest}
           label="Pull Requests"
           value={gitStats.totals.prCount.toLocaleString()}
-          detail={`${gitStats.totals.filesChanged.toLocaleString()} files changed across ${gitStats.totals.prCount.toLocaleString()} PRs`}
-          accentHex="#F59E0B"
-          hoverTint="group-hover:bg-amber-500/[0.03]"
-          sparkline={prSeries}
-          signalLabel="Volume"
+          detail={`${gitStats.totals.mergedCount.toLocaleString()} merged`}
+          tone="bg-amber-500/10 text-amber-600 dark:text-amber-400"
         />
-        <SignalMetricCard
+        <GitStatCard
+          icon={GitMerge}
           label="Merges"
           value={gitStats.totals.mergedCount.toLocaleString()}
-          detail={`${gitStats.totals.mergedCount.toLocaleString()} PRs merged successfully in this window`}
-          accentHex="#6366F1"
-          hoverTint="group-hover:bg-indigo-500/[0.03]"
-          sparkline={mergeSeries}
-          signalLabel="Confirmed"
+          detail={`${getMetricCount(gitStats.totals.mergeConflictCount).toLocaleString()} conflicts in scope`}
+          tone="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
+        />
+        <GitStatCard
+          icon={AlertTriangle}
+          label="Merge Conflicts"
+          value={getMetricCount(gitStats.totals.mergeConflictCount).toLocaleString()}
+          detail={`${gitStats.totals.prCount > 0 ? Math.round((getMetricCount(gitStats.totals.mergeConflictCount) / gitStats.totals.prCount) * 100) : 0}% of PRs`}
+          tone="bg-orange-500/10 text-orange-600 dark:text-orange-400"
         />
       </section>
 
-      <div className="flex gap-1 self-start rounded-2xl border border-black/[0.05] bg-white/68 p-1 dark:border-white/[0.05] dark:bg-void-900/35">
+      <GitRankingPanel buckets={gitStats.buckets} tasks={gitStats.tasks} sprints={gitStats.sprints} />
+
+      <div className="flex max-w-full gap-1 overflow-x-auto rounded-2xl border border-black/[0.05] bg-white/68 p-1 dark:border-white/[0.05] dark:bg-void-900/35">
         {leaderboardTabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -354,7 +469,7 @@ export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSum
               type="button"
               onClick={() => setActiveTab(tab.id)}
               aria-pressed={isActive}
-              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-all ${
+              className={`inline-flex min-w-max items-center gap-2 rounded-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-all motion-safe:duration-200 ${
                 isActive
                   ? "bg-slate-900 text-white shadow-sm dark:bg-white dark:text-void-900"
                   : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
