@@ -186,6 +186,22 @@ export function createDashboardDependencies(
         is_independent: taskRecord.isIndependent,
         is_merged: taskRecord.isMerged,
       };
+      const latestWorkspaceBinding = executionRepository.getLatestTaskWorkspaceResumeTarget?.(taskId);
+      if (latestWorkspaceBinding?.sessionId || latestWorkspaceBinding?.workerBranch) {
+        resolvedTask.session_id = latestWorkspaceBinding.sessionId || undefined;
+        resolvedTask.session_name = latestWorkspaceBinding.sessionName || undefined;
+        resolvedTask.worker_branch = latestWorkspaceBinding.workerBranch || resolvedTask.worker_branch;
+        resolvedTask.pr_url = latestWorkspaceBinding.prUrl || resolvedTask.pr_url;
+      }
+      if (!resolvedTask.session_id && !resolvedTask.worker_branch) {
+        const latestWorkspaceRun = executionRepository.getLatestTaskRunWithWorkspace?.(taskId);
+        if (latestWorkspaceRun?.sessionId || latestWorkspaceRun?.workerBranch) {
+          resolvedTask.session_id = latestWorkspaceRun.sessionId || undefined;
+          resolvedTask.session_name = latestWorkspaceRun.sessionName || undefined;
+          resolvedTask.worker_branch = latestWorkspaceRun.workerBranch || undefined;
+          resolvedTask.pr_url = latestWorkspaceRun.prUrl || undefined;
+        }
+      }
 
       return {
         task: resolvedTask,

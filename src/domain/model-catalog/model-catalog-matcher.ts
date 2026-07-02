@@ -38,10 +38,20 @@ const MODEL_SLUG_ALIASES: Partial<Record<ProviderId, Record<string, string>>> = 
   },
   antigravity: {
     default: "google/gemini-3-flash-preview",
+    "gemini-3.5-flash": "google/gemini-3.5-flash",
+    "gemini-3.1-pro-high": "google/gemini-3.1-pro-preview",
+    "gemini-3.1-pro-low": "google/gemini-3.1-pro-preview",
     "gemini-3-flash": "google/gemini-3-flash-preview",
-    "claude-sonnet-4.6-thinking": "anthropic/claude-sonnet-4-5",
-    "claude-opus-4.6-thinking": "anthropic/claude-opus-4-5",
+    "claude-sonnet-4.6-thinking": "anthropic/claude-sonnet-4-6",
+    "claude-opus-4.6-thinking": "anthropic/claude-opus-4-6",
+    "gpt-oss-120b": "google-vertex/openai/gpt-oss-120b-maas",
   },
+};
+
+const splitCanonicalModelId = (model: string): { providerId: string; modelId: string } | null => {
+  const [providerId, ...modelParts] = model.split("/");
+  const modelId = modelParts.join("/");
+  return providerId && modelId ? { providerId, modelId } : null;
 };
 
 /**
@@ -55,9 +65,18 @@ export function resolveCatalogModelId(providerId: ProviderId, rawModel: string):
     return null;
   }
 
+  if (splitCanonicalModelId(model) && getModelCatalogEntry(model)) {
+    return model;
+  }
+
   if (providerId === "opencode") {
-    // OpenCode model ids are already "<provider>/<model>", matching the catalogue format.
-    return getModelCatalogEntry(model) ? model : null;
+    // OpenCode commonly stores models as "<provider>/<model>", but its hosted
+    // Zen catalog also exposes bare model slugs under the "opencode" provider.
+    if (getModelCatalogEntry(model)) {
+      return model;
+    }
+    const openCodeHostedId = `opencode/${model}`;
+    return getModelCatalogEntry(openCodeHostedId) ? openCodeHostedId : null;
   }
 
   const catalogProvider = PROVIDER_TO_CATALOG_PROVIDER[providerId];
@@ -104,13 +123,24 @@ export function resolveCustomProviderModelId(
       continue;
     }
     if (providerId === "qwen-code" && instance.qwenModelId === model) {
-      return `${instance.qwenApiProviderId || "custom"}/${model}`;
+      return instance.qwenApiProviderId
+        ? `${instance.qwenApiProviderId}/${model}`
+        : splitCanonicalModelId(model) ? model : `custom/${model}`;
     }
-    if (providerId === "opencode" && instance.openCodeModelId === model) {
-      return `${instance.openCodeProviderId || "custom"}/${model}`;
+    if (providerId === "opencode") {
+      const customProviderId = instance.openCodeProviderId || "custom";
+      if (instance.openCodeModelId === model) {
+        return `${customProviderId}/${model}`;
+      }
+      const configuredCanonicalId = `${customProviderId}/${instance.openCodeModelId || ""}`;
+      if (configuredCanonicalId === model) {
+        return configuredCanonicalId;
+      }
     }
     if ((providerId === "claude-code" || providerId === "codex") && instance.customModel === model) {
-      return `${instance.customProviderId || "custom"}/${model}`;
+      return instance.customProviderId
+        ? `${instance.customProviderId}/${model}`
+        : splitCanonicalModelId(model) ? model : `custom/${model}`;
     }
   }
 

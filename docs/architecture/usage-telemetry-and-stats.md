@@ -75,6 +75,14 @@ Codex runs with `codex exec --json`.
 
 Code UX first looks for `token_count` JSONL events, then normalizes the usage payload via the same shared `prompt/completion/total` adapter used by other providers. This includes safe fallback handling when Codex payloads omit completion counts but provide prompt and total tokens. If JSONL usage is missing, Code UX falls back to session JSON usage, then token estimation using `js-tiktoken` over the prompt plus captured transcript.
 
+Codex's rollout file (`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`) is cumulative for the whole session and keeps accumulating across `codex exec resume --last` (used for follow-up/QA-reopened runs and multi-turn retries). `parseCodexRolloutJsonl` isolates each run's own usage by treating the last `total_token_usage` snapshot *before* the run's time window as a baseline and subtracting it from the final cumulative snapshot — otherwise a follow-up would re-report every earlier turn's tokens too, inflating that run's persisted usage.
+
+### Qwen Code
+
+Qwen Code runs via its OpenAI-compatible request/response logging (`enableOpenAILoggingDir`), written to a directory that is reset at the start of every run so usage aggregation only ever sums the current invocation's own log files — unlike Codex/OpenCode, there is no cross-run cumulative counter to isolate.
+
+`src/infrastructure/providers/cli/provider-logs/qwen-log-parser.ts` sums `response.usage` (falling back to a bare top-level `usage` for older loggers) across every logged call in the run. Cached and reasoning token extraction delegates to the shared `parseUsageObject` adapter (also used by Codex), which checks OpenAI-style `prompt_tokens_details.cached_tokens` / `completion_tokens_details.reasoning_tokens` first, then falls back to Anthropic-style `cache_read_input_tokens` + `cache_creation_input_tokens` — relevant because Qwen Code can be configured with `qwenProtocol: "anthropic"` against an Anthropic-compatible backend, whose usage payload doesn't carry OpenAI's `*_details` shape.
+
 ### Claude Code
 
 Claude Code runs with a generated native `--session-id`.
@@ -101,10 +109,11 @@ For Docker-backed Claude Code runs, Code UX reads the same session JSONL from th
 Antigravity runs with `agy` CLI commands.
 
 Code UX parses session data from two sources:
-- **Token usage**: reads the conversation's SQLite database file (`~/.gemini/antigravity-cli/conversations/<id>.db` or fallback path `~/.gemini/antigravity/conversations/<id>.db`). It decodes the custom Protobuf data stored in the latest row of the `gen_metadata` table to extract:
+- **Token usage**: reads the conversation's SQLite database file (`~/.gemini/antigravity-cli/conversations/<id>.db` or fallback path `~/.gemini/antigravity/conversations/<id>.db`). It decodes the custom Protobuf data stored in **every** row of the `gen_metadata` table and sums across them to extract:
   - `inputTokens`
-  - `outputTokens` (falling back to reasoning + candidates if output tokens are zero or missing)
+  - `outputTokens` (falling back to reasoning + candidates if output tokens are zero or missing, per row)
   - `reasoningTokens`
+  - `cachedInputTokens` (inferred field mapping — see below)
 - **Full conversation transcript**: reads the JSONL transcript file (`~/.gemini/antigravity-cli/brain/<id>/.system_generated/logs/transcript.jsonl` or fallback path under `antigravity`). The transcript parser processes:
   - `user` turns from `USER_INPUT` entry types (stripping `<USER_REQUEST>` wrapper tags).
   - `assistant` and `tool_call` turns from `PLANNER_RESPONSE` entry types.
@@ -112,6 +121,22 @@ Code UX parses session data from two sources:
   - `reasoning` turns from `SYSTEM` source events.
 
 For Docker-backed Antigravity runs, the SQLite database is encoded to Base64 within the container first, and then decoded to a temporary file on the host before parsing to bypass Docker named volume permission issues.
+
+Each `gen_metadata` row is **one model call**, not a running session total — confirmed empirically against live conversation databases, where a single conversation can carry anywhere from a handful to several hundred rows and consecutive rows' input-token fields fluctuate rather than grow monotonically. The original implementation read only the *latest* row, which under-reported total usage by roughly the number of generations in the run (verified against real data: a 203-generation conversation showed 1,268 input tokens under the old logic vs. 2,372,421 actually used). `parseAntigravityDatabase` now sums every row instead.
+
+There is no official schema for this internal protobuf, so the field mapping is inferred rather than documented: input/output/reasoning/candidates are the same fields the original implementation used, and a new field (proto field 5) is treated as **cached/reused-context tokens** — it's present only on some rows (consistent with proto3 omitting zero-valued fields, i.e. "no cache hit this turn"), and where present its value closely tracks the *previous* row's input tokens (that turn's context, now served from cache on the next one).
+
+Because `agy --conversation=<id>` resumes the same conversation db across follow-up/retry invocations — accumulating `gen_metadata` rows across separate CLI runs just like Codex's rollout file or OpenCode's session store — a resumed run must not re-sum generations an earlier invocation already reported. There's no timestamp column to window by, so instead `ProviderRunner` peeks the db's current highest `idx` *before* a resumed run starts (a lightweight read-only query, self-contained to `provider-runner.ts`/`antigravity-log-parser.ts` — no cross-invocation baseline needs to be persisted or threaded through callers, unlike the OpenCode fix) and only sums rows past that cutoff afterward.
+
+### OpenCode
+
+OpenCode runs with `opencode run --format json`.
+
+Code UX reads the JSON event stream for the transcript, structured conversation turns, and native `ses_...` session id. Because recent OpenCode builds expose authoritative token and cost totals through `opencode export <sessionID>`, Code UX captures that export after the run and stores `info.tokens` plus `info.cost` in `raw_usage_json`, including `cache.read` as `cachedInputTokens`.
+
+`opencode export` reports totals **cumulative for the whole session**, and resuming a session (follow-up task runs, QA-reopened runs, provider retries, and dashboard chat replies that continue an earlier turn) all pass `--session <id>` to keep using it. Without correction this means every resumed invocation would re-report all of the session's prior tokens on top of its own, inflating that invocation's persisted usage each time it happens (compounding further on longer follow-up chains). `subtractOpenCodeBaseline` (`opencode-log-parser.ts`) corrects for this: callers that resume a session look up the previous invocation's raw `{ tokens, cost }` export snapshot for that same session/purpose and pass it through `collectProviderUsageTelemetry`'s `opencodeBaselineUsage`, which is subtracted from the freshly exported cumulative totals so only the current run's own tokens are recorded. The stored `raw_usage_json` itself is left as the fresh, unadjusted snapshot so it can serve as the baseline for the *next* follow-up. This baseline is threaded through every known session-resuming call path: `execute-provider-stage.ts` (task coding), `quality-assurance-service.ts` (QA follow-up implementation passes), the in-process retry loops inside `ProviderExecutionService.executeProvider` and `StructuredProviderResponseService.executeAndParse`, and dashboard chat continuations (`chat-thread-runtime-service.ts` → `chat-management-action-service.ts`).
+
+Stats pricing still prefers configured model-pricing overrides and catalogue token rates. If those are unavailable for an OpenCode model, the stats aggregation falls back to the provider-reported `raw_usage_json.cost` total so OpenCode runs with gateway-specific or hosted model ids do not display as zero-cost when the provider reported a cost.
 
 ### Jules
 
@@ -182,6 +207,8 @@ The stats snapshot includes:
 - total provider cost totals (e.g. `providerCost` map)
 - total model cost totals (e.g. `modelCost` map)
 - usage cost chart series for historical visualization (e.g. `core_total_cost`, `provider_cost_*`)
+- model-pricing keys preserve canonical `provider/model` ids when a CLI runtime records one directly (for example `deepseek/...` or `google/...` through a local or gateway-backed provider), instead of forcing that model under the CLI provider's default catalogue namespace. Bare local model names still fall back to stable `custom/<model>` override keys, while legacy `custom/<provider>/<model>` override keys are treated as aliases for `<provider>/<model>`.
+- Antigravity pricing uses explicit per-model aliases because Antigravity can route to different underlying model providers. Gemini Antigravity slugs map to Google catalogue ids, Claude thinking slugs map to Anthropic catalogue ids, and GPT OSS maps to the matching Google Vertex catalogue entry.
 - active sprint metadata
 - the original query (`window`, optional `from`, optional `to`)
 - normalized range metadata (`label`, `resolution`, `resolutionLabel`, `from`, `to`, `bucketCount`, `isCustom`)
@@ -192,6 +219,12 @@ The stats snapshot includes:
 - provider split
 - execution-purpose split
 - token-source mix
+
+## PR Description Rollups
+
+Automated task and sprint PR descriptions read from the same `provider_invocations` table as the dashboard stats surface. Task PRs must query usage by the persisted task record id (`Subtask.record_id`) when it is present, while continuing to render the human task key (`T01`, `T02`, etc.) in the markdown. Runtime rows are written with the DB task id, so querying by the display key would incorrectly show `unknown` model and "No usage data recorded" for task PRs even though the sprint aggregate has usage.
+
+Billing labels in PR descriptions resolve usage against configured provider instances by provider family plus model before falling back to the family default. This matters when multiple `codex`, `claude-code`, `qwen-code`, or `opencode` instances exist: a primary dashboard-login instance and a custom API/local gateway instance can share the same provider family. The PR composer compares the usage row's model with instance-level `model`, `customModel`, `qwenModelId`, and `openCodeModelId` so Gemma or other gateway-backed usage is not attributed to an unrelated subscription/login instance.
 
 ## UI Surface
 

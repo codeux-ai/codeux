@@ -13,8 +13,10 @@ const PROTECTED_EXPORT_PATH_PREFIXES = [
   ".code-ux-home",
 ];
 
+const TEMP_EXPORT_INDEX_PATH_RE = /^\.code-ux-export-[^/]+\.index$/;
+
 function isProtectedExportPath(candidate: string): boolean {
-  return PROTECTED_EXPORT_PATH_PREFIXES.some((protectedPath) => (
+  return TEMP_EXPORT_INDEX_PATH_RE.test(candidate) || PROTECTED_EXPORT_PATH_PREFIXES.some((protectedPath) => (
     candidate === protectedPath || candidate.startsWith(`${protectedPath}/`)
   ));
 }
@@ -162,6 +164,7 @@ export class WorkspaceArtifactService {
   }): Promise<AppliedWorkspacePatchResult> {
     const hasPatch = args.patchText.trim().length > 0;
     const parentRefs = args.parentRefs ?? [];
+    const materializationBaseRef = await this.resolveMaterializationBaseRef(args);
 
     // Determine whether a merge commit must be recorded even without a tree change:
     // when at least one parent ref is not yet contained in the base branch.
@@ -191,13 +194,13 @@ export class WorkspaceArtifactService {
         GIT_INDEX_FILE: indexPath,
       };
 
-      await runCommandStrict("git", ["read-tree", args.baseRef], args.repoPath, indexEnv);
+      await runCommandStrict("git", ["read-tree", materializationBaseRef], args.repoPath, indexEnv);
       if (hasPatch) {
         await runCommandStrict("git", ["apply", "--cached", "--binary", patchPath], args.repoPath, indexEnv);
       }
 
       const treeSha = (await runCommandStrict("git", ["write-tree"], args.repoPath, indexEnv)).stdout.trim();
-      const baseTree = (await runCommandStrict("git", ["rev-parse", `${args.baseRef}^{tree}`], args.repoPath)).stdout.trim();
+      const baseTree = (await runCommandStrict("git", ["rev-parse", `${materializationBaseRef}^{tree}`], args.repoPath)).stdout.trim();
 
       if ((!treeSha || treeSha === baseTree) && !mergeParentsNeedRecording) {
         return { hasChanges: false };
@@ -205,7 +208,7 @@ export class WorkspaceArtifactService {
 
       const parentArgs = [
         "-p",
-        args.baseRef,
+        materializationBaseRef,
         ...(args.parentRefs || []).flatMap((parentRef) => ["-p", parentRef]),
       ];
       const commitSha = (await runCommandStrict(
@@ -228,7 +231,7 @@ export class WorkspaceArtifactService {
 
       const diffOutput = (await runCommandStrict(
         "git",
-        ["diff", "--numstat", args.baseRef, commitSha],
+        ["diff", "--numstat", materializationBaseRef, commitSha],
         args.repoPath,
       )).stdout;
 
@@ -261,6 +264,37 @@ export class WorkspaceArtifactService {
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
     }
+  }
+
+  private async resolveMaterializationBaseRef(args: {
+    repoPath: string;
+    baseRef: string;
+    workerBranch: string;
+    githubMode?: "REMOTE" | "LOCAL";
+    gitAuth?: GitHttpAuthOptions;
+  }): Promise<string> {
+    if (args.githubMode === "LOCAL") {
+      return args.baseRef;
+    }
+
+    const remoteRef = `refs/remotes/origin/${args.workerBranch}`;
+    try {
+      const pushEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(args.repoPath, args.gitAuth ?? {});
+      await runCommandStrict(
+        "git",
+        ["fetch", "origin", `+refs/heads/${args.workerBranch}:${remoteRef}`],
+        args.repoPath,
+        pushEnv ?? process.env,
+      );
+      await runCommandStrict("git", ["rev-parse", "--verify", remoteRef], args.repoPath);
+      if (await this.isAncestor(args.repoPath, args.baseRef, remoteRef)) {
+        return remoteRef;
+      }
+    } catch {
+      // No remote worker branch exists yet, or it is unrelated to this workspace base.
+      // In either case keep the normal base-ref materialization path.
+    }
+    return args.baseRef;
   }
 
   private async isAncestor(repoPath: string, ancestorRef: string, descendantRef: string): Promise<boolean> {

@@ -531,19 +531,32 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         }
       }
 
-      const resolvedConfigId = providerConfigId || providerId;
-      // `resolvedConfigId` is request-controlled and becomes a directory name under
+      // The candidate config id is request-controlled and becomes a directory name under
       // ~/.code-ux/credentials, where it is targeted by destructive fs.rm(recursive)/mkdir/cp
-      // calls. Reject any value that could escape that directory before it touches the FS.
+      // calls. Reject any value that could escape that directory before it touches the FS, and
+      // use the validator's own return value (not the raw request input) for every path built
+      // from it below.
+      let safeConfigId: string;
       try {
-        assertSafePathSegment(resolvedConfigId, "providerConfigId");
+        safeConfigId = assertSafePathSegment(providerConfigId || providerId, "providerConfigId");
       } catch (err) {
         res.status(400).json({ error: err instanceof Error ? err.message : "Invalid providerConfigId" });
         return;
       }
       const sessionId = randomUUID();
-      const hostCredsDir = path.join(os.homedir(), ".code-ux", "credentials", resolvedConfigId);
-      const tempCredsDir = path.join(os.homedir(), ".code-ux", "credentials", `${resolvedConfigId}-temp-${sessionId}`);
+      const credentialsRoot = path.join(os.homedir(), ".code-ux", "credentials");
+      const hostCredsDir = path.join(credentialsRoot, safeConfigId);
+      const tempCredsDir = path.join(credentialsRoot, `${safeConfigId}-temp-${sessionId}`);
+      // Inline containment check right beside the credentials directories that
+      // are about to be read/written below (defense in depth on top of the
+      // character allow-list above).
+      if (
+        path.relative(credentialsRoot, hostCredsDir).startsWith("..")
+        || path.relative(credentialsRoot, tempCredsDir).startsWith("..")
+      ) {
+        res.status(400).json({ error: "Invalid providerConfigId" });
+        return;
+      }
 
       // Ensure the temp credentials folder starts completely empty
       try {

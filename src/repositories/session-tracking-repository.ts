@@ -462,6 +462,14 @@ export class SessionTrackingRepository {
   }
 
   private rowToSession(row: SessionRow): JulesSession {
+    const pullRequestOutput = row.worker_branch || row.pr_url
+      ? [{
+        pullRequest: {
+          url: row.pr_url ?? undefined,
+          workerBranch: row.worker_branch ?? undefined,
+        },
+      }]
+      : [];
     return {
       id: row.id,
       name: toSessionName(row.id),
@@ -470,7 +478,7 @@ export class SessionTrackingRepository {
       provider: row.provider,
       prompt: row.prompt ?? "",
       createTime: row.create_time,
-      outputs: row.pr_url ? [{ pullRequest: { url: row.pr_url, workerBranch: row.worker_branch ?? undefined } }] : [],
+      outputs: pullRequestOutput,
     };
   }
 

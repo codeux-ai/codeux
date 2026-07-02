@@ -328,6 +328,7 @@ export class ChatThreadRuntimeService {
     const model = resolveEffectiveModel({
       provider,
       model: route.model!,
+      providerMountAuth: route.providerMountAuth,
       customModel: route.customModel,
       qwenAuthMode: route.qwenAuthMode,
       qwenModelId: route.qwenModelId,
@@ -436,6 +437,15 @@ export class ChatThreadRuntimeService {
       continueSessionId = runtimeState.sessionIds![0];
     }
 
+    // opencode's `export <sessionID>` is cumulative for the whole session, so
+    // a chat reply that resumes an earlier turn's session needs that turn's
+    // raw snapshot as a baseline to subtract out, or it would re-report every
+    // earlier reply's tokens too. See execute-provider-stage.ts for the
+    // analogous sprint-task wiring.
+    const openCodeBaselineRawUsageJson = provider === "opencode" && continueSessionId
+      ? (this.deps.executionRepository.getLatestProviderInvocationUsageBySession(thread.id, "dashboard_reply")?.rawUsageJson ?? null)
+      : null;
+
     const finalPrompt = buildProviderPrompt(promptContent, thinkingMode as any);
 
     const result = await this.deps.chatManagementActionService.processManagementAction({
@@ -462,6 +472,7 @@ export class ChatThreadRuntimeService {
       customModel: route.customModel,
       sessionId: thread.id,
       continueSessionId,
+      openCodeBaselineRawUsageJson,
       settings: dashboardSettings,
       prompt: finalPrompt,
       repoPath: project.baseDir,
@@ -547,6 +558,7 @@ export class ChatThreadRuntimeService {
     const model = resolveEffectiveModel({
       provider,
       model: route.model!,
+      providerMountAuth: route.providerMountAuth,
       customModel: route.customModel,
       qwenAuthMode: route.qwenAuthMode,
       qwenModelId: route.qwenModelId,

@@ -34,6 +34,7 @@ import { readLocalGitOriginUrl } from "../infrastructure/git/local-git-origin.js
 import { projectSummaryQuery } from "./project-management/project-summary-query.js";
 import { sprintSummaryQuery } from "./project-management/sprint-summary-query.js";
 import { validateTaskDependencies } from "./project-management/task-dependency-graph.js";
+import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
 
 const SELECTED_PROJECT_KEY = "selected_project_id";
 
@@ -422,6 +423,17 @@ export class ProjectManagementRepository {
   deleteSprint(sprintId: string): void {
     try {
       const sprint = this.requireSprint(sprintId);
+      const preservedInvocation = this.db.prepare(`
+        SELECT id
+        FROM execution_invocations
+        WHERE sprint_id = ?
+          AND preserved_at IS NOT NULL
+        ORDER BY preserved_at DESC, started_at DESC
+        LIMIT 1
+      `).get(sprintId) as { id: string } | undefined;
+      if (preservedInvocation) {
+        throw new ValidationError(`Sprint ${sprintId} has preserved execution invocation ${preservedInvocation.id}; clear preservation before deleting it.`);
+      }
       this.db.prepare(`DELETE FROM sprints WHERE id = ?`).run(sprintId);
 
       if (this.getSelectedSprintId(sprint.projectId) === sprintId) {
@@ -1308,7 +1320,7 @@ export class ProjectManagementRepository {
     if (sourceType === "local") {
       const trimmedSourceRef = sourceRef.trim();
       if (!trimmedSourceRef) {
-        return path.join(os.homedir(), ".codex-ux", "projects", slug);
+        return getHomeCodeUxPath("projects", slug);
       }
       return path.isAbsolute(trimmedSourceRef) ? trimmedSourceRef : path.resolve(os.homedir(), trimmedSourceRef);
     }
@@ -1319,7 +1331,7 @@ export class ProjectManagementRepository {
       return path.resolve(resolvedClone, repoName);
     }
 
-    return fallback || path.resolve(os.homedir(), ".codex-ux", "projects", repoName);
+    return fallback || getHomeCodeUxPath("projects", repoName);
   }
 
   private touchProject(projectId: string, updatedAt = new Date().toISOString()): void {

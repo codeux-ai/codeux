@@ -6,7 +6,9 @@ import { planSessionActivityFetches } from "../../domain/sprint/session-sync/act
 import type { ProviderInvocationUsageRecord } from "../../contracts/execution-types.js";
 import { applyPendingTaskRuntimeReset } from "../../domain/sprint/task-reset-state.js";
 import { isCompletedTaskSettled } from "../../domain/sprint/task-merge-state.js";
+import { failStaleProviderInvocation } from "../../domain/runtime/provider-invocation-recovery.js";
 import { fetchActivitiesBounded } from "../../domain/sprint/session-sync/bounded-activity-fetch.js";
+import { isNotFoundError } from "../../integrations/jules-api-client.js";
 import { hasUserReplyAfterLatestAgentRequest } from "../action-required-automation.js";
 import {
   extractProviderErrorCategory,
@@ -217,6 +219,36 @@ const isForeignSessionMatch = (
     || existingRun.taskId !== task.record_id;
 };
 
+const isRetiredSessionForPendingRetry = (
+  deps: SessionSyncDependencies,
+  task: Subtask,
+  session: JulesSession,
+): boolean => {
+  if (
+    String(task.status || "").toUpperCase() !== "PENDING"
+    || !deps.executionRepository
+    || typeof deps.executionRepository.getLatestTaskRunBySessionId !== "function"
+    || !task.record_id
+    || !task.project_id
+    || !task.sprint_id
+  ) {
+    return false;
+  }
+
+  const sessionId = deps.extractSessionId(session)
+    || deps.resolveSessionName(session)?.replace(/^sessions\//, "")
+    || null;
+  if (!sessionId) {
+    return false;
+  }
+
+  const existingRun = deps.executionRepository.getLatestTaskRunBySessionId(sessionId);
+  return existingRun?.state === "FAILED"
+    && existingRun.projectId === task.project_id
+    && existingRun.sprintId === task.sprint_id
+    && existingRun.taskId === task.record_id;
+};
+
 const resolveWorkerBranch = (session: JulesSession): string | null => {
   const output = Array.isArray(session.outputs)
     ? session.outputs.find((entry) => entry && typeof entry === "object" && "pullRequest" in entry)
@@ -245,6 +277,105 @@ const resolveTaskSessionId = (task: Subtask): string | null => {
     return task.session_name.replace(/^sessions\//, "");
   }
   return null;
+};
+
+const isJulesRecordedSession = (
+  deps: SessionSyncDependencies,
+  task: Subtask,
+  sessionId: string,
+): boolean => {
+  const taskProvider = typeof task.provider === "string" ? task.provider.toLowerCase() : "";
+  if (taskProvider) {
+    return taskProvider === "jules";
+  }
+  if (!deps.executionRepository || !task.record_id) {
+    return false;
+  }
+
+  const taskRun = typeof deps.executionRepository.getLatestTaskRunBySessionId === "function"
+    ? deps.executionRepository.getLatestTaskRunBySessionId(sessionId)
+    : deps.sprintRunId
+      ? deps.executionRepository.getLatestTaskRun(task.record_id, deps.sprintRunId)
+      : deps.executionRepository.getLatestTaskRun(task.record_id);
+  return taskRun?.provider === "jules" || taskRun?.mode === "jules";
+};
+
+const calculateDurationMs = (startedAt: string | null | undefined, finishedAt: string): number | null => {
+  const startedAtMs = Date.parse(startedAt || "");
+  const finishedAtMs = Date.parse(finishedAt);
+  if (!Number.isFinite(startedAtMs) || !Number.isFinite(finishedAtMs)) {
+    return null;
+  }
+  return Math.max(0, finishedAtMs - startedAtMs);
+};
+
+const recoverMissingRecordedSession = (
+  deps: SessionSyncDependencies,
+  task: Subtask,
+  sessionId: string,
+  retryFailed: boolean,
+): void => {
+  if (!deps.executionRepository || !task.record_id) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const message = `Recovered stale Jules task runtime after recorded session ${sessionId} was no longer available from the provider API.`;
+  const taskRun = deps.sprintRunId
+    ? deps.executionRepository.getLatestTaskRun(task.record_id, deps.sprintRunId)
+    : deps.executionRepository.getLatestTaskRun(task.record_id);
+
+  const providerInvocation = deps.executionRepository.getLatestProviderInvocationUsageBySession(sessionId, "task_coding");
+  if (providerInvocation?.status === "running") {
+    failStaleProviderInvocation(
+      deps.executionRepository,
+      providerInvocation,
+      deps.executionRepository.listExecutionInvocationsByProviderInvocationId(providerInvocation.id),
+      {
+        reconciledAt: now,
+        recoveryReason: "session_sync_missing_recorded_session",
+        systemMessage: message,
+      },
+    );
+  }
+
+  if (taskRun && taskRun.state !== "COMPLETED" && taskRun.state !== "FAILED") {
+    deps.executionRepository.updateTaskRun(taskRun.id, {
+      state: "FAILED",
+      finishedAt: now,
+      durationMs: calculateDurationMs(taskRun.startedAt, now),
+    });
+    deps.executionRepository.appendTaskRunEvent(taskRun.id, "task_run_recovered_missing_session", "system", {
+      sessionId,
+      retryFailed,
+      message,
+    }, {
+      sourceEventKey: `session-sync:missing-session:${taskRun.id}:${sessionId}`,
+    });
+
+    if (taskRun.dispatchId) {
+      const dispatch = deps.executionRepository.getTaskDispatch(taskRun.dispatchId);
+      deps.executionRepository.updateTaskDispatch(taskRun.dispatchId, {
+        status: "failed",
+        startedAt: dispatch?.startedAt || taskRun.startedAt || now,
+        finishedAt: now,
+        lastHeartbeatAt: now,
+        errorMessage: message,
+      });
+    }
+  }
+
+  task.intervention_hint = message;
+  if (retryFailed) {
+    applyPendingTaskRuntimeReset(task, {
+      preserveProvider: true,
+    });
+    deps.projectManagementRepository?.updateTask(task.record_id, {
+      status: "pending",
+      isMerged: false,
+      mergeIndicator: null,
+    });
+  }
 };
 
 const syncExecutionRunState = async (
@@ -526,6 +657,9 @@ export const runSessionSyncStep = async (
       if (snapshotSessionId === sessionId && snapshotIsTerminal) {
         continue;
       }
+      if (!isJulesRecordedSession(deps, task, sessionId)) {
+        continue;
+      }
       try {
         const session = await deps.getSession(sessionId);
         const runKey = extractTaskRunKeyFromTitle(session.title);
@@ -533,11 +667,15 @@ export const runSessionSyncStep = async (
           sessionMap.set(expectedRunKey, session);
           sessions.push(session);
         }
-      } catch {
+      } catch (error) {
         deps.logger.warn("Could not fetch recorded task session missing from session snapshot", {
           taskId: task.record_id || task.id,
           sessionId,
+          notFound: isNotFoundError(error),
         });
+        if (isNotFoundError(error)) {
+          recoverMissingRecordedSession(deps, task, sessionId, retryFailed);
+        }
       }
     }
   }
@@ -584,6 +722,16 @@ export const runSessionSyncStep = async (
 
     if (isForeignSessionMatch(deps, task, match)) {
       deps.logger.warn("Skipping foreign provider session matched by task run key", {
+        taskId: task.record_id || task.id,
+        projectId: task.project_id,
+        sprintId: task.sprint_id,
+        sessionId: deps.extractSessionId(match),
+        sessionName: deps.resolveSessionName(match),
+      });
+      continue;
+    }
+    if (isRetiredSessionForPendingRetry(deps, task, match)) {
+      deps.logger.warn("Skipping retired provider session for pending retry task", {
         taskId: task.record_id || task.id,
         projectId: task.project_id,
         sprintId: task.sprint_id,

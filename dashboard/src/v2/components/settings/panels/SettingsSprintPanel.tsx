@@ -1,14 +1,16 @@
 import type { FunctionComponent } from "preact";
+import { useState } from "preact/hooks";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
 import { NumberInput, Row, Toggle, TextInput, PillChoiceGroup } from "../SettingsFormFields.js";
 import type { ProjectSettings, GuardrailJobType, GuardrailOnLimitAction } from "../../../../types.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
 import { QAPanel } from "./QAPanel.js";
-import { Eye, GitBranch, GitMerge, PlayCircle, ShieldAlert, Sparkles, Timer } from "lucide-preact";
+import { Eye, GitBranch, GitMerge, GitPullRequest, PlayCircle, ShieldAlert, Sparkles, Timer } from "lucide-preact";
 import { AgentSelectAvatarIcon } from "../../agents/AgentSelectAvatarIcon.js";
 import { SprintKeyEditor } from "../SprintKeyEditor.js";
 import { InfoIconPopover } from "../../ui/InfoIconPopover.js";
 import { BranchNameSchemeEditor } from "../BranchNameSchemeEditor.js";
+import { PrTemplateEditorModal } from "../PrTemplateEditorModal.js";
 
 const GUARDRAIL_JOB_META: Array<{ key: GuardrailJobType; label: string; description: string }> = [
   { key: "task_coding", label: "Coding attempts", description: "Max times a task is (re)dispatched for coding before it is blocked." },
@@ -40,6 +42,7 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
 
   const getBadge = (...prefixes: string[]) => getBadgeHelper(activeScope, projectSources, ...prefixes);
   const getFieldBadge = (path: string) => getFieldBadgeHelper(activeScope, projectSources, path);
+  const [editingPrTemplate, setEditingPrTemplate] = useState<"task" | "sprint" | null>(null);
 
   if (!editableSettings) {
     return null;
@@ -90,7 +93,32 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
 
   return (
     <div className="flex flex-col gap-5">
-      <SectionCard title="Git Flow" watermark="GIT" badge={getBadge("git")} icon={<GitBranch strokeWidth={2.4} />}>
+      <SectionCard
+        title="Git Flow"
+        watermark="GIT"
+        badge={getBadge("git")}
+        icon={<GitBranch strokeWidth={2.4} />}
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => setEditingPrTemplate("task")}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-black/[0.06] bg-black/[0.02] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.1em] text-slate-600 hover:bg-black/[0.04] dark:border-white/[0.06] dark:text-slate-300 dark:hover:bg-white/[0.06]"
+            >
+              <GitPullRequest className="h-3.5 w-3.5" />
+              Customize Task PR…
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditingPrTemplate("sprint")}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-black/[0.06] bg-black/[0.02] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.1em] text-slate-600 hover:bg-black/[0.04] dark:border-white/[0.06] dark:text-slate-300 dark:hover:bg-white/[0.06]"
+            >
+              <GitPullRequest className="h-3.5 w-3.5" />
+              Customize Sprint PR…
+            </button>
+          </>
+        }
+      >
         <Row label="Git mode" description="Remote enables PR and CI-aware automation. Local keeps orchestration repo-local only." badge={getFieldBadge("git.githubMode")}>
           <PillChoiceGroup
             value={editableSettings.git.githubMode}
@@ -534,6 +562,15 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
             }))} />
           </Row>
         </SectionCard>
+
+        {editingPrTemplate ? (
+          <PrTemplateEditorModal
+            isOpen
+            kind={editingPrTemplate}
+            state={state}
+            onClose={() => setEditingPrTemplate(null)}
+          />
+        ) : null}
     </div>
   );
 };

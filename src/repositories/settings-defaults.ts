@@ -8,6 +8,7 @@ import type {
   InvocationRoutingId,
   InvocationRoutingProfile,
   InvocationRoutingSettings,
+  PrDescriptionSettings,
   ProviderConfigId,
   ProviderId,
   ProviderSettings,
@@ -18,6 +19,7 @@ import type {
   ThinkingMode,
 } from "../contracts/app-types.js";
 import { DEFAULT_SPRINT_BRANCH_SCHEME } from "../domain/sprint/branch-name-generator.js";
+import { DEFAULT_TASK_SECTION_ORDER, DEFAULT_SPRINT_SECTION_ORDER } from "../domain/sprint/composer/pr-description-composer.js";
 import { DEFAULT_INSTRUCTION_TEMPLATES } from "../instructions/instruction-template-catalog.js";
 import { DEFAULT_MCP_TOOL_TOGGLES } from "../mcp/mcp-tool-availability.js";
 
@@ -34,6 +36,31 @@ export const DEFAULT_SKILLS: SkillToggle[] = INTERNAL_SKILL_NAMES.map((name) => 
   enabled: name === "git_manager_local" ? false : true,
   isInternal: true,
 }));
+
+export const DEFAULT_PR_DESCRIPTION_SETTINGS: PrDescriptionSettings = {
+  task: {
+    summary: true,
+    modelAndProvider: true,
+    timing: true,
+    fullPrompt: true,
+    tokenUsage: true,
+    qaFindings: true,
+    branchInfo: true,
+  },
+  sprint: {
+    summary: true,
+    taskChecklist: true,
+    providerBreakdown: true,
+    planningModel: true,
+    mainPrompt: true,
+    timing: true,
+    tokenUsage: true,
+    qaFindings: true,
+    branchInfo: true,
+  },
+  taskSectionOrder: [...DEFAULT_TASK_SECTION_ORDER],
+  sprintSectionOrder: [...DEFAULT_SPRINT_SECTION_ORDER],
+};
 
 export const PROVIDER_IDS: ProviderId[] = ["jules", "gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"];
 export const THINKING_MODES: ThinkingMode[] = ["SMALL", "MEDIUM", "HIGH"];
@@ -439,6 +466,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     featureBranchPrefix: "feature/",
     sprintBranchScheme: DEFAULT_SPRINT_BRANCH_SCHEME,
     sprintKeyPrefix: "SPR",
+    prDescription: DEFAULT_PR_DESCRIPTION_SETTINGS,
   },
   jira: {
     host: "",

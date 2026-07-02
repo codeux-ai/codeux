@@ -5,6 +5,7 @@ export interface AntigravityUsageTotals {
   inputTokens: number;
   outputTokens: number;
   reasoningTokens: number;
+  cachedInputTokens: number;
 }
 
 export interface AntigravityLogResult {
@@ -111,34 +112,54 @@ function decodeProto(buffer: Buffer, pos = 0, end?: number): ProtoField[] {
   return fields;
 }
 
+/**
+ * Extracts one generation's own token usage from a single `gen_metadata` row's
+ * decoded protobuf. Each row is a *separate model call* (one per agent turn,
+ * not a running session total) — confirmed empirically against live
+ * `~/.gemini/antigravity-cli/conversations/<id>.db` files, where field 2
+ * (input) fluctuates non-monotonically across consecutive idx values instead
+ * of growing, and a single conversation can carry anywhere from a handful to
+ * several hundred rows.
+ *
+ * Field 5 is treated as cached/reused-context tokens: it is present only on
+ * some rows (proto3 omits zero-valued varints, consistent with "no cache hit
+ * this turn"), and where present its value closely tracks the *previous*
+ * row's input tokens (the prior turn's context, now served from cache) —
+ * e.g. row N has input=21647 with no field 5, row N+1 has field 5≈20368 and a
+ * much smaller fresh input. No official schema exists for this internal proto,
+ * so this mapping is inferred from that pattern rather than documented.
+ */
 function extractAntigravityUsageFromProto(fields: ProtoField[]): {
   usage: AntigravityUsageTotals | null;
   rawUsageJson: Record<string, unknown> | null;
 } | null {
   const f1 = fields.find(f => f.fieldNumber === 1);
   if (!f1 || f1.type !== "message") return null;
-  
+
   const f17 = f1.value.find(f => f.fieldNumber === 17);
   if (!f17 || f17.type !== "message") return null;
-  
+
   const f2 = f17.value.find(f => f.fieldNumber === 2);
   if (!f2 || f2.type !== "message") return null;
-  
+
   const f2Msg = f2.value;
   const f_input = f2Msg.find(f => f.fieldNumber === 2);
   const f_output = f2Msg.find(f => f.fieldNumber === 3);
+  const f_cached = f2Msg.find(f => f.fieldNumber === 5);
   const f_reasoning = f2Msg.find(f => f.fieldNumber === 9);
   const f_candidates = f2Msg.find(f => f.fieldNumber === 10);
-  
+
   const inputTokens = f_input && f_input.type === "varint" ? f_input.value : 0;
   const outputTokens = f_output && f_output.type === "varint" ? f_output.value : 0;
+  const cachedInputTokens = f_cached && f_cached.type === "varint" ? f_cached.value : 0;
   const reasoningTokens = f_reasoning && f_reasoning.type === "varint" ? f_reasoning.value : 0;
   const candidatesTokens = f_candidates && f_candidates.type === "varint" ? f_candidates.value : 0;
-  
+
   const usage: AntigravityUsageTotals = {
     inputTokens,
     outputTokens: outputTokens || (reasoningTokens + candidatesTokens),
     reasoningTokens,
+    cachedInputTokens,
   };
 
   const rawUsageJson: Record<string, unknown> = {
@@ -146,26 +167,64 @@ function extractAntigravityUsageFromProto(fields: ProtoField[]): {
     outputTokens: usage.outputTokens,
     reasoningTokens,
     candidatesTokens,
+    cachedInputTokens,
   };
 
   return { usage, rawUsageJson };
 }
 
 /**
- * Parses the raw SQLite data from the conversation's DB file to extract token usage totals.
+ * Parses the raw SQLite data from the conversation's DB file to extract token
+ * usage totals, summed across every `gen_metadata` row (one per model call —
+ * see {@link extractAntigravityUsageFromProto}) rather than just the latest.
+ *
+ * `agy --conversation=<id>` resumes the *same* conversation db across
+ * follow-up/retry invocations, so rows accumulate across separate CLI runs
+ * just like Codex's rollout file or OpenCode's session store. When `sinceIdx`
+ * is provided, only rows with `idx > sinceIdx` are summed so a follow-up run
+ * reports only the generations it added, not the whole conversation's
+ * total-to-date — callers get that cutoff by peeking `lastIdx` from this same
+ * function *before* a resumed run starts (see `provider-runner.ts`).
  */
-export function parseAntigravityDatabase(tempDbPath: string): {
+export function parseAntigravityDatabase(tempDbPath: string, sinceIdx?: number): {
   usage: AntigravityUsageTotals | null;
   rawUsageJson: Record<string, unknown> | null;
+  lastIdx: number | null;
 } | null {
   try {
     const db = new DatabaseSync(tempDbPath, { readOnly: true });
-    const rows = db.prepare("SELECT data FROM gen_metadata ORDER BY idx DESC LIMIT 1").all() as { data: Buffer }[];
+    const rows = db.prepare("SELECT idx, data FROM gen_metadata WHERE idx > ? ORDER BY idx ASC")
+      .all(typeof sinceIdx === "number" ? sinceIdx : -1) as { idx: number; data: Buffer }[];
     if (rows.length === 0) {
       return null;
     }
-    const fields = decodeProto(rows[0].data);
-    return extractAntigravityUsageFromProto(fields);
+
+    const totals: AntigravityUsageTotals = { inputTokens: 0, outputTokens: 0, reasoningTokens: 0, cachedInputTokens: 0 };
+    let rowsWithUsage = 0;
+    let lastIdx: number | null = null;
+    for (const row of rows) {
+      lastIdx = row.idx;
+      const fields = decodeProto(row.data);
+      const extracted = extractAntigravityUsageFromProto(fields);
+      if (!extracted?.usage) {
+        continue;
+      }
+      totals.inputTokens += extracted.usage.inputTokens;
+      totals.outputTokens += extracted.usage.outputTokens;
+      totals.reasoningTokens += extracted.usage.reasoningTokens;
+      totals.cachedInputTokens += extracted.usage.cachedInputTokens;
+      rowsWithUsage += 1;
+    }
+
+    if (rowsWithUsage === 0) {
+      return { usage: null, rawUsageJson: null, lastIdx };
+    }
+
+    return {
+      usage: totals,
+      rawUsageJson: { ...totals, generationCount: rowsWithUsage },
+      lastIdx,
+    };
   } catch {
     return null;
   }

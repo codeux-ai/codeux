@@ -32,6 +32,9 @@ import type { ProjectSetupService } from "../services/project-setup-service.js";
 import type { SprintIssueService } from "../services/sprint-issue-service.js";
 import type { QuicksprintService } from "../services/quicksprint-service.js";
 import type { SchedulerService } from "../services/scheduler-service.js";
+import type { CreateProjectInput, ProjectSummary } from "../contracts/project-management-types.js";
+import { initializeProject } from "../domain/projects/project-initializer.js";
+import { prepareGitProjectCreateInput } from "../services/project-git-clone-service.js";
 
 import { PreviewActions } from "./management/preview-actions.js";
 import { handleTelemetryActions } from "./management/telemetry-actions.js";
@@ -100,6 +103,45 @@ export class ManagementToolHandler {
     return new SchedulerActions(this.deps.schedulerService);
   }
 
+  private resolveGithubToken(): string | undefined {
+    try {
+      const settings = this.deps.getDashboardSettings();
+      const gitToken = settings.git?.githubToken?.trim();
+      if (gitToken) {
+        return gitToken;
+      }
+      return undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private resolveGitlabToken(): string | undefined {
+    try {
+      const settings = this.deps.getDashboardSettings();
+      const gitToken = settings.git?.gitlabToken?.trim();
+      if (gitToken) {
+        return gitToken;
+      }
+      return undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async createProject(input: CreateProjectInput): Promise<ProjectSummary> {
+    return initializeProject(input, {
+      createProject: async (projectInput) => this.deps.projectManagementRepository.createProject(
+        await prepareGitProjectCreateInput(projectInput, {
+          githubToken: this.resolveGithubToken(),
+          gitlabToken: this.resolveGitlabToken(),
+        }),
+      ),
+      getGithubToken: () => this.resolveGithubToken() ?? "",
+      getGitlabToken: () => this.resolveGitlabToken() ?? "",
+    });
+  }
+
   private formatError(domain: string, action: string, error: unknown): { content: Array<{ type: string; text: string }> } {
     const envelope: ManagementResponseEnvelope = {
       result: {
@@ -123,7 +165,8 @@ export class ManagementToolHandler {
           this.deps.projectManagementRepository,
           args.domain,
           args.approval,
-          this.deps.projectSetupService
+          this.deps.projectSetupService,
+          (input) => this.createProject(input)
         );
       } else if (args.domain === "sprints") {
         envelope = await this.sprintActions.handleSprintAction(args);
@@ -178,7 +221,8 @@ export class ManagementToolHandler {
         this.deps.projectManagementRepository,
         "projects",
         args.approval,
-        this.deps.projectSetupService
+        this.deps.projectSetupService,
+        (input) => this.createProject(input)
       );
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {

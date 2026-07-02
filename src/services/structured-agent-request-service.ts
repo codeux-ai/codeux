@@ -43,6 +43,9 @@ export interface StructuredRequestArgs<T> {
   buildRetryPrompt: (error: Error) => string;
   providerLabel: string;
   sessionIdPrefix: string;
+  logicalSessionId?: string;
+  continueSessionId?: string | null;
+  openCodeBaselineRawUsageJson?: Record<string, unknown> | null;
   invocationId?: string;
   systemRoutingMessage?: string;
   maxRetries?: number;
@@ -66,7 +69,7 @@ export class StructuredAgentRequestService {
   constructor(private readonly deps: StructuredAgentRequestServiceDeps) {}
 
   async executeRequest<T>(args: StructuredRequestArgs<T>): Promise<StructuredAgentRequestResult<T>> {
-    const sessionId = `${args.sessionIdPrefix}-${args.provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+    const sessionId = args.logicalSessionId || `${args.sessionIdPrefix}-${args.provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
     const maxRetries = this.resolveStructuredRetryCount(args);
     const maxProviderAttempts = this.resolveMaxProviderAttempts(args, maxRetries);
 
@@ -151,6 +154,8 @@ export class StructuredAgentRequestService {
       githubToken: args.githubToken,
       signal: args.signal,
       invocationId,
+      continueSessionId: args.continueSessionId,
+      openCodeBaselineRawUsageJson: args.openCodeBaselineRawUsageJson,
       onActivity: args.onActivity,
       settings: args.settings,
       maxRetries,

@@ -1,5 +1,48 @@
-import type { DashboardSettings, ExternalSettingsHints } from "../../../contracts/app-types.js";
+import type { DashboardSettings, ExternalSettingsHints, PrDescriptionSettings, SprintPrSectionKey, SprintPrTemplateSections, TaskPrSectionKey, TaskPrTemplateSections } from "../../../contracts/app-types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../repositories/settings-defaults.js";
+import { resolveSectionOrder } from "../../sprint/composer/pr-description-composer.js";
+
+const boolOrDefault = (value: unknown, fallback: boolean): boolean => typeof value === "boolean" ? value : fallback;
+
+const sanitizeOrder = <K extends string>(input: unknown, defaultOrder: K[]): K[] => (
+  resolveSectionOrder(Array.isArray(input) ? (input.filter((v) => typeof v === "string") as K[]) : undefined, defaultOrder)
+);
+
+/** Coerces every field to boolean, defaulting missing/non-boolean values to `true` so settings
+ *  rows saved before this feature existed still load with everything enabled. */
+export const sanitizePrDescriptionSections = (
+  input: Partial<PrDescriptionSettings> | undefined,
+): PrDescriptionSettings => {
+  const taskInput = (input?.task && typeof input.task === "object" ? input.task : {}) as Partial<TaskPrTemplateSections>;
+  const sprintInput = (input?.sprint && typeof input.sprint === "object" ? input.sprint : {}) as Partial<SprintPrTemplateSections>;
+  const taskDefaults = DEFAULT_DASHBOARD_SETTINGS.git.prDescription.task;
+  const sprintDefaults = DEFAULT_DASHBOARD_SETTINGS.git.prDescription.sprint;
+
+  return {
+    task: {
+      summary: boolOrDefault(taskInput.summary, taskDefaults.summary),
+      modelAndProvider: boolOrDefault(taskInput.modelAndProvider, taskDefaults.modelAndProvider),
+      timing: boolOrDefault(taskInput.timing, taskDefaults.timing),
+      fullPrompt: boolOrDefault(taskInput.fullPrompt, taskDefaults.fullPrompt),
+      tokenUsage: boolOrDefault(taskInput.tokenUsage, taskDefaults.tokenUsage),
+      qaFindings: boolOrDefault(taskInput.qaFindings, taskDefaults.qaFindings),
+      branchInfo: boolOrDefault(taskInput.branchInfo, taskDefaults.branchInfo),
+    },
+    sprint: {
+      summary: boolOrDefault(sprintInput.summary, sprintDefaults.summary),
+      taskChecklist: boolOrDefault(sprintInput.taskChecklist, sprintDefaults.taskChecklist),
+      providerBreakdown: boolOrDefault(sprintInput.providerBreakdown, sprintDefaults.providerBreakdown),
+      planningModel: boolOrDefault(sprintInput.planningModel, sprintDefaults.planningModel),
+      mainPrompt: boolOrDefault(sprintInput.mainPrompt, sprintDefaults.mainPrompt),
+      timing: boolOrDefault(sprintInput.timing, sprintDefaults.timing),
+      tokenUsage: boolOrDefault(sprintInput.tokenUsage, sprintDefaults.tokenUsage),
+      qaFindings: boolOrDefault(sprintInput.qaFindings, sprintDefaults.qaFindings),
+      branchInfo: boolOrDefault(sprintInput.branchInfo, sprintDefaults.branchInfo),
+    },
+    taskSectionOrder: sanitizeOrder<TaskPrSectionKey>(input?.taskSectionOrder, DEFAULT_DASHBOARD_SETTINGS.git.prDescription.taskSectionOrder),
+    sprintSectionOrder: sanitizeOrder<SprintPrSectionKey>(input?.sprintSectionOrder, DEFAULT_DASHBOARD_SETTINGS.git.prDescription.sprintSectionOrder),
+  };
+};
 
 export const sanitizeGit = (
   input: Partial<DashboardSettings> | undefined,
@@ -30,5 +73,6 @@ export const sanitizeGit = (
     sprintKeyPrefix: typeof gitInput.sprintKeyPrefix === "string" && gitInput.sprintKeyPrefix.trim().length >= 2 && gitInput.sprintKeyPrefix.trim().length <= 10
       ? gitInput.sprintKeyPrefix.trim().toUpperCase()
       : DEFAULT_DASHBOARD_SETTINGS.git.sprintKeyPrefix,
+    prDescription: sanitizePrDescriptionSections(gitInput.prDescription),
   };
 };

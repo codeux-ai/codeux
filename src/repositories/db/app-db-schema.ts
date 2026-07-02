@@ -558,6 +558,7 @@ CREATE TABLE IF NOT EXISTS execution_invocations (
         last_error_category TEXT,
         last_error_message TEXT,
         last_retry_after_iso TEXT,
+        preserved_at TEXT,
         message_count INTEGER NOT NULL DEFAULT 0,
         last_message_at TEXT,
         invocation_source TEXT NOT NULL DEFAULT 'internal',

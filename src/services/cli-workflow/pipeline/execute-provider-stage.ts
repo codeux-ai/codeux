@@ -14,6 +14,7 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
   const effectiveModel = resolveEffectiveModel({
     provider: ctx.provider,
     model: providerSettings.model,
+    providerMountAuth: providerSettings.providerMountAuth,
     customModel: providerSettings.customModel,
     qwenAuthMode: providerSettings.qwenAuthMode,
     qwenModelId: providerSettings.qwenModelId,
@@ -37,6 +38,11 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
     ? ctx.deps.executionRepository.getLatestProviderInvocationUsageBySession(ctx.workspaceSessionId, "task_coding")
     : null;
   const continueSessionId = previousInvocation?.nativeSessionId || (ctx.provider === "claude-code" ? null : ctx.workspaceSessionId);
+  // opencode's `export <sessionID>` reports cumulative totals for the whole
+  // session, so a follow-up run that resumes the same session needs the
+  // prior invocation's raw snapshot as a baseline to subtract out (see
+  // ProviderExecutionService.executeProvider / collectProviderUsageTelemetry).
+  const openCodeBaselineRawUsageJson = ctx.provider === "opencode" ? (previousInvocation?.rawUsageJson ?? null) : null;
 
   const providerExecutionService = new ProviderExecutionService({
     executionRepository: ctx.deps.executionRepository,
@@ -86,6 +92,7 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
     sessionId: ctx.sessionId,
     workspaceSessionId: ctx.workspaceSessionId,
     continueSessionId,
+    openCodeBaselineRawUsageJson,
     workflowSettings: ctx.workflowSettings,
     repoPath: ctx.repoPath,
     githubToken: ctx.deps.getGithubToken(),

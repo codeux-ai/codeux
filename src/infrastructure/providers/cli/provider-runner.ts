@@ -35,6 +35,7 @@ import {
 } from "./provider-runtime-artifacts.js";
 import { readQwenLogData, readCodexLatestSessionJson, readClaudeSessionJsonl, parseAntigravityConversationId, readAntigravityTranscript } from "./provider-transcripts.js";
 import { parseOpenCodeJsonLines } from "./provider-logs/opencode-log-parser.js";
+import { parseAntigravityDatabase } from "./provider-logs/antigravity-log-parser.js";
 import {
   collectProviderUsageTelemetry,
   readQwenOpenAiLogRecords,
@@ -93,6 +94,11 @@ export interface ProviderRunInput {
    *  Claude Code: uses --resume. Gemini: adds --resume. Codex: uses exec resume --last.
    *  Qwen Code uses project-scoped --continue because Code UX logical ids are not Qwen saved-session ids. */
   continueSessionId?: string | null;
+  /** The previous invocation's raw opencode export snapshot (`{ tokens, cost }`)
+   *  for this same session, when `continueSessionId` resumes it. `opencode
+   *  export` reports cumulative session totals, so this is subtracted out to
+   *  isolate the current run's own usage. No-op for other providers. */
+  openCodeBaselineUsage?: Record<string, unknown> | null;
   /** MCP server connection info for injecting management tools into the CLI provider. */
   mcpConnection?: McpConnectionInfo | null;
   /** User-defined custom MCP servers injected into the CLI provider alongside code_ux. */
@@ -210,6 +216,7 @@ export class ProviderRunner implements IProviderRunner {
     onTelemetry?: (telemetry: ProviderUsageTelemetry) => void;
     codexOutputPath?: string | null;
     continueSessionId?: string | null;
+    openCodeBaselineUsage?: Record<string, unknown> | null;
     mcpConnection?: McpConnectionInfo | null;
     customMcpServers?: CustomMcpServer[];
   }): Promise<ProviderRunResult> {
@@ -270,6 +277,27 @@ export class ProviderRunner implements IProviderRunner {
     if ((input.mcpConnection || applicableCustomServers.length > 0 || (provider === "qwen-code" && providerEnv.QWEN_SETTINGS_CONTENT)) && workflowSettings.executionMode !== "DOCKER") {
       const entries = await this.writeLocalMcpConfig(input.mcpConnection || null, cwd, provider, providerEnv.QWEN_SETTINGS_CONTENT, applicableCustomServers);
       localMcpCleanup.push(...entries);
+    }
+
+    // A resumed antigravity conversation (`--conversation=<id>`) keeps appending to
+    // the same gen_metadata table across separate CLI invocations, so read the
+    // highest idx already present *before* this run so only the generations this
+    // run adds get summed afterward — otherwise a follow-up would re-report every
+    // earlier generation's tokens too (see parseAntigravityDatabase).
+    let antigravityBaselineIdx: number | null = null;
+    if (provider === "antigravity" && continueSession && nativeSessionId) {
+      const peekDbPath = path.join(os.tmpdir(), `agy-baseline-${nativeSessionId.replace(/[^A-Za-z0-9_-]/g, "_")}-${randomUUID()}.db`);
+      try {
+        const resolved = await this.resolveAntigravityDatabase(cwd, nativeSessionId, workflowSettings.executionMode, peekDbPath);
+        if (resolved) {
+          antigravityBaselineIdx = parseAntigravityDatabase(peekDbPath)?.lastIdx ?? null;
+        }
+      } catch {
+        // Best-effort: if this fails, the run falls back to summing the whole
+        // conversation, which just re-reports rather than losing usage.
+      } finally {
+        await fs.rm(peekDbPath, { force: true }).catch(() => undefined);
+      }
     }
 
     // Start each qwen run from an empty log directory so usage aggregation only
@@ -481,8 +509,10 @@ export class ProviderRunner implements IProviderRunner {
         startTimeMs: startedMs,
         executionMode: workflowSettings.executionMode,
         antigravitySessionDbPath: tempDbPath,
+        antigravitySinceIdx: antigravityBaselineIdx,
         antigravityTranscriptJsonl,
         opencodeExportJson,
+        opencodeBaselineUsage: input.openCodeBaselineUsage,
       });
       return {
         ...result,

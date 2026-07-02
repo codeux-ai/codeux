@@ -35,4 +35,4 @@ Stable layouts on narrow widths (especially mobile or multi-panel layouts) must 
 
 ### 5. Hover and Active Indicators
 - **Interactions:** Hover backgrounds for triggers follow `hover:bg-black/[0.05] dark:hover:bg-white/[0.05]`. Active routes in the Sidebar use the primary `signal-500` marker tone.
-- **Tooltips:** Minimized sidebar items expose semantic `aria-label`s on their links and keep visual tooltips explicitly mapped via `aria-hidden="true"` styled to mimic standard dropdown glass panels (`shadow-2xl rounded-2xl`).
+- **Tooltips:** Minimized primary sidebar navigation items expose semantic `aria-label`s on their links and keep visual tooltips explicitly mapped via `aria-hidden="true"` styled to mimic standard dropdown glass panels (`shadow-2xl rounded-2xl`). Footer actions such as Settings and the sidebar collapse/expand control keep semantic `aria-label`s but do not render custom hover text labels.

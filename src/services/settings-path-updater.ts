@@ -17,17 +17,18 @@ export class SettingsPathUpdater {
     }
 
     const parts = path.split('.');
-    for (const part of parts) {
-      if (UNSAFE_PATH_KEYS.has(part)) {
-        throw new Error(`Invalid path part: ${part}`);
-      }
-    }
 
     const result = { ...obj };
     let current: any = result;
 
     for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i];
+      // Guard immediately before every write on this chain — never assign
+      // through __proto__/constructor/prototype, which would pollute the
+      // prototype chain of every object in the process.
+      if (UNSAFE_PATH_KEYS.has(part)) {
+        throw new Error(`Invalid path part: ${part}`);
+      }
       // Only treat own properties as existing nodes — never descend into an
       // inherited prototype property — and clone as we go so the input is left
       // untouched.
@@ -42,7 +43,11 @@ export class SettingsPathUpdater {
       current = current[part];
     }
 
-    current[parts[parts.length - 1]] = value;
+    const lastPart = parts[parts.length - 1];
+    if (UNSAFE_PATH_KEYS.has(lastPart)) {
+      throw new Error(`Invalid path part: ${lastPart}`);
+    }
+    current[lastPart] = value;
     return result;
   }
 }

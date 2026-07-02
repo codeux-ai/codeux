@@ -235,6 +235,12 @@ describe("useSettingsPageState", () => {
     expect(result.current.filteredCategories[0]!.id).toBe("models");
 
     act(() => {
+      result.current.setSettingsSearch("pricing");
+    });
+    expect(result.current.filteredCategories.length).toBe(1);
+    expect(result.current.filteredCategories[0]!.id).toBe("models");
+
+    act(() => {
       result.current.setSettingsSearch("this_should_not_exist_at_all");
     });
     expect(result.current.filteredCategories.length).toBe(0);

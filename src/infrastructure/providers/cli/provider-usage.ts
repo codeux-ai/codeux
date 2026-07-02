@@ -6,7 +6,7 @@ import { encodingForModel } from "js-tiktoken";
 import type { TokenUsageSource } from "../../../contracts/execution-types.js";
 import type { ParsedConversationTurn } from "./provider-logs/provider-conversation-types.js";
 import { parseCodexRolloutJsonl, parseCodexExecStdout } from "./provider-logs/codex-log-parser.js";
-import { parseOpenCodeJsonLines, parseOpenCodeExport } from "./provider-logs/opencode-log-parser.js";
+import { parseOpenCodeJsonLines, parseOpenCodeExport, subtractOpenCodeBaseline } from "./provider-logs/opencode-log-parser.js";
 import {
   buildQwenConversation,
   parseQwenOpenAiLogs,
@@ -345,9 +345,20 @@ export async function collectProviderUsageTelemetry(args: {
   executionMode?: "HOST" | "DOCKER";
   antigravitySessionDbPath?: string | null;
   antigravityTranscriptJsonl?: string | null;
+  /** The highest `gen_metadata` idx already summed by a previous invocation of
+   *  this same antigravity conversation (when `--conversation=<id>` resumes
+   *  it). Only rows with a higher idx are summed, so a follow-up run reports
+   *  only the generations it added — the conversation db otherwise
+   *  accumulates rows across resumes just like Codex's rollout file. */
+  antigravitySinceIdx?: number | null;
   /** stdout of `opencode export <sessionID>`, the authoritative usage source for
    *  opencode (the `run --format json` stream carries no token usage). */
   opencodeExportJson?: string | null;
+  /** The previous invocation's raw `{ tokens, cost }` export snapshot for this
+   *  same opencode session (when this run resumes/continues it). Subtracted
+   *  from the freshly exported cumulative usage so a follow-up run reports
+   *  only its own tokens instead of the whole session's total-to-date. */
+  opencodeBaselineUsage?: Record<string, unknown> | null;
 }): Promise<ProviderUsageTelemetry> {
   const fallbackOutput = [args.capturedText || "", args.stdout || "", args.stderr || ""].filter(Boolean).join("\n").trim();
 
@@ -411,8 +422,14 @@ export async function collectProviderUsageTelemetry(args: {
     const parsed = parseOpenCodeJsonLines(args.stdout);
     // The `run --format json` stream carries the transcript, conversation, and
     // session id but no token usage. Authoritative usage comes from
-    // `opencode export <sessionID>` (info.tokens), captured post-run.
-    const exportUsage = args.opencodeExportJson ? parseOpenCodeExport(args.opencodeExportJson) : null;
+    // `opencode export <sessionID>` (info.tokens), captured post-run. That
+    // export is cumulative for the whole session, so on a resumed/follow-up
+    // run it's reduced by the baseline snapshot from the prior invocation —
+    // otherwise a follow-up would re-report every earlier turn's tokens too.
+    const rawExportUsage = args.opencodeExportJson ? parseOpenCodeExport(args.opencodeExportJson) : null;
+    const exportUsage = rawExportUsage
+      ? subtractOpenCodeBaseline(rawExportUsage, args.opencodeBaselineUsage)
+      : null;
     if (parsed) {
       const transcriptText = parsed.transcriptText || fallbackOutput;
       const conversation = withLeadingUserTurn(parsed.conversation, args.prompt);
@@ -476,7 +493,7 @@ export async function collectProviderUsageTelemetry(args: {
     }
 
     if (args.antigravitySessionDbPath) {
-      const dbResult = parseAntigravityDatabase(args.antigravitySessionDbPath);
+      const dbResult = parseAntigravityDatabase(args.antigravitySessionDbPath, args.antigravitySinceIdx ?? undefined);
       if (dbResult) {
         usage = dbResult.usage;
         rawUsageJson = dbResult.rawUsageJson;
@@ -496,6 +513,7 @@ export async function collectProviderUsageTelemetry(args: {
       return {
         ...emptyTelemetry(),
         inputTokens: usage.inputTokens,
+        cachedInputTokens: usage.cachedInputTokens,
         outputTokens: usage.outputTokens,
         reasoningOutputTokens: usage.reasoningTokens,
         totalTokens: usage.inputTokens + usage.outputTokens,
@@ -525,6 +543,7 @@ export async function collectProviderUsageTelemetry(args: {
         inputTokens: exactUsage.inputTokens,
         cachedInputTokens: exactUsage.cachedInputTokens,
         outputTokens: exactUsage.outputTokens,
+        reasoningOutputTokens: exactUsage.reasoningOutputTokens,
         totalTokens: exactUsage.inputTokens + exactUsage.outputTokens,
         usageSource: "reported",
         rawUsageJson: null,

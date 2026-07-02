@@ -12,7 +12,7 @@ describe("buildProviderSettingsOverride", () => {
       weight: 1,
       thinkingMode: { type: "disabled" },
       apiKey: "sk-test",
-      mountAuth: true,
+      mountAuth: false,
       authPath: "/some/path",
       qwenAuthMode: "LOCAL_AUTH",
       qwenRegion: "international",
@@ -50,10 +50,34 @@ describe("buildProviderSettingsOverride", () => {
       openCodeBaseUrl: "https://open.url",
       openCodeEnvKey: "OC_TEST",
       openCodePackage: "oc-pkg",
-      providerMountAuth: true,
+      providerMountAuth: false,
       providerAuthPath: "/some/path",
       customBaseUrl: "https://custom.url",
       customModel: "custom-claude",
     });
+  });
+
+  it("clears API-key custom endpoint overrides when mounted auth is selected", () => {
+    const settings: ProviderSettings = {
+      provider: "codex",
+      name: "Codex Primary",
+      enabled: true,
+      model: "gpt-5.5",
+      weight: 1,
+      thinkingMode: "HIGH",
+      apiKey: "sk-local",
+      mountAuth: true,
+      authPath: "~/.code-ux/credentials/codex",
+      customBaseUrl: "http://192.168.0.38:1234/v1",
+      customModel: "local-model",
+    };
+
+    const override = buildProviderSettingsOverride("gpt-5.5", settings);
+
+    expect(override.apiKey).toBe("");
+    expect(override.customBaseUrl).toBeUndefined();
+    expect(override.customModel).toBeUndefined();
+    expect(override.providerMountAuth).toBe(true);
+    expect(override.model).toBe("gpt-5.5");
   });
 });

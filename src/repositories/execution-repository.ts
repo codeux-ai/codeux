@@ -45,6 +45,7 @@ import type {
 import type {
   AcquireExecutionLeaseInput,
   CreateProviderInvocationUsageInput,
+  ProviderInvocationPurpose,
   SprintRunStatus,
   TaskDispatchStatus,
   CreateTaskRunInput,
@@ -92,6 +93,14 @@ import { queryExecutionTaskDispatches } from "./execution/execution-task-dispatc
 import { queryExecutionRuntimeEvents } from "./execution/execution-runtime-events-query.js";
 import { normalizeProjectStatsQuery } from "./execution/project-stats-query.js";
 import { queryProjectStatsSnapshot } from "./execution/project-stats-snapshot-query.js";
+import { createSnapshotPricingResolver } from "./execution/project-stats-aggregation.js";
+import {
+  queryUsageGroupsByTaskId,
+  queryUsageGroupsBySprintId,
+  queryProviderInvocationsForTask,
+  queryProviderInvocationsForSprint,
+  PrUsageGroup,
+} from "./execution/execution-pr-usage-query.js";
 import { ExecutionWallTimeQuery } from "./execution/execution-wall-time-query.js";
 import { OverviewTelemetryQuery } from "./execution/overview-telemetry-query.js";
 import { createUsageBuckets, createEmptyUsageTotals } from "./execution/stats-buckets.js";
@@ -181,6 +190,26 @@ interface TaskRunEventRow {
   payload_json: string | null;
   source_event_key: string | null;
   created_at: string;
+}
+
+interface TaskWorkspaceResumeTargetRow {
+  task_run_id: string;
+  provider: string | null;
+  session_id: string | null;
+  session_name: string | null;
+  worker_branch: string | null;
+  pr_url: string | null;
+  payload_json: string | null;
+}
+
+export interface TaskWorkspaceResumeTarget {
+  taskRunId: string;
+  provider: string | null;
+  sessionId: string;
+  sessionName: string | null;
+  workerBranch: string | null;
+  prUrl: string | null;
+  worktreePath: string | null;
 }
 
 interface SprintRunEventRow {
@@ -1040,6 +1069,91 @@ export class ExecutionRepository {
     return row ? this.mapTaskRunRow(row) : null;
   }
 
+  getLatestTaskRunWithWorkspace(taskId: string, sprintRunId?: string): TaskRunRecord | null {
+    requireTask(this.db, taskId);
+    const row = sprintRunId
+      ? this.db.prepare(`
+        SELECT *
+        FROM task_runs
+        WHERE task_id = ?
+        AND sprint_run_id = ?
+        AND worker_branch IS NOT NULL
+        ORDER BY rowid DESC
+        LIMIT 1
+      `).get(taskId, sprintRunId) as TaskRunRow | undefined
+      : this.db.prepare(`
+        SELECT *
+        FROM task_runs
+        WHERE task_id = ?
+        AND worker_branch IS NOT NULL
+        ORDER BY rowid DESC
+        LIMIT 1
+      `).get(taskId) as TaskRunRow | undefined;
+    return row ? this.mapTaskRunRow(row) : null;
+  }
+
+  getLatestTaskWorkspaceResumeTarget(taskId: string, sprintRunId?: string): TaskWorkspaceResumeTarget | null {
+    requireTask(this.db, taskId);
+    const row = sprintRunId
+      ? this.db.prepare(`
+        SELECT
+          tr.id AS task_run_id,
+          tr.provider,
+          tr.session_id,
+          tr.session_name,
+          tr.worker_branch,
+          tr.pr_url,
+          e.payload_json
+        FROM task_run_events e
+        INNER JOIN task_runs tr ON tr.id = e.task_run_id
+        WHERE tr.task_id = ?
+        AND tr.sprint_run_id = ?
+        AND e.event_type = 'cli_workspace_bound'
+        ORDER BY e.created_at DESC, e.rowid DESC
+        LIMIT 1
+      `).get(taskId, sprintRunId) as TaskWorkspaceResumeTargetRow | undefined
+      : this.db.prepare(`
+        SELECT
+          tr.id AS task_run_id,
+          tr.provider,
+          tr.session_id,
+          tr.session_name,
+          tr.worker_branch,
+          tr.pr_url,
+          e.payload_json
+        FROM task_run_events e
+        INNER JOIN task_runs tr ON tr.id = e.task_run_id
+        WHERE tr.task_id = ?
+        AND e.event_type = 'cli_workspace_bound'
+        ORDER BY e.created_at DESC, e.rowid DESC
+        LIMIT 1
+      `).get(taskId) as TaskWorkspaceResumeTargetRow | undefined;
+
+    if (!row) {
+      return null;
+    }
+
+    const payload = parsePayloadJson(row.payload_json);
+    const workspaceSessionId = asNonEmptyString(payload?.workspaceSessionId) || asNonEmptyString(row.session_id);
+    if (!workspaceSessionId) {
+      return null;
+    }
+
+    const sessionName = workspaceSessionId === row.session_id
+      ? row.session_name
+      : `sessions/${workspaceSessionId}`;
+
+    return {
+      taskRunId: row.task_run_id,
+      provider: row.provider,
+      sessionId: workspaceSessionId,
+      sessionName,
+      workerBranch: row.worker_branch,
+      prUrl: row.pr_url,
+      worktreePath: asNonEmptyString(payload?.worktreePath),
+    };
+  }
+
   getProjectExecutionSnapshot(
     projectId: string,
     options: ProjectExecutionSnapshotOptions = {},
@@ -1053,13 +1167,12 @@ export class ExecutionRepository {
     }, options);
   }
 
-  getProjectStatsSnapshot(
-    projectId: string,
-    input: ProjectStatsQuery | ProjectStatsWindow = "7d",
-  ): ProjectExecutionStatsSnapshot {
-    const taskMetaCache = new Map<string, StatsEntityMetadata>();
-    const sprintMetaCache = new Map<string, StatsEntityMetadata>();
-
+  /**
+   * Builds a `(providerId, model) => TokenPricing` lookup backed by system settings' pricing
+   * overrides + the model catalog, memoized per call. Shared by project stats and the PR
+   * description composer's token-cost sections so both compute cost identically.
+   */
+  private buildModelPricingLookup(): (providerId: string, model: string | null) => TokenPricing | undefined {
     let cachedSettings: ReturnType<typeof this.settingsRepository.getSystemSettings> | undefined;
     try {
       cachedSettings = this.settingsRepository.getSystemSettings();
@@ -1068,47 +1181,87 @@ export class ExecutionRepository {
     }
     const pricingCache = new Map<string, TokenPricing | undefined>();
 
+    return (providerId, model) => {
+      if (!model || !PROVIDER_IDS.includes(providerId as ProviderId)) {
+        return undefined;
+      }
+
+      const cacheKey = `${providerId}:${model}`;
+      if (pricingCache.has(cacheKey)) {
+        return pricingCache.get(cacheKey);
+      }
+
+      if (!cachedSettings || !cachedSettings.modelPricing) {
+        pricingCache.set(cacheKey, undefined);
+        return undefined;
+      }
+
+      const overrides = cachedSettings.modelPricing.overrides || {};
+      const getOverride = (canonicalId: string): TokenPricing | undefined => (
+        overrides[canonicalId] ?? overrides[`custom/${canonicalId}`]
+      );
+
+      const canonicalId = resolveCatalogModelId(providerId as ProviderId, model);
+      if (canonicalId) {
+        const cost = getOverride(canonicalId) ?? getModelCatalogEntry(canonicalId)?.cost;
+        pricingCache.set(cacheKey, cost);
+        return cost;
+      }
+
+      // Not a built-in slug/alias match — fall back to a custom API provider/gateway
+      // routing (e.g. a self-hosted model with no catalogue entry), which still gets a
+      // stable override key reconstructed from the paired "API provider" field.
+      const customCanonicalId = resolveCustomProviderModelId(providerId as ProviderId, model, cachedSettings);
+      if (customCanonicalId) {
+        const cost = getOverride(customCanonicalId) ?? getModelCatalogEntry(customCanonicalId)?.cost;
+        pricingCache.set(cacheKey, cost);
+        return cost;
+      }
+
+      pricingCache.set(cacheKey, undefined);
+      return undefined;
+    };
+  }
+
+  /** Groups a task's provider invocations by (provider, model) with per-group $ cost applied. */
+  getTaskUsageGroups(projectId: string, taskId: string): PrUsageGroup[] {
+    const pricingResolver = createSnapshotPricingResolver(this.buildModelPricingLookup());
+    return queryUsageGroupsByTaskId(this.db, projectId, taskId, pricingResolver);
+  }
+
+  /**
+   * Groups a sprint's provider invocations (across all runs/resumes) by (provider, model) with
+   * per-group $ cost applied. Pass `purpose` to isolate e.g. planning-only invocations.
+   */
+  getSprintUsageGroups(projectId: string, sprintId: string, purpose?: ProviderInvocationPurpose): PrUsageGroup[] {
+    const pricingResolver = createSnapshotPricingResolver(this.buildModelPricingLookup());
+    return queryUsageGroupsBySprintId(this.db, projectId, sprintId, pricingResolver, purpose);
+  }
+
+  /** Raw provider invocation rows for a task, oldest first — used to surface the actual model used. */
+  listProviderInvocationsForTask(projectId: string, taskId: string): ProviderInvocationUsageRecord[] {
+    return queryProviderInvocationsForTask(this.db, projectId, taskId);
+  }
+
+  /** Raw provider invocation rows for a sprint, oldest first. Pass `purpose` to isolate e.g. planning invocations. */
+  listProviderInvocationsForSprint(projectId: string, sprintId: string, purpose?: ProviderInvocationPurpose): ProviderInvocationUsageRecord[] {
+    return queryProviderInvocationsForSprint(this.db, projectId, sprintId, purpose);
+  }
+
+  getProjectStatsSnapshot(
+    projectId: string,
+    input: ProjectStatsQuery | ProjectStatsWindow = "7d",
+  ): ProjectExecutionStatsSnapshot {
+    const taskMetaCache = new Map<string, StatsEntityMetadata>();
+    const sprintMetaCache = new Map<string, StatsEntityMetadata>();
+
+    const getModelPricing = this.buildModelPricingLookup();
+
     return queryProjectStatsSnapshot(this.db, projectId, input, {
       requireProject: (id) => requireProject(this.db, id),
       getWallTimeTotalsByTaskIdsForRange: (id, start, end, now) => this.wallTimeQuery.getWallTimeTotalsByTaskIdsForRange(id, start, end, now),
       getWallTimeTotalsBySprintRunIdsForRange: (id, start, end, now) => this.wallTimeQuery.getWallTimeTotalsBySprintRunIdsForRange(id, start, end, now),
-      getModelPricing: (providerId, model) => {
-        if (!model || !PROVIDER_IDS.includes(providerId as ProviderId)) {
-          return undefined;
-        }
-
-        const cacheKey = `${providerId}:${model}`;
-        if (pricingCache.has(cacheKey)) {
-          return pricingCache.get(cacheKey);
-        }
-
-        if (!cachedSettings || !cachedSettings.modelPricing) {
-          pricingCache.set(cacheKey, undefined);
-          return undefined;
-        }
-
-        const overrides = cachedSettings.modelPricing.overrides || {};
-
-        const canonicalId = resolveCatalogModelId(providerId as ProviderId, model);
-        if (canonicalId) {
-          const cost = overrides[canonicalId] ?? getModelCatalogEntry(canonicalId)?.cost;
-          pricingCache.set(cacheKey, cost);
-          return cost;
-        }
-
-        // Not a built-in slug/alias match — fall back to a custom API provider/gateway
-        // routing (e.g. a self-hosted model with no catalogue entry), which still gets a
-        // stable override key reconstructed from the paired "API provider" field.
-        const customCanonicalId = resolveCustomProviderModelId(providerId as ProviderId, model, cachedSettings);
-        if (customCanonicalId) {
-          const cost = overrides[customCanonicalId] ?? getModelCatalogEntry(customCanonicalId)?.cost;
-          pricingCache.set(cacheKey, cost);
-          return cost;
-        }
-
-        pricingCache.set(cacheKey, undefined);
-        return undefined;
-      },
+      getModelPricing,
       getTaskMetadata: (id, ids) => {
         const missing = ids.filter(i => !taskMetaCache.has(i));
         if (missing.length > 0) {

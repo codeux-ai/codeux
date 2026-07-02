@@ -17,6 +17,23 @@ afterEach(async () => {
 });
 
 describe("SessionTrackingRepository", () => {
+  it("returns worker branch outputs for local CLI sessions before a PR exists", async () => {
+    const repo = await createRepo();
+
+    repo.createSession({
+      id: "cli-codex-running",
+      provider: "codex",
+      state: "RUNNING",
+      prompt: "prompt",
+      title: "Sprint 1: [01] test",
+      workerBranch: "task/feature-t01-codex",
+    });
+
+    expect(repo.getSession("cli-codex-running")?.outputs).toEqual([
+      { pullRequest: { url: undefined, workerBranch: "task/feature-t01-codex" } },
+    ]);
+  });
+
   it("recovers interrupted running cli sessions and leaves other sessions untouched", async () => {
     const repo = await createRepo();
 

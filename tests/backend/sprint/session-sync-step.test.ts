@@ -15,6 +15,46 @@ afterEach(async () => {
 });
 
 describe("runSessionSyncStep", () => {
+  it("does not query Jules for recorded local CLI sessions missing from the session snapshot", async () => {
+    const getSession = vi.fn().mockRejectedValue({ status: 404, message: "not found" });
+    const subtasks: Subtask[] = [
+      {
+        id: "T01",
+        record_id: "task-1",
+        project_id: "project-1",
+        sprint_id: "sprint-1",
+        title: "CLI task",
+        prompt: "Do it",
+        depends_on: [],
+        is_independent: true,
+        status: "RUNNING",
+        session_id: "cli-codex-running",
+        session_name: "sessions/cli-codex-running",
+        provider: "codex",
+      },
+    ];
+
+    const result = await runSessionSyncStep(
+      subtasks,
+      {
+        listSessions: vi.fn().mockResolvedValue({ sessions: [] }),
+        resolveSessionName: (session: { name?: string }) => session.name,
+        extractSessionId: (session: { id?: string }) => session.id,
+        fetchRecentActivities: vi.fn().mockResolvedValue([]),
+        getSession,
+        isActionRequiredState: vi.fn().mockReturnValue(false),
+        logger: { warn: vi.fn() },
+      },
+      true,
+      { repoPath: "/tmp/codeux", sprintNumber: 1 },
+    );
+
+    expect(getSession).not.toHaveBeenCalled();
+    expect(result.subtasks[0]).toMatchObject({
+      status: "RUNNING",
+      session_id: "cli-codex-running",
+    });
+  });
 
   it("fetches full transcript and syncs usage and git metrics on terminal session state without duplication", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-metrics-"));
@@ -185,7 +225,7 @@ describe("runSessionSyncStep", () => {
         prompt: "Do it",
         depends_on: [],
         is_independent: true,
-        status: "PENDING",
+        status: "pending",
       },
     ];
 
@@ -2173,5 +2213,227 @@ describe("runSessionSyncStep", () => {
     expect(updatedUsage?.taskRunId).toBe(taskRun.id);
     expect(updatedUsage?.status).toBe("completed");
     expect(updatedTask?.status).toBe("coding_completed");
+  });
+
+  it("recovers a stale recorded Jules task when the provider session is gone", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-missing-"));
+    tempDirs.push(dir);
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "Session Sync Missing",
+      sourceType: "local",
+      sourceRef: "/tmp/codeux",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 40",
+      number: 40,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T09",
+      title: "Recover missing hosted session",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "jules",
+      status: "running",
+      startedAt: "2026-07-02T06:44:36.570Z",
+    } as any);
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "jules",
+      mode: "jules",
+      sessionId: "missing-jules-session",
+      sessionName: "sessions/missing-jules-session",
+      state: "RUNNING",
+      startedAt: "2026-07-02T06:44:36.570Z",
+    });
+    const providerInvocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      taskRunId: taskRun.id,
+      sessionId: "missing-jules-session",
+      provider: "jules",
+      purpose: "task_coding",
+      status: "running",
+      startedAt: "2026-07-02T06:44:36.570Z",
+    });
+    const executionInvocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      taskRunId: taskRun.id,
+      providerInvocationId: providerInvocation.id,
+      type: "task_coding",
+      status: "running",
+      provider: "jules",
+      model: "jules-agent",
+      startedAt: "2026-07-02T06:44:36.570Z",
+    });
+
+    const subtasks: Subtask[] = [
+      {
+        id: "T09",
+        record_id: task.id,
+        project_id: project.id,
+        sprint_id: sprint.id,
+        title: task.title,
+        prompt: task.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "RUNNING",
+        session_id: "missing-jules-session",
+        session_name: "sessions/missing-jules-session",
+        provider: "jules",
+      },
+    ];
+
+    const result = await runSessionSyncStep(
+      subtasks,
+      {
+        listSessions: vi.fn().mockResolvedValue({ sessions: [] }),
+        resolveSessionName: (session: { name?: string }) => session.name,
+        extractSessionId: (session: { id?: string }) => session.id,
+        fetchRecentActivities: vi.fn().mockResolvedValue([]),
+        getSession: vi.fn().mockRejectedValue({ status: 404, message: "not found" }),
+        isActionRequiredState: vi.fn().mockReturnValue(false),
+        executionRepository,
+        projectManagementRepository: projectRepository,
+        sprintRunId: sprintRun.id,
+        logger: { warn: vi.fn() },
+      },
+      true,
+      { repoPath: "/tmp/codeux", sprintNumber: 40 }
+    );
+
+    expect(result.subtasks[0]?.status).toBe("PENDING");
+    expect(result.subtasks[0]?.session_id).toBeUndefined();
+    expect(projectRepository.getTask(task.id)?.status).toBe("pending");
+    expect(executionRepository.getTaskRun(taskRun.id)).toMatchObject({
+      state: "FAILED",
+    });
+    expect(executionRepository.getTaskDispatch(dispatch.id)).toMatchObject({
+      status: "failed",
+    });
+    expect(executionRepository.getProviderInvocationUsage(providerInvocation.id)).toMatchObject({
+      status: "failed",
+    });
+    expect(executionRepository.getExecutionInvocation(executionInvocation.id)).toMatchObject({
+      status: "failed",
+    });
+    expect(executionRepository.listTaskRunEvents(taskRun.id).some((event) => event.eventType === "task_run_recovered_missing_session")).toBe(true);
+  });
+
+  it("does not reactivate a failed Jules session after the task was reset to pending", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-retired-"));
+    tempDirs.push(dir);
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "Session Sync Retired",
+      sourceType: "local",
+      sourceRef: "/tmp/codeux",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 40",
+      number: 40,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T09",
+      title: "Retry old Jules session",
+      status: "pending",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      provider: "jules",
+      mode: "jules",
+      sessionId: "retired-jules-session",
+      sessionName: "sessions/retired-jules-session",
+      state: "FAILED",
+      startedAt: "2026-07-02T06:44:36.570Z",
+      finishedAt: "2026-07-02T19:52:27.470Z",
+    });
+
+    const subtasks: Subtask[] = [
+      {
+        id: "T09",
+        record_id: task.id,
+        project_id: project.id,
+        sprint_id: sprint.id,
+        title: task.title,
+        prompt: task.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "pending",
+      },
+    ];
+
+    const result = await runSessionSyncStep(
+      subtasks,
+      {
+        listSessions: vi.fn().mockResolvedValue({
+          sessions: [
+            {
+              id: "retired-jules-session",
+              name: "sessions/retired-jules-session",
+              title: "Sprint 40: [run:codeux/s40/t09] [T09] Retry old Jules session",
+              state: "RUNNING",
+              provider: "jules",
+            },
+          ],
+        }),
+        resolveSessionName: (session: { name?: string }) => session.name,
+        extractSessionId: (session: { id?: string }) => session.id,
+        fetchRecentActivities: vi.fn().mockResolvedValue([]),
+        isActionRequiredState: vi.fn().mockReturnValue(false),
+        executionRepository,
+        projectManagementRepository: projectRepository,
+        sprintRunId: sprintRun.id,
+        logger: { warn: vi.fn() },
+      },
+      true,
+      { repoPath: "/tmp/codeux", sprintNumber: 40 }
+    );
+
+    expect(result.subtasks[0]?.status).toBe("pending");
+    expect(result.subtasks[0]?.session_id).toBeUndefined();
+    expect(executionRepository.getTaskRun(taskRun.id)).toMatchObject({
+      state: "FAILED",
+    });
+    expect(projectRepository.getTask(task.id)?.status).toBe("pending");
   });
 });

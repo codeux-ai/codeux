@@ -65,6 +65,7 @@ export interface ProjectGitSettings {
   featureBranchPrefix: string;
   sprintBranchScheme: string;
   sprintKeyPrefix: string;
+  prDescription: DashboardSettings["git"]["prDescription"];
 }
 
 export interface ProjectSettings {

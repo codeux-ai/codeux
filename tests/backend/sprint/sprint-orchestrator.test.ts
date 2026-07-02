@@ -128,11 +128,30 @@ describe("sprint-orchestrator", () => {
             getCiStatusForScope,
             resolveOrCreateMainBranchPr,
             autoMergeFeaturePr,
+            projectManagementRepository: {
+                getSprint: vi.fn().mockReturnValue({
+                    id: "sprint-1",
+                    projectId: "project-1",
+                    number: 1,
+                    name: "Sprint 1",
+                    originalPrompt: null,
+                    goal: "Awesome sprint description",
+                    latestReview: undefined,
+                }),
+            },
+            executionRepository: {
+                getSprintRun: vi.fn().mockReturnValue(null),
+                getSprintUsageGroups: vi.fn().mockReturnValue([]),
+                listProviderInvocationsForSprint: vi.fn().mockReturnValue([]),
+            },
         };
         const orch = new SprintOrchestrator(deps as any);
 
         const feedback = await (orch as any).renderMainMergeCiFeedback({
             repoPath: "/tmp/repo",
+            projectId: "project-1",
+            sprintId: "sprint-1",
+            sprintRunId: "run-1",
             featureBranch: "feature/sprint1-implementation",
             defaultBranch: "main",
             featureBranchPrefix: "feature/",

@@ -75,6 +75,14 @@ export function parseUsageObject(usage: Record<string, unknown>): ParsedUsageCou
       cachedInputTokens = toNumber(details.cached_tokens ?? 0);
     }
   }
+  if (cachedInputTokens === 0) {
+    // Anthropic-shaped usage (e.g. Qwen configured with `qwenProtocol: "anthropic"`
+    // against an Anthropic-compatible backend): cache hits and cache writes are
+    // reported as separate top-level counters rather than an OpenAI-style
+    // `*_details.cached_tokens` object. Both count as "cached" here, matching
+    // how the dedicated Claude Code parser treats them.
+    cachedInputTokens = toNumber(usage.cache_read_input_tokens ?? 0) + toNumber(usage.cache_creation_input_tokens ?? 0);
+  }
 
   let reasoningOutputTokens = toNumber(usage.reasoning_output_tokens ?? 0);
   if (reasoningOutputTokens === 0) {
@@ -90,6 +98,19 @@ export function parseUsageObject(usage: Record<string, unknown>): ParsedUsageCou
   }
 
   return { inputTokens, cachedInputTokens, outputTokens, reasoningOutputTokens };
+}
+
+/** Subtracts a baseline snapshot from a later cumulative one, clamping each
+ *  field at 0. Used when a provider only reports session-cumulative usage
+ *  (e.g. Codex's rollout file) so a resumed/follow-up run can be isolated to
+ *  just the tokens it added. */
+export function subtractUsageCounts(final: ParsedUsageCounts, baseline: ParsedUsageCounts): ParsedUsageCounts {
+  return {
+    inputTokens: Math.max(0, final.inputTokens - baseline.inputTokens),
+    cachedInputTokens: Math.max(0, final.cachedInputTokens - baseline.cachedInputTokens),
+    outputTokens: Math.max(0, final.outputTokens - baseline.outputTokens),
+    reasoningOutputTokens: Math.max(0, final.reasoningOutputTokens - baseline.reasoningOutputTokens),
+  };
 }
 
 /** Parses an ISO timestamp string into epoch ms, or null when absent/invalid. */

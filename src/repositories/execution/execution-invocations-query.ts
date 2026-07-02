@@ -45,6 +45,7 @@ const INVOCATION_SELECT = `
       execution_invocations.last_error_category,
       execution_invocations.last_error_message,
       execution_invocations.last_retry_after_iso,
+      execution_invocations.preserved_at,
       execution_invocations.message_count,
       execution_invocations.last_message_at,
       execution_invocations.invocation_source,

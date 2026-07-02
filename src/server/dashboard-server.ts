@@ -63,6 +63,7 @@ import type {
   ExecutionInvocationRecord,
   ExecutionInvocationMessageRecord,
 } from "../contracts/invocation-types.js";
+import type { PlanningInvocationRestartMode } from "../services/planning-agent-service.js";
 import type {
   ConversationMessageRecord,
   ConversationThreadRecord,
@@ -243,6 +244,7 @@ export interface DashboardServerOptions {
 
   listProjectInvocations: (projectId: string) => ExecutionInvocationRecord[];
   listInvocationMessages: (invocationId: string) => ExecutionInvocationMessageRecord[];
+  restartExecutionInvocation?: (invocationId: string, mode?: PlanningInvocationRestartMode) => Promise<unknown> | unknown;
 
   rerunTask: (taskId: string, options?: { provider?: string; providerConfigId?: string; model?: string; clearWorktree?: boolean; resetDependents?: boolean; undoMerge?: boolean }) => Promise<unknown>;
   orchestrateSprint: (projectId: string, sprintId: string) => Promise<unknown>;

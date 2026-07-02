@@ -6,6 +6,7 @@ import {
   collectProviderUsageTelemetry,
   parseQwenOpenAiLogs,
   sumQwenOpenAiUsage,
+  extractQwenUsageRecord,
   buildQwenConversation,
 } from "../../../../../src/infrastructure/providers/cli/provider-usage.js";
 
@@ -278,6 +279,68 @@ describe("collectProviderUsageTelemetry", () => {
     expect(toolCall.toolOutput).toBe("ok");
   });
 
+  it("prefers opencode export usage over the stdout stream", async () => {
+    const result = await collectProviderUsageTelemetry({
+      provider: "opencode",
+      model: "anthropic/claude-sonnet-4-5",
+      prompt: "Write unit tests.",
+      cwd: "/workspace/repo",
+      stdout: "",
+      stderr: "",
+      opencodeExportJson: JSON.stringify({
+        info: {
+          id: "ses_18e9b7f04ffe",
+          cost: 0.42,
+          tokens: { input: 88608, output: 10284, reasoning: 490, cache: { read: 1200, write: 0 } },
+        },
+      }),
+    });
+
+    expect(result).toMatchObject({
+      inputTokens: 88608,
+      cachedInputTokens: 1200,
+      outputTokens: 10284,
+      reasoningOutputTokens: 490,
+      totalTokens: 98892,
+      usageSource: "reported",
+    });
+  });
+
+  it("isolates a follow-up opencode run's tokens from the session-cumulative export using the prior invocation's baseline", async () => {
+    // The first invocation on this session already persisted this snapshot.
+    const baselineRawUsageJson = {
+      tokens: { input: 50000, output: 6000, reasoning: 200, cache: { read: 800, write: 0 } },
+      cost: 0.20,
+    };
+    // The follow-up resumes the same opencode session; `opencode export` now
+    // reports the whole session's cumulative total, including the baseline.
+    const result = await collectProviderUsageTelemetry({
+      provider: "opencode",
+      model: "anthropic/claude-sonnet-4-5",
+      prompt: "One more fix please.",
+      cwd: "/workspace/repo",
+      stdout: "",
+      stderr: "",
+      opencodeExportJson: JSON.stringify({
+        info: {
+          id: "ses_18e9b7f04ffe",
+          cost: 0.42,
+          tokens: { input: 88608, output: 10284, reasoning: 490, cache: { read: 1200, write: 0 } },
+        },
+      }),
+      opencodeBaselineUsage: baselineRawUsageJson,
+    });
+
+    expect(result).toMatchObject({
+      inputTokens: 38608,
+      cachedInputTokens: 400,
+      outputTokens: 4284,
+      reasoningOutputTokens: 290,
+      totalTokens: 42892,
+      usageSource: "reported",
+    });
+  });
+
   const buildCodexRollout = (lines: Array<{ timestamp?: string; type: string; payload: Record<string, unknown> }>): string =>
     lines.map((line) => JSON.stringify({ timestamp: line.timestamp ?? "2026-06-02T10:00:00.000Z", type: line.type, payload: line.payload })).join("\n");
 
@@ -426,9 +489,48 @@ describe("collectProviderUsageTelemetry", () => {
     // conversation stays empty (the caller then keeps its single assistant
     // message rather than storing a user-only transcript).
     expect(result.conversation).toEqual([]);
-    // Cumulative usage is still read from the last token_count event.
+    // Usage is isolated the same way: the only token_count snapshot in the
+    // fixture predates this run's window, so it becomes the baseline and is
+    // subtracted from itself, leaving 0 rather than re-reporting the prior
+    // run's 500 tokens (which would double-count them against that run's
+    // already-persisted usage).
     expect(result.usageSource).toBe("reported");
-    expect(result.inputTokens).toBe(500);
+    expect(result.inputTokens).toBe(0);
+    expect(result.totalTokens).toBe(0);
+  });
+
+  it("reports only the follow-up run's incremental tokens, not the whole resumed session's cumulative total", async () => {
+    // Codex keeps appending to the same rollout file across `resume --last`,
+    // and each token_count event is cumulative for the whole session. A
+    // follow-up run must report only what it added on top of the baseline
+    // captured by the prior run, or the two runs' persisted usage rows would
+    // both include the first run's 500/80/120/10 tokens.
+    const followUpRollout = buildCodexRollout([
+      { timestamp: "2026-06-02T10:00:00.000Z", type: "session_meta", payload: { id: "0199codex-uuid", cwd: "/workspace/repo" } },
+      { timestamp: "2026-06-02T10:00:02.000Z", type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "Write unit tests." }] } },
+      { timestamp: "2026-06-02T10:00:05.000Z", type: "event_msg", payload: { type: "token_count", info: { total_token_usage: { input_tokens: 500, cached_input_tokens: 80, output_tokens: 120, reasoning_output_tokens: 10, total_tokens: 620 } } } },
+      { timestamp: "2026-06-02T11:00:02.000Z", type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "Latest follow-up." }] } },
+      { timestamp: "2026-06-02T11:00:05.000Z", type: "event_msg", payload: { type: "token_count", info: { total_token_usage: { input_tokens: 560, cached_input_tokens: 90, output_tokens: 145, reasoning_output_tokens: 14, total_tokens: 705 } } } },
+    ]);
+
+    const result = await collectProviderUsageTelemetry({
+      provider: "codex",
+      model: "gpt-4o-codex",
+      prompt: "Latest follow-up.",
+      cwd: "/workspace/repo",
+      stdout: "",
+      stderr: "",
+      capturedText: "Resumed answer.",
+      codexSessionJson: followUpRollout,
+      startTimeMs: Date.parse("2026-06-02T11:00:00.000Z"),
+    });
+
+    expect(result.usageSource).toBe("reported");
+    expect(result.inputTokens).toBe(60);
+    expect(result.cachedInputTokens).toBe(10);
+    expect(result.outputTokens).toBe(25);
+    expect(result.reasoningOutputTokens).toBe(4);
+    expect(result.totalTokens).toBe(85);
   });
 
   it("parses Codex token_count usage with camelCase fields", async () => {
@@ -623,7 +725,7 @@ describe("collectProviderUsageTelemetry", () => {
       stdout: "Here is the binary search implementation.",
       stderr: "",
       nativeSessionId: "qwen-session-123",
-      qwenReportedUsage: { inputTokens: 1500, cachedInputTokens: 50, outputTokens: 450 },
+      qwenReportedUsage: { inputTokens: 1500, cachedInputTokens: 50, outputTokens: 450, reasoningOutputTokens: 0 },
     });
 
     expect(result).toMatchObject({
@@ -668,7 +770,7 @@ describe("parseQwenOpenAiLogs", () => {
 
     const usage = await parseQwenOpenAiLogs(logDir, Date.now() - 500);
 
-    expect(usage).toEqual({ inputTokens: 1700, cachedInputTokens: 50, outputTokens: 530 });
+    expect(usage).toEqual({ inputTokens: 1700, cachedInputTokens: 50, outputTokens: 530, reasoningOutputTokens: 0 });
   });
 
   it("returns null when no log file reports usage", async () => {
@@ -682,7 +784,35 @@ describe("parseQwenOpenAiLogs", () => {
 
   it("falls back to a top-level usage object (legacy logs)", () => {
     expect(sumQwenOpenAiUsage([{ usage: { input_tokens: 10, output_tokens: 4 } }]))
-      .toEqual({ inputTokens: 10, cachedInputTokens: 0, outputTokens: 4 });
+      .toEqual({ inputTokens: 10, cachedInputTokens: 0, outputTokens: 4, reasoningOutputTokens: 0 });
+  });
+
+  it("detects cached tokens reported in Anthropic shape (qwenProtocol: anthropic backends)", () => {
+    // Some qwen-code backends (qwenProtocol: "anthropic") log usage with
+    // Anthropic's separate cache_read/cache_creation counters instead of
+    // OpenAI's prompt_tokens_details.cached_tokens.
+    expect(extractQwenUsageRecord({
+      response: {
+        usage: {
+          input_tokens: 1000,
+          output_tokens: 200,
+          cache_read_input_tokens: 300,
+          cache_creation_input_tokens: 50,
+        },
+      },
+    })).toEqual({ inputTokens: 1000, outputTokens: 200, cachedInputTokens: 350, reasoningOutputTokens: 0 });
+  });
+
+  it("detects reasoning tokens via output_token_details", () => {
+    expect(extractQwenUsageRecord({
+      response: {
+        usage: {
+          prompt_tokens: 100,
+          completion_tokens: 40,
+          completion_tokens_details: { reasoning_tokens: 15 },
+        },
+      },
+    })).toEqual({ inputTokens: 100, outputTokens: 40, cachedInputTokens: 0, reasoningOutputTokens: 15 });
   });
 });
 
@@ -817,7 +947,7 @@ describe("buildQwenConversation", () => {
       cwd: "/workspace/repo",
       stdout: "",
       stderr: "",
-      qwenReportedUsage: { inputTokens: 200, cachedInputTokens: 0, outputTokens: 60 },
+      qwenReportedUsage: { inputTokens: 200, cachedInputTokens: 0, outputTokens: 60, reasoningOutputTokens: 0 },
       qwenConversation: [
         { kind: "assistant", text: "Test added." },
       ],

@@ -333,6 +333,66 @@ describe("ExecutionRepository", () => {
     expect(latestRuns.get(taskWithScopedRun.id)?.workerBranch).toBe("worker/T2-scoped");
   });
 
+  it("resolves the latest CLI workspace binding as the task resume target", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Workspace Resume Project",
+      sourceType: "local",
+      sourceRef: "/workspace/resume-target",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      goal: "Ship",
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "Resume task",
+      promptMarkdown: "Do work",
+      status: "pending",
+      isIndependent: true,
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      provider: "codex",
+      mode: "docker_cli",
+      state: "FAILED",
+      sessionId: "cli-codex-provider-session",
+      sessionName: "sessions/cli-codex-provider-session",
+      workerBranch: "task/worker-t1",
+      prUrl: "https://example.com/pr/9",
+    });
+
+    executionRepository.appendTaskRunEvent(taskRun.id, "cli_workspace_bound", "system", {
+      provider: "codex",
+      repoPath: "/workspace/resume-target",
+      worktreePath: "docker-volume://code-ux-resume-cli-codex-workspace-session",
+      workspaceSessionId: "cli-codex-workspace-session",
+      executionMode: "DOCKER",
+    }, { createdAt: "2026-07-02T10:00:00.000Z" });
+
+    const target = executionRepository.getLatestTaskWorkspaceResumeTarget(task.id, sprintRun.id);
+
+    expect(target).toEqual({
+      taskRunId: taskRun.id,
+      provider: "codex",
+      sessionId: "cli-codex-workspace-session",
+      sessionName: "sessions/cli-codex-workspace-session",
+      workerBranch: "task/worker-t1",
+      prUrl: "https://example.com/pr/9",
+      worktreePath: "docker-volume://code-ux-resume-cli-codex-workspace-session",
+    });
+  });
+
   it("ignores synthetic blocked status sync runs when listing latest task runs", async () => {
     const { executionRepository, projectRepository } = await createRepositories();
 

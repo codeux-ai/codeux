@@ -6,7 +6,7 @@ vi.mock("../../../../../src/infrastructure/git/git-status-query-client.js");
 
 
 describe("PrService", () => {
-    const defaultArgs = { taskId: "t", provider: "codex" as any, title: "title", featureBranch: "feat", workerBranch: "worker" };
+    const defaultArgs = { taskId: "t", provider: "codex" as any, title: "title", body: "body", featureBranch: "feat", workerBranch: "worker" };
     const githubRemote = "https://github.com/owner/repo.git\n";
     const gitlabRemote = "https://gitlab.com/group/project.git\n";
 
@@ -45,7 +45,7 @@ describe("PrService", () => {
             expect(mockClient.ghPrCreate).toHaveBeenCalledWith("feat", "worker", expect.any(String), expect.any(String), "token");
         });
 
-        it("creates new PR with task and sprint descriptions", async () => {
+        it("passes the pre-composed title and body through to ghPrCreate verbatim", async () => {
             const mockClient = {
                 gitRemoteUrl: vi.fn().mockResolvedValue({ ok: true, stdout: githubRemote }),
                 setProvider: vi.fn(),
@@ -57,22 +57,15 @@ describe("PrService", () => {
             const service = new PrService();
             const res = await service.resolveOrCreateFeaturePr({
                 ...defaultArgs,
-                taskDescription: "test task desc",
-                sprintDescription: "test sprint desc"
+                title: "## Composed Title",
+                body: "## Composed Body\n\ntest task desc\n\ntest sprint desc"
             }, "/path", "token");
             expect(res).toBe("http://newpr2");
             expect(mockClient.ghPrCreate).toHaveBeenCalledWith(
                 "feat",
                 "worker",
-                expect.any(String),
-                expect.stringContaining("test task desc"),
-                "token"
-            );
-            expect(mockClient.ghPrCreate).toHaveBeenCalledWith(
-                "feat",
-                "worker",
-                expect.any(String),
-                expect.stringContaining("test sprint desc"),
+                "## Composed Title",
+                "## Composed Body\n\ntest task desc\n\ntest sprint desc",
                 "token"
             );
         });
