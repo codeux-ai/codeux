@@ -135,7 +135,10 @@ describe("ProviderExecutionService", () => {
       return mockResult;
     });
 
-    await service.executeProvider(defaultArgs);
+    await service.executeProvider({
+      ...defaultArgs,
+      trackPromptInInvocation: false,
+    });
 
     expect(executionRepository.updateProviderInvocationUsage).not.toHaveBeenCalledWith(
       "prov-inv-1",
@@ -190,7 +193,7 @@ describe("ProviderExecutionService", () => {
     );
   });
 
-  it("records the full agent conversation even in text-output mode (QA / planning)", async () => {
+  it("final success replaces placeholder messages with a parsed planning transcript", async () => {
     const textMockResult = {
       ...mockResult,
       text: "{\"verdict\":\"pass\"}",
@@ -198,22 +201,163 @@ describe("ProviderExecutionService", () => {
         ...mockResult.usageTelemetry,
         conversation: [
           { kind: "user", text: "Review this diff." },
-          { kind: "tool_call", text: "", toolName: "read_file", toolCallId: "c1", toolArguments: "{}" },
-          { kind: "tool_result", text: "", toolCallId: "c1", toolOutput: "file contents" },
+          { kind: "reasoning", text: "I will inspect the diff and verify the rollout." },
+          { kind: "tool_call", text: "", toolName: "read_file", toolCallId: "c1", toolArguments: "{\"path\":\"src/app.ts\"}", toolStatus: "completed" },
+          { kind: "tool_result", text: "", toolCallId: "c1", toolName: "read_file", toolOutput: "file contents", toolStatus: "completed" },
           { kind: "assistant", text: "{\"verdict\":\"pass\"}" },
         ],
       },
     };
     providerRunner.runProviderForText.mockResolvedValue(textMockResult);
 
-    await service.executeProvider({ ...defaultArgs, expectTextOutput: true });
+    await service.executeProvider({
+      ...defaultArgs,
+      purpose: "planning",
+      type: "qa_review",
+      expectTextOutput: true,
+    });
 
     expect(providerRunner.runProviderForText).toHaveBeenCalled();
     expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledWith("exec-inv-1");
-    // The intermediate tool call is now persisted, not discarded.
     expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
       "exec-inv-1",
-      expect.objectContaining({ role: "tool", metadata: expect.objectContaining({ kind: "tool_call", toolName: "read_file" }) })
+      expect.objectContaining({
+        role: "user",
+        contentMarkdown: "Review this diff.",
+      }),
+    );
+    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
+      "exec-inv-1",
+      expect.objectContaining({
+        role: "assistant",
+        contentMarkdown: "I will inspect the diff and verify the rollout.",
+        metadata: expect.objectContaining({
+          kind: "reasoning",
+          provider: "claude-code",
+          model: "test-model",
+        }),
+      }),
+    );
+    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
+      "exec-inv-1",
+      expect.objectContaining({
+        role: "tool",
+        contentMarkdown: "",
+        toolCallsJson: expect.objectContaining({
+          arguments: "{\"path\":\"src/app.ts\"}",
+          callId: "c1",
+        }),
+        metadata: expect.objectContaining({
+          kind: "tool_call",
+          toolName: "read_file",
+          toolStatus: "completed",
+          provider: "claude-code",
+          model: "test-model",
+        }),
+      })
+    );
+    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
+      "exec-inv-1",
+      expect.objectContaining({
+        role: "tool",
+        toolCallsJson: expect.objectContaining({ output: "file contents" }),
+        metadata: expect.objectContaining({
+          kind: "tool_result",
+          toolName: "read_file",
+          provider: "claude-code",
+          model: "test-model",
+        }),
+      })
+    );
+    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
+      "exec-inv-1",
+      expect.objectContaining({
+        role: "assistant",
+        contentMarkdown: "{\"verdict\":\"pass\"}",
+      })
+    );
+  });
+
+  it("rewrites live telemetry when reasoning or tool payloads change without changing counts", async () => {
+    const firstConversation = [
+      { kind: "user", text: "Do the task." },
+      { kind: "reasoning", text: "alpha" },
+      { kind: "tool_call", text: "", toolName: "read_file", toolCallId: "c1", toolArguments: "{\"a\":1}", toolStatus: "ready" },
+      { kind: "tool_result", text: "", toolCallId: "c1", toolName: "read_file", toolOutput: "value", toolStatus: "ready" },
+      { kind: "assistant", text: "done" },
+    ];
+    const secondConversation = [
+      { kind: "user", text: "Do the task." },
+      { kind: "reasoning", text: "bravo" },
+      { kind: "tool_call", text: "", toolName: "read_file", toolCallId: "c1", toolArguments: "{\"b\":2}", toolStatus: "final" },
+      { kind: "tool_result", text: "", toolCallId: "c1", toolName: "read_file", toolOutput: "other", toolStatus: "final" },
+      { kind: "assistant", text: "done" },
+    ];
+    providerRunner.runProviderForText.mockImplementation(async (opts: any) => {
+      opts.onTelemetry({
+        ...mockResult.usageTelemetry,
+        transcriptText: "same",
+        conversation: firstConversation as any,
+      });
+      opts.onTelemetry({
+        ...mockResult.usageTelemetry,
+        transcriptText: "same",
+        conversation: secondConversation as any,
+      });
+      return {
+        ...mockResult,
+        text: "",
+        usageTelemetry: {
+          ...mockResult.usageTelemetry,
+          conversation: [],
+          transcriptText: "",
+        },
+      } as ProviderRunResult & { text: string };
+    });
+
+    await service.executeProvider({
+      ...defaultArgs,
+      purpose: "remediation",
+      type: "qa_review",
+      expectTextOutput: true,
+      trackPromptInInvocation: false,
+    });
+
+    expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledTimes(2);
+    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
+      "exec-inv-1",
+      expect.objectContaining({
+        role: "assistant",
+        contentMarkdown: "bravo",
+        metadata: expect.objectContaining({
+          kind: "reasoning",
+        }),
+      }),
+    );
+    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
+      "exec-inv-1",
+      expect.objectContaining({
+        role: "tool",
+        toolCallsJson: expect.objectContaining({
+          arguments: "{\"b\":2}",
+        }),
+        metadata: expect.objectContaining({
+          kind: "tool_call",
+          toolStatus: "final",
+        }),
+      }),
+    );
+    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
+      "exec-inv-1",
+      expect.objectContaining({
+        role: "tool",
+        toolCallsJson: expect.objectContaining({
+          output: "other",
+        }),
+        metadata: expect.objectContaining({
+          kind: "tool_result",
+        }),
+      }),
     );
   });
 
@@ -235,10 +379,19 @@ describe("ProviderExecutionService", () => {
       tick(sameConversation, "abc");   // first state — should write
       tick(sameConversation, "abc");   // identical — should be skipped
       tick(grownConversation, "abcd"); // changed — should write again
-      return mockResult;
+      return {
+        ...mockResult,
+        usageTelemetry: {
+          ...mockResult.usageTelemetry,
+          transcriptText: "",
+        },
+      };
     });
 
-    await service.executeProvider(defaultArgs);
+    await service.executeProvider({
+      ...defaultArgs,
+      trackPromptInInvocation: false,
+    });
 
     // Two distinct states persisted (the duplicate middle tick was skipped), not three.
     expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledTimes(2);
