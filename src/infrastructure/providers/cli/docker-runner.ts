@@ -261,11 +261,38 @@ export class DockerRunner implements IDockerRunner {
       // occupying the name first rather than racing `docker run --name` against it.
       await runCommandStrict("docker", ["rm", "-f", containerName], process.cwd()).catch(() => undefined);
 
-      return await runStreamingCommand("docker", dockerArgs, process.cwd(), process.env, {
-        signal,
-        onStdoutLine: (line) => onActivity(line, "agent"),
-        onStderrLine: (line) => onActivity(`[${providerLabel}] ${line}`, "provider"),
-      });
+      let abortKillIssued = false;
+      const killContainerOnAbort = (): void => {
+        if (abortKillIssued) {
+          return;
+        }
+        abortKillIssued = true;
+        // SIGKILLing the local `docker run` client only detaches from the daemon; it does
+        // not reliably stop the backing container, so kill the container directly on abort.
+        void runCommandStrict("docker", ["kill", containerName], process.cwd()).catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          onActivity(`Ignored Docker kill failure for ${containerName} after abort: ${message}`, "provider");
+        });
+      };
+
+      if (signal) {
+        signal.addEventListener("abort", killContainerOnAbort, { once: true });
+        if (signal.aborted) {
+          killContainerOnAbort();
+        }
+      }
+
+      try {
+        return await runStreamingCommand("docker", dockerArgs, process.cwd(), process.env, {
+          signal,
+          onStdoutLine: (line) => onActivity(line, "agent"),
+          onStderrLine: (line) => onActivity(`[${providerLabel}] ${line}`, "provider"),
+        });
+      } finally {
+        if (signal) {
+          signal.removeEventListener("abort", killContainerOnAbort);
+        }
+      }
     } finally {
       await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => undefined);
     }
