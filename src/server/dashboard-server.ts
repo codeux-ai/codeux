@@ -214,6 +214,14 @@ export interface DashboardServerOptions {
   deleteAgentPreset: (agentPresetId: string) => Promise<void> | void;
   importAgentPresetFromMarkdown?: (agentPresetId: string) => Promise<AgentPresetRecord> | AgentPresetRecord;
   syncAllAgentPresetsFromMarkdown?: (projectId: string) => Promise<AgentPresetRecord[]> | AgentPresetRecord[];
+  pushAgentPresetsToRepository?: (projectId: string, options: {
+    mode: "commit_only" | "commit_and_push" | "pull_request";
+    branchName?: string;
+  }) => Promise<{
+    committed: boolean;
+    pushedBranch?: string;
+    pullRequestUrl?: string;
+  }>;
   listInstructionFiles: (projectId: string) => Promise<InstructionFileSummary[]> | InstructionFileSummary[];
   readInstructionFile: (projectId: string, fileId: string) => Promise<InstructionFileContent> | InstructionFileContent;
   writeInstructionFile: (projectId: string, fileId: string, content: string) => Promise<InstructionFileContent> | InstructionFileContent;

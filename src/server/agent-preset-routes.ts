@@ -37,4 +37,20 @@ export function registerAgentPresetRoutes(router: Express, deps: DashboardDepend
     }
     res.json(await deps.syncAllAgentPresetsFromMarkdown(requireTrimmedString(req.params.projectId, "projectId")));
   }));
+
+  router.post("/api/projects/:projectId/agent-presets/push", asyncRoute(async (req, res) => {
+    if (!deps.pushAgentPresetsToRepository) {
+      res.status(404).json({ error: "Agent preset push is not enabled for agents." });
+      return;
+    }
+    const projectId = requireTrimmedString(req.params.projectId, "projectId");
+    const body = req.body as {
+      mode?: "commit_only" | "commit_and_push" | "pull_request";
+      branchName?: string;
+    };
+    res.json(await deps.pushAgentPresetsToRepository(projectId, {
+      mode: body.mode ?? "commit_only",
+      branchName: body.branchName,
+    }));
+  }));
 }
