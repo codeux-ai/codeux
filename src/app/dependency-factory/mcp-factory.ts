@@ -28,18 +28,7 @@ export function createMcpDependencies(
       };
     }
 
-    const settings = { ...effective.settings };
-    const sources = effective.sources || {};
-
-    // If git.defaultBranch is from system, allow project metadata to override it.
-    if (scope?.projectId && sources["git.defaultBranch"] === "system") {
-      const project = coreDeps.projectManagementRepository.getProject(scope.projectId);
-      if (project?.defaultBranch) {
-        settings.git = { ...settings.git, defaultBranch: project.defaultBranch };
-      }
-    }
-
-    return settings;
+    return effective.settings;
   };
 
   const managementToolHandler = new ManagementToolHandler({

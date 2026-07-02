@@ -67,17 +67,7 @@ export function createSprintDependencies(
       };
     }
 
-    const settings = { ...effective.settings };
-    const sources = effective.sources || {};
-
-    if (projectId && sources["git.defaultBranch"] === "system") {
-      const project = projectManagementRepository.getProject(projectId);
-      if (project?.defaultBranch) {
-        settings.git = { ...settings.git, defaultBranch: project.defaultBranch };
-      }
-    }
-
-    return settings;
+    return effective.settings;
   };
 
   const cliWorkflowService = new CliWorkflowService({
