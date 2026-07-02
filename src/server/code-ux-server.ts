@@ -52,6 +52,7 @@ import { DatabaseMaintenanceService } from "../services/database-maintenance-ser
 import { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
 import { AgentPresetSyncService } from "../services/agent-preset-sync-service.js";
 import { PlanningAgentService } from "../services/planning-agent-service.js";
+import { ExecutionInvocationControlService } from "../services/execution-invocation-control-service.js";
 import { createRuntimeDependencies, ServerContext } from "../app/dependency-factory.js";
 import { generateCorrelationId, runWithCorrelationId } from "../shared/logging/correlation-id.js";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
@@ -158,6 +159,7 @@ export class CodeUxServer {
   private activityCacheService: ActivityCacheService;
   private taskRerunService: TaskRerunService;
   private executionControlService: ExecutionControlService;
+  private executionInvocationControlService: ExecutionInvocationControlService;
   private planningAgentService: PlanningAgentService;
   private quicksprintService: import("../services/quicksprint-service.js").QuicksprintService;
   private projectSetupService: import("../services/project-setup-service.js").ProjectSetupService;
@@ -226,6 +228,7 @@ export class CodeUxServer {
     this.activityCacheService = deps.activityCacheService;
     this.taskRerunService = deps.taskRerunService;
     this.executionControlService = deps.executionControlService;
+    this.executionInvocationControlService = deps.executionInvocationControlService;
     this.planningAgentService = deps.planningAgentService;
     this.quicksprintService = deps.quicksprintService;
     this.projectSetupService = deps.projectSetupService;
@@ -1138,6 +1141,7 @@ export class CodeUxServer {
         activityCacheService: this.activityCacheService,
         taskRerunService: this.taskRerunService,
         executionControlService: this.executionControlService,
+        executionInvocationControlService: this.executionInvocationControlService,
         planningAgentService: this.planningAgentService,
         quicksprintService: this.quicksprintService,
         projectSetupService: this.projectSetupService,

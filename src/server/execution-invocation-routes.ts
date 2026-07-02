@@ -63,4 +63,19 @@ export function registerExecutionInvocationRoutes(router: Express, deps: Dashboa
       next(error);
     }
   });
+
+  router.post("/api/execution/invocations/:invocationId/cancel", async (req, res, next) => {
+    try {
+      if (!deps.cancelExecutionInvocation) {
+        res.status(404).json({ error: "Invocation cancellation is not enabled." });
+        return;
+      }
+      const result = await deps.cancelExecutionInvocation(
+        requireTrimmedString(req.params.invocationId, "invocationId"),
+      );
+      res.status(202).json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
 }

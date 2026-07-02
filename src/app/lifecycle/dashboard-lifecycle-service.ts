@@ -45,6 +45,7 @@ import type { TaskRerunService } from "../../services/task-rerun-service.js";
 import type { ExecutionControlService } from "../../services/execution-control-service.js";
 import type { DashboardRealtimeService } from "../../services/dashboard-realtime-service.js";
 import type { PlanningAgentService } from "../../services/planning-agent-service.js";
+import type { ExecutionInvocationControlService } from "../../services/execution-invocation-control-service.js";
 import type { ChatThreadRuntimeService } from "../../services/chat-thread-runtime-service.js";
 import type { QuicksprintService } from "../../services/quicksprint-service.js";
 import type { ProjectSetupService } from "../../services/project-setup-service.js";
@@ -88,6 +89,7 @@ export interface BootDashboardDeps {
   activityCacheService: ActivityCacheService;
   taskRerunService: TaskRerunService;
   executionControlService: ExecutionControlService;
+  executionInvocationControlService: ExecutionInvocationControlService;
   planningAgentService: PlanningAgentService;
   quicksprintService: QuicksprintService;
   projectSetupService: ProjectSetupService;
@@ -581,6 +583,11 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     listInvocationMessages: (invocationId) => deps.executionRepository.listExecutionInvocationMessages(invocationId),
     restartExecutionInvocation: async (invocationId, mode) => {
       const result = await deps.planningAgentService.restartInvocation(invocationId, mode);
+      deps.activityCacheService.invalidateGitStatusCache();
+      return result;
+    },
+    cancelExecutionInvocation: async (invocationId) => {
+      const result = await deps.executionInvocationControlService.cancelInvocation(invocationId);
       deps.activityCacheService.invalidateGitStatusCache();
       return result;
     },

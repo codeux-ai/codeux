@@ -54,3 +54,12 @@ export const restartExecutionInvocation = async (
     body: JSON.stringify({ mode }),
   });
 };
+
+export const cancelExecutionInvocation = async (
+  invocationId: string,
+): Promise<{ cancelled: boolean; invocationId: string; stoppedContainerIds?: string[]; message?: string }> => {
+  return fetchJson<{ cancelled: boolean; invocationId: string; stoppedContainerIds?: string[]; message?: string }>(
+    `/api/execution/invocations/${encodeURIComponent(invocationId)}/cancel`,
+    { method: "POST" },
+  );
+};

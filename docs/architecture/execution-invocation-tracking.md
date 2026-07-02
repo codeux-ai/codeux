@@ -33,6 +33,8 @@ User-facing chat threads show up with `scope === "project"`, while agent backgro
 
 The Chat -> Invocations detail view exposes same-session recovery actions for failed planning invocations. **Restart** preserves the original failed transcript, creates a new invocation row, and resends the full planning prompt while passing the failed provider row's native session id as `continueSessionId` (Claude Code uses `--resume <nativeSessionId>`). **Continue** uses the same native-session resume path but sends only a compact continuation prompt asking the provider to finish and output the complete JSON plan. The replacement invocation has its own provider usage trail; the failed row remains immutable evidence of the quota/error history.
 
+Running invocations can also be cancelled from the same detail header. Cancellation is available for every running invocation type, not just planning. The dashboard posts to `/api/execution/invocations/:invocationId/cancel`; the server requests any registered active dispatch to stop, finds Docker containers by the existing `code-ux.session-id` label from the linked provider/task runtime, kills those containers, marks the provider usage row `cancelled`, and appends a system cancellation message to the invocation transcript. Provider finalizers check the current invocation state before writing terminal status so a cancelled row is not overwritten by a late provider failure while the process unwinds.
+
 ## Realtime Synchronization
 
 When an invocation or its messages are created/updated, the server emits a project-scoped realtime event.

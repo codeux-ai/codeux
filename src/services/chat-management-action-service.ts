@@ -102,6 +102,14 @@ export interface ProcessManagementActionArgs {
 export class ChatManagementActionService {
   constructor(private readonly deps: ChatManagementActionServiceDeps) {}
 
+  private isExecutionInvocationActiveForFinalize(invocationId: string): boolean {
+    if (typeof this.deps.executionRepository.getExecutionInvocation !== "function") {
+      return true;
+    }
+    const current = this.deps.executionRepository.getExecutionInvocation(invocationId);
+    return current?.status !== "cancelled";
+  }
+
   async executeApprovedAction(projectId: string, provider: string, model: string, action: ManageCodeUxArgs): Promise<ManagementActionProposedResult> {
     const startedAt = new Date().toISOString();
     const execInvocationId = this.deps.executionRepository.createExecutionInvocation({
@@ -234,10 +242,12 @@ export class ChatManagementActionService {
         contentMarkdown: replyText || "_No response from provider._",
       });
 
-      this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
-        status: args.signal?.aborted ? "cancelled" : (result.ok ? "completed" : "failed"),
-        finishedAt: new Date().toISOString(),
-      });
+      if (this.isExecutionInvocationActiveForFinalize(execInvocationId)) {
+        this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
+          status: args.signal?.aborted ? "cancelled" : (result.ok ? "completed" : "failed"),
+          finishedAt: new Date().toISOString(),
+        });
+      }
 
       if (!result.ok) {
         throw new Error(`Virtual ${args.provider} worker failed: ${result.stderr || result.stdout}`);
@@ -256,10 +266,12 @@ export class ChatManagementActionService {
         role: "system",
         contentMarkdown: wasCancelled ? "Superseded by a newer chat message." : `Error: ${errMessage}`,
       });
-      this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
-        status: wasCancelled ? "cancelled" : "failed",
-        finishedAt: new Date().toISOString(),
-      });
+      if (this.isExecutionInvocationActiveForFinalize(execInvocationId)) {
+        this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
+          status: wasCancelled ? "cancelled" : "failed",
+          finishedAt: new Date().toISOString(),
+        });
+      }
       throw err;
     }
   }
@@ -344,10 +356,12 @@ export class ChatManagementActionService {
 
       if (!parsed.action || !parsed.action.domain || !parsed.action.action) {
         // No action proposed, just a reply
-        this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
-          status: "completed",
-          finishedAt: new Date().toISOString(),
-        });
+        if (this.isExecutionInvocationActiveForFinalize(execInvocationId)) {
+          this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
+            status: "completed",
+            finishedAt: new Date().toISOString(),
+          });
+        }
         return {
           replyMarkdown: parsed.replyMarkdown,
           action: null,
@@ -371,10 +385,12 @@ export class ChatManagementActionService {
         contentMarkdown: `Action result: ${JSON.stringify(envelope, null, 2)}`,
       });
 
-      this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
-        status: "completed",
-        finishedAt: new Date().toISOString(),
-      });
+      if (this.isExecutionInvocationActiveForFinalize(execInvocationId)) {
+        this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
+          status: "completed",
+          finishedAt: new Date().toISOString(),
+        });
+      }
 
       return {
         replyMarkdown: parsed.replyMarkdown,
@@ -392,10 +408,12 @@ export class ChatManagementActionService {
         role: "system",
         contentMarkdown: wasCancelled ? "Superseded by a newer chat message." : `Error: ${errMessage}`,
       });
-      this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
-        status: wasCancelled ? "cancelled" : "failed",
-        finishedAt: new Date().toISOString(),
-      });
+      if (this.isExecutionInvocationActiveForFinalize(execInvocationId)) {
+        this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
+          status: wasCancelled ? "cancelled" : "failed",
+          finishedAt: new Date().toISOString(),
+        });
+      }
       throw err;
     }
   }

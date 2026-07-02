@@ -172,6 +172,14 @@ Checks:
 - Preserved sprint-scoped invocation rows block sprint deletion so the quota/error transcript is not removed by a cascade.
 - If the restart or continuation fails, retry from the original failed row or inspect the new failed row depending on which invocation produced the latest error.
 
+### 6a. Cancel a running invocation
+Checks:
+- Open Chat -> Invocations, select any running invocation, then choose **Cancel** in the detail header.
+- Cancellation requests the active dispatch stop hook when the invocation is tied to task execution.
+- For Docker-backed provider runs, Code UX locates containers with the `code-ux.session-id` label from the linked provider/task runtime and kills them directly.
+- The execution invocation and linked provider usage row are marked `cancelled`, and a system message is appended to the transcript with the stopped Docker container ids when any were found.
+- If the backing provider process reports a late error while unwinding, the cancelled invocation remains cancelled instead of being overwritten as failed.
+
 ### 7. Orchestration stuck with blocked tasks
 Checks:
 - Are dependencies in final `completed`, or in `coding_completed` with no remaining merge work?
