@@ -15,7 +15,9 @@ The chat and invocation design system for the Code UX dashboard defines the layo
   - **System**: Rendered distinctly (e.g., dashed borders, monospaced headers, truncated views) to separate internal instructions from standard dialogue.
   - **Tool Calls / Reasoning**: Presented as full-width, compact cards rather than standard bubbles to clearly differentiate them as structural operations or internal thoughts rather than user-facing dialogue.
 - **Widgets**: specialized components (Routing, Planning, Container) embedded within the stream to provide rich status and execution context without cluttering the text transcript. They use a unified visual language (`ChatWidgetFrame`).
-  - **Reasoning turns**: internal thinking output renders as a dedicated expandable card with provider, model, timing, and token context so long traces stay readable without collapsing back into a generic assistant bubble.
+  - **Reasoning turns**: internal thinking output renders as a dedicated `ReasoningWidget`, not as a generic assistant bubble and not as a tool-call widget. It keeps the text plain and whitespace-preserving, adds provider/model/timing/token context in the header, and collapses long content behind an expand/collapse button with `aria-expanded` and `aria-controls`.
+  - **Collapsed long content**: long reasoning stays readable by default through a short preview and expands in place. Short reasoning stays fully visible with no affordance churn, while the widget still keeps a stable region label for screen readers.
+  - **Assistant vs. tool-call vs. reasoning**: assistant bubbles remain the normal markdown transcript surface, tool-call widgets summarize structured input/output/status for operations, and reasoning widgets are reserved for transcripted internal deliberation so the live session can be inspected without flattening every turn into the same bubble style.
 
 ## States
 - **Loading**: Use `LoadingChat` for initial data fetches. Provide pulsating dots or skeleton lines.

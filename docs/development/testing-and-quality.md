@@ -104,6 +104,7 @@ pnpm run typecheck:dashboard
 2. Preserve existing tool contracts unless intentional migration.
 3. Add tests for behavioral changes.
 4. Validate both server and dashboard build.
+5. If you change invocation reasoning or transcript persistence, keep `docs/architecture/execution-invocation-tracking.md` and `docs/dashboard/design-system-chat.md` aligned with `provider-conversation-message-mapper.ts`, `ProviderExecutionService`, and `ReasoningWidget`, then re-check the docs index links.
 
 ## Cross-Platform Test Expectations
 
