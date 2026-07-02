@@ -4,9 +4,11 @@ import gsap from 'gsap';
 import { X } from 'lucide-preact';
 import { MODAL_MOTION } from '../../../lib/motion/modal-motion.js';
 import type {
+  ProjectExecutionStatsChartSeries,
   ProjectExecutionStatsSnapshot,
 } from '../../../types.js';
 import styles from './UsageFilterMenu.module.css';
+import { UsageGraphLegend } from './UsageGraphLegend.js';
 
 interface UsageFilterMenuProps {
   isOpen: boolean;
@@ -14,6 +16,23 @@ interface UsageFilterMenuProps {
   stats: ProjectExecutionStatsSnapshot | null;
   enabledSeries: Record<string, boolean>;
   setEnabledSeries: (val: Record<string, boolean> | ((curr: Record<string, boolean>) => Record<string, boolean>)) => void;
+}
+
+function buildResetSeriesMap(series: ProjectExecutionStatsChartSeries[] | null | undefined): Record<string, boolean> {
+  if (!series || series.length === 0) {
+    return {};
+  }
+
+  const next = series.reduce((acc, item) => {
+    acc[item.id] = item.defaultEnabled;
+    return acc;
+  }, {} as Record<string, boolean>);
+
+  if (!Object.values(next).some(Boolean)) {
+    next[series[0]!.id] = true;
+  }
+
+  return next;
 }
 
 export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
@@ -78,6 +97,19 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
 
   const activeSeriesCount = Object.values(enabledSeries).filter(Boolean).length;
 
+  const groupedSeries: Record<string, ProjectExecutionStatsChartSeries[]> = stats?.chartSeries?.reduce((acc, series) => {
+    (acc[series.grouping] ??= []).push(series);
+    return acc;
+  }, {} as Record<string, ProjectExecutionStatsChartSeries[]>) ?? {};
+
+  const displayOrder = ['core', 'purposes', 'providers', 'git'];
+  const orderedGroups = displayOrder.filter((groupKey) => groupedSeries[groupKey]?.length)
+    .concat(Object.keys(groupedSeries).filter((groupKey) => !displayOrder.includes(groupKey) && groupedSeries[groupKey]?.length));
+  const orderedSeriesGroups = orderedGroups.reduce((acc, groupKey) => {
+    acc[groupKey] = groupedSeries[groupKey]!;
+    return acc;
+  }, {} as Record<string, ProjectExecutionStatsChartSeries[]>);
+
   return (
     <div
       ref={menuRef}
@@ -94,7 +126,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
             {activeSeriesCount > 0 && (
               <button
                 type="button"
-                onClick={() => setEnabledSeries({})}
+                onClick={() => setEnabledSeries(buildResetSeriesMap(stats?.chartSeries))}
                 className="text-xs text-slate-400 transition-colors hover:text-amber-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 rounded"
               >
                 Reset filters
@@ -115,84 +147,18 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
         {stats && (
           <div className={styles.section}>
             <label className={styles.label}>Metric Series</label>
-            <div className="flex max-h-[280px] flex-col gap-2 overflow-y-auto pr-2">
-              {(() => {
-                const groups = stats.chartSeries.reduce((acc, s) => {
-                  (acc[s.grouping] ??= []).push(s);
-                  return acc;
-                }, {} as Record<string, typeof stats.chartSeries>);
-                const displayOrder = ['core', 'purposes', 'providers', 'git'];
-                const orderedGroups = [
-                  ...displayOrder.filter((groupKey) => groups[groupKey]?.length),
-                  ...Object.keys(groups).filter((groupKey) => !displayOrder.includes(groupKey) && groups[groupKey]?.length),
-                ];
-
-                return orderedGroups.map((groupKey) => {
-                  const groupLabel = (
-                    groupKey === 'core'
-                      ? 'Core'
-                      : groupKey === 'purposes'
-                        ? 'Purposes'
-                        : groupKey === 'providers'
-                          ? 'Providers'
-                          : groupKey === 'git'
-                            ? 'Git'
-                            : groupKey.charAt(0).toUpperCase() + groupKey.slice(1)
-                  );
-
-                  return (
-                    <div key={groupKey} className="flex flex-col">
-                      <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 mt-3 mb-1 px-1">
-                        {groupLabel}
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        {groups[groupKey].map((s) => {
-                          const active = enabledSeries[s.id] || false;
-                          const disabled = activeSeriesCount === 1 && active;
-                          const groupActiveCount = groups[groupKey].filter((item) => enabledSeries[item.id]).length;
-                          return (
-                            <button
-                              key={s.id}
-                              type="button"
-                              onClick={() => {
-                                if (activeSeriesCount === 1 && enabledSeries[s.id]) return;
-                                setEnabledSeries((curr) => ({ ...curr, [s.id]: !curr[s.id] }));
-                              }}
-                              aria-disabled={disabled ? "true" : undefined}
-                              aria-pressed={active}
-                              className={`flex items-center justify-between rounded-xl border px-3 py-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 ${
-                                active
-                                  ? 'border-amber-500/28 bg-amber-500/12 text-amber-700 dark:text-amber-300'
-                                  : 'border-black/[0.05] bg-transparent text-slate-500 hover:border-black/[0.1] dark:border-white/[0.05] dark:text-slate-400'
-                              } ${disabled ? 'cursor-not-allowed opacity-60' : ''}`}
-                            >
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className="h-2 w-2 rounded-full"
-                                  style={{ backgroundColor: s.color || '#ccc' }}
-                                />
-                                <span className="text-[10px] font-bold uppercase tracking-[0.14em]">
-                                  {s.label}
-                                </span>
-                              </div>
-                              {active && (
-                                <div className="flex items-center gap-1.5">
-                                  {groupActiveCount > 1 && (
-                                    <div className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[8px] font-bold text-amber-700 dark:bg-amber-500/30 dark:text-amber-200">
-                                      +{groupActiveCount - 1}
-                                    </div>
-                                  )}
-                                  <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                                </div>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                });
-              })()}
+            <div className="flex max-h-[320px] flex-col gap-4 overflow-y-auto pr-1">
+              <UsageGraphLegend
+                seriesGroups={orderedSeriesGroups}
+                enabledSeries={enabledSeries}
+                activeSeriesCount={activeSeriesCount}
+                onToggleSeries={(id) => {
+                  if (activeSeriesCount === 1 && enabledSeries[id]) {
+                    return;
+                  }
+                  setEnabledSeries((curr) => ({ ...curr, [id]: !curr[id] }));
+                }}
+              />
             </div>
           </div>
         )}

@@ -2,7 +2,7 @@ import type { FunctionComponent } from 'preact';
 import { ActionFeedbackRegion } from '../../../components/ui/ActionFeedbackRegion.js';
 
 export const UsageGraphLoading: FunctionComponent = () => (
-  <div className="flex h-[24rem] w-full items-center justify-center px-6">
+  <div className="flex min-h-[24rem] w-full items-center justify-center px-6">
     <div className="w-full max-w-lg">
       <ActionFeedbackRegion
         status="pending"
@@ -14,13 +14,13 @@ export const UsageGraphLoading: FunctionComponent = () => (
 );
 
 export const UsageGraphEmpty: FunctionComponent<{ onReset?: () => void }> = ({ onReset }) => (
-  <div className="flex h-[24rem] w-full items-center justify-center px-6">
+  <div className="flex min-h-[24rem] w-full items-center justify-center px-6">
     <div className="w-full max-w-lg">
       <ActionFeedbackRegion
         status="warning"
-        message="No data for this window. Telemetry will appear once the project starts executing tasks."
+        message="No telemetry buckets are available for this window yet."
         retryAction={onReset}
-        retryLabel={onReset ? "Reset Filters" : undefined}
+        retryLabel={onReset ? "Reset window" : undefined}
         autoDismiss={false}
       />
     </div>
@@ -28,7 +28,7 @@ export const UsageGraphEmpty: FunctionComponent<{ onReset?: () => void }> = ({ o
 );
 
 export const UsageGraphError: FunctionComponent<{ message?: string; onRetry?: () => void }> = ({ message, onRetry }) => (
-  <div className="flex h-[24rem] w-full items-center justify-center px-6">
+  <div className="flex min-h-[24rem] w-full items-center justify-center px-6">
     <div className="w-full max-w-lg">
       <ActionFeedbackRegion
         status="error"

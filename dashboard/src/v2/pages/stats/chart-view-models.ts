@@ -1,9 +1,8 @@
 import type {
   ExecutionUsageBucketSummary,
   ProjectExecutionStatsChartSeries,
-  ProjectExecutionStatsSnapshot
 } from '../../../types.js';
-import { formatStatsDuration, formatTokens, NUMBER_FORMATTER, sumUsage, formatCost } from './stats-utils.js';
+import { EMPTY_USAGE, formatStatsDuration, formatTokens, NUMBER_FORMATTER, formatCost } from './stats-utils.js';
 import {
   buildPoints,
   buildSmoothPath,
@@ -23,11 +22,13 @@ export interface NormalizedChartSeries extends Omit<ProjectExecutionStatsChartSe
 
 export interface ChartMetrics {
   peakTokens: number;
+  peakActiveTimeMs: number;
   peakTime: number;
   peakInvocations: number;
   averageTokens: number;
   peakCostUsd: number;
   totalCostUsd: number;
+  invocationDensity: number;
 }
 
 export interface TooltipState {
@@ -95,29 +96,37 @@ export function groupChartSeries(
 }
 
 export function calculateChartMetrics(visibleBuckets: ExecutionUsageBucketSummary[]): ChartMetrics {
-  const peakTokens = Math.max(0, ...visibleBuckets.map((bucket) => bucket.usage.totalTokens));
-  const peakTime = Math.max(0, ...visibleBuckets.map((bucket) => bucket.usage.activeTimeMs));
-  const peakInvocations = Math.max(0, ...visibleBuckets.map((bucket) => bucket.usage.invocationCount));
-  const peakCostUsd = Math.max(0, ...visibleBuckets.map((bucket) => bucket.usage.totalCostUsd || 0));
-  const totalCostUsd = visibleBuckets.reduce((acc, bucket) => acc + (bucket.usage.totalCostUsd || 0), 0);
-  const averageTokens = visibleBuckets.length > 0 ? Math.round(sumUsage(visibleBuckets.map((bucket) => ({
-    id: bucket.bucketStart,
-    label: bucket.label,
-    secondaryLabel: null,
-    status: null,
-    purpose: null,
-    provider: null,
-    usage: bucket.usage,
-    lastActivityAt: bucket.bucketEnd,
-  }))).totalTokens / visibleBuckets.length) : 0;
+  let peakTokens = 0;
+  let peakActiveTimeMs = 0;
+  let peakInvocations = 0;
+  let peakCostUsd = 0;
+  let totalTokens = 0;
+  let totalInvocations = 0;
+  let totalCostUsd = 0;
+
+  for (const bucket of visibleBuckets) {
+    const usage = bucket.usage ?? EMPTY_USAGE;
+    peakTokens = Math.max(peakTokens, usage.totalTokens);
+    peakActiveTimeMs = Math.max(peakActiveTimeMs, usage.activeTimeMs);
+    peakInvocations = Math.max(peakInvocations, usage.invocationCount);
+    peakCostUsd = Math.max(peakCostUsd, usage.totalCostUsd || 0);
+    totalTokens += usage.totalTokens;
+    totalInvocations += usage.invocationCount;
+    totalCostUsd += usage.totalCostUsd || 0;
+  }
+
+  const averageTokens = visibleBuckets.length > 0 ? Math.round(totalTokens / visibleBuckets.length) : 0;
+  const invocationDensity = visibleBuckets.length > 0 ? totalInvocations / visibleBuckets.length : 0;
 
   return {
     peakTokens,
-    peakTime,
+    peakActiveTimeMs,
+    peakTime: peakActiveTimeMs,
     peakInvocations,
     averageTokens,
     peakCostUsd,
     totalCostUsd,
+    invocationDensity,
   };
 }
 
@@ -141,10 +150,13 @@ export function getTooltipState(
   padding: number,
   width: number
 ): TooltipState {
-  const activeIndex = hoveredIndex ?? (visibleBuckets.length > 0 ? visibleBuckets.length - 1 : 0);
+  const activeIndex = Math.min(
+    Math.max(hoveredIndex ?? (visibleBuckets.length > 0 ? visibleBuckets.length - 1 : 0), 0),
+    Math.max(0, visibleBuckets.length - 1)
+  );
   const activeBucket = visibleBuckets[activeIndex] ?? null;
   const xPositions = chartData[0]?.points.map((point) => point.x) ?? [];
-  const tooltipLeft = xPositions[activeIndex]
+  const tooltipLeft = xPositions[activeIndex] !== undefined
     ? ((xPositions[activeIndex]! - padding) / Math.max(1, width - padding * 2)) * 100
     : 50;
 

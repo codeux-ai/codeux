@@ -146,6 +146,7 @@ export const TrendStudio: FunctionComponent<{
   planningUsage: _planningUsage,
   chartState,
 }) => {
+  const chartMetrics = chartState.metrics;
   const buckets = stats.buckets || [];
   const tokenDelta = computeWindowDelta(buckets, (bucket) => bucket.usage?.totalTokens || 0);
   const invocationDelta = computeWindowDelta(buckets, (bucket) => bucket.usage?.invocationCount || 0);
@@ -175,7 +176,10 @@ export const TrendStudio: FunctionComponent<{
       />
       <TrendKpiTile
         label="Peak Bucket Cost"
-        value={(chartState as any)?.metrics?.peakCostUsd > 0 ? formatCost((chartState as any)?.metrics?.peakCostUsd) : "—"}
+        value={chartMetrics && chartMetrics.peakCostUsd > 0 ? formatCost(chartMetrics.peakCostUsd) : "—"}
+        detail={chartMetrics && typeof chartMetrics.invocationDensity === "number"
+          ? `${chartMetrics.invocationDensity.toFixed(1)} invocations / bucket`
+          : "selected window"}
       />
       <TrendKpiTile
         label="Total Tokens"

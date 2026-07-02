@@ -10,8 +10,10 @@ import { TopCardsModeRenderer } from "../../../src/v2/components/stats/TopCardsM
 import { StatsPage } from "../../../src/v2/pages/stats/StatsPage.js";
 import { StatsPageHero } from "../../../src/v2/pages/stats/components/StatsPageHero.js";
 import { DonutCard } from "../../../src/v2/pages/stats/components/stats-ui-primitives.js";
+import { UsageFilterMenu } from "../../../src/v2/pages/stats/components/UsageFilterMenu.js";
 import { ProjectDataContext } from "../../../src/v2/context/project-data.js";
 import { fireEvent } from "@testing-library/preact";
+import { useState } from "preact/hooks";
 
 
 expect.extend(matchers);
@@ -28,7 +30,13 @@ vi.mock("gsap", () => ({
     }),
     set: vi.fn(),
     timeline: vi.fn().mockImplementation(() => ({ fromTo: vi.fn(), to: vi.fn(), kill: vi.fn() })),
-    context: vi.fn().mockImplementation((cb) => { cb(); return { revert: vi.fn() }; })
+    context: vi.fn().mockImplementation((cb) => { cb(); return { revert: vi.fn() }; }),
+    matchMedia: vi.fn().mockReturnValue({
+      add: vi.fn().mockImplementation((_q, cb) => {
+        if (_q.includes("no-preference")) cb();
+      }),
+      revert: vi.fn()
+    })
   }
 }));
 
@@ -177,5 +185,36 @@ describe("TopCardsModeRenderer Accessibility", () => {
     expect(group).toBeInTheDocument();
     const btn7d = screen.getByText("7d");
     expect(btn7d).toBeInTheDocument();
+  });
+
+  it("keeps one series enabled when usage filters are reset", () => {
+    const stats = {
+      chartSeries: [
+        { id: "tokens", label: "Tokens", grouping: "Usage", defaultEnabled: false, data: [100] },
+        { id: "active", label: "Active Time", grouping: "Usage", defaultEnabled: false, data: [200] },
+      ],
+    } as any;
+
+    const FilterMenuHarness = () => {
+      const [enabledSeries, setEnabledSeries] = useState({ tokens: true, active: false });
+
+      return (
+        <UsageFilterMenu
+          isOpen={true}
+          onClose={vi.fn()}
+          stats={stats}
+          enabledSeries={enabledSeries}
+          setEnabledSeries={setEnabledSeries}
+        />
+      );
+    };
+
+    render(<FilterMenuHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset filters" }));
+
+    const switches = screen.getAllByRole("switch");
+    expect(switches.some((button) => button.getAttribute("aria-checked") === "true")).toBe(true);
+    expect(screen.getByRole("switch", { name: /tokens/i })).toHaveAttribute("aria-checked", "true");
   });
 });
