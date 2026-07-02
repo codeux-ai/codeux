@@ -30,71 +30,71 @@ const MemorySidebar = ({ nodes, onSelectNode }: MemorySidebarProps) => {
   const openLabel = "Open memory sidebar";
   const closeLabel = "Close memory sidebar";
 
-  return (
-    <div
-      className={`group relative flex shrink-0 flex-col overflow-hidden bg-void-900 border-void-700 transition-[width,height,background-color,border-color,box-shadow] duration-300 ease-out motion-reduce:transition-none ${
-        isExpanded
-          ? "h-[min(42vh,32rem)] w-full border-t lg:h-full lg:w-[20rem] lg:border-l lg:border-t-0"
-          : "h-14 w-full border-t lg:h-full lg:w-14 lg:border-l lg:border-t-0"
-      }`}
-    >
-      <div className={`flex h-14 min-w-0 items-center border-b border-void-700 px-3 ${isExpanded ? "justify-between" : "justify-center"}`}>
-        {isExpanded && (
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">
-              Memory
-            </p>
-            <p className="truncate text-[11px] text-slate-500">
-              Search and browse project memory
-            </p>
-          </div>
-        )}
-        <button
-          onClick={toggleSidebar}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-void-700 bg-void-800 text-void-200 shadow-md transition-colors duration-200 hover:border-signal-500 hover:text-signal-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-void-900 motion-reduce:transition-none"
-          aria-label={isExpanded ? closeLabel : openLabel}
-          aria-expanded={isExpanded}
-          aria-controls="memory-sidebar-content"
-          title={isExpanded ? closeLabel : openLabel}
-        >
-          <span
-            data-sidebar-toggle-icon
-            className={`flex items-center justify-center transition-transform duration-300 ease-out motion-reduce:transition-none motion-reduce:transform-none ${
-              isExpanded ? "rotate-0" : "rotate-180"
+    return (
+        <div
+            className={`group relative flex shrink-0 flex-col overflow-hidden bg-void-900 border-void-700 transition-[width,height,background-color,border-color,box-shadow] duration-300 ease-out motion-reduce:transition-none ${
+                isExpanded
+                    ? "h-[min(44dvh,34rem)] w-full border-t lg:h-full lg:w-[20rem] lg:border-l lg:border-t-0"
+                    : "h-14 w-full border-t lg:h-full lg:w-14 lg:border-l lg:border-t-0"
             }`}
-          >
-            <ChevronDown className="h-4 w-4 lg:hidden" aria-hidden="true" />
-            <ChevronRight className="hidden h-4 w-4 lg:block" aria-hidden="true" />
-            <span className="sr-only">
-              {isExpanded ? "Collapse sidebar" : "Expand sidebar"}
-            </span>
-          </span>
-          <span className="sr-only">
-            {isExpanded ? closeLabel : openLabel}
-          </span>
-        </button>
-      </div>
+        >
+            <div className={`flex h-14 min-w-0 items-center border-b border-void-700 px-3 ${isExpanded ? "justify-between" : "justify-center"}`}>
+                {isExpanded && (
+                    <div className="min-w-0 flex-1">
+                        <p className="truncate font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">
+                            Memory
+                        </p>
+                        <p className="truncate text-[11px] text-slate-500">
+                            Search and browse project memory
+                        </p>
+                    </div>
+                )}
+                <button
+                    onClick={toggleSidebar}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-void-700 bg-void-800 text-void-200 shadow-md transition-colors duration-200 hover:border-signal-500 hover:text-signal-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-void-900 motion-reduce:transition-none"
+                    aria-label={isExpanded ? closeLabel : openLabel}
+                    aria-expanded={isExpanded}
+                    aria-controls="memory-sidebar-content"
+                    title={isExpanded ? closeLabel : openLabel}
+                >
+                    <span
+                        data-sidebar-toggle-icon
+                        className={`flex items-center justify-center transition-transform duration-300 ease-out motion-reduce:transition-none motion-reduce:transform-none ${
+                            isExpanded ? "rotate-0" : "rotate-180"
+                        }`}
+                    >
+                        <ChevronDown className="h-4 w-4 lg:hidden" aria-hidden="true" />
+                        <ChevronRight className="hidden h-4 w-4 lg:block" aria-hidden="true" />
+                        <span className="sr-only">
+                            {isExpanded ? "Collapse sidebar" : "Expand sidebar"}
+                        </span>
+                    </span>
+                    <span className="sr-only">
+                        {isExpanded ? closeLabel : openLabel}
+                    </span>
+                </button>
+            </div>
 
-      <div
-        id="memory-sidebar-content"
-        aria-hidden={!isExpanded}
-        className={`min-h-0 min-w-0 flex-1 flex-col overflow-hidden transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none ${
-          isExpanded
-            ? "flex opacity-100 translate-y-0 lg:translate-y-0"
-            : "pointer-events-none flex opacity-0 translate-y-1 lg:translate-y-0"
-        }`}
-      >
-        <div className="flex h-full min-h-0 min-w-0 flex-col">
-          <div className="shrink-0 border-b border-void-700 p-3">
-            <MemorySearch />
-          </div>
-          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
-            <MemoryList nodes={nodes} onSelectNode={onSelectNode} />
-          </div>
+            <div
+                id="memory-sidebar-content"
+                aria-hidden={!isExpanded}
+                className={`min-h-0 min-w-0 flex-1 flex-col overflow-hidden transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none ${
+                    isExpanded
+                        ? "flex opacity-100 translate-y-0 lg:translate-y-0"
+                        : "pointer-events-none flex opacity-0 translate-y-1 lg:translate-y-0"
+                }`}
+            >
+                <div className="flex h-full min-h-0 min-w-0 flex-col">
+                    <div className="shrink-0 border-b border-void-700 p-3">
+                        <MemorySearch />
+                    </div>
+                    <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+                        <MemoryList nodes={nodes} onSelectNode={onSelectNode} />
+                    </div>
+                </div>
+            </div>
         </div>
-      </div>
-    </div>
-  );
+    );
 };
 
 export default MemorySidebar;
