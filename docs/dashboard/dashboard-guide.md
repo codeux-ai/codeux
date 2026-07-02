@@ -193,10 +193,14 @@ Legacy runtime:
 ## UI Sections
 
 ### Stats page
-- The Stats page keeps the time-window selector in the hero header, above the visual mode tabs, so preset and custom range controls remain visible no matter which analysis tab is active.
-- The trend-chart filter flyout is now metric-series only, which keeps the graph controls focused on series visibility while the header owns the time range.
-- The system invocation ledger beneath the stats analysis views is a sortable, card-row table with sticky sort controls for Time, In, Out, Total, and Duration; explicit input/output/cached/total token columns; status chips; task context chips; empty and loading states; and expandable detail placeholders that will later host message history.
-- The System stats view uses a local `useSystemViewData(projectId)` hook to fetch project invocation records, apply client-side search/filter/sort state, and derive summary metrics directly from the filtered list.
+- The Stats page keeps the time-window selector in the hero header, above the visual mode toggle, so preset and custom range controls remain visible no matter which analysis view is active.
+- The mode toggle exposes `trend`, `composition`, `models`, `reliability`, `ledgers`, and `system` as the primary analytics views.
+- Trend mode uses a compact metric strip, the interactive usage chart, and a persistent right-side summary rail; the graph filter menu only controls series visibility.
+- The chart summary stays keyboard and screen-reader friendly, with hover, focus, and drag zoom all feeding the same active-bucket state.
+- Ledgers mode uses tabbed task, sprint, and git telemetry with stable counts and roving focus.
+- System mode uses a controlled filter bar with search, status chips, provider/purpose chips, and pagination controls above a sortable invocation table.
+- The system invocation table preserves status chips, task context chips, token columns, loading and empty states, and expandable detail rows for transcript history.
+- The System stats view uses a local `useSystemViewData(projectId)` hook to fetch project invocation records, apply controlled search/filter/sort state, and derive summary metrics directly from the filtered list.
 
 ### V2 project management
 - Interactive dashboard controls use pointer cursors consistently: enabled buttons, links, tab controls, form toggles, menu/popover triggers, DAG nodes, cards, and dismissible overlays expose a pointer affordance, while disabled controls retain `not-allowed`.
