@@ -110,7 +110,7 @@ Code UX parses session data from two sources:
 - **Full conversation transcript**: reads the JSONL transcript file (`~/.gemini/antigravity-cli/brain/<id>/.system_generated/logs/transcript.jsonl` or fallback path under `antigravity`). The transcript parser processes:
   - `user` turns from `USER_INPUT` entry types (stripping `<USER_REQUEST>` wrapper tags).
   - `reasoning`, `assistant`, and `tool_call` turns from `PLANNER_RESPONSE` entry types, keeping visible planner reasoning ahead of the response text and tool calls it produced.
-  - `tool_result` turns from `RUN_COMMAND` or `TOOL_RESPONSE` entries.
+  - `tool_result` turns from `RUN_COMMAND` or `TOOL_RESPONSE` entries, preserving any available correlation ids and tool names so the matching call/result pair stays traceable in the reconstructed transcript.
   - `reasoning` turns from `SYSTEM` source events.
 
 For Docker-backed Antigravity runs, the SQLite database is encoded to Base64 within the container first, and then decoded to a temporary file on the host before parsing to bypass Docker named volume permission issues.
