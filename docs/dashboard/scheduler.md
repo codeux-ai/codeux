@@ -28,7 +28,9 @@ Repeating entries support:
 - a fixed number of iterations
 - an explicit end date/time
 
-Minute-based entries render summary labels such as `Every 15 minutes` and can be edited back into the same interval form state.
+Minute-based entries use the `minutely` recurrence literal in the API and MCP payloads. In the dashboard form, that same option is labeled `Minutes`, and the recurrence summaries reuse the same formatter as other schedules: `Every minute`, `Every 15 minutes`, `Every 15 minutes, 5 runs`, or `Every 15 minutes until <date>` depending on the configured interval and end mode.
+
+Minutely entries are not special-cased at runtime. They are persisted in the same recurrence JSON as other schedules, expanded into calendar occurrences with the same UTC recurrence helpers, and when due they advance `nextRunAt` by the configured minute interval before executing through the existing scheduler workflow. The separate memory-remediation cadence keeps its own off/daily/weekly controls.
 
 ## Backend Contract
 
