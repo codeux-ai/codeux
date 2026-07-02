@@ -567,6 +567,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     updateConversationThread: (threadId, input) => deps.connectionChatRepository.updateThread(threadId, input),
     updateThreadRoute: (threadId, input) => deps.chatThreadRuntimeService.updateThreadRoute(threadId, input),
     compactThreadSession: (threadId) => deps.chatThreadRuntimeService.compactThreadSession(threadId),
+    cancelThreadTurn: (threadId) => deps.chatThreadRuntimeService.cancelInFlightTurn(threadId),
     deleteConversationThread: (threadId) => deps.connectionChatRepository.deleteThread(threadId),
     listConversationMessages: (threadId) => deps.connectionChatRepository.listMessages(threadId),
     postConversationMessage: (projectId, input) => deps.chatThreadRuntimeService.postMessage(projectId, input),

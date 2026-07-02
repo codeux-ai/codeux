@@ -215,6 +215,7 @@ describe("dashboard route handlers", () => {
       updateConversationThread: () => ({ id: "thread-1" }),
       updateThreadRoute: () => ({ id: "thread-1" }),
       compactThreadSession: async () => ({ ok: true }),
+      cancelThreadTurn: async () => ({ cancelled: true }),
       deleteConversationThread: () => undefined,
       listConversationMessages: () => [],
       postConversationMessage: () => ({ id: "message-1" }),
@@ -231,6 +232,7 @@ describe("dashboard route handlers", () => {
     expect((await request(app).put("/api/conversations/threads/thread-1/route").send({ routeKind: "worker", workerEndpointId: "worker-1" })).status).toBe(200);
     expect((await request(app).put("/api/conversations/threads/thread-1/route").send({ routeKind: "invalid" })).status).toBe(400);
     expect((await request(app).post("/api/conversations/threads/thread-1/compact")).status).toBe(200);
+    expect((await request(app).post("/api/conversations/threads/thread-1/cancel")).status).toBe(200);
     expect((await request(app).delete("/api/conversations/threads/thread-1")).status).toBe(200);
     expect((await request(app).get("/api/conversations/threads/thread-1/messages")).status).toBe(200);
     expect((await request(app).post("/api/projects/project-1/conversations/messages").send({ bodyMarkdown: "Hello" })).status).toBe(201);
@@ -251,6 +253,7 @@ describe("dashboard route handlers", () => {
     const disabledApp = createApp((router) => registerConversationRoutes(router, {} as DashboardDependencies));
     expect((await request(disabledApp).put("/api/conversations/threads/thread-1/route").send({ routeKind: "worker" })).status).toBe(404);
     expect((await request(disabledApp).post("/api/conversations/threads/thread-1/compact")).status).toBe(404);
+    expect((await request(disabledApp).post("/api/conversations/threads/thread-1/cancel")).status).toBe(404);
   });
 
   it("covers planning routes, validation, and optional feature guards", async () => {
