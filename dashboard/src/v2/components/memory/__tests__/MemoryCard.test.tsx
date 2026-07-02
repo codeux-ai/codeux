@@ -4,8 +4,7 @@ import { render, fireEvent } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { expect, test, describe, vi, afterEach } from "vitest";
 import { MemoryCard } from "../MemoryCard.js";
-import { activeMemoryIdSignal, lobotomizeModeSignal, memoriesSignal } from "../memoryState.js";
-import { memoryMutationsSignal } from "../memoryState.js";
+import { activeMemoryIdSignal, lobotomizeModeSignal, memoryMutationsSignal, selectedMemoryIdsSignal } from "../memoryState.js";
 
 expect.extend(matchers);
 
@@ -24,11 +23,19 @@ vi.mock("../../../hooks/use-confirm-dialog.js", () => ({
 
 describe("MemoryCard", () => {
     const mockRemoveMemory = vi.fn();
-    memoryMutationsSignal.value = { removeMemory: mockRemoveMemory, addMemory: vi.fn(), feedback: null, clearFeedback: vi.fn() };
+    memoryMutationsSignal.value = {
+        removeMemory: mockRemoveMemory,
+        removeMemories: vi.fn().mockResolvedValue([]),
+        addMemory: vi.fn(),
+        feedback: { status: "idle", message: null },
+        clearFeedback: vi.fn(),
+        clearError: vi.fn()
+    };
     afterEach(() => {
         vi.clearAllMocks();
         lobotomizeModeSignal.value = false;
-        memoriesSignal.value = [];
+        activeMemoryIdSignal.value = null;
+        selectedMemoryIdsSignal.value = [];
         document.body.innerHTML = "";
     });
 
@@ -47,9 +54,8 @@ describe("MemoryCard", () => {
 
     test("shows Danger button when lobotomizeModeSignal is true and deletes on click", async () => {
         lobotomizeModeSignal.value = true;
-        memoriesSignal.value = [{ id: "test-id" }];
 
-        const { container, getByRole, queryByText } = render(
+        const { getByRole } = render(
             <MemoryCard
                 id="test-id"
                 content="test-content"
@@ -81,6 +87,26 @@ describe("MemoryCard", () => {
         );
 
         expect(queryByRole("button", { name: /Delete Context memory: test-content/i })).not.toBeInTheDocument();
+    });
+
+    test("exposes a batch selection toggle with an accessible name", () => {
+        const { getByRole } = render(
+            <MemoryCard
+                id="test-id"
+                content="toggle-test-content"
+                category="context"
+                strength={0.8}
+                onClick={vi.fn()}
+            />
+        );
+
+        const toggle = getByRole("button", { name: "Select Context memory" });
+        expect(toggle).toHaveAttribute("aria-pressed", "false");
+
+        fireEvent.click(toggle);
+
+        expect(selectedMemoryIdsSignal.value).toContain("test-id");
+        expect(getByRole("button", { name: "Deselect Context memory" })).toHaveAttribute("aria-pressed", "true");
     });
 
     test("has correct accessibility attributes", () => {

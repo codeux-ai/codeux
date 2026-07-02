@@ -1,9 +1,8 @@
 import { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
-import { useState } from "preact/hooks";
-import { activeMemoryIdSignal, hoveredMemoryIdSignal, lobotomizeModeSignal, memoriesSignal, memoryMutationsSignal } from "./memoryState.js";
+import { activeMemoryIdSignal, hoveredMemoryIdSignal, lobotomizeModeSignal, memoryMutationsSignal, selectedMemoryIdsSignal, toggleSelectedMemoryId } from "./memoryState.js";
 import { useComputed } from "@preact/signals";
-import { X } from "lucide-preact";
+import { Check, X } from "lucide-preact";
 import { deleteMemory } from "../../lib/memory-api.js";
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
@@ -40,6 +39,7 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
 }) => {
     const cat = CAT[category] || CAT.context;
     const isSelected = useComputed(() => activeMemoryIdSignal.value === id);
+    const isBatchSelected = useComputed(() => selectedMemoryIdsSignal.value.includes(id));
     const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel, triggerRef } = useConfirmDialog();
     const interactionTokens = useInteractionTokens();
 
@@ -81,12 +81,41 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
             className={`
                 group relative cursor-pointer p-4 rounded-[1.25rem] border text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                 ${isSelected.value
-                    ? "bg-signal-500/5 dark:bg-signal-500/10 border-signal-500 ring-1 ring-signal-500 shadow-[0_4px_24px_rgba(0,224,160,0.15)] scale-[1.02] z-10"
-                    : "bg-white/60 dark:bg-void-800/50 border-black/[0.06] dark:border-white/[0.06] hover:bg-white dark:hover:bg-void-800 hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)] dark:hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] scale-100"
+                    ? "bg-signal-500/5 dark:bg-signal-500/10 border-signal-500 ring-1 ring-signal-500 shadow-[0_4px_24px_rgba(0,224,160,0.15)] z-10"
+                    : isBatchSelected.value
+                        ? "bg-signal-500/[0.06] dark:bg-signal-500/[0.08] border-signal-500/40 ring-1 ring-signal-500/30 shadow-[0_4px_20px_rgba(0,224,160,0.08)]"
+                        : "bg-white/60 dark:bg-void-800/50 border-black/[0.06] dark:border-white/[0.06] hover:bg-white dark:hover:bg-void-800 hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)] dark:hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] scale-100"
                 }
                 ${lobotomizeModeSignal.value ? "ring-1 ring-status-red/50 hover:bg-status-red/10 hover:border-status-red hover:ring-status-red hover:shadow-[0_4px_24px_rgba(227,0,15,0.15)]" : ""}
             `}
         >
+            <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                    <button
+                        type="button"
+                        aria-pressed={isBatchSelected.value}
+                        aria-label={isBatchSelected.value ? `Deselect ${cat.label} memory` : `Select ${cat.label} memory`}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            toggleSelectedMemoryId(id);
+                        }}
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
+                            ${isBatchSelected.value
+                                ? "border-signal-500 bg-signal-500 text-white shadow-[0_4px_14px_rgba(0,224,160,0.25)]"
+                                : "border-black/[0.08] bg-white/80 text-slate-500 hover:border-signal-500/40 hover:text-signal-500 dark:border-white/[0.08] dark:bg-void-800/80 dark:text-slate-300"
+                            }`}
+                    >
+                        <Check size={13} strokeWidth={3} aria-hidden="true" className={isBatchSelected.value ? "opacity-100" : "opacity-0"} />
+                    </button>
+                    <div className="flex min-w-0 items-center gap-2">
+                        <div className="w-2 h-2 rounded-full shrink-0" style={{ background: cat.hex, boxShadow: `0 0 8px ${cat.hex}` }} />
+                        <span className="truncate text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: cat.hex }}>
+                            {cat.label}
+                        </span>
+                    </div>
+                </div>
+                <span className="text-[10px] font-mono text-slate-400">{Math.round(strength * 100)}%</span>
+            </div>
             {lobotomizeModeSignal.value && (
                 <button
                     type="button"
@@ -100,15 +129,6 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
                     <X size={14} strokeWidth={2.5} />
                 </button>
             )}
-            <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ background: cat.hex, boxShadow: `0 0 8px ${cat.hex}` }} />
-                    <span className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: cat.hex }}>
-                        {cat.label}
-                    </span>
-                </div>
-                <span className="text-[10px] font-mono text-slate-400">{Math.round(strength * 100)}%</span>
-            </div>
             <p className="text-[13px] text-slate-700 dark:text-slate-300 font-medium leading-relaxed line-clamp-3">
                 {content}
             </p>

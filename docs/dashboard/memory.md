@@ -122,6 +122,9 @@ The Memory settings panel also manages one project-scoped scheduler entry for lo
 - Closing the sidebar clears the current search query; Escape still clears the field while the sidebar is open, and the live announcement remains polite.
 - Added keyboard-accessible clear search functionality to `MemorySearch.tsx` (supports clearing via `Escape` and a dedicated clear button with an explicit `<kbd>Esc</kbd>` visual affordance).
 - Enhanced `MemoryList.tsx` to prominently display active search result counts directly in the UI instead of relying solely on `sr-only` live regions, while keeping the list layout `min-w-0` and overflow-safe on narrow screens.
+- Added per-memory selection toggles and a batch action bar to the sidebar list so users can select visible memories, clear the selection, or select all currently filtered results without touching hidden records.
+- Batch deletion requires an explicit confirmation dialog when more than one memory is selected. The delete flow is optimistic, restores any failed deletions, and reports partial failures through the memory feedback region with a retry action.
+- Selection is pruned automatically when search, tier, sprint, agent, or sidebar state changes make a memory invisible, which keeps batch actions scoped to the current visible slice of memory.
 - Improved memory list accessibility and reduced motion fallbacks in `MemoryList.tsx`, utilizing `useInteractionTokens` to respect OS-level reduced motion preferences.
 - Updated the memory map camera so wheel, button, and click focus interactions all preserve readable navigation on dense graphs.
 - `MemoryFilters.tsx` implements proper tab semantics and uses clear, high-contrast danger state indicators (`bg-status-red`) for lobotomize (delete) mode to prevent accidental removals.
