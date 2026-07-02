@@ -47,8 +47,8 @@ describe('UsageFilterMenu', () => {
   });
 
   it('should call setEnabledSeries when a metric button is clicked', () => {
-    const { getByRole } = render(<UsageFilterMenu {...mockProps} />);
-    const metricButton = getByRole('switch', { name: /tokens/i });
+    const { getAllByRole } = render(<UsageFilterMenu {...mockProps} />);
+    const metricButton = getAllByRole('switch').find((button) => button.getAttribute('aria-label') === 'Tokens, enabled')!;
     fireEvent.click(metricButton);
     expect(mockProps.setEnabledSeries).toHaveBeenCalled();
   });

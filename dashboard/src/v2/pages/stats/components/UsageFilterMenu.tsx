@@ -79,6 +79,19 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
   if (!isOpen && !menuRef.current) return null;
 
   const activeSeriesCount = Object.values(enabledSeries).filter(Boolean).length;
+  const handleResetFilters = () => {
+    const chartSeries = stats?.chartSeries ?? [];
+    const resetSeries = chartSeries.reduce((acc, series) => {
+      acc[series.id] = series.defaultEnabled;
+      return acc;
+    }, {} as Record<string, boolean>);
+
+    if (chartSeries.length > 0 && Object.values(resetSeries).every((enabled) => !enabled)) {
+      resetSeries[chartSeries[0]!.id] = true;
+    }
+
+    setEnabledSeries(resetSeries);
+  };
 
   const groupedSeries: Record<string, ProjectExecutionStatsChartSeries[]> = stats?.chartSeries?.reduce((acc, series) => {
     (acc[series.grouping] ??= []).push(series);
@@ -109,7 +122,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
             {activeSeriesCount > 0 && (
               <button
                 type="button"
-                onClick={() => setEnabledSeries({})}
+                onClick={handleResetFilters}
                 className="text-xs text-slate-400 transition-colors hover:text-amber-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 rounded"
               >
                 Reset filters
