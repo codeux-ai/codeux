@@ -86,6 +86,7 @@ import type {
   ProjectSummary,
   SprintMarkdownExportBundle,
   SprintMarkdownImportInput,
+  SprintImportedTaskInput,
   SprintRecord,
   TaskRecord,
   UpdateProjectInput,
@@ -208,6 +209,7 @@ export interface DashboardServerOptions {
   listTasks: (projectId: string, sprintId?: string) => TaskRecord[];
   getTask: (taskId: string) => TaskRecord | null;
   createTask: (projectId: string, input: CreateTaskInput) => TaskRecord;
+  createImportedTasks?: (projectId: string, sprintId: string, inputs: SprintImportedTaskInput[]) => TaskRecord[];
   updateTask: (taskId: string, input: UpdateTaskInput) => TaskRecord;
   deleteTask: (taskId: string) => void;
   searchJiraIssues: (projectId: string, input: JiraIssueSearchInput) => Promise<JiraIssueSearchResult[]>;

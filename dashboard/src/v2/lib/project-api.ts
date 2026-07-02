@@ -15,6 +15,7 @@ import type {
   SprintCollectionResponse,
   SprintMarkdownExportBundle,
   SprintMarkdownImportInput,
+  SprintImportedTaskInput,
   SprintLinkedIssueInput,
   SprintLinkedIssueRecord,
   SprintRecord,
@@ -182,6 +183,21 @@ export const replaceSprintLinkedIssues = async (
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ projectId, issues }),
+    }
+  );
+};
+
+export const addImportedTasksToSprint = async (
+  projectId: string,
+  sprintId: string,
+  tasks: SprintImportedTaskInput[],
+): Promise<TaskRecord[]> => {
+  return fetchJson<TaskRecord[]>(
+    `/api/projects/${encodeURIComponent(projectId)}/sprints/${encodeURIComponent(sprintId)}/imported-tasks`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tasks }),
     }
   );
 };

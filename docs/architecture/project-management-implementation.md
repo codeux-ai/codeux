@@ -82,6 +82,7 @@ The dashboard now has project-scoped CRUD endpoints:
 - `PUT /api/projects/:projectId/select`
 - `GET /api/projects/:projectId/sprints`
 - `POST /api/projects/:projectId/sprints`
+- `POST /api/projects/:projectId/sprints/:sprintId/imported-tasks`
 - `POST /api/projects/:projectId/sprints/import`
 - `GET /api/projects/:projectId/sprints/:sprintId/export`
 - `PATCH /api/sprints/:sprintId`
@@ -146,6 +147,7 @@ Sprint import:
 - accepts sprint markdown plus a list of task markdown documents
 - creates sprint and task rows in sqlite
 - resolves task dependencies after task creation
+- accepts special imported tasks directly on sprint creation or through the imported-task endpoint, preserving source metadata and routing hints without routing the work through planning
 
 Sprint export:
 - emits one sprint markdown document

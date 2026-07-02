@@ -12,6 +12,8 @@ import type {
   ProjectSourceType,
   ProjectSummary,
   SprintLinkedIssueInput,
+  SprintImportedTaskInput,
+  SprintImportedTaskKind,
   SprintLinkedIssueRecord,
   SprintRecord,
   SprintCollectionResponse,
@@ -639,6 +641,19 @@ export class ProjectManagementRepository {
       this.logger.error("Operation failed", { error, projectId, sprintId: input.sprintId });
       throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
     }
+  }
+
+  createImportedTask(projectId: string, sprintId: string, input: SprintImportedTaskInput): TaskRecord {
+    const created = this.createTask(projectId, buildImportedTaskCreateInput(sprintId, input));
+    return created;
+  }
+
+  createImportedTasks(projectId: string, sprintId: string, inputs: SprintImportedTaskInput[]): TaskRecord[] {
+    const tasks: TaskRecord[] = [];
+    for (const input of inputs) {
+      tasks.push(this.createImportedTask(projectId, sprintId, input));
+    }
+    return tasks;
   }
 
   updateTask(taskId: string, input: UpdateTaskInput): TaskRecord {
@@ -1341,6 +1356,295 @@ export class ProjectManagementRepository {
   private publishProjectsRefresh(): void {
     this.realtimeNotifier?.scheduleProjectsRefresh();
   }
+}
+
+function buildImportedTaskCreateInput(sprintId: string, input: SprintImportedTaskInput): CreateTaskInput {
+  const title = input.title.trim();
+  const kind = input.kind;
+  const sourcePath = normalizeImportedTaskSourcePath(input);
+  const labels = normalizeImportedTaskLabels(input.labels);
+  const priority = input.priority || defaultImportedTaskPriority(kind);
+  const promptMarkdown = buildImportedTaskPromptMarkdown(input, labels, priority, sourcePath);
+  const dependsOnTaskIds = normalizeImportedTaskDependencies(input.dependsOnTaskIds);
+  const agentPresetId = typeof input.agentPresetId === "string" && input.agentPresetId.trim().length > 0
+    ? input.agentPresetId.trim()
+    : null;
+
+  return {
+    sprintId,
+    title,
+    description: input.errorMessage?.trim() || defaultImportedTaskDescription(kind),
+    promptMarkdown,
+    status: "pending",
+    priority,
+    executorType: "auto",
+    agentPresetId,
+    dependsOnTaskIds,
+    isIndependent: dependsOnTaskIds.length === 0,
+    sourceType: `import:${kind}`,
+    sourcePath,
+  };
+}
+
+function buildImportedTaskPromptMarkdown(
+  input: SprintImportedTaskInput,
+  labels: string[],
+  priority: SprintImportedTaskInput["priority"],
+  sourcePath: string | null,
+): string {
+  const lines = [
+    "## Objective",
+    getImportedTaskObjective(input.kind),
+    "",
+    "## Source",
+    `- Kind: ${input.kind}`,
+    `- Provider: ${normalizeImportedTaskText(input.provider) || "unknown"}`,
+    `- Repository: ${normalizeImportedTaskText(input.repository) || "unknown"}`,
+    `- Source: ${sourcePath ? sourcePath : "unknown"}`,
+  ];
+
+  if (input.branch?.trim()) {
+    lines.push(`- Branch: ${input.branch.trim()}`);
+  }
+  if (input.baseBranch?.trim()) {
+    lines.push(`- Base branch: ${input.baseBranch.trim()}`);
+  }
+  if (input.pullRequestNumber !== undefined && input.pullRequestNumber !== null) {
+    lines.push(`- Pull request: #${Math.trunc(input.pullRequestNumber)}`);
+  }
+  if (input.pullRequestUrl?.trim()) {
+    lines.push(`- Pull request URL: ${input.pullRequestUrl.trim()}`);
+  }
+  if (input.workflowRunId?.trim()) {
+    lines.push(`- Workflow run: ${input.workflowRunId.trim()}`);
+  }
+  if (input.workflowRunUrl?.trim()) {
+    lines.push(`- Workflow run URL: ${input.workflowRunUrl.trim()}`);
+  }
+  if (input.commitSha?.trim()) {
+    lines.push(`- Commit SHA: ${input.commitSha.trim()}`);
+  }
+  if (labels.length > 0) {
+    lines.push(`- Labels: ${labels.map((label) => `\`${label}\``).join(", ")}`);
+  }
+  lines.push(`- Priority: ${priority || "medium"}`);
+
+  lines.push("", "## Context");
+  lines.push(...getImportedTaskContextLines(input));
+  if (input.errorMessage?.trim()) {
+    lines.push("", "### Error Message", "", "```text", input.errorMessage.trim(), "```");
+  }
+
+  lines.push("", "## Constraints");
+  lines.push(...getImportedTaskConstraintLines(input.kind));
+
+  lines.push("", "## Verification");
+  lines.push(...getImportedTaskVerificationLines(input.kind));
+
+  return lines.join("\n");
+}
+
+function getImportedTaskObjective(kind: SprintImportedTaskKind): string {
+  switch (kind) {
+    case "security":
+      return "Investigate, fix, and verify the security issue described below.";
+    case "quality":
+      return "Fix the quality or correctness issue described below without changing unrelated behavior.";
+    case "merge_conflict":
+      return "Resolve the merge conflict and leave the branch in a mergeable state.";
+    case "failed_ci":
+      return "Fix the failing CI run and restore the pipeline to green.";
+  }
+}
+
+function getImportedTaskContextLines(input: SprintImportedTaskInput): string[] {
+  const lines: string[] = [];
+
+  switch (input.kind) {
+    case "security":
+      lines.push(
+        "Imported security work item.",
+        "Focus on the concrete vulnerability, exposure, or hardening gap reported in the source metadata.",
+      );
+      break;
+    case "quality":
+      lines.push(
+        "Imported quality work item.",
+        "Address the bug, regression, or documentation gap reported in the source metadata.",
+      );
+      break;
+    case "merge_conflict":
+      lines.push("Imported merge-conflict work item.");
+      if (input.branch?.trim() || input.baseBranch?.trim()) {
+        lines.push(
+          "",
+          "### Branch Details",
+          ...(input.branch?.trim() ? [`- Head branch: ${input.branch.trim()}`] : []),
+          ...(input.baseBranch?.trim() ? [`- Base branch: ${input.baseBranch.trim()}`] : []),
+        );
+      }
+      if (input.pullRequestNumber !== undefined && input.pullRequestNumber !== null) {
+        lines.push(`- Pull request number: #${Math.trunc(input.pullRequestNumber)}`);
+      }
+      if (input.pullRequestUrl?.trim()) {
+        lines.push(`- Pull request URL: ${input.pullRequestUrl.trim()}`);
+      }
+      if (input.commitSha?.trim()) {
+        lines.push(`- Merge base / commit SHA: ${input.commitSha.trim()}`);
+      }
+      break;
+    case "failed_ci":
+      lines.push("Imported failed-CI work item.");
+      if (input.workflowRunId?.trim() || input.workflowRunUrl?.trim()) {
+        lines.push(
+          "",
+          "### CI Run Details",
+          ...(input.workflowRunId?.trim() ? [`- Workflow run ID: ${input.workflowRunId.trim()}`] : []),
+          ...(input.workflowRunUrl?.trim() ? [`- Workflow run URL: ${input.workflowRunUrl.trim()}`] : []),
+        );
+      }
+      if (input.branch?.trim() || input.baseBranch?.trim()) {
+        lines.push(
+          "",
+          "### Branch Details",
+          ...(input.branch?.trim() ? [`- Head branch: ${input.branch.trim()}`] : []),
+          ...(input.baseBranch?.trim() ? [`- Base branch: ${input.baseBranch.trim()}`] : []),
+        );
+      }
+      if (input.commitSha?.trim()) {
+        lines.push(`- Commit SHA: ${input.commitSha.trim()}`);
+      }
+      break;
+  }
+
+  return lines;
+}
+
+function getImportedTaskConstraintLines(kind: SprintImportedTaskKind): string[] {
+  switch (kind) {
+    case "security":
+      return [
+        "- Preserve unrelated behavior and keep the fix scoped to the reported issue.",
+        "- Prefer the smallest safe change that eliminates the security concern.",
+      ];
+    case "quality":
+      return [
+        "- Preserve linked issue behavior and avoid widening the scope of the fix.",
+        "- Keep the change targeted to the bug or correctness issue described in the source.",
+      ];
+    case "merge_conflict":
+      return [
+        "- Resolve conflicts without discarding unrelated branch work.",
+        "- Keep the resulting merge clean, reviewable, and consistent with the surrounding code.",
+      ];
+    case "failed_ci":
+      return [
+        "- Fix the failing job with the smallest change that restores CI.",
+        "- Do not silence the failure; address the underlying cause.",
+      ];
+  }
+}
+
+function getImportedTaskVerificationLines(kind: SprintImportedTaskKind): string[] {
+  switch (kind) {
+    case "security":
+      return [
+        "- Re-run the relevant security checks or regression tests if available.",
+        "- Confirm the issue no longer reproduces and note the evidence.",
+      ];
+    case "quality":
+      return [
+        "- Re-run the focused regression or unit test that covers the bug.",
+        "- Confirm the issue no longer reproduces and that nearby behavior still works.",
+      ];
+    case "merge_conflict":
+      return [
+        "- Confirm the branch merges cleanly after the fix.",
+        "- Capture the specific branch state used to verify the resolution.",
+      ];
+    case "failed_ci":
+      return [
+        "- Re-run the failed CI job or the narrowest equivalent check.",
+        "- Confirm the original failure signal is gone and summarize the result.",
+      ];
+  }
+}
+
+function normalizeImportedTaskDependencies(dependsOnTaskIds: string[] | undefined): string[] {
+  if (!dependsOnTaskIds || dependsOnTaskIds.length === 0) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const dependencyId of dependsOnTaskIds) {
+    const trimmed = dependencyId.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+    seen.add(trimmed);
+    normalized.push(trimmed);
+  }
+  return normalized;
+}
+
+function normalizeImportedTaskLabels(labels: string[] | undefined): string[] {
+  if (!labels || labels.length === 0) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const label of labels) {
+    const trimmed = label.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+    seen.add(trimmed);
+    normalized.push(trimmed);
+  }
+  return normalized;
+}
+
+function normalizeImportedTaskSourcePath(input: SprintImportedTaskInput): string | null {
+  const source = [
+    input.sourcePath,
+    input.sourceUrl,
+    input.pullRequestUrl,
+    input.workflowRunUrl,
+  ].find((value): value is string => typeof value === "string" && value.trim().length > 0);
+
+  return source ? source.trim() : null;
+}
+
+function defaultImportedTaskPriority(kind: SprintImportedTaskKind): SprintImportedTaskInput["priority"] {
+  switch (kind) {
+    case "security":
+      return "high";
+    case "quality":
+      return "medium";
+    case "merge_conflict":
+      return "critical";
+    case "failed_ci":
+      return "high";
+  }
+}
+
+function defaultImportedTaskDescription(kind: SprintImportedTaskKind): string {
+  switch (kind) {
+    case "security":
+      return "Imported security work item.";
+    case "quality":
+      return "Imported quality work item.";
+    case "merge_conflict":
+      return "Imported merge-conflict work item.";
+    case "failed_ci":
+      return "Imported failed-CI work item.";
+  }
+}
+
+function normalizeImportedTaskText(value?: string | null): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function mapEffectiveSprintStatus(
