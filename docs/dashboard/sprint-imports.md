@@ -58,11 +58,11 @@ When the GitHub token is empty, GitHub issue search, issue context loading, and 
 
 ## Jira Issue Import
 
-Use `Import -> Jira Issues` to search Jira with guided filters, multi-select issues, and attach them to the sprint composer. The Jira modal follows the same interaction model as the GitHub/GitLab importer: project key, search text, status, assignee text, optional labels, selectable issue cards, source links, and per-issue `Append Conversation` toggles.
+Use `Import -> Jira Issues` to search Jira with guided filters, multi-select issues, and attach them to the sprint composer. The Jira modal follows the same interaction model as the GitHub/GitLab importer: editable project key, exact issue key lookup, free-text search, status, assignee text, reporter text, issue type, priority, labels, updated-date windows, sort controls, selectable issue cards, source links, and per-issue `Append Conversation` toggles.
 
 The Jira search endpoint also accepts an exact issue key, reporter text, issue type, priority, updated-date windows, sort field, sort direction, and a bounded result limit. A raw JQL override remains available for advanced users who want to bypass guided filter composition.
 
-Operators do not need to write JQL in the dashboard. The server builds the Jira query from the selected filters, defaults to open issues sorted by recent updates, and uses `Settings -> Integrations -> Jira -> Default project` to prefill the project key when available.
+Operators do not need to write JQL in the dashboard. The server builds the Jira query from the selected filters, defaults to open issues sorted by recent updates, and uses `Settings -> Integrations -> Jira -> Default project` to prefill the project key when available. Clearing the project key browses all Jira issues the saved credentials can see.
 
 The assignee field accepts a Jira user full name, email address, or account ID. It also accepts `me` / `currentUser()` for the connected Jira account and `unassigned` / `empty` for issues without an assignee.
 
@@ -74,7 +74,9 @@ Jira uses system-scoped settings from `Settings -> Integrations -> Jira`:
 - close transition name, defaulting to `Done`
 - Jira-specific auto-close toggle
 
-Selected Jira issues are loaded through the same prompt-context path as GitHub/GitLab imports. The sprint prompt receives the Jira description and, when `Append Conversation` is enabled, Jira comments. Imported Jira cards are persisted as linked sprint issues with provider `jira`, project key, issue key, labels, assignees, status, and source URL. The import result cards also surface Jira issue type, priority, assignee, labels, status, and a description preview when Jira returns those fields.
+Selected Jira issues are loaded through the same prompt-context path as GitHub/GitLab imports. The sprint prompt receives the Jira description and, when `Append Conversation` is enabled, Jira comments. Imported Jira cards are persisted as linked sprint issues with provider `jira`, project key, issue key, labels, assignees, status, and source URL. The import result cards also surface Jira issue type, priority, reporter, assignee, labels, status, updated timestamps, and a description preview when Jira returns those fields.
+
+When the dashboard also has special imported-task contracts available, Jira issues that look like security or quality follow-ups can be emitted as imported task payloads instead of linked issue contexts. That keeps remediation work attached to the sprint immediately while preserving linked-issue imports for ordinary backlog items.
 
 ## Auto-Close
 
