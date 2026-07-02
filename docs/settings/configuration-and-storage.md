@@ -59,9 +59,9 @@ Runtime resolution:
 - `git.defaultBranch` resolves with the following precedence:
   1. Sprint setting override (Dashboard)
   2. Project setting override (Dashboard)
-  3. Project metadata `defaultBranch` field (Database)
-  4. System setting default (Dashboard)
-  5. Hardcoded default (`main`)
+  3. System setting default (Dashboard)
+  4. Hardcoded default (`main`)
+- The legacy project metadata `defaultBranch` column is retained for project records created before the scoped settings model and for display/initialization context, but sprint orchestration and final merge targets do not let that metadata override resolved scoped settings. A project inheriting a system default of `dev` must merge sprint completion PRs into `dev`, even if the older project row still says `main`.
 - In remote git mode, Code UX refreshes `origin` before sprint branch preflight and before each task start so branch resolution is based on current remote state instead of stale local refs.
 - HTTPS GitHub remotes use the configured dashboard token as a temporary Git extraheader during origin refresh, remote branch checks, and branch pushes. HTTPS origin refreshes and branch preflight network checks run with interactive credential prompts disabled and a bounded timeout so orchestration cannot remain stuck waiting on local credential helpers. Mandatory CLI task refreshes fetch the requested starting branch's remote-tracking ref when possible, avoiding a whole-origin fetch for every task dispatch. They use a 120 second default fetch timeout, configurable with `CODE_UX_GIT_FETCH_TIMEOUT_MS` for slow Git transports. If direct remote inspection is unavailable, branch preflight can use an existing `refs/remotes/origin/<branch>` ref as remote-branch evidence. Local origin-refresh failures remain strict for CLI-backed work that needs local git state, but are best-effort for branch preflight and Jules dispatch because Jules works from the remote source and starting branch. SSH remotes continue to use the local SSH agent/key setup unchanged.
 - In remote git mode, Code UX also refreshes `origin` before branch-sensitive recovery flows such as QA review, QA follow-up continuation, clarification auto-replies, CI fix runs, and merge-conflict resolution. Clarification auto-replies refresh the recorded task worker branch when available; if the task has no worker branch yet, they refresh the scoped `git.defaultBranch` so project-level default branch overrides are used instead of falling back to `main`.
@@ -84,7 +84,7 @@ Runtime resolution:
 - Jules sessions that still report `AWAITING_USER_FEEDBACK` are kept locally `running` when the recent activity transcript shows a user reply after the latest agent clarification request. This clears stale blocked dispatch errors and attention indicators while Code UX waits for Jules to process the submitted reply.
 - session sync uses the shared bounded Jules session snapshot for normal polling, but directly fetches any recorded task session missing from that snapshot or present only as a stale nonterminal snapshot copy. Older long-running sprints can otherwise keep local task runs marked `running` after Jules already completed the session and opened a PR.
 - When Code UX has to create a missing feature branch, it prefers `origin/<defaultBranch>` over the local `<defaultBranch>` ref when the remote-tracking base branch exists.
-- `main` is only the final fallback when no sprint, project, or system base branch is configured. Normal sprint and task flows use the resolved `git.defaultBranch` value from settings and project metadata.
+- `main` is only the final fallback when no sprint, project, or system base branch is configured. Normal sprint and task flows use the resolved `git.defaultBranch` value from scoped settings.
 - the old global `/api/settings` contract is removed in favor of explicit scoped endpoints
 - dashboard v2 settings queries clear both cached and in-flight effective-settings requests whenever system/project settings are saved or reset, which prevents stale AI model options immediately after integration updates.
 

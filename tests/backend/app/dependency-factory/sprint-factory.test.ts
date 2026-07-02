@@ -261,4 +261,30 @@ describe("Sprint Factory", () => {
     const sprintArgs = vi.mocked(SprintOrchestrator).mock.calls[0][0];
     expect(sprintArgs.getDashboardSettings()).toBeDefined();
   });
+
+  it("keeps resolved default branch settings authoritative over stale project metadata", () => {
+    mockCoreDeps.projectManagementRepository = {
+      getProject: vi.fn().mockReturnValue({
+        id: "project-1",
+        defaultBranch: "main",
+      }),
+    };
+    mockCoreDeps.settingsRepository.resolveProjectDashboardSettings.mockReturnValue({
+      settings: {
+        git: { defaultBranch: "dev" },
+        workers: { executionMode: "VIRTUAL" },
+      },
+      sources: { "git.defaultBranch": "system" },
+    });
+
+    createSprintDependencies(
+      mockOptions,
+      mockContext as unknown as ServerContext,
+      mockCoreDeps as unknown as CoreDependencies
+    );
+
+    const sprintArgs = vi.mocked(SprintOrchestrator).mock.calls[0][0];
+    expect(sprintArgs.getDashboardSettings({ projectId: "project-1" }).git.defaultBranch).toBe("dev");
+    expect(mockCoreDeps.projectManagementRepository.getProject).not.toHaveBeenCalled();
+  });
 });
