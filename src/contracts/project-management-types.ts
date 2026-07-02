@@ -48,6 +48,7 @@ export interface SprintReviewSummary {
 
 export type LinkedIssueProvider = "github" | "gitlab" | "jira";
 export type LinkedIssueCloseState = "open" | "closed" | "close_failed";
+export type SprintImportedTaskKind = "security" | "quality" | "merge_conflict" | "failed_ci";
 export type RepositoryIssueSearchState = "open" | "closed" | "all";
 export type RepositoryIssueSearchSortField = "updated" | "created" | "comments";
 export type RepositoryIssueSearchSortDirection = "asc" | "desc";
@@ -130,6 +131,27 @@ export interface SprintLinkedIssueInput {
   issueAuthor?: string | null;
   issueCreatedAt?: string | null;
   issueUpdatedAt?: string | null;
+}
+
+export interface SprintImportedTaskInput {
+  kind: SprintImportedTaskKind;
+  title: string;
+  sourceUrl?: string | null;
+  sourcePath?: string | null;
+  provider?: string | null;
+  repository?: string | null;
+  branch?: string | null;
+  baseBranch?: string | null;
+  pullRequestNumber?: number | null;
+  pullRequestUrl?: string | null;
+  workflowRunId?: string | null;
+  workflowRunUrl?: string | null;
+  commitSha?: string | null;
+  errorMessage?: string | null;
+  labels?: string[];
+  priority?: TaskPriority;
+  agentPresetId?: string | null;
+  dependsOnTaskIds?: string[];
 }
 
 export interface IssuePromptContextInput extends SprintLinkedIssueInput {
@@ -275,6 +297,7 @@ export interface CreateSprintInput {
   originalPrompt?: string | null;
   goal?: string;
   linkedIssues?: SprintLinkedIssueInput[];
+  importedTasks?: SprintImportedTaskInput[];
   number?: number | null;
   slug?: string;
   status?: SprintStatus;

@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute, toErrorResponse, syncRoute } from "./route-utils.js";
-import { parseCreateSprintInput, parseTrimmedString, parseUpdateSprintInput, requireTrimmedString } from "./request-parsers.js";
+import { parseCreateSprintInput, parseTrimmedString, parseUpdateSprintInput, requireTrimmedString, parseSprintImportedTaskInput } from "./request-parsers.js";
 import type {
   IssuePromptContextInput,
   SprintLinkedIssueInput,
@@ -85,6 +85,32 @@ export function registerSprintRoutes(router: Express, deps: DashboardDependencie
     }
   }));
 
+  router.post("/api/projects/:projectId/sprints/:sprintId/imported-tasks", syncRoute((req, res) => {
+    if (!deps.createImportedTasks) {
+      res.status(501).json({ error: "Imported task creation is not available." });
+      return;
+    }
+    try {
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
+      const sprintId = requireTrimmedString(req.params.sprintId, "sprintId");
+      const sprint = deps.getSprint(sprintId);
+      if (!sprint) {
+        res.status(404).json({ error: `Sprint not found: ${sprintId}` });
+        return;
+      }
+      if (sprint.projectId !== projectId) {
+        res.status(400).json({ error: `Sprint ${sprintId} does not belong to project ${projectId}` });
+        return;
+      }
+      const importedTasks = Array.isArray(req.body?.tasks)
+        ? req.body.tasks.map((task: unknown, index: number) => parseSprintImportedTaskInput(task, index))
+        : [];
+      res.status(201).json(deps.createImportedTasks(projectId, sprintId, importedTasks));
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to add imported tasks"));
+    }
+  }));
+
   router.get("/api/projects/:projectId/issues", asyncRoute(async (req, res) => {
     if (!deps.sprintIssueService) {
       res.status(501).json({ error: "Issue import service is not available." });
@@ -144,7 +170,18 @@ export function registerSprintRoutes(router: Express, deps: DashboardDependencie
       if (payload.showcasePinned === undefined) {
         payload.showcasePinned = true;
       }
-      res.status(201).json(deps.createSprint(requireTrimmedString(req.params.projectId, "projectId"), payload));
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
+      const sprint = deps.createSprint(projectId, payload);
+      if (payload.importedTasks?.length) {
+        if (!deps.createImportedTasks) {
+          res.status(501).json({ error: "Imported task creation is not available." });
+          return;
+        }
+        deps.createImportedTasks(projectId, sprint.id, payload.importedTasks);
+        res.status(201).json(deps.getSprint(sprint.id) || sprint);
+        return;
+      }
+      res.status(201).json(sprint);
     } catch (error) {
       res.status(400).json(toErrorResponse(error, "Failed to create sprint"));
     }
