@@ -14,7 +14,7 @@ import {
   X,
   Users
 } from "lucide-preact";
-import type { Sprint, AgentPreset, SprintLinkedIssueInput } from "../../types.js";
+import type { Sprint, AgentPreset, SprintImportedTaskInput, SprintLinkedIssueInput } from "../../types.js";
 import { AvantgardeSelect } from "./AvantgardeSelect.js";
 import {
   useSprintComposerState, 
@@ -30,6 +30,7 @@ import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
 import { useActionFeedback } from "../../hooks/use-action-feedback.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import type { ImprovePromptInput } from "../../types.js";
+import type { ActionFeedbackState } from "../../hooks/use-action-feedback.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
 import { JiraIcon } from "../icons/JiraIcon.js";
 import { AgentSelectAvatarIcon } from "../agents/AgentSelectAvatarIcon.js";
@@ -83,7 +84,42 @@ interface SprintComposerProps {
   onAppendTasks?: () => void;
   linkedIssues?: SprintLinkedIssueInput[];
   onRemoveLinkedIssue?: (issue: SprintLinkedIssueInput) => void;
+  importedTasks?: SprintImportedTaskInput[];
+  onRemoveImportedTask?: (task: SprintImportedTaskInput) => void;
+  importedTaskFeedback?: ActionFeedbackState;
+  onClearImportedTaskFeedback?: () => void;
+  clearImportedTaskError?: () => void;
 }
+
+const IMPORTED_TASK_KIND_LABELS: Record<SprintImportedTaskInput["kind"], string> = {
+  security: "Security",
+  quality: "Quality",
+  merge_conflict: "Merge Conflict",
+  failed_ci: "Failed CI",
+};
+
+const IMPORTED_TASK_KIND_TONES: Record<SprintImportedTaskInput["kind"], string> = {
+  security: "border-status-red/20 bg-status-red/10 text-status-red",
+  quality: "border-signal-500/20 bg-signal-500/10 text-signal-600 dark:text-signal-300",
+  merge_conflict: "border-ember-500/20 bg-ember-500/10 text-ember-600 dark:text-ember-400",
+  failed_ci: "border-slate-900/10 bg-slate-900/[0.04] text-slate-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-200",
+};
+
+const getImportedTaskKey = (task: SprintImportedTaskInput): string => (
+  [
+    task.kind,
+    task.provider || "",
+    task.repository || "",
+    task.sourceUrl || task.sourcePath || "",
+  ].join("::")
+);
+
+const formatImportedTaskPriority = (priority?: SprintImportedTaskInput["priority"]): string => {
+  if (!priority) {
+    return "Default";
+  }
+  return `${priority.charAt(0).toUpperCase()}${priority.slice(1)}`;
+};
 
 export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   nextId,
@@ -106,6 +142,11 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   onAppendTasks,
   linkedIssues,
   onRemoveLinkedIssue,
+  importedTasks,
+  onRemoveImportedTask,
+  importedTaskFeedback,
+  onClearImportedTaskFeedback,
+  clearImportedTaskError,
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const fieldsRef = useRef<HTMLFormElement>(null);
@@ -138,6 +179,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     workerAgentPresetId: defaultWorkerAgentPresetId,
   });
   const visibleLinkedIssues = linkedIssues ?? initialSprint?.linkedIssues ?? [];
+  const visibleImportedTasks = importedTasks ?? [];
   const agentPresetOptions = agentPresets ?? planningPresets;
   const agentSelectOptions = agentPresetOptions.map((preset) => ({
     value: preset.id,
@@ -524,10 +566,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         onSecondaryAction={handleStartNewSprint}
       />
 
-      <div
-        aria-live="polite"
-        className="sr-only"
-      >
+      <div aria-live="polite" className="sr-only">
         {isBusy ? PLANNING_ACTION_LABELS[busyAction!] || "Planning in progress" : actionFeedback.status === "error" ? actionFeedback.message : ""}
       </div>
 
@@ -779,6 +818,91 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                             className="mt-3 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 transition-colors hover:text-status-red"
                           >
                             Remove Link
+                          </button>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {visibleImportedTasks.length > 0 && (
+              <div data-composer-stagger className="rounded-[1.7rem] border border-black/[0.07] bg-white/62 p-4 shadow-[0_12px_28px_rgba(15,23,42,0.04)] dark:border-white/[0.08] dark:bg-white/[0.035]">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                  <div className="inline-flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                    <Sparkles className="h-3.5 w-3.5 text-ember-500" strokeWidth={2.2} />
+                    Special Imported Tasks
+                  </div>
+                  <div className="rounded-full border border-ember-500/18 bg-ember-500/[0.08] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-ember-600 dark:text-ember-300">
+                    {visibleImportedTasks.length} queued
+                  </div>
+                </div>
+                {importedTaskFeedback && importedTaskFeedback.status !== "idle" && importedTaskFeedback.message && (
+                  <div className="mb-3">
+                    <ActionFeedbackRegion
+                      status={importedTaskFeedback.status}
+                      message={importedTaskFeedback.message}
+                      onDismiss={onClearImportedTaskFeedback}
+                      clearError={clearImportedTaskError}
+                    />
+                  </div>
+                )}
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {visibleImportedTasks.map((task) => {
+                    const sourceLabel = task.sourceUrl || task.sourcePath || "Unknown source";
+                    return (
+                      <article
+                        key={getImportedTaskKey(task)}
+                        className="group relative overflow-hidden rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] p-4 transition-all hover:-translate-y-0.5 hover:border-ember-500/24 hover:bg-white/88 dark:border-white/[0.07] dark:bg-white/[0.03] dark:hover:bg-white/[0.055]"
+                      >
+                        <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-ember-500 via-signal-500 to-slate-300 opacity-70" />
+                        <div className="flex items-start gap-3">
+                          <div className={`inline-flex h-9 shrink-0 items-center rounded-[0.85rem] border px-2.5 text-[10px] font-bold uppercase tracking-[0.12em] ${IMPORTED_TASK_KIND_TONES[task.kind]}`}>
+                            {IMPORTED_TASK_KIND_LABELS[task.kind]}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="line-clamp-2 min-w-0 text-sm font-black leading-snug text-slate-900 dark:text-white">
+                              {task.title}
+                            </h3>
+                            <div className="mt-2 grid gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                              <div className="break-all">
+                                <span className="font-bold uppercase tracking-[0.12em] text-slate-400">Source:</span>{" "}
+                                {task.sourceUrl ? (
+                                  <a
+                                    href={getSafeUrl(task.sourceUrl)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="font-medium text-slate-700 underline decoration-slate-300 underline-offset-2 transition-colors hover:text-slate-900 dark:text-slate-200 dark:decoration-slate-600 dark:hover:text-white"
+                                  >
+                                    {sourceLabel}
+                                  </a>
+                                ) : (
+                                  <span className="font-medium text-slate-700 dark:text-slate-200">{sourceLabel}</span>
+                                )}
+                              </div>
+                              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                <span>
+                                  <span className="font-bold uppercase tracking-[0.12em] text-slate-400">Priority:</span>{" "}
+                                  <span className="font-medium text-slate-700 dark:text-slate-200">{formatImportedTaskPriority(task.priority)}</span>
+                                </span>
+                                {task.repository && (
+                                  <span className="truncate">
+                                    <span className="font-bold uppercase tracking-[0.12em] text-slate-400">Repo:</span>{" "}
+                                    <span className="font-medium text-slate-700 dark:text-slate-200">{task.repository}</span>
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        {onRemoveImportedTask && !isBusy && (
+                          <button
+                            type="button"
+                            onClick={() => onRemoveImportedTask(task)}
+                            className="mt-3 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 transition-colors hover:text-status-red"
+                          >
+                            Remove Task
                           </button>
                         )}
                       </article>

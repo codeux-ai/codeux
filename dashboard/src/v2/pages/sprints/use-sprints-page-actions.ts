@@ -81,6 +81,12 @@ export interface SprintsPageActionsDeps {
   createProject: any;
 }
 
+interface ImportedTaskSubmissionCallbacks {
+  onPending?: (count: number) => void;
+  onSuccess?: (count: number) => void;
+  onError?: (message: string) => void;
+}
+
 export function useSprintsPageActions({
   selectedProject,
   sprints,
@@ -303,6 +309,7 @@ export function useSprintsPageActions({
       workerAgentPresetId: string | null;
       linkedIssues?: SprintLinkedIssueInput[];
       importedTasks?: SprintImportedTaskInput[];
+      importedTaskCallbacks?: ImportedTaskSubmissionCallbacks;
       clientRequestId?: string;
       sprintKeyOverride?: string;
       signal?: AbortSignal;
@@ -320,6 +327,7 @@ export function useSprintsPageActions({
       );
       const linkedIssues = payload.linkedIssues || [];
       const importedTasks = payload.importedTasks || [];
+      const importedTaskCallbacks = payload.importedTaskCallbacks;
       const goal = mergePromptWithLinkedIssues(payload.goal, linkedIssues);
 
       let numberOverride: number | null | undefined = undefined;
@@ -352,7 +360,14 @@ export function useSprintsPageActions({
         });
 
         if (importedTasks.length > 0) {
-          await addImportedTasksToSprint(selectedProject.id, editingSprint.id, importedTasks);
+          importedTaskCallbacks?.onPending?.(importedTasks.length);
+          try {
+            await addImportedTasksToSprint(selectedProject.id, editingSprint.id, importedTasks);
+            importedTaskCallbacks?.onSuccess?.(importedTasks.length);
+          } catch (error) {
+            importedTaskCallbacks?.onError?.(error instanceof Error ? error.message : String(error));
+            throw error;
+          }
         }
 
         if (
@@ -401,7 +416,6 @@ export function useSprintsPageActions({
           goal,
           originalPrompt: payload.originalPrompt,
           linkedIssues,
-          importedTasks,
           number:
             numberOverride !== undefined ? numberOverride : reservedNumber,
           ...(slugOverride !== undefined ? { slug: slugOverride } : {}),
@@ -410,6 +424,17 @@ export function useSprintsPageActions({
           startDate: null,
           endDate: null,
         });
+
+        if (importedTasks.length > 0) {
+          importedTaskCallbacks?.onPending?.(importedTasks.length);
+          try {
+            await addImportedTasksToSprint(selectedProject.id, created.id, importedTasks);
+            importedTaskCallbacks?.onSuccess?.(importedTasks.length);
+          } catch (error) {
+            importedTaskCallbacks?.onError?.(error instanceof Error ? error.message : String(error));
+            throw error;
+          }
+        }
 
         if (payload.submitMode === "plan_only") {
           await planSprint(
