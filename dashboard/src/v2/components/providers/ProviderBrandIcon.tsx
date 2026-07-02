@@ -19,9 +19,16 @@ const brandIcons: Record<GitHostBrandIconId, { slug: string; fallback: string; l
   gitlab: { slug: "gitlab", fallback: "GL", label: "GitLab" },
 };
 
-const getBrandIcon = (id: ProviderId | "github" | "gitlab" | string): { slug: string; fallback: string; label: string } => (
-  brandIcons[(id in brandIcons ? id : "jules") as GitHostBrandIconId]
-);
+const getBrandIcon = (
+  id: ProviderId | "github" | "gitlab" | string,
+  fallbackLabel?: string,
+): { slug: string; fallback: string; label: string } => {
+  if (id in brandIcons) {
+    return brandIcons[id as GitHostBrandIconId];
+  }
+  const label = fallbackLabel || id;
+  return { slug: "", fallback: label.slice(0, 2).toUpperCase(), label };
+};
 
 export const ProviderBrandIcon: FunctionComponent<{
   id: ProviderId | "github" | "gitlab" | string;
@@ -36,8 +43,9 @@ export const ProviderBrandIcon: FunctionComponent<{
   const [failed, setFailed] = useState(false);
   const icon = src
     ? { slug: "", fallback: (fallbackLabel || id).slice(0, 2).toUpperCase(), label: fallbackLabel || id }
-    : getBrandIcon(id);
+    : getBrandIcon(id, fallbackLabel);
   const iconSrc = src || `${LOBE_ICON_BASE_URL}/${icon.slug}.svg`;
+  const shouldShowFallback = failed || (!src && !icon.slug);
 
   const hasHeight = className.split(/\s+/).some(c => c.startsWith("h-"));
   const hasWidth = className.split(/\s+/).some(c => c.startsWith("w-"));
@@ -69,7 +77,7 @@ export const ProviderBrandIcon: FunctionComponent<{
       aria-hidden
       title={icon.label}
     >
-      {failed ? (
+      {shouldShowFallback ? (
         <span className={`font-display font-black text-slate-700 ${textClass}`}>
           {icon.fallback}
         </span>

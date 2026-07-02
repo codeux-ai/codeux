@@ -116,6 +116,8 @@ OpenCode JSON retry continuation uses native OpenCode session ids only when the 
 
 If OpenCode rejects a real native session id with `Session not found`, Code UX retries once in the same preserved workspace without `--session` or `--continue`. This keeps the failed worktree available while letting OpenCode create a fresh local session instead of failing the task solely because its session store no longer contains the prior id.
 
+After a successful run, Code UX reads `opencode export <sessionID>` when a native session id is available. The export supplies session-cumulative `info.tokens` and `info.cost`; the stats page uses configured model-pricing rates first, then falls back to this provider-reported cost when no catalogue or override rate matches the stored OpenCode model id.
+
 ## Dashboard Surface
 
 The v2 Integrations page exposes OpenCode-specific setup panels:

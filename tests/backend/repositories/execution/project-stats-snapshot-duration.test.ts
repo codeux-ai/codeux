@@ -34,7 +34,8 @@ describe("queryProjectStatsSnapshot - Duration Aggregation Bounding", () => {
         purpose TEXT,
         status TEXT,
         finished_at TEXT,
-        tool_call_count INTEGER
+        tool_call_count INTEGER,
+        raw_usage_json TEXT
       );
       CREATE TABLE task_runs (id TEXT PRIMARY KEY, project_id TEXT, sprint_id TEXT, sprint_run_id TEXT, task_id TEXT, started_at TEXT, finished_at TEXT, created_at TEXT, pr_url TEXT);
       CREATE TABLE task_run_events (id TEXT PRIMARY KEY, task_run_id TEXT, event_type TEXT, payload_json TEXT, created_at TEXT);

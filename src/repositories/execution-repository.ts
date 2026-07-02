@@ -1092,10 +1092,13 @@ export class ExecutionRepository {
       }
 
       const overrides = cachedSettings.modelPricing.overrides || {};
+      const getOverride = (canonicalId: string): TokenPricing | undefined => (
+        overrides[canonicalId] ?? overrides[`custom/${canonicalId}`]
+      );
 
       const canonicalId = resolveCatalogModelId(providerId as ProviderId, model);
       if (canonicalId) {
-        const cost = overrides[canonicalId] ?? getModelCatalogEntry(canonicalId)?.cost;
+        const cost = getOverride(canonicalId) ?? getModelCatalogEntry(canonicalId)?.cost;
         pricingCache.set(cacheKey, cost);
         return cost;
       }
@@ -1105,7 +1108,7 @@ export class ExecutionRepository {
       // stable override key reconstructed from the paired "API provider" field.
       const customCanonicalId = resolveCustomProviderModelId(providerId as ProviderId, model, cachedSettings);
       if (customCanonicalId) {
-        const cost = overrides[customCanonicalId] ?? getModelCatalogEntry(customCanonicalId)?.cost;
+        const cost = getOverride(customCanonicalId) ?? getModelCatalogEntry(customCanonicalId)?.cost;
         pricingCache.set(cacheKey, cost);
         return cost;
       }

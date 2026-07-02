@@ -318,6 +318,7 @@ export class ChatThreadRuntimeService {
     const model = resolveEffectiveModel({
       provider,
       model: route.model!,
+      providerMountAuth: route.providerMountAuth,
       customModel: route.customModel,
       qwenAuthMode: route.qwenAuthMode,
       qwenModelId: route.qwenModelId,
@@ -537,6 +538,7 @@ export class ChatThreadRuntimeService {
     const model = resolveEffectiveModel({
       provider,
       model: route.model!,
+      providerMountAuth: route.providerMountAuth,
       customModel: route.customModel,
       qwenAuthMode: route.qwenAuthMode,
       qwenModelId: route.qwenModelId,

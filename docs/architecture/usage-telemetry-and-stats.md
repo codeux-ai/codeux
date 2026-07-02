@@ -113,6 +113,14 @@ Code UX parses session data from two sources:
 
 For Docker-backed Antigravity runs, the SQLite database is encoded to Base64 within the container first, and then decoded to a temporary file on the host before parsing to bypass Docker named volume permission issues.
 
+### OpenCode
+
+OpenCode runs with `opencode run --format json`.
+
+Code UX reads the JSON event stream for the transcript, structured conversation turns, and native `ses_...` session id. Because recent OpenCode builds expose authoritative token and cost totals through `opencode export <sessionID>`, Code UX captures that export after the run and stores `info.tokens` plus `info.cost` in `raw_usage_json`.
+
+Stats pricing still prefers configured model-pricing overrides and catalogue token rates. If those are unavailable for an OpenCode model, the stats aggregation falls back to the provider-reported `raw_usage_json.cost` total so OpenCode runs with gateway-specific or hosted model ids do not display as zero-cost when the provider reported a cost.
+
 ### Jules
 
 Jules does not expose a compatible native token contract. Instead of excluding it, Code UX computes **estimated** tokens for Jules by accumulating input and output characters divided by 4 (the characters-per-token heuristic).
@@ -182,6 +190,8 @@ The stats snapshot includes:
 - total provider cost totals (e.g. `providerCost` map)
 - total model cost totals (e.g. `modelCost` map)
 - usage cost chart series for historical visualization (e.g. `core_total_cost`, `provider_cost_*`)
+- model-pricing keys preserve canonical `provider/model` ids when a CLI runtime records one directly (for example `deepseek/...` or `google/...` through a local or gateway-backed provider), instead of forcing that model under the CLI provider's default catalogue namespace. Bare local model names still fall back to stable `custom/<model>` override keys, while legacy `custom/<provider>/<model>` override keys are treated as aliases for `<provider>/<model>`.
+- Antigravity pricing uses explicit per-model aliases because Antigravity can route to different underlying model providers. Gemini Antigravity slugs map to Google catalogue ids, Claude thinking slugs map to Anthropic catalogue ids, and GPT OSS maps to the matching Google Vertex catalogue entry.
 - active sprint metadata
 - the original query (`window`, optional `from`, optional `to`)
 - normalized range metadata (`label`, `resolution`, `resolutionLabel`, `from`, `to`, `bucketCount`, `isCustom`)
