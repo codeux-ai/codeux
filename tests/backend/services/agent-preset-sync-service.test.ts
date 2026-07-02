@@ -8,8 +8,10 @@ import { AgentPresetRepository } from "../../../src/repositories/agent-preset-re
 import { KnowledgeRepository } from "../../../src/repositories/knowledge-repository.js";
 import { SettingsRepository } from "../../../src/repositories/settings-repository.js";
 import { AgentPresetSyncService } from "../../../src/services/agent-preset-sync-service.js";
+import { runCommandStrict } from "../../../src/services/cli-process-runner.js";
 import { KnowledgeIngestionService } from "../../../src/services/knowledge-ingestion-service.js";
 import { KnowledgeService } from "../../../src/services/knowledge-service.js";
+import { PrService } from "../../../src/infrastructure/providers/cli/pr-service.js";
 
 const tempDirs: string[] = [];
 const appStorages: AppDbStorage[] = [];
@@ -25,6 +27,43 @@ const fakeEmbeddingService = {
   getDimension: () => 2,
   embed: async () => new Float32Array([1, 0]),
 } as any;
+
+async function runGit(args: string[], cwd: string): Promise<void> {
+  await runCommandStrict("git", args, cwd);
+}
+
+async function initializeGitRepo(repoPath: string, branch = "main"): Promise<void> {
+  await fs.mkdir(repoPath, { recursive: true });
+  await runGit(["init", "-b", branch], repoPath);
+  await runGit(["config", "user.name", "Code UX Test"], repoPath);
+  await runGit(["config", "user.email", "codeux-test@example.com"], repoPath);
+}
+
+async function createRepoProject(dir: string, repoPath: string, getGithubToken?: () => string | undefined): Promise<{
+  projectRepository: ProjectManagementRepository;
+  agentPresetRepository: AgentPresetRepository;
+  settingsRepository: SettingsRepository;
+  syncService: AgentPresetSyncService;
+  project: Awaited<ReturnType<ProjectManagementRepository["createProject"]>>;
+}> {
+  const storage = createAppStorage(path.join(dir, "app.db"));
+  const projectRepository = new ProjectManagementRepository(storage);
+  const agentPresetRepository = new AgentPresetRepository(storage);
+  const settingsRepository = createSettingsRepository(path.join(dir, "settings.db"));
+  const syncService = new AgentPresetSyncService({
+    projectManagementRepository: projectRepository,
+    agentPresetRepository,
+    settingsRepository,
+    projectRoot: dir,
+    getGithubToken,
+  });
+  const project = projectRepository.createProject({
+    name: "Repository Push Project",
+    sourceType: "local",
+    sourceRef: repoPath,
+  });
+  return { projectRepository, agentPresetRepository, settingsRepository, syncService, project };
+}
 
 const createAppStorage = (dbPath: string): AppDbStorage => {
   const storage = new AppDbStorage(dbPath);
@@ -479,6 +518,103 @@ describe("AgentPresetSyncService", () => {
     expect(synced.filter((preset) => preset.syncStatus === "out_of_sync")).toHaveLength(0);
     expect(synced.find((preset) => preset.name === "Planning agent")?.instructionMarkdown).toContain("Updated planning instructions");
     expect(synced.find((preset) => preset.name === "Reviewer")?.instructionMarkdown).toContain("Updated review instructions");
+  });
+
+  it("commits agent preset markdown without pushing when the repository has no origin", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-push-commit-only-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    await initializeGitRepo(repoPath);
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
+    await fs.writeFile(path.join(repoPath, ".code-ux", "agents", "worker.md"), "Commit only worker.\n", "utf8");
+
+    const { syncService, project } = await createRepoProject(dir, repoPath);
+
+    const result = await syncService.pushAgentPresetsToRepository(project.id, { mode: "commit_only" });
+
+    expect(result).toEqual({ committed: true });
+    const log = await runCommandStrict("git", ["log", "-1", "--pretty=%s"], repoPath);
+    expect(log.stdout.trim()).toBe("chore: push agent presets");
+  });
+
+  it("pushes committed agent preset markdown to origin when requested", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-push-commit-and-push-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    const originPath = path.join(dir, "origin.git");
+    await fs.mkdir(originPath, { recursive: true });
+    await runGit(["init", "--bare"], originPath);
+    await initializeGitRepo(repoPath);
+    await runGit(["remote", "add", "origin", originPath], repoPath);
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
+    await fs.writeFile(path.join(repoPath, ".code-ux", "agents", "worker.md"), "Push worker.\n", "utf8");
+
+    const { syncService, project } = await createRepoProject(dir, repoPath);
+
+    const result = await syncService.pushAgentPresetsToRepository(project.id, { mode: "commit_and_push" });
+
+    expect(result).toEqual({
+      committed: true,
+      pushedBranch: "main",
+    });
+    const remoteHead = await runCommandStrict("git", ["ls-remote", "--heads", "origin", "main"], repoPath);
+    expect(remoteHead.stdout.trim()).toContain("refs/heads/main");
+  });
+
+  it("creates a feature branch and resolves a pull request when pushing agent preset markdown", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-push-pr-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    const originPath = path.join(dir, "origin.git");
+    await fs.mkdir(originPath, { recursive: true });
+    await runGit(["init", "--bare"], originPath);
+    await initializeGitRepo(repoPath);
+    await runGit(["remote", "add", "origin", originPath], repoPath);
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
+    await fs.writeFile(path.join(repoPath, ".code-ux", "agents", "worker.md"), "Pull request worker.\n", "utf8");
+
+    const prUrl = "https://example.com/acme/repo/pull/7";
+    const prSpy = vi.spyOn(PrService.prototype, "resolveOrCreateFeaturePr").mockResolvedValue(prUrl);
+
+    const { syncService, project, settingsRepository } = await createRepoProject(dir, repoPath, () => "gh-token");
+    settingsRepository.saveProjectSettings(project.id, {
+      git: {
+        gitlabToken: "gl-token",
+      },
+    });
+    const result = await syncService.pushAgentPresetsToRepository(project.id, {
+      mode: "pull_request",
+    });
+
+    const pushCall = prSpy.mock.calls[0];
+    const pushArgs = pushCall?.[0] as {
+      workerBranch?: string;
+    } | undefined;
+    const pushedBranch = pushArgs?.workerBranch;
+    expect(pushedBranch).toMatch(/^agents\/push-/);
+    expect(result).toEqual({
+      committed: true,
+      pushedBranch,
+      pullRequestUrl: prUrl,
+    });
+    expect(prSpy).toHaveBeenCalledWith({
+      taskId: `agent-preset-push:${project.id}`,
+      provider: "codex",
+      title: "Push agent presets",
+      featureBranch: "main",
+      workerBranch: pushedBranch,
+      taskDescription: "Push the project's .code-ux/agents markdown files into the repository.",
+      sprintDescription: `Project: ${project.name}`,
+    }, repoPath, {
+      githubToken: "gh-token",
+      gitlabToken: "gl-token",
+    });
+    const remoteHead = await runCommandStrict("git", ["ls-remote", "--heads", "origin", pushedBranch!], repoPath);
+    expect(remoteHead.stdout.trim()).toContain(`refs/heads/${pushedBranch}`);
+    prSpy.mockRestore();
   });
 
   describe("resolveTargetedPlanningAgent", () => {

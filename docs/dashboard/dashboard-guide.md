@@ -77,6 +77,8 @@ Project management:
   - Re-imports a linked markdown agent into sqlite
 - `POST /api/projects/:projectId/agent-presets/sync-markdown`
   - Re-imports every out-of-sync linked markdown agent for the selected project
+- `POST /api/projects/:projectId/agent-presets/push`
+  - Commits `.code-ux/agents/*.md` changes from the selected project, optionally pushes the branch, and can open a pull request against the default branch when repository remotes are available
 - `POST /api/projects/:projectId/planning/improve-sprint-prompt`
   - Sends a draft sprint prompt to the Planning agent through the configured virtual worker provider and returns the improved prompt
   - Planning overrides may explicitly target a specific `planningAgentPresetId`, as well as a virtual CLI provider/model for that one request. The composer defaults to the project Agent Routing planning preset.

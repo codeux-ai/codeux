@@ -283,6 +283,7 @@ export function createCoreDependencies(
     projectRoot: options.projectRoot,
     logger: logger.child({ component: "agent-preset-sync-service" }),
     knowledgeService,
+    getGithubToken: () => context.getEffectiveGithubToken(),
   });
   const instructionService = new InstructionService({
     settingsRepository,

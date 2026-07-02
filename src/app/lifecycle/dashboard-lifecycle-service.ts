@@ -559,6 +559,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     deleteAgentPreset: async (agentPresetId) => await deps.agentPresetSyncService.deleteAgentPreset(agentPresetId),
     importAgentPresetFromMarkdown: async (agentPresetId) => await deps.agentPresetSyncService.importAgentPresetFromMarkdown(agentPresetId),
     syncAllAgentPresetsFromMarkdown: async (projectId) => await deps.agentPresetSyncService.syncAllAgentPresetsFromMarkdown(projectId),
+    pushAgentPresetsToRepository: async (projectId, options) => await deps.agentPresetSyncService.pushAgentPresetsToRepository(projectId, options),
     listInstructionFiles: (projectId) => instructionFileService.listInstructionFiles(projectId),
     readInstructionFile: (projectId, fileId) => instructionFileService.readInstructionFile(projectId, fileId),
     writeInstructionFile: (projectId, fileId, content) => instructionFileService.writeInstructionFile(projectId, fileId, content),
