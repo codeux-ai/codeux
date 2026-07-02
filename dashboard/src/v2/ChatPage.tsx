@@ -85,6 +85,8 @@ export const ChatPage: FunctionComponent = () => {
     activateThread,
     activateInvocation,
     handleCompactThread,
+    handleCancelActiveTurn,
+    isCancelling,
     handleSend,
     navigateHistory,
     handleDeleteThread,
@@ -252,7 +254,9 @@ export const ChatPage: FunctionComponent = () => {
           <ChatThreadHeader
             thread={selectedThread}
             onCompact={() => void handleCompactThread()}
+            onCancelActiveTurn={() => void handleCancelActiveTurn()}
             isCompacting={compacting}
+            isCancelling={isCancelling}
           />
 
           <div id="chat-panel" role="tabpanel" aria-labelledby="tab-threads" className="flex-1 min-h-0 flex flex-col overflow-y-auto">
