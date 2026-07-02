@@ -1,3 +1,5 @@
+import type { CreateProjectInput } from "./project-management-types.js";
+
 export interface ManagementApproval {
   confirmed: boolean;
 }
@@ -11,12 +13,10 @@ export interface ManagementRequestEnvelope {
 
 export interface ManageCodeUxArgs extends ManagementRequestEnvelope {}
 
-export interface ManageProjectsArgs {
+export interface ManageProjectsArgs extends Partial<CreateProjectInput> {
   action: "list" | "get" | "create" | "update" | "select" | "setup" | "delete";
   projectId?: string;
-  name?: string;
   description?: string;
-  setup?: Record<string, unknown>;
   approval?: ManagementApproval;
 }
 

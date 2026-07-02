@@ -491,6 +491,173 @@ describe("PlanningAgentService", () => {
     expect(providerRetryPolicy.sleepWithSignal).toHaveBeenCalledWith(1_000, undefined);
   });
 
+  it("restarts a failed planning invocation by resuming the same native session with the full prompt", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-session-restart-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
+    await fs.writeFile(path.join(repoPath, ".code-ux", "agents", "planning_agent.md"), "Plan the sprint.\n", "utf8");
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const connectionRepository = new ConnectionChatRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+    const providerRunner: IProviderRunner = {
+      runProvider: vi.fn(),
+      runProviderForText: vi.fn().mockResolvedValue({
+        ok: true,
+        stdout: "",
+        stderr: "",
+        code: 0,
+        signal: null,
+        nativeSessionId: "native-original",
+        usageTelemetry: { inputTokens: 10, cachedInputTokens: 0, outputTokens: 10, reasoningOutputTokens: 0, totalTokens: 20, usageSource: "reported", rawUsageJson: {}, transcriptText: "", nativeSessionId: "native-original" },
+        text: JSON.stringify({
+          goal: "Restarted goal",
+          tasks: [{ key: "T01", title: "Restarted task", description: "D", promptMarkdown: "## Objective\nP\n\n## Scope\n- S\n\n## Implementation Requirements\n1. R\n\n## Constraints\n- C\n\n## Verification\n- V", priority: "high", executorType: "auto", dependsOn: [] }],
+        }),
+      }),
+    };
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      executionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: { orchestrateSprint: vi.fn() } as any,
+      providerRunner,
+    });
+
+    const project = projectRepository.createProject({ name: "Session Restart Project", sourceType: "local", sourceRef: repoPath });
+    const sprint = projectRepository.createSprint(project.id, { name: "Session Restart Sprint", goal: "Plan with context" });
+    settingsRepository.saveProjectSettings(project.id, { workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "claude-code" } });
+    const providerUsage = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sessionId: "planning-claude-code-old",
+      provider: "claude-code",
+      purpose: "planning",
+      status: "failed",
+    });
+    executionRepository.updateProviderInvocationUsage(providerUsage.id, {
+      status: "failed",
+      nativeSessionId: "native-original",
+      rawUsageJson: { prior: true },
+    });
+    const failedInvocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: sprint.id,
+      providerInvocationId: providerUsage.id,
+      type: "planning",
+      status: "failed",
+      provider: "claude-code",
+      model: "claude-fable-5",
+      errorMessage: "Quota exhausted",
+    });
+
+    const restarted = await service.restartInvocation(failedInvocation.id, "retry_full_prompt");
+
+    expect(restarted.createdTaskIds).toHaveLength(1);
+    const call = vi.mocked(providerRunner.runProviderForText).mock.calls[0]?.[0];
+    expect(call?.continueSessionId).toBe("native-original");
+    expect(call?.sessionId).toBe("planning-claude-code-old");
+    expect(call?.prompt).toContain("Plan with context");
+    expect(call?.prompt).not.toContain("Continue the previous planning attempt");
+    expect(executionRepository.getExecutionInvocation(failedInvocation.id)?.preservedAt).toEqual(expect.any(String));
+  });
+
+  it("continues a failed planning invocation by sending a continuation prompt into the same native session", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-session-continue-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
+    await fs.writeFile(path.join(repoPath, ".code-ux", "agents", "planning_agent.md"), "Plan the sprint.\n", "utf8");
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const connectionRepository = new ConnectionChatRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+    const providerRunner: IProviderRunner = {
+      runProvider: vi.fn(),
+      runProviderForText: vi.fn().mockResolvedValue({
+        ok: true,
+        stdout: "",
+        stderr: "",
+        code: 0,
+        signal: null,
+        nativeSessionId: "native-original",
+        usageTelemetry: { inputTokens: 10, cachedInputTokens: 0, outputTokens: 10, reasoningOutputTokens: 0, totalTokens: 20, usageSource: "reported", rawUsageJson: {}, transcriptText: "", nativeSessionId: "native-original" },
+        text: JSON.stringify({
+          goal: "Continued goal",
+          tasks: [{ key: "T01", title: "Continued task", description: "D", promptMarkdown: "## Objective\nP\n\n## Scope\n- S\n\n## Implementation Requirements\n1. R\n\n## Constraints\n- C\n\n## Verification\n- V", priority: "high", executorType: "auto", dependsOn: [] }],
+        }),
+      }),
+    };
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      executionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: { orchestrateSprint: vi.fn() } as any,
+      providerRunner,
+    });
+
+    const project = projectRepository.createProject({ name: "Session Continue Project", sourceType: "local", sourceRef: repoPath });
+    const sprint = projectRepository.createSprint(project.id, { name: "Session Continue Sprint", goal: "Plan with context" });
+    settingsRepository.saveProjectSettings(project.id, { workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "claude-code" } });
+    const providerUsage = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sessionId: "planning-claude-code-old",
+      provider: "claude-code",
+      purpose: "planning",
+      status: "failed",
+    });
+    executionRepository.updateProviderInvocationUsage(providerUsage.id, {
+      status: "failed",
+      nativeSessionId: "native-original",
+    });
+    const failedInvocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: sprint.id,
+      providerInvocationId: providerUsage.id,
+      type: "planning",
+      status: "failed",
+      provider: "claude-code",
+      model: "claude-fable-5",
+      errorMessage: "Quota exhausted",
+    });
+
+    const continued = await service.restartInvocation(failedInvocation.id, "continue_session");
+
+    expect(continued.createdTaskIds).toHaveLength(1);
+    const call = vi.mocked(providerRunner.runProviderForText).mock.calls[0]?.[0];
+    expect(call?.continueSessionId).toBe("native-original");
+    expect(call?.sessionId).toBe("planning-claude-code-old");
+    expect(call?.prompt).toContain("Continue the previous planning attempt");
+    expect(call?.prompt).toContain("Output the complete valid JSON sprint definition now");
+    expect(executionRepository.getExecutionInvocation(failedInvocation.id)?.preservedAt).toEqual(expect.any(String));
+  });
+
   it("stops virtual planning rate-limit retries after the configured max", async () => {
     const sleepSpy = vi.spyOn(providerRetryPolicy, "sleepWithSignal").mockResolvedValue();
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-rate-limit-max-"));

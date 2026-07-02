@@ -14,6 +14,8 @@ Execution invocations span various purposes:
 - **Clarification**: Prompt rewrites or operator clarification flows.
 - **QA Coverage**: Automated verification and quality assurance sweeps.
 
+Failed invocations can be explicitly preserved with `preserved_at`. Preservation is used for high-value transcripts such as quota-expensive planning runs that should remain available for operator review. Preserved sprint-scoped invocation rows block sprint deletion through the repository boundary so their transcripts are not removed by a foreign-key cascade.
+
 For supported models, tracking relies on provider-reported usage. For Jules integrations, we compute **estimated** tokens by accumulating input and output characters divided by 4 (the characters-per-token heuristic), keeping it accounted for without inventing authoritative native counts.
 
 ### `execution_invocation_messages`
@@ -28,6 +30,8 @@ Execution invocations are heavily used by the Chat page to track activity.
 When chat conversations take place (routed to either connected workers or virtual providers), those discrete operations and interactions generate `execution_invocations` with `type === "chat"`.
 This provides a clear audit log of the agent's work and prompt history separate from the user-facing `ConversationThreadRecord` and `ConversationMessageRecord` items.
 User-facing chat threads show up with `scope === "project"`, while agent background logs and execution runs appear with `scope === "connection"`.
+
+The Chat -> Invocations detail view exposes same-session recovery actions for failed planning invocations. **Restart** preserves the original failed transcript, creates a new invocation row, and resends the full planning prompt while passing the failed provider row's native session id as `continueSessionId` (Claude Code uses `--resume <nativeSessionId>`). **Continue** uses the same native-session resume path but sends only a compact continuation prompt asking the provider to finish and output the complete JSON plan. The replacement invocation has its own provider usage trail; the failed row remains immutable evidence of the quota/error history.
 
 ## Realtime Synchronization
 

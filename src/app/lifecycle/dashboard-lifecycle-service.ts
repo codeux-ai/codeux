@@ -573,6 +573,11 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
 
     listProjectInvocations: (projectId) => deps.executionRepository.listExecutionInvocations({ projectId }),
     listInvocationMessages: (invocationId) => deps.executionRepository.listExecutionInvocationMessages(invocationId),
+    restartExecutionInvocation: async (invocationId, mode) => {
+      const result = await deps.planningAgentService.restartInvocation(invocationId, mode);
+      deps.activityCacheService.invalidateGitStatusCache();
+      return result;
+    },
 
     rerunTask: async (taskId: string, options?: { provider?: string; providerConfigId?: string; model?: string; clearWorktree?: boolean; resetDependents?: boolean; undoMerge?: boolean }) => {
       const task = await deps.taskRerunService.rerunTask(taskId, {

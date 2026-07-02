@@ -1,8 +1,18 @@
 import { initLocalRepo } from "../../infrastructure/git/local-repo-initializer.js";
 import * as path from "node:path";
+import * as os from "node:os";
 import { createGitHubRepo, createGitLabRepo } from "../../infrastructure/git/remote-repo-creator.js";
 import { validateSafeRepoName, validateSafeClonePath, validateNonEmptyDir } from "../../utils/path-validator.js";
 import type { CreateProjectInput, ProjectSummary } from "../../contracts/project-management-types.js";
+import { getHomeCodeUxPath } from "../../shared/config/code-ux-paths.js";
+
+function resolveCloneParentDir(cloneDir?: string): string {
+  const trimmed = cloneDir?.trim();
+  if (!trimmed) {
+    return getHomeCodeUxPath("projects");
+  }
+  return path.isAbsolute(trimmed) ? trimmed : path.resolve(os.homedir(), trimmed);
+}
 
 export async function initializeProject(
   input: CreateProjectInput,
@@ -34,10 +44,10 @@ export async function initializeProject(
   if (mode === "new-remote") {
     if (!input.remoteProvider) throw new Error("remoteProvider is required for new-remote init mode");
     validateSafeRepoName(input.sourceRef);
-    const cloneParentDir = input.cloneDir ?? process.cwd();
+    const cloneParentDir = resolveCloneParentDir(input.cloneDir);
 
-    // The allowed root is cloneDir if provided, otherwise cwd.
-    const allowedRoot = input.cloneDir ?? process.cwd();
+    // The allowed root is the resolved clone parent, including the home Code UX default.
+    const allowedRoot = cloneParentDir;
     validateSafeClonePath(cloneParentDir, allowedRoot);
     const targetDir = path.resolve(cloneParentDir, input.sourceRef);
     validateNonEmptyDir(targetDir);
@@ -62,7 +72,7 @@ export async function initializeProject(
       ...input,
       sourceType: "git",
       sourceRef: result.remoteUrl,
-      cloneDir: result.localPath,
+      cloneDir: cloneParentDir,
       initMode: undefined,
     });
   }
