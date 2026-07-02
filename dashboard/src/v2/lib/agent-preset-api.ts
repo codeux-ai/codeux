@@ -73,3 +73,20 @@ export const syncAllAgentPresetsFromMarkdown = async (projectId: string): Promis
     method: "POST",
   });
 };
+
+export const pushAgentPresetsToRepository = async (
+  projectId: string,
+  options: { mode: "commit_only" | "commit_and_push" | "pull_request"; branchName?: string },
+): Promise<{ committed: boolean; pushedBranch?: string; pullRequestUrl?: string }> => {
+  return fetchJson<{ committed: boolean; pushedBranch?: string; pullRequestUrl?: string }>(
+    `/api/projects/${encodeURIComponent(projectId)}/agent-presets/push`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: options.mode,
+        branchName: options.branchName,
+      }),
+    },
+  );
+};

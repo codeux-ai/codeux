@@ -207,6 +207,7 @@ Legacy runtime:
 - Global Search preserves previous results during debounce to avoid layout shift, only polls for container previews when opened, and uses `aria-activedescendant` for keyboard navigation.
 - Shared dropdown menus enhance nested menu items inside layout wrappers, so keyboard navigation and item entrance animation remain consistent when menu content is grouped.
 - Shared popovers own trigger open/close toggling; feature triggers such as Agent Memory avoid duplicate local toggles that can immediately close the panel after opening.
+- The Agents page now includes a Push Agents header action with an inline destination picker, so users explicitly choose between a local commit, branch push, or pull request before dispatching the backend push request.
 - The Live Sprint Clock card in the Sprint Stats deck now shows a six-tile grid with Finished, Avg Finish, Accumulated, Input, Output, and Cached values, and the token tiles reuse the shared compact formatter from the Stats page.
 - Live runtime pages now use the persisted top-nav sprint selection as the page scope, so the Live view follows the selected sprint from the header menu
 - That selection is view-only for the dashboard surface; it does not change which sprint run is actually executing in the backend
