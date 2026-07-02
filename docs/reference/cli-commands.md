@@ -1,100 +1,175 @@
 # CLI Commands Reference
 
-`codeux` exposes the same management handlers used by MCP, plus a generic `manage` passthrough for raw MCP-shaped payloads.
+The `codeux` CLI exposes the same management surface as the MCP tool handlers, but with a shell-friendly command layout for local operators and scripts.
 
-## Invocation Forms
+## Command Forms
 
-- `codeux <domain> <action> [flags]`
-- `codeux manage --payload-json '<json>'`
-
-Supported management domains:
-
-- `projects`
-- `sprints`
-- `tasks`
-- `quicksprints`
-- `scheduler`
-- `settings`
-- `agents`
-- `memory`
-- `preview`
-- `telemetry`
-
-Direct domain commands and `manage` both call the same backend handlers. The only difference is how the payload is supplied.
-
-## Common Flags
-
-The CLI accepts the common human aliases below and normalizes them into the internal management payload:
-
-| Canonical flag | Common aliases |
-| --- | --- |
-| `--project` | `--project-id` |
-| `--sprint` | `--sprint-id` |
-| `--sprint-run` | `--sprint-run-id`, `--sprintrun`, `--sprintrunid` |
-| `--task` | `--task-id` |
-| `--template` | `--template-id` |
-| `--entry` | `--entry-id` |
-| `--preset` | `--preset-id` |
-| `--memory` | `--memory-id` |
-| `--session` | `--session-id` |
-| `--invocation` | `--invocation-id` |
-| `--at` | `--scheduled-for` |
-| `--tasks` | `--task-count` |
-| `--settings-json` | `--settings-json` |
-| `--payload-json` | `--payload-json` |
-| `--memory-ids` | `--memory-ids` |
-| `--json` | `--json` |
-
-Hyphenated action aliases are also accepted and normalized to snake_case. Common examples include:
-
-- `schedule-sprint`, `schedule-quicksprint`, `schedule-chat`
-- `list-templates`, `get-template`, `create-template`, `update-template`, `delete-template`
-- `get-system`, `get-project-override`, `resolve-project-effective`
-- `replace-system-settings`, `patch-project-setting`, `reset-sprint-settings`
-- `start-session`, `rebuild-session`, `stop-session`, `remove-session`, `get-url`
-- `get-project-execution-snapshot`, `get-project-stats-snapshot`, `list-execution-invocations`
-
-## Interactive Prompting
-
-- Missing required flags are prompted only when `stdin` is interactive.
-- Prompts use the same human labels as the underlying action, so the CLI can ask for project, sprint, template, task, memory, path, value, body markdown, or JSON payload values without a separate wrapper command.
-- When `stdin` is not interactive, the CLI fails fast with the missing flag list instead of waiting for input.
-
-## JSON Output And Passthrough
-
-- `--json` prints the raw JSON envelope returned by the management handler.
-- Without `--json`, the CLI prints a human-readable summary of the envelope.
-- `--payload-json` accepts a raw MCP-shaped payload. The value can include `domain`, `action`, `payload`, and `approval`, or it can be a plain object that becomes the payload when those keys are absent.
-- When `--payload-json` is used together with direct flags, the CLI merges the flag values into the payload before dispatching the handler.
-
-## Approval-Gated Work
-
-- Destructive actions still require explicit approval in the underlying handler.
-- `delete_*`, `reset_*`, and `replace_*` settings actions queue a confirmation step first; the CLI does not auto-confirm them.
-- Settings mutations are one-use approvals: the first call records the exact payload, and only the same action plus the same payload can run once with `approval.confirmed: true` within the approval window.
-- When the handler returns `approvalRequired: true`, rerun the exact same command after confirming the change with the user.
-
-## Examples
-
-| Domain | Example |
-| --- | --- |
-| `projects` | `codeux projects list` |
-| `sprints` | `codeux sprints start --project <id> --sprint <id>` |
-| `quicksprints` | `codeux quicksprints start --project <id> --template <id> --tasks 5` |
-| `scheduler` | `codeux scheduler schedule-quicksprint --project <id> --template <id> --at <iso>` |
-| `settings` | `codeux settings patch-project-setting --project <id> --path git.defaultBranch --value main` |
-| `agents` | `codeux agents delete --project <id> --preset <id>` |
-| `memory` | `codeux memory promote --project <id> --memory-ids '["mem-1","mem-2"]'` |
-| `preview` | `codeux preview get-url --session <id> --path /` |
-| `telemetry` | `codeux telemetry list-execution-invocations --project <id>` |
-
-## Manage Passthrough
-
-The generic passthrough is useful when you already have the MCP-shaped payload:
+There are two supported entry points:
 
 ```bash
+codeux <domain> <action> [flags]
 codeux manage --payload-json '{"domain":"projects","action":"list","payload":{}}'
-codeux manage --domain sprints --action start --payload-json '{"projectId":"p1","sprintId":"s1"}'
 ```
 
-Because the passthrough talks to the same handler, it supports the same domain-specific validation, approval requirements, and output formatting as the direct domain commands.
+The direct domain form is the preferred shell interface. The generic `manage` form is useful when you already have an MCP-shaped payload or want to forward a full JSON request without re-mapping the fields by hand.
+
+## Common Rules
+
+- Action names accept dash-case aliases and normalize to the internal snake_case action names.
+- The CLI prompts for missing required flags only when `stdin` is a TTY.
+- If required flags are missing in non-interactive mode, the command fails instead of guessing.
+- `--json` prints the raw management envelope returned by the handler.
+- `--payload-json` can carry `domain`, `action`, `payload`, and `approval` for the `manage` passthrough.
+- Destructive actions require an approval retry. The first call returns an approval request, and the exact same action must be sent again with `approval.confirmed: true`.
+
+## Common Aliases
+
+These aliases are accepted and normalized before dispatch:
+
+- `list-templates` -> `list_templates`
+- `get-template` -> `get_template`
+- `create-template` -> `create_template`
+- `update-template` -> `update_template`
+- `delete-template` -> `delete_template`
+- `schedule-sprint` -> `schedule_sprint`
+- `schedule-quicksprint` -> `schedule_quicksprint`
+- `schedule-chat` -> `schedule_chat`
+- `get-system` -> `get_system`
+- `replace-system-settings` -> `replace_system_settings`
+- `patch-project-setting` -> `patch_project_setting`
+- `start-session` -> `start_session`
+- `get-project-stats-snapshot` -> `get_project_stats_snapshot`
+
+## Flag Conventions
+
+The CLI accepts the same compact flag names used by the dashboard and MCP layers.
+
+- `--project`
+- `--sprint`
+- `--task`
+- `--template`
+- `--entry`
+- `--preset`
+- `--memory`
+- `--session`
+- `--invocation`
+- `--at` for `scheduledFor`
+- `--tasks` for quicksprint task counts
+- `--agent-instruction-markdown`
+- `--body-markdown`
+- `--settings-json`
+- `--path`
+- `--value`
+- `--payload-json` for raw JSON input
+- `--json` for raw JSON output
+
+The CLI also prompts for missing required flags when it is connected to an interactive terminal. Empty answers fall back to the prompt default when the prompt defines one.
+
+## Required Flags At A Glance
+
+Use these core flags most often:
+
+- Projects: `--project` for `get`, `update`, `select`, `setup`, and `delete`; `--name` for `create`
+- Sprints: `--project` for `list`, `import_issues`, and `plan`; `--project` plus `--sprint` for `start` and `inspect_run`; `--sprint` for `get`, `update`, and `delete`
+- Quicksprints: `--project` for `list_templates`; `--project` plus `--template` for `get_template`, `update_template`, `delete_template`, `start`, and `execute`; `create_template` also requires `--name`, `--description`, `--icon`, `--category`, and `--agent-instruction-markdown`
+- Scheduler: `--project` plus `--scheduled-for` for `create` and `schedule_*`; add `--sprint`, `--template`, or `--body-markdown` depending on the target type; generic `create` also needs `--target-type` or a payload with `targetType`; `--entry` for `update` and `delete`
+- Settings: `--settings-json` for replace actions; `--project` and `--sprint` when the scope is project or sprint specific; `--path` and `--value` for patch actions; `reset_project_settings` needs `--project` and `reset_sprint_settings` needs `--sprint`
+- Agents: `--project` for `list`, `create`, and `sync`; `--project` plus `--preset` for `get`, `update`, and `delete`
+- Memory: `--project` plus `--query` for `search`; `--project` plus `--content` for `create`; `--project` plus `--memory-ids` for `promote`; `--memory` for `get`, `update`, and `delete`
+- Preview: `--project` for `list_sessions`; `--project` plus `--sprint` for `start_session` and `get_script`; `--session` for `rebuild_session`, `stop_session`, `remove_session`, `get_logs`, and `get_url`
+- Telemetry: `--project` for `get_project_execution_snapshot`, `get_project_stats_snapshot`, and `list_execution_invocations`; `--project` plus `--sprint` for `list_sprint_runs`; add `--task` for `list_task_dispatches`; `--invocation` for `list_execution_invocation_messages`
+
+## Destructive Approval Handling
+
+Some commands intentionally block on approval before they mutate state:
+
+- `delete_*` actions
+- `reset_*` settings actions
+- `replace_*` settings actions
+- selected scheduler delete operations
+
+When one of those commands runs without approval, Code UX returns an approval request instead of mutating anything. Re-run the same command with `approval.confirmed: true` once the user approves the change.
+
+## Domain Examples
+
+### Projects
+
+```bash
+codeux projects list
+codeux projects get --project proj-1
+codeux projects create --name "Website Refresh"
+```
+
+### Sprints
+
+```bash
+codeux sprints plan --project proj-1 --name "SPR-12" --goal "Ship the pricing page redesign"
+codeux sprints start --project proj-1 --sprint sprint-1
+codeux sprints import_issues --project proj-1
+```
+
+### Quicksprints
+
+```bash
+codeux quicksprints list_templates --project proj-1
+codeux quicksprints start --project proj-1 --template qs-audit --tasks 5
+codeux quicksprints execute --project proj-1 --template qs-ui --no-task-limit
+```
+
+### Scheduler
+
+```bash
+codeux scheduler list --project proj-1
+codeux scheduler schedule-quicksprint --project proj-1 --template qs-ui --at 2026-06-01T12:00:00Z
+codeux scheduler schedule-chat --project proj-1 --body-markdown "Standup check-in" --at 2026-06-01T13:00:00Z
+codeux scheduler update --entry sched-1 --status paused
+```
+
+Minute-level recurrence is supplied through `--payload-json` or the dashboard/MCP payload using the same `recurrence.frequency = minutely` literal accepted by the API and MCP payloads.
+
+### Settings
+
+```bash
+codeux settings get_system
+codeux settings resolve_project_effective --project proj-1
+codeux settings patch_project_setting --project proj-1 --path git.defaultBranch --value main
+codeux settings replace_sprint_settings --project proj-1 --sprint sprint-1 --settings-json '{"git":{"autoCreatePr":true}}'
+```
+
+### Agents
+
+```bash
+codeux agents list --project proj-1
+codeux agents sync --project proj-1
+codeux agents update --project proj-1 --preset qa-agent --payload-json '{"instructionMarkdown":"Review for regressions"}'
+```
+
+### Memory
+
+```bash
+codeux memory search --project proj-1 --query "pricing page"
+codeux memory promote --project proj-1 --memory-ids '["mem-1","mem-2"]'
+codeux memory start_reembed --project proj-1
+```
+
+### Preview
+
+```bash
+codeux preview list_sessions --project proj-1
+codeux preview start_session --project proj-1 --sprint sprint-1
+codeux preview get_url --session preview-1 --path /
+```
+
+### Telemetry
+
+```bash
+codeux telemetry get_project_stats_snapshot --project proj-1
+codeux telemetry list_execution_invocations --project proj-1
+codeux telemetry list_execution_invocation_messages --invocation inv-1
+```
+
+## Notes
+
+- `codeux manage` is the best fit when you already have an MCP-style payload.
+- The direct domain commands are easier to discover interactively because required flags are surfaced through prompts.
+- Use `--json` when another tool needs the raw envelope instead of the human-readable summary text.

@@ -30,7 +30,7 @@ Repeating entries support:
 
 Minute-based entries use the `minutely` recurrence literal in the API and MCP payloads. In the dashboard form, that same option is labeled `Minutes`, and the recurrence summaries reuse the same formatter as other schedules: `Every minute`, `Every 15 minutes`, `Every 15 minutes, 5 runs`, or `Every 15 minutes until <date>` depending on the configured interval and end mode.
 
-Minutely entries are not special-cased at runtime. They are persisted in the same recurrence JSON as other schedules, expanded into calendar occurrences with the same UTC recurrence helpers, and when due they advance `nextRunAt` by the configured minute interval before executing through the existing scheduler workflow. The separate memory-remediation cadence keeps its own off/daily/weekly controls.
+Minutely entries are not special-cased at runtime. They are persisted in the same recurrence JSON as other schedules, expanded into calendar occurrences with the same UTC recurrence helpers, and when due they advance `nextRunAt` by the configured minute interval before executing through the existing scheduler workflow. The scheduler service keeps the same execution path for minute, hourly, daily, weekly, and monthly entries, so the cadence only changes the recurrence math, not the runtime target handling. The separate memory-remediation cadence keeps its own off/daily/weekly controls.
 
 ## Backend Contract
 
