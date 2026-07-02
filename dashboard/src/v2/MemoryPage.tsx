@@ -273,6 +273,7 @@ export const MemoryPage: FunctionComponent = () => {
 
     const lobRef = useRef(lobotomize);
     lobRef.current = lobotomize;
+    const inspectorOpen = activeMemoryIdSignal.value !== null;
 
     /* ── Fetch agent presets on project change ─────────────── */
     useEffect(() => {
@@ -1012,8 +1013,14 @@ export const MemoryPage: FunctionComponent = () => {
                 <div ref={wrapRef} className="flex-1 relative overflow-hidden">
                     <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
 
-                {/* Zoom controls */}
-                <div className="absolute bottom-5 right-5 z-20 flex flex-col gap-1.5">
+                    {/* Zoom controls */}
+                    <div
+                        className={`absolute z-20 flex flex-col gap-1.5 ${
+                            inspectorOpen
+                                ? "right-4 top-4 lg:bottom-5 lg:right-[calc(300px+1.25rem)] lg:top-auto"
+                                : "bottom-5 right-5"
+                        }`}
+                    >
                     {[
                         { icon: ZoomIn, fn: zoomIn, title: "Zoom in" },
                         { icon: ZoomOut, fn: zoomOut, title: "Zoom out" },
@@ -1029,10 +1036,16 @@ export const MemoryPage: FunctionComponent = () => {
                             <Icon className="w-4 h-4" strokeWidth={1.5} />
                         </button>
                     ))}
-                </div>
+                    </div>
 
-                {/* Legend */}
-                <div className="absolute bottom-5 left-5 z-20 flex flex-wrap gap-x-4 gap-y-1.5">
+                    {/* Legend */}
+                    <div
+                        className={`absolute z-20 flex max-w-[min(100%-2rem,48rem)] flex-wrap gap-x-4 gap-y-1.5 ${
+                            inspectorOpen
+                                ? "left-4 top-4 lg:bottom-5 lg:left-5 lg:top-auto"
+                                : "bottom-5 left-5"
+                        }`}
+                    >
                     {Object.entries(CAT).map(([, cfg]) => (
                         <div key={cfg.label} className="flex items-center gap-1.5">
                             <div className="w-2 h-2 rounded-full" style={{ background: cfg.hex, boxShadow: `0 0 6px ${cfg.hex}` }} />
@@ -1042,14 +1055,20 @@ export const MemoryPage: FunctionComponent = () => {
                             </span>
                         </div>
                     ))}
-                </div>
+                    </div>
 
-                {/* Node count */}
-                <div className="absolute top-5 right-5 z-20 pointer-events-none">
+                    {/* Node count */}
+                    <div
+                        className={`absolute z-20 pointer-events-none ${
+                            inspectorOpen
+                                ? "right-4 top-16 lg:right-[calc(300px+1.25rem)] lg:top-5"
+                                : "right-5 top-5"
+                        }`}
+                    >
                     <span className="text-[9px] font-mono text-slate-300 dark:text-slate-600">
                         {memoryCount} nodes
                     </span>
-                </div>
+                    </div>
 
                 {/* Empty state */}
                 {!loading && memoryCount === 0 && (

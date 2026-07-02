@@ -1,17 +1,16 @@
+import { activeTierSignal, selectedSprintIdSignal, selectedAgentPresetIdSignal } from "./memoryState.js";
 import { FunctionComponent } from "preact";
-import { Plus, HardDrive, AlertTriangle } from "lucide-preact";
-import type { SprintRecord, AgentPreset } from "../../types.js";
-import type { MemoryScope } from "../../memory-types.js";
+import { AlertTriangle, HardDrive, Plus } from "lucide-preact";
+import { useInteractionTokens } from "../../lib/motion/index.js";
 import type { MemoryStats } from "../../lib/memory-api.js";
+import type { MemoryScope } from "../../memory-types.js";
+import type { SprintRecord, AgentPreset } from "../../types.js";
 
 type MemTier = "short_term" | "long_term";
 const TIER_TABS: { key: MemTier; label: string; scope: MemoryScope }[] = [
     { key: "short_term", label: "Short Term", scope: "sprint" },
     { key: "long_term",  label: "Long Term",  scope: "project" },
 ];
-
-import { activeTierSignal, selectedSprintIdSignal, selectedAgentPresetIdSignal } from "./memoryState.js";
-import { useInteractionTokens } from "../../lib/motion/index.js";
 
 export const MemoryFilters: FunctionComponent<{
     stats: MemoryStats;
@@ -34,8 +33,8 @@ export const MemoryFilters: FunctionComponent<{
     const interactionTokens = useInteractionTokens();
 
     return (
-        <div className="flex flex-col items-start md:items-end w-full md:w-auto gap-3.5 shrink-0">
-            <div className="flex flex-wrap items-center gap-2.5" role="tablist" aria-label="Memory Tier">
+        <div className="flex w-full min-w-0 flex-col items-stretch gap-3.5 md:items-end">
+            <div className="flex w-full flex-wrap items-center gap-2.5" role="tablist" aria-label="Memory Tier">
                 {TIER_TABS.map(tab => {
                     const count = tab.key === "short_term"
                         ? (stats.sprint + stats.agent)
@@ -53,7 +52,7 @@ export const MemoryFilters: FunctionComponent<{
                                 transitionDuration: `${interactionTokens.enterExit.duration}s`,
                                 transitionTimingFunction: interactionTokens.enterExit.ease,
                             }}
-                            className={`text-[10px] font-bold font-mono px-3.5 py-1.5 rounded-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
+                            className={`min-w-0 rounded-full border px-3.5 py-1.5 text-[10px] font-bold font-mono leading-tight whitespace-normal cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                             ${activeTier === tab.key
                                 ? "bg-signal-500/[0.12] border border-signal-500/30 text-signal-500 hover:bg-signal-500/[0.2]"
                                 : "bg-black/[0.04] dark:bg-white/[0.04] border border-transparent text-slate-400 hover:bg-black/[0.08] dark:hover:bg-white/[0.08] hover:text-slate-600 dark:hover:text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -84,10 +83,10 @@ export const MemoryFilters: FunctionComponent<{
                     );
                 })}
             </div>
-            <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex w-full flex-wrap items-center gap-2.5">
                 {/* Sprint selector — only for Short Term */}
                 {activeTier === "short_term" && sprints.length > 0 && (
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex min-w-0 items-center gap-1.5">
                         <label htmlFor="sprint-selector" className="sr-only">Filter by Sprint</label>
                         <select
                             id="sprint-selector"
@@ -95,9 +94,7 @@ export const MemoryFilters: FunctionComponent<{
                             title="Filter memory by Sprint"
                             value={selectedSprintId ?? ""}
                             onChange={(e) => selectedSprintIdSignal.value = (e.target as HTMLSelectElement).value || undefined}
-                            className="text-[11px] font-mono font-bold px-3 py-1.5 rounded-lg
-                                       bg-black/[0.04] dark:bg-white/[0.04] hover:bg-black/[0.08] dark:hover:bg-white/[0.08] border border-black/[0.08] dark:border-white/[0.08] transition-colors duration-200
-                                       text-slate-600 dark:text-slate-300 cursor-pointer
+                            className="min-w-0 max-w-full rounded-lg border border-black/[0.08] bg-black/[0.04] px-3 py-1.5 text-[11px] font-mono font-bold text-slate-600 transition-colors duration-200 cursor-pointer hover:bg-black/[0.08] dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08]
                                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900">
                             {sprints.map(s => (
                                 <option key={s.id} value={s.id}>
@@ -109,7 +106,7 @@ export const MemoryFilters: FunctionComponent<{
                 )}
                 {/* Agent selector — both tiers */}
                 {agentPresets.length > 0 && (
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex min-w-0 items-center gap-1.5">
                         <label htmlFor="agent-selector" className="sr-only">Filter by Agent Preset</label>
                         <select
                             id="agent-selector"
@@ -117,9 +114,7 @@ export const MemoryFilters: FunctionComponent<{
                             title="Filter memory by Agent Preset"
                             value={selectedAgentPresetId ?? ""}
                             onChange={(e) => selectedAgentPresetIdSignal.value = (e.target as HTMLSelectElement).value || undefined}
-                            className="text-[11px] font-mono font-bold px-3 py-1.5 rounded-lg
-                                       bg-black/[0.04] dark:bg-white/[0.04] hover:bg-black/[0.08] dark:hover:bg-white/[0.08] border border-black/[0.08] dark:border-white/[0.08] transition-colors duration-200
-                                       text-slate-600 dark:text-slate-300 cursor-pointer
+                            className="min-w-0 max-w-full rounded-lg border border-black/[0.08] bg-black/[0.04] px-3 py-1.5 text-[11px] font-mono font-bold text-slate-600 transition-colors duration-200 cursor-pointer hover:bg-black/[0.08] dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08]
                                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900">
                             <option value="">All Agents</option>
                             {agentPresets.map(a => (
@@ -130,18 +125,18 @@ export const MemoryFilters: FunctionComponent<{
                 )}
             </div>
             <div className="flex flex-wrap items-center gap-2.5">
-                <button onClick={() => setShowAddModal(true)}
+                <button type="button" onClick={() => setShowAddModal(true)}
                     aria-label="Add Memory"
-                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold
+                    className="flex min-w-0 items-center gap-1.5 whitespace-normal leading-tight rounded-xl px-4 py-2.5 text-xs font-bold
                                bg-signal-500/10 text-signal-500 hover:bg-signal-500/20
                                border border-signal-500/20
                                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                                transition-colors duration-200">
                     <Plus className="w-3.5 h-3.5" strokeWidth={2.5} /> Add Memory
                 </button>
-                <button aria-pressed={showModels} onClick={() => setShowModels(!showModels)}
+                <button type="button" aria-pressed={showModels} onClick={() => setShowModels(!showModels)}
                     aria-label="Toggle embedding model catalog"
-                    className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer
+                    className={`flex min-w-0 items-center gap-1.5 whitespace-normal leading-tight rounded-xl px-4 py-2.5 text-xs font-bold cursor-pointer
                                border transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                                ${showModels
                                    ? "bg-signal-500/[0.12] border-signal-500/30 text-signal-500 hover:bg-signal-500/[0.2]"
@@ -153,9 +148,9 @@ export const MemoryFilters: FunctionComponent<{
                         <span className="w-1.5 h-1.5 rounded-full bg-signal-500" />
                     )}
                 </button>
-                <button aria-pressed={lobotomize} onClick={handleLobotomizeToggle}
+                <button type="button" aria-pressed={lobotomize} onClick={handleLobotomizeToggle}
                     aria-label="Toggle Danger Delete Mode"
-                    className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl font-bold text-xs border
+                    className={`flex min-w-0 items-center gap-2.5 whitespace-normal leading-tight rounded-xl px-5 py-2.5 text-xs font-bold border
                                transition-[background-color,box-shadow,border-color,color] duration-300
                                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                                ${lobotomize
