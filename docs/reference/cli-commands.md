@@ -57,7 +57,7 @@ Hyphenated action aliases are also accepted and normalized to snake_case. Common
 ## Interactive Prompting
 
 - Missing required flags are prompted only when `stdin` is interactive.
-- Prompts use the same human labels as the underlying action, so the CLI can ask for project, sprint, template, task, memory, or JSON payload values without a separate wrapper command.
+- Prompts use the same human labels as the underlying action, so the CLI can ask for project, sprint, template, task, memory, path, value, body markdown, or JSON payload values without a separate wrapper command.
 - When `stdin` is not interactive, the CLI fails fast with the missing flag list instead of waiting for input.
 
 ## JSON Output And Passthrough
