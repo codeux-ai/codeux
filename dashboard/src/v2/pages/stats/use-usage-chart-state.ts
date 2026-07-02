@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "preact/hooks";
 import type { ProjectExecutionStatsSnapshot } from "../../types.js";
 import type { ChartZoomRange, StatsVisualMode } from "./components/StatsShared.js";
+import { calculateChartMetrics } from "./chart-view-models.js";
 
 export function parseEnabledSeries(stored: string | null): Record<string, boolean> {
   if (!stored) return {};
@@ -68,6 +69,7 @@ export interface UsageChartState {
   setDragCurrentIndex: (index: number | null) => void;
   enabledSeries: Record<string, boolean>;
   setEnabledSeries: (val: Record<string, boolean> | ((curr: Record<string, boolean>) => Record<string, boolean>)) => void;
+  metrics: ReturnType<typeof calculateChartMetrics> | null;
 }
 
 export function useUsageChartState(
@@ -145,6 +147,15 @@ export function useUsageChartState(
     setDragCurrentIndex(null);
   }, [projectId, currentRangeKey]);
 
+  const metrics = stats
+    ? calculateChartMetrics(
+        stats.buckets.slice(
+          zoomRange?.start ?? 0,
+          (zoomRange?.end ?? Math.max(0, stats.buckets.length - 1)) + 1
+        )
+      )
+    : null;
+
   return {
     visualMode,
     setVisualMode,
@@ -158,5 +169,6 @@ export function useUsageChartState(
     setDragCurrentIndex,
     enabledSeries,
     setEnabledSeries,
+    metrics,
   };
 }

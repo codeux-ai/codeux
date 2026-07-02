@@ -1,4 +1,4 @@
-import type { FunctionComponent } from "preact";
+import type { FunctionComponent, JSX } from "preact";
 import { useMemo, useRef, useState } from "preact/hooks";
 import type { ExecutionUsageBucketSummary } from "../../../types.js";
 import type { ChartZoomRange } from "./stats-ui-primitives.js";
@@ -32,14 +32,13 @@ export const UsageChartMinimap: FunctionComponent<{
     };
   }, [buckets]);
 
-  if (buckets.length < 2) {
-    return null;
-  }
-
   const lastIndex = buckets.length - 1;
+  const hasZoomableRange = buckets.length > 1;
 
   const indexToX = (index: number): number =>
-    MINIMAP_PADDING + (index / lastIndex) * (MINIMAP_WIDTH - MINIMAP_PADDING * 2);
+    lastIndex <= 0
+      ? MINIMAP_PADDING
+      : MINIMAP_PADDING + (index / lastIndex) * (MINIMAP_WIDTH - MINIMAP_PADDING * 2);
 
   const clientXToIndex = (clientX: number): number => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -57,6 +56,9 @@ export const UsageChartMinimap: FunctionComponent<{
   const windowBounds = selection ?? zoomRange;
 
   const handlePointerDown = (event: PointerEvent) => {
+    if (!hasZoomableRange) {
+      return;
+    }
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
     const index = clientXToIndex(event.clientX);
     setDragStart(index);
@@ -64,7 +66,7 @@ export const UsageChartMinimap: FunctionComponent<{
   };
 
   const handlePointerMove = (event: PointerEvent) => {
-    if (dragStart === null) {
+    if (dragStart === null || !hasZoomableRange) {
       return;
     }
     setDragCurrent(clientXToIndex(event.clientX));
@@ -87,15 +89,63 @@ export const UsageChartMinimap: FunctionComponent<{
     }
   };
 
+  const handleKeyDown = (event: JSX.TargetedKeyboardEvent<HTMLDivElement>) => {
+    if (!hasZoomableRange) {
+      if (event.key === "Escape" || event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        onZoomChange(null);
+      }
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onZoomChange(null);
+      return;
+    }
+
+    if (!zoomRange) {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        onZoomChange({ start: 0, end: lastIndex });
+      }
+      return;
+    }
+
+    const span = Math.max(1, zoomRange.end - zoomRange.start);
+    const moveRange = (delta: number) => {
+      const nextStart = Math.max(0, Math.min(lastIndex - span, zoomRange.start + delta));
+      onZoomChange({ start: nextStart, end: nextStart + span });
+    };
+
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      moveRange(-1);
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      moveRange(1);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      onZoomChange({ start: 0, end: Math.min(lastIndex, span) });
+    } else if (event.key === "End") {
+      event.preventDefault();
+      onZoomChange({ start: Math.max(0, lastIndex - span), end: lastIndex });
+    }
+  };
+
   return (
     <div className="mt-3">
       <div className="mb-1.5 flex items-center justify-between">
         <div className="text-[9px] font-bold uppercase tracking-[0.22em] text-[var(--stats-label-color,theme(colors.slate.400))]">
-          Overview · drag to zoom, click to reset
+          Overview · drag to zoom, arrow keys to pan, escape to reset
         </div>
         {zoomRange ? (
           <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-signal-500">
             {zoomRange.end - zoomRange.start + 1} of {buckets.length} buckets
+          </div>
+        ) : !hasZoomableRange ? (
+          <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--stats-detail-color)]">
+            Single-bucket view
           </div>
         ) : null}
       </div>
@@ -104,20 +154,20 @@ export const UsageChartMinimap: FunctionComponent<{
         data-testid="usage-chart-minimap"
         role="region"
         aria-label="Chart minimap zoom region"
+        aria-disabled={!hasZoomableRange ? "true" : undefined}
         tabIndex={0}
-        className="relative h-[4.5rem] w-full cursor-crosshair touch-none select-none overflow-hidden rounded-2xl border border-black/[0.05] bg-black/[0.02] dark:border-white/[0.06] dark:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900"
+        className={`relative h-[4.5rem] w-full select-none overflow-hidden rounded-2xl border border-black/[0.05] bg-black/[0.02] dark:border-white/[0.06] dark:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 ${hasZoomableRange ? 'cursor-crosshair touch-none' : 'cursor-default opacity-75'}`}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onZoomChange(null);
-          }
-        }}
+        onKeyDown={handleKeyDown}
       >
         <div className="sr-only" aria-live="polite">
-          {zoomRange ? `Showing ${zoomRange.end - zoomRange.start + 1} of ${buckets.length} buckets` : 'Zoom reset'}
+          {zoomRange
+            ? `Showing ${zoomRange.end - zoomRange.start + 1} of ${buckets.length} buckets.`
+            : hasZoomableRange
+              ? 'Zoom reset. Use arrow keys to pan and escape to clear.'
+              : 'Single-bucket view. Zoom is unavailable until more buckets exist.'}
         </div>
         <svg
           aria-hidden="true"
@@ -133,7 +183,7 @@ export const UsageChartMinimap: FunctionComponent<{
           </defs>
           <path d={geometry.areaPath} fill="url(#stats-minimap-fill)" />
           <path d={geometry.path} fill="none" stroke={accentHex} stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
-          {windowBounds ? (
+          {windowBounds && hasZoomableRange ? (
             <g>
               <rect
                 x="0"
@@ -165,6 +215,11 @@ export const UsageChartMinimap: FunctionComponent<{
             </g>
           ) : null}
         </svg>
+        {!hasZoomableRange ? (
+          <div className="absolute inset-0 flex items-center justify-center px-4 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-detail-color)]">
+            Zoom becomes available after the next bucket lands.
+          </div>
+        ) : null}
       </div>
     </div>
   );

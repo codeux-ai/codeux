@@ -51,7 +51,9 @@ describe("UsageChartMinimap", () => {
     const { container } = render(
       <UsageChartMinimap buckets={createBuckets(1)} zoomRange={null} onZoomChange={vi.fn()} />,
     );
-    expect(container.querySelector("[data-testid='usage-chart-minimap']")).toBeNull();
+    const strip = container.querySelector("[data-testid='usage-chart-minimap']");
+    expect(strip).toBeTruthy();
+    expect(strip?.textContent).toContain("Zoom becomes available after the next bucket lands.");
   });
 
   it("emits a zoom range after a drag selection", () => {

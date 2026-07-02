@@ -186,12 +186,9 @@ describe("UsageChartAccessibility", () => {
     // Simulate opening the filter menu to render the series toggles
     fireEvent.click(filtersButton);
 
-    // Check if filter metric buttons have aria-pressed
-    // Use explicitly lookup for all buttons and find one with aria-pressed.
-    // Given they are rendered within UsageFilterMenu:
-    const buttons = screen.getAllByRole("button");
-    const pressedButton = buttons.find(b => b.getAttribute('aria-pressed') === 'true' || b.getAttribute('aria-pressed') === 'false');
-    expect(pressedButton).toBeInTheDocument();
+    const switches = screen.getAllByRole("switch");
+    expect(switches.length).toBeGreaterThan(0);
+    expect(switches.some((button) => button.getAttribute('aria-checked') === 'true')).toBe(true);
   });
 
   it("provides status roles for loading, empty, and error states", () => {

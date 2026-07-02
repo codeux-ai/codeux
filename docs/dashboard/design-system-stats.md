@@ -32,6 +32,8 @@ Analytics components draw from `stats-theme.css`, which maps specifically back t
 *   **Chart Backgrounds**: Should remain subtle (e.g., `bg-[var(--stats-card-bg)]`), avoiding faux-gradients or distracting "glassy" layers over the plot area.
 *   **Tooltips & Menus**: Float above the chart using `var(--surface-glass)` and `var(--elevation-floating)`.
 *   **Controls**: Use standard semantic focus rings (`var(--accent-focus-ring)`) rather than custom rings per button.
+*   **Series Toggles**: Present grouped metric controls as `button role="switch"` elements with `aria-checked`, visible focus states, and a guard that keeps at least one series enabled.
+*   **Chart Layers**: Prefer a three-part layout for dense usage analysis surfaces: a compact summary strip, the main SVG plot, and a persistent side rail for live values, zoom, and series exploration.
 
 ### Ledgers & Tables (Telemetry & System)
 *   **Row Interactions**: Rows must rely on global `var(--fill-muted-hover)` patterns rather than arbitrary hardcoded highlights.
@@ -40,6 +42,7 @@ Analytics components draw from `stats-theme.css`, which maps specifically back t
 ### Accessibility Rules
 *   **Charts**: Chart regions must provide accessible names, descriptions, and keyboard-reachable summaries. Provide data-table or text alternatives for usage trends. For SVG sparklines or micro-charts, avoid hiding them completely with `aria-hidden="true"`. Instead, set `role="img"` and provide an `aria-label` that describes the overall computed trend (e.g., 'increasing', 'decreasing', or 'stable'). When composing dense metric cards with multiple visual elements (labels, values, trends), apply `aria-hidden="true"` to the internal visual components and provide a single coherent `aria-label` on the parent container to prevent fragmented screen reader announcements.
 *   **Legends**: Legends and series toggles must expose pressed/selected state and series names via visually hidden text. When building series toggle controls (e.g., chart legends or sidebars), implement them as interactive `<button role="switch">` elements using the `aria-checked` attribute.
+*   **Exploration**: Hover and keyboard focus should expose exact bucket values without covering the plot, and empty/error states should preserve panel dimensions so the chart area does not jump when data is missing.
 *   **Tables**: Ensure invocation tables preserve header relationships (`scope="col"`).
 *   **Motion**: Respect reduced motion for chart transitions and animated loading states. Provide non-motion status text.
 
