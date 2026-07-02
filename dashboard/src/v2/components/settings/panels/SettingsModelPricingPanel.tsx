@@ -20,6 +20,19 @@ const BUILTIN_PROVIDER_TO_CATALOG_PROVIDER: Partial<Record<ProviderId, string>> 
   "qwen-code": "alibaba",
 };
 
+const BUILTIN_MODEL_ALIASES: Partial<Record<ProviderId, Record<string, string>>> = {
+  antigravity: {
+    default: "google/gemini-3-flash-preview",
+    "gemini-3.5-flash": "google/gemini-3.5-flash",
+    "gemini-3.1-pro-high": "google/gemini-3.1-pro-preview",
+    "gemini-3.1-pro-low": "google/gemini-3.1-pro-preview",
+    "gemini-3-flash": "google/gemini-3-flash-preview",
+    "claude-sonnet-4.6-thinking": "anthropic/claude-sonnet-4-6",
+    "claude-opus-4.6-thinking": "anthropic/claude-opus-4-6",
+    "gpt-oss-120b": "google-vertex/openai/gpt-oss-120b-maas",
+  },
+};
+
 /** A model referenced by a configured provider instance, whether or not it exists in the models.dev catalogue. */
 interface RelevantModelRef {
   /** Same "<provider>/<model>" scheme used as the price-override key, whether or not it's a real catalogue id. */
@@ -47,6 +60,18 @@ const splitCanonicalModelId = (model: string): { providerId: string; modelId: st
   const [providerId, ...modelParts] = model.split("/");
   const modelId = modelParts.join("/");
   return providerId && modelId ? { providerId, modelId } : null;
+};
+
+const resolveBuiltInProviderModelRef = (provider: ProviderId, model: string): { providerId?: string; modelId: string } => {
+  const alias = BUILTIN_MODEL_ALIASES[provider]?.[model];
+  const canonicalAlias = alias ? splitCanonicalModelId(alias) : null;
+  if (canonicalAlias) {
+    return { providerId: canonicalAlias.providerId, modelId: canonicalAlias.modelId };
+  }
+  return {
+    providerId: splitCanonicalModelId(model) ? undefined : BUILTIN_PROVIDER_TO_CATALOG_PROVIDER[provider],
+    modelId: model,
+  };
 };
 
 const normalizeOverrideId = (id: string): string => {
@@ -151,11 +176,8 @@ export const SettingsModelPricingPanel: FunctionComponent<{ state: SettingsPageS
         if (providerId && modelParts.length > 0) addRef(providerId, modelParts.join("/"), usageTag);
         continue;
       }
-      addRef(
-        splitCanonicalModelId(provider.model) ? undefined : BUILTIN_PROVIDER_TO_CATALOG_PROVIDER[provider.provider],
-        provider.model,
-        usageTag,
-      );
+      const resolved = resolveBuiltInProviderModelRef(provider.provider, provider.model);
+      addRef(resolved.providerId, resolved.modelId, usageTag);
     }
 
     // Existing overrides always stay visible, even if the referencing provider was since removed.

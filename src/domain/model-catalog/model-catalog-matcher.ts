@@ -38,9 +38,13 @@ const MODEL_SLUG_ALIASES: Partial<Record<ProviderId, Record<string, string>>> = 
   },
   antigravity: {
     default: "google/gemini-3-flash-preview",
+    "gemini-3.5-flash": "google/gemini-3.5-flash",
+    "gemini-3.1-pro-high": "google/gemini-3.1-pro-preview",
+    "gemini-3.1-pro-low": "google/gemini-3.1-pro-preview",
     "gemini-3-flash": "google/gemini-3-flash-preview",
-    "claude-sonnet-4.6-thinking": "anthropic/claude-sonnet-4-5",
-    "claude-opus-4.6-thinking": "anthropic/claude-opus-4-5",
+    "claude-sonnet-4.6-thinking": "anthropic/claude-sonnet-4-6",
+    "claude-opus-4.6-thinking": "anthropic/claude-opus-4-6",
+    "gpt-oss-120b": "google-vertex/openai/gpt-oss-120b-maas",
   },
 };
 

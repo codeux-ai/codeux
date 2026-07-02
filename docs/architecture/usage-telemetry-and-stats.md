@@ -191,6 +191,7 @@ The stats snapshot includes:
 - total model cost totals (e.g. `modelCost` map)
 - usage cost chart series for historical visualization (e.g. `core_total_cost`, `provider_cost_*`)
 - model-pricing keys preserve canonical `provider/model` ids when a CLI runtime records one directly (for example `deepseek/...` or `google/...` through a local or gateway-backed provider), instead of forcing that model under the CLI provider's default catalogue namespace. Bare local model names still fall back to stable `custom/<model>` override keys, while legacy `custom/<provider>/<model>` override keys are treated as aliases for `<provider>/<model>`.
+- Antigravity pricing uses explicit per-model aliases because Antigravity can route to different underlying model providers. Gemini Antigravity slugs map to Google catalogue ids, Claude thinking slugs map to Anthropic catalogue ids, and GPT OSS maps to the matching Google Vertex catalogue entry.
 - active sprint metadata
 - the original query (`window`, optional `from`, optional `to`)
 - normalized range metadata (`label`, `resolution`, `resolutionLabel`, `from`, `to`, `bucketCount`, `isCustom`)

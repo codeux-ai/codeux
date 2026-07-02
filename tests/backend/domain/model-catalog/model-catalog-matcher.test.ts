@@ -16,6 +16,17 @@ describe("resolveCatalogModelId", () => {
     expect(resolveCatalogModelId("gemini", "gemini-2.5-pro")).toBe("google/gemini-2.5-pro");
   });
 
+  it("maps each built-in Antigravity model slug to its underlying catalogue provider", () => {
+    expect(resolveCatalogModelId("antigravity", "default")).toBe("google/gemini-3-flash-preview");
+    expect(resolveCatalogModelId("antigravity", "gemini-3.5-flash")).toBe("google/gemini-3.5-flash");
+    expect(resolveCatalogModelId("antigravity", "gemini-3.1-pro-high")).toBe("google/gemini-3.1-pro-preview");
+    expect(resolveCatalogModelId("antigravity", "gemini-3.1-pro-low")).toBe("google/gemini-3.1-pro-preview");
+    expect(resolveCatalogModelId("antigravity", "gemini-3-flash")).toBe("google/gemini-3-flash-preview");
+    expect(resolveCatalogModelId("antigravity", "claude-sonnet-4.6-thinking")).toBe("anthropic/claude-sonnet-4-6");
+    expect(resolveCatalogModelId("antigravity", "claude-opus-4.6-thinking")).toBe("anthropic/claude-opus-4-6");
+    expect(resolveCatalogModelId("antigravity", "gpt-oss-120b")).toBe("google-vertex/openai/gpt-oss-120b-maas");
+  });
+
   it("resolves shorthand aliases that don't match a models.dev id directly", () => {
     expect(resolveCatalogModelId("claude-code", "sonnet")).toBe("anthropic/claude-sonnet-4-5");
     expect(resolveCatalogModelId("claude-code", "default")).toBe("anthropic/claude-sonnet-4-5");
