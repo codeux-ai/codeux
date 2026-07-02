@@ -58,11 +58,30 @@ export function assertSafePathSegment(segment: string, label = "identifier"): st
   return segment;
 }
 
-export function validateNonEmptyDir(targetPath: string): void {
+/**
+ * Confirms `targetPath` either doesn't exist yet or is an empty directory.
+ * When `allowedRoot` is given, also verifies (inline, right before the
+ * filesystem calls below) that the resolved path is contained within it —
+ * this mirrors {@link validateSafeClonePath}'s containment check so a caller
+ * that passes an unvalidated `targetPath` still can't probe or touch
+ * directories outside the intended root through this function.
+ *
+ * Returns the resolved path so callers use the exact value that was checked.
+ */
+export function validateNonEmptyDir(targetPath: string, allowedRoot?: string): string {
   // Normalize to an absolute path before any filesystem access so the checks
   // operate on a single canonical location (and so untrusted relative inputs
   // can't be interpreted against an unexpected cwd).
   const resolved = path.resolve(targetPath);
+
+  if (allowedRoot) {
+    const rootResolved = path.resolve(allowedRoot);
+    const relative = path.relative(rootResolved, resolved);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+      throw new Error(`Cannot inspect directory outside of allowed root: ${resolved}`);
+    }
+  }
+
   if (fs.existsSync(resolved)) {
     const stats = fs.statSync(resolved);
     if (stats.isDirectory()) {
@@ -74,4 +93,5 @@ export function validateNonEmptyDir(targetPath: string): void {
       throw new Error(`Target path exists and is not a directory: ${resolved}`);
     }
   }
+  return resolved;
 }

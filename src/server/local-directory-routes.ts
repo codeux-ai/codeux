@@ -7,6 +7,27 @@ import { asyncRoute } from "./route-utils.js";
 import { parseTrimmedString } from "./request-parsers.js";
 import { expandHomePath } from "../shared/config/home-path.js";
 
+function isWithinAnyRoot(candidate: string, roots: string[]): boolean {
+  return roots.some((root) => {
+    return candidate === root || candidate.startsWith(root + path.sep) || candidate.startsWith(root + "/");
+  });
+}
+
+async function resolveAllowedRoots(): Promise<string[]> {
+  const configuredRoots = [
+    os.homedir(),
+    process.cwd(),
+    ...(process.env.CODE_UX_DIRECTORY_BROWSER_ROOTS || "").split(",").filter(Boolean),
+  ].map(async (r) => {
+    try {
+      return await fs.realpath(r);
+    } catch {
+      return path.resolve(r);
+    }
+  });
+  return Promise.all(configuredRoots);
+}
+
 /**
  * Resolves `targetPath` to its canonical real path and confirms it lives inside
  * one of the allowed roots (home, cwd, or configured browser roots). Returns the
@@ -25,25 +46,8 @@ async function resolveAllowedPath(targetPath: string): Promise<string | null> {
     realTargetPath = path.resolve(targetPath);
   }
 
-  const allowedRoots = [
-    os.homedir(),
-    process.cwd(),
-    ...(process.env.CODE_UX_DIRECTORY_BROWSER_ROOTS || "").split(",").filter(Boolean)
-  ].map(async (r) => {
-    try {
-      return await fs.realpath(r);
-    } catch {
-      return path.resolve(r);
-    }
-  });
-
-  const resolvedAllowedRoots = await Promise.all(allowedRoots);
-
-  const allowed = resolvedAllowedRoots.some((root) => {
-    return realTargetPath === root || realTargetPath.startsWith(root + path.sep) || realTargetPath.startsWith(root + "/");
-  });
-
-  return allowed ? realTargetPath : null;
+  const resolvedAllowedRoots = await resolveAllowedRoots();
+  return isWithinAnyRoot(realTargetPath, resolvedAllowedRoots) ? realTargetPath : null;
 }
 
 export function registerLocalDirectoryRoutes(router: Express): void {
@@ -56,6 +60,14 @@ export function registerLocalDirectoryRoutes(router: Express): void {
       // every filesystem operation below uses it, never the raw request input.
       const safePath = await resolveAllowedPath(resolvedPath);
       if (!safePath) {
+        res.status(403).json({ error: "Access denied" });
+        return;
+      }
+      // Inline containment check directly beside the filesystem calls below
+      // (in addition to the allow-list check inside resolveAllowedPath), so
+      // the guard sits right next to the paths it protects.
+      const allowedRoots = await resolveAllowedRoots();
+      if (!isWithinAnyRoot(safePath, allowedRoots)) {
         res.status(403).json({ error: "Access denied" });
         return;
       }

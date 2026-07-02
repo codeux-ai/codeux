@@ -23,14 +23,14 @@ const parseApiError = (fallback: string, text: string): string => {
 
 const cloneRepository = async (remoteUrl: string, cloneParentDir: string, repoName: string, hostToken?: string): Promise<void> => {
   validateSafeRepoName(repoName);
-  validateSafeClonePath(cloneParentDir);
-  const targetDir = path.resolve(cloneParentDir, repoName);
-  validateNonEmptyDir(targetDir);
+  const safeParentDir = validateSafeClonePath(cloneParentDir);
+  const targetDir = path.resolve(safeParentDir, repoName);
+  validateNonEmptyDir(targetDir, safeParentDir);
 
   await runCommandStrict(
     "git",
     ["clone", remoteUrl, repoName],
-    cloneParentDir,
+    safeParentDir,
     (await buildGitHttpAuthEnvWithFallbacks(remoteUrl, {
       githubToken: hostToken,
       gitlabToken: hostToken,
@@ -54,7 +54,7 @@ export async function createGitHubRepo(opts: {
     // validator rather than the raw request-supplied path.
     const safeParentDir = validateSafeClonePath(opts.cloneParentDir);
     const targetDir = path.resolve(safeParentDir, opts.repoName);
-    validateNonEmptyDir(targetDir);
+    validateNonEmptyDir(targetDir, safeParentDir);
     fs.mkdirSync(safeParentDir, { recursive: true });
 
     if (!opts.hostToken?.trim()) {
@@ -87,8 +87,8 @@ export async function createGitHubRepo(opts: {
       throw new Error("GitHub API response did not include clone_url.");
     }
 
-    await cloneRepository(remoteUrl, opts.cloneParentDir, opts.repoName, opts.hostToken);
-    const localPath = path.join(opts.cloneParentDir, opts.repoName);
+    await cloneRepository(remoteUrl, safeParentDir, opts.repoName, opts.hostToken);
+    const localPath = path.join(safeParentDir, opts.repoName);
     return { localPath, remoteUrl };
   } catch (error: any) {
     const message = error.stderr?.toString() || error.message;
@@ -113,7 +113,7 @@ export async function createGitLabRepo(opts: {
     // validator rather than the raw request-supplied path.
     const safeParentDir = validateSafeClonePath(opts.cloneParentDir);
     const targetDir = path.resolve(safeParentDir, opts.repoName);
-    validateNonEmptyDir(targetDir);
+    validateNonEmptyDir(targetDir, safeParentDir);
     fs.mkdirSync(safeParentDir, { recursive: true });
 
     if (!opts.hostToken?.trim()) {
@@ -148,9 +148,9 @@ export async function createGitLabRepo(opts: {
     if (!remoteUrl) {
       throw new Error("GitLab API response did not include http_url_to_repo.");
     }
-    const localPath = path.join(opts.cloneParentDir, opts.repoName);
+    const localPath = path.join(safeParentDir, opts.repoName);
 
-    await cloneRepository(remoteUrl, opts.cloneParentDir, opts.repoName, opts.hostToken);
+    await cloneRepository(remoteUrl, safeParentDir, opts.repoName, opts.hostToken);
 
     return { localPath, remoteUrl };
   } catch (error: any) {
