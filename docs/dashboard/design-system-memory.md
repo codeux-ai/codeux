@@ -21,6 +21,10 @@ The Memory UI relies on specific hex colors that match existing app accents:
 
 ## Responsive Layout Guidelines
 - **Main Canvas:** Uses dynamic viewport height `h-[calc(100dvh-12rem)] min-h-[500px]` to prevent clipping and scrolling issues.
-- **Sidebar & Details:** Stacks to the bottom on mobile (`h-[50vh]`) and anchors to the side on desktop.
+- **Sidebar & Details:** The memory sidebar starts collapsed as a narrow rail/tab so the canvas stays available by default. When expanded, it stacks to the bottom on mobile and anchors to the side on desktop.
 - **Filters & Search:** Wraps flex items cleanly using `flex-wrap` (without hardcoded `w-full`) and applies `min-w-0` for select wrappers to prevent overflow.
 - **Truncation:** Metadata limits string lengths gracefully utilizing `truncate` and `break-words` along with `min-w-0`.
+
+## Sidebar Contract
+- The memory search UI only appears in the expanded sidebar. Closing the sidebar clears the active search query so the filter state does not linger invisibly behind the rail.
+- The collapse/expand toggle must remain visible in both states and the arrow should point toward the next action, not the current state.

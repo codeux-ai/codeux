@@ -16,7 +16,7 @@ describe("MemorySearch Accessibility", () => {
     test("input has accessible label", () => {
         searchQuerySignal.value = "";
         const { getByRole } = render(<MemorySearch />);
-        const input = getByRole("textbox", { name: "Search memory" });
+        const input = getByRole("textbox", { name: "Search memories" });
         expect(input).toBeInTheDocument();
     });
 
@@ -31,7 +31,7 @@ describe("MemorySearch Accessibility", () => {
     test("ESC key clears search and keeps input focused", async () => {
         searchQuerySignal.value = "test search";
         const { getByRole } = render(<MemorySearch />);
-        const input = getByRole("textbox", { name: "Search memory" });
+        const input = getByRole("textbox", { name: "Search memories" });
         input.focus();
         expect(document.activeElement).toBe(input);
 
@@ -44,7 +44,7 @@ describe("MemorySearch Accessibility", () => {
     test("ESC key clears search and makes polite announcement", async () => {
         searchQuerySignal.value = "test search";
         const { getByRole, getByText } = render(<MemorySearch />);
-        const input = getByRole("textbox", { name: "Search memory" });
+        const input = getByRole("textbox", { name: "Search memories" });
         input.focus();
 
         await fireEvent.keyDown(input, { key: "Escape", code: "Escape" });
@@ -55,7 +55,7 @@ describe("MemorySearch Accessibility", () => {
     test("typing in search makes active-query polite announcement", async () => {
         searchQuerySignal.value = "";
         const { getByRole, getByText } = render(<MemorySearch />);
-        const input = getByRole("textbox", { name: "Search memory" });
+        const input = getByRole("textbox", { name: "Search memories" });
 
         await fireEvent.input(input, { target: { value: "test query" } });
 

@@ -1,6 +1,5 @@
 import { FunctionComponent } from "preact";
-import { useMemo, useState, useEffect } from "preact/hooks";
-import { useLayoutEffect, useRef } from "preact/hooks";
+import { useState, useEffect, useLayoutEffect, useRef } from "preact/hooks";
 import { ActionFeedbackRegion } from "../ui/ActionFeedbackRegion.js";
 
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
@@ -8,17 +7,13 @@ import gsap from "gsap";
 import { GSAP_INTERACTION_TOKENS } from "../../lib/motion/constants.js";
 import { useComputed } from "@preact/signals";
 import { MemoryCard } from "./MemoryCard.js";
-import { searchQuerySignal, activeMemoryIdSignal, memoryMutationsSignal, activeTierSignal } from "./memoryState.js";
+import { searchQuerySignal, activeTierSignal, memoryMutationsSignal } from "./memoryState.js";
 import type { MemNode } from "../../lib/memory-graph.js";
 
 export const MemoryList: FunctionComponent<{
     nodes: MemNode[];
     onSelectNode: (idx: number) => void;
 }> = ({ nodes, onSelectNode }) => {
-
-
-
-
     const filteredNodes = useComputed(() => {
         const query = searchQuerySignal.value;
         if (!query.trim()) {
@@ -38,8 +33,8 @@ export const MemoryList: FunctionComponent<{
 
     useEffect(() => {
         if (reducedMotion) {
-            const currentIds = new Set(filteredNodes.value.map((n: any) => n.node.id));
-            const renderedIds = new Set(renderedNodes.map((n: any) => n.node.id));
+            const currentIds = new Set(filteredNodes.value.map((n: { node: MemNode }) => n.node.id));
+            const renderedIds = new Set(renderedNodes.map((n: { node: MemNode }) => n.node.id));
             const removedIds = Array.from(renderedIds).filter(id => !currentIds.has(id));
             if (removedIds.length > 0 && listRef.current) {
                 const elementsToRemove = removedIds.map(id => listRef.current?.querySelector(`[data-memory-id="${id}"]`)).filter(Boolean);
@@ -57,8 +52,8 @@ export const MemoryList: FunctionComponent<{
             return;
         }
 
-        const currentIds = new Set(filteredNodes.value.map((n: any) => n.node.id));
-        const renderedIds = new Set(renderedNodes.map((n: any) => n.node.id));
+        const currentIds = new Set(filteredNodes.value.map((n: { node: MemNode }) => n.node.id));
+        const renderedIds = new Set(renderedNodes.map((n: { node: MemNode }) => n.node.id));
         const removedIds = Array.from(renderedIds).filter(id => !currentIds.has(id));
 
         if (removedIds.length > 0 && listRef.current) {
@@ -85,7 +80,7 @@ export const MemoryList: FunctionComponent<{
     useLayoutEffect(() => {
         if (!listRef.current) return;
         if (reducedMotion) {
-            const currentRenderedIds = new Set(renderedNodes.map((n: any) => n.node.id));
+            const currentRenderedIds = new Set(renderedNodes.map((n: { node: MemNode }) => n.node.id));
             const addedIds = Array.from(currentRenderedIds).filter(id => !prevRenderedIds.current.has(id));
             if (addedIds.length > 0) {
                 const addedElements = addedIds.map(id => listRef.current?.querySelector(`[data-memory-id="${id}"]`)).filter(Boolean);
@@ -97,7 +92,7 @@ export const MemoryList: FunctionComponent<{
             return;
         }
 
-        const currentRenderedIds = new Set(renderedNodes.map((n: any) => n.node.id));
+        const currentRenderedIds = new Set(renderedNodes.map((n: { node: MemNode }) => n.node.id));
         const addedIds = Array.from(currentRenderedIds).filter(id => !prevRenderedIds.current.has(id));
 
         if (addedIds.length > 0) {
@@ -120,13 +115,17 @@ export const MemoryList: FunctionComponent<{
         prevRenderedIds.current = currentRenderedIds as unknown as Set<string>;
     }, [renderedNodes, reducedMotion]);
 
+    const resultCount = renderedNodes.length;
+    const totalAliveCount = nodes.filter((node) => node.alive).length;
+    const hasSearchQuery = searchQuerySignal.value.trim().length > 0;
+
     if (renderedNodes.length === 0) {
         const isEmpty = nodes.length === 0;
         const message = isEmpty ? "No memories exist" : "No memories match your search or filters";
         return (
-            <div className="flex flex-col items-center justify-center p-8 text-center text-slate-400">
+            <div className="flex min-h-0 min-w-0 flex-col items-center justify-center p-8 text-center text-slate-400">
                 <div className="sr-only" aria-live="polite" aria-atomic="true">{message}</div>
-                <p className="text-sm font-medium">{message}</p>
+                <p className="max-w-full break-words text-sm font-medium">{message}</p>
             </div>
         );
     }
@@ -134,14 +133,22 @@ export const MemoryList: FunctionComponent<{
     const activeTier = useComputed(() => activeTierSignal.value);
 
     return (
-        <div id="memory-panel" aria-labelledby={`tab-${activeTier.value}`} className="flex flex-col gap-3 h-full overflow-y-auto dashboard-scrollbar p-2" role="listbox" aria-label="Memory List">
+        <div
+            id="memory-panel"
+            aria-labelledby={`tab-${activeTier.value}`}
+            className="flex min-h-0 min-w-0 flex-col gap-3 overflow-y-auto overflow-x-hidden p-2 dashboard-scrollbar"
+            role="listbox"
+            aria-label="Memory List"
+        >
             <div className="sr-only" aria-live="polite" aria-atomic="true">
-                {renderedNodes.length} memories found
+                {resultCount} {resultCount === 1 ? "memory" : "memories"} found
             </div>
-            <div className="sticky top-0 z-10 w-full flex flex-col gap-2">
-                {searchQuerySignal.value && (
-                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400 px-2 py-1 bg-black/[0.02] dark:bg-white/[0.02] rounded-lg inline-block self-start border border-black/[0.04] dark:border-white/[0.04]">
-                        Showing {renderedNodes.length} result{renderedNodes.length !== 1 ? 's' : ''}
+            <div className="sticky top-0 z-10 flex min-w-0 flex-col gap-2">
+                {hasSearchQuery && (
+                    <div className="inline-flex max-w-full items-center gap-1.5 self-start rounded-lg border border-black/[0.04] bg-black/[0.02] px-2 py-1 text-xs font-medium text-slate-500 dark:border-white/[0.04] dark:bg-white/[0.02] dark:text-slate-400">
+                        <span className="truncate">
+                            Showing {resultCount} of {totalAliveCount} memories
+                        </span>
                     </div>
                 )}
                 <ActionFeedbackRegion
@@ -153,9 +160,9 @@ export const MemoryList: FunctionComponent<{
                     retryLabel={memoryMutationsSignal.value.feedback?.retryLabel}
                 />
             </div>
-            <div className="flex flex-col gap-3" ref={listRef}>
-                {renderedNodes.map(({ node, index }: any) => (
-                    <div key={node.id} data-memory-id={node.id} className="will-change-transform transform-gpu">
+            <div className="flex min-w-0 flex-col gap-3" ref={listRef}>
+                {renderedNodes.map(({ node, index }: { node: MemNode; index: number }) => (
+                    <div key={node.id} data-memory-id={node.id} className="min-w-0 will-change-transform transform-gpu">
                         <MemoryCard
                             key={node.id}
                             id={node.id}
