@@ -34,6 +34,7 @@ The Memory UI relies on specific hex colors that match existing app accents:
 - **Inspector Dock:** The inspector is a bottom sheet on mobile and a fixed right dock on desktop. Its scroll area is internal, the close button is always labeled, and the panel never blocks the ability to dismiss it.
 - **Overlay Safety:** Zoom controls, legend, and node count live inside the canvas wrapper with safe offsets that move away from the inspector on desktop and stay reachable on mobile.
 - **Filters & Search:** Filter controls wrap into multiple rows with `flex-wrap`, `min-w-0`, and `max-w-full` so tier tabs, sprint selectors, agent selectors, model catalog, add memory, and danger actions never force horizontal scrolling.
+- **Sidebar Search:** The expanded memory sidebar includes a visible search field above the list. Search filters are debounced and optional; clearing the field must restore the full alive memory list for the current tier/filter context.
 - **Truncation:** Metadata limits string lengths gracefully using `truncate`, `break-words`, and compact badges for connected-memory details.
 
 ## Model Catalog

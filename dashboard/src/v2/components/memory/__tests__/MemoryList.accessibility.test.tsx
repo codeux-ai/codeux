@@ -100,6 +100,25 @@ describe("MemoryList", () => {
         expect(getByText("Showing 1 of 2 memories")).toBeInTheDocument();
     });
 
+    test("filters memories by category while preserving listbox options", () => {
+        searchQuerySignal.value = "decision";
+        const { getAllByRole, getByRole, getByText, queryByText } = render(
+            <MemoryList
+                nodes={[
+                    buildNode({ id: "memory-1", content: "Alpha project memory", category: "architecture" }),
+                    buildNode({ id: "memory-2", content: "Release tradeoff", category: "decision" }),
+                ]}
+                onSelectNode={vi.fn()}
+            />
+        );
+
+        expect(getByRole("listbox", { name: "Memory List" })).toBeInTheDocument();
+        expect(getAllByRole("option")).toHaveLength(1);
+        expect(getByText("Release tradeoff")).toBeInTheDocument();
+        expect(queryByText("Alpha project memory")).toBeNull();
+        expect(getByText("1 memory found")).toHaveClass("sr-only");
+    });
+
     test("select all visible only targets currently filtered nodes", () => {
         searchQuerySignal.value = "alpha";
         const { getByRole } = render(

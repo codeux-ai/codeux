@@ -25,7 +25,13 @@ export const MemoryList: FunctionComponent<{
         const lower = query.toLowerCase();
         return nodes
             .map((node, index) => ({ node, index }))
-            .filter(({ node }) => node.alive && (node.content.toLowerCase().includes(lower) || node.category.toLowerCase().includes(lower)));
+            .filter(({ node }) => {
+                if (!node.alive) {
+                    return false;
+                }
+
+                return node.content.toLowerCase().includes(lower) || node.category.toLowerCase().includes(lower);
+            });
     });
 
     const reducedMotion = useReducedMotion();
@@ -176,7 +182,7 @@ export const MemoryList: FunctionComponent<{
         <div
             id="memory-panel"
             aria-labelledby={`tab-${activeTier.value}`}
-            className="flex min-h-0 min-w-0 flex-col gap-3 overflow-y-auto overflow-x-hidden p-2 dashboard-scrollbar"
+            className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto overflow-x-hidden p-2 dashboard-scrollbar"
             role="listbox"
             aria-label="Memory List"
         >
