@@ -10,7 +10,6 @@ import { AnalysisStudioSection } from "./components/AnalysisStudioSection.js";
 import { TopCardsModeRenderer } from "../../components/stats/TopCardsModeRenderer.js";
 import { Button } from "../../components/ui/Button.js";
 import { PageContainer } from "../../components/layout/PageContainer.js";
-import { EmptyState } from "../../components/ui/EmptyState.js";
 import { PANEL_CLASS, CHIP_CLASS, SUBPANEL_CLASS } from "./components/stats-ui-primitives.js";
 import { formatDateTime } from "./stats-utils.js";
 import styles from "./StatsPage.module.css";
@@ -196,12 +195,18 @@ export const StatsPage: FunctionComponent = () => {
           <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700 dark:text-amber-300 ${CHIP_CLASS}`}>
             {options.badge}
           </div>
-          <EmptyState
-            icon={<options.icon className={`h-8 w-8 text-amber-600 dark:text-amber-300 ${options.iconClassName || ""}`} />}
-            title={options.title}
-            description={options.description}
-            primaryAction={options.primaryAction}
-          />
+          <div className={styles.stateMessageContent}>
+            <div className={styles.stateMessageIcon} aria-hidden="true">
+              <options.icon className={`h-8 w-8 text-amber-600 dark:text-amber-300 ${options.iconClassName || ""}`} />
+            </div>
+            <h3 className={styles.stateMessageTitle}>{options.title}</h3>
+            <p className={styles.stateMessageDescription}>{options.description}</p>
+            {options.primaryAction ? (
+              <div className={styles.stateMessageAction}>
+                {options.primaryAction}
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     </section>
@@ -221,7 +226,7 @@ export const StatsPage: FunctionComponent = () => {
           title: "Loading telemetry field",
           description: `Gathering ${selectedProject.name} telemetry for the ${getWindowLabel(activeQuery.window)} window.`,
           role: "status",
-          iconClassName: "animate-spin",
+          iconClassName: "animate-spin motion-reduce:animate-none",
           badge: "Stats panel refreshing",
         })
       : error && !stats

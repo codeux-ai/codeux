@@ -91,7 +91,7 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
   );
 
   return (
-    <div key={visualMode} className="animate-in fade-in duration-200">
+    <div key={visualMode} className="animate-in fade-in duration-200 motion-reduce:animate-none">
       <div className={`${PANEL_CLASS} mb-6 p-4 md:p-5`}>
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex min-w-0 items-start gap-4">

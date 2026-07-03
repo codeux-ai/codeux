@@ -71,7 +71,7 @@ export const CONTROL_FOCUS_CLASS = "focus-visible:outline-none focus-visible:rin
 export const INPUT_CLASS = `h-11 rounded-[var(--stats-control-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-input)] px-4 text-sm text-[color:var(--stats-value-color)] outline-none transition-[background-color,border-color,box-shadow,color] duration-200 placeholder:text-[color:var(--stats-detail-color)] focus:border-[color:var(--stats-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`;
 export const LEDGER_ROW_CLASS = "group rounded-[var(--stats-subpanel-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-subpanel)] p-4 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-md transition-[transform,background-color,border-color,box-shadow] duration-200 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-subpanel-hover)] hover:shadow-[var(--stats-card-shadow-hover)] motion-safe:hover:-translate-y-0.5 motion-reduce:transition-none";
 export const LEDGER_ROW_MODERN_CLASS = "group relative overflow-hidden rounded-[var(--stats-panel-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-panel)] p-6 shadow-[var(--stats-panel-shadow)] backdrop-blur-xl transition-[transform,background-color,border-color,box-shadow] duration-200 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-panel-hover)] hover:shadow-[var(--stats-card-shadow-hover)] motion-safe:hover:-translate-y-0.5 motion-reduce:transition-none";
-const CONTROL_BASE_CLASS = `inline-flex items-center justify-center rounded-[var(--stats-chip-radius)] border px-3 text-[11px] font-bold uppercase tracking-[0.14em] transition-[background-color,border-color,box-shadow,color] duration-200 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`;
+const CONTROL_BASE_CLASS = `inline-flex min-w-0 items-center justify-center rounded-[var(--stats-chip-radius)] border px-3 text-[11px] font-bold uppercase tracking-[0.14em] transition-[background-color,border-color,box-shadow,color] duration-200 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`;
 const CONTROL_IDLE_CLASS = "border-transparent text-[color:var(--stats-control-text)] hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[color:var(--stats-control-text-hover)]";
 const CONTROL_ACTIVE_CLASS = "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-surface-control-active)] text-[color:var(--stats-control-text-active)] shadow-[var(--stats-control-shadow-active)]";
 const CONTROL_ACTIVE_STRONG_CLASS = "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-surface-control-active-strong)] text-[color:var(--stats-control-text-active-strong)] shadow-[var(--stats-control-shadow-active)]";
@@ -212,7 +212,7 @@ export const ViewToggle: FunctionComponent<{
                 : CONTROL_IDLE_CLASS
             }`}
           >
-            <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+            <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />
             <span className="hidden min-w-0 truncate sm:inline">{mode.label}</span>
           </button>
         );
@@ -258,7 +258,7 @@ export const TokenChip: FunctionComponent<{
 }> = ({ icon: Icon, label, value, tone }) => (
   <div className={`relative inline-flex min-w-0 items-center gap-2 overflow-hidden rounded-[var(--stats-chip-radius)] border px-3 py-1.5 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-md transition-[background-color,border-color,color,box-shadow] duration-200 motion-reduce:transition-none ${tone}`}>
     <div className="relative flex min-w-0 items-center gap-1.5 opacity-85">
-      <Icon className="h-3.5 w-3.5" strokeWidth={2.5} />
+      <Icon className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden="true" />
       <span className="truncate text-[10px] font-bold uppercase tracking-[0.14em]">{label}</span>
     </div>
     <div className="relative shrink-0 text-[11px] font-black text-[color:var(--stats-value-color)]">
@@ -311,14 +311,18 @@ export const ChurnFlowBar: FunctionComponent<{
   deletions: number;
 }> = ({ insertions, deletions }) => {
   const total = insertions + deletions;
-  if (total <= 0) return <div className="h-2 w-full rounded-full bg-black/[0.05] dark:bg-white/[0.05]" />;
+  const summary = total > 0
+    ? `Code churn mix: ${insertions.toLocaleString()} insertions, ${deletions.toLocaleString()} deletions, ${total.toLocaleString()} total changed lines.`
+    : "No code churn data available.";
+
+  if (total <= 0) return <div role="img" aria-label={summary} className="h-2 w-full rounded-full bg-black/[0.05] dark:bg-white/[0.05]" />;
   const inPct = (insertions / total) * 100;
   const delPct = (deletions / total) * 100;
 
   return (
-    <div className="flex h-2 w-full overflow-hidden rounded-full bg-black/[0.05] dark:bg-white/[0.05]">
-      {inPct > 0 && <div className="h-full bg-emerald-500/70 transition-all duration-500" style={{ width: `${inPct}%` }} title={`Insertions: ${inPct.toFixed(1)}%`} />}
-      {delPct > 0 && <div className="h-full bg-rose-500/55 transition-all duration-500" style={{ width: `${delPct}%` }} title={`Deletions: ${delPct.toFixed(1)}%`} />}
+    <div role="img" aria-label={summary} className="flex h-2 w-full overflow-hidden rounded-full bg-black/[0.05] dark:bg-white/[0.05]">
+      {inPct > 0 && <div aria-hidden="true" className="h-full bg-emerald-500/70 motion-safe:transition-all motion-safe:duration-500" style={{ width: `${inPct}%` }} title={`Insertions: ${inPct.toFixed(1)}%`} />}
+      {delPct > 0 && <div aria-hidden="true" className="h-full bg-rose-500/55 motion-safe:transition-all motion-safe:duration-500" style={{ width: `${delPct}%` }} title={`Deletions: ${delPct.toFixed(1)}%`} />}
     </div>
   );
 };

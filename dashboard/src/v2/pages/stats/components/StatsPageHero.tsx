@@ -50,7 +50,10 @@ export const HeroKpi: FunctionComponent<{
   detail: string;
   valueClassName?: string;
 }> = ({ icon: Icon, label, value, detail, valueClassName = "text-slate-900 dark:text-white" }) => (
-  <div className={`${SUBPANEL_CLASS} flex min-h-[6.75rem] min-w-0 flex-col justify-between gap-3 !p-3.5 md:!p-4`}>
+  <article
+    aria-label={`${label}: ${value}. ${detail}`}
+    className={`${SUBPANEL_CLASS} flex min-h-[6.75rem] min-w-0 flex-col justify-between gap-3 !p-3.5 md:!p-4`}
+  >
     <div className="flex min-w-0 items-center gap-2.5">
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[color:var(--stats-accent-amber-fill)] text-amber-700 dark:text-amber-300">
         <Icon className="h-4 w-4" strokeWidth={2.15} aria-hidden="true" />
@@ -65,7 +68,7 @@ export const HeroKpi: FunctionComponent<{
         {detail}
       </div>
     </div>
-  </div>
+  </article>
 );
 
 const ContextBadge: FunctionComponent<{
@@ -328,7 +331,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                       aria-pressed={isActive}
                       aria-expanded={window === "custom" ? customControlsOpen : undefined}
                       aria-controls={window === "custom" ? "stats-custom-range-controls" : undefined}
-                      className={`inline-flex min-h-9 flex-1 shrink-0 basis-[calc(33.333%-0.25rem)] items-center justify-center rounded-full border px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-white sm:basis-auto dark:focus-visible:ring-offset-void-900 ${
+                      className={`inline-flex min-h-9 min-w-0 flex-1 shrink-0 basis-[calc(33.333%-0.25rem)] items-center justify-center rounded-full border px-3 py-2 text-center text-[11px] font-bold uppercase tracking-[0.14em] transition-[background-color,border-color,box-shadow,color,transform] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-white sm:basis-auto dark:focus-visible:ring-offset-void-900 ${
                         isActive
                           ? "border-amber-500/30 bg-[color:var(--stats-accent-amber-fill)] text-amber-700 dark:text-amber-300"
                           : "border-transparent text-slate-500 hover:bg-[color:var(--fill-muted-hover)] hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
@@ -386,7 +389,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                   onClick={handleApplyCustom}
                   disabled={!isValidCustomRange(customFrom, customTo)}
                   aria-disabled={!isValidCustomRange(customFrom, customTo) ? "true" : undefined}
-                  className="inline-flex h-10 items-center justify-center self-end rounded-[var(--stats-control-radius)] bg-slate-900 px-4 text-[11px] font-bold uppercase tracking-[0.16em] text-white shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--stats-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:bg-white dark:text-void-900 dark:focus-visible:ring-offset-void-900 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-10 items-center justify-center self-end rounded-[var(--stats-control-radius)] bg-slate-900 px-4 text-[11px] font-bold uppercase tracking-[0.16em] text-white shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-transform motion-safe:hover:-translate-y-0.5 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--stats-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:bg-white dark:text-void-900 dark:focus-visible:ring-offset-void-900 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Apply
                 </button>

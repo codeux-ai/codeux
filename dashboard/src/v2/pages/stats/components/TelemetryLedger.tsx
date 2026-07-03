@@ -326,8 +326,12 @@ export const TelemetryLedger: FunctionComponent<{
 
         <div className={`${SUBPANEL_CLASS} sticky top-3 z-20 grid gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center`}>
           <div className="relative">
+            <label htmlFor={`${kindLabel}-ledger-search`} className="sr-only">
+              Search {kindLabel}
+            </label>
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" strokeWidth={2} />
             <input
+              id={`${kindLabel}-ledger-search`}
               type="text"
               value={query}
               onInput={(event) => setQuery((event.currentTarget as HTMLInputElement).value)}
@@ -345,7 +349,7 @@ export const TelemetryLedger: FunctionComponent<{
               </button>
             ) : null}
           </div>
-          <div className="flex max-w-full gap-2 overflow-x-auto pb-1 pr-1 scrollbar-hide lg:flex-wrap lg:justify-end">
+          <div className="flex max-w-full flex-wrap gap-2 pr-1 lg:justify-end" role="group" aria-label={`${title} sort controls`}>
             {([
               ["last", "Latest"],
               ["tokens", "Tokens"],
@@ -421,7 +425,7 @@ export const TelemetryLedger: FunctionComponent<{
                 const statusLabel = item.status ? item.status.replace(/_/g, " ") : "No status";
 
                 return (
-                  <div key={item.id} className={`${LEDGER_ROW_MODERN_CLASS} !p-4`} aria-label={`${item.label} ${kindLabel} telemetry row`}>
+                  <div key={item.id} role="article" className={`${LEDGER_ROW_MODERN_CLASS} !p-4`} aria-label={`${item.label} ${kindLabel} telemetry row`}>
                     <div className="flex flex-col gap-4">
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
@@ -491,9 +495,14 @@ export const TelemetryLedger: FunctionComponent<{
                           reasoning={item.usage.reasoningOutputTokens}
                           total={item.usage.totalTokens}
                         />
-                        <div className="h-1 rounded-full bg-black/[0.04] dark:bg-white/[0.05]">
+                        <div
+                          role="img"
+                          aria-label={`${item.label} contributes ${formatPercent(shareOfLeader)} of the leading ${singularKind} token volume.`}
+                          className="h-1 rounded-full bg-black/[0.04] dark:bg-white/[0.05]"
+                        >
                           <div
-                            className="h-1 rounded-full bg-emerald-500/60 transition-all duration-500"
+                            aria-hidden="true"
+                            className="h-1 rounded-full bg-emerald-500/60 motion-safe:transition-all motion-safe:duration-500"
                             style={{ width: `${Math.min(100, Math.max(shareOfLeader > 0 ? 3 : 0, shareOfLeader))}%` }}
                           />
                         </div>
