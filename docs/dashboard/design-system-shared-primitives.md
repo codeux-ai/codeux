@@ -38,6 +38,15 @@ The goal is to ensure all primitives align with the signal-and-ember operational
 4.  **Tables**: Headers should use `--text-metadata`. Hover states for rows apply `--fill-muted-hover`. Borders between cells use `--border-hairline`. When using the custom `Table` primitive, provide the `mobileLabel` prop on `TableCell` elements to ensure visible column labels are communicated to assistive technology on mobile layouts. In sortable data tables, the parent `<th>` element must declare the `aria-sort` attribute ('ascending', 'descending', or 'none'). The internal sort `<button>` should include an explicit `aria-label` or visually hidden `.sr-only` text.
 5.  **EmptyStates & SectionHeaders**: Leverage `--text-metadata` to ensure textual consistency. Icons use `--surface-glass` for subtle emphasis without drawing primary attention away from calls to action. When displaying dynamic filter or table result counts (e.g., 'Showing 10 of 50'), apply `aria-live="polite"` directly to the text container so screen readers natively announce updates.
 
+### Shared Accessibility Contracts
+
+1.  **Landmarks & Regions**: Shared layout primitives must allow callers to provide accessible names through visible headings, `aria-label`, or `aria-labelledby`. Route pages should render inside the shell's single `main` landmark and use `PageContainer` or an equivalent named workbench region; repeated cards, rails, charts, and feeds should be named only when the name helps navigation.
+2.  **Icon Buttons**: Any button whose visible content is only an icon, counter, avatar, status dot, or compact mobile glyph must receive an explicit accessible name. This applies to `Button`, `DropdownMenu` triggers, `ConfirmDialog` actions, Browser chrome controls, task actions, command actions, preview controls, and settings/catalog controls.
+3.  **Repeated Actions**: When the same action appears in a list, include the target in the accessible name or description. Provider tiles and `ProviderInstanceCard` actions should name the provider instance or config id; task actions should name the task; preview actions should name the selected session/sprint when available; telemetry rows should expose the item label and state.
+4.  **Async Feedback**: `ActionFeedbackRegion` is the reference primitive for action outcomes. Pending, success, warning, empty, and background-refresh states are polite; errors that block the workflow are assertive. Initiating controls should set `aria-busy` or disabled/`aria-disabled` while the operation is pending.
+5.  **Status & Progress**: Status dots, token bars, sparklines, progress bars, and animated state visuals need a text equivalent through `aria-label`, `role="img"`, adjacent visible copy, or screen-reader-only text. Decorative icons must be `aria-hidden="true"`.
+6.  **Tables & Mobile Data**: The `Table` primitive must retain rowgroup, row, columnheader, and cell semantics even when mobile styles render rows as cards. Captions describe the dataset, not the visual layout. `mobileLabel` text should match the column meaning and remain available in stacked mobile rows.
+
 ### Field Accessibility & Error Contracts
 
 1.  **FieldWrapper**: Always associates labels with the first control. It dynamically passes down `id`, `aria-describedby`, `aria-errormessage`, `aria-invalid`, and `aria-required` to its children.
@@ -45,3 +54,6 @@ The goal is to ensure all primitives align with the signal-and-ember operational
 3.  **FormError**: Visible errors render with `role="alert"` for assertive live-region announcements.
 4.  **Inputs & Selects**: Component primitives like `Input`, `Select`, and `AvantgardeSelect` gracefully fall back to these external `aria-*` props from `FieldWrapper` to avoid duplicate ID generation or conflicting descriptions.
 5.  **Required State**: Conveys required state both visually (with a red asterisk) and programmatically via `aria-required="true"` and an `sr-only` "(Required)" span.
+6.  **Settings Toggles & Choices**: Settings scope switches and pill choices use `radiogroup`/`radio` for one-of-many choices, and switches/toggles expose the current checked state plus any inherited/overridden context in nearby text. Invalid submissions focus the first invalid field and scroll it within the modal or panel body rather than shifting the whole page.
+
+For route-level verification, see the [Dashboard Accessibility Quality Audit](./accessibility-quality-audit.md).

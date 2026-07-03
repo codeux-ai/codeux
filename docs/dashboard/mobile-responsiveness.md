@@ -45,6 +45,15 @@ The Stats page combines fixed header-adjacent navigation, chart controls, tabbed
 5. **Ledgers and Tables:** Ledger tabs use real tab semantics, while task, sprint, Git, and system rows preserve table headers or mobile labels. Long prompts, model names, provider ids, errors, and transcript text must wrap inside the row or detail panel.
 6. **Reduced Motion:** Stats shell entrance, chart updates, donut/ribbon animation, hover lift, and tab transitions must respect `prefers-reduced-motion`; disabling motion must not hide filter state, validation errors, chart values, or transcript content.
 
+## Warm Void Responsive Consistency
+
+1. **Text Zoom & Narrow Widths:** Test narrow widths and browser text zoom with long provider names, model ids, sprint names, branch names, workflow names, file paths, command labels, and connection keys. Controls should wrap or compact without overlapping adjacent shell, rail, or card content.
+2. **Shell Navigation:** Top-nav project/sprint selectors, notification menus, theme/Docker controls, sidebar links, and the bottom `KineticDock` must keep their accessible names when the visual treatment becomes icon-only. Tooltip text may be visual-only, but the control itself needs the stable name.
+3. **Browser Rails:** Browser Preview session rails, launch cards, address controls, script editor actions, log panels, and file-browser tree/change lists own their overflow inside the rail or panel. The iframe/workbench should remain viewport-bounded rather than forcing body-level horizontal or vertical overflow.
+4. **Task Cards:** Task board lanes and cards stack cleanly, preserve lane headings and count summaries, and keep task id/title/status/priority/dependency/session/PR/duration/QA context readable without hover. Drag treatment remains pointer-only unless a real keyboard reordering contract is implemented.
+5. **Color Discipline:** Use Signal Jade for focus, active selection, primary route accents, and running/healthy signals. Use Ember/status tones for warning, error, danger, intervention, and destructive states. Do not solve mobile emphasis by adding unrelated one-off accent colors.
+6. **Motion:** Mobile layouts follow the same motion tokens as desktop. Reduced motion snaps rail movement, chart transitions, task-card tilt, status waves, and background animation while retaining static state cues.
+
 ## Horizontal Dashboard Rails
 
 Horizontally overflowing dashboard surfaces, including Quicksprint template rails, should contain their own horizontal scrolling within the component boundary. The page itself must not gain horizontal scroll at mobile, tablet, or desktop widths.
@@ -64,3 +73,5 @@ For modals with extensive form content (like `AddProjectModal` and `AddTaskModal
 Fixed bottom navigation elements, such as the `KineticDock`, must account for mobile browser UI chrome and safe areas:
 1. **Dynamic Bottom Constraints**: Use `bottom-0` and set the container's height dynamically with `h-[calc(height+env(safe-area-inset-bottom))]` while applying `pb-[env(safe-area-inset-bottom)]` or a style attribute for bottom padding to elevate the controls above the iOS home indicator.
 2. **Horizontal Scroll Boundaries**: For horizontally scrolling lists inside constrained boundaries (e.g., `snap-x`), add an explicit right spacer (`<div className="w-[1px] shrink-0" aria-hidden="true" />`) and apply horizontal scroll padding (`scroll-px-*`) to prevent the last navigation item from being clipped visually or causing focus states to overflow out of bounds.
+
+For route-level responsive checks, use the [Dashboard Accessibility Quality Audit](./accessibility-quality-audit.md).
