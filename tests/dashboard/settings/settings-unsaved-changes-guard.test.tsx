@@ -66,6 +66,19 @@ describe("useUnsavedChangesGuard", () => {
     expect(window.location.pathname).toBe("/agents");
   });
 
+  it("uses explicit unsaved-change messaging for internal navigation prompts", () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    renderHook(() => useUnsavedChangesGuard(true, {
+      message: "Settings have local edits that are not saved yet. Leave without saving?",
+    }));
+
+    window.history.pushState({}, "", "/integrations");
+
+    expect(window.location.pathname).toBe("/config");
+    expect(confirmSpy).toHaveBeenCalledWith("Settings have local edits that are not saved yet. Leave without saving?");
+  });
+
   it("stops prompting immediately after dirty state is cleared", () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
 

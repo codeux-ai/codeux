@@ -15,6 +15,7 @@ This document defines the visual patterns and rules for the Settings workspace. 
     *   Primary actions (e.g., `Save Changes`) and explicit tonal buttons (e.g., `success`, `danger`) use `--elevation-raised` rather than arbitrary soft shadows.
     *   Segment controls (`System` / `Project`) utilize consistent heights (e.g., `h-8`) and precise `disabled` states (`opacity-50 pointer-events-none`). Active segments mimic the primary or signal accents.
     *   Mutually exclusive Settings choices use `radiogroup` / `radio` semantics (or explicit pressed-state semantics for non-radio tool controls) so assistive technology reports the current selection. Provider-instance controls should include the provider instance name or config id in accessible names when the same action appears more than once.
+    *   Provider-instance cards announce local action results in-card. Enable/disable, auth-mode changes, dashboard login, and remove affordances distinguish local unsaved changes from persisted state; destructive remove actions require a confirmation click before invoking the change.
 
 3.  **High-Risk Actions**:
     *   Destructive actions in the Danger Zone (`Wipe Project`, `Wipe Database`) use the `danger` tone, yielding clear semantic `bg-status-red text-white` presentation. Panels themselves hint at danger via red-tinted borders and backgrounds.
@@ -39,6 +40,7 @@ This document defines the visual patterns and rules for the Settings workspace. 
 ## Implementation details
 
 *   Always rely on semantic CSS variables from `globals.css` and `tokens.css` via `[var(--variable-name)]` for colors, backgrounds, borders, and shadows instead of hardcoding Tailwind utility colors and shadow values.
+*   Inline validation and character-counter feedback must use the shared `inlineValidation` and `controlFeedback` interaction tokens. Error text should be announced only after blur or an explicit submit/force-validation path, and helper text should not remain in `aria-describedby` while an error is active.
 *   Preserve the responsive behaviors (`md:flex-row`, `xl:grid-cols-2`) already established in the dense form panels.
 *   When deep cloning dashboard settings, never use `JSON.parse(JSON.stringify(...))`. Instead, use the typed clone helpers such as `cloneSystemSettings` and `cloneProjectSettings` provided in `settings-view-models.ts` to ensure type safety and mutation isolation.
 
