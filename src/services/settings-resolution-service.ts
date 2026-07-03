@@ -828,6 +828,112 @@ export function resolveEffectiveDashboardSettings(
     : settingsRepository.resolveProjectDashboardSettings(projectId);
 }
 
+type SettingsResolutionScope =
+  | { scope: "system" }
+  | { scope: "project"; projectId: string }
+  | { scope: "sprint"; projectId: string; sprintId: string };
+
+type SettingsResolutionRevision = number | string;
+
+function settingsResolutionCacheKey(revision: SettingsResolutionRevision, scope: SettingsResolutionScope): string {
+  if (scope.scope === "system") {
+    return `${revision}:system`;
+  }
+  if (scope.scope === "project") {
+    return `${revision}:project:${scope.projectId}`;
+  }
+  return `${revision}:sprint:${scope.projectId}:${scope.sprintId}`;
+}
+
+export class SettingsResolutionCache {
+  private readonly effectiveDashboardSettings = new Map<string, EffectiveSettingsResponse>();
+  private readonly resolvedProjectSettings = new Map<string, ProjectSettings>();
+
+  clear(): void {
+    this.effectiveDashboardSettings.clear();
+    this.resolvedProjectSettings.clear();
+  }
+
+  getSystemDashboardSettings(
+    revision: SettingsResolutionRevision,
+    systemSettings: SystemSettings,
+  ): EffectiveSettingsResponse {
+    return this.getEffectiveDashboardSettings(
+      revision,
+      { scope: "system" },
+      () => resolveDashboardSettings({ systemSettings }),
+    );
+  }
+
+  getProjectDashboardSettings(
+    revision: SettingsResolutionRevision,
+    projectId: string,
+    factory: () => {
+      systemSettings: SystemSettings;
+      projectOverride?: ProjectSettingsOverride | null;
+    },
+  ): EffectiveSettingsResponse {
+    return this.getEffectiveDashboardSettings(
+      revision,
+      { scope: "project", projectId },
+      () => resolveDashboardSettings(factory()),
+    );
+  }
+
+  getSprintDashboardSettings(
+    revision: SettingsResolutionRevision,
+    projectId: string,
+    sprintId: string,
+    factory: () => {
+      systemSettings: SystemSettings;
+      projectOverride?: ProjectSettingsOverride | null;
+      sprintOverride?: SprintSettingsOverride | null;
+    },
+  ): EffectiveSettingsResponse {
+    return this.getEffectiveDashboardSettings(
+      revision,
+      { scope: "sprint", projectId, sprintId },
+      () => resolveDashboardSettings(factory()),
+    );
+  }
+
+  getProjectSettings(
+    revision: SettingsResolutionRevision,
+    projectId: string,
+    factory: () => {
+      systemSettings: SystemSettings;
+      projectOverride?: ProjectSettingsOverride | null;
+    },
+  ): ProjectSettings {
+    const key = settingsResolutionCacheKey(revision, { scope: "project", projectId });
+    const cached = this.resolvedProjectSettings.get(key);
+    if (cached) {
+      return cached;
+    }
+
+    const { systemSettings, projectOverride } = factory();
+    const resolved = resolveProjectSettings(systemSettings, projectOverride);
+    this.resolvedProjectSettings.set(key, resolved);
+    return resolved;
+  }
+
+  private getEffectiveDashboardSettings(
+    revision: SettingsResolutionRevision,
+    scope: SettingsResolutionScope,
+    factory: () => EffectiveSettingsResponse,
+  ): EffectiveSettingsResponse {
+    const key = settingsResolutionCacheKey(revision, scope);
+    const cached = this.effectiveDashboardSettings.get(key);
+    if (cached) {
+      return cached;
+    }
+
+    const resolved = factory();
+    this.effectiveDashboardSettings.set(key, resolved);
+    return resolved;
+  }
+}
+
 export function resolveDashboardSettings(args: {
   systemSettings: SystemSettings;
   projectOverride?: ProjectSettingsOverride | null;

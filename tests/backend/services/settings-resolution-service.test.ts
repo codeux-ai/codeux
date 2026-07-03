@@ -408,6 +408,7 @@ describe("Settings Resolution Service", () => {
         getSystemSettings: vi.fn().mockReturnValue(mockSystemSettings),
         getProjectSettings: vi.fn().mockReturnValue(mockProjectSettingsOverride),
         getSprintSettings: vi.fn().mockReturnValue({}),
+        getSettingsResolutionRevision: vi.fn().mockReturnValue(0),
       };
       resolver = new ScopedEffectiveSettingsResolver(mockRepo);
     });
