@@ -168,7 +168,8 @@ Checks:
 Checks:
 - Open Chat -> Invocations, select the failed planning invocation, then choose one of the header actions.
 - **Restart** marks the original failed transcript as preserved, creates a replacement invocation row, resumes the failed provider session, and sends the full planning prompt again.
-- **Continue** marks the original failed transcript as preserved, creates a replacement invocation row, resumes the failed provider session, and sends a compact continuation prompt asking for the complete JSON plan.
+- **Continue** marks the original failed transcript as preserved, creates a replacement invocation row, resumes the failed provider session, and sends a continuation prompt that also embeds the original planning instructions so the run can still complete if the provider has lost the native conversation.
+- Docker-backed planning runs use a stable project/sprint planning workspace and preserve the paired runtime volume while the run is failed/incomplete. Restart and Continue reuse that workspace so provider-local session files, caches, and runtime state remain available across quota/auth failures. Successful planning cleans up the workspace and paired runtime volume.
 - Preserved sprint-scoped invocation rows block sprint deletion so the quota/error transcript is not removed by a cascade.
 - If the restart or continuation fails, retry from the original failed row or inspect the new failed row depending on which invocation produced the latest error.
 
@@ -233,7 +234,7 @@ Checks:
 ### Transient Provider Failures
 Transient provider failures are classified and managed in `src/shared/providers/provider-error-classifier.ts`. These shared helpers encapsulate the operational meaning of failures such as:
 - **Codex transport errors**: Disconnections or channel closures (e.g., "stream disconnected before completion", "channel closed").
-- **Claude missing conversations**: Attempts to resume a non-existent session resulting in "no conversation found".
+- **Claude missing conversations**: Attempts to resume a non-existent session resulting in "no conversation found". Code UX retries once with a fresh Claude session; planning continuations are self-contained so that fallback still has the original schema, sprint goal, and task-generation instructions.
 - **OpenCode missing sessions**: Attempts to resume a removed native session resulting in "Session not found"; Code UX retries once as a fresh OpenCode session in the same workspace.
 - **Silent quota signals**: Provider tools (like Antigravity) failing due to capacity limits without explicit failure output.
 

@@ -41,6 +41,8 @@ describe("Memory Capture Integration", () => {
     }).id;
     vi.spyOn(WorkspaceManager.prototype, "createSnapshotWorkspace")
       .mockResolvedValue("docker-volume://planning-test");
+    vi.spyOn(WorkspaceManager.prototype, "createOrReuseSnapshotWorkspace")
+      .mockResolvedValue("docker-volume://planning-test");
     vi.spyOn(WorkspaceManager.prototype, "removeWorktree")
       .mockResolvedValue(undefined);
     vi.spyOn(WorkspaceManager.prototype, "readWorkspaceFile")

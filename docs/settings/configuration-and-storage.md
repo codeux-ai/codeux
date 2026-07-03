@@ -493,6 +493,7 @@ Runtime cleanup notes:
 - startup schedules a fast, label-filtered stale Docker workspace prune for untracked, unrecoverable, and outdated sessions while preserving content-addressed setup-cache images for reuse. Tracked CLI sessions marked `FAILED` remain protected so same-workspace task retry can resume their Docker workspace/runtime volumes.
 - successful CLI task runs now preserve their workspace while the owning sprint is still non-terminal (so QA follow-up and sprint-side retries can continue in the same workspace handle)
 - preserved workspaces are tagged by persisted task-run workspace metadata (including Docker `docker-volume://...` handles) and cleaned when the sprint reaches a terminal state (`completed`, `failed`, or `cancelled`); cleanup removes both the workspace volume and its `-runtime` provider-state volume
+- Docker-backed planning invocations also use a stable project/sprint snapshot workspace and paired provider runtime volume. Failed or incomplete planning runs leave it in place so Restart/Continue can resume provider-local session state instead of starting from a cleaned throwaway snapshot; successful planning removes the workspace and runtime volume.
 - terminal sprint completion/failure/cancellation removes those retained CLI task workspaces immediately instead of waiting for the next restart sweep
 - sprint planning and prompt improvement also honor worker mode, so `VIRTUAL` projects can plan without any live MCP listener
 

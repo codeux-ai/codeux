@@ -239,7 +239,7 @@ export class ProviderRunner implements IProviderRunner {
         : resolveAntigravityHostLogPath(sessionId))
       : null;
     const providerEnv = this.withProviderEnv(provider, runModel, apiKey, workflowSettings, githubToken, providerMountAuth, input, qwenProcessLogDir, gitlabToken);
-    const nativeSessionId = provider === "opencode"
+    let nativeSessionId = provider === "opencode"
       ? isOpenCodeNativeSessionId(input.continueSessionId) ? input.continueSessionId! : null
       : provider === "qwen-code"
         ? null
@@ -384,13 +384,14 @@ export class ProviderRunner implements IProviderRunner {
     try {
 
       const buildFreshClaudeSpec = () => {
+        nativeSessionId = randomUUID();
         return this.buildCommandSpec(
           provider,
           runModel,
           prompt,
           workflowSettings.executionMode === "DOCKER" ? CONTAINER_WORKSPACE_ROOT : cwd,
           input.codexOutputPath,
-          randomUUID(),
+          nativeSessionId,
           false,
           hasMcpConfig,
           input.qwenAuthMode,
