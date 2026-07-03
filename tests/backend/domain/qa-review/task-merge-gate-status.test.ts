@@ -191,4 +191,34 @@ describe("computeTaskMergeGateStatus", () => {
     expect(result.reason).toBe("pending_review");
     expect(result.mergeAllowed).toBe(false);
   });
+
+  it.each([
+    {
+      name: "human attention required after exhausted decisive review budget",
+      latestRun: createMockRun({ status: "completed", outcome: "changes_requested", summaryMarkdown: null }),
+      runsUsed: 3,
+      decisiveRuns: 3,
+      expectedSummary: "human attention required",
+    },
+    {
+      name: "human attention required after persistent infra failures exhaust the grace ceiling",
+      latestRun: createMockRun({ status: "failed", outcome: null, summaryMarkdown: null }),
+      runsUsed: 3 + QA_INFRA_FAILURE_GRACE,
+      decisiveRuns: 0,
+      expectedSummary: "human attention required",
+    },
+  ])("$name", ({ latestRun, runsUsed, decisiveRuns, expectedSummary }) => {
+    const result = computeTaskMergeGateStatus({
+      taskId: "task-1",
+      triggerType: "task_completion",
+      qaSettings: mockSettings,
+      latestRun,
+      runsUsed,
+      decisiveRuns,
+    });
+
+    expect(result.mergeAllowed).toBe(false);
+    expect(result.reason).toBe("retries_exhausted");
+    expect(result.summary).toContain(expectedSummary);
+  });
 });
