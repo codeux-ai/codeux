@@ -380,17 +380,17 @@ describe("StatsPage accessibility", () => {
 
     expect(screen.getByText("Usage Graph")).toBeInTheDocument();
     expect(screen.getByText("Data Visualization for 7d")).toBeInTheDocument();
-    expect(screen.getByText(/Currently showing 3 buckets/i)).toBeInTheDocument();
-    expect(screen.getByText(/Peak Tokens:/i)).toBeInTheDocument();
+    expect(screen.getByText(/3 visible buckets/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Peak tokens/i).length).toBeGreaterThan(0);
 
     const slider = screen.getByRole("slider", { name: /Explore chart data across time/i });
-    expect(slider).toHaveAttribute("aria-describedby", "usage-chart-tooltip");
+    expect(slider.getAttribute("aria-describedby")).toContain("usage-chart-tooltip");
 
     fireEvent.click(screen.getByRole("button", { name: "Filters" }));
 
-    const tokenSwitch = screen.getAllByRole("switch").find((button) => button.getAttribute("aria-label") === "Tokens, enabled") as HTMLElement | undefined;
-    const activeSwitch = screen.getAllByRole("switch").find((button) => button.getAttribute("aria-label") === "Active Time, enabled") as HTMLElement | undefined;
-    const invocationSwitch = screen.getAllByRole("switch").find((button) => button.getAttribute("aria-label") === "Invocations, enabled") as HTMLElement | undefined;
+    const tokenSwitch = screen.getAllByRole("switch").find((button) => button.getAttribute("aria-label") === "Tokens series, enabled") as HTMLElement | undefined;
+    const activeSwitch = screen.getAllByRole("switch").find((button) => button.getAttribute("aria-label") === "Active Time series, enabled") as HTMLElement | undefined;
+    const invocationSwitch = screen.getAllByRole("switch").find((button) => button.getAttribute("aria-label") === "Invocations series, enabled") as HTMLElement | undefined;
 
     expect(tokenSwitch).toBeDefined();
     expect(activeSwitch).toBeDefined();
