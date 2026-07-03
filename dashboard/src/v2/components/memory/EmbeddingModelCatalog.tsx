@@ -27,9 +27,9 @@ export const EmbeddingModelCatalog: FunctionComponent<EmbeddingModelCatalogProps
   const activeModel = models.find((model) => model.active);
 
   return (
-    <section aria-labelledby="embedding-model-catalog-title" className="relative overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.07)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/62 dark:shadow-[0_18px_48px_rgba(0,0,0,0.3)] md:p-7">
+    <section aria-labelledby="embedding-model-catalog-title" className="relative overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/72 p-4 shadow-[0_18px_48px_rgba(15,23,42,0.07)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/62 dark:shadow-[0_18px_48px_rgba(0,0,0,0.3)] md:p-6">
       <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-signal-500/35 to-transparent" />
-      <div className="relative z-10 flex flex-col gap-6">
+      <div className="relative z-10 flex flex-col gap-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="flex min-w-0 gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-signal-500/20 bg-signal-500/[0.1] text-signal-600 shadow-[0_0_30px_rgba(0,224,160,0.12)] dark:text-signal-300">
@@ -116,7 +116,7 @@ export const EmbeddingModelCatalog: FunctionComponent<EmbeddingModelCatalogProps
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 2xl:grid-cols-3">
           {models.map((model) => (
             <ModelCard key={model.id} model={model}
               onDownload={onDownload}

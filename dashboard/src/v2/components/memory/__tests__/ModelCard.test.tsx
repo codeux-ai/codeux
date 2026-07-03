@@ -69,6 +69,22 @@ describe("ModelCard", () => {
     expect(props.onDownload).toHaveBeenCalledWith("bge-small-en-v1.5");
   });
 
+  it("renders compact Warm Void sizing and metadata labels", () => {
+    const { container } = render(<ModelCard model={model()}
+      {...handlers()}
+      reembedding={false}
+      staleCount={0} />);
+
+    const card = container.querySelector("article");
+    expect(card?.className).toContain("min-h-[16.5rem]");
+    expect(card?.className).toContain("p-4");
+    expect(card?.className).toContain("rounded-[1.25rem]");
+    expect(screen.getByText("Dim")).toBeInTheDocument();
+    expect(screen.getByText("Size")).toBeInTheDocument();
+    expect(screen.getByText("Lang")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Download" }).className).toContain("min-h-9");
+  });
+
   it("shows download progress while a model is downloading", () => {
     render(<ModelCard model={model({ downloading: true, downloadProgress: 0.42 })}
       {...handlers()}
