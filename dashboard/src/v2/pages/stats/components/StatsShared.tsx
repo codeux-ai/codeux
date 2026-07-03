@@ -51,12 +51,7 @@ import { PANEL_CLASS, SUBPANEL_CLASS, CHIP_CLASS, LEDGER_ROW_MODERN_CLASS, Signa
 import { formatDay, formatHourTick, formatShortDate, toTimestamp, getAxisLabelStep, formatAxisLabel, getLedgerSortValue } from "./stats-formatters.js";
 import { buildPath, buildSmoothPath, buildAreaPath, buildSmoothAreaPath, buildPoints, polarToCartesian, buildDonutArcPath, buildDonutSlices } from "./stats-geometry.js";
 import { InteractiveUsageChart } from "./InteractiveUsageChart.js";
-import {
-  buildProviderConfidenceSummary,
-  buildTelemetryQualityIndicators,
-  buildTelemetrySourceSummary,
-  formatShare,
-} from "../model-insights.js";
+import { buildTelemetrySourceSummary } from "../model-insights.js";
 export { InteractiveUsageChart };
 
 type ProviderTelemetryUsage = ExecutionStatsEntitySummary["usage"] & {
@@ -67,23 +62,8 @@ type ProviderTelemetryUsage = ExecutionStatsEntitySummary["usage"] & {
 type ProviderTelemetrySource = {
   label: string;
   tone: string;
-  toneKey: "strong" | "warn" | "critical" | "neutral";
   detail: string;
   caveat: string;
-};
-
-const SOURCE_TONE_CLASS: Record<TokenUsageSource, string> = {
-  reported: "border-status-green/16 bg-status-green/10 text-status-green",
-  estimated: "border-amber-500/16 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-  unavailable: "border-rose-500/16 bg-rose-500/10 text-rose-700 dark:text-rose-300",
-  unsupported: "border-slate-500/16 bg-slate-500/10 text-slate-600 dark:text-slate-300",
-};
-
-const CONFIDENCE_TONE_CLASS: Record<"Direct" | "Partial" | "Fallback" | "Unknown", string> = {
-  Direct: "text-status-green dark:text-status-green",
-  Partial: "text-amber-600 dark:text-amber-400",
-  Fallback: "text-rose-600 dark:text-rose-400",
-  Unknown: "text-slate-500 dark:text-slate-400",
 };
 
 function getProviderTelemetrySource(
@@ -99,18 +79,18 @@ function getProviderTelemetrySource(
 
   if (source.mix.total > 0) {
     if (source.tone === "strong") {
-      return { label: source.label, tone: "text-status-green dark:text-status-green", toneKey: source.tone, detail: source.detail, caveat: source.caveat };
+      return { label: source.label, tone: "text-status-green dark:text-status-green", detail: source.detail, caveat: source.caveat };
     }
 
     if (source.tone === "warn") {
-      return { label: source.label, tone: "text-amber-600 dark:text-amber-400", toneKey: source.tone, detail: source.detail, caveat: source.caveat };
+      return { label: source.label, tone: "text-amber-600 dark:text-amber-400", detail: source.detail, caveat: source.caveat };
     }
 
     if (source.tone === "critical") {
-      return { label: source.label, tone: "text-rose-600 dark:text-rose-400", toneKey: source.tone, detail: source.detail, caveat: source.caveat };
+      return { label: source.label, tone: "text-rose-600 dark:text-rose-400", detail: source.detail, caveat: source.caveat };
     }
 
-    return { label: source.label, tone: "text-slate-500 dark:text-slate-400", toneKey: source.tone, detail: source.detail, caveat: source.caveat };
+    return { label: source.label, tone: "text-slate-500 dark:text-slate-400", detail: source.detail, caveat: source.caveat };
   }
 
   const aggregateSource = tokenSources.find((entry) => entry.source === "reported" && entry.count > 0)
@@ -127,7 +107,6 @@ function getProviderTelemetrySource(
     return {
       label: "Reported",
       tone: "text-status-green dark:text-status-green",
-      toneKey: "strong",
       detail: "Aggregate token-source fallback",
       caveat: "Provider-specific telemetry is missing, so this provider inherits the reported aggregate mix.",
     };
@@ -137,7 +116,6 @@ function getProviderTelemetrySource(
     return {
       label: "Estimated",
       tone: "text-amber-600 dark:text-amber-400",
-      toneKey: "warn",
       detail: "Aggregate token-source fallback",
       caveat: "Provider-specific telemetry is missing, so this provider inherits the estimated aggregate mix.",
     };
@@ -147,13 +125,12 @@ function getProviderTelemetrySource(
     return {
       label: "Unavailable",
       tone: "text-rose-600 dark:text-rose-400",
-      toneKey: "critical",
       detail: "Aggregate token-source fallback",
       caveat: "Provider-specific telemetry is missing and the aggregate mix only reports unavailable counts.",
     };
   }
 
-  return { label: source.label, tone: "text-slate-500 dark:text-slate-400", toneKey: "neutral", detail: source.detail, caveat: source.caveat };
+  return { label: source.label, tone: "text-slate-500 dark:text-slate-400", detail: source.detail, caveat: source.caveat };
 }
 
 const TrendKpiTile: FunctionComponent<{
@@ -369,33 +346,18 @@ export const CompositionStudio: FunctionComponent<{
   const topPurposeShare = stats.usage.totalTokens > 0 && topPurpose
     ? (topPurpose.usage.totalTokens / stats.usage.totalTokens) * 100
     : null;
-  const sourceIndicators = buildTelemetryQualityIndicators(stats.usage);
-  const visibleSourceIndicators = sourceIndicators.filter((source) => source.count > 0);
-  const hasLowData = stats.usage.totalTokens <= 0 || providers.length === 0;
-  const tokenParts = [
-    { label: "Input", value: stats.usage.inputTokens, tone: "text-signal-600 dark:text-signal-400" },
-    { label: "Cached", value: stats.usage.cachedInputTokens, tone: "text-cyan-600 dark:text-cyan-400" },
-    { label: "Output", value: stats.usage.outputTokens, tone: "text-amber-600 dark:text-amber-400" },
-    { label: "Reasoning", value: stats.usage.reasoningOutputTokens, tone: "text-rose-600 dark:text-rose-400" },
-  ];
 
   return (
     <section className="space-y-6">
-      {hasLowData ? (
-        <div role="status" className={`${SUBPANEL_CLASS} border-dashed p-4 text-sm leading-relaxed text-slate-500 dark:text-slate-400`}>
-          Composition is waiting on provider token totals. The studio keeps source and purpose fallbacks visible so sparse windows still show what landed.
-        </div>
-      ) : null}
-
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StudioMetricTile
-          label="Top Provider"
+          label="Provider Share"
           value={topProvider ? topProvider.label : "No providers"}
           detail={topProvider && topProviderShare !== null ? `${formatPercent(topProviderShare)} of token volume` : "Nothing reported yet"}
           toneClass="text-signal-500 dark:text-signal-400"
         />
         <StudioMetricTile
-          label="Top Purpose"
+          label="Purpose Distribution"
           value={topPurpose ? topPurpose.label.replace(/_/g, " ") : "No purposes"}
           detail={topPurpose && topPurposeShare !== null ? `${formatPercent(topPurposeShare)} of token volume` : "No purpose data"}
           toneClass="text-amber-600 dark:text-amber-400"
@@ -416,43 +378,6 @@ export const CompositionStudio: FunctionComponent<{
         />
       </div>
 
-      <div className={`${PANEL_CLASS} p-6`}>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="max-w-3xl">
-            <div className="flex items-center gap-3">
-              <PieChart className="h-4 w-4 text-signal-500" strokeWidth={2} aria-hidden="true" />
-              <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Token Anatomy</div>
-            </div>
-            <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-              Input, cached, output, and reasoning tokens are shown from the backend totals so provider and model comparisons reconcile to the same window volume.
-            </div>
-          </div>
-          <div className={`self-start px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ${CHIP_CLASS}`}>
-            {formatTokens(stats.usage.totalTokens)} total tokens
-          </div>
-        </div>
-        <div className="mt-5">
-          <TokenFlowBar
-            input={stats.usage.inputTokens}
-            cached={stats.usage.cachedInputTokens}
-            output={stats.usage.outputTokens}
-            reasoning={stats.usage.reasoningOutputTokens}
-            total={stats.usage.totalTokens}
-          />
-        </div>
-        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {tokenParts.map((part) => (
-            <div key={part.label} className={`${SUBPANEL_CLASS} p-4`}>
-              <div className={`text-[10px] font-bold uppercase tracking-[0.16em] ${part.tone}`}>{part.label}</div>
-              <div className="mt-2 text-xl font-black text-slate-900 dark:text-white">{formatTokens(part.value)}</div>
-              <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                {stats.usage.totalTokens > 0 ? `${formatShare(part.value / stats.usage.totalTokens)} of total` : "No total volume"}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
       <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1.02fr_0.98fr]">
         <DonutCard
           title="Provider Share"
@@ -470,49 +395,6 @@ export const CompositionStudio: FunctionComponent<{
           centerLabel="token mix"
           segments={tokenSegments}
         />
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_1fr]">
-        <div className={`${PANEL_CLASS} p-6`}>
-          <div className="flex items-center gap-3">
-            <Layers3 className="h-4 w-4 text-cyan-500" strokeWidth={2} aria-hidden="true" />
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Provider vs Source Signals</div>
-          </div>
-          <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-            Provider lanes explain who consumed tokens; source lanes explain how trustworthy those token totals are.
-          </div>
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className={`${SUBPANEL_CLASS} p-4`}>
-              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-signal-600 dark:text-signal-400">Provider Lanes</div>
-              <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{providerSegments.length}</div>
-              <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                {providers.length > 0 ? `${providers.length} providers ranked by token volume` : "No provider token lanes"}
-              </div>
-            </div>
-            <div className={`${SUBPANEL_CLASS} p-4`}>
-              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-600 dark:text-amber-400">Source Lanes</div>
-              <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{visibleSourceIndicators.length}</div>
-              <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                {visibleSourceIndicators.length > 0 ? "Reported, estimated, or missing source counts" : "No source counts recorded"}
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className={`${PANEL_CLASS} p-6`}>
-          <div className="flex items-center gap-3">
-            <ShieldCheck className="h-4 w-4 text-status-green" strokeWidth={2} aria-hidden="true" />
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Source Distribution</div>
-          </div>
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {sourceIndicators.map((source) => (
-              <div key={source.id} className={`rounded-2xl border p-4 ${SOURCE_TONE_CLASS[source.id]}`}>
-                <div className="text-[10px] font-bold uppercase tracking-[0.16em]">{source.label}</div>
-                <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{source.count.toLocaleString()}</div>
-                <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] opacity-80">{source.summary}</div>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.05fr_0.95fr]">
@@ -718,7 +600,6 @@ export const ReliabilityStudio: FunctionComponent<{
   sourceSegments: SegmentDefinition[];
 }> = ({ stats, providerSegments, sourceSegments }) => {
   const sourceSummary = buildTelemetrySourceSummary(stats.usage);
-  const sourceIndicators = buildTelemetryQualityIndicators(stats.usage);
   const finishedCount = stats.statusCounts.completed + stats.statusCounts.failed + stats.statusCounts.cancelled;
   const successRate = finishedCount > 0 ? stats.statusCounts.completed / finishedCount : null;
   const overallDurationSamples = stats.duration.sampleCount;
@@ -729,26 +610,6 @@ export const ReliabilityStudio: FunctionComponent<{
 
   return (
     <section className="space-y-6">
-      <div className={`${SUBPANEL_CLASS} p-4`}>
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Actionable Status</div>
-            <div className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-100">
-              {sourceSummary.tone === "strong"
-                ? "Telemetry quality is decision-ready for this window."
-                : sourceSummary.tone === "warn"
-                  ? "Telemetry is usable, but fallback source counts should be reviewed."
-                  : sourceSummary.tone === "critical"
-                    ? "Telemetry confidence is weak; inspect providers with missing or unsupported source counts."
-                    : "Telemetry confidence is unknown until source counts land."}
-            </div>
-          </div>
-          <div className={`self-start rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${CHIP_CLASS}`}>
-            {sourceSummary.label} source quality
-          </div>
-        </div>
-      </div>
-
       <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1.02fr_0.98fr]">
         <DonutCard
           title="Telemetry Source Mix"
@@ -811,23 +672,34 @@ export const ReliabilityStudio: FunctionComponent<{
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Confidence Board</div>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-4">
-            {sourceIndicators.map((source) => (
-              <div
-                key={source.id}
-                className={`rounded-2xl border p-4 ${SOURCE_TONE_CLASS[source.id]}`}
-                aria-label={`${source.label}: ${source.count.toLocaleString()} invocations, ${source.summary}`}
-              >
-                <div className="text-[10px] font-bold uppercase tracking-[0.16em]">{source.label}</div>
-                <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{source.count.toLocaleString()}</div>
-                <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] opacity-80">{source.summary}</div>
-                <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.08]" aria-hidden="true">
-                  <div
-                    className="h-full bg-current"
-                    style={{ width: `${source.share !== null ? Math.max(4, source.share * 100) : 0}%` }}
-                  />
-                </div>
+            <div className="rounded-2xl border border-status-green/16 bg-status-green/10 p-4">
+              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-status-green">Reported</div>
+              <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{stats.usage.reportedInvocationCount}</div>
+              <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-status-green/20">
+                <div className="h-full bg-status-green" style={{ width: `${sourceSummary.mix.total > 0 ? ((stats.usage.reportedInvocationCount || 0) / sourceSummary.mix.total) * 100 : 0}%` }} />
               </div>
-            ))}
+            </div>
+            <div className="rounded-2xl border border-amber-500/16 bg-amber-500/10 p-4">
+              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-600 dark:text-amber-400">Estimated</div>
+              <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{stats.usage.estimatedInvocationCount}</div>
+              <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-amber-500/20">
+                <div className="h-full bg-amber-500" style={{ width: `${sourceSummary.mix.total > 0 ? ((stats.usage.estimatedInvocationCount || 0) / sourceSummary.mix.total) * 100 : 0}%` }} />
+              </div>
+            </div>
+            <div className="rounded-2xl border border-rose-500/16 bg-rose-500/10 p-4">
+              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-rose-600 dark:text-rose-400">Unavailable</div>
+              <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{stats.usage.unavailableInvocationCount}</div>
+              <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-rose-500/20">
+                <div className="h-full bg-rose-500" style={{ width: `${sourceSummary.mix.total > 0 ? ((stats.usage.unavailableInvocationCount || 0) / sourceSummary.mix.total) * 100 : 0}%` }} />
+              </div>
+            </div>
+            <div className="rounded-2xl border border-slate-500/16 bg-slate-500/10 p-4">
+              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600 dark:text-slate-300">Unsupported</div>
+              <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{stats.usage.unsupportedInvocationCount}</div>
+              <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-slate-500/20">
+                <div className="h-full bg-slate-500" style={{ width: `${sourceSummary.mix.total > 0 ? ((stats.usage.unsupportedInvocationCount || 0) / sourceSummary.mix.total) * 100 : 0}%` }} />
+              </div>
+            </div>
           </div>
         </div>
         <div className={`${PANEL_CLASS} p-6`}>
@@ -850,12 +722,6 @@ export const ReliabilityStudio: FunctionComponent<{
                   : "No duration samples were recorded, so latency metrics remain unavailable rather than inferred."}
               </div>
             </div>
-            <div className={SUBPANEL_CLASS}>
-              <div className="text-sm font-semibold text-slate-900 dark:text-white">Provider confidence</div>
-              <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                Provider cards combine direct source counts, model status totals, and duration samples so weak confidence is visible before comparing token volume.
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -876,8 +742,7 @@ export const ReliabilityStudio: FunctionComponent<{
             {providerRows.map((provider) => {
               const { icon: Icon, bg, text } = getProviderIcon(provider.provider);
               const providerUsage = provider.usage as ProviderTelemetryUsage;
-              const sourceQuality = getProviderTelemetrySource(providerUsage, stats.tokenSources || []);
-              const confidence = buildProviderConfidenceSummary(providerUsage);
+              const sourceQuality = getProviderTelemetrySource(providerUsage, stats.tokenSources);
               const providerModels = (stats.models || []).filter((model) => model.provider === provider.id);
               const durationSamples = providerModels.reduce((sum, model) => sum + model.duration.sampleCount, 0);
               const weightedLatencyMs = durationSamples > 0
@@ -928,20 +793,13 @@ export const ReliabilityStudio: FunctionComponent<{
                       label="Telemetry Quality"
                       value={sourceQuality.label}
                       detail={sourceQuality.detail}
-                      toneClass={sourceQuality.toneKey === "strong"
+                      toneClass={sourceQuality.tone === "strong"
                         ? "text-status-green dark:text-status-green"
-                        : sourceQuality.toneKey === "warn"
+                        : sourceQuality.tone === "warn"
                           ? "text-amber-600 dark:text-amber-400"
-                          : sourceQuality.toneKey === "critical"
+                          : sourceQuality.tone === "critical"
                             ? "text-rose-600 dark:text-rose-400"
                             : "text-slate-500 dark:text-slate-400"}
-                    />
-                    <StudioMetricTile
-                      label="Provider Confidence"
-                      value={confidence.label}
-                      detail={confidence.detail}
-                      toneClass={CONFIDENCE_TONE_CLASS[confidence.label]}
-                      icon={ShieldCheck}
                     />
                     <StudioMetricTile
                       label="Success Rate"
@@ -989,7 +847,7 @@ export const ReliabilityStudio: FunctionComponent<{
                   </div>
 
                   <div className="mt-4 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                    {sourceQuality.caveat} {confidence.score === null ? "Provider confidence score unavailable." : `${formatShare(confidence.score)} direct confidence.`}
+                    {sourceQuality.caveat}
                   </div>
                 </div>
               );

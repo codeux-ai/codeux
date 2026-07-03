@@ -149,12 +149,15 @@ describe("useSystemViewData", () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(mockedFetchProjectInvocations).toHaveBeenCalledWith(
+    expect(mockedFetchProjectInvocations).toHaveBeenLastCalledWith(
       "project-1",
       expect.objectContaining({
         search: "test search",
         limit: 100,
         offset: 0
+      }),
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
       })
     );
 

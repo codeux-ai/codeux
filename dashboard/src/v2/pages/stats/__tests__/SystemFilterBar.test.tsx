@@ -46,13 +46,13 @@ describe("SystemFilterBar", () => {
     );
 
     const runningButton = getByRole("button", { name: "Running" });
-    expect(runningButton.className).not.toContain("border-blue-500/40");
+    expect(runningButton.className).not.toContain("border-signal-500/30");
 
     expect(getByRole("group", { name: "Status filters" })).toBeTruthy();
 
     fireEvent.click(runningButton);
-    expect(runningButton.className).toContain("border-blue-500/40");
-    expect(runningButton.className).toContain("text-blue-300");
+    expect(runningButton.className).toContain("border-signal-500/30");
+    expect(runningButton.className).toContain("text-signal-700");
 
     const searchInput = getByPlaceholderText("Search system stats") as HTMLInputElement;
     fireEvent.input(searchInput, { target: { value: "beta" } });
@@ -65,7 +65,7 @@ describe("SystemFilterBar", () => {
     const clearAll = getByRole("button", { name: "Clear all" });
     fireEvent.click(clearAll);
 
-    expect(runningButton.className).not.toContain("border-blue-500/40");
+    expect(runningButton.className).not.toContain("border-signal-500/30");
     expect(searchInput.value).toBe("");
   });
 

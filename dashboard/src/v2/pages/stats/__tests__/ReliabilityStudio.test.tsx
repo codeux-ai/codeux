@@ -129,10 +129,7 @@ describe("ReliabilityStudio", () => {
     expect(confidenceBoard.compareDocumentPosition(auditNotes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(auditNotes.compareDocumentPosition(providerBreakdown) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-    expect(screen.getByText("Telemetry is usable, but fallback source counts should be reviewed.")).toBeInTheDocument();
     expect(screen.getByText("Per-provider token anatomy, invocation volume, compute time, and telemetry reliability for the selected window.")).toBeInTheDocument();
-    expect(screen.getByLabelText("Reported: 8 invocations, 67% directly reported")).toBeInTheDocument();
-    expect(screen.getByLabelText("Unavailable: 1 invocations, 8% missing usage details")).toBeInTheDocument();
 
     const getCard = (label: string): HTMLElement => {
       const card = screen.getByText(label).closest('div[class*="rounded-[1.9rem]"]');
@@ -145,8 +142,6 @@ describe("ReliabilityStudio", () => {
     expect(within(qwenCard).getByText("900")).toBeInTheDocument();
     expect(within(qwenCard).getByText("150/call")).toBeInTheDocument();
     expect(within(qwenCard as HTMLElement).getByText("Reported")).toBeInTheDocument();
-    expect(within(qwenCard as HTMLElement).getByText("Provider Confidence")).toBeInTheDocument();
-    expect(within(qwenCard as HTMLElement).getByText("Direct")).toBeInTheDocument();
     expect(within(qwenCard as HTMLElement).getByTitle("Input: 50.0%")).toBeInTheDocument();
 
     const openCard = getCard("OpenCode");
@@ -154,7 +149,6 @@ describe("ReliabilityStudio", () => {
 
     const antiCard = getCard("Antigravity");
     expect(within(antiCard).getByText("Estimated")).toBeInTheDocument();
-    expect(within(antiCard).getByText("Fallback")).toBeInTheDocument();
   });
 
   it("falls back to unknown source quality when no telemetry source signal exists", () => {

@@ -50,39 +50,6 @@ const STUDIO_EMPTY_MESSAGES: Record<StatsVisualMode, string> = {
   system: "Select a time window to see System data.",
 };
 
-const STUDIO_FRAMES: Record<StatsVisualMode, { question: string; compare: string; action: string }> = {
-  trend: {
-    question: "Is activity accelerating or cooling?",
-    compare: "Tokens, active time, cost, and invocation momentum.",
-    action: "Use the chart rail to inspect exact buckets.",
-  },
-  composition: {
-    question: "Where is the workload concentrated?",
-    compare: "Token anatomy, provider lanes, source confidence, and purpose mix.",
-    action: "Look for dominant providers or missing purpose/source signals.",
-  },
-  models: {
-    question: "Which models are doing the best work?",
-    compare: "Latency, success rate, token volume, cache efficiency, velocity, and reasoning share.",
-    action: "Use leaderboard rows to compare efficiency against reliability.",
-  },
-  reliability: {
-    question: "Can this telemetry be trusted?",
-    compare: "Reported, estimated, unavailable, and unsupported coverage by provider.",
-    action: "Prioritize providers with partial confidence or missing duration samples.",
-  },
-  ledgers: {
-    question: "Which records explain the totals?",
-    compare: "Task, sprint, and git rows with searchable operational context.",
-    action: "Use tabs and sorting to trace the source records.",
-  },
-  system: {
-    question: "Which invocations need inspection?",
-    compare: "Runtime status, purpose, provider, messages, and error categories.",
-    action: "Filter down to the exact invocation trail.",
-  },
-};
-
 export interface AnalysisStudioSectionProps {
   stats: ProjectExecutionStatsSnapshot | null;
   loading: boolean;
@@ -112,7 +79,6 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
   chartState,
 }) => {
   const StudioIcon = STUDIO_ICONS[visualMode];
-  const frame = STUDIO_FRAMES[visualMode];
 
   const renderEmptyState = (mode: StatsVisualMode) => (
     <div role="status" aria-live="polite" className={`${PANEL_CLASS} flex flex-col items-center justify-center py-20 text-center`}>
@@ -126,15 +92,15 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
 
   return (
     <div key={visualMode} className="animate-in fade-in duration-200">
-      <div className={`${PANEL_CLASS} mb-6 p-4 md:p-5`} aria-labelledby={`stats-${visualMode}-studio-title`}>
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+      <div className={`${PANEL_CLASS} mb-6 p-4 md:p-5`}>
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex min-w-0 items-start gap-4">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-chip)] text-signal-600 dark:text-signal-400">
-              <StudioIcon className="h-5 w-5" strokeWidth={2.2} aria-hidden="true" />
+              <StudioIcon className="h-5 w-5" strokeWidth={2.2} />
             </div>
             <div className="min-w-0">
               <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Analysis Studio</div>
-              <h2 id={`stats-${visualMode}-studio-title`} className="mt-1 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+              <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
                 {STUDIO_TITLES[visualMode]}
               </h2>
               <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
@@ -142,23 +108,10 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
               </p>
             </div>
           </div>
-          <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-3 lg:max-w-3xl" aria-label={`${STUDIO_TITLES[visualMode]} analysis frame`}>
-            {[
-              ["Question", frame.question],
-              ["Compare", frame.compare],
-              ["Action", frame.action],
-            ].map(([label, value]) => (
-              <div key={label} className="rounded-2xl border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-subpanel)] px-3 py-2">
-                <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">{label}</div>
-                <div className="mt-1 text-xs font-semibold leading-snug text-slate-700 dark:text-slate-200">{value}</div>
-              </div>
-            ))}
-          </div>
           <div
             role="status"
             aria-live="polite"
-            aria-label={`${STUDIO_TITLES[visualMode]} studio ${loading ? "refreshing" : stats ? "ready" : "waiting"}`}
-            className={`self-start rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] lg:self-center ${
+            className={`self-start rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] md:self-center ${
               loading
                 ? "border-amber-500/24 bg-amber-500/[0.08] text-amber-700 dark:text-amber-300"
                 : "border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-chip)] text-slate-500 dark:text-slate-400"
