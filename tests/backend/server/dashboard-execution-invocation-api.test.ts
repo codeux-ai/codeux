@@ -79,9 +79,11 @@ describe("Dashboard Execution Invocation API", () => {
       forceCancelTaskDispatch: vi.fn(),
       retryTaskDispatch: vi.fn(),
     };
-
-    setupDashboardServer(mockOptions as DashboardServerOptions);
   });
+
+  const setupServer = (): void => {
+    void setupDashboardServer(mockOptions as DashboardServerOptions);
+  };
 
   describe("GET /api/projects/:projectId/execution/invocations", () => {
     it("returns list of invocations for a project", async () => {
@@ -90,6 +92,7 @@ describe("Dashboard Execution Invocation API", () => {
         { id: "inv-2", projectId: "proj-1", status: "running" },
       ];
       vi.mocked(mockOptions.listProjectInvocations!).mockReturnValue(mockInvocations as any);
+      setupServer();
 
       const response = await request(app).get("/api/projects/proj-1/execution/invocations");
 
@@ -120,6 +123,7 @@ describe("Dashboard Execution Invocation API", () => {
         },
       ];
       vi.mocked(mockOptions.listProjectInvocations!).mockReturnValue(mockInvocations as any);
+      setupServer();
 
       const response = await request(app).get("/api/projects/proj-1/execution/invocations");
 
@@ -132,6 +136,7 @@ describe("Dashboard Execution Invocation API", () => {
       vi.mocked(mockOptions.listProjectInvocations!).mockImplementation(() => {
         throw new Error("DB Error");
       });
+      setupServer();
 
       const response = await request(app).get("/api/projects/proj-1/execution/invocations");
 
@@ -151,6 +156,7 @@ describe("Dashboard Execution Invocation API", () => {
 
       // Setup mock repository for this test
       mockOptions.executionRepository = { queryProjectInvocations: vi.fn().mockReturnValue(mockResult) } as any;
+      setupServer();
 
       const response = await request(app).get("/api/projects/proj-1/execution/invocations?limit=10&offset=0&status=completed&sortKey=startedAt&sortDir=desc&search=foo&provider=jules&purpose=task_coding");
 
@@ -178,6 +184,7 @@ describe("Dashboard Execution Invocation API", () => {
         { id: "msg-2", invocationId: "inv-1", role: "assistant", contentMarkdown: "hi" },
       ];
       vi.mocked(mockOptions.listInvocationMessages!).mockReturnValue(mockMessages as any);
+      setupServer();
 
       const response = await request(app).get("/api/execution/invocations/inv-1/messages");
 
@@ -190,6 +197,7 @@ describe("Dashboard Execution Invocation API", () => {
       vi.mocked(mockOptions.listInvocationMessages!).mockImplementation(() => {
         throw new Error("DB Error");
       });
+      setupServer();
 
       const response = await request(app).get("/api/execution/invocations/inv-1/messages");
 
@@ -201,6 +209,7 @@ describe("Dashboard Execution Invocation API", () => {
   describe("POST /api/execution/invocations/:invocationId/restart", () => {
     it("restarts a failed invocation", async () => {
       vi.mocked(mockOptions.restartExecutionInvocation!).mockResolvedValue({ invocationId: "inv-new" });
+      setupServer();
 
       const response = await request(app).post("/api/execution/invocations/inv-1/restart");
 
@@ -211,6 +220,7 @@ describe("Dashboard Execution Invocation API", () => {
 
     it("continues a failed invocation session when requested", async () => {
       vi.mocked(mockOptions.restartExecutionInvocation!).mockResolvedValue({ invocationId: "inv-continued" });
+      setupServer();
 
       const response = await request(app)
         .post("/api/execution/invocations/inv-1/restart")
@@ -223,6 +233,7 @@ describe("Dashboard Execution Invocation API", () => {
 
     it("reports when invocation restart is disabled", async () => {
       mockOptions.restartExecutionInvocation = undefined;
+      setupServer();
 
       const response = await request(app).post("/api/execution/invocations/inv-1/restart");
 
@@ -238,6 +249,7 @@ describe("Dashboard Execution Invocation API", () => {
         invocationId: "inv-1",
         stoppedContainerIds: ["container-1"],
       });
+      setupServer();
 
       const response = await request(app).post("/api/execution/invocations/inv-1/cancel");
 
@@ -252,6 +264,7 @@ describe("Dashboard Execution Invocation API", () => {
 
     it("reports when invocation cancellation is disabled", async () => {
       mockOptions.cancelExecutionInvocation = undefined;
+      setupServer();
 
       const response = await request(app).post("/api/execution/invocations/inv-1/cancel");
 
