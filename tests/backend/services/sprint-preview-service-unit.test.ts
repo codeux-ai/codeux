@@ -35,6 +35,7 @@ vi.mock("../../../src/services/cli-docker-utils.js", () => ({
   pickContainerEnv: vi.fn(() => []),
   resolveConfiguredPath: vi.fn((_base: string, rel: string) => `/resolved/${rel}`),
   toDockerMountArg: vi.fn((m: any) => `type=${m.type ?? "bind"},source=${m.source},target=${m.destination}`),
+  writeDockerEnvFile: vi.fn(async () => undefined),
 }));
 
 vi.mock("../../../src/infrastructure/providers/cli/docker-runtime-paths.js", () => ({
@@ -79,6 +80,7 @@ vi.mock("../../../src/shared/config/code-ux-paths.js", () => ({
 vi.mock("fs/promises", async () => {
   return {
     mkdir: vi.fn(async () => undefined),
+    mkdtemp: vi.fn(async () => "/tmp/code-ux-preview-env-test"),
     writeFile: vi.fn(async () => undefined),
     chmod: vi.fn(async () => undefined),
     rm: vi.fn(async () => undefined),

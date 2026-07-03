@@ -58,6 +58,37 @@ describe("SprintPreviewDockerPlanBuilder", () => {
     expect(args).toContain("preview-runner");
   });
 
+  it("adds env-file by path without expanding secret variables into docker args", () => {
+    const args = buildSprintPreviewDockerCreateArgs({
+      projectId: "proj-1",
+      sprintId: "sprint-1",
+      sessionId: "session-1",
+      containerName: "preview-proj-1-sprint-1",
+      hostPort: 4444,
+      containerAppPort: 3000,
+      containerWorkspacePath: "/workspace",
+      containerRuntimeHome: "/home",
+      volumeName: "my-volume",
+      userSpec: null,
+      setupScriptSource: null,
+      shouldRunSetupScriptAtRuntime: false,
+      containerGitUserName: "test",
+      containerGitUserEmail: "test@example.com",
+      credentialMounts: [],
+      effectiveInstallCommand: null,
+      buildCommand: null,
+      runCommand: "npm start",
+      sourceCommit: null,
+      envFileSource: "/tmp/provider.env",
+      resolvedImage: "node:18",
+      bootstrapScript: "echo 'bootstrap'",
+    });
+
+    expect(args).toContain("--env-file");
+    expect(args[args.indexOf("--env-file") + 1]).toBe("/tmp/provider.env");
+    expect(args.some((arg) => arg.includes("GEMINI_API_KEY="))).toBe(false);
+  });
+
   it("matches snapshot", () => {
     const args = buildSprintPreviewDockerCreateArgs({
       projectId: "proj-1",

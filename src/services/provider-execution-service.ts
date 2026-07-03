@@ -71,6 +71,23 @@ function persistInvocationMessages(
   }
 }
 
+function buildUsageTelemetrySignature(telemetry: ProviderUsageTelemetry): string {
+  const conversation = telemetry.conversation ?? [];
+  return [
+    telemetry.nativeSessionId || "",
+    telemetry.usageSource,
+    telemetry.transcriptText.length,
+    telemetry.inputTokens,
+    telemetry.cachedInputTokens,
+    telemetry.outputTokens,
+    telemetry.reasoningOutputTokens,
+    telemetry.totalTokens,
+    countConversationToolCalls(conversation),
+    conversation.length,
+    telemetry.rawUsageJson ? JSON.stringify(telemetry.rawUsageJson) : "",
+  ].join("|");
+}
+
 function isRestartInterruptedDockerInvocation(error: unknown, args: ExecutionProviderRunArgs): boolean {
   if (args.workflowSettings.executionMode !== "DOCKER") {
     return false;
@@ -224,6 +241,7 @@ export class ProviderExecutionService {
       // multiply it. Track a cheap signature of what we last persisted and skip the rewrite when the
       // conversation hasn't changed since the previous tick.
       let lastPersistedMessagesSignature: string | null = null;
+      let lastPersistedUsageSignature: string | null = null;
 
       if (!execInvocationId) {
         execInvocationId = this.deps.executionRepository?.createExecutionInvocation({
@@ -355,7 +373,13 @@ export class ProviderExecutionService {
           }
         },
         onTelemetry: (telemetry: ProviderUsageTelemetry) => {
-          if (invocation && this.deps.executionRepository && this.isProviderInvocationStillRunning(invocation.id)) {
+          const usageSignature = buildUsageTelemetrySignature(telemetry);
+          if (
+            usageSignature !== lastPersistedUsageSignature
+            && invocation
+            && this.deps.executionRepository
+            && this.isProviderInvocationStillRunning(invocation.id)
+          ) {
             const durationMs = Date.now() - startedMs;
             this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
               status: "running",
@@ -372,6 +396,7 @@ export class ProviderExecutionService {
               usageSource: telemetry.usageSource,
               rawUsageJson: telemetry.rawUsageJson || undefined,
             });
+            lastPersistedUsageSignature = usageSignature;
           }
 
           if (

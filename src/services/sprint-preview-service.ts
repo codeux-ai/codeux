@@ -29,6 +29,7 @@ import {
   pickContainerEnv,
   resolveConfiguredPath,
   toDockerMountArg,
+  writeDockerEnvFile,
 } from "./cli-docker-utils.js";
 import { CONTAINER_SETUP_SCRIPT } from "./cli-workflow-utils.js";
 import {
@@ -257,34 +258,44 @@ export class SprintPreviewService {
           pathPosix.join(containerNpmCache, "pnpm-store"),
         ], project.baseDir);
 
-        const dockerArgs = buildSprintPreviewDockerCreateArgs({
-          projectId,
-          sprintId,
-          sessionId: session.id,
-          containerName,
-          hostPort,
-          containerAppPort: settings.containerAppPort,
-          containerWorkspacePath,
-          containerRuntimeHome,
-          volumeName,
-          userSpec,
-          setupScriptSource: setupScriptPath ? this.mapDockerSourcePathForDaemon(setupScriptPath, project.baseDir) : null,
-          shouldRunSetupScriptAtRuntime,
-          containerGitUserName: workflowSettings.containerGitUserName,
-          containerGitUserEmail: workflowSettings.containerGitUserEmail,
-          credentialMounts: credentialMounts.map((mount) => ({
-            ...mount,
-            source: this.mapDockerSourcePathForDaemon(mount.source, project.baseDir),
-          })),
-          effectiveInstallCommand,
-          buildCommand: preparedScript.buildCommand,
-          runCommand: preparedScript.runCommand,
-          sourceCommit,
-          resolvedImage: resolvedImage.image,
-          bootstrapScript,
-        });
+        const startResult = await (async () => {
+          const envFileTempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-preview-env-"));
+          try {
+            const envFilePath = path.join(envFileTempRoot, "preview.env");
+            await writeDockerEnvFile(envFilePath, pickContainerEnv(process.env));
+            const dockerArgs = buildSprintPreviewDockerCreateArgs({
+              projectId,
+              sprintId,
+              sessionId: session.id,
+              containerName,
+              hostPort,
+              containerAppPort: settings.containerAppPort,
+              containerWorkspacePath,
+              containerRuntimeHome,
+              volumeName,
+              userSpec,
+              setupScriptSource: setupScriptPath ? this.mapDockerSourcePathForDaemon(setupScriptPath, project.baseDir) : null,
+              shouldRunSetupScriptAtRuntime,
+              containerGitUserName: workflowSettings.containerGitUserName,
+              containerGitUserEmail: workflowSettings.containerGitUserEmail,
+              credentialMounts: credentialMounts.map((mount) => ({
+                ...mount,
+                source: this.mapDockerSourcePathForDaemon(mount.source, project.baseDir),
+              })),
+              effectiveInstallCommand,
+              buildCommand: preparedScript.buildCommand,
+              runCommand: preparedScript.runCommand,
+              sourceCommit,
+              envFileSource: this.mapDockerSourcePathForDaemon(envFilePath, project.baseDir),
+              resolvedImage: resolvedImage.image,
+              bootstrapScript,
+            });
 
-        const startResult = await runCommandStrict("docker", dockerArgs, project.baseDir);
+            return await runCommandStrict("docker", dockerArgs, project.baseDir);
+          } finally {
+            await fs.rm(envFileTempRoot, { recursive: true, force: true }).catch(() => undefined);
+          }
+        })();
         const containerId = startResult.stdout.trim();
         if (!containerId) {
           throw new Error("Docker preview container did not return a container id.");

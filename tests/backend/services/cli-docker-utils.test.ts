@@ -4,10 +4,12 @@ import {
   getDockerUserSpec,
   toDockerMountArg,
   pickContainerEnv,
+  writeDockerEnvFile,
   mapPathPrefix,
   isDockerWorkspaceMountError,
   getProviderFallbackInstallCommand
 } from "../../../src/services/cli-docker-utils.js";
+import fs from "fs/promises";
 import os from "os";
 import path from "path";
 
@@ -53,6 +55,33 @@ describe("cli-docker-utils", () => {
             { key: "GEMINI_CLI_TRUST_WORKSPACE", value: "true" },
             { key: "HTTP_PROXY", value: "proxy" },
         ]);
+    });
+
+    it("writeDockerEnvFile serializes selected env without exposing values as argv flags", async () => {
+        const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-env-file-test-"));
+        try {
+            const filePath = path.join(dir, "provider.env");
+            await writeDockerEnvFile(filePath, [
+                { key: "GEMINI_API_KEY", value: "secret-value" },
+                { key: "1_INVALID", value: "ignored" },
+                { key: "HTTP_PROXY", value: "http://proxy" },
+            ]);
+
+            expect(await fs.readFile(filePath, "utf8")).toBe("GEMINI_API_KEY=secret-value\nHTTP_PROXY=http://proxy\n");
+            if (process.platform !== "win32") {
+                const stat = await fs.stat(filePath);
+                expect(stat.mode & 0o777).toBe(0o600);
+            }
+        } finally {
+            await fs.rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    it("writeDockerEnvFile rejects multiline values Docker env-files cannot represent safely", async () => {
+        const filePath = path.join(os.tmpdir(), "code-ux-env-file-invalid.env");
+        await expect(writeDockerEnvFile(filePath, [
+            { key: "GEMINI_API_KEY", value: "line1\nline2" },
+        ])).rejects.toThrow("Cannot pass multiline Docker env value");
     });
 
     it("mapPathPrefix", () => {
