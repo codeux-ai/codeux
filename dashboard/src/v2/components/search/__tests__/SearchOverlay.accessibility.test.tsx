@@ -247,7 +247,7 @@ describe("SearchOverlay Accessibility", () => {
         );
 
         const dialog = screen.getByRole("dialog", { hidden: true });
-        expect(dialog).toHaveClass("max-w-[calc(100vw-2rem)]");
-        expect(dialog).toHaveClass("max-h-[calc(100dvh-2rem)]");
+        expect(dialog).toHaveClass("max-w-[calc(100vw-1.5rem)]");
+        expect(dialog).toHaveClass("max-h-[calc(100dvh-1.5rem)]");
     });
 });

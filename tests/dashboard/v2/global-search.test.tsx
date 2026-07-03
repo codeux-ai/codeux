@@ -75,9 +75,9 @@ describe("Global Search", () => {
                 enabled: false,
             });
 
-            const searchButton = screen.getByText("Search...").closest("button");
+            const searchButton = screen.getByRole("button", { name: "Search workspace" });
             expect(searchButton).not.toBeNull();
-            fireEvent.click(searchButton!);
+            fireEvent.click(searchButton);
 
             await waitFor(() => {
                 expect(useProjectTasks).toHaveBeenLastCalledWith("p1", [expect.objectContaining({ id: "p1" })], [], null, {
@@ -111,7 +111,7 @@ describe("Global Search", () => {
                 />
             );
 
-            fireEvent.click(screen.getByText("Search...").closest("button")!);
+            fireEvent.click(screen.getByRole("button", { name: "Search workspace" }));
             fireEvent.input(screen.getByRole("combobox", { hidden: true }), { target: { value: "CODUX-32" } });
 
             await waitFor(() => {
@@ -145,7 +145,7 @@ describe("Global Search", () => {
                 />
             );
 
-            fireEvent.click(screen.getByText("Search...").closest("button")!);
+            fireEvent.click(screen.getByRole("button", { name: "Search workspace" }));
             fireEvent.input(screen.getByRole("combobox", { hidden: true }), { target: { value: "hotfix-login" } });
 
             await waitFor(() => {
@@ -244,7 +244,7 @@ describe("Global Search", () => {
 
             const link = screen.getByRole("option");
             expect(link).toHaveAttribute("aria-selected", "true");
-            expect(link).toHaveClass("bg-signal-500/8"); // Custom active class in implementation
+            expect(link).toHaveClass("bg-signal-500/[0.07]");
             expect(screen.getByText("SPR-1")).toBeInTheDocument();
             expect(screen.getByText("Test Sprint")).toBeInTheDocument();
         });
