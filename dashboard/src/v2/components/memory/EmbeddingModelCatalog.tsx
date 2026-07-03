@@ -27,19 +27,19 @@ export const EmbeddingModelCatalog: FunctionComponent<EmbeddingModelCatalogProps
   const activeModel = models.find((model) => model.active);
 
   return (
-    <section aria-labelledby="embedding-model-catalog-title" className="relative overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.07)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/62 dark:shadow-[0_18px_48px_rgba(0,0,0,0.3)] md:p-7">
+    <section aria-labelledby="embedding-model-catalog-title" className="relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-4 shadow-[0_14px_38px_rgba(15,23,42,0.06)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/62 dark:shadow-[0_16px_42px_rgba(0,0,0,0.28)] md:p-5">
       <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-signal-500/35 to-transparent" />
-      <div className="relative z-10 flex flex-col gap-6">
+      <div className="relative z-10 flex flex-col gap-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="flex min-w-0 gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-signal-500/20 bg-signal-500/[0.1] text-signal-600 shadow-[0_0_30px_rgba(0,224,160,0.12)] dark:text-signal-300">
+          <div className="flex min-w-0 gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-signal-500/20 bg-signal-500/[0.1] text-signal-600 shadow-[0_0_24px_rgba(0,224,160,0.12)] dark:text-signal-300">
               <Boxes className="h-5 w-5" strokeWidth={2.2} />
             </div>
             <div className="min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">
                 Local embeddings
               </p>
-              <h2 id="embedding-model-catalog-title" className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">
+              <h2 id="embedding-model-catalog-title" className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">
                 Embedding model catalog
               </h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
@@ -49,19 +49,19 @@ export const EmbeddingModelCatalog: FunctionComponent<EmbeddingModelCatalogProps
           </div>
 
           <dl className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
-            <div className="rounded-2xl border border-black/[0.05] bg-black/[0.025] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
+            <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2.5 dark:border-white/[0.06] dark:bg-white/[0.03]">
               <dt className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Available</dt>
               <dd className="mt-1 font-mono text-sm font-semibold text-slate-800 dark:text-slate-100">{models.length}</dd>
             </div>
-            <div className="rounded-2xl border border-signal-500/15 bg-signal-500/[0.07] px-4 py-3">
+            <div className="rounded-xl border border-signal-500/15 bg-signal-500/[0.07] px-3 py-2.5">
               <dt className="text-[9px] font-bold uppercase tracking-[0.16em] text-signal-700/70 dark:text-signal-300/70">Downloaded</dt>
               <dd className="mt-1 font-mono text-sm font-semibold text-signal-700 dark:text-signal-300">{downloadedCount}</dd>
             </div>
-            <div className="rounded-2xl border border-ember-500/20 bg-ember-500/[0.07] px-4 py-3">
+            <div className="rounded-xl border border-ember-500/20 bg-ember-500/[0.07] px-3 py-2.5">
               <dt className="text-[9px] font-bold uppercase tracking-[0.16em] text-ember-600/75 dark:text-ember-400/75">Stale</dt>
               <dd className="mt-1 font-mono text-sm font-semibold text-ember-600 dark:text-ember-400">{stats.staleEmbeddings}</dd>
             </div>
-            <div className="rounded-2xl border border-black/[0.05] bg-black/[0.025] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
+            <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2.5 dark:border-white/[0.06] dark:bg-white/[0.03]">
               <dt className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Active</dt>
               <dd className="mt-1 max-w-[9rem] truncate font-mono text-sm font-semibold text-slate-800 dark:text-slate-100">
                 {activeModel?.displayName ?? "None"}
@@ -116,7 +116,7 @@ export const EmbeddingModelCatalog: FunctionComponent<EmbeddingModelCatalogProps
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-2">
           {models.map((model) => (
             <ModelCard key={model.id} model={model}
               onDownload={onDownload}

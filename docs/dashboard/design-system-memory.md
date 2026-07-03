@@ -39,7 +39,8 @@ The Memory UI relies on specific hex colors that match existing app accents:
 
 ## Model Catalog
 - The embedding model catalog uses one Warm Void panel instead of a plain grid. The panel should feel quiet and operational, with low-contrast surfaces, restrained borders, and a header that summarizes available, downloaded, stale, and active model state before the card grid.
-- Model cards keep model name, status, description, dimension, size, language, progress, stale count, and action controls in stable regions so one-column mobile and two-column desktop layouts remain scannable.
+- Model cards use a compact Warm Void standard (`min-h-[17rem]`, modest padding, restrained radius, and low elevation) while keeping model name, status, description, dimension, size, language, progress, stale count, and action controls in stable regions so one-column mobile and two-column desktop layouts remain scannable.
+- Model catalog action controls use compact `min-h-9` buttons with wrapped labels, visible Signal Jade focus rings, and icon-only delete affordances sized consistently with the rest of the card chrome.
 - Signal Jade is the primary action treatment for download, activate, active, downloaded-progress, and re-embedding progress states. Use it for the user's next constructive model action and avoid competing violet primary buttons in the catalog.
 - Ember is reserved for stale embedding messaging and re-embed prompts. Stale copy should be direct and actionable without making the entire card feel destructive.
 - Status red is reserved for unavailable/error states and delete affordances. Delete remains a quiet icon-only destructive action with an explicit accessible name, visible focus ring, and disabled state for the active model.
