@@ -13,6 +13,8 @@ import { usePreviewSessions } from "../../../dashboard/src/v2/hooks/use-preview-
 
 expect.extend(matchers);
 
+const mockNavigate = vi.hoisted(() => vi.fn());
+
 vi.mock("../../../dashboard/src/v2/hooks/use-project-tasks.js", () => ({
     useProjectTasks: vi.fn(),
 }));
@@ -31,9 +33,9 @@ vi.mock("../../../dashboard/src/v2/lib/agent-preset-api.js", () => ({
 }));
 
 vi.mock("@tanstack/react-router", () => ({
-    useNavigate: vi.fn().mockReturnValue(vi.fn()),
+    useNavigate: vi.fn().mockReturnValue(mockNavigate),
     Link: ({ children, to, search, ...props }: any) => (
-        <a href={to} data-testid={`link-${to}`} {...props}>
+        <a href={to} data-search={JSON.stringify(search || {})} data-testid={`link-${to}`} {...props}>
             {children}
         </a>
     ),
@@ -59,6 +61,7 @@ describe("Global Search", () => {
     beforeEach(() => {
         cleanup();
         vi.clearAllMocks();
+        mockNavigate.mockClear();
         vi.mocked(useProjectTasks).mockReturnValue({ tasks: [] } as any);
         vi.mocked(usePreviewSessions).mockReturnValue({ sessions: [] } as any);
         document.body.innerHTML = '';
@@ -81,6 +84,74 @@ describe("Global Search", () => {
                     enabled: true,
                 });
             });
+        });
+
+        it("matches and renders custom sprint keys from the project prefix", async () => {
+            render(
+                <GlobalSearch
+                    projectId="p1"
+                    selectedProject={{ id: "p1", name: "Project 1" } as any}
+                    sprintKeyPrefix="CODUX"
+                    sprints={[
+                        {
+                            id: "sprint-32",
+                            projectId: "p1",
+                            number: 32,
+                            slug: "codux-32",
+                            name: "Search Routing",
+                            goal: "Make global search use custom sprint keys",
+                            status: "running",
+                            showcasePinned: false,
+                            tasksCount: 0,
+                            completion: 0,
+                            createdAt: "2026-07-03T00:00:00Z",
+                            updatedAt: "2026-07-03T00:00:00Z",
+                        } as any,
+                    ]}
+                />
+            );
+
+            fireEvent.click(screen.getByText("Search...").closest("button")!);
+            fireEvent.input(screen.getByRole("combobox", { hidden: true }), { target: { value: "CODUX-32" } });
+
+            await waitFor(() => {
+                expect(screen.getByText("CODUX-32")).toBeInTheDocument();
+            });
+            expect(screen.getByText("Search Routing")).toBeInTheDocument();
+        });
+
+        it("matches numberless sprints by slug and renders the slug route key", async () => {
+            render(
+                <GlobalSearch
+                    projectId="p1"
+                    selectedProject={{ id: "p1", name: "Project 1" } as any}
+                    sprintKeyPrefix="CODUX"
+                    sprints={[
+                        {
+                            id: "sprint-hotfix",
+                            projectId: "p1",
+                            number: null,
+                            slug: "hotfix-login",
+                            name: "Login Hotfix",
+                            goal: "Patch auth redirect",
+                            status: "idle",
+                            showcasePinned: false,
+                            tasksCount: 0,
+                            completion: 0,
+                            createdAt: "2026-07-03T00:00:00Z",
+                            updatedAt: "2026-07-03T00:00:00Z",
+                        } as any,
+                    ]}
+                />
+            );
+
+            fireEvent.click(screen.getByText("Search...").closest("button")!);
+            fireEvent.input(screen.getByRole("combobox", { hidden: true }), { target: { value: "hotfix-login" } });
+
+            await waitFor(() => {
+                expect(screen.getByText("HOTFIX-LOGIN")).toBeInTheDocument();
+            });
+            expect(screen.getByText("Login Hotfix")).toBeInTheDocument();
         });
 
         it("opens search overlay when Cmd+K is pressed", async () => {
@@ -139,11 +210,36 @@ describe("Global Search", () => {
 
             expect(onClose).toHaveBeenCalled();
         });
+
+        it("navigates sprint selections with explicit sprint id and custom key", () => {
+            const onClose = vi.fn();
+            render(
+                <SearchOverlay
+                    isOpen={true}
+                    onClose={onClose}
+                    searchQuery="CODUX-32"
+                    onSearchChange={vi.fn()}
+                    results={{
+                        sprints: [{ id: "sprint-32", title: "Search Routing", displayKey: "CODUX-32", sprintKey: "CODUX-32", routeSprintId: "sprint-32", status: "running" }],
+                        tasks: [],
+                        agents: [],
+                        containers: []
+                    }}
+                    isLoading={false}
+                />
+            );
+
+            fireEvent.keyDown(window, { key: "ArrowDown" });
+            fireEvent.keyDown(window, { key: "Enter" });
+
+            expect(mockNavigate).toHaveBeenCalledWith({ to: "/sprints", search: { sprintId: "sprint-32", sprintKey: "CODUX-32" } });
+            expect(onClose).toHaveBeenCalled();
+        });
     });
 
     describe("SearchResultRow Component", () => {
         it("renders sprint properly and highlights active state", () => {
-            const item = { id: "1", title: "SPR-1: Test Sprint", status: "active" };
+            const item = { id: "1", title: "Test Sprint", displayKey: "SPR-1", sprintKey: "SPR-1", routeSprintId: "1", status: "active" };
             render(<SearchResultRow item={item} categoryType="sprints" searchQuery="" globalItemIndex={0} isFocused={true} onFocus={vi.fn()} activeItemRef={null} onClick={vi.fn()} />);
 
             const link = screen.getByRole("option");
@@ -154,14 +250,14 @@ describe("Global Search", () => {
         });
 
         it("renders task properly and highlights match", () => {
-             const item = { id: "tsk12345", title: "Implement feature X", status: "open", sprintId: "1" };
+             const item = { id: "tsk12345", title: "Implement feature X", status: "open", sprintId: "1", routeTaskId: "tsk12345", routeSprintId: "1" };
              render(<SearchResultRow item={item} categoryType="tasks" searchQuery="feature" globalItemIndex={0} isFocused={false} onFocus={vi.fn()} activeItemRef={null} onClick={vi.fn()} />);
 
              expect(screen.getByText("feature").tagName).toBe("MARK");
         });
 
         it("disables row when item status is unavailable", () => {
-             const item = { id: "tsk12345", title: "Implement feature X", status: "unavailable", sprintId: "1" };
+             const item = { id: "tsk12345", title: "Implement feature X", status: "unavailable", sprintId: "1", routeTaskId: "tsk12345", routeSprintId: "1" };
              render(<SearchResultRow item={item} categoryType="tasks" searchQuery="feature" globalItemIndex={0} isFocused={false} onFocus={vi.fn()} activeItemRef={null} onClick={vi.fn()} />);
 
              const link = screen.getByRole("option");

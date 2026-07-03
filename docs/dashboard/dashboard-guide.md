@@ -218,7 +218,7 @@ Legacy runtime:
 - Top-nav project selector persists the active project in sqlite
 - Top-nav sprint selector persists the active sprint for the selected project
 - Top-nav search sits in the left header cluster beside the brand and lazy-loads project tasks only after the search overlay opens; the active task counter uses the same compact height as the project, sprint, and worker selectors
-- Global Search preserves previous results during debounce to avoid layout shift, only polls for container previews when opened, and uses `aria-activedescendant` for keyboard navigation.
+- Global Search preserves previous results during debounce to avoid layout shift, only polls for container previews when opened, and uses `aria-activedescendant` for keyboard navigation. Sprint results use the selected project's effective sprint key prefix, include slug/id/status/goal text in matching, and deep-link to `/sprints?sprintId=<id>&sprintKey=<key>` without deriving route state from visible row text.
 - Shared dropdown menus enhance nested menu items inside layout wrappers, so keyboard navigation and item entrance animation remain consistent when menu content is grouped.
 - Shared popovers own trigger open/close toggling; feature triggers such as Agent Memory avoid duplicate local toggles that can immediately close the panel after opening.
 - The Agents page now includes a Push Agents header action with an inline destination picker, so users explicitly choose between a local commit, branch push, or pull request before dispatching the backend push request.

@@ -39,8 +39,8 @@ import { SearchOverlay } from "../SearchOverlay";
 
 describe("SearchOverlay Accessibility", () => {
     const mockResults = {
-        sprints: [{ id: "spr-1", title: "SPR-1: Sprint 1", status: "active" }],
-        tasks: [{ id: "tsk-1", title: "Task 1", sprintId: "spr-1" }],
+        sprints: [{ id: "spr-1", title: "Sprint 1", displayKey: "SPR-1", sprintKey: "SPR-1", routeSprintId: "spr-1", status: "active" }],
+        tasks: [{ id: "tsk-1", title: "Task 1", sprintId: "spr-1", routeTaskId: "tsk-1", routeSprintId: "spr-1" }],
         agents: [],
         containers: [],
     };

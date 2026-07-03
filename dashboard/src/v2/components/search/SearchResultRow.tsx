@@ -2,13 +2,13 @@ import { FunctionComponent } from "preact";
 import { Target, ListChecks, Cpu, Compass, ArrowRight } from "lucide-preact";
 import { Link } from "@tanstack/react-router";
 import { AgentAvatarSvg } from "../agents/AgentAvatarSvg.js";
-import type { SearchItem } from "./SearchOverlay";
+import type { AgentSearchItem, ContainerSearchItem, SearchCategoryId, SearchItem, SprintSearchItem, TaskSearchItem } from "./SearchOverlay";
 import { INTERACTION_TOKENS } from "../../lib/motion/tokens.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 interface SearchResultRowProps {
     item: SearchItem;
-    categoryType: string;
+    categoryType: SearchCategoryId;
     searchQuery: string;
     globalItemIndex: number;
     isFocused: boolean;
@@ -30,6 +30,7 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
     const reducedMotion = useReducedMotion();
     const transitionDuration = reducedMotion ? "0ms" : INTERACTION_TOKENS.selectionMovement.duration;
     const transitionTimingFunction = reducedMotion ? "none" : INTERACTION_TOKENS.selectionMovement.ease;
+    const avatarConfig = "avatarConfig" in item ? item.avatarConfig : null;
     // Determine icon and specific formatting based on category
     let Icon = Target;
     let itemId = item.id;
@@ -43,47 +44,44 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
     let targetSearch = {};
 
     if (categoryType === 'sprints') {
+        const sprintItem = item as SprintSearchItem;
         Icon = Target;
         targetTo = "/sprints";
-        // The TopNav formats title as `SPR-XX: Name`, let's extract it
-        const match = title?.match(/^(SPR-\d+):\s*(.*)$/);
-        if (match) {
-            itemId = match[1];
-            title = match[2];
-        } else {
-             // fallback if format isn't matched
-            itemId = 'SPR';
-        }
-        targetSearch = { sprintId: item.id };
-        badgeText = item.status || 'Active';
-        if (item.status === 'completed') badgeColorClass = 'text-status-green bg-status-green/10';
-        else if (item.status === 'active') badgeColorClass = 'text-signal-500 bg-signal-500/10';
+        itemId = sprintItem.displayKey;
+        title = sprintItem.title;
+        targetSearch = { sprintId: sprintItem.routeSprintId, sprintKey: sprintItem.sprintKey };
+        badgeText = sprintItem.status || 'Active';
+        if (sprintItem.status === 'completed') badgeColorClass = 'text-status-green bg-status-green/10';
+        else if (sprintItem.status === 'active') badgeColorClass = 'text-signal-500 bg-signal-500/10';
     } else if (categoryType === 'tasks') {
+        const taskItem = item as TaskSearchItem;
         Icon = ListChecks;
         targetTo = "/tasks";
-        targetSearch = { taskId: item.id, sprintId: item.sprintId };
+        targetSearch = { taskId: taskItem.routeTaskId, sprintId: taskItem.routeSprintId };
         // Typically tsk-something
-        itemId = item.id.substring(0, 8);
-        badgeText = item.status || 'Open';
-        if (item.status === 'done') badgeColorClass = 'text-status-green bg-status-green/10';
-        else if (item.status === 'in_progress') badgeColorClass = 'text-signal-500 bg-signal-500/10';
+        itemId = taskItem.id.substring(0, 8);
+        badgeText = taskItem.status || 'Open';
+        if (taskItem.status === 'done') badgeColorClass = 'text-status-green bg-status-green/10';
+        else if (taskItem.status === 'in_progress') badgeColorClass = 'text-signal-500 bg-signal-500/10';
     } else if (categoryType === 'agents') {
+        const agentItem = item as AgentSearchItem;
         Icon = Cpu;
         targetTo = "/agents";
-        targetSearch = { agentId: item.id };
+        targetSearch = { agentId: agentItem.routeAgentId };
         showDot = true;
-        itemId = item.id.split('-')[0] || 'AGT'; // Or however it's formatted
-        badgeText = item.status || 'Offline';
-        if (item.status === 'idle') dotColorClass = 'bg-slate-400';
-        else if (item.status === 'running' || item.status === 'active') dotColorClass = 'bg-status-green animate-pulse';
+        itemId = agentItem.id.split('-')[0] || 'AGT'; // Or however it's formatted
+        badgeText = agentItem.status || 'Offline';
+        if (agentItem.status === 'idle') dotColorClass = 'bg-slate-400';
+        else if (agentItem.status === 'running' || agentItem.status === 'active') dotColorClass = 'bg-status-green animate-pulse';
     } else if (categoryType === 'containers') {
+        const containerItem = item as ContainerSearchItem;
         Icon = Compass;
         targetTo = "/browser";
-        targetSearch = { containerId: item.id };
+        targetSearch = { containerId: containerItem.routeContainerId };
         showDot = true;
-        itemId = item.id.substring(0, 8);
-        badgeText = item.status || 'Stopped';
-        if (item.status === 'running') {
+        itemId = containerItem.id.substring(0, 8);
+        badgeText = containerItem.status || 'Stopped';
+        if (containerItem.status === 'running') {
             dotColorClass = 'bg-status-green animate-pulse';
             badgeText = 'Running';
         } else {
@@ -141,9 +139,9 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
                 <div className={`p-2 rounded-xl transition-colors duration-200 shrink-0 ${
                     isFocused ? 'bg-signal-500/15 text-signal-500' : 'bg-black/5 dark:bg-white/5 text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200'
                 }`}>
-                    {item.avatarConfig ? (
+                    {avatarConfig ? (
                         <div className="w-5 h-5 flex items-center justify-center shrink-0">
-                            <AgentAvatarSvg config={item.avatarConfig} expression="happy" size={20} static />
+                            <AgentAvatarSvg config={avatarConfig} expression="happy" size={20} static />
                         </div>
                     ) : (
                         <Icon className="w-5 h-5" strokeWidth={isFocused ? 2 : 1.5} />
