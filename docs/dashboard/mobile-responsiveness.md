@@ -33,6 +33,12 @@ When using the `Table` component for responsive data displays:
 4. **Accessible Sort States:** Apply `ariaSort` explicitly only on the active sort column.
 5. **Handling Long Strings:** To ensure long continuous strings do not overflow the mobile cards or desktop columns, `TableCell` internals must use `min-w-0 break-words` classes. Content rendered inside the cell must support text wrapping safely without breaking the mobile layout.
 
+## Horizontal Dashboard Rails
+
+Horizontally overflowing dashboard surfaces, including Quicksprint template rails, should contain their own horizontal scrolling within the component boundary. The page itself must not gain horizontal scroll at mobile, tablet, or desktop widths.
+
+For Quicksprint templates, keep the three-row rail layout reachable on narrow screens by allowing native touch and trackpad scrolling inside the rail. Left and right controls may remain available where space allows, but they should supplement native scrolling rather than replace it. Use viewport-safe max widths, `min-w-0` on rail containers, and scroll padding or end spacers when needed so the first and last cards, focus rings, and controls are not clipped.
+
 ## Long-Form Modal Scrolling
 
 For modals with extensive form content (like `AddProjectModal` and `AddTaskModal`), the layout should ensure that:
