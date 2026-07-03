@@ -5,7 +5,7 @@ import { effect } from "@preact/signals";
 import { Inspector } from "./components/memory/Inspector.js";
 import { MemoryFilters, MemoryDetails, MemoryCard } from "./components/memory/index.js";
 import MemorySidebar from "./components/memory/MemorySidebar.js";
-import { memorySidebarExpandedSignal, searchQuerySignal, activeMemoryIdSignal, hoveredMemoryIdSignal, activeTierSignal, selectedSprintIdSignal, selectedAgentPresetIdSignal } from "./components/memory/memoryState.js";
+import { memorySidebarExpandedSignal, searchQuerySignal, activeMemoryIdSignal, hoveredMemoryIdSignal, activeTierSignal, selectedSprintIdSignal, selectedAgentPresetIdSignal, lobotomizeModeSignal } from "./components/memory/memoryState.js";
 
 import { AddMemoryModal } from "./components/memory/AddMemoryModal.js";
 import type { FunctionComponent } from "preact";
@@ -293,6 +293,12 @@ export const MemoryPage: FunctionComponent = () => {
 
     const lobRef = useRef(lobotomize);
     lobRef.current = lobotomize;
+    useEffect(() => {
+        lobotomizeModeSignal.value = lobotomize;
+        return () => {
+            lobotomizeModeSignal.value = false;
+        };
+    }, [lobotomize]);
     const inspectorOpen = activeMemoryIdSignal.value !== null;
 
     /* ── Fetch agent presets on project change ─────────────── */
@@ -355,6 +361,34 @@ export const MemoryPage: FunctionComponent = () => {
             };
         }
     }, [graphData]);
+
+    /* ── Delete ────────────────────────────────────────────────────────── */
+    const handleDelete = useCallback(async (id: string) => {
+        const s = S.current;
+        const idx = s.graph.nodes.findIndex(n => n.id === id);
+        if (idx < 0) return;
+        const node = s.graph.nodes[idx];
+
+        // API delete
+        try { await apiDeleteMemory(id); } catch { /* ignore */ }
+
+        gsap.timeline({
+            onComplete: () => {
+                node.alive = false;
+                if (s.selectedIdx === idx) { s.selectedIdx = -1; activeMemoryIdSignal.value = null; }
+                setMemoryCount(s.graph.nodes.filter(n => n.alive).length);
+                setDeletedCount(c => c + 1);
+            },
+        })
+            .to(node, { x: node.x + 8, duration: 0.04, ease: "power4.out" })
+            .to(node, { x: node.x - 8, duration: 0.04 })
+            .to(node, { x: node.x + 5, duration: 0.04 })
+            .to(node, { x: node.x, duration: 0.03 })
+            .to(node, { glow: 2, duration: 0.1 })
+            .to(node, { scale: 0, opacity: 0, x: 0, y: 0, duration: 0.4, ease: "power4.in" });
+    }, [setMemoryCount]);
+    const handleDeleteRef = useRef(handleDelete);
+    handleDeleteRef.current = handleDelete;
 
 /* ── Canvas setup & render loop ───────────────────────────────────── */
     useLayoutEffect(() => {
@@ -650,8 +684,15 @@ export const MemoryPage: FunctionComponent = () => {
                 const { wx, wy } = getWorld(e);
                 const idx = hitTest(wx, wy, s.graph.nodes);
                 if (idx >= 0) {
-                    s.selectedIdx = idx;
                     const node = s.graph.nodes[idx];
+                    if (lobRef.current) {
+                        void handleDeleteRef.current(node.id);
+                        s.mouseDown = false;
+                        s.dragMoved = false;
+                        canvas.style.cursor = "pointer";
+                        return;
+                    }
+                    s.selectedIdx = idx;
                     activeMemoryIdSignal.value = node.id;
                     const target = focusCameraOnPoint(node, Math.max(s.cam.zoom, MEMORY_CAMERA.selectedNodeZoom));
                     gsap.to(s.cam, { ...target, ...CAMERA_FOCUS_TWEEN });
@@ -769,32 +810,6 @@ export const MemoryPage: FunctionComponent = () => {
             }
             return next;
         });
-    }, []);
-
-    /* ── Delete ────────────────────────────────────────────────────────── */
-    const handleDelete = useCallback(async (id: string) => {
-        const s = S.current;
-        const idx = s.graph.nodes.findIndex(n => n.id === id);
-        if (idx < 0) return;
-        const node = s.graph.nodes[idx];
-
-        // API delete
-        try { await apiDeleteMemory(id); } catch { /* ignore */ }
-
-        gsap.timeline({
-            onComplete: () => {
-                node.alive = false;
-                if (s.selectedIdx === idx) { s.selectedIdx = -1; activeMemoryIdSignal.value = null; }
-                setMemoryCount(s.graph.nodes.filter(n => n.alive).length);
-                setDeletedCount(c => c + 1);
-            },
-        })
-            .to(node, { x: node.x + 8, duration: 0.04, ease: "power4.out" })
-            .to(node, { x: node.x - 8, duration: 0.04 })
-            .to(node, { x: node.x + 5, duration: 0.04 })
-            .to(node, { x: node.x, duration: 0.03 })
-            .to(node, { glow: 2, duration: 0.1 })
-            .to(node, { scale: 0, opacity: 0, x: 0, y: 0, duration: 0.4, ease: "power4.in" });
     }, []);
 
     /* ── Camera controls ──────────────────────────────────────────────── */
@@ -1020,7 +1035,7 @@ export const MemoryPage: FunctionComponent = () => {
                     <AlertTriangle className="w-4 h-4 shrink-0" strokeWidth={2.5} />
                     <p className="text-xs font-bold">
                         <span className="uppercase tracking-[0.14em]">Warning — Lobotomize mode active.</span>
-                        {" "}Click any node then use the inspector to excise memories permanently.
+                        {" "}Single-click a graph node to delete it immediately. Inspector and sidebar delete buttons also skip confirmation.
                     </p>
                 </div>
             )}

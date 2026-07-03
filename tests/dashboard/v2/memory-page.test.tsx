@@ -4,7 +4,8 @@ import { h } from "preact";
 // @ts-ignore
 globalThis.React = { createElement: h };
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, act, waitFor } from "@testing-library/preact";
+import { render, screen, act, waitFor, fireEvent } from "@testing-library/preact";
+import * as matchers from "@testing-library/jest-dom/matchers";
 import { MemoryPage, getWheelZoomTarget, inverseZoomScreenSize } from "../../../dashboard/src/v2/MemoryPage.js";
 import { ProjectDataContext } from "../../../dashboard/src/v2/context/project-data.js";
 import * as api from "../../../dashboard/src/v2/lib/memory-api.js";
@@ -12,17 +13,47 @@ import userEvent from "@testing-library/user-event";
 import { useEmbeddingModelStatus } from "../../../dashboard/src/v2/hooks/use-embedding-model-status.js";
 import { useMemoryPageData } from "../../../dashboard/src/v2/hooks/use-memory-page-data.js";
 import { MEMORY_CAMERA } from "../../../dashboard/src/v2/lib/memory-camera.js";
+import { activeMemoryIdSignal, activeTierSignal, lobotomizeModeSignal, memorySidebarExpandedSignal } from "../../../dashboard/src/v2/components/memory/memoryState.js";
+import type { MemoryRecord } from "../../../dashboard/src/v2/memory-types.js";
 // we cannot use renderHook because of dependency conflict. So we create a wrapper.
+
+expect.extend(matchers);
 
 // Mock API
 vi.mock("../../../dashboard/src/v2/lib/memory-api.js");
 vi.mock("../../../dashboard/src/v2/lib/project-api.js", () => ({
     fetchSprints: vi.fn().mockResolvedValue({ sprints: [] }),
+}));
+vi.mock("../../../dashboard/src/v2/lib/agent-preset-api.js", () => ({
     fetchAgentPresets: vi.fn().mockResolvedValue([]),
 }));
 vi.mock("../../../dashboard/src/v2/lib/api/fetch-json.js", () => ({
     fetchJson: vi.fn()
 }));
+vi.mock("gsap", () => {
+    const createTimeline = (config?: { onComplete?: () => void }) => {
+        const timeline = {
+            to: vi.fn(() => timeline),
+            kill: vi.fn(),
+        };
+        if (config?.onComplete) {
+            queueMicrotask(config.onComplete);
+        }
+        return timeline;
+    };
+    const gsapMock = {
+        to: vi.fn(),
+        fromTo: vi.fn(),
+        set: vi.fn(),
+        timeline: vi.fn(createTimeline),
+        context: vi.fn((callback: () => void) => {
+            callback();
+            return { revert: vi.fn() };
+        }),
+        killTweensOf: vi.fn(),
+    };
+    return { default: gsapMock, gsap: gsapMock };
+});
 
 describe("memory map canvas helpers", () => {
     it("keeps label sizing in screen space as camera zoom changes", () => {
@@ -55,6 +86,109 @@ const renderMemoryPage = () => {
         </ProjectDataContext.Provider>
     );
 };
+
+const memoryRecord = (overrides: Partial<MemoryRecord> = {}): MemoryRecord => ({
+    id: "memory-1",
+    projectId: "proj-1",
+    scope: "project",
+    content: "Immediate deletion memory",
+    category: "context",
+    strength: 0.8,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    sprintId: null,
+    agentPresetId: null,
+    source: { type: "manual" },
+    embeddingModel: null,
+    embeddingDimension: 0,
+    embeddingBlob: null,
+    promotedFromId: null,
+    promotionReason: null,
+    ...overrides,
+});
+
+describe("MemoryPage destructive mode", () => {
+    let originalMatchMedia: typeof window.matchMedia;
+    let canvasRectSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        activeTierSignal.value = "long_term";
+        activeMemoryIdSignal.value = null;
+        lobotomizeModeSignal.value = false;
+        memorySidebarExpandedSignal.value = false;
+        vi.mocked(api.listMemories).mockResolvedValue([memoryRecord()]);
+        vi.mocked(api.listEmbeddingModels).mockResolvedValue([]);
+        vi.mocked(api.getMemoryStats).mockResolvedValue({ sprint: 0, agent: 0, project: 1, activeModel: null, staleEmbeddings: 0 });
+        vi.mocked(api.getEmbeddingMap).mockResolvedValue({
+            hasEmbeddings: true,
+            nodes: [{ id: "memory-1", x: 0, y: 0 }],
+            edges: [],
+        });
+        vi.mocked(api.deleteMemory).mockResolvedValue(undefined);
+        originalMatchMedia = window.matchMedia;
+        window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+            matches: query === "(prefers-reduced-motion: reduce)",
+            media: query,
+            onchange: null,
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            dispatchEvent: vi.fn(),
+        }));
+        canvasRectSpy = vi.spyOn(HTMLCanvasElement.prototype, "getBoundingClientRect").mockImplementation(() => ({
+            x: 0,
+            y: 0,
+            left: 0,
+            top: 0,
+            right: 800,
+            bottom: 600,
+            width: 800,
+            height: 600,
+            toJSON: () => ({}),
+        } as DOMRect));
+    });
+
+    afterEach(() => {
+        window.matchMedia = originalMatchMedia;
+        canvasRectSpy.mockRestore();
+        activeTierSignal.value = "short_term";
+        activeMemoryIdSignal.value = null;
+        lobotomizeModeSignal.value = false;
+        memorySidebarExpandedSignal.value = false;
+        document.body.innerHTML = "";
+    });
+
+    it("syncs lobotomize mode and deletes a graph node with one click", async () => {
+        const { container, unmount } = renderMemoryPage();
+
+        await waitFor(() => {
+            expect(screen.getByText("1 nodes")).toBeInTheDocument();
+        });
+
+        await userEvent.click(screen.getByRole("button", { name: "Toggle Danger Delete Mode" }));
+
+        await waitFor(() => {
+            expect(lobotomizeModeSignal.value).toBe(true);
+            expect(screen.getByText(/Single-click a graph node to delete it immediately/i)).toBeInTheDocument();
+        });
+
+        const canvas = container.querySelector("canvas");
+        expect(canvas).toBeTruthy();
+
+        fireEvent.mouseDown(canvas!, { clientX: 400, clientY: 300 });
+        fireEvent.mouseUp(canvas!, { clientX: 400, clientY: 300 });
+
+        await waitFor(() => {
+            expect(api.deleteMemory).toHaveBeenCalledWith("memory-1");
+        });
+        expect(activeMemoryIdSignal.value).toBeNull();
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+        unmount();
+    });
+});
 
 describe("useMemoryPageData Hook", () => {
     beforeEach(() => {

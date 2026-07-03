@@ -8,19 +8,6 @@ import { activeMemoryIdSignal, lobotomizeModeSignal, memoryMutationsSignal, sele
 
 expect.extend(matchers);
 
-
-
-vi.mock("../../../hooks/use-confirm-dialog.js", () => ({
-    useConfirmDialog: () => ({
-        isOpen: false,
-        options: null,
-        requestConfirm: vi.fn().mockResolvedValue(true),
-        handleConfirm: vi.fn(),
-        handleCancel: vi.fn(),
-        triggerRef: { current: null }
-    })
-}));
-
 describe("MemoryCard", () => {
     const mockRemoveMemory = vi.fn();
     memoryMutationsSignal.value = {
@@ -68,9 +55,29 @@ describe("MemoryCard", () => {
         const deleteButton = getByRole("button", { name: /Delete Context memory: test-content/i });
         expect(deleteButton).toBeInTheDocument();
 
-        await fireEvent.click(deleteButton);
+        fireEvent.click(deleteButton);
 
         expect(mockRemoveMemory).toHaveBeenCalledWith("test-id");
+    });
+
+    test("delete click does not also select the card", () => {
+        lobotomizeModeSignal.value = true;
+        const onClick = vi.fn();
+
+        const { getByRole } = render(
+            <MemoryCard
+                id="test-id"
+                content="test-content"
+                category="context"
+                strength={0.8}
+                onClick={onClick}
+            />
+        );
+
+        fireEvent.click(getByRole("button", { name: /Delete Context memory: test-content/i }));
+
+        expect(mockRemoveMemory).toHaveBeenCalledWith("test-id");
+        expect(onClick).not.toHaveBeenCalled();
     });
 
     test("does not show X button when lobotomizeModeSignal is false", () => {
