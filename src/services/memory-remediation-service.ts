@@ -11,6 +11,8 @@ import type { ExecutionRepository } from "../repositories/execution-repository.j
 import { buildProviderPrompt } from "./cli-workflow-utils.js";
 import { DEFAULT_CLI_WORKFLOW_SETTINGS } from "./cli-workflow-utils.js";
 
+const AI_REMEDIATION_REVIEW_THRESHOLD = 0.45;
+
 interface MemoryRemediationDeps {
   memoryPromotionService: MemoryPromotionService;
   memoryService: MemoryService;
@@ -131,8 +133,11 @@ export class MemoryRemediationService {
     }
 
     const candidates = await this.deps.memoryPromotionService.analyzeForPromotion(args.projectId, args.sprintId);
+    const reviewThreshold = memorySettings.remediationMode === "ai"
+      ? Math.min(memorySettings.promotionThreshold, AI_REMEDIATION_REVIEW_THRESHOLD)
+      : memorySettings.promotionThreshold;
     const eligible = candidates
-      .filter((candidate) => candidate.score >= memorySettings.promotionThreshold)
+      .filter((candidate) => candidate.score >= reviewThreshold)
       .slice(0, memorySettings.remediationMaxPromotions);
 
     if (eligible.length === 0) {
@@ -189,8 +194,8 @@ export class MemoryRemediationService {
         settings,
         candidates: eligible,
       });
-      const allowedIds = new Set(eligible.map((candidate) => candidate.memory.id));
-      const candidateById = new Map(eligible.map((candidate) => [candidate.memory.id, candidate]));
+      const allowedIds = new Set(eligible.map((candidate) => candidate.id));
+      const candidateById = new Map(eligible.map((candidate) => [candidate.id, candidate]));
       const selected = decision.promote
         .map((item) => ({
           id: item.id,
@@ -207,13 +212,13 @@ export class MemoryRemediationService {
       const reasonByCandidateId = new Map<string, string>();
       const selectedCandidates = selected.flatMap((item) => {
         if (!item.candidate) return [];
-        reasonByCandidateId.set(item.candidate.memory.id, item.reason);
+        reasonByCandidateId.set(item.candidate.id, item.reason);
         return [item.candidate];
       });
       const promoted = this.deps.memoryPromotionService.promoteCandidatesAsClaims(
         args.projectId,
         selectedCandidates,
-        (candidate) => reasonByCandidateId.get(candidate.memory.id) || "AI memory remediation after sprint",
+        (candidate) => reasonByCandidateId.get(candidate.id) || "AI memory remediation after sprint",
       );
       return { mode: "ai", promoted, candidateCount: candidates.length, aiUsed: true };
     } catch (error) {
@@ -301,7 +306,7 @@ export class MemoryRemediationService {
         "Your previous response failed validation:",
         error.message,
         "",
-        "Return only valid JSON with this shape: { \"promote\": [{ \"id\": \"memory-id\", \"reason\": \"short reason\" }] }.",
+        "Return only valid JSON with this shape: { \"promote\": [{ \"id\": \"candidate-id\", \"reason\": \"short reason\" }] }.",
       ].join("\n"),
       providerLabel: "Memory remediation",
       sessionIdPrefix: "memory-remediation",
@@ -452,16 +457,15 @@ export class MemoryRemediationService {
     candidates: PromotionCandidate[];
   }): string {
     const candidatesJson = JSON.stringify(args.candidates.map((candidate) => ({
-      id: candidate.memory.id,
-      clusterId: candidate.clusterId,
+      id: candidate.id,
       claim: candidate.claim,
       category: candidate.memory.category,
       strength: candidate.memory.strength,
       score: Number(candidate.score.toFixed(3)),
       reason: candidate.reason,
       riskFlags: candidate.riskFlags,
-      evidenceMemoryIds: candidate.evidenceMemoryIds,
-      content: candidate.memory.content,
+      evidenceCount: candidate.evidenceCount,
+      crossSprintCount: candidate.crossSprintCount,
     })), null, 2);
 
     return [
@@ -478,7 +482,7 @@ export class MemoryRemediationService {
       candidatesJson,
       "",
       "Return only JSON with this exact shape:",
-      "{ \"promote\": [{ \"id\": \"memory-id\", \"reason\": \"why this is durable\" }] }",
+      "{ \"promote\": [{ \"id\": \"candidate-id\", \"reason\": \"why this is durable\" }] }",
     ].join("\n");
   }
 

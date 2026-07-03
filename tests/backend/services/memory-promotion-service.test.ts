@@ -83,7 +83,7 @@ describe("MemoryPromotionService", () => {
       expect(candidates[0].crossSprintCount).toBe(0);
     });
 
-    it("filters out low-strength memories below 0.6", async () => {
+    it("filters out very low-strength memories below the candidate floor", async () => {
       const lowMem = makeMemory({ id: "low", strength: 0.4 });
       const highMem = makeMemory({ id: "high", strength: 0.75 });
       memoryRepository.listBySprint.mockReturnValue([lowMem, highMem]);
@@ -141,6 +141,8 @@ describe("MemoryPromotionService", () => {
 
       expect(candidates).toHaveLength(1);
       expect(candidates[0].memory).toBe(mem);
+      expect(candidates[0].id).toBe("mem-1");
+      expect(candidates[0].evidenceCount).toBe(1);
       // Ensure cross-sprint count defaults to 0 and score calculates from strength alone
       expect(candidates[0].crossSprintCount).toBe(0);
       expect(candidates[0].score).toBeGreaterThan(0);
@@ -278,7 +280,10 @@ describe("MemoryPromotionService", () => {
       const candidates = await service.analyzeForPromotion("proj-1", "sprint-1");
 
       expect(candidates).toHaveLength(1);
+      expect(candidates[0].id).toBe("mem-a");
+      expect(candidates[0].clusterId).toBe("cluster:mem-a");
       expect(candidates[0].evidenceMemoryIds).toEqual(["mem-a", "mem-b"]);
+      expect(candidates[0].evidenceCount).toBe(2);
       expect(candidates[0].reason).toContain("clustered from 2 sprint memories");
       expect(candidates[0].riskFlags).toEqual([]);
     });
@@ -375,10 +380,12 @@ describe("MemoryPromotionService", () => {
         strength: 0.8,
       });
       const candidate = {
+        id: "src-1",
         memory: source,
         clusterId: "cluster:src-1,src-2",
         claim: "Use dependency factory composition for service wiring.",
         evidenceMemoryIds: ["src-1", "src-2"],
+        evidenceCount: 2,
         riskFlags: [],
         score: 0.82,
         reason: "confirmed by 2 agents",
@@ -444,10 +451,12 @@ describe("MemoryPromotionService", () => {
     it("links evidence to an existing active claim instead of duplicating it", () => {
       const source = makeMemory({ id: "src-1" });
       const candidate = {
+        id: "src-1",
         memory: source,
         clusterId: "memory:src-1",
         claim: source.content,
         evidenceMemoryIds: ["src-1", "src-2"],
+        evidenceCount: 2,
         riskFlags: [],
         score: 0.8,
         reason: "meets promotion threshold",

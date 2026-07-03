@@ -253,7 +253,7 @@ Dashboard behavior:
 - `autoCaptureSprint`
 - `autoCaptureAgent`
 - `autoPromote`
-- `promotionThreshold`
+- `promotionThreshold` (default `0.5`; AI remediation may review candidates down to `0.45` before selecting durable promotions)
 - `remediationMode` (`off|deterministic|ai`)
 - `remediationMaxPromotions`
 - `maxSprintMemories`

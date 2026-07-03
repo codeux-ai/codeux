@@ -15,10 +15,11 @@ Claims store confidence, durability, category, tags, source metadata, and option
 
 `MemoryPromotionService.analyzeForPromotion` builds promotion candidates from sprint memories:
 
-- filters out low-strength and CI/check/build failure notes
+- filters out very low-strength and CI/check/build failure notes
 - detects risky sprint-local facts such as fixtures, implementation trivia, speculation, and file-specific one-offs
 - clusters semantically similar memories from the same sprint into one candidate
 - scores candidates with recurrence, cross-agent agreement, category weight, and risk penalties
+- assigns each candidate one stable `id` for remediation selection; internal evidence IDs remain available only for claim provenance
 
 `promoteCandidatesAsClaims` is the production promotion path for auto-promotion and post-sprint remediation:
 
@@ -44,7 +45,7 @@ The service searches embedded project-scope claim mirror memories, then hydrates
 
 ## Remediation Semantics
 
-Deterministic and AI post-sprint remediation both consume the same promotion candidates. AI mode can reject risky candidates, but selected IDs are allow-listed against deterministic candidates before any write occurs.
+Deterministic and AI post-sprint remediation both consume scored promotion candidates. AI mode receives a broader review set with compact candidate IDs, score, reason, risk flags, `evidenceCount`, and cross-sprint count. It does not receive every source memory ID in the prompt. Selected IDs are allow-listed against those candidates before any write occurs.
 
 Long-term cleanup still operates on project-scope memories for duplicate and CI-failure cleanup. Claims are retained as durable knowledge records and can continue receiving evidence across future sprints.
 

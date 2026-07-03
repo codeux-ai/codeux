@@ -29,6 +29,9 @@ const RISK_PENALTIES: Record<MemoryPromotionRiskFlag, number> = {
   file_specific: 0.08,
 };
 
+const MIN_PROMOTION_CANDIDATE_STRENGTH = 0.45;
+const SCORE_NORMALIZATION_FACTOR = 1.35;
+
 interface RawPromotionCandidate extends PromotionCandidate {
   similarCurrentSprintMemoryIds: string[];
 }
@@ -60,7 +63,7 @@ export class MemoryPromotionService {
       if (memory.source.originType === "ci_failure_learning" || riskFlags.includes("ci_failure")) {
         continue;
       }
-      if (memory.strength < 0.6) continue;
+      if (memory.strength < MIN_PROMOTION_CANDIDATE_STRENGTH) continue;
 
       // Check for semantic similarity across other sprint memories (cross-sprint consistency)
       let crossSprintCount = 0;
@@ -137,7 +140,7 @@ export class MemoryPromotionService {
       const crossSprintBonus = crossSprintCount >= 3 ? 0.3 : crossSprintCount >= 2 ? 0.2 : crossSprintCount >= 1 ? 0.1 : 0;
       const crossAgentBonus = crossAgentCount >= 2 ? 0.25 : crossAgentCount >= 1 ? 0.15 : 0;
       const strengthBonus = memory.strength >= 0.9 ? 0.2 : memory.strength >= 0.8 ? 0.1 : 0;
-      const rawScore = Math.min(1, (memory.strength * categoryWeight + crossSprintBonus + crossAgentBonus + strengthBonus) / 1.5);
+      const rawScore = Math.min(1, (memory.strength * categoryWeight + crossSprintBonus + crossAgentBonus + strengthBonus) / SCORE_NORMALIZATION_FACTOR);
       const riskPenalty = Math.min(0.45, riskFlags.reduce((sum, flag) => sum + (RISK_PENALTIES[flag] ?? 0), 0));
       const score = Math.max(0, rawScore - riskPenalty);
 
@@ -150,10 +153,12 @@ export class MemoryPromotionService {
       if (reasons.length === 0) reasons.push("meets promotion threshold");
 
       candidates.push({
+        id: memory.id,
         memory,
         clusterId: `memory:${memory.id}`,
         claim: memory.content,
         evidenceMemoryIds: [memory.id],
+        evidenceCount: 1,
         riskFlags,
         score,
         reason: reasons.join(", "),
@@ -256,7 +261,7 @@ export class MemoryPromotionService {
         Math.max(source.strength, candidate.score),
       );
       promoted.push(record);
-      this.logger.info(`Promoted memory cluster ${candidate.clusterId} → claim ${claim.id} → ${record.id}`);
+      this.logger.info(`Promoted memory candidate ${candidate.id} (${candidate.evidenceCount} evidence memories) → claim ${claim.id} → ${record.id}`);
 
       this.memoryService.triggerEmbedding(record).catch((error: Error) => {
         this.logger.warn(`Failed to embed promoted claim memory ${record.id}: ${error.message}`);
@@ -364,9 +369,11 @@ function clusterPromotionCandidates(candidates: RawPromotionCandidate[]): Promot
 
     return {
       memory: representative.memory,
-      clusterId: `cluster:${evidenceMemoryIds.join(",")}`,
+      id: representative.memory.id,
+      clusterId: evidenceMemoryIds.length > 1 ? `cluster:${representative.memory.id}` : `memory:${representative.memory.id}`,
       claim: representative.memory.content,
       evidenceMemoryIds,
+      evidenceCount: evidenceMemoryIds.length,
       riskFlags,
       score: representative.score,
       reason: reasonParts.join(", "),

@@ -127,10 +127,12 @@ export type MemoryPromotionRiskFlag =
   | "speculative";
 
 export interface PromotionCandidate {
+  id: string;
   memory: MemoryRecord;
   clusterId: string;
   claim: string;
   evidenceMemoryIds: string[];
+  evidenceCount: number;
   riskFlags: MemoryPromotionRiskFlag[];
   score: number;
   reason: string;
