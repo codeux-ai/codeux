@@ -172,6 +172,13 @@ For sprint create/update calls:
 - `goalMarkdown` is accepted as a public MCP alias for `goal`.
 - Missing or blank `projectId`, `sprintId`, `sprintRunId`, `name`, and `title` values are rejected before repository calls so MCP clients receive a validation error instead of a low-level `.trim()` failure.
 
+For sprint issue imports:
+- `manage_sprints` action `import_issues` is the MCP contract for issue importer access.
+- Search/import callers can provide `provider` (`github`, `gitlab`, or `jira`), `repository`, `hostDomain`, `projectKey`, `search`, `state`, `status`, `labels`, `assignee`, `assigneeText`, `issueKeys`, `issueNumbers`, `issueRefs`, `includeConversation`, `limit`, and optional sprint attachment fields.
+- `sprintId` and `attachToSprint` represent sprint attachment intent; `planAfterImport`, `autoStart`, `planningAgentPresetId`, `replan`, and `overrides` represent optional planning intent after import.
+- Existing `search`, `provider`, `limit`, `sprintId`, `planningAgentPresetId`, `replan`, and `overrides` payloads remain valid.
+- Issue search and import are not destructive actions. Sprint deletion remains approval-gated.
+
 For task create/update calls:
 - `title` is canonical; `name` is accepted as an alias.
 - `projectId` is required for list/create, and `sprintId` is required for create. List can omit `sprintId` to return all project tasks.
