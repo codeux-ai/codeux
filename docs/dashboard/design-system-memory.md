@@ -16,6 +16,7 @@ The Memory UI relies on specific hex colors that match existing app accents:
 ## Accessibility Rules
 - **Memory Tier Tabs:** The tier controls use `role="tablist"` with `aria-label="Memory Tier"`. Keyboard navigation should fully support Arrow, Home, and End keys, and visually track `aria-selected` status.
 - **Danger Mode:** Destructive toggles like "Lobotomize" use `aria-pressed` and include explicit visually hidden or text-visible labels (e.g. `aria-label="Toggle Danger Delete Mode"`) indicating the destructive nature.
+- **Immediate Delete Warning:** When Lobotomize is active, the visible warning copy must say that single-click graph deletion is active and that inspector/sidebar single-memory delete controls do not show a confirmation dialog.
 - **Memory Cards:** Memory cards must not be pointer-only. They should announce context, including scope and origin (e.g., via visually hidden instructional text like "Press Enter to open details" and explicitly mentioning the scope in the card's accessible label).
 - **Search & Filtering:** Escape to clear behavior in the search box should update `aria-live` regions ("Search cleared") without unexpectedly blurring focus.
 

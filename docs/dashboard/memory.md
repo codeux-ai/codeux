@@ -126,6 +126,7 @@ The Memory settings panel also manages one project-scoped scheduler entry for lo
 - Enhanced `MemoryList.tsx` to prominently display visible memory counts directly in the UI instead of relying solely on `sr-only` live regions, while keeping the list layout `min-w-0` and overflow-safe on narrow screens.
 - Added per-memory selection toggles and a batch action bar to the sidebar list so users can select visible memories, clear the selection, or select all currently filtered results without touching hidden records.
 - Batch deletion requires an explicit confirmation dialog when more than one memory is selected. The delete flow is optimistic, restores any failed deletions, and reports partial failures through the memory feedback region with a retry action.
+- Lobotomize mode is immediate by design: a single click on a graph node deletes it through the canvas deletion animation, and inspector/sidebar single-memory delete buttons do not open confirmation dialogs. Sidebar card deletion still uses the existing optimistic removal path with undo feedback.
 - Selection is pruned automatically when search, tier, sprint, agent, or sidebar state changes make a memory invisible, which keeps batch actions scoped to the current visible slice of memory.
 - Improved memory list accessibility and reduced motion fallbacks in `MemoryList.tsx`, utilizing `useInteractionTokens` to respect OS-level reduced motion preferences.
 - Updated the memory map camera so wheel, button, and click focus interactions all preserve readable navigation on dense graphs.
