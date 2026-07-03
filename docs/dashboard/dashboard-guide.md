@@ -123,7 +123,7 @@ Legacy runtime:
   - websocket upgrade endpoint for dashboard realtime subscriptions (`projects`, `overview`, `project:<projectId>`, `thread:<threadId>`)
 - `GET /api/projects/:projectId/execution`
   - Project-scoped execution control-plane snapshot for the v2 runtime
-- `GET /api/projects/:projectId/stats?window=24h|7d|30d|all|custom&from=YYYY-MM-DD&to=YYYY-MM-DD`
+- `GET /api/projects/:projectId/stats?window=1h|24h|7d|30d|all|custom&from=YYYY-MM-DD&to=YYYY-MM-DD`
   - Project-scoped token/time statistics snapshot with adaptive hourly/daily/weekly buckets, task/sprint/provider/purpose rollups, and telemetry-source mix
   - `custom` requires both `from` and `to`; presets ignore them
 - `POST /api/projects/:projectId/attention-items/:attentionItemId/claim`
@@ -193,24 +193,22 @@ Legacy runtime:
 ## UI Sections
 
 ### Stats page
-- Shared Stats surfaces use `stats-theme.css` as the warm-void visual foundation. Panel, subpanel, chip, input, ledger row, and card primitives map onto dashboard semantic tokens for surfaces, hairline borders, focus rings, motion, elevation, and low-opacity status/accent fills.
-- Shared Stats controls now route selected, hover, focus, disabled, shadow, and compact segmented-navigation states through the same stats theme tokens. The analysis mode rail keeps accessible `aria-pressed` buttons, icon-first compact rendering, wrap-first responsive rows, and visible focus rings.
-- Shared Stats cards render as named analytics articles with stable height, restrained hover elevation, long-value wrapping, and protected sparkline layering so dense metric decks do not shift or overlap as labels and values change.
-- The Stats hero is a two-zone command band. Project, sprint, generated-at, freshness, telemetry-source, and range-resolution context sit beside compact time-window controls, explicit custom date entry, active-mode guidance, and the analysis mode rail.
-- A lightweight workspace context strip follows the Stats hero and keeps the active mode, selected data window, freshness, resolution, and sprint scope visible without repeating the hero controls.
-- Time-window presets always stay in the hero. Choosing `Custom` reveals date inputs without applying the range; the validated `Apply` action is the only path that changes a custom range, and invalid ranges announce inline errors.
-- The analysis mode rail exposes Trend, Composition, Models, Providers, Ledgers, and System. Providers maps to the reliability workspace while keeping the user-facing label short.
-- The top summary cards change with the selected mode. Trend emphasizes tokens, active time, cost, invocations, and cache rate; Composition, Models, Reliability, Ledgers, and System use mode-specific cards for provider mix, model performance, telemetry confidence, ledger volume, and invocation health.
-- Every mode renders a warm-void Analysis Studio header with the mode icon, title, short description, compact question/compare/action framing, and a live Ready/Refreshing/Waiting state so polling refreshes do not disorient the workspace.
-- Trend mode uses a compact KPI band, trend-delta strip, interactive usage chart, graph filter menu, minimap, screen-reader data table, purpose activity panel, final range metadata, and persistent active-bucket/series rail. The usage chart header keeps filter access and zoom reset visible near the graph title, while the toolbar exposes selected range, bucket count, resolution, and active zoom; hover, keyboard focus, slider exploration, minimap selection, and drag zoom all feed the same active-bucket state.
-- Composition, Models, and Reliability are secondary studios for token/provider mix, ranked model efficiency, latency, success rates, source quality, provider health, and telemetry gaps. Composition compares token anatomy, provider lanes, source counts, purpose distribution, and low-data fallbacks; Models compares latency, success rate, token volume, cache efficiency, output velocity, and reasoning share; Reliability summarizes source quality, reported/estimated/unavailable/unsupported coverage, provider confidence, and duration sample coverage.
-- Ledgers mode uses sticky tabbed Task Telemetry, Sprint Telemetry, and Git Telemetry with stable count badges, roving focus, responsive overflow, search/sort controls, and progressive rendering for large result sets. Task and sprint ledgers summarize total and average token/time activity, latest activity, filtered-result context, and top contributors; rows keep provider, purpose, status, token flow, active time, calls, share, and last-activity context visible across mobile and desktop.
-- System mode uses a compact debugging workbench organized around sprint state, invocation health, external API activity, error categories, filters, and an invocation ledger, featuring summary strips, status distribution, and invocation filters.
-- The system invocation toolbar groups search, status, purpose, provider, error-category chips, clear-all, active-filter counts, result counts, and pagination into responsive wrapping control groups so filters remain operable on narrow screens.
-- The system invocation table preserves subdued status indicators, semantic column headers, per-cell header relationships, provider/model/type labels, task context chips, token and duration columns, loading/error/empty states, mobile-friendly row cards, and expandable transcript detail rows.
-- Invocation transcript detail wraps long prompts, system messages, and errors inside the panel while surfacing role, created time, token metadata, cost metadata when available, keyboard-accessible expansion, and plain-text rendering.
-- No-project, first-load loading, and first-load error states reuse the same Stats visual shell under the hero and context strip; loading remains a polite status and errors expose a retry action.
-- Stats data comes from `GET /api/projects/:projectId/stats`, and the System stats view additionally uses `useSystemViewData(projectId)` to fetch invocation records. Stats refresh through the normal dashboard polling/realtime path: existing snapshots remain visible while loading states mark the studio as refreshing.
+- The Stats page is available at `/stats` and is scoped to the selected project. Without a selected project, it renders the Stats shell with a polite no-project state instead of attempting to fetch telemetry.
+- Stats data comes from `GET /api/projects/:projectId/stats`; System mode additionally uses `useSystemViewData(projectId)` and invocation APIs for paginated records and transcript detail. Background refreshes keep the previous snapshot visible while the studio state changes to `Refreshing`.
+- The header is the command surface for the page. It shows project, sprint lens, generated-at time, freshness, telemetry-source quality, range resolution, active mode guidance, and the KPI runway for tokens, active time, invocations, success rate, models/providers, and selected range.
+- Time-window presets are `1h`, `24h`, `7d`, `30d`, `All time`, and `Custom`. Presets apply immediately. `Custom` only opens date fields; the range changes after a valid `Apply`. Incomplete or inverted ranges remain inline, mark the date inputs invalid, and announce the error.
+- Visual modes are `Trend`, `Composition`, `Models`, `Providers`, `Ledgers`, and `System`. `Providers` opens the reliability workspace while keeping the shorter user-facing label.
+- A workspace context strip follows the header so the active mode, selected window, freshness, resolution, and sprint scope remain visible while scrolling.
+- Mode-specific top cards summarize the selected analysis surface. Trend emphasizes work, runtime, cost, invocation health, cache rate, and velocity; Composition emphasizes provider and token mix; Models emphasizes model performance; Providers emphasizes telemetry confidence and risk; Ledgers emphasizes entity volume and Git scope; System emphasizes invocation health.
+- Trend mode is the chart workspace. It includes KPI tiles, trend deltas, health chips, the interactive usage chart, graph filters, minimap, screen-reader data table, purpose activity, and selected-range metadata. Filter switches change visible series only; they do not change the time window.
+- Composition mode explains provider share, token anatomy, cache behavior, source quality, purpose distribution, and low-data fallbacks using donuts, ribbons, and flow bars backed by snapshot totals.
+- Models mode ranks model activity by token volume and surfaces provider identity, success tone, latency, tokens per call, cache hit rate, reasoning share, output velocity, and sparse-telemetry states.
+- Providers mode summarizes reliability, fallback usage, source confidence, failure pressure, provider coverage, duration coverage, and provider-specific risk without fabricating health when telemetry is missing.
+- Ledgers mode provides Task Telemetry, Sprint Telemetry, and Git Telemetry tabs. Task and sprint ledgers include search, sort, progressive rendering, token-flow anatomy, status/provider/purpose context, recency, visible share, leader share, and optional duration percentile chips. Git ledgers use churn visuals for insertions and deletions so code change volume stays distinct from token flow.
+- System mode is a debugging workbench organized around Sprint State, Invocation Health, External API Activity, Error Categories, filters, pagination, an invocation ledger, and expandable message transcripts.
+- System filtering covers search, status, purpose, provider, error category, record mode (`All`, `Errors`, `System Msgs`), sort, page controls, clear-all, active-filter counts, and result counts. These controls wrap rather than clipping on narrow screens.
+- Loading, no-data, low-data, empty, and error states reuse the Stats shell. Loading panels use `role="status"` and error panels use `role="alert"` with retry where recovery is available.
+- For implementation details and page-level design rules, see [Stats & Analytics Design System](./design-system-stats.md). For telemetry collection semantics, see [Usage Telemetry And Stats](../architecture/usage-telemetry-and-stats.md).
 
 ### V2 project management
 - Interactive dashboard controls use pointer cursors consistently: enabled buttons, links, tab controls, form toggles, menu/popover triggers, DAG nodes, cards, and dismissible overlays expose a pointer affordance, while disabled controls retain `not-allowed`.
@@ -346,7 +344,7 @@ Legacy runtime:
 - Tasks board is now scoped to the active sprint selection when one is set, filtering the view to only tasks for that sprint
 - Tasks page stores explicit task executor preference (`auto`, `docker_cli`, `jules`)
 - The Tasks board entrance animation now replays only for project/view/filter changes instead of every background task refresh
-- Stats page is project-scoped and visualizes tracked token, time, and Git usage (insertions, deletions, PRs) for the selected project with `24h`, `7d`, `30d`, `all time`, and custom date windows
+- Stats page is project-scoped and visualizes tracked token, time, model/provider, source, task/sprint, Git, and system invocation telemetry for the selected project with `1h`, `24h`, `7d`, `30d`, `all time`, and custom date windows.
 - Scheduler page is project-scoped and provides a calendar plus 24-hour day view for timed sprint starts, quicksprint launches, and `/chat` messages. Recurring entries expand into every visible day in the calendar and support minute-level recurrence (`minutely` in API/MCP payloads, `Minutes` in the form) plus endless, fixed-count, and end-date/time recurrence. It also supports editing existing entries directly from scheduled entries or occurrences with full form hydration, title customization, and cancellation support. See [Scheduler](./scheduler.md).
 - Browser page is project-scoped and provides a polished in-app browser surface for sprint preview containers:
   - floating horizontal slider in its own top strip, with large-screen five-card visibility for preview selection
@@ -370,21 +368,15 @@ Legacy runtime:
   - restrained panel surfaces for sidebar and viewer regions using shared neutral/light-dark borders and backgrounds
   - launch state card matching Browser Preview container-launch conventions (accent icon treatment, selector styling, and primary action button)
   - file browsing/diff behavior remains unchanged (`files` and `changes` modes, selected path display, side-by-side toggle, and status semantics)
-- Stats page now matches the high-interaction v2 dashboard card language more closely with a unified **Analysis Studio UX**, including light/dark mode support and responsive behavior across screen sizes:
-  - unified glass-panel system that mirrors the premium live card surfaces instead of using a separate visual treatment
-  - visual-mode navigation controls that focus the workspace on Trend, Composition, Models, Providers/Reliability, Ledgers, or System subpages
-  - a full-width interactive trend graph (Usage Graph) with hover bucket inspection and drag-to-zoom timeframe selection, integrating Tokens, Time, Git metrics, and Cost into unified groupings
-  - Settings Integrations provider-instance `Token pricing` values now feed Stats cost metrics; if a provider has no pricing configured (or $0.00), its invocations are tracked but contribute $0.00 to aggregate cost series
-  - The AI Models settings page ends with Model Pricing, which lists active provider-instance model references with small usage tags and preserves canonical `provider/model` ids from custom or gateway-backed runtimes so a Google/DeepSeek model is not displayed under the CLI provider's fallback catalogue namespace. Antigravity models use explicit per-model mappings to Google, Anthropic, or Google Vertex catalogue entries as appropriate. Legacy `custom/<provider>/<model>` override keys display under the canonical provider row, and custom or override-only tags render neutral initials instead of borrowing a built-in provider brand.
-  - a Trend Studio summary band above the chart and a purpose activity section below it, keeping the trend tab self-contained for window-level analysis
-  - a Composition Studio that layers cache efficiency, token-flight timing, and a per-provider activity ledger beneath donut charts so the provider picture stays readable without tab switching
-  - a persistent right-side selected-metrics rail for configuring the chart series; same-window refreshes preserve user chart selections
-  - hourly views keep one-hour hover targets while reducing visible axis labels to a three-hour rhythm for readability
-  - donut-style composition charts for providers, token anatomy, and telemetry-source mix now animate as interactive slices with hover emphasis and center-detail readouts
-  - Models and Providers/Reliability tracking specifically surface model performance, API error rates, and retry counts
-  - tabbed Ledgers telemetry section replaces the always-visible ledger layout, complete with search, sort-by-recency/tokens/time/input/output/name, filtered-result summaries, top-contributor context, and richer token/time breakdowns
-  - System subpage for deeper debugging and internal telemetry info, now split into sprint state, invocation health, failure analysis, external API metrics, filters, and the invocation table so each operational concern stays scannable
-  - Git stats (Insertions, Deletions, Files Changed, Pull Requests, Merged PRs, merge rate, and merge conflicts) are integrated directly alongside Tokens, Time, and Cost metrics in the Analysis Studio, with bucket and entity rankings surfaced next to the tabbed ledgers. Git ledger rows use a dedicated churn mix visualization for insertions/deletions so code-change volume is visually distinct from token flow.
+- Stats page uses the unified **Analysis Studio UX** with light/dark support and responsive behavior across screen sizes:
+  - page-scoped Stats panels, chips, cards, inputs, ledgers, and focus rings come from `stats-theme.css` and the shared Stats primitives.
+  - visual-mode navigation focuses the workspace on Trend, Composition, Models, Providers, Ledgers, or System.
+  - Trend uses an interactive usage chart with hover and keyboard bucket inspection, minimap selection, drag zoom, graph filters, and accessible chart summaries.
+  - Composition layers provider share, token anatomy, source confidence, purpose activity, cache efficiency, and low-data fallbacks.
+  - Models ranks model usage and efficiency from snapshot model summaries, including success tone, latency, cache, reasoning, token volume, and output velocity.
+  - Providers surfaces reliability, telemetry confidence, failure pressure, provider coverage, duration coverage, and source mix from the existing stats snapshot.
+  - Ledgers uses tabbed Task Telemetry, Sprint Telemetry, and Git Telemetry with search, sort, progressive rendering, token-flow bars, and dedicated Git churn visuals.
+  - System splits operational debugging into sprint state, invocation health, external API activity, error categories, filters, pagination, invocation rows, and expandable transcript detail.
 - The Stats page uses the same project realtime invalidation channels as the rest of the v2 dashboard, then falls back to polling so usage graphs and tables stay current during active sprint execution
 - Overview widgets and headline stat cards now read project/task data from the same project-management API surface, and task streams are filtered to the currently selected active sprint only (a frontend-only view change with no API contract change)
 - Agents page features an immersive, showcase-first layout that defaults to presenting the selected agent's 3D animated avatar, details, and route-assignment tags, rather than a raw edit form.
