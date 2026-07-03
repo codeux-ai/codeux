@@ -77,6 +77,8 @@ describe("Settings Resolution Service", () => {
       expect(settings.ciIntelligence.resolveMainMergeConflicts).toBe(true);
       expect(settings.memory.enabled).toBe(true);
       expect(settings.agents.qualityAssurance.enabled).toBe(true);
+      expect(settings.agents.qualityAssurance.maxTaskReviewRuns).toBe(3);
+      expect(settings.agents.qualityAssurance.maxSprintReviewRuns).toBe(3);
       expect(settings.agents.qualityAssurance.exhaustionPolicy).toBe("FINISH_TASK");
     });
   });

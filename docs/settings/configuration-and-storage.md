@@ -290,8 +290,8 @@ Dashboard behavior:
   - these fields are only applied by invocation routes using the `AGENT` provider strategy; blank values inherit the route, worker, or global default
 - `qualityAssurance`
   - `enabled` (default `true`)
-  - `maxTaskReviewRuns` (default `5`)
-  - `maxSprintReviewRuns` (default `5`)
+  - `maxTaskReviewRuns` (default `3` for new or unset settings)
+  - `maxSprintReviewRuns` (default `3` for new or unset settings)
   - `exhaustionPolicy` (default `FINISH_TASK` for new or unset settings)
   - `taskCompletion`
     - `enabled`
@@ -310,8 +310,8 @@ QA merge-gate notes:
 - enabled task QA blocks feature merge until QA passes or `maxTaskReviewRuns` is exhausted
 - while task QA is pending or retrying, the runtime merge indicator can be `QA_PENDING`
 - the initial task review always counts as run `1`; later runs are only used for QA-requested fix checks
-- `maxTaskReviewRuns = 5` is the default task QA budget: the initial task review plus up to four QA re-checks after fixes
-- `maxSprintReviewRuns = 5` is the default sprint QA budget: the initial sprint review plus up to four sprint-level follow-up reviews
+- `maxTaskReviewRuns = 3` is the default task QA budget for new or unset settings: the initial task review plus up to two QA re-checks after fixes
+- `maxSprintReviewRuns = 3` is the default sprint QA budget for new or unset settings: the initial sprint review plus up to two sprint-level follow-up reviews
 - `exhaustionPolicy = FINISH_TASK` is the default for new or unset settings when task QA spends its budget without a pass; stricter projects can choose `FAIL_TASK` or `ESCALATE_TO_HUMAN`
 - a passed task QA result is reused and does not restart by itself on the next orchestration cycle
 - sprint QA now runs before the final `feature -> default` merge gate

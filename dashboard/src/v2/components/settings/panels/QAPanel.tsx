@@ -32,7 +32,7 @@ export const QAPanel: FunctionComponent<{
           <>
             <Row
               label="Task QA max runs"
-              description="How many QA review cycles a single task gets before the exhaustion policy applies. Default is 5."
+              description="How many QA review cycles a single task gets before the exhaustion policy applies. Default is 3."
               badge={getBadge("agents.qualityAssurance.maxTaskReviewRuns")}
             >
               <NumberInput
@@ -47,7 +47,7 @@ export const QAPanel: FunctionComponent<{
 
             <Row
               label="Sprint QA max runs"
-              description="How many sprint-completion QA review cycles a sprint gets before its budget is spent. Default is 5."
+              description="How many sprint-completion QA review cycles a sprint gets before its budget is spent. Default is 3."
               badge={getBadge("agents.qualityAssurance.maxSprintReviewRuns")}
             >
               <NumberInput

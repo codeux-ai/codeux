@@ -587,8 +587,8 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     instructionTemplates: { ...DEFAULT_INSTRUCTION_TEMPLATES },
     qualityAssurance: {
       enabled: true,
-      maxTaskReviewRuns: 5,
-      maxSprintReviewRuns: 5,
+      maxTaskReviewRuns: 3,
+      maxSprintReviewRuns: 3,
       exhaustionPolicy: "FINISH_TASK",
       taskCompletion: {
         enabled: true,

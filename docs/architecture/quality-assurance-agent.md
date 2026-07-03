@@ -135,7 +135,7 @@ Note: The run budget and retry limit rules are explicitly implemented in a dedic
 - recovered stale QA rows do not consume the task's final retry opportunity. If Code UX marks a running QA row failed because its provider runtime disappeared, the next cycle treats that as a retryable infrastructure recovery rather than a semantic QA failure.
 - `maxTaskReviewRuns = 2` means the initial task review plus one QA re-check after fixes
 - `maxTaskReviewRuns = N` means the initial task review plus up to `N - 1` QA re-checks for later fix iterations
-- `maxTaskReviewRuns = 5` is the default task QA budget
+- `maxTaskReviewRuns = 3` is the default task QA budget for new or unset settings
 - `FINISH_TASK` is the default task QA exhaustion policy for new or unset settings, so a task whose budget is spent without a pass is marked complete unless the project selects `FAIL_TASK` or `ESCALATE_TO_HUMAN`
 - if QA has failed at the cap without an explicit `changes_requested` verdict, Code UX treats the retry budget as exhausted
 - if the latest QA verdict is `changes_requested`, Code UX keeps the merge blocked at the retry cap unless a completed Code UX-applied QA continuation is waiting for verification
@@ -160,7 +160,7 @@ Behavior:
 - sprint QA uses the same budget semantics as task QA, but with its own `maxSprintReviewRuns` setting:
   - run `1` is the initial finished-sprint review
   - later runs are only used to check QA-requested fixes or follow-up work
-  - `maxSprintReviewRuns = 5` is the default sprint QA budget
+  - `maxSprintReviewRuns = 3` is the default sprint QA budget for new or unset settings
   - `maxSprintReviewRuns = 1` means sprint fixes are not re-checked by QA
 - if sprint QA passes, Code UX proceeds to main-merge evaluation and eventual completion
 - if sprint QA is still running, failed, or waiting on follow-up work, the main merge stays blocked
