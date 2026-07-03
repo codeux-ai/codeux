@@ -29,7 +29,7 @@ describe("parseOpenCodeJsonLines", () => {
 
     const result = parseOpenCodeJsonLines(stream);
     expect(result).not.toBeNull();
-    expect(result!.inputTokens).toBe(1500);
+    expect(result!.inputTokens).toBe(300);
     expect(result!.outputTokens).toBe(42);
     expect(result!.reasoningOutputTokens).toBe(8);
     expect(result!.cachedInputTokens).toBe(1200);
@@ -61,7 +61,7 @@ describe("parseOpenCodeJsonLines", () => {
     ]);
 
     const result = parseOpenCodeJsonLines(stream)!;
-    expect(result.inputTokens).toBe(1500);
+    expect(result.inputTokens).toBe(1400);
     expect(result.outputTokens).toBe(50);
     expect(result.reasoningOutputTokens).toBe(5);
     expect(result.cachedInputTokens).toBe(100);
@@ -92,7 +92,7 @@ describe("parseOpenCodeJsonLines", () => {
     ]);
 
     const result = parseOpenCodeJsonLines(stream)!;
-    expect(result.inputTokens).toBe(100);
+    expect(result.inputTokens).toBe(60);
     expect(result.outputTokens).toBe(11);
     expect(result.reasoningOutputTokens).toBe(2);
     expect(result.cachedInputTokens).toBe(40);
@@ -146,7 +146,7 @@ describe("parseOpenCodeExport", () => {
 
   it("reads session-cumulative usage from info.tokens", () => {
     const usage = parseOpenCodeExport(realExport)!;
-    expect(usage.inputTokens).toBe(88608);
+    expect(usage.inputTokens).toBe(87408);
     expect(usage.outputTokens).toBe(10284);
     expect(usage.reasoningOutputTokens).toBe(490);
     expect(usage.cachedInputTokens).toBe(1200);
@@ -160,7 +160,7 @@ describe("parseOpenCodeExport", () => {
   it("tolerates incidental wrapper output around the JSON object", () => {
     const noisy = `provider-runner: warning: something\n${realExport}\n`;
     const usage = parseOpenCodeExport(noisy)!;
-    expect(usage.inputTokens).toBe(88608);
+    expect(usage.inputTokens).toBe(87408);
     expect(usage.outputTokens).toBe(10284);
   });
 
@@ -173,7 +173,7 @@ describe("parseOpenCodeExport", () => {
 describe("subtractOpenCodeBaseline", () => {
   it("returns the usage unchanged when there is no baseline", () => {
     const current = {
-      inputTokens: 88608, cachedInputTokens: 1200, outputTokens: 10284, reasoningOutputTokens: 490,
+      inputTokens: 87408, cachedInputTokens: 1200, outputTokens: 10284, reasoningOutputTokens: 490,
       cost: 0.42, rawUsageJson: { tokens: { input: 88608, output: 10284, reasoning: 490, cache: { read: 1200, write: 0 } }, cost: 0.42 },
     };
     expect(subtractOpenCodeBaseline(current, null)).toEqual(current);
@@ -191,7 +191,7 @@ describe("subtractOpenCodeBaseline", () => {
     // The follow-up run resumes the session; `opencode export` now reports the
     // whole session's cumulative total, including the baseline above.
     const current = {
-      inputTokens: 88608,
+      inputTokens: 87408,
       cachedInputTokens: 1200,
       outputTokens: 10284,
       reasoningOutputTokens: 490,
@@ -201,7 +201,7 @@ describe("subtractOpenCodeBaseline", () => {
 
     const result = subtractOpenCodeBaseline(current, baseline);
 
-    expect(result.inputTokens).toBe(38608);
+    expect(result.inputTokens).toBe(38208);
     expect(result.cachedInputTokens).toBe(400);
     expect(result.outputTokens).toBe(4284);
     expect(result.reasoningOutputTokens).toBe(290);
@@ -214,7 +214,7 @@ describe("subtractOpenCodeBaseline", () => {
   it("never returns negative deltas even if the baseline is inconsistent", () => {
     const baseline = { tokens: { input: 90000, output: 11000, reasoning: 500, cache: { read: 1300, write: 0 } }, cost: 0.5 };
     const current = {
-      inputTokens: 88608, cachedInputTokens: 1200, outputTokens: 10284, reasoningOutputTokens: 490,
+      inputTokens: 87408, cachedInputTokens: 1200, outputTokens: 10284, reasoningOutputTokens: 490,
       cost: 0.42, rawUsageJson: null,
     };
 

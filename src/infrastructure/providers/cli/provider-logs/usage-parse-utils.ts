@@ -65,14 +65,16 @@ export function parseUsageObject(usage: Record<string, unknown>): ParsedUsageCou
     completionKeys: ["output_tokens", "completion_tokens", "outputTokens", "completionTokens", "output", "completion"],
     totalKeys: ["total_tokens", "totalTokens", "totalTokenCount", "total"],
   });
-  const inputTokens = normalized.promptTokens;
+  const promptTokens = normalized.promptTokens;
   let outputTokens = normalized.completionTokens;
 
   let cachedInputTokens = toNumber(usage.cached_input_tokens ?? 0);
+  let cachedTokensIncludedInPrompt = cachedInputTokens > 0;
   if (cachedInputTokens === 0) {
     const details = (usage.input_token_details ?? usage.prompt_tokens_details ?? usage.input_tokens_details) as Record<string, unknown> | undefined;
     if (details && typeof details === "object") {
       cachedInputTokens = toNumber(details.cached_tokens ?? 0);
+      cachedTokensIncludedInPrompt = cachedInputTokens > 0;
     }
   }
   if (cachedInputTokens === 0) {
@@ -83,6 +85,9 @@ export function parseUsageObject(usage: Record<string, unknown>): ParsedUsageCou
     // how the dedicated Claude Code parser treats them.
     cachedInputTokens = toNumber(usage.cache_read_input_tokens ?? 0) + toNumber(usage.cache_creation_input_tokens ?? 0);
   }
+  const inputTokens = cachedTokensIncludedInPrompt
+    ? Math.max(0, promptTokens - cachedInputTokens)
+    : promptTokens;
 
   let reasoningOutputTokens = toNumber(usage.reasoning_output_tokens ?? 0);
   if (reasoningOutputTokens === 0) {
@@ -93,7 +98,9 @@ export function parseUsageObject(usage: Record<string, unknown>): ParsedUsageCou
   }
 
   // When providers report only total+prompt, infer completion safely.
-  if (outputTokens <= 0 && normalized.totalTokens > inputTokens) {
+  if (outputTokens <= 0 && normalized.totalTokens > promptTokens) {
+    outputTokens = Math.max(0, normalized.totalTokens - promptTokens);
+  } else if (outputTokens <= 0 && normalized.totalTokens > inputTokens) {
     outputTokens = Math.max(0, normalized.totalTokens - inputTokens);
   }
 

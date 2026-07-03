@@ -128,7 +128,7 @@ describe("parseCodexRolloutJsonl", () => {
     const result = parseCodexRolloutJsonl(jsonl, Date.parse(followUpStart));
 
     expect(result.usage).toEqual({
-      inputTokens: 500,
+      inputTokens: 350,
       cachedInputTokens: 150,
       outputTokens: 60,
       reasoningOutputTokens: 15,

@@ -867,7 +867,7 @@ describe("ProviderRunner", () => {
     expect(globArg).toBe("*.jsonl");
 
     expect(result.usageTelemetry).toMatchObject({
-      inputTokens: 300,
+      inputTokens: 260,
       cachedInputTokens: 40,
       outputTokens: 90,
       reasoningOutputTokens: 5,
@@ -921,7 +921,7 @@ describe("ProviderRunner", () => {
       inputTokens: 12,
       cachedInputTokens: 7,
       outputTokens: 8,
-      totalTokens: 20,
+      totalTokens: 27,
       usageSource: "reported",
       transcriptText: "Finished in container.",
     });

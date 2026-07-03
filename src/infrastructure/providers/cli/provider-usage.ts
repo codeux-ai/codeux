@@ -184,6 +184,10 @@ function estimateTelemetry(provider: "gemini" | "codex" | "claude-code" | "qwen-
   };
 }
 
+function totalTrackedTokens(inputTokens: number, cachedInputTokens: number, outputTokens: number): number {
+  return inputTokens + cachedInputTokens + outputTokens;
+}
+
 function parseGeminiTokens(stats: Record<string, unknown> | null): ProviderUsageTelemetry | null {
   if (!stats) {
     return null;
@@ -200,7 +204,7 @@ function parseGeminiTokens(stats: Record<string, unknown> | null): ProviderUsage
     const cachedInputTokens = toNumber(directTokens.cached);
     const outputTokens = normalized.completionTokens;
     const reasoningOutputTokens = toNumber(directTokens.thoughts);
-    const totalTokens = Math.max(normalized.totalTokens, inputTokens + outputTokens + reasoningOutputTokens);
+    const totalTokens = Math.max(normalized.totalTokens, inputTokens + cachedInputTokens + outputTokens + reasoningOutputTokens);
     if (totalTokens > 0) {
       return {
         ...emptyTelemetry(),
@@ -236,7 +240,7 @@ function parseGeminiTokens(stats: Record<string, unknown> | null): ProviderUsage
       outputTokens += normalized.completionTokens;
       reasoningOutputTokens += toNumber((tokens as Record<string, unknown>).thoughts);
     }
-    const totalTokens = inputTokens + outputTokens + reasoningOutputTokens;
+    const totalTokens = inputTokens + cachedInputTokens + outputTokens + reasoningOutputTokens;
     if (totalTokens > 0) {
       return {
         ...emptyTelemetry(),
@@ -396,7 +400,8 @@ async function parseClaudeSessionTelemetry(
   // separators and drive-letter colons. Handle both Unix ("/") and Windows
   // ("\\", "C:") forms so the lookup works on every host.
   const slug = cwd.replace(/[/\\:]/g, "-");
-  const sessionPath = path.join(os.homedir(), ".claude", "projects", slug, `${nativeSessionId}.jsonl`);
+  const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
+  const sessionPath = path.join(homeDir, ".claude", "projects", slug, `${nativeSessionId}.jsonl`);
   const raw = await fs.readFile(sessionPath, "utf8").catch(() => "");
   if (!raw.trim()) return null;
   return claudeJsonlToTelemetry(raw, nativeSessionId, { sessionPath }, sinceMs);
@@ -440,7 +445,7 @@ function claudeJsonlToTelemetry(
 
   const { inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens } = parsed.usage;
   const cachedInputTokens = cacheCreationTokens + cacheReadTokens;
-  const totalTokens = inputTokens + outputTokens;
+  const totalTokens = totalTrackedTokens(inputTokens, cachedInputTokens, outputTokens);
 
   return {
     ...emptyTelemetry(),
@@ -554,7 +559,7 @@ export async function collectProviderUsageTelemetry(args: {
         cachedInputTokens: usage.cachedInputTokens,
         outputTokens: usage.outputTokens,
         reasoningOutputTokens: usage.reasoningOutputTokens,
-        totalTokens: usage.inputTokens + usage.outputTokens,
+        totalTokens: totalTrackedTokens(usage.inputTokens, usage.cachedInputTokens, usage.outputTokens),
         usageSource: "reported",
         rawUsageJson,
         transcriptText,
@@ -602,7 +607,7 @@ export async function collectProviderUsageTelemetry(args: {
           cachedInputTokens: reported.cachedInputTokens,
           outputTokens: reported.outputTokens,
           reasoningOutputTokens: reported.reasoningOutputTokens,
-          totalTokens: reported.inputTokens + reported.outputTokens,
+          totalTokens: totalTrackedTokens(reported.inputTokens, reported.cachedInputTokens, reported.outputTokens),
           usageSource: "reported",
           rawUsageJson: reported.rawUsageJson,
           transcriptText,
@@ -622,7 +627,7 @@ export async function collectProviderUsageTelemetry(args: {
         cachedInputTokens: exportUsage.cachedInputTokens,
         outputTokens: exportUsage.outputTokens,
         reasoningOutputTokens: exportUsage.reasoningOutputTokens,
-        totalTokens: exportUsage.inputTokens + exportUsage.outputTokens,
+        totalTokens: totalTrackedTokens(exportUsage.inputTokens, exportUsage.cachedInputTokens, exportUsage.outputTokens),
         usageSource: "reported",
         rawUsageJson: exportUsage.rawUsageJson,
         transcriptText: fallbackOutput,
@@ -666,7 +671,7 @@ export async function collectProviderUsageTelemetry(args: {
         cachedInputTokens: usage.cachedInputTokens,
         outputTokens: usage.outputTokens,
         reasoningOutputTokens: usage.reasoningTokens,
-        totalTokens: usage.inputTokens + usage.outputTokens,
+        totalTokens: totalTrackedTokens(usage.inputTokens, usage.cachedInputTokens, usage.outputTokens),
         usageSource: "reported",
         rawUsageJson,
         transcriptText,
@@ -694,7 +699,7 @@ export async function collectProviderUsageTelemetry(args: {
         cachedInputTokens: exactUsage.cachedInputTokens,
         outputTokens: exactUsage.outputTokens,
         reasoningOutputTokens: exactUsage.reasoningOutputTokens,
-        totalTokens: exactUsage.inputTokens + exactUsage.outputTokens,
+        totalTokens: totalTrackedTokens(exactUsage.inputTokens, exactUsage.cachedInputTokens, exactUsage.outputTokens),
         usageSource: "reported",
         rawUsageJson: null,
         transcriptText: fallbackOutput,
