@@ -132,9 +132,21 @@ In this working environment you have broad latitude to operate the running syste
   served from the built `dashboard/dist`, not transpiled live — refresh the browser tab after a
   rebuild finishes). Restart the process for backend/server (`src/`, non-dashboard) changes to take
   effect.
-- **You may run test sprints in the project "Simple Test 2".** It is wired to a local model
+- **You may run test sprints only in the approved local test project.** It is wired to a local model
   specifically for testing, so dispatching sprints/tasks there is safe and expected. Use it for
   end-to-end orchestration checks; don't run experimental sprints against real projects.
+
+## Project name privacy
+
+- Never mention real user/customer/live project names in PR titles, PR bodies, review comments,
+  commit messages, release notes, docs, or final summaries. Use generic labels such as `live project`,
+  `customer project`, `non-test project`, or `approved local test project`.
+- It is acceptable to inspect real project names privately in the local database or logs when required
+  for debugging, but do not surface those names outside transient local commands. Redact or generalize
+  them before publishing or summarizing findings.
+- When documenting validation, describe coverage by behavior and environment, for example `local test
+  sprint`, `live project restart window`, or `non-test provider invocation`, rather than naming the
+  project.
 
 ## Conventions
 

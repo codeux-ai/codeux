@@ -173,7 +173,12 @@ Release note rules:
 ## Local Dev Access (this environment)
 - **Full access to the database and environment.** The runtime DB is `~/.code-ux/app.db` (SQLite, WAL); read/write it as needed via `node:sqlite`. You may inspect and modify environment state.
 - **Restart the dev server on port 4444 anytime.** The dashboard/backend runs there; restart it (e.g. `pnpm run dev`) whenever a change needs to take effect — no need to ask first.
-- **Run test sprints in the project "Simple Test 2".** It is wired to a local model for testing, so dispatching sprints/tasks there is safe and expected. Use it for end-to-end orchestration checks; do not run experimental sprints against real projects.
+- **Run test sprints only in the approved local test project.** It is wired to a local model for testing, so dispatching sprints/tasks there is safe and expected. Use it for end-to-end orchestration checks; do not run experimental sprints against real projects.
+
+## Project Name Privacy
+- Never mention real user/customer/live project names in PR titles, PR bodies, review comments, commit messages, release notes, docs, or final summaries. Use generic labels such as `live project`, `customer project`, `non-test project`, or `approved local test project`.
+- It is acceptable to inspect real project names privately in the local database or logs when required for debugging, but do not surface those names outside transient local commands. Redact or generalize them before publishing or summarizing findings.
+- When documenting validation, describe coverage by behavior and environment, for example `local test sprint`, `live project restart window`, or `non-test provider invocation`, rather than naming the project.
 
 ## Documentation Workflow (Mandatory)
 - Documentation source of truth lives in `docs/` with the main entrypoint at `docs/index.md`.

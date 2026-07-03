@@ -3,6 +3,7 @@ import * as fsPromises from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { CommandRunner } from "../../../../src/shared/subprocess/command-runner.js";
+import { beginRuntimeShutdown, resetRuntimeShutdownForTests } from "../../../../src/services/shutdown-state.js";
 
 describe("CommandRunner", () => {
   const runner = new CommandRunner();
@@ -256,6 +257,27 @@ describe("CommandRunner", () => {
         "--porcelain",
       ]));
     } finally {
+      if (previous === undefined) {
+        delete process.env.CODE_UX_CONTAINERIZED_GIT;
+      } else {
+        process.env.CODE_UX_CONTAINERIZED_GIT = previous;
+      }
+    }
+  });
+
+  it("keeps git commands on the host after runtime shutdown begins", () => {
+    const tempRoot = path.join(os.tmpdir(), "code-ux-command-runner-repo");
+    const previous = process.env.CODE_UX_CONTAINERIZED_GIT;
+    process.env.CODE_UX_CONTAINERIZED_GIT = "1";
+    beginRuntimeShutdown();
+    try {
+      const resolved = (runner as unknown as {
+        resolveCommand: (command: string, args: string[], options: { cwd?: string; env?: NodeJS.ProcessEnv }) => { command: string; args: string[] };
+      }).resolveCommand("git", ["status", "--porcelain"], { cwd: tempRoot });
+
+      expect(resolved.command).toBe("git");
+    } finally {
+      resetRuntimeShutdownForTests();
       if (previous === undefined) {
         delete process.env.CODE_UX_CONTAINERIZED_GIT;
       } else {

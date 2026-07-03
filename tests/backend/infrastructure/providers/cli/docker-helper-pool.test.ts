@@ -2,14 +2,21 @@ import { describe, expect, it, vi } from "vitest";
 import { DockerHelperContainerPool } from "../../../../../src/infrastructure/providers/cli/docker-helper-pool.js";
 
 type Call = { command: string; args: string[] };
+type RunnerResult = { ok: boolean; code?: number; stdout?: string; stderr?: string };
 
-function makePool(overrides?: (call: Call) => { ok: boolean; stdout?: string; stderr?: string } | undefined) {
+function makePool(overrides?: (call: Call) => RunnerResult | Promise<RunnerResult> | undefined) {
   const calls: Call[] = [];
   const runner = vi.fn(async (command: string, args: string[]) => {
     calls.push({ command, args });
     const custom = overrides?.({ command, args });
     if (custom) {
-      return { ok: custom.ok, code: custom.ok ? 0 : 1, stdout: custom.stdout ?? "", stderr: custom.stderr ?? "" };
+      const resolved = await custom;
+      return {
+        ok: resolved.ok,
+        code: resolved.code ?? (resolved.ok ? 0 : 1),
+        stdout: resolved.stdout ?? "",
+        stderr: resolved.stderr ?? "",
+      };
     }
     if (args[0] === "run" && args.includes("-d")) {
       return { ok: true, code: 0, stdout: "cid\n", stderr: "" };
@@ -73,6 +80,31 @@ describe("DockerHelperContainerPool", () => {
     await pool.shutdown();
     const removals = calls.filter((c) => c.args[0] === "rm" && c.args.includes("-f") && c.args.includes("-v") && c.args.includes("cid"));
     expect(removals.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("shutdown removes a helper whose docker run is still in flight", async () => {
+    let resolveCreate: ((value: { ok: boolean; code: number; stdout: string; stderr: string }) => void) | null = null;
+    const { pool, calls } = makePool(({ args }) => {
+      if (args[0] !== "run") {
+        return undefined;
+      }
+      return new Promise((resolve) => {
+        resolveCreate = resolve;
+      });
+    });
+
+    const ensurePromise = pool.ensure("k1");
+    await vi.waitFor(() => expect(resolveCreate).not.toBeNull());
+
+    const shutdownPromise = pool.shutdown();
+    resolveCreate?.({ ok: true, code: 0, stdout: "late-cid\n", stderr: "" });
+
+    await expect(ensurePromise).rejects.toThrow(/released before startup completed/);
+    await shutdownPromise;
+
+    const removals = calls.filter((c) => c.args[0] === "rm" && c.args.includes("-f") && c.args.includes("-v"));
+    expect(removals.some((call) => call.args.includes("helper-k1"))).toBe(true);
+    expect(removals.some((call) => call.args.includes("late-cid"))).toBe(true);
   });
 
   it("isContainerGone detects missing containers", () => {

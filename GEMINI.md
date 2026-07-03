@@ -141,9 +141,23 @@ Before a task is complete, all of these MUST pass (`ci` = lint → backend cover
   inspect/modify env state as needed.
 - **Restart the dev server on port 4444 anytime** (e.g. `pnpm run dev`) when a change needs to take
   effect — no need to ask first.
-- **Run test sprints in the project "Simple Test 2"**, which uses a local model for testing.
+- **Run test sprints only in the approved local test project**, which uses a local model for testing.
   Dispatching sprints/tasks there is safe and expected; use it for end-to-end orchestration checks,
   not real projects.
+
+---
+
+## 🔒 7.1. Project Name Privacy
+
+- Never mention real user/customer/live project names in PR titles, PR bodies, review comments,
+  commit messages, release notes, docs, or final summaries. Use generic labels such as `live project`,
+  `customer project`, `non-test project`, or `approved local test project`.
+- It is acceptable to inspect real project names privately in the local database or logs when required
+  for debugging, but do not surface those names outside transient local commands. Redact or generalize
+  them before publishing or summarizing findings.
+- When documenting validation, describe coverage by behavior and environment, for example `local test
+  sprint`, `live project restart window`, or `non-test provider invocation`, rather than naming the
+  project.
 
 ---
 

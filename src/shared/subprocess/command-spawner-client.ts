@@ -78,9 +78,13 @@ export class CommandSpawnerClient {
       this.pending.set(id, job);
 
       try {
-        host.send({ type: "run", id, command, args, options });
+        host.send({ type: "run", id, command, args, options }, (error) => {
+          if (error) {
+            this.handleHostDown(error);
+          }
+        });
       } catch (error) {
-        this.settleReject(id, error instanceof Error ? error : new Error(String(error)));
+        this.handleHostDown(error instanceof Error ? error : new Error(String(error)));
       }
     });
   }
@@ -97,7 +101,12 @@ export class CommandSpawnerClient {
       this.settleReject(id, new HostUnavailableError("Command spawner client disposed"));
     }
     host?.removeAllListeners();
-    host?.disconnect?.();
+    host?.on("error", () => undefined);
+    try {
+      host?.disconnect?.();
+    } catch {
+      // The process may already have closed its IPC channel.
+    }
     host?.kill();
   }
 
@@ -115,7 +124,7 @@ export class CommandSpawnerClient {
       this.baseEnvSnapshot = snapshotEnv();
       const host = fork(this.hostModulePath, [], { stdio: ["ignore", "ignore", "inherit", "ipc"] });
       host.on("message", (message: SpawnerResponse) => this.handleMessage(message));
-      host.once("error", (error) => this.handleHostDown(error));
+      host.on("error", (error) => this.handleHostDown(error));
       host.once("exit", (code, signal) => {
         if (this.host === host) {
           this.handleHostDown(new Error(`Command spawner host exited (code=${code}, signal=${signal})`));
@@ -155,7 +164,11 @@ export class CommandSpawnerClient {
   private handleHostDown(error: Error): void {
     // Tear the host down and fail in-flight jobs; the next run() lazily respawns a fresh host so a
     // one-off crash doesn't permanently disable the spawner.
-    this.host?.removeAllListeners();
+    const host = this.host;
+    if (host) {
+      host.removeAllListeners();
+      host.on("error", () => undefined);
+    }
     this.host = null;
     this.rejectAll(error);
   }
