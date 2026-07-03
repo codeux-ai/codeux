@@ -380,9 +380,13 @@ describe("StatsPage Shell", () => {
     mockStatsPageData({ visualMode: "trend", setVisualMode });
     const { rerender } = render(<StatsPage />);
 
-    fireEvent.click(within(screen.getByRole("group", { name: "Analytics modes" })).getByRole("button", { name: "Composition" }));
-    fireEvent.click(within(screen.getByRole("group", { name: "Analytics modes" })).getByRole("button", { name: "Providers" }));
-    fireEvent.click(within(screen.getByRole("group", { name: "Analytics modes" })).getByRole("button", { name: "System" }));
+    const modeGroup = screen.getByRole("group", { name: "Analytics modes" });
+    expect(within(modeGroup).getByRole("button", { name: "Trend" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(modeGroup).getByText("Selected analytics mode: Trend.")).toBeInTheDocument();
+
+    fireEvent.click(within(modeGroup).getByRole("button", { name: "Composition" }));
+    fireEvent.click(within(modeGroup).getByRole("button", { name: "Providers" }));
+    fireEvent.click(within(modeGroup).getByRole("button", { name: "System" }));
     expect(setVisualMode).toHaveBeenNthCalledWith(1, "composition");
     expect(setVisualMode).toHaveBeenNthCalledWith(2, "reliability");
     expect(setVisualMode).toHaveBeenNthCalledWith(3, "system");
@@ -399,6 +403,56 @@ describe("StatsPage Shell", () => {
     rerender(<StatsPage />);
     expect(screen.getByRole("region", { name: "Ledgers metrics" })).toBeInTheDocument();
     expect(screen.getByLabelText("Mock analysis studio")).toHaveTextContent("Task Telemetry");
+  });
+
+  it("moves analytics mode focus with arrow keys while preserving pressed-button semantics", () => {
+    const setVisualMode = vi.fn();
+    mockStatsPageData({ visualMode: "trend", setVisualMode });
+    render(<StatsPage />);
+
+    const modeGroup = screen.getByRole("group", { name: "Analytics modes" });
+    within(modeGroup).getByRole("button", { name: "Trend" }).focus();
+    fireEvent.keyDown(modeGroup, { key: "ArrowRight" });
+
+    expect(setVisualMode).toHaveBeenCalledWith("composition");
+    expect(within(modeGroup).getByRole("button", { name: "Composition" })).toHaveFocus();
+    expect(modeGroup).not.toHaveAttribute("role", "tablist");
+    expect(within(modeGroup).queryByRole("tab")).not.toBeInTheDocument();
+  });
+
+  it("labels metric-card empty sparklines as explicit no-data states", () => {
+    mockStatsPageData({
+      visualMode: "trend",
+      stats: {
+        ...richStats,
+        usage: {
+          ...usage,
+          invocationCount: 0,
+          activeTimeMs: 0,
+          wallTimeMs: 0,
+          inputTokens: 0,
+          cachedInputTokens: 0,
+          outputTokens: 0,
+          reasoningOutputTokens: 0,
+          totalTokens: 0,
+          totalCostUsd: 0,
+          reportedInvocationCount: 0,
+          estimatedInvocationCount: 0,
+          unavailableInvocationCount: 0,
+          unsupportedInvocationCount: 0,
+        },
+        buckets: [],
+        chartSeries: [],
+        statusCounts: { completed: 0, failed: 0, cancelled: 0, running: 0, paused: 0 },
+        duration: { sampleCount: 0, avgMs: 0, p50Ms: 0, p95Ms: 0, maxMs: 0 },
+      },
+    });
+
+    render(<StatsPage />);
+
+    const costCard = screen.getByRole("article", { name: /Cost: No cost/ });
+    expect(within(costCard).getByText("No sparkline data")).toBeInTheDocument();
+    expect(within(costCard).getByRole("img", { name: /Cost has no spend sparkline data/i })).toBeInTheDocument();
   });
 
   it("does not animate the shell when reduced motion is enabled", () => {
