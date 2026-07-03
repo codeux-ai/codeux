@@ -3,6 +3,8 @@ import styles from "./StatsCard.module.css";
 import "../styles/stats-theme.css";
 
 export type StatsCardAccent = "signal" | "amber" | "cyan" | "rose" | "emerald" | "default";
+export type StatsCardDensity = "compact" | "comfortable";
+export type StatsCardTone = "warm" | "muted";
 
 interface StatsCardProps {
   title: string;
@@ -11,19 +13,12 @@ interface StatsCardProps {
   icon?: ComponentType<any>;
   description?: ComponentChildren;
   accent?: StatsCardAccent;
+  density?: StatsCardDensity;
+  tone?: StatsCardTone;
   className?: string;
   isActive?: boolean;
   children?: ComponentChildren;
 }
-
-const ACCENT_HEX_MAP: Record<StatsCardAccent, string> = {
-  signal: "#00E0A0",
-  amber: "#FFB800",
-  cyan: "#0EA5E9",
-  rose: "#F43F5E",
-  emerald: "#10B981",
-  default: "#00E0A0",
-};
 
 const ACCENT_CLASS_MAP: Record<StatsCardAccent, string> = {
   signal: styles.accentSignal,
@@ -34,9 +29,19 @@ const ACCENT_CLASS_MAP: Record<StatsCardAccent, string> = {
   default: "",
 };
 
+const DENSITY_CLASS_MAP: Record<StatsCardDensity, string> = {
+  compact: styles.compact,
+  comfortable: styles.comfortable,
+};
+
+const TONE_CLASS_MAP: Record<StatsCardTone, string> = {
+  warm: styles.toneWarm,
+  muted: styles.toneMuted,
+};
+
 /**
- * Reusable StatsCard primitive with award-grade styling.
- * Supports multiple accents, icon slots, and trend/metadata.
+ * Reusable StatsCard primitive for stats surfaces.
+ * Supports named accents, density/tone hooks, icon slots, and trend/metadata.
  */
 export const StatsCard: FunctionComponent<StatsCardProps> = ({
   title,
@@ -45,24 +50,35 @@ export const StatsCard: FunctionComponent<StatsCardProps> = ({
   icon: Icon,
   description,
   accent = "default",
+  density = "comfortable",
+  tone = "warm",
   className = "",
   isActive = false,
   children,
 }) => {
-  const accentHex = ACCENT_HEX_MAP[accent];
   const accentClass = ACCENT_CLASS_MAP[accent];
+  const densityClass = DENSITY_CLASS_MAP[density];
+  const toneClass = TONE_CLASS_MAP[tone];
+  const accessibleParts = [title, String(value)];
+  if (typeof description === "string" && description.trim().length > 0) {
+    accessibleParts.push(description);
+  }
+  const accessibleLabel = accessibleParts.join(": ");
 
   return (
-    <div className={`${styles.card} ${accentClass} ${className} group`}>
+    <article
+      aria-label={accessibleLabel}
+      className={`${styles.card} ${accentClass} ${densityClass} ${toneClass} ${isActive ? styles.active : ""} ${className} group`}
+    >
       {/* Background Tint */}
-      <div className={styles.tint} />
+      <div className={styles.tint} aria-hidden="true" />
       
       {/* Header: Title and Trend */}
       <div className={styles.header}>
         <div className={styles.titleGroup}>
           <div className={styles.title}>{title}</div>
           {Icon && (
-            <div className={styles.iconContainer}>
+            <div className={styles.iconContainer} aria-hidden="true">
               <Icon className="w-4 h-4" strokeWidth={2.2} />
             </div>
           )}
@@ -86,6 +102,6 @@ export const StatsCard: FunctionComponent<StatsCardProps> = ({
 
       {/* Extra Children (e.g. Action Buttons, extra footer elements, or Sparkline) */}
       {children}
-    </div>
+    </article>
   );
 };

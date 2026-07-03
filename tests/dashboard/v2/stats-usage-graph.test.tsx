@@ -17,6 +17,7 @@ import {
   calculateChartMetrics,
   getTooltipState,
 } from "../../../dashboard/src/v2/pages/stats/chart-view-models.js";
+import { formatCost } from "../../../dashboard/src/v2/pages/stats/stats-utils.js";
 import { useUsageChartState } from "../../../dashboard/src/v2/pages/stats/use-usage-chart-state.js";
 
 // Basic stubs
@@ -81,6 +82,33 @@ describe("Chart View Models", () => {
     expect(grouped["G2"]?.length).toBe(1);
   });
 
+  it("groupChartSeries sorts long series lists into readable categories", () => {
+    const grouped = groupChartSeries([
+      { id: "provider_b", label: "Beta Tokens", grouping: "providers" },
+      { id: "core_output", label: "Output Tokens", grouping: "details" },
+      { id: "provider_a", label: "Alpha Tokens", grouping: "providers" },
+      { id: "purpose_calls", label: "Task Coding Calls", grouping: "purposes_invocations" },
+      { id: "core_total", label: "Total Tokens", grouping: "totals" },
+      { id: "reported", label: "Reported Usage", grouping: "reliability" },
+      { id: "git_files", label: "Files Changed", grouping: "git" },
+    ] as any);
+
+    expect(Object.keys(grouped)).toEqual([
+      "Totals",
+      "Token details",
+      "Source confidence",
+      "Providers",
+      "Purpose calls",
+      "Git",
+    ]);
+    expect(grouped["Providers"]?.map((series) => series.label)).toEqual(["Alpha Tokens", "Beta Tokens"]);
+  });
+
+  it("formats cost values with exactly two decimal places", () => {
+    expect(formatCost(55.4093)).toBe("$55.41");
+    expect(formatCost(0)).toBe("$0.00");
+  });
+
   it("calculateChartMetrics calculates peak and average metrics", () => {
     const buckets = [
       { usage: { totalTokens: 10, activeTimeMs: 100, invocationCount: 1 } },
@@ -89,6 +117,7 @@ describe("Chart View Models", () => {
     const metrics = calculateChartMetrics(buckets);
     expect(metrics.peakTokens).toBe(20);
     expect(metrics.peakTime).toBe(200);
+    expect(metrics.peakActiveTimeMs).toBe(200);
     expect(metrics.peakInvocations).toBe(2);
     expect(metrics.averageTokens).toBe(15);
   });
@@ -181,8 +210,8 @@ describe("UsageFilterMenu", () => {
       />
     );
 
-    const tokensBtn = getByRole("button", { name: /Tokens/i });
-    const activeBtn = getByRole("button", { name: /Active Time/i });
+    const tokensBtn = getByRole("switch", { name: /Tokens/i });
+    const activeBtn = getByRole("switch", { name: /Active Time/i });
 
     // Since tokens is the only active series, it should be disabled to prevent 0 active series
     expect(tokensBtn).toHaveAttribute("aria-disabled", "true");
@@ -335,7 +364,7 @@ describe("InteractiveUsageChart", () => {
 
     render(<InteractiveUsageChart stats={stats} loading={false} error={null} refresh={vi.fn()} chartState={chartState} />);
 
-    expect(screen.getByText(/No data for this window/i)).toBeInTheDocument();
+    expect(screen.getByText(/No telemetry buckets are available for this window yet/i)).toBeInTheDocument();
 
     // Check that we DO NOT show a reset button inside the empty state.
     // But since enabledSeries is {tokens: true}, the UsageFilterMenu will show "Reset filters" when opened.

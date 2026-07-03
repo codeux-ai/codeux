@@ -1,93 +1,207 @@
 @import "tailwindcss";
 
 .card {
-  @apply relative overflow-hidden flex flex-col justify-between motion-safe:transition-all duration-300;
-  background: var(--stats-card-bg);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  @apply relative flex min-w-0 flex-col justify-between overflow-visible motion-safe:transform-gpu;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--stats-card-bg) 95%, var(--stats-card-accent-fill, transparent) 5%), var(--stats-card-bg)),
+    var(--stats-card-bg);
+  backdrop-filter: blur(var(--stats-surface-blur-panel));
+  -webkit-backdrop-filter: blur(var(--stats-surface-blur-panel));
   border: 1px solid var(--stats-card-border);
   border-radius: var(--stats-card-radius);
   padding: var(--stats-card-padding);
+  min-height: var(--stats-card-min-height);
+  height: 100%;
   box-shadow: var(--stats-card-shadow);
+  transition:
+    transform var(--stats-motion-fast),
+    background-color var(--stats-motion-fast),
+    border-color var(--stats-motion-fast),
+    box-shadow var(--stats-motion-fast);
+}
+
+.card:hover,
+.card.active {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-panel-hover) 92%, var(--stats-card-accent-fill, transparent) 8%), var(--stats-surface-panel-hover)),
+    var(--stats-surface-panel-hover);
+  border-color: var(--stats-border-strong);
+  box-shadow: var(--stats-card-shadow-hover);
 }
 
 .card:hover {
-  @apply -translate-y-0.5;
-  box-shadow: var(--elevation-raised);
+  transform: translateY(-1px);
+}
+
+.card:focus-within {
+  outline: 2px solid var(--stats-focus-ring);
+  outline-offset: 2px;
+  box-shadow: var(--stats-card-shadow-focus);
+}
+
+.compact {
+  padding: var(--stats-card-padding-compact);
+  min-height: var(--stats-card-compact-min-height);
+  --stats-card-current-value-size: var(--stats-card-value-size-compact);
+}
+
+.comfortable {
+  padding: var(--stats-card-padding);
+  --stats-card-current-value-size: var(--stats-card-value-size);
+}
+
+.toneWarm {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-panel) 95%, var(--stats-card-accent-fill, transparent) 5%), var(--stats-surface-panel)),
+    var(--stats-surface-panel);
+}
+
+.toneMuted {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-subpanel) 95%, var(--stats-card-accent-fill, transparent) 5%), var(--stats-surface-subpanel)),
+    var(--stats-surface-subpanel);
 }
 
 .header {
-  @apply relative z-10 flex items-center justify-between mb-6;
+  @apply relative z-10 mb-3 flex min-w-0 flex-wrap items-start justify-between gap-2;
 }
 
 .titleGroup {
-  @apply flex items-center gap-2;
+  @apply flex min-w-0 flex-1 items-start gap-2;
 }
 
 .title {
-  @apply text-xs font-medium uppercase tracking-widest transition-colors duration-300;
+  @apply min-w-0 max-w-full break-words text-xs font-semibold uppercase;
   color: var(--stats-label-color);
+  letter-spacing: var(--stats-card-title-letter-spacing);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  transition: color var(--stats-motion-fast);
 }
 
 .iconContainer {
-  @apply flex items-center justify-center w-6 h-6 rounded-lg transition-colors duration-300;
-  background: rgba(0, 0, 0, 0.04);
-}
-
-.dark .iconContainer {
-  background: rgba(255, 255, 255, 0.04);
+  @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--stats-control-radius)];
+  background: var(--stats-accent-muted-fill);
+  color: var(--stats-card-accent, var(--stats-detail-color));
+  transition:
+    background-color var(--stats-motion-fast),
+    color var(--stats-motion-fast);
 }
 
 .valueContainer {
-  @apply relative z-10;
+  @apply relative z-10 mt-auto flex min-w-0 flex-col gap-1.5;
 }
 
 .valueRow {
-  @apply flex items-end justify-between mb-1;
+  @apply flex min-w-0 flex-wrap items-end justify-between gap-2;
 }
 
 .value {
-  @apply text-[2.25rem] font-semibold font-mono tracking-tighter leading-none;
+  @apply min-w-0 max-w-full break-words font-mono font-semibold;
   color: var(--stats-value-color);
+  font-size: var(--stats-card-current-value-size, var(--stats-card-value-size));
+  line-height: 1.05;
+  overflow-wrap: anywhere;
 }
 
 .secondaryValue {
-  @apply flex-shrink-0;
+  @apply min-w-0 max-w-full shrink;
+  overflow-wrap: anywhere;
 }
 
 .description {
-  @apply text-sm leading-relaxed mt-2;
+  @apply text-xs leading-snug;
   color: var(--stats-detail-color);
+  overflow-wrap: anywhere;
 }
 
 .trendContainer {
-  @apply flex items-center;
+  @apply flex min-w-0 flex-[1_1_auto] items-center justify-end;
+  max-width: min(100%, 14rem);
+}
+
+.trendContainer > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* Accent Tints */
 .tint {
-  @apply absolute inset-0 opacity-0 transition-opacity duration-500 pointer-events-none;
+  @apply pointer-events-none absolute inset-0 opacity-0;
+  border-radius: inherit;
+  background: var(--stats-card-accent-fill, var(--stats-accent-muted-fill));
+  transition: opacity var(--stats-motion-standard);
 }
 
 .card:hover .tint {
-  @apply opacity-[0.03];
+  opacity: 0.72;
+}
+
+.card > :global(svg.absolute) {
+  z-index: 1;
+  max-height: 5rem;
+}
+
+.card > :global(svg:not(.absolute)),
+.card > :global(canvas) {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  max-width: 100%;
+  min-height: 2.5rem;
+  margin-top: 1rem;
 }
 
 /* Variants */
-.accentSignal .tint { background-color: var(--stats-accent-signal); }
-.accentAmber .tint { background-color: var(--stats-accent-amber); }
-.accentCyan .tint { background-color: var(--stats-accent-cyan); }
-.accentRose .tint { background-color: var(--stats-accent-rose); }
-.accentEmerald .tint { background-color: var(--stats-accent-emerald); }
+.accentSignal {
+  --stats-card-accent: var(--stats-accent-signal);
+  --stats-card-accent-fill: var(--stats-accent-signal-fill);
+}
 
-.card.accentSignal:hover .title { color: var(--stats-accent-signal); }
-.card.accentAmber:hover .title { color: var(--stats-accent-amber); }
-.card.accentCyan:hover .title { color: var(--stats-accent-cyan); }
-.card.accentRose:hover .title { color: var(--stats-accent-rose); }
-.card.accentEmerald:hover .title { color: var(--stats-accent-emerald); }
+.accentAmber {
+  --stats-card-accent: var(--stats-accent-amber);
+  --stats-card-accent-fill: var(--stats-accent-amber-fill);
+}
 
-.accentSignal .iconContainer { color: var(--stats-accent-signal); }
-.accentAmber .iconContainer { color: var(--stats-accent-amber); }
-.accentCyan .iconContainer { color: var(--stats-accent-cyan); }
-.accentRose .iconContainer { color: var(--stats-accent-rose); }
-.accentEmerald .iconContainer { color: var(--stats-accent-emerald); }
+.accentCyan {
+  --stats-card-accent: var(--stats-accent-cyan);
+  --stats-card-accent-fill: var(--stats-accent-cyan-fill);
+}
+
+.accentRose {
+  --stats-card-accent: var(--stats-accent-rose);
+  --stats-card-accent-fill: var(--stats-accent-rose-fill);
+}
+
+.accentEmerald {
+  --stats-card-accent: var(--stats-accent-emerald);
+  --stats-card-accent-fill: var(--stats-accent-emerald-fill);
+}
+
+.card:hover .title,
+.card:focus-within .title,
+.card.active .title {
+  color: var(--stats-card-accent, var(--stats-value-color));
+}
+
+.accentSignal .iconContainer,
+.accentAmber .iconContainer,
+.accentCyan .iconContainer,
+.accentRose .iconContainer,
+.accentEmerald .iconContainer {
+  background: var(--stats-card-accent-fill);
+  color: var(--stats-card-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .tint,
+  .iconContainer {
+    transition: none;
+    animation: none;
+  }
+
+  .card:hover {
+    transform: none;
+  }
+}

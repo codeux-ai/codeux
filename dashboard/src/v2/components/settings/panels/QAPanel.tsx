@@ -3,6 +3,7 @@ import type { ProjectSettings } from "../../../../types.js";
 import { SelectInput, Toggle, NumberInput } from "../SettingsFormFields.js";
 import { SectionCard, Row } from "./SharedPanelComponents.js";
 import { ShieldCheck } from "lucide-preact";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../lib/settings.js";
 
 // Shared QA section rendered by the settings panels that own QA configuration.
 export const QAPanel: FunctionComponent<{
@@ -31,7 +32,7 @@ export const QAPanel: FunctionComponent<{
           <>
             <Row
               label="Task QA max runs"
-              description="How many QA review cycles a single task gets before the exhaustion policy applies. Default is 5."
+              description="How many QA review cycles a single task gets before the exhaustion policy applies. Default is 3."
               badge={getBadge("agents.qualityAssurance.maxTaskReviewRuns")}
             >
               <NumberInput
@@ -46,7 +47,7 @@ export const QAPanel: FunctionComponent<{
 
             <Row
               label="Sprint QA max runs"
-              description="How many sprint-completion QA review cycles a sprint gets before its budget is spent. Default is 5."
+              description="How many sprint-completion QA review cycles a sprint gets before its budget is spent. Default is 3."
               badge={getBadge("agents.qualityAssurance.maxSprintReviewRuns")}
             >
               <NumberInput
@@ -61,7 +62,7 @@ export const QAPanel: FunctionComponent<{
 
             <Row
               label="When QA max runs is exhausted"
-              description="What to do with a code-complete task whose QA budget is spent without a pass. Escalate holds it for a human; Fail marks it failed and lets the sprint finish; Finish marks it complete despite no QA pass."
+              description="What to do with a code-complete task whose QA budget is spent without a pass. Finish is the default and marks it complete despite no QA pass; Fail marks it failed; Escalate holds it for a human."
               badge={getBadge("agents.qualityAssurance.exhaustionPolicy")}
             >
               <SelectInput
@@ -69,12 +70,12 @@ export const QAPanel: FunctionComponent<{
                 onChange={(value) => update({
                   exhaustionPolicy: (value === "FAIL_TASK" || value === "FINISH_TASK" || value === "ESCALATE_TO_HUMAN")
                     ? value
-                    : "ESCALATE_TO_HUMAN",
+                    : DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.exhaustionPolicy,
                 })}
                 options={[
-                  { value: "ESCALATE_TO_HUMAN", label: "Escalate to human" },
-                  { value: "FAIL_TASK", label: "Fail task" },
                   { value: "FINISH_TASK", label: "Finish task" },
+                  { value: "FAIL_TASK", label: "Fail task" },
+                  { value: "ESCALATE_TO_HUMAN", label: "Escalate to human" },
                 ]}
                 aria-label="QA exhaustion policy"
               />

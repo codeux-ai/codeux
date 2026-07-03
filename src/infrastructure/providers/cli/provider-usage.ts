@@ -6,7 +6,7 @@ import { encodingForModel } from "js-tiktoken";
 import type { TokenUsageSource } from "../../../contracts/execution-types.js";
 import type { ParsedConversationTurn } from "./provider-logs/provider-conversation-types.js";
 import { parseCodexRolloutJsonl, parseCodexExecStdout } from "./provider-logs/codex-log-parser.js";
-import { parseOpenCodeJsonLines, parseOpenCodeExport } from "./provider-logs/opencode-log-parser.js";
+import { parseOpenCodeJsonLines, parseOpenCodeExport, subtractOpenCodeBaseline } from "./provider-logs/opencode-log-parser.js";
 import {
   buildQwenConversation,
   parseQwenOpenAiLogs,
@@ -184,6 +184,10 @@ function estimateTelemetry(provider: "gemini" | "codex" | "claude-code" | "qwen-
   };
 }
 
+function totalTrackedTokens(inputTokens: number, cachedInputTokens: number, outputTokens: number): number {
+  return inputTokens + cachedInputTokens + outputTokens;
+}
+
 function parseGeminiTokens(stats: Record<string, unknown> | null): ProviderUsageTelemetry | null {
   if (!stats) {
     return null;
@@ -200,7 +204,7 @@ function parseGeminiTokens(stats: Record<string, unknown> | null): ProviderUsage
     const cachedInputTokens = toNumber(directTokens.cached);
     const outputTokens = normalized.completionTokens;
     const reasoningOutputTokens = toNumber(directTokens.thoughts);
-    const totalTokens = Math.max(normalized.totalTokens, inputTokens + outputTokens + reasoningOutputTokens);
+    const totalTokens = Math.max(normalized.totalTokens, inputTokens + cachedInputTokens + outputTokens + reasoningOutputTokens);
     if (totalTokens > 0) {
       return {
         ...emptyTelemetry(),
@@ -236,7 +240,7 @@ function parseGeminiTokens(stats: Record<string, unknown> | null): ProviderUsage
       outputTokens += normalized.completionTokens;
       reasoningOutputTokens += toNumber((tokens as Record<string, unknown>).thoughts);
     }
-    const totalTokens = inputTokens + outputTokens + reasoningOutputTokens;
+    const totalTokens = inputTokens + cachedInputTokens + outputTokens + reasoningOutputTokens;
     if (totalTokens > 0) {
       return {
         ...emptyTelemetry(),
@@ -254,6 +258,134 @@ function parseGeminiTokens(stats: Record<string, unknown> | null): ProviderUsage
   return null;
 }
 
+function flattenGeminiText(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  if (Array.isArray(value)) {
+    const parts: string[] = [];
+    for (const item of value) {
+      const rec = item && typeof item === "object" ? item as Record<string, unknown> : null;
+      if (rec && typeof rec.text === "string") {
+        parts.push(rec.text);
+      } else if (rec && typeof rec.output_text === "string") {
+        parts.push(rec.output_text);
+      } else if (typeof item === "string") {
+        parts.push(item);
+      }
+    }
+    return parts.join("").trim();
+  }
+  return "";
+}
+
+function geminiPartIsReasoning(part: Record<string, unknown>): boolean {
+  const partType = typeof part.type === "string" ? part.type : null;
+  return partType === "thinking"
+    || partType === "reasoning"
+    || partType === "thought"
+    || part.thought === true
+    || part.thought === "true"
+    || part.reasoning != null
+    || part.reasoning_content != null
+    || part.thinking != null
+    || part.summary != null
+    || part.summary_text != null;
+}
+
+function geminiPartReasoningText(part: Record<string, unknown>): string {
+  return flattenGeminiText(
+    part.reasoning_content ?? part.reasoning ?? part.thinking ?? part.summary ?? part.summary_text ?? part.text,
+  );
+}
+
+function geminiPartAssistantText(part: Record<string, unknown>): string {
+  const partType = typeof part.type === "string" ? part.type : null;
+  if (partType === "text" || partType === "output_text" || partType === "message") {
+    return flattenGeminiText(part.text ?? part.output_text ?? part.content);
+  }
+  if (typeof part.text === "string" && !geminiPartIsReasoning(part)) {
+    return part.text.trim();
+  }
+  return "";
+}
+
+function parseGeminiConversation(parsed: Record<string, unknown>): ParsedConversationTurn[] {
+  const response = parsed.response && typeof parsed.response === "object" ? parsed.response as Record<string, unknown> : null;
+  const candidates = Array.isArray(response?.candidates)
+    ? response!.candidates
+    : Array.isArray(parsed.candidates)
+      ? parsed.candidates
+      : [];
+  const conversation: ParsedConversationTurn[] = [];
+
+  for (const candidate of candidates) {
+    const candidateRec = candidate && typeof candidate === "object" ? candidate as Record<string, unknown> : null;
+    const content = candidateRec?.content && typeof candidateRec.content === "object"
+      ? candidateRec.content as Record<string, unknown>
+      : null;
+    const parts = Array.isArray(content?.parts)
+      ? content!.parts
+      : Array.isArray(candidateRec?.parts)
+        ? candidateRec!.parts
+        : [];
+    if (parts.length === 0) {
+      continue;
+    }
+
+    let assistantText = "";
+    for (const part of parts) {
+      const rec = part && typeof part === "object" ? part as Record<string, unknown> : null;
+      if (!rec) {
+        continue;
+      }
+      const reasoningText = geminiPartReasoningText(rec);
+      if (geminiPartIsReasoning(rec) && reasoningText) {
+        conversation.push({ kind: "reasoning", text: reasoningText });
+        continue;
+      }
+      const assistantPartText = geminiPartAssistantText(rec);
+      if (assistantPartText) {
+        assistantText += assistantPartText;
+      }
+    }
+
+    if (assistantText.trim()) {
+      conversation.push({ kind: "assistant", text: assistantText.trim() });
+    }
+  }
+
+  if (conversation.length > 0) {
+    return conversation;
+  }
+
+  const fallbackContent = response?.content && typeof response.content === "object" ? response.content as Record<string, unknown> : null;
+  const fallbackParts = Array.isArray(fallbackContent?.parts) ? fallbackContent!.parts : [];
+  if (fallbackParts.length === 0) {
+    return conversation;
+  }
+
+  let assistantText = "";
+  for (const part of fallbackParts) {
+    const rec = part && typeof part === "object" ? part as Record<string, unknown> : null;
+    if (!rec) continue;
+    const reasoningText = geminiPartReasoningText(rec);
+    if (geminiPartIsReasoning(rec) && reasoningText) {
+      conversation.push({ kind: "reasoning", text: reasoningText });
+      continue;
+    }
+    const assistantPartText = geminiPartAssistantText(rec);
+    if (assistantPartText) {
+      assistantText += assistantPartText;
+    }
+  }
+  if (assistantText.trim()) {
+    conversation.push({ kind: "assistant", text: assistantText.trim() });
+  }
+
+  return conversation;
+}
+
 /**
  * Reads the Claude Code session JSONL from the host ~/.claude/projects directory
  * and delegates to the dedicated parser (now in claude-code-log-parser.ts).
@@ -268,7 +400,8 @@ async function parseClaudeSessionTelemetry(
   // separators and drive-letter colons. Handle both Unix ("/") and Windows
   // ("\\", "C:") forms so the lookup works on every host.
   const slug = cwd.replace(/[/\\:]/g, "-");
-  const sessionPath = path.join(os.homedir(), ".claude", "projects", slug, `${nativeSessionId}.jsonl`);
+  const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
+  const sessionPath = path.join(homeDir, ".claude", "projects", slug, `${nativeSessionId}.jsonl`);
   const raw = await fs.readFile(sessionPath, "utf8").catch(() => "");
   if (!raw.trim()) return null;
   return claudeJsonlToTelemetry(raw, nativeSessionId, { sessionPath }, sinceMs);
@@ -312,7 +445,7 @@ function claudeJsonlToTelemetry(
 
   const { inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens } = parsed.usage;
   const cachedInputTokens = cacheCreationTokens + cacheReadTokens;
-  const totalTokens = inputTokens + outputTokens;
+  const totalTokens = totalTrackedTokens(inputTokens, cachedInputTokens, outputTokens);
 
   return {
     ...emptyTelemetry(),
@@ -345,9 +478,20 @@ export async function collectProviderUsageTelemetry(args: {
   executionMode?: "HOST" | "DOCKER";
   antigravitySessionDbPath?: string | null;
   antigravityTranscriptJsonl?: string | null;
+  /** The highest `gen_metadata` idx already summed by a previous invocation of
+   *  this same antigravity conversation (when `--conversation=<id>` resumes
+   *  it). Only rows with a higher idx are summed, so a follow-up run reports
+   *  only the generations it added — the conversation db otherwise
+   *  accumulates rows across resumes just like Codex's rollout file. */
+  antigravitySinceIdx?: number | null;
   /** stdout of `opencode export <sessionID>`, the authoritative usage source for
    *  opencode (the `run --format json` stream carries no token usage). */
   opencodeExportJson?: string | null;
+  /** The previous invocation's raw `{ tokens, cost }` export snapshot for this
+   *  same opencode session (when this run resumes/continues it). Subtracted
+   *  from the freshly exported cumulative usage so a follow-up run reports
+   *  only its own tokens instead of the whole session's total-to-date. */
+  opencodeBaselineUsage?: Record<string, unknown> | null;
 }): Promise<ProviderUsageTelemetry> {
   const fallbackOutput = [args.capturedText || "", args.stdout || "", args.stderr || ""].filter(Boolean).join("\n").trim();
 
@@ -355,13 +499,35 @@ export async function collectProviderUsageTelemetry(args: {
     const parsed = parseJsonObject(args.stdout);
     const stats = parsed?.stats && typeof parsed.stats === "object" ? parsed.stats as Record<string, unknown> : null;
     const usage = parseGeminiTokens(stats);
+    const structuredConversation = parsed ? parseGeminiConversation(parsed) : [];
+    const transcriptFromStructuredConversation = structuredConversation
+      .filter((turn) => turn.kind === "assistant")
+      .map((turn) => turn.text)
+      .filter(Boolean)
+      .join("\n")
+      .trim();
     if (usage) {
-      usage.transcriptText = typeof parsed?.response === "string" ? parsed.response : fallbackOutput;
+      usage.transcriptText = typeof parsed?.response === "string"
+        ? parsed.response
+        : transcriptFromStructuredConversation || fallbackOutput;
       usage.nativeSessionId = typeof parsed?.session_id === "string" ? parsed.session_id : null;
+      if (structuredConversation.length > 0) {
+        usage.conversation = structuredConversation;
+      }
       return usage;
     }
-    const estimated = estimateTelemetry("gemini", args.model, args.prompt, typeof parsed?.response === "string" ? parsed.response : fallbackOutput);
+    const estimated = estimateTelemetry(
+      "gemini",
+      args.model,
+      args.prompt,
+      typeof parsed?.response === "string"
+        ? parsed.response
+        : transcriptFromStructuredConversation || fallbackOutput,
+    );
     estimated.nativeSessionId = typeof parsed?.session_id === "string" ? parsed.session_id : null;
+    if (structuredConversation.length > 0) {
+      estimated.conversation = structuredConversation;
+    }
     return estimated;
   }
 
@@ -393,7 +559,7 @@ export async function collectProviderUsageTelemetry(args: {
         cachedInputTokens: usage.cachedInputTokens,
         outputTokens: usage.outputTokens,
         reasoningOutputTokens: usage.reasoningOutputTokens,
-        totalTokens: usage.inputTokens + usage.outputTokens,
+        totalTokens: totalTrackedTokens(usage.inputTokens, usage.cachedInputTokens, usage.outputTokens),
         usageSource: "reported",
         rawUsageJson,
         transcriptText,
@@ -411,8 +577,14 @@ export async function collectProviderUsageTelemetry(args: {
     const parsed = parseOpenCodeJsonLines(args.stdout);
     // The `run --format json` stream carries the transcript, conversation, and
     // session id but no token usage. Authoritative usage comes from
-    // `opencode export <sessionID>` (info.tokens), captured post-run.
-    const exportUsage = args.opencodeExportJson ? parseOpenCodeExport(args.opencodeExportJson) : null;
+    // `opencode export <sessionID>` (info.tokens), captured post-run. That
+    // export is cumulative for the whole session, so on a resumed/follow-up
+    // run it's reduced by the baseline snapshot from the prior invocation —
+    // otherwise a follow-up would re-report every earlier turn's tokens too.
+    const rawExportUsage = args.opencodeExportJson ? parseOpenCodeExport(args.opencodeExportJson) : null;
+    const exportUsage = rawExportUsage
+      ? subtractOpenCodeBaseline(rawExportUsage, args.opencodeBaselineUsage)
+      : null;
     if (parsed) {
       const transcriptText = parsed.transcriptText || fallbackOutput;
       const conversation = withLeadingUserTurn(parsed.conversation, args.prompt);
@@ -435,7 +607,7 @@ export async function collectProviderUsageTelemetry(args: {
           cachedInputTokens: reported.cachedInputTokens,
           outputTokens: reported.outputTokens,
           reasoningOutputTokens: reported.reasoningOutputTokens,
-          totalTokens: reported.inputTokens + reported.outputTokens,
+          totalTokens: totalTrackedTokens(reported.inputTokens, reported.cachedInputTokens, reported.outputTokens),
           usageSource: "reported",
           rawUsageJson: reported.rawUsageJson,
           transcriptText,
@@ -455,7 +627,7 @@ export async function collectProviderUsageTelemetry(args: {
         cachedInputTokens: exportUsage.cachedInputTokens,
         outputTokens: exportUsage.outputTokens,
         reasoningOutputTokens: exportUsage.reasoningOutputTokens,
-        totalTokens: exportUsage.inputTokens + exportUsage.outputTokens,
+        totalTokens: totalTrackedTokens(exportUsage.inputTokens, exportUsage.cachedInputTokens, exportUsage.outputTokens),
         usageSource: "reported",
         rawUsageJson: exportUsage.rawUsageJson,
         transcriptText: fallbackOutput,
@@ -476,7 +648,7 @@ export async function collectProviderUsageTelemetry(args: {
     }
 
     if (args.antigravitySessionDbPath) {
-      const dbResult = parseAntigravityDatabase(args.antigravitySessionDbPath);
+      const dbResult = parseAntigravityDatabase(args.antigravitySessionDbPath, args.antigravitySinceIdx ?? undefined);
       if (dbResult) {
         usage = dbResult.usage;
         rawUsageJson = dbResult.rawUsageJson;
@@ -496,9 +668,10 @@ export async function collectProviderUsageTelemetry(args: {
       return {
         ...emptyTelemetry(),
         inputTokens: usage.inputTokens,
+        cachedInputTokens: usage.cachedInputTokens,
         outputTokens: usage.outputTokens,
         reasoningOutputTokens: usage.reasoningTokens,
-        totalTokens: usage.inputTokens + usage.outputTokens,
+        totalTokens: totalTrackedTokens(usage.inputTokens, usage.cachedInputTokens, usage.outputTokens),
         usageSource: "reported",
         rawUsageJson,
         transcriptText,
@@ -525,7 +698,8 @@ export async function collectProviderUsageTelemetry(args: {
         inputTokens: exactUsage.inputTokens,
         cachedInputTokens: exactUsage.cachedInputTokens,
         outputTokens: exactUsage.outputTokens,
-        totalTokens: exactUsage.inputTokens + exactUsage.outputTokens,
+        reasoningOutputTokens: exactUsage.reasoningOutputTokens,
+        totalTokens: totalTrackedTokens(exactUsage.inputTokens, exactUsage.cachedInputTokens, exactUsage.outputTokens),
         usageSource: "reported",
         rawUsageJson: null,
         transcriptText: fallbackOutput,

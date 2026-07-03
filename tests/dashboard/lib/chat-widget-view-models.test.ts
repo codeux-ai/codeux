@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   getChatWidgetData,
   getInvocationWidgetData,
+  getReasoningWidgetData,
   getWorkingBubbleData,
   sanitizeInvocationOutputText,
 } from "../../../dashboard/src/v2/lib/chat-widget-view-models.js";
@@ -98,6 +99,36 @@ describe("Chat Widget View Models", () => {
 
       const result = getInvocationWidgetData(message);
       expect(result).toEqual({ type: "planning", status: "failed", planName: "Worker Execution" });
+    });
+  });
+
+  describe("getReasoningWidgetData", () => {
+    it("returns sanitized reasoning text and stable accessibility labels", () => {
+      const message = {
+        contentMarkdown: [
+          "before",
+          "fatal: your current branch 'code-ux-bootstrap-1' does not have any commits yet",
+          "after",
+        ].join("\n"),
+        createdAt: "2026-03-10T12:00:00.000Z",
+        metadata: {
+          provider: "anthropic",
+          model: "claude-3.7-sonnet",
+          tokens: { reasoning: 17 },
+          kind: "reasoning",
+        },
+      } as unknown as ExecutionInvocationMessageRecord;
+
+      const result = getReasoningWidgetData(message);
+      expect(result.text).toBe("before\nafter");
+      expect(result.providerLabel).toBe("anthropic");
+      expect(result.modelLabel).toBe("claude-3.7-sonnet");
+      expect(result.tokens).toEqual({ reasoning: 17 });
+      expect(result.createdAtLabel).not.toBe("");
+      expect(result.ariaLabel).toContain("Reasoning turn");
+      expect(result.ariaLabel).toContain("anthropic");
+      expect(result.ariaLabel).toContain("claude-3.7-sonnet");
+      expect(result.ariaLabel).toContain("17 tokens");
     });
   });
 

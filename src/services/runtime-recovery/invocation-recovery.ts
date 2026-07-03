@@ -276,6 +276,12 @@ export class InvocationRecoveryService {
           message: "Recovered stale task coding provider invocation after the linked task run completed.",
         };
       }
+      if (taskRun?.state === "FAILED" || taskRun?.state === "BLOCKED" || taskRun?.state === "QUOTA") {
+        return {
+          status: "failed",
+          message: `Recovered stale task coding provider invocation after the linked task run was already ${taskRun.state}.`,
+        };
+      }
     }
 
     const task = providerInvocation.taskId

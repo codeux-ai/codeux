@@ -84,8 +84,9 @@ export function writeExecutionInvocation(
       lastErrorCategory: input.lastErrorCategory || null,
       lastErrorMessage: input.lastErrorMessage || null,
       lastRetryAfterIso: input.lastRetryAfterIso || null,
+      preservedAt: input.preservedAt || null,
       invocationSource: input.invocationSource || "internal",
-      agentPresetId: taskAgentPresetId,
+      agentPresetId: input.agentPresetId === undefined ? taskAgentPresetId : input.agentPresetId,
       messageCount: 0,
       lastMessageAt: null,
       createdAt: now,
@@ -96,10 +97,10 @@ export function writeExecutionInvocation(
       INSERT INTO execution_invocations (
         id, project_id, sprint_id, task_id, sprint_run_id, dispatch_id, task_run_id, attention_item_id, provider_invocation_id,
         type, status, provider, model, system_prompt, started_at, finished_at, error_message, message_count, last_message_at,
-        last_error_category, last_error_message, last_retry_after_iso, invocation_source, agent_preset_id,
+        last_error_category, last_error_message, last_retry_after_iso, preserved_at, invocation_source, agent_preset_id,
         created_at, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -125,6 +126,7 @@ export function writeExecutionInvocation(
       record.lastErrorCategory,
       record.lastErrorMessage,
       record.lastRetryAfterIso,
+      record.preservedAt,
       record.invocationSource || "internal",
       record.agentPresetId,
       record.createdAt,
@@ -235,6 +237,11 @@ export function writeExecutionInvocationUpdate(
       updates.push("last_retry_after_iso = ?");
       values.push(input.lastRetryAfterIso);
       existing.lastRetryAfterIso = input.lastRetryAfterIso;
+    }
+    if (input.preservedAt !== undefined) {
+      updates.push("preserved_at = ?");
+      values.push(input.preservedAt);
+      existing.preservedAt = input.preservedAt;
     }
 
     if (updates.length > 0) {

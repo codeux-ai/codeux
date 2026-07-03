@@ -149,6 +149,10 @@ The action runs the Project Setup Agent and returns the applied artifact summary
 
 Dashboard calls can add `background: true` to the HTTP setup request. In that mode Code UX returns the created `invocationId` immediately and the invocation rail becomes the live tracking surface while setup continues.
 
+### Project Creation Paths
+
+`manage_projects` and `manage_code_ux` project creation use the same initialization path as the dashboard. Git URL projects are cloned into the selected `cloneDir`, or `~/.code-ux/projects/<repo-name>` when `cloneDir` is omitted. `new-remote` project creation treats `cloneDir` as the clone parent directory and stores the project base directory as the single repository checkout root.
+
 ### Sprint, Task, and Settings Payload Normalization
 
 For payload normalization in management tools, Code UX centralizes parsing behavior:
@@ -166,7 +170,155 @@ For sprint create/update calls:
 - `title` is accepted as a public MCP alias for `name`.
 - `goal` is the canonical repository field.
 - `goalMarkdown` is accepted as a public MCP alias for `goal`.
+- `linkedIssues` can include imported issue body and conversation markdown. Sprint create merges that context into the goal under `## Linked Issues`; sprint update does the same when a replacement goal is provided. Prompt-only issue body and conversation content are not stored in linked issue repository rows.
 - Missing or blank `projectId`, `sprintId`, `sprintRunId`, `name`, and `title` values are rejected before repository calls so MCP clients receive a validation error instead of a low-level `.trim()` failure.
+
+### `manage_sprints import_issues`
+
+`manage_sprints` action `import_issues` is the MCP contract for Jira, GitHub, and GitLab issue importer access. Internal MCP clients use it for search-only discovery, assigned-work searches, explicit ticket imports, linked sprint issue attachment, and optional planning after import.
+
+Provider requirements:
+- GitHub imports require a saved effective `git.githubToken` in system or project settings.
+- GitLab imports require a saved effective `git.gitlabToken` in system or project settings.
+- Jira imports require Jira integration settings: host/site URL, account email, API token, and usually a default project key.
+- Importer workflows do not fall back to local CLI authentication. A locally authenticated `gh`, `glab`, or Git remote is not enough for MCP issue search, explicit import, sprint attachment, or planning import paths.
+
+Search/import callers can provide `provider` (`github`, `gitlab`, or `jira`), `repository`, `hostDomain`, `projectKey`, `search`, `state`, `status`, `labels`, `assignee`, `assigneeText`, `issueKeys`, `issueNumbers`, `issueRefs`, `includeConversation`, `limit`, and optional sprint attachment fields. `sprintId` and `attachToSprint` represent sprint attachment intent. `planAfterImport`, `autoStart`, `planningAgentPresetId`, `replan`, and `overrides` represent optional planning intent after import.
+
+Search-only GitHub example:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "provider": "github",
+  "repository": "codeux-ai/codeux",
+  "hostDomain": "github.com",
+  "search": "import label:bug",
+  "state": "open",
+  "limit": 10
+}
+```
+
+Search-only GitLab example:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "provider": "gitlab",
+  "repository": "platform/runtime",
+  "hostDomain": "gitlab.com",
+  "search": "runner timeout",
+  "state": "open",
+  "limit": 20
+}
+```
+
+Assigned-to-me Jira example:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "provider": "jira",
+  "projectKey": "OPS",
+  "assigneeText": "me",
+  "status": "In Progress",
+  "limit": 20
+}
+```
+
+Explicit Jira key example:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "provider": "jira",
+  "projectKey": "OPS",
+  "issueKeys": ["OPS-123"],
+  "includeConversation": true
+}
+```
+
+Explicit GitLab issue number example:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "provider": "gitlab",
+  "repository": "platform/runtime",
+  "hostDomain": "gitlab.com",
+  "issueNumbers": [42],
+  "includeConversation": true
+}
+```
+
+Explicit GitHub issue number example:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "provider": "github",
+  "repository": "codeux-ai/codeux",
+  "hostDomain": "github.com",
+  "issueNumbers": [42],
+  "includeConversation": true
+}
+```
+
+Attach imported issues to an existing sprint:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "sprintId": "sprint-456",
+  "provider": "jira",
+  "projectKey": "OPS",
+  "issueRefs": ["OPS-123", "OPS-124"],
+  "includeConversation": true,
+  "attachToSprint": true
+}
+```
+
+Attach imported issues and run planning after the sprint goal is enriched:
+
+```json
+{
+  "action": "import_issues",
+  "projectId": "project-123",
+  "sprintId": "sprint-456",
+  "provider": "github",
+  "repository": "codeux-ai/codeux",
+  "hostDomain": "github.com",
+  "issueRefs": ["#42", "#43"],
+  "includeConversation": true,
+  "attachToSprint": true,
+  "planAfterImport": true,
+  "autoStart": false,
+  "replan": true,
+  "planningAgentPresetId": "planner-agent",
+  "overrides": {
+    "taskCount": 4
+  }
+}
+```
+
+Result shape:
+- Search mode returns `mode: "search"` and populates `searchedIssues` with lightweight normalized issue summaries.
+- Explicit-reference mode returns `mode: "explicit"` and populates `importedContexts` with prompt contexts that can include full issue body and conversation text.
+- When `sprintId` is supplied and `attachToSprint` is not `false`, the response includes persisted `linkedIssues` metadata records and the updated `sprint`.
+- When `planAfterImport` is `true`, the response includes the optional `planning` result from sprint planning. `planAfterImport` requires `sprintId` because planning runs against an existing sprint.
+
+Persistence and prompt behavior:
+- `issueKeys` and Jira-style refs such as `OPS-123` resolve through Jira. `issueNumbers` and refs such as `#42` or `!42` resolve through GitHub/GitLab when `repository` and `hostDomain` are provided or inferable from the project.
+- Full issue body and comment/conversation text are merged into the sprint goal under `## Linked Issues` before planning so the Planning agent receives the complete context.
+- Linked issue persistence stores metadata only: provider, repository or project key, issue key/number, title, labels, assignees, status, source URL, and related tracking fields. Full remote issue bodies and comments remain prompt-only data and are not stored in linked issue rows.
+- Issue search and import are not destructive actions. Sprint deletion remains approval-gated.
 
 For task create/update calls:
 - `title` is canonical; `name` is accepted as an alias.

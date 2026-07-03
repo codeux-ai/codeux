@@ -1,3 +1,5 @@
+import type { CreateProjectInput } from "./project-management-types.js";
+
 export interface ManagementApproval {
   confirmed: boolean;
 }
@@ -11,12 +13,10 @@ export interface ManagementRequestEnvelope {
 
 export interface ManageCodeUxArgs extends ManagementRequestEnvelope {}
 
-export interface ManageProjectsArgs {
+export interface ManageProjectsArgs extends Partial<CreateProjectInput> {
   action: "list" | "get" | "create" | "update" | "select" | "setup" | "delete";
   projectId?: string;
-  name?: string;
   description?: string;
-  setup?: Record<string, unknown>;
   approval?: ManagementApproval;
 }
 
@@ -37,7 +37,20 @@ export interface ManageSprintsArgs {
   autoStart?: boolean;
   replan?: boolean;
   search?: string;
-  provider?: string;
+  provider?: "github" | "gitlab" | "jira";
+  repository?: string;
+  hostDomain?: string;
+  projectKey?: string;
+  state?: "open" | "closed" | "all";
+  labels?: string[];
+  assignee?: string;
+  assigneeText?: string;
+  issueKeys?: string[];
+  issueNumbers?: number[];
+  issueRefs?: string[];
+  includeConversation?: boolean;
+  attachToSprint?: boolean;
+  planAfterImport?: boolean;
   limit?: number;
   overrides?: Record<string, unknown>;
   approval?: ManagementApproval;

@@ -45,6 +45,8 @@ import type { HeartbeatService } from "../services/heartbeat-service.js";
 import type { SprintIssueService } from "../services/sprint-issue-service.js";
 import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
 import type { JulesUsageService } from "../domain/jules/jules-usage-service.js";
+import { buildSprintPrComposerInput } from "../domain/sprint/composer/sprint-pr-input-builder.js";
+import { composeSprintPrBody, composeSprintPrTitle } from "../domain/sprint/composer/pr-description-composer.js";
 
 
 const SPRINT_ORCHESTRATOR_OWNER_KEY = `sprint_orchestrator:${process.pid}`;
@@ -236,6 +238,9 @@ export class SprintOrchestrator {
 
   private async renderMainMergeCiFeedback(args: {
     repoPath: string;
+    projectId: string;
+    sprintId: string;
+    sprintRunId: string;
     featureBranch: string;
     defaultBranch: string;
     featureBranchPrefix: string;
@@ -287,12 +292,33 @@ export class SprintOrchestrator {
       && args.ciIntelligence.mainBranchAutoMergeMode !== "OFF"
       && this.deps.resolveOrCreateMainBranchPr
     ) {
+      // The sprint record can theoretically vanish between the completion check and here
+      // (e.g. deleted mid-flight); fall back to a minimal title/body rather than blocking
+      // the PR entirely, since resolveOrCreateMainBranchPr still needs some non-empty body.
+      const freshSprint = this.deps.projectManagementRepository.getSprint(args.sprintId);
+      const dashboardSettings = this.deps.getDashboardSettings({ projectId: args.projectId, sprintId: args.sprintId });
+      const title = freshSprint
+        ? composeSprintPrTitle({ sprintNumber: freshSprint.number, sprintName: freshSprint.name, featureBranch: args.featureBranch, defaultBranch: args.defaultBranch })
+        : `Merge ${args.featureBranch} into ${args.defaultBranch}`;
+      const body = freshSprint
+        ? composeSprintPrBody(buildSprintPrComposerInput({
+          sprint: freshSprint,
+          sprintRunId: args.sprintRunId,
+          subtasks: args.subtasks || [],
+          featureBranch: args.featureBranch,
+          defaultBranch: args.defaultBranch,
+          aiProviderSettings: dashboardSettings.aiProvider,
+          sections: dashboardSettings.git.prDescription.sprint,
+          sectionOrder: dashboardSettings.git.prDescription.sprintSectionOrder,
+          executionRepository: this.deps.executionRepository,
+        }))
+        : `Automated sprint completion PR opened by Code UX.\n\nBase: \`${args.defaultBranch}\`\nHead: \`${args.featureBranch}\``;
       const pr = await this.deps.resolveOrCreateMainBranchPr({
         repoPath: args.repoPath,
         featureBranch: args.featureBranch,
         defaultBranch: args.defaultBranch,
-        title: resolveMainBranchPrTitle(args),
-        body: resolveMainBranchPrBody({ ...args, subtasks: args.subtasks }),
+        title,
+        body,
       });
       if (pr?.prUrl || pr?.prNumber) {
         createdPrNote = `\n🤖 **Main PR ${pr.created ? "Created" : "Resolved"}:** ${formatMainPrReference(pr, args.featureBranch, args.defaultBranch)}\n`;
@@ -308,6 +334,21 @@ export class SprintOrchestrator {
           gitStatus,
           autoMergeMainBranchPr: this.deps.autoMergeFeaturePr,
         });
+        if (feedback.state === "missing_pr") {
+          feedback = {
+            ...feedback,
+            text: `\n### Main Merge CI Gate\n- PR: ${formatMainPrReference(pr, args.featureBranch, args.defaultBranch)}\n- Check Status: \`PENDING\`\n- Waiting for GitHub to return the new main PR and its checks before finalizing the sprint.\n`,
+            state: "pending_checks",
+            prNumber: pr.prNumber,
+            prUrl: pr.prUrl,
+            hasPendingChecks: true,
+          };
+        }
+      } else if (pr?.errorMessage) {
+        feedback = {
+          ...feedback,
+          text: `${feedback.text}\n⚠️ **Main PR Creation Failed:** ${pr.errorMessage}\n`,
+        };
       }
     }
     const result = await MainMergeGateService.attemptMainAutoMerge(feedback, {
@@ -769,100 +810,6 @@ export class SprintOrchestrator {
       }
     }
   }
-}
-
-function resolveMainBranchPrTitle(args: {
-  featureBranch: string;
-  defaultBranch: string;
-  sprintNumber?: number;
-  sprintName?: string;
-}): string {
-  if (typeof args.sprintNumber === "number" && Number.isFinite(args.sprintNumber)) {
-    return `Sprint ${args.sprintNumber}: merge ${args.featureBranch} into ${args.defaultBranch}`;
-  }
-  if (typeof args.sprintName === "string" && args.sprintName.trim().length > 0) {
-    return `${args.sprintName.trim()}: merge ${args.featureBranch} into ${args.defaultBranch}`;
-  }
-  return `Merge ${args.featureBranch} into ${args.defaultBranch}`;
-}
-
-export function resolveMainBranchPrBody(args: {
-  featureBranch: string;
-  defaultBranch: string;
-  sprintNumber?: number;
-  sprintName?: string;
-  sprintDescription?: string;
-  subtasks?: Subtask[];
-}): string {
-  const scopeLine = typeof args.sprintNumber === "number" && Number.isFinite(args.sprintNumber)
-    ? `Sprint: ${args.sprintNumber}`
-    : typeof args.sprintName === "string" && args.sprintName.trim().length > 0
-      ? `Sprint: ${args.sprintName.trim()}`
-      : "Sprint: not recorded";
-
-  const descriptionSection = args.sprintDescription?.trim()
-    ? `**Sprint Context:**\n${args.sprintDescription.trim()}`
-    : `**Sprint Context:**\nNo sprint description provided.`;
-
-  if (!args.subtasks || args.subtasks.length === 0) {
-    return [
-      "Automated sprint completion PR opened by Code UX.",
-      "",
-      scopeLine,
-      "",
-      descriptionSection,
-      "",
-      `Base: \`${args.defaultBranch}\``,
-      `Head: \`${args.featureBranch}\``,
-    ].join("\n");
-  }
-
-  const completedTasks = args.subtasks.filter(task => {
-    return task.status === 'COMPLETED' || (task.status === 'CODING_COMPLETED' && (task.is_merged || task.merge_indicator === 'MERGED' || task.merge_indicator === 'AUTOMERGE'));
-  });
-
-  const providerCounts = new Map<string, number>();
-  for (const task of completedTasks) {
-    if (task.provider) {
-      providerCounts.set(task.provider, (providerCounts.get(task.provider) || 0) + 1);
-    }
-  }
-
-  const providerStats = Array.from(providerCounts.entries())
-    .map(([provider, count]) => `${count} by ${provider}`)
-    .join(" · ");
-
-  const summaryStats = `**${completedTasks.length}/${args.subtasks.length} tasks completed**` + (providerStats ? ` · ${providerStats}` : '');
-
-  const taskChecklist = args.subtasks.map(task => {
-    const isCompleted = task.status === 'COMPLETED' || (task.status === 'CODING_COMPLETED' && (task.is_merged || task.merge_indicator === 'MERGED' || task.merge_indicator === 'AUTOMERGE'));
-    const checkbox = isCompleted ? '[x]' : '[ ]';
-    const providerStr = task.provider ? ` — \`${task.provider}\`` : '';
-    const prStr = task.pr_url ? ` ([PR](${task.pr_url}))` : '';
-    return `- ${checkbox} **${task.id}**: ${task.title}${providerStr}${prStr}`;
-  }).join("\n");
-
-  return [
-    "## 🚀 Sprint Completion",
-    "Automated sprint completion PR opened by Code UX.",
-    "",
-    "> " + scopeLine,
-    "> " + descriptionSection.split('\n').join('\n> '),
-    "",
-    summaryStats,
-    "",
-    taskChecklist,
-    "",
-    "<details>",
-    "<summary>Branch Info</summary>",
-    "",
-    `Base: \`${args.defaultBranch}\``,
-    `Head: \`${args.featureBranch}\``,
-    "</details>",
-    "",
-    "---",
-    "*Generated by [Code UX](https://github.com/codeux-ai/codeux)*"
-  ].join("\n");
 }
 
 function formatMainPrReference(

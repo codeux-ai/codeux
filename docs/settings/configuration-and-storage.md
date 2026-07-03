@@ -59,9 +59,9 @@ Runtime resolution:
 - `git.defaultBranch` resolves with the following precedence:
   1. Sprint setting override (Dashboard)
   2. Project setting override (Dashboard)
-  3. Project metadata `defaultBranch` field (Database)
-  4. System setting default (Dashboard)
-  5. Hardcoded default (`main`)
+  3. System setting default (Dashboard)
+  4. Hardcoded default (`main`)
+- The legacy project metadata `defaultBranch` column is retained for project records created before the scoped settings model and for display/initialization context, but sprint orchestration and final merge targets do not let that metadata override resolved scoped settings. A project inheriting a system default of `dev` must merge sprint completion PRs into `dev`, even if the older project row still says `main`.
 - In remote git mode, Code UX refreshes `origin` before sprint branch preflight and before each task start so branch resolution is based on current remote state instead of stale local refs.
 - HTTPS GitHub remotes use the configured dashboard token as a temporary Git extraheader during origin refresh, remote branch checks, and branch pushes. HTTPS origin refreshes and branch preflight network checks run with interactive credential prompts disabled and a bounded timeout so orchestration cannot remain stuck waiting on local credential helpers. Mandatory CLI task refreshes fetch the requested starting branch's remote-tracking ref when possible, avoiding a whole-origin fetch for every task dispatch. They use a 120 second default fetch timeout, configurable with `CODE_UX_GIT_FETCH_TIMEOUT_MS` for slow Git transports. If direct remote inspection is unavailable, branch preflight can use an existing `refs/remotes/origin/<branch>` ref as remote-branch evidence. Local origin-refresh failures remain strict for CLI-backed work that needs local git state, but are best-effort for branch preflight and Jules dispatch because Jules works from the remote source and starting branch. SSH remotes continue to use the local SSH agent/key setup unchanged.
 - In remote git mode, Code UX also refreshes `origin` before branch-sensitive recovery flows such as QA review, QA follow-up continuation, clarification auto-replies, CI fix runs, and merge-conflict resolution. Clarification auto-replies refresh the recorded task worker branch when available; if the task has no worker branch yet, they refresh the scoped `git.defaultBranch` so project-level default branch overrides are used instead of falling back to `main`.
@@ -85,7 +85,7 @@ Runtime resolution:
 - Jules sessions that still report `AWAITING_USER_FEEDBACK` are kept locally `running` when the recent activity transcript shows a user reply after the latest agent clarification request. This clears stale blocked dispatch errors and attention indicators while Code UX waits for Jules to process the submitted reply.
 - session sync uses the shared bounded Jules session snapshot for normal polling, but directly fetches any recorded task session missing from that snapshot or present only as a stale nonterminal snapshot copy. Older long-running sprints can otherwise keep local task runs marked `running` after Jules already completed the session and opened a PR.
 - When Code UX has to create a missing feature branch, it prefers `origin/<defaultBranch>` over the local `<defaultBranch>` ref when the remote-tracking base branch exists.
-- `main` is only the final fallback when no sprint, project, or system base branch is configured. Normal sprint and task flows use the resolved `git.defaultBranch` value from settings and project metadata.
+- `main` is only the final fallback when no sprint, project, or system base branch is configured. Normal sprint and task flows use the resolved `git.defaultBranch` value from scoped settings.
 - the old global `/api/settings` contract is removed in favor of explicit scoped endpoints
 - dashboard v2 settings queries clear both cached and in-flight effective-settings requests whenever system/project settings are saved or reset, which prevents stale AI model options immediately after integration updates.
 
@@ -253,7 +253,7 @@ Dashboard behavior:
 - `autoCaptureSprint`
 - `autoCaptureAgent`
 - `autoPromote`
-- `promotionThreshold`
+- `promotionThreshold` (default `0.5`; AI remediation may review candidates down to `0.45` before selecting durable promotions)
 - `remediationMode` (`off|deterministic|ai`)
 - `remediationMaxPromotions`
 - `maxSprintMemories`
@@ -290,8 +290,9 @@ Dashboard behavior:
   - these fields are only applied by invocation routes using the `AGENT` provider strategy; blank values inherit the route, worker, or global default
 - `qualityAssurance`
   - `enabled` (default `true`)
-  - `maxTaskReviewRuns` (default `5`)
-  - `maxSprintReviewRuns` (default `5`)
+  - `maxTaskReviewRuns` (default `3` for new or unset settings)
+  - `maxSprintReviewRuns` (default `3` for new or unset settings)
+  - `exhaustionPolicy` (default `FINISH_TASK` for new or unset settings)
   - `taskCompletion`
     - `enabled`
     - `agentPresetId`
@@ -309,8 +310,9 @@ QA merge-gate notes:
 - enabled task QA blocks feature merge until QA passes or `maxTaskReviewRuns` is exhausted
 - while task QA is pending or retrying, the runtime merge indicator can be `QA_PENDING`
 - the initial task review always counts as run `1`; later runs are only used for QA-requested fix checks
-- `maxTaskReviewRuns = 5` is the default task QA budget: the initial task review plus up to four QA re-checks after fixes
-- `maxSprintReviewRuns = 5` is the default sprint QA budget: the initial sprint review plus up to four sprint-level follow-up reviews
+- `maxTaskReviewRuns = 3` is the default task QA budget for new or unset settings: the initial task review plus up to two QA re-checks after fixes
+- `maxSprintReviewRuns = 3` is the default sprint QA budget for new or unset settings: the initial sprint review plus up to two sprint-level follow-up reviews
+- `exhaustionPolicy = FINISH_TASK` is the default for new or unset settings when task QA spends its budget without a pass; stricter projects can choose `FAIL_TASK` or `ESCALATE_TO_HUMAN`
 - a passed task QA result is reused and does not restart by itself on the next orchestration cycle
 - sprint QA now runs before the final `feature -> default` merge gate
 - enabled sprint QA blocks main-branch merge until sprint QA passes
@@ -490,9 +492,10 @@ Runtime cleanup notes:
 - cleanup treats expired sprint leases as stale, not active ownership
 - when a stale `running` sprint run has no active dispatches and its heartbeat is older than the cleanup cutoff, Code UX fails that run and releases the expired sprint lease in the same sweep
 - startup now prunes orphaned virtual worker endpoints before new virtual cycles begin
-- startup schedules a fast, label-filtered stale Docker workspace prune for failed, finished, unrecoverable, and outdated sessions while preserving content-addressed setup-cache images for reuse
+- startup schedules a fast, label-filtered stale Docker workspace prune for untracked, unrecoverable, and outdated sessions while preserving content-addressed setup-cache images for reuse. Tracked CLI sessions marked `FAILED` remain protected so same-workspace task retry can resume their Docker workspace/runtime volumes.
 - successful CLI task runs now preserve their workspace while the owning sprint is still non-terminal (so QA follow-up and sprint-side retries can continue in the same workspace handle)
 - preserved workspaces are tagged by persisted task-run workspace metadata (including Docker `docker-volume://...` handles) and cleaned when the sprint reaches a terminal state (`completed`, `failed`, or `cancelled`); cleanup removes both the workspace volume and its `-runtime` provider-state volume
+- Docker-backed planning invocations also use a stable project/sprint snapshot workspace and paired provider runtime volume. Failed or incomplete planning runs leave it in place so Restart/Continue can resume provider-local session state instead of starting from a cleaned throwaway snapshot; successful planning removes the workspace and runtime volume.
 - terminal sprint completion/failure/cancellation removes those retained CLI task workspaces immediately instead of waiting for the next restart sweep
 - sprint planning and prompt improvement also honor worker mode, so `VIRTUAL` projects can plan without any live MCP listener
 

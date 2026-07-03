@@ -1,6 +1,22 @@
 // Keys that must never be writable through a dotted path, since assigning to
 // them can pollute the prototype chain of every object in the process.
 const UNSAFE_PATH_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+declare const safeSettingsPathPartBrand: unique symbol;
+
+type SafeSettingsPathPart = string & { readonly [safeSettingsPathPartBrand]: true };
+
+function parseSafePathParts(path: string): SafeSettingsPathPart[] {
+  if (!path) {
+    throw new Error('Path cannot be empty');
+  }
+
+  return path.split('.').map((part) => {
+    if (!part || UNSAFE_PATH_KEYS.has(part)) {
+      throw new Error(`Invalid path part: ${part}`);
+    }
+    return part as SafeSettingsPathPart;
+  });
+}
 
 export class SettingsPathUpdater {
   /**
@@ -12,16 +28,7 @@ export class SettingsPathUpdater {
       throw new Error('Target must be an object');
     }
 
-    if (!path) {
-      throw new Error('Path cannot be empty');
-    }
-
-    const parts = path.split('.');
-    for (const part of parts) {
-      if (UNSAFE_PATH_KEYS.has(part)) {
-        throw new Error(`Invalid path part: ${part}`);
-      }
-    }
+    const parts = parseSafePathParts(path);
 
     const result = { ...obj };
     let current: any = result;
@@ -42,7 +49,8 @@ export class SettingsPathUpdater {
       current = current[part];
     }
 
-    current[parts[parts.length - 1]] = value;
+    const lastPart = parts[parts.length - 1];
+    current[lastPart] = value;
     return result;
   }
 }

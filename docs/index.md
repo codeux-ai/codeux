@@ -12,6 +12,7 @@ Use this page as the main entrypoint.
 3. [Dashboard Guide](./dashboard/dashboard-guide.md)
 4. [Dashboard Accessibility Patterns](./dashboard/dashboard-guide.md#accessibility-patterns)
 4.1. [Interaction Patterns](./dashboard/interaction-patterns.md)
+4.2. [Stats & Analytics Design System](./dashboard/design-system-stats.md)
 5. [Sprint Imports](./dashboard/sprint-imports.md)
 5. [Project Initialization](./dashboard/project-initialization.md)
 6. [Quicksprint Templates](./dashboard/quicksprint-templates.md)
@@ -69,12 +70,13 @@ Use this page as the main entrypoint.
 ### Path 3: MCP integrator (tool contracts and runtime expectations)
 1. [Quickstart](./getting-started/quickstart.md)
 2. [MCP Tools and Contracts](./mcp/tools-and-contracts.md)
-3. [MCP Runtime and Dispatch](./mcp/runtime-and-dispatch.md)
-4. [Operations Runbook](./operations/runbook.md)
-5. [Security Hardening](./operations/security-hardening.md)
-6. [Logging and Correlation IDs](./operations/logging-and-correlation.md)
-7. [CLI Commands Reference](./reference/cli-commands.md) - `codeux` management syntax, aliases, prompting, JSON payloads, and approvals
-8. [CLI Management Surface](./operations/management-cli.md)
+3. [MCP Issue Importer Contract](./mcp/tools-and-contracts.md#manage_sprints-import_issues)
+4. [MCP Runtime and Dispatch](./mcp/runtime-and-dispatch.md)
+5. [Operations Runbook](./operations/runbook.md)
+6. [Security Hardening](./operations/security-hardening.md)
+7. [Logging and Correlation IDs](./operations/logging-and-correlation.md)
+8. [CLI Commands Reference](./reference/cli-commands.md) - `codeux` management syntax, aliases, prompting, JSON payloads, and approvals
+9. [CLI Management Surface](./operations/management-cli.md)
 
 ## Full Table of Contents
 
@@ -127,6 +129,7 @@ Use this page as the main entrypoint.
 - [Dashboard Guide](./dashboard/dashboard-guide.md)
 - [Dashboard Accessibility Patterns](./dashboard/dashboard-guide.md#accessibility-patterns)
 - [Interaction Patterns](./dashboard/interaction-patterns.md)
+- [Stats & Analytics Design System](./dashboard/design-system-stats.md)
 - [Dashboard Onboarding](./dashboard/onboarding.md)
 - [Project Initialization](./dashboard/project-initialization.md)
 - [Sprint Imports](./dashboard/sprint-imports.md)

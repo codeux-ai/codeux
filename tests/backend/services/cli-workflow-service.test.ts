@@ -242,7 +242,10 @@ describe("CliWorkflowService unpushed commit detection", () => {
     expect(executePrepareStage).toHaveBeenCalled();
     expect(executeProviderStage).toHaveBeenCalled();
     expect(executeGitFinalizeStage).toHaveBeenCalled();
-    expect(executePrFinalizeStage).toHaveBeenCalled();
+    expect(executePrFinalizeStage).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ completionTimestamp: expect.any(String) }),
+    );
     expect(executeCleanupStage).toHaveBeenCalled();
     expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
       "run-1",

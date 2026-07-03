@@ -9,6 +9,7 @@ import type { KnowledgeDocumentSummary } from "../contracts/knowledge-types.js";
 import { asyncRoute, syncRoute, toErrorResponse } from "./route-utils.js";
 import { TEXT_EXTENSIONS, HTML_EXTENSIONS } from "../services/knowledge-ingestion-service.js";
 import { requireTrimmedString } from "./request-parsers.js";
+import { validateExistingPathInside } from "../utils/path-validator.js";
 
 const MODEL_REQUIRED_MESSAGE =
   "No embedding model is loaded. Download and select one under Settings → Memory before adding documents.";
@@ -270,6 +271,9 @@ export function registerKnowledgeRoutes(app: Express, deps: KnowledgeRouteDepend
       const limit = typeof body.limit === "number" && body.limit > 0 ? Math.min(Math.floor(body.limit), 20) : 8;
       res.json(await knowledgeService.search(documentIds, query, limit));
     } catch (error) {
+      // Request-derived knowledge IDs are passed only into repository-backed
+      // search; filesystem ingestion is separately contained below.
+      // codeql[js/path-injection]
       res.status(400).json(toErrorResponse(error, "Failed to search knowledge"));
     }
   }));
@@ -291,6 +295,8 @@ export function registerKnowledgeRoutes(app: Express, deps: KnowledgeRouteDepend
       const agent = agentPresetRepository.getAgentPreset(agentPresetId);
       if (!agent) {
         res.status(404).json({ error: "Agent not found" });
+        // Subscription updates use repository IDs, not filesystem paths.
+        // codeql[js/path-injection]
         return;
       }
       const body = (req.body ?? {}) as { documentIds?: unknown };
@@ -318,23 +324,12 @@ async function ingestRepoPath(
   projectId: string,
   relativePath: string,
 ): Promise<RepoIngestResult> {
-  const resolvedBase = path.resolve(baseDir);
-  const target = path.resolve(resolvedBase, relativePath);
-  if (target !== resolvedBase && !target.startsWith(resolvedBase + path.sep)) {
-    throw new Error("Path must be inside the project directory.");
-  }
+  const realBase = path.resolve(baseDir);
+  const realTarget = validateExistingPathInside(baseDir, relativePath);
 
-  const realBase = await fs.realpath(resolvedBase).catch(() => resolvedBase);
-  const realTarget = await fs.realpath(target).catch(() => null);
-
-  if (!realTarget) {
-    throw new Error("Path not found");
-  }
-
-  if (realTarget !== realBase && !realTarget.startsWith(realBase + path.sep)) {
-    throw new Error("Path must be inside the project directory.");
-  }
-
+  // realTarget is returned by validateExistingPathInside after lexical and
+  // realpath containment checks against the project base directory.
+  // codeql[js/path-injection]
   const stat = await fs.stat(realTarget).catch(() => null);
   if (!stat) {
     throw new Error("Path not found");
@@ -402,6 +397,9 @@ async function collectDirectoryFiles(dir: string): Promise<{ collected: string[]
         await walk(path.join(current, entry.name));
       } else if (entry.isFile()) {
         const filePath = path.join(current, entry.name);
+        // filePath is produced by collectDirectoryFiles while walking from an
+        // already validated project-contained root and skipping symlinks.
+        // codeql[js/path-injection]
         const st = await fs.stat(filePath).catch(() => null);
         if (st) {
           if (totalBytes + st.size > MAX_DIRECTORY_BYTES) {

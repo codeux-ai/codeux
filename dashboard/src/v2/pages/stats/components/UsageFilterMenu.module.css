@@ -1,11 +1,10 @@
 .menu {
   position: absolute;
-  top: 100%;
+  top: 0;
   right: 0;
   z-index: 50;
-  margin-top: 1rem;
-  width: 24rem;
-  max-width: calc(100vw - 2rem);
+  margin-top: 0.65rem;
+  width: min(26rem, calc(100vw - 2rem));
   max-height: calc(100dvh - 8rem);
   transform-origin: top right;
 }
@@ -15,31 +14,31 @@
   flex-direction: column;
   overflow: hidden;
   max-height: inherit;
-  border-radius: 1.75rem;
-  border: 1px solid var(--border-hairline);
-  background-color: var(--surface-glass);
+  border-radius: 1.35rem;
+  border: 1px solid var(--stats-card-border);
+  background-color: var(--stats-card-bg);
   box-shadow: var(--elevation-floating);
   backdrop-filter: blur(24px);
 }
 
 :global(.dark) .content {
-  border: 1px solid var(--border-hairline);
-  background-color: var(--surface-glass);
+  border: 1px solid var(--stats-card-border);
+  background-color: var(--stats-card-bg);
   box-shadow: var(--elevation-floating);
 }
 
 .header {
-  padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  padding: 1rem 1.1rem;
+  border-bottom: 1px solid var(--stats-card-border);
 }
 
 :global(.dark) .header {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--stats-card-border);
 }
 
 .section {
-  padding: 1.5rem;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  padding: 1.1rem;
+  border-bottom: 1px solid var(--stats-card-border);
 }
 
 .section:last-child {
@@ -47,7 +46,7 @@
 }
 
 :global(.dark) .section {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--stats-card-border);
 }
 
 .label {
@@ -55,9 +54,9 @@
   font-size: 0.625rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.16em;
-  color: #94a3b8; /* slate-400 */
-  margin-bottom: 1rem;
+  letter-spacing: 0.14em;
+  color: var(--stats-label-color);
+  margin-bottom: 0.85rem;
 }
 
 .grid {
@@ -70,4 +69,20 @@
   display: grid;
   gap: 0.75rem;
   grid-template-columns: 1fr;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu,
+  .content {
+    transition: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .menu {
+    left: 0;
+    right: auto;
+    width: min(100%, calc(100vw - 2rem));
+    transform-origin: top left;
+  }
 }

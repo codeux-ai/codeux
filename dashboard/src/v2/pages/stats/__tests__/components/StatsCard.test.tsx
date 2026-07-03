@@ -2,9 +2,13 @@
 /** @jsx h */
 import { h } from "preact";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/preact";
+import * as matchers from "@testing-library/jest-dom/matchers";
+import { render, screen, cleanup, fireEvent, within } from "@testing-library/preact";
 import { StatsCard } from "../../components/StatsCard.js";
+import { CHART_SERIES, SeriesLegendButton, SortButton, ViewToggle } from "../../components/stats-ui-primitives.js";
 import { Activity } from "lucide-preact";
+
+expect.extend(matchers);
 
 // Mock animated foundations to avoid GSAP/DOM issues in jsdom
 vi.mock("../../../../components/ui/WaveFluid.js", () => ({
@@ -24,15 +28,13 @@ describe("StatsCard", () => {
     
     expect(screen.getByText("Daily Active")).toBeDefined();
     expect(screen.getByText("4.2k")).toBeDefined();
+    expect(screen.getByRole("article", { name: "Daily Active: 4.2k" })).toBeDefined();
   });
 
   it("renders icon component when provided", () => {
     const { container } = render(<StatsCard title="Test" value="0" icon={Activity} />);
-    // The icon container should be present
-    const iconContainer = container.querySelector('[class*="iconContainer"]');
-    expect(iconContainer).not.toBeNull();
-    // Lucide icons render as SVG
-    expect(iconContainer?.querySelector("svg")).not.toBeNull();
+    expect(screen.getByRole("article", { name: "Test: 0" })).toBeDefined();
+    expect(container.querySelector("svg")).not.toBeNull();
   });
 
   it("renders trend and description slots", () => {
@@ -47,22 +49,108 @@ describe("StatsCard", () => {
     
     expect(screen.getByTestId("trend-chip")).toBeDefined();
     expect(screen.getByText("vs previous period")).toBeDefined();
+    expect(screen.getByRole("article", { name: "Revenue: $50k: vs previous period" })).toBeDefined();
   });
 
-  it("applies variant classes based on accent prop", () => {
-    const { container } = render(<StatsCard title="Test" value="0" accent="amber" />);
-    const card = container.firstChild as HTMLElement;
-    // Match the CSS module class name for accentAmber
-    expect(card.className).toMatch(/accentAmber/);
+  it("keeps the accessible card contract across accent variants", () => {
+    render(<StatsCard title="Cost" value="$4.20" accent="amber" description="Projected usage" />);
+    expect(screen.getByRole("article", { name: "Cost: $4.20: Projected usage" })).toBeDefined();
+    expect(screen.getByText("Projected usage")).toBeDefined();
   });
 
   it("stays stable without optional elements", () => {
-    const { container } = render(<StatsCard title="Minimal" value="100" />);
+    render(<StatsCard title="Minimal" value="100" />);
     
     expect(screen.queryByTestId("trend-chip")).toBeNull();
-    // The footer div should not be rendered if both trend and description are missing
-    const footer = container.querySelector('[class*="footer"]');
-    expect(footer).toBeNull();
+    expect(screen.getByRole("article", { name: "Minimal: 100" })).toBeDefined();
+  });
+
+  it("renders visual children directly in the card so backgrounds reach the edges", () => {
+    const { container } = render(
+      <StatsCard title="With Visual" value="42">
+        <svg data-testid="edge-visual" />
+      </StatsCard>
+    );
+
+    const card = container.firstChild as HTMLElement;
+    const visual = screen.getByTestId("edge-visual");
+    expect(visual.parentElement).toBe(card);
+  });
+
+  it("keeps long labels, values, and descriptions exposed without changing the card contract", () => {
+    const longTitle = "Extremely Long Provider Throughput Label That Should Wrap";
+    const longValue = "codex/gpt-5-codex-super-long-provider-model-name-with-1234567890 tokens";
+    const longDescription = "Sustained window with a long descriptive phrase for provider and model comparisons";
+
+    render(
+      <StatsCard
+        title={longTitle}
+        value={longValue}
+        description={longDescription}
+      />,
+    );
+
+    const card = screen.getByRole("article", {
+      name: `${longTitle}: ${longValue}: ${longDescription}`,
+    });
+
+    expect(screen.getByText(longTitle)).toBeDefined();
+    expect(screen.getByText(longValue)).toBeDefined();
+    expect(screen.getByText(longDescription)).toBeDefined();
+    expect(card).toHaveTextContent(longTitle);
+    expect(card).toHaveTextContent(longValue);
+    expect(card).toHaveTextContent(longDescription);
+  });
+
+  it("renders ViewToggle as pressed segmented controls with icon-first labels for every mode", () => {
+    const onChange = vi.fn();
+    const modes = [
+      { label: "Trend", value: "trend" },
+      { label: "Composition", value: "composition" },
+      { label: "Models", value: "models" },
+      { label: "Providers", value: "reliability" },
+      { label: "Ledgers", value: "ledgers" },
+      { label: "System", value: "system" },
+    ] as const;
+
+    render(<ViewToggle value="models" onChange={onChange} ariaLabel="Stats mode" />);
+
+    const group = screen.getByRole("group", { name: "Stats mode" });
+    expect(group).toBeDefined();
+
+    for (const mode of modes) {
+      const button = within(group).getByRole("button", { name: mode.label });
+      expect(button).toHaveAttribute("aria-pressed", mode.value === "models" ? "true" : "false");
+      expect(button.firstElementChild?.tagName.toLowerCase()).toBe("svg");
+    }
+
+    fireEvent.click(within(group).getByRole("button", { name: "Ledgers" }));
+
+    expect(onChange).toHaveBeenCalledWith("ledgers");
+  });
+
+  it("exposes selected state on shared sort and series controls", () => {
+    const onSort = vi.fn();
+    const onToggle = vi.fn();
+
+    render(
+      <div>
+        <SortButton label="Recent" active={true} direction="desc" onClick={onSort} />
+        <SeriesLegendButton
+          series={CHART_SERIES[0]}
+          active={true}
+          currentValue={42000}
+          onToggle={onToggle}
+        />
+      </div>,
+    );
+
+    expect(screen.getByRole("button", { name: /Recent/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /Throughput/i })).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: /Throughput/i }));
+
+    expect(onToggle).toHaveBeenCalledTimes(1);
   });
 
 });

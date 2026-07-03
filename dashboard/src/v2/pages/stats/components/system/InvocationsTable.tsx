@@ -1,4 +1,4 @@
-import type { FunctionComponent } from "preact";
+import { Fragment, type FunctionComponent } from "preact";
 import { useState, useMemo } from "preact/hooks";
 import {
   ChevronRight,
@@ -20,6 +20,9 @@ import { DEFAULT_LIST_WINDOW, resolveListWindow } from "../../../../lib/list-win
 import {
   LEDGER_ROW_MODERN_CLASS,
   CHIP_CLASS,
+  STATUS_TONE_CLASS,
+  TAB_IDLE_CLASS,
+  TRACK_CLASS,
   getProviderIcon,
 } from "../StatsShared.js";
 import { InvocationMessagesPanel } from "./InvocationMessagesPanel.js";
@@ -31,6 +34,7 @@ export interface InvocationsTableProps {
   expandedId: string | null;
   onRowExpand: (id: string | null) => void;
   loading?: boolean;
+  error?: string | null;
 }
 
 export function useInvocationsWindow(
@@ -69,6 +73,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
   expandedId,
   onRowExpand,
   loading,
+  error,
   }) => {
   const expandedInvocation = expandedId === null
     ? null
@@ -87,9 +92,9 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
   const renderSortIcon = (key: SystemSortKey) => {
     if (sort.key !== key) return <ArrowUpDown aria-label="sortable" className="ml-1 h-3 w-3" />;
     return sort.dir === "asc" ? (
-      <ArrowUp aria-label="sorted ascending" className="ml-1 h-3 w-3 text-signal-500" />
+      <ArrowUp aria-label="sorted ascending" className="ml-1 h-3 w-3 text-[color:var(--stats-signal-text)]" />
     ) : (
-      <ArrowDown aria-label="sorted descending" className="ml-1 h-3 w-3 text-signal-500" />
+      <ArrowDown aria-label="sorted descending" className="ml-1 h-3 w-3 text-[color:var(--stats-signal-text)]" />
     );
   };
 
@@ -97,67 +102,89 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
     switch (status) {
       case "running":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border border-black/[0.06] bg-[color:var(--surface-glass)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-300 dark:border-white/[0.06]`}>
-            <div className="h-2 w-2 rounded-full bg-blue-500" />
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${STATUS_TONE_CLASS.signal}`}>
+            <div className="h-2 w-2 rounded-full bg-[color:var(--stats-signal-text)]" />
             <Loader2 className="h-3 w-3 animate-spin" />
             Running
           </div>
         );
       case "completed":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border border-black/[0.06] bg-[color:var(--surface-glass)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-300 dark:border-white/[0.06]`}>
-            <div className="h-2 w-2 rounded-full bg-emerald-500" />
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${STATUS_TONE_CLASS.positive}`}>
+            <div className="h-2 w-2 rounded-full bg-[color:var(--stats-positive-text)]" />
             <CheckCircle2 className="h-3 w-3" />
             Completed
           </div>
         );
       case "failed":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border border-black/[0.06] bg-[color:var(--surface-glass)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-red-600 dark:text-red-300 dark:border-white/[0.06]`}>
-            <div className="h-2 w-2 rounded-full bg-red-500" />
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${STATUS_TONE_CLASS.negative}`}>
+            <div className="h-2 w-2 rounded-full bg-[color:var(--stats-negative-text)]" />
             <XCircle className="h-3 w-3" />
             Failed
           </div>
         );
       case "cancelled":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border border-black/[0.06] bg-[color:var(--surface-glass)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 dark:border-white/[0.06]`}>
-            <div className="h-2 w-2 rounded-full bg-slate-500" />
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${STATUS_TONE_CLASS.neutral}`}>
+            <div className="h-2 w-2 rounded-full bg-[color:var(--stats-detail-color)]" />
             <MinusCircle className="h-3 w-3" />
             Cancelled
           </div>
         );
       case "paused":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border border-black/[0.06] bg-[color:var(--surface-glass)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-300 dark:border-white/[0.06]`}>
-            <div className="h-2 w-2 rounded-full bg-amber-500" />
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${STATUS_TONE_CLASS.warning}`}>
+            <div className="h-2 w-2 rounded-full bg-[color:var(--stats-warning-text)]" />
             <PauseCircle className="h-3 w-3" />
             Paused
           </div>
         );
       default:
         return (
-          <div className={`${CHIP_CLASS} px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400`}>
+          <div className={`${CHIP_CLASS} px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--stats-label-color)]`}>
             {status}
           </div>
         );
     }
   };
 
+  const formatLabel = (value: string | null | undefined): string => {
+    const label = (value || "unknown").replace(/[_-]/g, " ").trim();
+    return label.length > 0 ? label : "unknown";
+  };
+
+  const cellClass = "block px-3 py-2 align-middle lg:table-cell lg:px-2 lg:py-3";
+  const mobileLabelClass = "mb-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)] lg:hidden";
+
   if (loading) {
     return (
       <div role="status" aria-label="Loading invocations" className="space-y-3">
         <span className="sr-only" aria-live="polite">Loading invocations</span>
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className={`${LEDGER_ROW_MODERN_CLASS} h-20 motion-safe:animate-pulse bg-slate-100/50 dark:bg-white/5`} />
+          <div key={i} className={`${LEDGER_ROW_MODERN_CLASS} h-20 motion-safe:animate-pulse ${TRACK_CLASS}`} />
         ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div role="alert" className={`rounded-2xl px-4 py-4 text-sm ${STATUS_TONE_CLASS.negative}`}>
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div className="min-w-0">
+            <div className="font-bold">Failed to load invocation records</div>
+            <div className="mt-1 break-words">{error}</div>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (invocations.length === 0) {
     return (
-      <div role="status" aria-live="polite" aria-label="Empty invocations table" className="flex flex-col items-center justify-center py-20 text-slate-500">
+      <div role="status" aria-live="polite" aria-label="Empty invocations table" className="flex flex-col items-center justify-center py-20 text-[color:var(--stats-detail-color)]">
         <AlertTriangle className="mb-4 h-10 w-10 opacity-20" />
         <div className="text-sm font-medium">No invocations match the current filters</div>
       </div>
@@ -165,61 +192,61 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-separate border-spacing-y-2 block lg:table">
-        <thead className="sticky top-0 z-10 bg-white/90 backdrop-blur-sm dark:bg-void-900/80 hidden lg:table-header-group">
-          <tr className="text-left text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-            <th scope="col" className="pb-2 pl-6">
+    <div className="min-w-0 overflow-visible">
+      <table className="block w-full border-separate border-spacing-y-2 lg:table">
+        <thead className="sticky top-0 z-10 hidden bg-[color:var(--stats-surface-panel)] backdrop-blur-sm lg:table-header-group">
+          <tr className="text-left text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">
+            <th id="invocations-time" scope="col" className="pb-2 pl-6">
               <button
                 type="button"
                 onClick={() => handleSort("startedAt")}
-                className="flex items-center hover:text-slate-900 dark:hover:text-white"
+                className={`flex items-center ${TAB_IDLE_CLASS}`}
               >
                 Time {renderSortIcon("startedAt")}
               </button>
             </th>
-            <th scope="col" className="pb-2">Status</th>
-            <th scope="col" className="pb-2">Type</th>
-            <th scope="col" className="pb-2">Model</th>
-            <th scope="col" className="pb-2">
+            <th id="invocations-status" scope="col" className="pb-2">Status</th>
+            <th id="invocations-type" scope="col" className="pb-2">Type</th>
+            <th id="invocations-model" scope="col" className="pb-2">Model</th>
+            <th id="invocations-input" scope="col" className="pb-2">
               <button
                 type="button"
                 onClick={() => handleSort("inputTokens")}
-                className="flex items-center hover:text-slate-900 dark:hover:text-white"
+                className={`flex items-center ${TAB_IDLE_CLASS}`}
               >
                 In {renderSortIcon("inputTokens")}
               </button>
             </th>
-            <th scope="col" className="pb-2">
+            <th id="invocations-output" scope="col" className="pb-2">
               <button
                 type="button"
                 onClick={() => handleSort("outputTokens")}
-                className="flex items-center hover:text-slate-900 dark:hover:text-white"
+                className={`flex items-center ${TAB_IDLE_CLASS}`}
               >
                 Out {renderSortIcon("outputTokens")}
               </button>
             </th>
-            <th scope="col" className="pb-2">Cached</th>
-            <th scope="col" className="pb-2">
+            <th id="invocations-cached" scope="col" className="pb-2">Cached</th>
+            <th id="invocations-total" scope="col" className="pb-2">
               <button
                 type="button"
                 onClick={() => handleSort("totalTokens")}
-                className="flex items-center hover:text-slate-900 dark:hover:text-white"
+                className={`flex items-center ${TAB_IDLE_CLASS}`}
               >
                 Total {renderSortIcon("totalTokens")}
               </button>
             </th>
-            <th scope="col" className="hidden pb-2 md:table-cell">
+            <th id="invocations-duration" scope="col" className="pb-2">
               <button
                 type="button"
                 onClick={() => handleSort("durationMs")}
-                className="flex items-center hover:text-slate-900 dark:hover:text-white"
+                className={`flex items-center ${TAB_IDLE_CLASS}`}
               >
                 Avg Duration {renderSortIcon("durationMs")}
               </button>
             </th>
-            <th scope="col" className="pb-2">Context</th>
-            <th scope="col" className="pb-2 pr-6 text-right">Expand</th>
+            <th id="invocations-context" scope="col" className="pb-2">Context</th>
+            <th id="invocations-expand" scope="col" className="pb-2 pr-6 text-right">Expand</th>
           </tr>
         </thead>
         <tbody className="block lg:table-row-group">
@@ -231,176 +258,116 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               : "running";
 
             return (
-              <>
-                <tr key={invocation.id} className="block lg:table-row">
-                  <td colSpan={11} className="p-0 block lg:table-cell">
-                    <div className={`${LEDGER_ROW_MODERN_CLASS} flex items-center p-4 lg:p-6 ${invocation.status === "running" ? "border-l-2 border-l-blue-400 bg-blue-500/[0.02]" : invocation.status === "failed" ? "border-l-2 border-l-red-400 bg-red-500/[0.02]" : ""}`}>
-                      <div className="flex flex-col gap-3 lg:grid lg:w-full lg:grid-cols-[1.2fr_1fr_1fr_1.4fr_0.6fr_0.6fr_0.6fr_0.8fr_0.8fr_1fr_0.4fr] lg:items-center lg:gap-2">
-                        {/* Header Row: Time and Expand */}
-                        <div className="flex items-center justify-between lg:contents">
-                          {/* Time */}
-                          <div>
-                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Time</div>
-                            <div className="text-[11px] font-mono text-slate-400">
-
-                            {formatDateTime(invocation.startedAt)}
-
-                            </div>
-                          </div>
-                          {/* Expand Toggle Mobile */}
-                          <div className="flex justify-end lg:hidden">
-                            <button
-                              type="button"
-                              onClick={() => onRowExpand(isExpanded ? null : invocation.id)}
-                              aria-label={isExpanded ? `Collapse invocation ${invocation.id}` : `Expand invocation ${invocation.id}`}
-                              className={`rounded-full p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 hover:bg-black/[0.04] dark:hover:bg-white/5 ${
-                                isExpanded ? "text-signal-500" : "text-slate-400"
-                              }`}
-                            >
-                              {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Status & Type Row */}
-                        <div className="flex items-center gap-2 lg:contents">
-                          {/* Status */}
-                          <div>
-                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Status</div>
-                            {renderStatusChip(invocation.status)}
-                          </div>
-
-                        {/* Type */}
-                          <div className="flex flex-col min-w-0">
-                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Type</div>
-                            <div className={`${CHIP_CLASS} w-max px-2 py-0.5 text-[10px] font-medium text-slate-500`}>
-                              {invocation.type?.replace(/_/g, " ") || "unknown"}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Model & Duration Row */}
-                        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between lg:contents">
-                          {/* Model */}
-                          <div>
-                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Model</div>
-                            <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300 min-w-0">
-
-                            <div className={`rounded-lg p-1.5 ${providerBg} ${providerText}`}>
-                              <ProviderIcon className="h-3 w-3" strokeWidth={2.5} />
-                            </div>
-                            <span className="truncate min-w-0">{invocation.model || "—"}</span>
-                            </div>
-                          </div>
-
-                        {/* Token Stats Row */}
-                        <div className="grid grid-cols-4 gap-2 rounded-lg border border-slate-200/60 bg-slate-50 p-2 dark:border-white/5 dark:bg-white/[0.02] lg:contents lg:border-0 lg:bg-transparent lg:p-0">
-                          {/* In Tokens */}
-                          <div>
-                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">In</div>
-                            <div className="text-[11px] text-blue-600 dark:text-blue-400">
-
-                          {formatTokens(invocation.inputTokens ?? 0)}
-                        </div>
-                          </div>
-
-                        {/* Out Tokens */}
-                          <div>
-                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Out</div>
-                            <div className="text-[11px] text-emerald-600 dark:text-emerald-400">
-
-                          {formatTokens(invocation.outputTokens ?? 0)}
-                        </div>
-                          </div>
-
-                        {/* Cached Tokens */}
-                          <div>
-                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Cached</div>
-                            <div className="text-[11px] text-purple-600 dark:text-purple-400">
-
-                          {formatTokens(invocation.cachedInputTokens ?? 0)}
-                        </div>
-                          </div>
-
-                        {/* Total Tokens */}
-                          <div>
-                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Total</div>
-                            <div className="text-[11px] font-bold text-slate-900 dark:text-white">
-
-                          {formatTokens(invocation.totalTokens ?? 0)}
-                        </div>
-                          </div>
-                        </div>
-
-                        {/* Duration */}
-                          <div>
-                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Duration</div>
-                            <div className={`text-[11px] ${invocation.finishedAt ? "text-slate-600 dark:text-slate-300" : "text-blue-600 dark:text-blue-400"}`}>
-
-                            {duration}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Context Chips */}
-                        <div className="flex flex-col gap-1 lg:contents">
-                          <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Context</div>
-                          <div className="flex flex-wrap gap-1">
-                          {(invocation.sprintNumber !== null || invocation.taskKey !== null) && (
-                            <>
-                              {invocation.sprintNumber !== null && (
-                                <div className={`${CHIP_CLASS} px-1.5 py-0.5 text-[9px] font-bold text-slate-400`}>
-                                  S{invocation.sprintNumber}
-                                </div>
-                              )}
-                              {invocation.taskKey !== null && (
-                                <div className={`${CHIP_CLASS} px-1.5 py-0.5 text-[9px] font-bold text-slate-400`}>
-                                  {invocation.taskKey}
-                                </div>
-                              )}
-                            </>
-                          )}
-                        </div>
-                        </div>
-
-                        {/* Expand Toggle Desktop */}
-                        <div className="hidden lg:flex lg:justify-end">
-
-                          <button
-                            type="button"
-                            onClick={() => onRowExpand(isExpanded ? null : invocation.id)}
-                            aria-label={isExpanded ? `Collapse invocation ${invocation.id}` : `Expand invocation ${invocation.id}`}
-                            className={`rounded-full p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 hover:bg-black/[0.04] dark:hover:bg-white/5 ${
-                              isExpanded ? "text-signal-500" : "text-slate-400"
-                            }`}
-                          >
-                            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                          </button>
-                        </div>
+              <Fragment key={invocation.id}>
+                <tr
+                  key={invocation.id}
+                  className={`${LEDGER_ROW_MODERN_CLASS} block overflow-hidden lg:table-row ${
+                    invocation.status === "running"
+                      ? "border-l-2 border-l-[color:var(--stats-signal-text)]"
+                      : invocation.status === "failed"
+                        ? "border-l-2 border-l-[color:var(--stats-negative-text)]"
+                        : ""
+                  }`}
+                >
+                  <td headers="invocations-time" className={`${cellClass} lg:pl-6`}>
+                    <div className={mobileLabelClass}>Time</div>
+                    <div className="text-[11px] font-mono text-[color:var(--stats-label-color)]">{formatDateTime(invocation.startedAt)}</div>
+                  </td>
+                  <td headers="invocations-status" className={cellClass}>
+                    <div className={mobileLabelClass}>Status</div>
+                    {renderStatusChip(invocation.status)}
+                    {invocation.status === "failed" && (invocation.lastErrorMessage || invocation.errorMessage) ? (
+                      <div className="mt-2 flex min-w-0 items-start gap-1.5 text-[11px] text-[color:var(--stats-negative-text)]">
+                        <AlertTriangle className="h-3 w-3 shrink-0" />
+                        <span className="min-w-0 break-words [overflow-wrap:anywhere]">{invocation.lastErrorMessage || invocation.errorMessage}</span>
                       </div>
+                    ) : null}
+                  </td>
+                  <td headers="invocations-type" className={cellClass}>
+                    <div className={mobileLabelClass}>Type</div>
+                    <div className={`${CHIP_CLASS} max-w-full px-2 py-0.5 text-[10px] font-medium capitalize text-[color:var(--stats-detail-color)]`}>
+                      <span className="block truncate">{formatLabel(invocation.type)}</span>
                     </div>
-
-                    {/* Error Sub-row inside main card if failed */}
-                    {invocation.status === "failed" && (invocation.lastErrorMessage || invocation.errorMessage) && (
-                      <div className="mt-[-8px] px-6 pb-4">
-                        <div className="flex items-center gap-1.5 text-[11px] text-red-600 dark:text-red-400">
-                          <AlertTriangle className="h-3 w-3 flex-shrink-0" />
-                          <span>{invocation.lastErrorMessage || invocation.errorMessage}</span>
-                        </div>
+                  </td>
+                  <td headers="invocations-model" className={cellClass}>
+                    <div className={mobileLabelClass}>Model</div>
+                    <div className="flex min-w-0 items-center gap-2 text-[11px] text-[color:var(--stats-detail-color)]">
+                      <div className={`shrink-0 rounded-lg p-1.5 ${providerBg} ${providerText}`}>
+                        <ProviderIcon className="h-3 w-3" strokeWidth={2.5} />
                       </div>
-                    )}
+                      <span className="min-w-0 truncate">
+                        <span className="font-bold capitalize text-[color:var(--stats-value-color)]">{formatLabel(invocation.provider)}</span>
+                        <span className="mx-1 text-[color:var(--stats-label-color)]">·</span>
+                        {invocation.model || "—"}
+                      </span>
+                    </div>
+                  </td>
+                  <td headers="invocations-input" className={cellClass}>
+                    <div className={mobileLabelClass}>In</div>
+                    <div className="text-[11px] text-[color:var(--stats-detail-color)]">{formatTokens(invocation.inputTokens ?? 0)}</div>
+                  </td>
+                  <td headers="invocations-output" className={cellClass}>
+                    <div className={mobileLabelClass}>Out</div>
+                    <div className="text-[11px] text-[color:var(--stats-detail-color)]">{formatTokens(invocation.outputTokens ?? 0)}</div>
+                  </td>
+                  <td headers="invocations-cached" className={cellClass}>
+                    <div className={mobileLabelClass}>Cached</div>
+                    <div className="text-[11px] text-[color:var(--stats-detail-color)]">{formatTokens(invocation.cachedInputTokens ?? 0)}</div>
+                  </td>
+                  <td headers="invocations-total" className={cellClass}>
+                    <div className={mobileLabelClass}>Total</div>
+                    <div className="text-[11px] font-bold text-[color:var(--stats-value-color)]">{formatTokens(invocation.totalTokens ?? 0)}</div>
+                  </td>
+                  <td headers="invocations-duration" className={cellClass}>
+                    <div className={mobileLabelClass}>Duration</div>
+                    <div className={`text-[11px] ${invocation.finishedAt ? "text-[color:var(--stats-detail-color)]" : "text-[color:var(--stats-signal-text)]"}`}>
+                      {duration}
+                    </div>
+                  </td>
+                  <td headers="invocations-context" className={cellClass}>
+                    <div className={mobileLabelClass}>Context</div>
+                    <div className="flex min-w-0 flex-wrap gap-1">
+                      {invocation.sprintNumber !== null && invocation.sprintNumber !== undefined ? (
+                        <div className={`${CHIP_CLASS} px-1.5 py-0.5 text-[9px] font-bold text-[color:var(--stats-label-color)]`}>
+                          S{invocation.sprintNumber}
+                        </div>
+                      ) : null}
+                      {invocation.taskKey !== null && invocation.taskKey !== undefined ? (
+                        <div className={`${CHIP_CLASS} px-1.5 py-0.5 text-[9px] font-bold text-[color:var(--stats-label-color)]`}>
+                          {invocation.taskKey}
+                        </div>
+                      ) : null}
+                      {invocation.sprintNumber == null && invocation.taskKey == null ? (
+                        <span className="text-[11px] text-[color:var(--stats-label-color)]">—</span>
+                      ) : null}
+                    </div>
+                  </td>
+                  <td headers="invocations-expand" className={`${cellClass} lg:pr-6 lg:text-right`}>
+                    <div className={mobileLabelClass}>Messages</div>
+                    <button
+                      type="button"
+                      onClick={() => onRowExpand(isExpanded ? null : invocation.id)}
+                      aria-expanded={isExpanded}
+                      aria-controls={`invocation-messages-${invocation.id}`}
+                      aria-label={isExpanded ? `Collapse invocation ${invocation.id}` : `Expand invocation ${invocation.id}`}
+                      className={`rounded-full p-2 transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--stats-focus-ring)] ${
+                        isExpanded ? "text-[color:var(--stats-signal-text)]" : "text-[color:var(--stats-label-color)]"
+                      }`}
+                    >
+                      {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    </button>
                   </td>
                 </tr>
 
                 {/* Expanded Detail Row */}
                 {isExpanded && expandedInvocation ? (
                   <tr key={`${invocation.id}-detail`} className="block lg:table-row">
-                    <td colSpan={11} className="px-0 pb-2 lg:px-6 block lg:table-cell">
+                    <td colSpan={11} className="block px-0 pb-2 lg:table-cell lg:px-6">
                       <InvocationMessagesPanel invocation={expandedInvocation} />
                     </td>
                   </tr>
                 ) : null}
-              </>
+              </Fragment>
             );
           })}
         </tbody>
@@ -410,7 +377,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
           <button
             type="button"
             onClick={revealMore}
-            className="rounded-full bg-slate-100 px-4 py-2 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-200 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
+            className="rounded-full bg-[color:var(--stats-surface-chip)] px-4 py-2 text-xs font-bold text-[color:var(--stats-detail-color)] transition-colors hover:bg-[color:var(--stats-surface-chip-hover)]"
           >
             Show more invocations
           </button>

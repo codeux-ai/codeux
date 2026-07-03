@@ -79,6 +79,9 @@ export class WatchLoopRunner {
     private readonly cycleRunner: CycleRunner,
     private readonly renderMainMergeCiFeedback: (args: {
       repoPath: string;
+      projectId: string;
+      sprintId: string;
+      sprintRunId: string;
       featureBranch: string;
       defaultBranch: string;
       featureBranchPrefix: string;
@@ -97,6 +100,31 @@ export class WatchLoopRunner {
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private publishStatusSnapshot(params: {
+    args: SprintAgentArgs;
+    scopedExecutionContext: SprintExecutionContext & { sprintNumber: number };
+    repoPath: string;
+    defaultFeatureBranch: string;
+    subtasks: Subtask[];
+    reportText: string;
+    statusTable: string;
+    instructions: string;
+  }): void {
+    this.deps.updateLastStatus({
+      project_id: params.scopedExecutionContext.project.id,
+      sprint_id: params.scopedExecutionContext.sprint.id,
+      sprint_number: params.scopedExecutionContext.sprintNumber,
+      source_id: params.args.source_id,
+      repo_path: params.repoPath,
+      feature_branch: params.defaultFeatureBranch,
+      subtasks: params.subtasks,
+      reportText: params.reportText,
+      statusTable: params.statusTable,
+      instructions: params.instructions,
+      timestamp: new Date().toLocaleTimeString(),
+    } as DashboardStatusSnapshot);
   }
 
   async run(params: WatchLoopRunnerArgs): Promise<string> {
@@ -250,9 +278,29 @@ export class WatchLoopRunner {
           });
           fullReport += finalizationResult.report;
           if (finalizationResult.status === "exit") {
+            this.publishStatusSnapshot({
+              args,
+              scopedExecutionContext,
+              repoPath,
+              defaultFeatureBranch,
+              subtasks,
+              reportText: reportText + finalizationResult.report,
+              statusTable,
+              instructions,
+            });
             return fullReport;
           }
           if (finalizationResult.status === "wait") {
+            this.publishStatusSnapshot({
+              args,
+              scopedExecutionContext,
+              repoPath,
+              defaultFeatureBranch,
+              subtasks,
+              reportText: reportText + finalizationResult.report,
+              statusTable,
+              instructions,
+            });
             checkpointWindowStartedAt = Date.now();
             allFinished = false;
             await this.sleep(watchLoopIntervalMs);
@@ -386,20 +434,16 @@ export class WatchLoopRunner {
       planningAgentPresetId: params.planningAgentPresetId,
     });
 
-    const timestamp = new Date().toLocaleTimeString();
-    this.deps.updateLastStatus({
-      project_id: params.scopedExecutionContext.project.id,
-      sprint_id: params.scopedExecutionContext.sprint.id,
-      sprint_number: params.scopedExecutionContext.sprintNumber,
-      source_id: params.args.source_id,
-      repo_path: params.repoPath,
-      feature_branch: params.defaultFeatureBranch,
+    this.publishStatusSnapshot({
+      args: params.args,
+      scopedExecutionContext: params.scopedExecutionContext,
+      repoPath: params.repoPath,
+      defaultFeatureBranch: params.defaultFeatureBranch,
       subtasks: cycleResult.subtasks,
       reportText: cycleResult.reportText,
       statusTable: cycleResult.statusTable,
       instructions: cycleResult.instructions,
-      timestamp,
-    } as DashboardStatusSnapshot);
+    });
 
     return cycleResult;
   }
@@ -481,6 +525,9 @@ export class WatchLoopRunner {
         });
         const mergeFeedback = await this.renderMainMergeCiFeedback({
           repoPath,
+          projectId: scopedExecutionContext.project.id,
+          sprintId: scopedExecutionContext.sprint.id,
+          sprintRunId,
           featureBranch: defaultFeatureBranch,
           defaultBranch,
           featureBranchPrefix,

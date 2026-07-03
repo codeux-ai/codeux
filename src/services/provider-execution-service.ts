@@ -30,6 +30,45 @@ function countConversationToolCalls(conversation: ParsedConversationTurn[] | und
   return conversation.reduce((count, turn) => (turn.kind === "tool_call" ? count + 1 : count), 0);
 }
 
+function buildPersistedInvocationMessages(
+  provider: CliProviderId,
+  model: string,
+  prompt: string,
+  conversation: ParsedConversationTurn[] | undefined | null,
+  transcriptText: string,
+  trackPromptInInvocation: boolean | undefined,
+): AppendExecutionInvocationMessageInput[] {
+  if (conversation && conversation.length > 0) {
+    return conversation.map((turn) => conversationTurnToMessage(turn, provider, model));
+  }
+
+  const messages: AppendExecutionInvocationMessageInput[] = [];
+  if (trackPromptInInvocation !== false) {
+    messages.push({
+      role: "user",
+      contentMarkdown: prompt,
+    });
+  }
+  if (transcriptText) {
+    messages.push({
+      role: "assistant",
+      contentMarkdown: sanitizeInvocationOutputText(transcriptText),
+    });
+  }
+  return messages;
+}
+
+function persistInvocationMessages(
+  executionRepository: ExecutionRepository,
+  execInvocationId: string,
+  messages: AppendExecutionInvocationMessageInput[],
+): void {
+  executionRepository.clearExecutionInvocationMessages?.(execInvocationId);
+  for (const message of messages) {
+    executionRepository.appendExecutionInvocationMessage?.(execInvocationId, message);
+  }
+}
+
 function isRestartInterruptedDockerInvocation(error: unknown, args: ExecutionProviderRunArgs): boolean {
   if (args.workflowSettings.executionMode !== "DOCKER") {
     return false;
@@ -97,6 +136,12 @@ export interface ExecutionProviderRunArgs {
   onActivity?: (description: string, originator?: string) => void;
   signal?: AbortSignal;
   continueSessionId?: string | null;
+  /** The previous invocation's raw opencode export snapshot for this session,
+   *  when `continueSessionId` resumes it. Ignored for other providers. See
+   *  {@link https://opencode.ai} `export` semantics: totals are cumulative for
+   *  the whole session, so this baseline is subtracted from each follow-up's
+   *  freshly exported usage. */
+  openCodeBaselineRawUsageJson?: Record<string, unknown> | null;
 
   // Option to return ProviderResult with string `text` rather than standard ProviderResult
   expectTextOutput?: boolean;
@@ -121,9 +166,9 @@ export interface ExecutionProviderRunArgs {
 }
 
 /** Resolves the effective model name to use for telemetry and recording. */
-export function resolveEffectiveModel(args: Pick<ExecutionProviderRunArgs, "provider" | "model" | "customModel" | "qwenAuthMode" | "qwenModelId" | "openCodeAuthMode" | "openCodeProviderId" | "openCodeModelId">): string {
-  const { provider, model, customModel } = args;
-  if ((provider === "claude-code" || provider === "codex") && customModel && customModel.trim().length > 0) {
+export function resolveEffectiveModel(args: Pick<ExecutionProviderRunArgs, "provider" | "model" | "providerMountAuth" | "customModel" | "qwenAuthMode" | "qwenModelId" | "openCodeAuthMode" | "openCodeProviderId" | "openCodeModelId">): string {
+  const { provider, model, providerMountAuth, customModel } = args;
+  if (!providerMountAuth && (provider === "claude-code" || provider === "codex") && customModel && customModel.trim().length > 0) {
     return customModel.trim();
   }
   if (provider === "qwen-code" && args.qwenAuthMode === "MODEL_PROVIDER") {
@@ -154,7 +199,7 @@ export class ProviderExecutionService {
       mcpConnection: args.mcpConnection ?? null,
     });
 
-    const runProviderInner = async (p: string, retrySystemMessage?: string, continueSessionId?: string | null): Promise<ProviderRunResult> => {
+    const runProviderInner = async (p: string, retrySystemMessage?: string, continueSessionId?: string | null, openCodeBaselineRawUsageJson?: Record<string, unknown> | null): Promise<ProviderRunResult> => {
       const startedAt = new Date().toISOString();
 
       // Coalesce the per-line streaming activity firehose into batched transactions so concurrent
@@ -291,6 +336,7 @@ export class ProviderExecutionService {
         gitlabToken: args.gitlabToken,
         signal: args.signal,
         continueSessionId,
+        openCodeBaselineUsage: openCodeBaselineRawUsageJson,
         mcpConnection: resolvedMcp.mcpConnection,
         customMcpServers: resolvedMcp.customMcpServers,
         onActivity: (desc: string, originator?: string) => {
@@ -331,39 +377,18 @@ export class ProviderExecutionService {
               // just as agentic but were previously collapsed to prompt + final
               // answer. The structured callers parse their result from the
               // returned text, not from these messages, so this is display-only.
-              //
-              // Cheap signature of the about-to-be-persisted state. The conversation only grows
-              // within a run, so identical signatures across ticks mean nothing changed and the
-              // O(turns) clear+reinsert below can be skipped entirely.
-              const turnCount = telemetry.conversation?.length ?? 0;
-              const signature = turnCount > 0
-                ? `conv:${turnCount}:${telemetry.transcriptText.length}:${countConversationToolCalls(telemetry.conversation)}`
-                : `text:${args.trackPromptInInvocation !== false ? "p" : ""}:${telemetry.transcriptText.length}`;
+              const messages = buildPersistedInvocationMessages(
+                args.provider,
+                effectiveModel,
+                p,
+                telemetry.conversation,
+                telemetry.transcriptText,
+                args.trackPromptInInvocation,
+              );
+              const signature = JSON.stringify(messages);
 
               if (signature !== lastPersistedMessagesSignature) {
-                if (telemetry.conversation && telemetry.conversation.length > 0) {
-                  this.deps.executionRepository.clearExecutionInvocationMessages(execInvocationId);
-                  for (const turn of telemetry.conversation) {
-                    this.deps.executionRepository.appendExecutionInvocationMessage(
-                      execInvocationId,
-                      conversationTurnToMessage(turn, args.provider, effectiveModel),
-                    );
-                  }
-                } else {
-                  this.deps.executionRepository.clearExecutionInvocationMessages(execInvocationId);
-                  if (args.trackPromptInInvocation !== false) {
-                    this.deps.executionRepository.appendExecutionInvocationMessage(execInvocationId, {
-                      role: "user",
-                      contentMarkdown: p,
-                    });
-                  }
-                  if (telemetry.transcriptText) {
-                    this.deps.executionRepository.appendExecutionInvocationMessage(execInvocationId, {
-                      role: "assistant",
-                      contentMarkdown: sanitizeInvocationOutputText(telemetry.transcriptText),
-                    });
-                  }
-                }
+                persistInvocationMessages(this.deps.executionRepository, execInvocationId, messages);
                 lastPersistedMessagesSignature = signature;
               }
             }
@@ -478,13 +503,21 @@ export class ProviderExecutionService {
     let usedReadFileRetry = false;
     let continueSessionId: string | null = args.continueSessionId || null;
     let rateLimitRetryCount = 0;
+    let openCodeBaselineRawUsageJson: Record<string, unknown> | null = args.openCodeBaselineRawUsageJson || null;
 
     while (true) {
       providerResult = await runProviderInner(
         currentPrompt,
         usedReadFileRetry ? "Retrying with file-discovery guidance." : undefined,
         continueSessionId,
+        openCodeBaselineRawUsageJson,
       );
+      // Each attempt's raw export snapshot becomes the baseline for the next
+      // retry, since a retry that resumes the same opencode session would
+      // otherwise re-report this attempt's tokens too (export is cumulative).
+      if (args.provider === "opencode" && providerResult.usageTelemetry?.rawUsageJson) {
+        openCodeBaselineRawUsageJson = providerResult.usageTelemetry.rawUsageJson;
+      }
 
       if (!providerResult.ok && args.workflowSettings.retryOnReadFileNotFound && !usedReadFileRetry && isReadFileNotFoundToolError(providerResult)) {
         if (args.onActivity) {
@@ -513,23 +546,27 @@ export class ProviderExecutionService {
           if (args.trackAssistantInInvocation !== false) {
             const conversation = providerResult.usageTelemetry.conversation;
             if (conversation && conversation.length > 0) {
-              // Replace the placeholder message(s) with the full parsed agent
-              // session (user prompt, reasoning, tool calls/results, assistant)
-              // for every invocation type, not just coding runs.
-              this.deps.executionRepository?.clearExecutionInvocationMessages(execInvocationId);
-              for (const turn of conversation) {
-                this.deps.executionRepository?.appendExecutionInvocationMessage(
-                  execInvocationId,
-                  conversationTurnToMessage(turn, args.provider, effectiveModel),
-                );
+              const messages = buildPersistedInvocationMessages(
+                args.provider,
+                effectiveModel,
+                currentPrompt,
+                conversation,
+                providerResult.usageTelemetry.transcriptText,
+                args.trackPromptInInvocation,
+              );
+              if (this.deps.executionRepository) {
+                persistInvocationMessages(this.deps.executionRepository, execInvocationId, messages);
               }
             } else {
-              this.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
-                role: "assistant",
-                contentMarkdown: sanitizeInvocationOutputText(
-                  args.expectTextOutput ? (providerResult as any).text : providerResult.usageTelemetry.transcriptText,
-                ),
-              });
+              const fallbackText = args.expectTextOutput
+                ? ((providerResult as { text?: string }).text ?? providerResult.usageTelemetry.transcriptText)
+                : providerResult.usageTelemetry.transcriptText;
+              if (fallbackText) {
+                this.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
+                  role: "assistant",
+                  contentMarkdown: sanitizeInvocationOutputText(fallbackText),
+                });
+              }
             }
           }
         }

@@ -2,6 +2,7 @@ import { buildDonutSlices } from "./stats-geometry.js";
 import type { FunctionComponent, ComponentType } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
+import "../styles/stats-theme.css";
 import {
   Activity,
   ArrowDown,
@@ -24,6 +25,7 @@ import {
   Workflow,
   Bot,
   Terminal,
+  type LucideIcon,
 } from "lucide-preact";
 import { Sparkline } from "../../../components/ui/Sparkline.js";
 import { StatsCard, type StatsCardAccent } from "./StatsCard.js";
@@ -64,12 +66,34 @@ export interface ChartZoomRange {
   end: number;
 }
 
-export const PANEL_CLASS = "relative overflow-hidden rounded-[1.9rem] border border-black/[0.06] bg-white/80 p-6 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]";
-export const SUBPANEL_CLASS = "rounded-[1.45rem] border border-black/[0.05] bg-white/68 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.045)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35 dark:shadow-[0_12px_28px_rgba(0,0,0,0.2)]";
-export const CHIP_CLASS = "rounded-full border border-black/[0.06] bg-white/70 shadow-[0_1px_3px_rgba(0,0,0,0.04)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/55 dark:shadow-[0_1px_3px_rgba(0,0,0,0.18)]";
-export const INPUT_CLASS = "h-11 rounded-2xl border border-black/[0.06] bg-white/72 px-4 text-sm text-slate-700 outline-none transition-colors focus:border-signal-500 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-200";
-export const LEDGER_ROW_CLASS = "group rounded-[1.5rem] border border-black/[0.05] bg-white/68 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.045)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-amber-500/30 hover:shadow-[0_18px_48px_rgba(255,184,0,0.14)] dark:border-white/[0.05] dark:bg-void-900/35 dark:shadow-[0_12px_28px_rgba(0,0,0,0.2)] dark:hover:bg-void-900/45";
-export const LEDGER_ROW_MODERN_CLASS = "group relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/80 p-6 shadow-[0_8px_32px_rgba(15,23,42,0.05)] backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:border-amber-500/30 hover:shadow-[0_18px_48px_rgba(255,184,0,0.14)] dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_12px_32px_rgba(0,0,0,0.25)] dark:hover:border-amber-500/40 dark:hover:bg-void-800/80";
+export const PANEL_CLASS = "stats-surface-panel relative overflow-hidden rounded-[var(--stats-panel-radius)] p-6 transition-[background-color,border-color,box-shadow] duration-200 motion-reduce:transition-none";
+export const SUBPANEL_CLASS = "stats-surface-subpanel rounded-[var(--stats-subpanel-radius)] p-4 transition-[background-color,border-color,box-shadow] duration-200 motion-reduce:transition-none";
+export const CHIP_CLASS = "stats-surface-chip rounded-[var(--stats-chip-radius)] transition-[background-color,border-color,color,box-shadow] duration-200 motion-reduce:transition-none";
+export const CONTROL_FOCUS_CLASS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--stats-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--stats-focus-ring-offset)]";
+export const INPUT_CLASS = `stats-surface-input h-11 rounded-[var(--stats-control-radius)] px-4 text-sm text-[color:var(--stats-value-color)] outline-none transition-[background-color,border-color,box-shadow,color] duration-200 placeholder:text-[color:var(--stats-detail-color)] focus:border-[color:var(--stats-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`;
+export const LEDGER_ROW_CLASS = "stats-surface-subpanel group rounded-[var(--stats-subpanel-radius)] p-4 transition-[transform,background-color,border-color,box-shadow] duration-200 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-subpanel-hover)] hover:shadow-[var(--stats-card-shadow-hover)] motion-safe:hover:-translate-y-0.5 motion-reduce:transition-none";
+export const LEDGER_ROW_MODERN_CLASS = "stats-surface-panel group relative overflow-hidden rounded-[var(--stats-panel-radius)] p-6 transition-[transform,background-color,border-color,box-shadow] duration-200 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-panel-hover)] hover:shadow-[var(--stats-card-shadow-hover)] motion-safe:hover:-translate-y-0.5 motion-reduce:transition-none";
+export const TEXT_LABEL_CLASS = "text-[color:var(--stats-label-color)]";
+export const TEXT_DETAIL_CLASS = "text-[color:var(--stats-detail-color)]";
+export const TEXT_VALUE_CLASS = "text-[color:var(--stats-value-color)]";
+export const TRACK_CLASS = "bg-[color:var(--stats-quiet-track)]";
+export const DASHED_EMPTY_CLASS = "rounded-2xl border border-dashed border-[color:var(--stats-card-border)] px-4 py-8 text-center text-sm text-[color:var(--stats-label-color)]";
+export const STATUS_TONE_CLASS = {
+  signal: "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-accent-signal-fill)] text-[color:var(--stats-signal-text)]",
+  positive: "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-accent-emerald-fill)] text-[color:var(--stats-positive-text)]",
+  warning: "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-accent-amber-fill)] text-[color:var(--stats-warning-text)]",
+  negative: "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-accent-rose-fill)] text-[color:var(--stats-negative-text)]",
+  cyan: "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-accent-cyan-fill)] text-[color:var(--stats-accent-cyan)]",
+  neutral: "border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-chip)] text-[color:var(--stats-detail-color)]",
+} as const;
+export const TAB_ACTIVE_CLASS = "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-surface-control-active)] text-[color:var(--stats-control-text-active)] shadow-[var(--stats-control-shadow-active)]";
+export const TAB_IDLE_CLASS = "text-[color:var(--stats-detail-color)] hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[color:var(--stats-value-color)]";
+export const TAB_COUNT_ACTIVE_CLASS = "bg-[color:var(--stats-surface-control-active-strong)] text-[color:var(--stats-control-text-active-strong)]";
+export const TAB_COUNT_IDLE_CLASS = "text-[color:var(--stats-detail-color)]";
+const CONTROL_BASE_CLASS = `inline-flex min-w-0 items-center justify-center rounded-[var(--stats-chip-radius)] border px-3 text-[11px] font-bold uppercase tracking-[0.14em] transition-[background-color,border-color,box-shadow,color] duration-200 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`;
+const CONTROL_IDLE_CLASS = "border-transparent text-[color:var(--stats-control-text)] hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[color:var(--stats-control-text-hover)]";
+const CONTROL_ACTIVE_CLASS = "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-surface-control-active)] text-[color:var(--stats-control-text-active)] shadow-[var(--stats-control-shadow-active)]";
+const CONTROL_ACTIVE_STRONG_CLASS = "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-surface-control-active-strong)] text-[color:var(--stats-control-text-active-strong)] shadow-[var(--stats-control-shadow-active)]";
 
 export const CHART_SERIES: ChartSeriesDefinition[] = [
   {
@@ -116,16 +140,17 @@ export const RangeToggle: FunctionComponent<{
   onApplyCustom,
 }) => (
   <div className="flex flex-col gap-4">
-    <div className={`inline-flex flex-wrap p-1 ${CHIP_CLASS}`}>
+    <div className={`inline-flex flex-wrap gap-1 p-1 ${CHIP_CLASS}`}>
       {(["1h", "24h", "7d", "30d", "all"] as const).map((value) => (
         <button
           key={value}
           type="button"
           onClick={() => onSelectPreset(value)}
-          className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.2em] transition-all ${
+          aria-pressed={activeWindow === value}
+          className={`${CONTROL_BASE_CLASS} min-h-9 px-4 py-2 ${
             activeWindow === value
-              ? "bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300"
-              : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+              ? CONTROL_ACTIVE_STRONG_CLASS
+              : CONTROL_IDLE_CLASS
           }`}
         >
           {value === "all" ? "All time" : value}
@@ -134,10 +159,11 @@ export const RangeToggle: FunctionComponent<{
       <button
         type="button"
         onClick={onApplyCustom}
-        className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.2em] transition-all ${
+        aria-pressed={activeWindow === "custom"}
+        className={`${CONTROL_BASE_CLASS} min-h-9 px-4 py-2 ${
           activeWindow === "custom"
-            ? "bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300"
-            : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+            ? CONTROL_ACTIVE_STRONG_CLASS
+            : CONTROL_IDLE_CLASS
         }`}
       >
         Custom
@@ -159,7 +185,7 @@ export const RangeToggle: FunctionComponent<{
       <button
         type="button"
         onClick={onApplyCustom}
-        className="inline-flex h-11 items-center justify-center rounded-2xl bg-white/78 px-4 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-700 shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-transform hover:-translate-y-0.5 dark:bg-white dark:text-void-900"
+        className={`inline-flex h-11 items-center justify-center rounded-[var(--stats-control-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-control-active)] px-4 text-[11px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-control-text-active)] shadow-[var(--stats-control-shadow)] transition-[background-color,border-color,box-shadow,transform] duration-200 hover:border-[color:var(--stats-border-strong)] hover:shadow-[var(--stats-control-shadow-active)] motion-safe:hover:-translate-y-0.5 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`}
       >
         Apply
       </button>
@@ -170,34 +196,43 @@ export const RangeToggle: FunctionComponent<{
 export const ViewToggle: FunctionComponent<{
   value: StatsVisualMode;
   onChange: (value: StatsVisualMode) => void;
-}> = ({ value, onChange }) => {
-  const modes: Array<{ id: StatsVisualMode; label: string; icon: any }> = [
-    { id: "trend", label: "Trend", icon: BarChart3 },
-    { id: "composition", label: "Composition", icon: PieChart },
-    { id: "models", label: "Models", icon: Cpu },
-    { id: "reliability", label: "Providers", icon: ShieldCheck },
-    { id: "ledgers", label: "Ledgers", icon: Layers3 },
-    { id: "system", label: "System", icon: Terminal },
+  ariaLabel?: string;
+  className?: string;
+}> = ({ value, onChange, ariaLabel = "Analytics modes", className = "" }) => {
+  const modes: Array<{ id: StatsVisualMode; label: string; accessibleLabel: string; icon: LucideIcon }> = [
+    { id: "trend", label: "Trend", accessibleLabel: "Trend", icon: BarChart3 },
+    { id: "composition", label: "Composition", accessibleLabel: "Composition", icon: PieChart },
+    { id: "models", label: "Models", accessibleLabel: "Models", icon: Cpu },
+    { id: "reliability", label: "Providers", accessibleLabel: "Providers", icon: ShieldCheck },
+    { id: "ledgers", label: "Ledgers", accessibleLabel: "Ledgers", icon: Layers3 },
+    { id: "system", label: "System", accessibleLabel: "System", icon: Terminal },
   ];
 
   return (
-    <div role="group" aria-label="Visual Modes" className={`inline-flex p-1 ${CHIP_CLASS}`}>
+    <div
+      role="group"
+      aria-label={ariaLabel}
+      className={`flex w-full max-w-full min-w-0 flex-wrap gap-1 p-1 ${CHIP_CLASS} ${className}`.trim()}
+    >
       {modes.map((mode) => {
         const Icon = mode.icon;
+        const selected = value === mode.id;
         return (
           <button
             key={mode.id}
             type="button"
             onClick={() => onChange(mode.id)}
-            aria-pressed={value === mode.id}
-            className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] transition-all ${
-              value === mode.id
-                ? "bg-amber-500 text-white shadow-[0_2px_8px_rgba(255,184,0,0.35)] dark:bg-amber-500 dark:text-white"
-                : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+            aria-pressed={selected}
+            aria-label={mode.accessibleLabel}
+            title={mode.label}
+            className={`${CONTROL_BASE_CLASS} min-h-10 min-w-10 flex-[1_1_calc(33.333%-0.25rem)] gap-2 px-2 py-2 sm:min-w-[7rem] sm:flex-[1_1_auto] sm:px-4 ${
+              selected
+                ? CONTROL_ACTIVE_CLASS
+                : CONTROL_IDLE_CLASS
             }`}
           >
-            <Icon className="h-3.5 w-3.5" strokeWidth={2} />
-            {mode.label}
+            <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />
+            <span className="hidden min-w-0 truncate sm:inline">{mode.label}</span>
           </button>
         );
       })}
@@ -218,16 +253,18 @@ export const SignalMetricCard: FunctionComponent<{
     title={label}
     value={value}
     trend={
-      <div className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400 ${CHIP_CLASS}`}>
+      <div className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)] ${CHIP_CLASS}`}>
         {signalLabel}
       </div>
     }
     // We map hex to known accent if possible, or just pass children
     accent={accentHex === "#00E0A0" ? "signal" : accentHex === "#FFB800" ? "amber" : "cyan"}
   >
-    <Sparkline points={sparkline} color={accentHex} />
-    <div className="mt-4 flex flex-col gap-1 border-t border-black/[0.06] pt-4 dark:border-white/[0.06]">
-      <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+    <div className="relative z-10 mt-4 h-16 rounded-[var(--stats-control-radius)]">
+      <Sparkline points={sparkline} color={accentHex} className="absolute inset-0 h-full w-full pointer-events-none" />
+    </div>
+    <div className="mt-4 flex flex-col gap-1 border-t border-[color:var(--stats-card-border)] pt-4">
+      <div className="text-xs font-medium text-[color:var(--stats-detail-color)]">
         {detail}
       </div>
     </div>
@@ -240,12 +277,12 @@ export const TokenChip: FunctionComponent<{
   value: number | string;
   tone: string;
 }> = ({ icon: Icon, label, value, tone }) => (
-  <div className={`group relative inline-flex items-center gap-2 overflow-hidden rounded-[14px] border px-3 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_2px_8px_rgba(0,0,0,0.04)] backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.8),0_4px_12px_rgba(0,0,0,0.08)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_4px_12px_rgba(0,0,0,0.2)] ${tone}`}>
-    <div className="relative flex items-center gap-1.5 opacity-80 transition-opacity group-hover:opacity-100">
-      <Icon className="h-3.5 w-3.5" strokeWidth={2.5} />
-      <span className="text-[10px] font-bold uppercase tracking-[0.16em]">{label}</span>
+  <div className={`relative inline-flex min-w-0 items-center gap-2 overflow-hidden rounded-[var(--stats-chip-radius)] border px-3 py-1.5 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-md transition-[background-color,border-color,color,box-shadow] duration-200 motion-reduce:transition-none ${tone}`}>
+    <div className="relative flex min-w-0 items-center gap-1.5 opacity-85">
+      <Icon className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden="true" />
+      <span className="truncate text-[10px] font-bold uppercase tracking-[0.14em]">{label}</span>
     </div>
-    <div className="relative text-[11px] font-black tracking-wide text-slate-900 drop-shadow-sm transition-all group-hover:drop-shadow-md dark:text-white">
+    <div className="relative shrink-0 text-[11px] font-black text-[color:var(--stats-value-color)]">
       {typeof value === "number" ? formatTokens(value) : value}
     </div>
   </div>
@@ -253,14 +290,14 @@ export const TokenChip: FunctionComponent<{
 
 export function getProviderIcon(provider: string | null | undefined): { icon: ComponentType<any>; bg: string; text: string } {
   const p = (provider || "").toLowerCase();
-  if (p.includes("gemini")) return { icon: Sparkles, bg: "bg-indigo-500/10", text: "text-indigo-600 dark:text-indigo-400" };
-  if (p.includes("claude")) return { icon: Brain, bg: "bg-amber-500/10", text: "text-amber-600 dark:text-amber-400" };
-  if (p.includes("codex")) return { icon: Terminal, bg: "bg-cyan-500/10", text: "text-cyan-600 dark:text-cyan-400" };
-  if (p.includes("jules")) return { icon: Layers3, bg: "bg-signal-500/10", text: "text-signal-600 dark:text-signal-400" };
-  if (p.includes("qwen-code")) return { icon: Code2, bg: "bg-violet-500/10", text: "text-violet-600 dark:text-violet-400" };
-  if (p.includes("opencode")) return { icon: GitBranch, bg: "bg-emerald-500/10", text: "text-emerald-600 dark:text-emerald-400" };
-  if (p.includes("antigravity")) return { icon: Zap, bg: "bg-orange-500/10", text: "text-orange-600 dark:text-orange-400" };
-  return { icon: Bot, bg: "bg-slate-500/10", text: "text-slate-600 dark:text-slate-400" };
+  if (p.includes("gemini")) return { icon: Sparkles, bg: "bg-[color:var(--stats-accent-cyan-fill)]", text: "text-[color:var(--stats-accent-cyan)]" };
+  if (p.includes("claude")) return { icon: Brain, bg: "bg-[color:var(--stats-accent-amber-fill)]", text: "text-[color:var(--stats-warning-text)]" };
+  if (p.includes("codex")) return { icon: Terminal, bg: "bg-[color:var(--stats-accent-cyan-fill)]", text: "text-[color:var(--stats-accent-cyan)]" };
+  if (p.includes("jules")) return { icon: Layers3, bg: "bg-[color:var(--stats-accent-signal-fill)]", text: "text-[color:var(--stats-signal-text)]" };
+  if (p.includes("qwen-code")) return { icon: Code2, bg: "bg-[color:var(--stats-accent-signal-fill)]", text: "text-[color:var(--stats-signal-text)]" };
+  if (p.includes("opencode")) return { icon: GitBranch, bg: "bg-[color:var(--stats-accent-emerald-fill)]", text: "text-[color:var(--stats-positive-text)]" };
+  if (p.includes("antigravity")) return { icon: Zap, bg: "bg-[color:var(--stats-accent-amber-fill)]", text: "text-[color:var(--stats-warning-text)]" };
+  return { icon: Bot, bg: "bg-[color:var(--stats-surface-chip)]", text: TEXT_DETAIL_CLASS };
 }
 
 export const TokenFlowBar: FunctionComponent<{
@@ -270,18 +307,22 @@ export const TokenFlowBar: FunctionComponent<{
   reasoning: number;
   total: number;
 }> = ({ input, cached, output, reasoning, total }) => {
-  if (total <= 0) return <div className="h-2 w-full rounded-full bg-black/[0.05] dark:bg-white/[0.05]" />;
+  const summary = total > 0
+    ? `Input ${formatTokens(input)}; cached ${formatTokens(cached)}; output ${formatTokens(output)}; reasoning ${formatTokens(reasoning)}; total ${formatTokens(total)}.`
+    : "No token flow data available.";
+
+  if (total <= 0) return <div role="img" aria-label={summary} className={`h-2 w-full rounded-full ${TRACK_CLASS}`} />;
   const inPct = (input / total) * 100;
   const cachedPct = (cached / total) * 100;
   const outPct = (output / total) * 100;
   const reasonPct = (reasoning / total) * 100;
 
   return (
-    <div className="flex h-2 w-full overflow-hidden rounded-full bg-black/[0.05] dark:bg-white/[0.05]">
-      {inPct > 0 && <div className="h-full bg-signal-500 transition-all duration-500" style={{ width: `${inPct}%` }} title={`Input: ${inPct.toFixed(1)}%`} />}
-      {cachedPct > 0 && <div className="h-full bg-cyan-500 transition-all duration-500" style={{ width: `${cachedPct}%` }} title={`Cached: ${cachedPct.toFixed(1)}%`} />}
-      {outPct > 0 && <div className="h-full bg-amber-500 transition-all duration-500" style={{ width: `${outPct}%` }} title={`Output: ${outPct.toFixed(1)}%`} />}
-      {reasonPct > 0 && <div className="h-full bg-rose-500 transition-all duration-500" style={{ width: `${reasonPct}%` }} title={`Reasoning: ${reasonPct.toFixed(1)}%`} />}
+    <div role="img" aria-label={summary} className={`flex h-2 w-full overflow-hidden rounded-full ${TRACK_CLASS}`}>
+      {inPct > 0 && <div aria-hidden="true" className="h-full bg-[color:var(--stats-signal-text)] motion-safe:transition-all motion-safe:duration-500" style={{ width: `${inPct}%` }} title={`Input: ${inPct.toFixed(1)}%`} />}
+      {cachedPct > 0 && <div aria-hidden="true" className="h-full bg-[color:var(--stats-accent-cyan)] motion-safe:transition-all motion-safe:duration-500" style={{ width: `${cachedPct}%` }} title={`Cached: ${cachedPct.toFixed(1)}%`} />}
+      {outPct > 0 && <div aria-hidden="true" className="h-full bg-[color:var(--stats-warning-text)] motion-safe:transition-all motion-safe:duration-500" style={{ width: `${outPct}%` }} title={`Output: ${outPct.toFixed(1)}%`} />}
+      {reasonPct > 0 && <div aria-hidden="true" className="h-full bg-[color:var(--stats-negative-text)] motion-safe:transition-all motion-safe:duration-500" style={{ width: `${reasonPct}%` }} title={`Reasoning: ${reasonPct.toFixed(1)}%`} />}
     </div>
   );
 };
@@ -291,14 +332,18 @@ export const ChurnFlowBar: FunctionComponent<{
   deletions: number;
 }> = ({ insertions, deletions }) => {
   const total = insertions + deletions;
-  if (total <= 0) return <div className="h-2 w-full rounded-full bg-black/[0.05] dark:bg-white/[0.05]" />;
+  const summary = total > 0
+    ? `Code churn mix: ${insertions.toLocaleString()} insertions, ${deletions.toLocaleString()} deletions, ${total.toLocaleString()} total changed lines.`
+    : "No code churn data available.";
+
+  if (total <= 0) return <div role="img" aria-label={summary} className={`h-2 w-full rounded-full ${TRACK_CLASS}`} />;
   const inPct = (insertions / total) * 100;
   const delPct = (deletions / total) * 100;
 
   return (
-    <div className="flex h-2 w-full overflow-hidden rounded-full bg-black/[0.05] dark:bg-white/[0.05]">
-      {inPct > 0 && <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${inPct}%` }} title={`Insertions: ${inPct.toFixed(1)}%`} />}
-      {delPct > 0 && <div className="h-full bg-rose-500 transition-all duration-500" style={{ width: `${delPct}%` }} title={`Deletions: ${delPct.toFixed(1)}%`} />}
+    <div role="img" aria-label={summary} className={`flex h-2 w-full overflow-hidden rounded-full ${TRACK_CLASS}`}>
+      {inPct > 0 && <div aria-hidden="true" className="h-full bg-[color:var(--stats-positive-text)] motion-safe:transition-all motion-safe:duration-500" style={{ width: `${inPct}%` }} title={`Insertions: ${inPct.toFixed(1)}%`} />}
+      {delPct > 0 && <div aria-hidden="true" className="h-full bg-[color:var(--stats-negative-text)] motion-safe:transition-all motion-safe:duration-500" style={{ width: `${delPct}%` }} title={`Deletions: ${delPct.toFixed(1)}%`} />}
     </div>
   );
 };
@@ -314,19 +359,20 @@ export const SeriesLegendButton: FunctionComponent<{
     type="button"
     onClick={onToggle}
     disabled={disabled}
-    className={`rounded-[1.25rem] border px-4 py-3 text-left transition-all ${
+    aria-pressed={active}
+    className={`rounded-[1.25rem] border px-4 py-3 text-left transition-[background-color,border-color,box-shadow,opacity] duration-200 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS} ${
       active
-        ? `${SUBPANEL_CLASS} border-signal-500/18`
-        : "rounded-[1.25rem] border border-black/[0.05] bg-white/60 px-4 py-3 text-left opacity-72 backdrop-blur-xl hover:opacity-100 dark:border-white/[0.05] dark:bg-void-900/30"
+        ? `${SUBPANEL_CLASS} border-[color:var(--stats-control-border-active)]`
+        : "border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-subpanel)] opacity-75 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-subpanel-hover)] hover:opacity-100"
     } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
   >
     <div className="flex items-center gap-3">
       <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: series.accentHex }} />
-      <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">{series.label}</span>
+      <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">{series.label}</span>
     </div>
     <div className="mt-3 flex items-end justify-between gap-4">
-      <div className="text-lg font-black text-slate-900 dark:text-white">{series.formatter(currentValue)}</div>
-      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{series.signalLabel}</div>
+      <div className="text-lg font-black text-[color:var(--stats-value-color)]">{series.formatter(currentValue)}</div>
+      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)]">{series.signalLabel}</div>
     </div>
   </button>
 );
@@ -343,11 +389,30 @@ export const DonutCard: FunctionComponent<{
   const cardRef = useRef<HTMLDivElement>(null);
   const wheelRef = useRef<SVGSVGElement>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const slices = useMemo(() => buildDonutSlices(segments), [segments]);
   const activeSegment = hoveredIndex === null ? null : slices[hoveredIndex] || null;
 
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return;
+    }
+
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const updatePreference = () => setPrefersReducedMotion(media.matches);
+
+    updatePreference();
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", updatePreference);
+      return () => media.removeEventListener("change", updatePreference);
+    }
+
+    media.addListener(updatePreference);
+    return () => media.removeListener(updatePreference);
+  }, []);
+
   useLayoutEffect(() => {
-    if (!cardRef.current || !wheelRef.current) {
+    if (!cardRef.current || !wheelRef.current || prefersReducedMotion) {
       return;
     }
 
@@ -376,16 +441,16 @@ export const DonutCard: FunctionComponent<{
       );
     }
     return () => timeline.kill();
-  }, [segments.length]);
+  }, [prefersReducedMotion, segments.length]);
 
   return (
     <div ref={cardRef} className={`${PANEL_CLASS} h-full p-6`}>
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.08] to-transparent dark:via-white/[0.14]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[color:var(--stats-card-border)]" />
       <div className="relative flex h-full flex-col gap-6">
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">{eyebrow}</div>
-          <div className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</div>
-          <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{description}</div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">{eyebrow}</div>
+          <div className="mt-2 text-2xl font-black tracking-tight text-[color:var(--stats-value-color)]">{title}</div>
+          <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">{description}</div>
         </div>
         <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-center">
           <div className="flex items-center justify-center">
@@ -406,7 +471,7 @@ export const DonutCard: FunctionComponent<{
                     <feBlend in="SourceGraphic" />
                   </filter>
                 </defs>
-                <circle cx="120" cy="120" r="103" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" />
+                <circle cx="120" cy="120" r="103" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.08)" />
                 {slices.map((slice, index) => {
                   const radians = ((slice.midAngle - 90) * Math.PI) / 180;
                   const offsetX = hoveredIndex === index ? Math.cos(radians) * 7 : 0;
@@ -418,13 +483,13 @@ export const DonutCard: FunctionComponent<{
                       d={slice.path}
                       fill={slice.color}
                       stroke="rgba(255,255,255,0.12)"
-                      strokeWidth={hoveredIndex === index ? 3 : 1.2}
+                      strokeWidth={hoveredIndex === index ? 2.2 : 1.1}
                       filter={hoveredIndex === index ? "url(#stats-donut-glow)" : undefined}
                       style={{
                         transform: `translate(${offsetX}px, ${offsetY}px)`,
                         transformOrigin: "120px 120px",
-                        opacity: hoveredIndex === null || hoveredIndex === index ? 1 : 0.58,
-                        transition: "transform 220ms ease, opacity 220ms ease, stroke-width 220ms ease",
+                        opacity: hoveredIndex === null || hoveredIndex === index ? 0.86 : 0.38,
+                        transition: prefersReducedMotion ? "none" : "transform 220ms ease, opacity 220ms ease, stroke-width 220ms ease",
                       }}
                       onMouseEnter={() => setHoveredIndex(index)}
                       onMouseLeave={() => setHoveredIndex(null)}
@@ -432,15 +497,15 @@ export const DonutCard: FunctionComponent<{
                   );
                 })}
               </svg>
-              <div className="pointer-events-none absolute inset-[24%] rounded-full border border-black/[0.05] bg-white/88 shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/88 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_12px_28px_rgba(0,0,0,0.28)]" />
+              <div className="pointer-events-none absolute inset-[24%] rounded-full border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-panel)] shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl" />
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <div className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+                <div className="text-3xl font-black tracking-tight text-[color:var(--stats-value-color)]">
                   {activeSegment ? formatTokens(activeSegment.value) : centerValue}
                 </div>
-                <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                <div className="mt-1 max-w-[7.5rem] break-words text-center text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
                   {activeSegment ? activeSegment.label : centerLabel}
                 </div>
-                <div className="mt-2 text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                <div className="mt-2 text-[11px] font-mono text-[color:var(--stats-detail-color)]">
                   {activeSegment ? `${formatPercent(activeSegment.share)} of visible volume` : `${segments.length} lanes`}
                 </div>
               </div>
@@ -448,7 +513,7 @@ export const DonutCard: FunctionComponent<{
           </div>
           <div className="space-y-3">
             {segments.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-8 text-center text-sm text-slate-400 dark:border-white/[0.08]">
+              <div className={DASHED_EMPTY_CLASS}>
                 No telemetry landed in this composition yet.
               </div>
             ) : slices.map((segment, index) => {
@@ -456,7 +521,7 @@ export const DonutCard: FunctionComponent<{
                 <div
                   key={segment.label}
                   data-donut-item
-                  className={`${SUBPANEL_CLASS} transition-transform duration-300 ${hoveredIndex === index ? "translate-x-1 border-white/[0.12] dark:border-white/[0.12]" : ""}`}
+                  className={`${SUBPANEL_CLASS} transition-[border-color,background-color,transform] duration-200 ${hoveredIndex === index ? "translate-x-1 border-[color:var(--stats-border-strong)] bg-[color:var(--stats-surface-subpanel-hover)]" : ""}`}
                   onMouseEnter={() => setHoveredIndex(index)}
                   onMouseLeave={() => setHoveredIndex(null)}
                 >
@@ -464,24 +529,25 @@ export const DonutCard: FunctionComponent<{
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: segment.color }} />
-                        <span className={`truncate text-sm font-semibold ${segment.textClassName}`}>{segment.label}</span>
+                        <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">#{index + 1}</span>
+                        <span className={`min-w-0 break-words text-sm font-semibold ${segment.textClassName}`} title={segment.label}>{segment.label}</span>
                       </div>
-                      <div className="mt-1 text-[11px] font-mono text-slate-400 dark:text-slate-500">
+                      <div className="mt-1 text-[11px] font-mono text-[color:var(--stats-detail-color)]">
                         {formatPercent(segment.share)} of visible volume
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-sm font-black text-slate-900 dark:text-white">{formatTokens(segment.value)}</div>
-                      <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">tokens</div>
+                      <div className="text-sm font-black text-[color:var(--stats-value-color)]">{formatTokens(segment.value)}</div>
+                      <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">tokens</div>
                     </div>
                   </div>
-                  <div className="mt-3 h-1.5 rounded-full bg-black/[0.05] dark:bg-white/[0.06]">
+                  <div className={`mt-3 h-1.5 rounded-full ${TRACK_CLASS}`}>
                     <div
                       className="h-1.5 rounded-full"
                       style={{
                         width: `${Math.max(6, segment.share)}%`,
                         backgroundColor: segment.color,
-                        opacity: hoveredIndex === null || hoveredIndex === index ? 1 : 0.72,
+                        opacity: hoveredIndex === null || hoveredIndex === index ? 0.85 : 0.45,
                       }}
                     />
                   </div>
@@ -497,28 +563,77 @@ export const DonutCard: FunctionComponent<{
 
 export const PurposeRibbon: FunctionComponent<{
   purposes: ExecutionStatsEntitySummary[];
-}> = ({ purposes }) => (
-  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-    {purposes.slice(0, 4).map((purpose) => {
-      const config = getPurposeConfig(purpose.id);
-      return (
-        <StatsCard
-          key={purpose.id}
-          title={purpose.label.replace(/_/g, " ")}
-          value={formatTokens(purpose.usage.totalTokens)}
-          description={`${formatStatsDuration(purpose.usage.activeTimeMs)} active time`}
-          icon={config.icon}
-          accent={config.accent}
-        >
-          <div className="mt-4 flex flex-wrap gap-2">
-            <TokenChip icon={ArrowDownRight} label="In" value={purpose.usage.inputTokens} tone="border-black/[0.06] bg-white/72 text-slate-600 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300" />
-            <TokenChip icon={ArrowUpRight} label="Out" value={purpose.usage.outputTokens} tone="border-black/[0.06] bg-white/72 text-slate-600 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300" />
+  totalTokens?: number;
+  dominantPurposeId?: string | null;
+}> = ({ purposes, totalTokens = 0, dominantPurposeId = null }) => {
+  const rankedPurposes = [...purposes].sort((left, right) => {
+    const delta = right.usage.totalTokens - left.usage.totalTokens;
+    return delta !== 0 ? delta : left.label.localeCompare(right.label);
+  });
+
+  if (rankedPurposes.length === 0) {
+    return (
+      <div className={DASHED_EMPTY_CLASS}>
+        No purpose data for this window.
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+      {rankedPurposes.slice(0, 4).map((purpose) => {
+        const config = getPurposeConfig(purpose.id);
+        const Icon = config.icon;
+        const tokenShare = totalTokens > 0 ? (purpose.usage.totalTokens / totalTokens) * 100 : null;
+        const isDominant = dominantPurposeId === purpose.id;
+        const accentTextClass: Record<StatsCardAccent, string> = {
+          default: TEXT_DETAIL_CLASS,
+          signal: "text-[color:var(--stats-signal-text)]",
+          amber: "text-[color:var(--stats-warning-text)]",
+          cyan: "text-[color:var(--stats-accent-cyan)]",
+          rose: "text-[color:var(--stats-negative-text)]",
+          emerald: "text-[color:var(--stats-positive-text)]",
+        };
+        return (
+          <div key={purpose.id} className={`${SUBPANEL_CLASS} flex min-h-[9rem] flex-col justify-between p-4`}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="break-words text-sm font-black capitalize text-[color:var(--stats-value-color)]" title={purpose.label.replace(/_/g, " ")}>
+                  {purpose.label.replace(/_/g, " ")}
+                </div>
+                <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">
+                  {purpose.usage.invocationCount.toLocaleString()} calls / {formatStatsDuration(purpose.usage.activeTimeMs)} active
+                </div>
+              </div>
+              <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-chip)] ${accentTextClass[config.accent]}`}>
+                <Icon className="h-4 w-4" strokeWidth={2.2} />
+              </div>
+            </div>
+            <div>
+              <div className="mt-4 flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <div className="text-xl font-black text-[color:var(--stats-value-color)]">{formatTokens(purpose.usage.totalTokens)}</div>
+                  <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">
+                    {tokenShare !== null ? `${formatPercent(tokenShare)} token share` : "No token share"}
+                  </div>
+                </div>
+                {isDominant ? (
+                  <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-signal-text)] ${CHIP_CLASS}`}>
+                    Dominant
+                  </div>
+                ) : null}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <TokenChip icon={ArrowDownRight} label="In" value={purpose.usage.inputTokens} tone={STATUS_TONE_CLASS.neutral} />
+                <TokenChip icon={ArrowUpRight} label="Out" value={purpose.usage.outputTokens} tone={STATUS_TONE_CLASS.neutral} />
+              </div>
+            </div>
           </div>
-        </StatsCard>
-      );
-    })}
-  </div>
-);
+        );
+      })}
+    </div>
+  );
+};
 
 export const StudioHeader: FunctionComponent<{
   icon: typeof Activity | typeof PieChart | typeof ShieldCheck | typeof Layers3;
@@ -526,13 +641,15 @@ export const StudioHeader: FunctionComponent<{
   title: string;
   description: string;
 }> = ({ icon: Icon, eyebrow, title, description }) => (
-  <div className="max-w-3xl">
-    <div className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/72 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300">
-      <Icon className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.2} />
-      {eyebrow}
+  <div className="flex max-w-4xl items-start gap-4">
+    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-chip)] text-[color:var(--stats-signal-text)]">
+      <Icon className="h-5 w-5" strokeWidth={2.2} />
     </div>
-    <div className="mt-4 text-3xl font-black tracking-tight text-slate-900 dark:text-white">{title}</div>
-    <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{description}</div>
+    <div className="min-w-0">
+      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">{eyebrow}</div>
+      <div className="mt-1 break-words text-2xl font-black tracking-tight text-[color:var(--stats-value-color)]">{title}</div>
+      <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">{description}</div>
+    </div>
   </div>
 );
 
@@ -547,10 +664,10 @@ export const SortButton: FunctionComponent<{
     type="button"
     onClick={onClick}
     aria-pressed={active}
-    className={`inline-flex items-center gap-1 rounded-full px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] transition-all ${
+    className={`${CONTROL_BASE_CLASS} gap-1 px-3 py-2 text-[10px] tracking-[0.16em] ${
       active
-        ? "bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400"
-        : `${CHIP_CLASS} text-slate-500 dark:text-slate-300`
+        ? CONTROL_ACTIVE_STRONG_CLASS
+        : `${CHIP_CLASS} ${CONTROL_IDLE_CLASS}`
     }`}
   >
     {label}

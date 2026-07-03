@@ -8,6 +8,7 @@ import {
   restoreCheckedOutRef,
   mergeBranchLocally,
   findRecoverableWorkerBranch,
+  workerBranchHasMergeWork,
   deleteBranchLocally,
 } from "../../../../src/infrastructure/git/local-merge.js";
 
@@ -242,5 +243,52 @@ describe("findRecoverableWorkerBranch", () => {
       const deleted = await deleteBranchLocally({ repoPath: repo, branch: "does-not-exist" });
       expect(deleted).toBe(false);
     });
+  });
+});
+
+describe("workerBranchHasMergeWork", () => {
+  let repo: string;
+
+  beforeEach(async () => {
+    repo = await mkdtemp(path.join(tmpdir(), "worker-merge-work-"));
+    await git(repo, "init", "-b", "main");
+    await git(repo, "config", "user.email", "test@example.com");
+    await git(repo, "config", "user.name", "Test");
+    await commitFile(repo, "base.txt", "base\n", "Initial commit");
+    await git(repo, "branch", "feature");
+  });
+
+  afterEach(async () => {
+    await rm(repo, { recursive: true, force: true });
+  });
+
+  it("returns false when the recorded worker branch is missing", async () => {
+    await expect(workerBranchHasMergeWork({
+      repoPath: repo,
+      featureBranch: "feature",
+      workerBranch: "task/missing",
+    })).resolves.toBe(false);
+  });
+
+  it("returns false when the worker branch exists but has no commits ahead", async () => {
+    await git(repo, "branch", "task/noop", "feature");
+
+    await expect(workerBranchHasMergeWork({
+      repoPath: repo,
+      featureBranch: "feature",
+      workerBranch: "task/noop",
+    })).resolves.toBe(false);
+  });
+
+  it("returns true when the worker branch has commits ahead of the feature branch", async () => {
+    await git(repo, "checkout", "-b", "task/real-work", "feature");
+    await commitFile(repo, "work.txt", "work\n", "feat: work");
+    await git(repo, "checkout", "main");
+
+    await expect(workerBranchHasMergeWork({
+      repoPath: repo,
+      featureBranch: "feature",
+      workerBranch: "task/real-work",
+    })).resolves.toBe(true);
   });
 });

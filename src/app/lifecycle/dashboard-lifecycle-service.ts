@@ -45,6 +45,7 @@ import type { TaskRerunService } from "../../services/task-rerun-service.js";
 import type { ExecutionControlService } from "../../services/execution-control-service.js";
 import type { DashboardRealtimeService } from "../../services/dashboard-realtime-service.js";
 import type { PlanningAgentService } from "../../services/planning-agent-service.js";
+import type { ExecutionInvocationControlService } from "../../services/execution-invocation-control-service.js";
 import type { ChatThreadRuntimeService } from "../../services/chat-thread-runtime-service.js";
 import type { QuicksprintService } from "../../services/quicksprint-service.js";
 import type { ProjectSetupService } from "../../services/project-setup-service.js";
@@ -56,6 +57,7 @@ import type { EmbeddingModelManager } from "../../services/embedding-model-manag
 import type { EmbeddingService } from "../../services/embedding-service.js";
 import type { MemoryRepository } from "../../repositories/memory-repository.js";
 import type { GuardrailService } from "../../services/guardrail-service.js";
+import type { ProjectSettings } from "../../contracts/settings-scope-types.js";
 import { UpdateCheckerService } from "../../services/update-checker-service.js";
 import { GUARDRAIL_LEDGER_PURPOSES, type GuardrailLedgerPurpose } from "../../repositories/guardrail-repository.js";
 import { getRepoDebugLogPath, CODE_UX_SERVICE_NAME } from "../../shared/config/code-ux-paths.js";
@@ -63,6 +65,7 @@ import { getProjectLiveSnapshot } from "../live/project-live-snapshot.js";
 import { DashboardSnapshotCache, mapAssignedWorkers } from "./dashboard-snapshot-cache.js";
 import { prepareGitProjectCreateInput } from "../../services/project-git-clone-service.js";
 import { getOnboardingRuntimeReadiness } from "../../services/onboarding-readiness-service.js";
+import type { SprintImportedTaskInput } from "../../contracts/project-management-types.js";
 
 const updateCheckerService = new UpdateCheckerService();
 
@@ -88,6 +91,7 @@ export interface BootDashboardDeps {
   activityCacheService: ActivityCacheService;
   taskRerunService: TaskRerunService;
   executionControlService: ExecutionControlService;
+  executionInvocationControlService: ExecutionInvocationControlService;
   planningAgentService: PlanningAgentService;
   quicksprintService: QuicksprintService;
   projectSetupService: ProjectSetupService;
@@ -271,6 +275,30 @@ function resolveAttentionClaimWorkerEndpointId(
   }
 
   throw new Error(`No supervising worker is assigned to project ${projectId}.`);
+}
+
+export function resolveImportedTaskAgentPresetId(
+  settings: Pick<ProjectSettings, "agents">,
+  input: SprintImportedTaskInput,
+): string | null {
+  const explicitAgentPresetId = typeof input.agentPresetId === "string" ? input.agentPresetId.trim() : "";
+  if (explicitAgentPresetId) {
+    return explicitAgentPresetId;
+  }
+
+  const taskCodingPresetId = settings.agents.routing.taskCoding.mode === "MANUAL"
+    ? settings.agents.routing.taskCoding.agentPresetId?.trim() || null
+    : null;
+
+  switch (input.kind) {
+    case "merge_conflict":
+      return settings.agents.routing.mergeConflict.agentPresetId?.trim() || taskCodingPresetId;
+    case "failed_ci":
+      return settings.agents.routing.ciFix.agentPresetId?.trim() || taskCodingPresetId;
+    case "security":
+    case "quality":
+      return taskCodingPresetId;
+  }
 }
 
 export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardServerHandle> {
@@ -538,6 +566,22 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     listTasks: (projectId, sprintId) => deps.projectManagementRepository.listTasks(projectId, sprintId),
     getTask: (taskId) => deps.projectManagementRepository.getTask(taskId),
     createTask: (projectId, input) => deps.projectManagementRepository.createTask(projectId, input),
+    createImportedTasks: (projectId, sprintId, inputs) => {
+      const sprint = deps.projectManagementRepository.getSprint(sprintId);
+      if (!sprint || sprint.projectId !== projectId) {
+        throw new Error(`Sprint ${sprintId} does not belong to project ${projectId}.`);
+      }
+
+      const settings = deps.settingsRepository.getProjectResolvedSettings(projectId);
+      return deps.projectManagementRepository.createImportedTasks(
+        projectId,
+        sprintId,
+        inputs.map((input) => ({
+          ...input,
+          agentPresetId: resolveImportedTaskAgentPresetId(settings, input),
+        })),
+      );
+    },
     updateTask: (taskId, input) => deps.projectManagementRepository.updateTask(taskId, input),
     deleteTask: (taskId) => deps.projectManagementRepository.deleteTask(taskId),
     searchJiraIssues: (projectId, input) => {
@@ -579,6 +623,16 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
 
     listProjectInvocations: (projectId) => deps.executionRepository.listExecutionInvocations({ projectId }),
     listInvocationMessages: (invocationId) => deps.executionRepository.listExecutionInvocationMessages(invocationId),
+    restartExecutionInvocation: async (invocationId, mode) => {
+      const result = await deps.planningAgentService.restartInvocation(invocationId, mode);
+      deps.activityCacheService.invalidateGitStatusCache();
+      return result;
+    },
+    cancelExecutionInvocation: async (invocationId) => {
+      const result = await deps.executionInvocationControlService.cancelInvocation(invocationId);
+      deps.activityCacheService.invalidateGitStatusCache();
+      return result;
+    },
 
     rerunTask: async (taskId: string, options?: { provider?: string; providerConfigId?: string; model?: string; clearWorktree?: boolean; resetDependents?: boolean; undoMerge?: boolean }) => {
       const task = await deps.taskRerunService.rerunTask(taskId, {

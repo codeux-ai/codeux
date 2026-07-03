@@ -1,9 +1,11 @@
 /** @vitest-environment happy-dom */
 /** @jsx h */
 import { h } from "preact";
+import { useEffect, useState } from "preact/hooks";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
+import { useSprintsPageActions } from "../../../dashboard/src/v2/pages/sprints/use-sprints-page-actions.js";
 import { useSprintsPageData } from "../../../dashboard/src/v2/pages/sprints/use-sprints-page-data.js";
 
 expect.extend(matchers);
@@ -43,6 +45,8 @@ let sprintsData: any[] = [baseSprint];
 const refreshMock = vi.fn(async () => undefined);
 const refreshExecutionMock = vi.fn(async () => undefined);
 const createSprintMock = vi.fn();
+const updateSprintMock = vi.fn();
+const addImportedTasksToSprintMock = vi.fn();
 const executeQuicksprintMock = vi.fn();
 
 vi.mock("../../../dashboard/src/v2/context/project-data.js", () => ({
@@ -79,6 +83,8 @@ vi.mock("../../../dashboard/src/v2/lib/api/sprint-composer-client.js", () => ({
 
 vi.mock("../../../dashboard/src/v2/lib/project-api.js", () => ({
   createSprint: (...args: unknown[]) => createSprintMock(...args),
+  updateSprint: (...args: unknown[]) => updateSprintMock(...args),
+  addImportedTasksToSprint: (...args: unknown[]) => addImportedTasksToSprintMock(...args),
   planSprint: vi.fn(),
   improveSprintPrompt: vi.fn(),
   cancelPlanningRequest: vi.fn(),
@@ -88,7 +94,6 @@ vi.mock("../../../dashboard/src/v2/lib/project-api.js", () => ({
   fetchProjectExecution: vi.fn(),
   fetchTasks: vi.fn(),
   importSprintMarkdown: vi.fn(),
-  updateSprint: vi.fn(),
   createTask: vi.fn(),
 }));
 
@@ -102,9 +107,41 @@ vi.mock("../../../dashboard/src/v2/lib/quicksprint-api.js", () => ({
 
 const HookHarness = () => {
   const data = useSprintsPageData();
+  const [submitExistingSprint, setSubmitExistingSprint] = useState(false);
+
+  useEffect(() => {
+    if (!submitExistingSprint || !data.editingSprint) {
+      return;
+    }
+    setSubmitExistingSprint(false);
+    void data.handleSubmitSprint({
+      name: "Existing sprint",
+      goal: "Existing",
+      originalPrompt: null,
+      submitMode: "draft",
+      routeOverride: null,
+      modelOverride: null,
+      planningAgentPresetId: null,
+      agentRoutingMode: "MANUAL",
+      workerAgentPresetId: null,
+      linkedIssues: [],
+      importedTasks: [
+        {
+          kind: "quality",
+          title: "Quality follow-up: Fix UI",
+          sourceUrl: "https://github.com/acme/widgets/issues/43",
+          sourcePath: "https://github.com/acme/widgets/issues/43",
+          provider: "github",
+          repository: "acme/widgets",
+        },
+      ],
+    }).catch(() => undefined);
+  }, [data.editingSprint, data.handleSubmitSprint, submitExistingSprint]);
+
   return (
     <div>
       <div data-testid="next-id">{data.nextId}</div>
+      <div data-testid="editing-sprint">{data.editingSprint?.id || "none"}</div>
       <button
         type="button"
         onClick={() => {
@@ -123,6 +160,53 @@ const HookHarness = () => {
         }}
       >
         submit-sprint
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          void data.handleSubmitSprint({
+            name: "Queued sprint with tasks",
+            goal: "Create sprint",
+            originalPrompt: "Create sprint",
+            submitMode: "draft",
+            routeOverride: null,
+            modelOverride: null,
+            planningAgentPresetId: null,
+            agentRoutingMode: "MANUAL",
+            workerAgentPresetId: null,
+            linkedIssues: [],
+            importedTasks: [
+              {
+                kind: "security",
+                title: "Security follow-up: Fix CI",
+                sourceUrl: "https://github.com/acme/widgets/issues/42",
+                sourcePath: "https://github.com/acme/widgets/issues/42",
+                provider: "github",
+                repository: "acme/widgets",
+              },
+            ],
+          }).catch(() => undefined);
+        }}
+      >
+        submit-sprint-with-tasks
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          data.setEditingSprint(baseSprint);
+          setSubmitExistingSprint(true);
+        }}
+      >
+        edit-sprint
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          data.setEditingSprint(baseSprint);
+          setSubmitExistingSprint(true);
+        }}
+      >
+        submit-edit-with-tasks
       </button>
       <button
         type="button"
@@ -183,6 +267,107 @@ describe("useSprintsPageData sprint-number reservations", () => {
     await waitFor(() => {
       expect(screen.getByTestId("next-id")).toHaveTextContent("SPR-02");
     });
+  });
+
+  it("creates a sprint without passing imported tasks in the create payload and then adds them through the imported-task API", async () => {
+    createSprintMock.mockResolvedValueOnce({ id: "new-sprint" });
+    addImportedTasksToSprintMock.mockResolvedValueOnce([]);
+    render(<HookHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "submit-sprint-with-tasks" }));
+
+    await waitFor(() => {
+      expect(createSprintMock).toHaveBeenCalledTimes(1);
+      expect(addImportedTasksToSprintMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(createSprintMock.mock.calls[0]?.[1]).not.toHaveProperty("importedTasks");
+    expect(addImportedTasksToSprintMock.mock.calls[0]).toEqual([
+      "project-1",
+      "new-sprint",
+      [
+        expect.objectContaining({
+          kind: "security",
+          repository: "acme/widgets",
+        }),
+      ],
+    ]);
+  });
+
+  it("updates an existing sprint and sends imported tasks through the imported-task API", async () => {
+    updateSprintMock.mockResolvedValueOnce(undefined);
+    addImportedTasksToSprintMock.mockResolvedValueOnce([]);
+    let actionsRef: ReturnType<typeof useSprintsPageActions> | null = null;
+    const ActionHarness = () => {
+      actionsRef = useSprintsPageActions({
+        selectedProject: { id: "project-1" },
+        sprints: [baseSprint] as any,
+        sprintKeyPrefix: "SPR",
+        activeRunsBySprintId: new Map(),
+        pauseResumeRunsBySprintId: new Map(),
+        pendingActionIds: new Set(),
+        setPendingActionIds: vi.fn(),
+        setOptimisticStatuses: vi.fn(),
+        setSuppressedRunningSprintIds: vi.fn(),
+        refresh: refreshMock,
+        refreshExecution: refreshExecutionMock,
+        refreshPlanningEta: vi.fn(),
+        inFlightStartIds: { current: new Set() },
+        editingSprint: baseSprint as any,
+        setEditingSprint: vi.fn(),
+        reserveNextSprintNumber: vi.fn(() => 2),
+        releaseSprintNumberReservation: vi.fn(),
+        setError: vi.fn(),
+        setExportState: vi.fn(),
+        addTaskForSprint: null,
+        setAddTaskSprintTasks: vi.fn(),
+        setAddTaskForSprint: vi.fn(),
+        reloadQuicksprintTemplates: vi.fn(),
+        createProject: vi.fn(),
+      } as any);
+      return null;
+    };
+
+    render(<ActionHarness />);
+    await actionsRef!.handleSubmitSprint({
+      name: "Existing sprint",
+      goal: "Existing",
+      originalPrompt: null,
+      submitMode: "draft",
+      routeOverride: null,
+      modelOverride: null,
+      planningAgentPresetId: null,
+      agentRoutingMode: "MANUAL",
+      workerAgentPresetId: null,
+      linkedIssues: [],
+      importedTasks: [
+        {
+          kind: "quality",
+          title: "Quality follow-up: Fix UI",
+          sourceUrl: "https://github.com/acme/widgets/issues/43",
+          sourcePath: "https://github.com/acme/widgets/issues/43",
+          provider: "github",
+          repository: "acme/widgets",
+        },
+      ],
+    });
+
+    await waitFor(() => {
+      expect(updateSprintMock).toHaveBeenCalledTimes(1);
+      expect(addImportedTasksToSprintMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(updateSprintMock.mock.calls[0]?.[1]).not.toHaveProperty("importedTasks");
+    expect(addImportedTasksToSprintMock.mock.calls[0]).toEqual([
+      "project-1",
+      "sprint-1",
+      [
+        expect.objectContaining({
+          kind: "quality",
+          repository: "acme/widgets",
+        }),
+      ],
+    ]);
   });
 
   it("reserves distinct sprint numbers for multiple unresolved sprint creations", async () => {

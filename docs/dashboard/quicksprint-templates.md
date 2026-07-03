@@ -55,11 +55,16 @@ The Quicksprint panel separates templates into two groups:
 - `Custom Templates`
 
 Default templates are now organized by `purpose`.
-The browse panel renders both groups in horizontally scrollable rails so large catalogs stay readable without cutting off rows on smaller viewports. Desktop browse rails use a three-row layout by default, each rail exposes left/right controls for page-style scrolling, and mobile or touch users can swipe the rail directly with normal horizontal scrolling. Trackpad scrolling works the same way.
+
+Projects can also have generated or project-local templates without any active built-in defaults. In that case the dashboard suppresses the empty `Default Templates` rail and shows the populated custom/project rail directly, so the browse slider never opens on an empty catalog.
+
+The browse panel renders template groups as horizontally scrollable rails so large catalogs stay readable without cutting off rows on smaller viewports. Browse rails keep template cards arranged in exactly two rows by default, then continue horizontally for overflow items instead of adding a third visible row or forcing the whole page to widen. The panel content scrolls internally when these rails exceed the viewport height, preserving the rounded quicksprint shell without clipping the loaded templates.
+
+Each rail exposes left and right controls for page-style scrolling. These controls move the rail contents without changing the selected template or interfering with keyboard focus. Touch and trackpad users can swipe the rail directly with normal horizontal scrolling, so mobile behavior preserves swipe scrolling rather than replacing it with control-only navigation. Trackpad scrolling works the same way.
 
 This browse-slider treatment only changes how templates are discovered and selected. Template execution still uses the same quicksprint planning flow, subtask-count controls, and `Plan Only` / `Plan & Start` behavior as before.
 
-The execution sidebar now lets operators raise the subtask count up to 30 or switch on `No limit`, which disables the slider and asks the planner to choose an appropriate task count for the run.
+The execution sidebar now lets operators raise the subtask count up to 30 or switch on `No limit`, which disables the slider and asks the planner to choose an appropriate task count for the run. The subtask control is backed by a native range input for keyboard and assistive-technology support, while preserving the custom visual track. Saved template defaults outside the visual 1-30 range are clamped when loaded into the dashboard composer or template editor so the thumb, fill, and submitted task count stay consistent.
 
 Current built-in purpose set:
 - `Fullstack JS App`

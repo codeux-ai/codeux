@@ -3,6 +3,7 @@ import type { ExecutionInvocationRecord, ExecutionInvocationMessageRecord, Agent
 import { useMessageCache } from "./useMessageCache.js";
 import { fetchInvocationMessages, fetchProjectInvocations } from "../lib/invocation-api.js";
 import { buildInvocationIndex } from "../lib/chat-entity-index.js";
+import { isDeepEqual } from "../lib/resource-equality.js";
 
 export const areInvocationsEqual = (left: ExecutionInvocationRecord[], right: ExecutionInvocationRecord[]): boolean => (
   left.length === right.length
@@ -12,6 +13,7 @@ export const areInvocationsEqual = (left: ExecutionInvocationRecord[], right: Ex
       && candidate.id === invocation.id
       && candidate.status === invocation.status
       && candidate.updatedAt === invocation.updatedAt
+      && candidate.preservedAt === invocation.preservedAt
       && candidate.messageCount === invocation.messageCount
       && candidate.lastMessageAt === invocation.lastMessageAt;
   })
@@ -23,7 +25,11 @@ export const areInvocationMessagesEqual = (left: ExecutionInvocationMessageRecor
     const candidate = right[index];
     return Boolean(candidate)
       && candidate.id === message.id
-      && candidate.createdAt === message.createdAt;
+      && candidate.createdAt === message.createdAt
+      && candidate.role === message.role
+      && candidate.contentMarkdown === message.contentMarkdown
+      && isDeepEqual(candidate.toolCallsJson, message.toolCallsJson)
+      && isDeepEqual(candidate.metadata ?? null, message.metadata ?? null);
   })
 );
 
@@ -42,6 +48,9 @@ export const useInvocationPaneData = (options: {
   const [error, setError] = useState<string | null>(null);
 
   const selectedInvocationIdRef = useRef<string | null>(null);
+  const selectedInvocationRefreshIdRef = useRef<string | null>(null);
+  const selectedInvocationSummaryRef = useRef<string | null>(null);
+  const selectedInvocationStatusRef = useRef<ExecutionInvocationRecord["status"] | null>(null);
   const inflightInvocationFetchesRef = useRef(new Map<string, Promise<ExecutionInvocationMessageRecord[]>>());
   const activationTokenRef = useRef(0);
 
@@ -77,6 +86,19 @@ export const useInvocationPaneData = (options: {
     }
     return undefined;
   }, [selectedInvocation?.agentPresetId, agentPresets]);
+
+  const selectedInvocationRefreshKey = useMemo(() => {
+    if (!selectedInvocation) {
+      return null;
+    }
+    return [
+      selectedInvocation.id,
+      selectedInvocation.status,
+      selectedInvocation.messageCount,
+      selectedInvocation.lastMessageAt || "",
+      selectedInvocation.updatedAt,
+    ].join("|");
+  }, [selectedInvocation]);
 
   const setInvocationsSnapshot = useCallback((nextInvocations: ExecutionInvocationRecord[]): void => {
     setInvocations((current) => areInvocationsEqual(current, nextInvocations) ? current : nextInvocations);
@@ -122,6 +144,7 @@ export const useInvocationPaneData = (options: {
       lastErrorCategory: null,
       lastErrorMessage: null,
       lastRetryAfterIso: null,
+      preservedAt: null,
       messageCount: 0,
       lastMessageAt: createdAt,
       invocationSource: "internal",
@@ -284,6 +307,36 @@ export const useInvocationPaneData = (options: {
       }
     }
   }, [cache, ensureInvocationMessagesLoaded, setInvocationMessagesSnapshot]);
+
+  useEffect(() => {
+    const previousSelectedInvocationId = selectedInvocationRefreshIdRef.current;
+    const currentSelectedInvocation = selectedInvocation;
+    const nextSummaryKey = selectedInvocationRefreshKey;
+    const previousSummaryKey = selectedInvocationSummaryRef.current;
+    const previousStatus = selectedInvocationStatusRef.current;
+
+    selectedInvocationRefreshIdRef.current = selectedInvocationId;
+    selectedInvocationSummaryRef.current = nextSummaryKey;
+    selectedInvocationStatusRef.current = currentSelectedInvocation?.status || null;
+
+    if (!selectedInvocationId || !currentSelectedInvocation || !nextSummaryKey) {
+      return;
+    }
+
+    if (previousSummaryKey === null || previousSummaryKey === nextSummaryKey) {
+      return;
+    }
+
+    if (previousSelectedInvocationId !== selectedInvocationId) {
+      return;
+    }
+
+    if (previousStatus !== "running" && currentSelectedInvocation.status !== "running") {
+      return;
+    }
+
+    void refreshInvocationMessages(currentSelectedInvocation.id, { force: true });
+  }, [refreshInvocationMessages, selectedInvocation, selectedInvocationId, selectedInvocationRefreshKey]);
 
   return {
     invocations: mergedInvocations,

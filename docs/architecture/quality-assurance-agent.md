@@ -112,12 +112,14 @@ Recovery guarantees:
 - before task QA starts, Code UX polls feature PR status with any task-level PR URLs already recorded by Jules. This lets orchestration recover the PR head branch even when the Jules PR base branch has drifted from the currently configured sprint feature branch.
 - if a prior task QA run requested changes, Code UX sends fix instructions back to the same task session when possible and tracks that work as same-session follow-up instead of creating a new task branch.
 - CLI QA follow-up work is tracked through `cli_task_followup` execution invocations. If that follow-up finishes inside the same task run after a `changes_requested` QA result, the next orchestration cycle now treats it as fresh work and queues the verification QA run instead of leaving the task parked at the CI/QA merge gate.
+- when CLI QA follow-up work updates a task branch or opens/reuses a follow-up PR, Code UX clears any previous `is_merged` / `MERGED` projection from an earlier task PR and persists the task back to `coding_completed`. This lets the feature PR gate evaluate and auto-merge the follow-up PR instead of treating the task as already settled.
 - when a task has already reached the QA retry cap, only a completed same-session `cli_task_followup` spawned by task QA gets one final verification review before the exhaustion policy is applied. A new full task run is not treated as task-QA follow-up work and should come from an explicit rerun/reset path.
 - once a task is parked in `QA_REVIEW_FAILED`, status derivation treats it as a stable human-owned state rather than requeueing it just because dependencies are satisfied. Only an explicit rerun/reset should move it back to pending work.
 - each sprint cycle reconciles running task QA reviews against their backing provider runtime. If a running QA invocation never links to provider runtime, or if a Docker-backed QA provider invocation no longer has a running `code-ux.session-id` container, Code UX marks the stale QA run failed so the next cycle can retry it instead of leaving the task at `QA_PENDING`.
 - provider concurrency slot waits and claims also reconcile stale Docker-backed provider invocations before counting or creating active slots. This releases orphaned `qwen-code`/CLI QA slots when their containers disappeared before the invocation reached a terminal state, including providers configured with unlimited concurrency, but only after linked execution activity has been idle long enough to avoid racing normal container startup.
 - startup recovery also reconciles stale `running` QA review rows and stale QA invocation audit rows globally. If the backing QA execution invocation already ended, never linked to provider runtime, or points at a Docker-backed provider invocation whose container is gone, startup marks the QA run and backing invocation failed so the sprint can retry instead of keeping a historical `QA review running` badge indefinitely.
 - startup recovery also clears stale task-coding runtime projections that can otherwise keep sprint QA and merge gates looking active after the real work ended. This includes terminal linked task runs, terminal provider invocations, orphaned Jules `task_coding` provider rows, active task-run rows without dispatch/provider/execution linkage, and paused sprint-run rows whose owning sprint is already idle or terminal.
+- session sync also clears stale hosted Jules task projections when a task records a session id that is missing from the list snapshot and a direct provider lookup returns not found. In that case Code UX fails the stale provider/execution/task-run rows and requeues the task when failed-task retry is enabled.
 - if QA/runtime recovery closes a provider or execution invocation while the provider process is still unwinding, later telemetry and completion callbacks do not rewrite the recovered terminal rows back to `running` or `completed`.
 - sprint-scoped task loading falls back to the latest unscoped task run when no task run exists for the active sprint run. This keeps continued Jules sessions visible to QA and merge gates after restarts or follow-up messages.
 - remote branch refreshes for task QA are serialized per repository, preventing parallel QA checks from racing while creating local tracking branches and failing on `.git/config` locks.
@@ -133,7 +135,8 @@ Note: The run budget and retry limit rules are explicitly implemented in a dedic
 - recovered stale QA rows do not consume the task's final retry opportunity. If Code UX marks a running QA row failed because its provider runtime disappeared, the next cycle treats that as a retryable infrastructure recovery rather than a semantic QA failure.
 - `maxTaskReviewRuns = 2` means the initial task review plus one QA re-check after fixes
 - `maxTaskReviewRuns = N` means the initial task review plus up to `N - 1` QA re-checks for later fix iterations
-- `maxTaskReviewRuns = 5` is the default task QA budget
+- `maxTaskReviewRuns = 3` is the default task QA budget for new or unset settings
+- `FINISH_TASK` is the default task QA exhaustion policy for new or unset settings, so a task whose budget is spent without a pass is marked complete unless the project selects `FAIL_TASK` or `ESCALATE_TO_HUMAN`
 - if QA has failed at the cap without an explicit `changes_requested` verdict, Code UX treats the retry budget as exhausted
 - if the latest QA verdict is `changes_requested`, Code UX keeps the merge blocked at the retry cap unless a completed Code UX-applied QA continuation is waiting for verification
 - if the latest QA verdict is `changes_requested` and a same-session CLI QA follow-up completes after that verdict, Code UX schedules verification before applying `FINISH_TASK`, `FAIL_TASK`, or `ESCALATE_TO_HUMAN`
@@ -157,7 +160,7 @@ Behavior:
 - sprint QA uses the same budget semantics as task QA, but with its own `maxSprintReviewRuns` setting:
   - run `1` is the initial finished-sprint review
   - later runs are only used to check QA-requested fixes or follow-up work
-  - `maxSprintReviewRuns = 5` is the default sprint QA budget
+  - `maxSprintReviewRuns = 3` is the default sprint QA budget for new or unset settings
   - `maxSprintReviewRuns = 1` means sprint fixes are not re-checked by QA
 - if sprint QA passes, Code UX proceeds to main-merge evaluation and eventual completion
 - if sprint QA is still running, failed, or waiting on follow-up work, the main merge stays blocked

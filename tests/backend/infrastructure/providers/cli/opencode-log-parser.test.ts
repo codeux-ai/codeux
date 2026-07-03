@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseOpenCodeJsonLines, parseOpenCodeExport } from "../../../../../src/infrastructure/providers/cli/provider-logs/opencode-log-parser.js";
+import { parseOpenCodeJsonLines, parseOpenCodeExport, subtractOpenCodeBaseline } from "../../../../../src/infrastructure/providers/cli/provider-logs/opencode-log-parser.js";
 
 /** Builds an `opencode run --format json` NDJSON stream from flattened events. */
 function ndjson(events: Array<Record<string, unknown>>): string {
@@ -14,7 +14,7 @@ describe("parseOpenCodeJsonLines", () => {
 
   it("extracts reported usage from step-finish parts (input/output/reasoning/cache)", () => {
     const stream = ndjson([
-      { type: "reasoning", part: { type: "reasoning", sessionID: "ses_abc123", text: "thinking about it" } },
+      { type: "reasoning", part: { type: "reasoning", sessionID: "ses_abc123", summary: [{ text: "thinking about it" }] } },
       { type: "text", part: { type: "text", sessionID: "ses_abc123", text: "PONG" } },
       {
         type: "step-finish",
@@ -29,7 +29,7 @@ describe("parseOpenCodeJsonLines", () => {
 
     const result = parseOpenCodeJsonLines(stream);
     expect(result).not.toBeNull();
-    expect(result!.inputTokens).toBe(1500);
+    expect(result!.inputTokens).toBe(300);
     expect(result!.outputTokens).toBe(42);
     expect(result!.reasoningOutputTokens).toBe(8);
     expect(result!.cachedInputTokens).toBe(1200);
@@ -43,6 +43,17 @@ describe("parseOpenCodeJsonLines", () => {
     expect(result!.conversation.map((t) => t.kind)).toEqual(["reasoning", "assistant"]);
   });
 
+  it("extracts visible reasoning from OpenCode reasoning parts that use summary fields", () => {
+    const stream = ndjson([
+      { type: "reasoning", part: { type: "reasoning", sessionID: "ses_reason", summary: [{ type: "summary_text", text: "I should inspect the logs first." }] } },
+      { type: "text", part: { type: "text", sessionID: "ses_reason", text: "I found the issue." } },
+    ]);
+
+    const result = parseOpenCodeJsonLines(stream)!;
+    expect(result.conversation.map((t) => t.kind)).toEqual(["reasoning", "assistant"]);
+    expect(result.conversation[0]).toMatchObject({ kind: "reasoning", text: "I should inspect the logs first." });
+  });
+
   it("sums usage across multiple step-finish parts (one per LLM call)", () => {
     const stream = ndjson([
       { type: "step-finish", part: { type: "step-finish", cost: 0.01, tokens: { input: 1000, output: 20, reasoning: 0, cache: { read: 0, write: 0 } } } },
@@ -50,7 +61,7 @@ describe("parseOpenCodeJsonLines", () => {
     ]);
 
     const result = parseOpenCodeJsonLines(stream)!;
-    expect(result.inputTokens).toBe(1500);
+    expect(result.inputTokens).toBe(1400);
     expect(result.outputTokens).toBe(50);
     expect(result.reasoningOutputTokens).toBe(5);
     expect(result.cachedInputTokens).toBe(100);
@@ -81,7 +92,7 @@ describe("parseOpenCodeJsonLines", () => {
     ]);
 
     const result = parseOpenCodeJsonLines(stream)!;
-    expect(result.inputTokens).toBe(100);
+    expect(result.inputTokens).toBe(60);
     expect(result.outputTokens).toBe(11);
     expect(result.reasoningOutputTokens).toBe(2);
     expect(result.cachedInputTokens).toBe(40);
@@ -135,7 +146,7 @@ describe("parseOpenCodeExport", () => {
 
   it("reads session-cumulative usage from info.tokens", () => {
     const usage = parseOpenCodeExport(realExport)!;
-    expect(usage.inputTokens).toBe(88608);
+    expect(usage.inputTokens).toBe(87408);
     expect(usage.outputTokens).toBe(10284);
     expect(usage.reasoningOutputTokens).toBe(490);
     expect(usage.cachedInputTokens).toBe(1200);
@@ -149,12 +160,68 @@ describe("parseOpenCodeExport", () => {
   it("tolerates incidental wrapper output around the JSON object", () => {
     const noisy = `provider-runner: warning: something\n${realExport}\n`;
     const usage = parseOpenCodeExport(noisy)!;
-    expect(usage.inputTokens).toBe(88608);
+    expect(usage.inputTokens).toBe(87408);
     expect(usage.outputTokens).toBe(10284);
   });
 
   it("returns null when the export carries no usable token counts", () => {
     const empty = JSON.stringify({ info: { tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } }, messages: [] });
     expect(parseOpenCodeExport(empty)).toBeNull();
+  });
+});
+
+describe("subtractOpenCodeBaseline", () => {
+  it("returns the usage unchanged when there is no baseline", () => {
+    const current = {
+      inputTokens: 87408, cachedInputTokens: 1200, outputTokens: 10284, reasoningOutputTokens: 490,
+      cost: 0.42, rawUsageJson: { tokens: { input: 88608, output: 10284, reasoning: 490, cache: { read: 1200, write: 0 } }, cost: 0.42 },
+    };
+    expect(subtractOpenCodeBaseline(current, null)).toEqual(current);
+    expect(subtractOpenCodeBaseline(current, undefined)).toEqual(current);
+    expect(subtractOpenCodeBaseline(current, {})).toEqual(current);
+  });
+
+  it("isolates a follow-up run's own tokens from the session-cumulative export", () => {
+    // A prior invocation on this same opencode session already persisted this
+    // snapshot as its raw usage.
+    const baseline = {
+      tokens: { input: 50000, output: 6000, reasoning: 200, cache: { read: 800, write: 0 } },
+      cost: 0.20,
+    };
+    // The follow-up run resumes the session; `opencode export` now reports the
+    // whole session's cumulative total, including the baseline above.
+    const current = {
+      inputTokens: 87408,
+      cachedInputTokens: 1200,
+      outputTokens: 10284,
+      reasoningOutputTokens: 490,
+      cost: 0.42,
+      rawUsageJson: { tokens: { input: 88608, output: 10284, reasoning: 490, cache: { read: 1200, write: 0 } }, cost: 0.42 },
+    };
+
+    const result = subtractOpenCodeBaseline(current, baseline);
+
+    expect(result.inputTokens).toBe(38208);
+    expect(result.cachedInputTokens).toBe(400);
+    expect(result.outputTokens).toBe(4284);
+    expect(result.reasoningOutputTokens).toBe(290);
+    expect(result.cost).toBeCloseTo(0.22);
+    // rawUsageJson stays the fresh, unadjusted snapshot so it can serve as the
+    // baseline for a subsequent follow-up.
+    expect(result.rawUsageJson).toEqual(current.rawUsageJson);
+  });
+
+  it("never returns negative deltas even if the baseline is inconsistent", () => {
+    const baseline = { tokens: { input: 90000, output: 11000, reasoning: 500, cache: { read: 1300, write: 0 } }, cost: 0.5 };
+    const current = {
+      inputTokens: 87408, cachedInputTokens: 1200, outputTokens: 10284, reasoningOutputTokens: 490,
+      cost: 0.42, rawUsageJson: null,
+    };
+
+    const result = subtractOpenCodeBaseline(current, baseline);
+
+    expect(result).toMatchObject({
+      inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, cost: 0,
+    });
   });
 });

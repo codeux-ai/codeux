@@ -4,7 +4,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { TrendStudio } from "../components/StatsShared.js";
+import { TrendStudio } from "../components/TrendStudio.js";
 
 expect.extend(matchers);
 
@@ -13,7 +13,7 @@ vi.mock("../components/InteractiveUsageChart.js", () => ({
 }));
 
 describe("TrendStudio", () => {
-  it("renders the summary band, period chips, chart, and purpose breakdown in order", () => {
+  it("renders the compact signal cards, chart, and purpose breakdown without duplicate trend KPI cards", () => {
     const { container } = render(
       <TrendStudio
         stats={
@@ -24,6 +24,8 @@ describe("TrendStudio", () => {
               activeTimeMs: 5400000,
               inputTokens: 1000,
               cachedInputTokens: 250,
+              outputTokens: 3200,
+              totalCostUsd: 1.75,
             },
             range: {
               label: "Last 7 Days",
@@ -39,6 +41,7 @@ describe("TrendStudio", () => {
                   activeTimeMs: 1800000,
                   inputTokens: 2400,
                   outputTokens: 1600,
+                  invocationCount: 7,
                 },
               },
             ],
@@ -52,17 +55,20 @@ describe("TrendStudio", () => {
       />,
     );
 
-    const totalTokens = screen.getByText("Total Tokens");
-    const rangeLabel = screen.getByText("Last 7 Days");
+    const median = screen.getByText("Median");
     const chart = screen.getByTestId("interactive-usage-chart");
     const purposeActivity = screen.getByText("Purpose Activity");
 
-    expect(totalTokens.compareDocumentPosition(rangeLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(rangeLabel.compareDocumentPosition(chart) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(median.compareDocumentPosition(chart) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(chart.compareDocumentPosition(purposeActivity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-    expect(container.textContent).toContain("12.5k");
-    expect(container.textContent).toContain("42");
+    expect(container.textContent).toContain("Velocity");
+    expect(container.textContent).toContain("Success");
+    expect(container.textContent).not.toContain("vs first half of window");
+    expect(container.textContent).not.toContain("Token trend");
+    expect(container.textContent).not.toContain("Invocation trend");
+    expect(container.textContent).not.toContain("Active time trend");
     expect(container.textContent).toContain("Purpose Activity");
+    expect(screen.queryByLabelText("Trend range metadata")).toBeNull();
   });
 });

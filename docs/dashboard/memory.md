@@ -48,6 +48,16 @@ When the UI generates visual graphs of memory items:
 - If a valid memory embedding map is present, the layout and edges match the exact vectors provided by the embedding model.
 - If no embedding map is present (or embeddings are still generating), a local fallback algorithm creates a deterministic layout. To preserve front-end performance on dense graphs, fallback category edges are bounded using a deterministic ring topology. Rather than computing $O(N^2)$ all-pairs edges within a category, it calculates exactly $N$ sequential edges per category, limiting memory and rendering bottlenecks.
 
+## Map Camera Behavior
+
+The memory map uses a pointer-centered camera so users can inspect dense graphs without losing spatial context:
+- Mouse wheel zoom keeps the world point under the cursor stable as closely as possible while clamping to the configured zoom range.
+- The zoom controls step through the same range as the wheel with the same short camera tween, and can reach a deep-readability zoom for dense maps.
+- Selecting a node from the canvas or list recenters the camera on that memory at a readable zoom level, and Reset returns to the default overview without leaving a stale selection behind.
+- Node points, category labels, and memory labels are drawn in clamped screen space so the graph positions zoom while dots and text remain readable instead of growing with the map or disappearing during deep inspection.
+- Hovering a node highlights it and updates the cursor only. At higher zoom levels the canvas renders the focused label bubble for the selected memory instead of creating hover-only overlays.
+- Dense maps are expected to remain navigable at 200+ memories without forcing every memory label to render at once.
+
 ## Storage Requirements
 
 Memory records encapsulate the base `content` string alongside its vectorized byte representation (`embeddingBlob`). The byte buffer must correctly decode based on its stored `embeddingDimension`. The system expects IEEE 754 32-bit floats.
@@ -79,17 +89,18 @@ See [Memory Claims and Evidence](../architecture/memory-claims.md) for the archi
 When a sprint completes, Code UX can run memory remediation according to `memory.remediationMode`:
 - `off`: no post-sprint curation.
 - `deterministic`: uses promotion scoring and promotes qualifying sprint evidence clusters up to `memory.remediationMaxPromotions`.
-- `ai`: first builds deterministic candidates, then invokes the provider routed through the `remediation` invocation route. The AI may select which candidates to promote; if the AI invocation fails, deterministic claim promotion is used as a fallback.
+- `ai`: first builds promotion candidates, then invokes the provider routed through the `remediation` invocation route. The AI may select which compact candidate IDs to promote; if the AI invocation fails, deterministic claim promotion is used as a fallback.
 
 The remediation guardrail job type is `remediation`, so runaway review loops are capped by the same guardrail system as planning, CI fix, and merge-conflict repair.
 
 Promotion analysis treats short-term sprint memories as evidence, not as durable knowledge by default:
-- sprint memories below strength `0.6` are ignored
-- semantically similar memories from the same sprint are clustered into one promotion candidate with `evidenceMemoryIds`
+- sprint memories below strength `0.45` are ignored
+- semantically similar memories from the same sprint are clustered into one promotion candidate with one selectable `id` plus `evidenceCount`; full source evidence IDs stay internal for claim provenance
 - recurrence across previous sprints and agreement across agents can raise the candidate score
 - near-duplicates of existing project-scope memories are skipped
 - risk flags such as `test_fixture`, `task_local`, `file_specific`, `implementation_trivia`, `speculative`, and `ci_failure` reduce the score before the promotion threshold is applied
-- AI remediation receives the cluster claim, evidence IDs, score, reason, and risk flags so repeated smoke-test or fixture mechanics are visible as risky evidence rather than durable project knowledge
+- the default promotion threshold is `0.5`; AI remediation uses a lower review floor of `0.45` so the model has a useful candidate set to curate without automatically promoting every reviewed memory
+- AI remediation receives the cluster claim, score, reason, risk flags, evidence count, and cross-sprint count so repeated smoke-test or fixture mechanics are visible as risky evidence rather than durable project knowledge
 - selected candidates become long-term claims with evidence links; raw sprint notes are not copied verbatim unless the claim itself is already the durable statement
 
 CI-failure learnings are treated specially:
@@ -109,7 +120,17 @@ If deterministic prefiltering finds no cleanup candidates, Code UX records a com
 The Memory settings panel also manages one project-scoped scheduler entry for long-term remediation. Users can set it to Off, Every day, or Every week without leaving Settings. Entries created this way are marked as `memoryRemediationTarget.source = "memory_settings"` so manually created Scheduler page entries are not overwritten.
 
 ## UI Updates and Accessibility
-- Added keyboard-accessible clear search functionality to `MemorySearch.tsx` (supports clearing via `Escape` and a dedicated clear button with an explicit `<kbd>Esc</kbd>` visual affordance).
-- Enhanced `MemoryList.tsx` to prominently display active search result counts directly in the UI instead of relying solely on `sr-only` live regions.
+- The Memory page model catalog is presented as a Warm Void panel with a state summary and responsive model cards. It distinguishes active, downloaded, downloading, stale, and unavailable models without using legacy violet action styling.
+- Model catalog primary actions use Signal Jade for download and activation, stale re-embedding warnings use Ember, and destructive/error states use status red. The downloaded-model delete action is icon-only with an accessible label and is disabled while the model is active.
+- The memory sidebar now starts collapsed by default and exposes a compact rail/tab so the graph canvas remains visible until the user explicitly expands it.
+- Expanding the sidebar opens directly to the current alive memory list for the selected tier, sprint, and agent filter set, with an embedded search input above the list. Browsing all visible memories is still the default path; search is not required before the list is useful.
+- Closing the sidebar clears the current search query and selected memory IDs so returning to the sidebar starts from the current visible memory list.
+- `MemorySearch.tsx` provides debounced text filtering by memory text/category and keyboard-accessible clear behavior (supports clearing via `Escape` and a dedicated clear button with an explicit `<kbd>Esc</kbd>` visual affordance).
+- Enhanced `MemoryList.tsx` to prominently display visible memory counts directly in the UI instead of relying solely on `sr-only` live regions, while keeping the list layout `min-w-0` and overflow-safe on narrow screens.
+- Added per-memory selection toggles and a batch action bar to the sidebar list so users can select visible memories, clear the selection, or select all currently filtered results without touching hidden records.
+- Batch deletion requires an explicit confirmation dialog when more than one memory is selected. The delete flow is optimistic, restores any failed deletions, and reports partial failures through the memory feedback region with a retry action.
+- Lobotomize mode is immediate by design: a single click on a graph node deletes it through the canvas deletion animation, and inspector/sidebar single-memory delete buttons do not open confirmation dialogs. Because deletion is immediate, the active mode must use explicit danger styling and visible copy that tells users single-memory deletion will not ask again. Sidebar card deletion still uses the existing optimistic removal path with undo feedback.
+- Selection is pruned automatically when search, tier, sprint, agent, or sidebar state changes make a memory invisible, which keeps batch actions scoped to the current visible slice of memory.
 - Improved memory list accessibility and reduced motion fallbacks in `MemoryList.tsx`, utilizing `useInteractionTokens` to respect OS-level reduced motion preferences.
+- Updated the memory map camera so wheel, button, and click focus interactions preserve readable navigation on dense graphs. Wheel zoom uses smoother proportional movement, and graph labels keep stable on-screen sizing during zoom so text remains readable while node positions scale.
 - `MemoryFilters.tsx` implements proper tab semantics and uses clear, high-contrast danger state indicators (`bg-status-red`) for lobotomize (delete) mode to prevent accidental removals.

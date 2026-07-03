@@ -1,40 +1,141 @@
 @layer base {
   :root {
     /* Layout Tokens */
-    --stats-card-radius: 1.5rem;
+    --stats-card-radius: 1.25rem;
+    --stats-panel-radius: 1.35rem;
+    --stats-subpanel-radius: 1.05rem;
+    --stats-control-radius: 0.95rem;
+    --stats-chip-radius: 9999px;
     --stats-card-padding: 1.5rem;
+    --stats-card-padding-compact: 1rem;
+    --stats-card-min-height: 10rem;
+    --stats-card-compact-min-height: 8rem;
+    --stats-card-value-size: 2rem;
+    --stats-card-value-size-compact: 1.5rem;
+    --stats-card-title-letter-spacing: 0.12em;
+    --stats-surface-blur-panel: 18px;
+    --stats-surface-blur-subpanel: 12px;
     
     /* Surface Tokens (Light Mode) */
-    --stats-card-bg: var(--surface-glass);
+    --stats-surface-panel: var(--surface-glass);
+    --stats-surface-panel-hover: var(--surface-glass-hover);
+    --stats-surface-subpanel: color-mix(in srgb, var(--fill-muted) 86%, var(--surface-glass) 14%);
+    --stats-surface-subpanel-hover: var(--fill-muted-hover);
+    --stats-surface-chip: color-mix(in srgb, var(--surface-glass) 76%, var(--fill-muted) 24%);
+    --stats-surface-chip-hover: var(--fill-muted-hover);
+    --stats-surface-input: var(--fill-muted);
+    --stats-surface-control-active: var(--stats-accent-signal-fill);
+    --stats-surface-control-active-strong: var(--stats-accent-amber-fill);
+    --stats-card-bg: var(--stats-surface-panel);
     --stats-card-border: var(--border-hairline);
     --stats-card-shadow: var(--elevation-base);
+    --stats-card-shadow-hover: var(--elevation-raised);
+    --stats-card-shadow-focus: var(--elevation-raised);
+    --stats-panel-shadow: var(--elevation-base);
+    --stats-subpanel-shadow: var(--elevation-base);
+    --stats-border-hairline: var(--border-hairline);
+    --stats-border-strong: color-mix(in srgb, var(--stats-value-color) 12%, transparent);
+    --stats-control-shadow: var(--elevation-base);
+    --stats-control-shadow-active: var(--elevation-raised);
+    --stats-control-border-active: color-mix(in srgb, var(--stats-accent-signal) 24%, transparent);
+    --stats-quiet-track: color-mix(in srgb, var(--stats-value-color) 5%, transparent);
+    --stats-scrim: color-mix(in srgb, var(--stats-value-color) 10%, transparent);
+    --stats-selection-fill: color-mix(in srgb, var(--stats-accent-signal) 8%, transparent);
+    --stats-selection-border: color-mix(in srgb, var(--stats-accent-signal) 32%, transparent);
+    --stats-window-fill: color-mix(in srgb, var(--stats-accent-amber) 10%, transparent);
+    --stats-window-border: color-mix(in srgb, var(--stats-accent-amber) 36%, transparent);
     
     /* Accent Tokens */
-    --stats-accent-signal: #00E0A0;
-    --stats-accent-amber: #FFB800;
-    --stats-accent-cyan: #0EA5E9;
-    --stats-accent-rose: #F43F5E;
-    --stats-accent-emerald: #10B981;
+    --stats-accent-signal: var(--signal-600);
+    --stats-accent-amber: var(--ember-600);
+    --stats-accent-cyan: #0369a1;
+    --stats-accent-rose: var(--status-red);
+    --stats-accent-emerald: var(--status-green);
+    --stats-accent-signal-fill: rgba(0, 122, 94, 0.08);
+    --stats-accent-amber-fill: rgba(153, 90, 0, 0.08);
+    --stats-accent-cyan-fill: rgba(3, 105, 161, 0.08);
+    --stats-accent-rose-fill: rgba(211, 47, 47, 0.07);
+    --stats-accent-emerald-fill: rgba(0, 122, 94, 0.07);
+    --stats-accent-muted-fill: rgba(15, 23, 42, 0.045);
+    --stats-focus-ring: var(--accent-focus-ring);
+    --stats-focus-ring-offset: var(--surface-page);
     
     /* Typography Tokens */
     --stats-label-color: var(--text-metadata);
-    --stats-value-color: #0F172A; /* slate-900 */
+    --stats-value-color: var(--text-primary);
     --stats-detail-color: var(--text-metadata);
+    --stats-control-text: var(--text-metadata);
+    --stats-control-text-hover: var(--text-primary);
+    --stats-control-text-active: var(--stats-accent-signal);
+    --stats-control-text-active-strong: var(--stats-accent-amber);
+    --stats-positive-text: var(--status-green);
+    --stats-negative-text: var(--status-red);
+    --stats-warning-text: var(--stats-accent-amber);
+    --stats-signal-text: var(--stats-accent-signal);
     
     /* Motion Tokens */
-    --stats-motion-standard: 300ms cubic-bezier(0.4, 0, 0.2, 1);
-    --stats-motion-dramatic: 500ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    --stats-motion-fast: var(--motion-fast) var(--motion-ease-standard);
+    --stats-motion-standard: var(--motion-standard) var(--motion-ease-standard);
+    --stats-motion-dramatic: var(--motion-slow) var(--motion-ease-dramatic);
   }
 
   .dark {
     /* Surface Tokens (Dark Mode) */
-    --stats-card-bg: var(--surface-glass);
+    --stats-card-bg: var(--stats-surface-panel);
     --stats-card-border: var(--border-hairline);
     --stats-card-shadow: var(--elevation-base);
+    --stats-card-shadow-hover: var(--elevation-raised);
+    --stats-card-shadow-focus: var(--elevation-raised);
+    --stats-panel-shadow: var(--elevation-base);
+    --stats-subpanel-shadow: var(--elevation-base);
+    --stats-border-strong: color-mix(in srgb, var(--stats-value-color) 14%, transparent);
+    --stats-control-shadow-active: var(--elevation-raised);
+    --stats-control-border-active: color-mix(in srgb, var(--stats-accent-signal) 26%, transparent);
     
-    /* Typography Tokens (Dark Mode) */
-    --stats-label-color: var(--text-metadata);
-    --stats-value-color: #FFFFFF;
-    --stats-detail-color: var(--text-metadata);
+    /* Accent Tokens (Dark Mode) */
+    --stats-accent-cyan: #38bdf8;
+    --stats-accent-signal-fill: rgba(0, 224, 160, 0.08);
+    --stats-accent-amber-fill: rgba(224, 160, 0, 0.08);
+    --stats-accent-cyan-fill: rgba(56, 189, 248, 0.08);
+    --stats-accent-rose-fill: rgba(255, 77, 77, 0.075);
+    --stats-accent-emerald-fill: rgba(0, 163, 126, 0.075);
+    --stats-accent-muted-fill: rgba(250, 244, 237, 0.045);
+  }
+}
+
+@layer components {
+  .stats-surface-panel {
+    border: 1px solid var(--stats-border-hairline);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-panel) 96%, var(--stats-accent-signal-fill) 4%), var(--stats-surface-panel)),
+      var(--stats-surface-panel);
+    box-shadow: var(--stats-panel-shadow);
+    backdrop-filter: blur(var(--stats-surface-blur-panel));
+    -webkit-backdrop-filter: blur(var(--stats-surface-blur-panel));
+  }
+
+  .stats-surface-subpanel {
+    border: 1px solid var(--stats-border-hairline);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-subpanel) 94%, var(--surface-glass) 6%), var(--stats-surface-subpanel)),
+      var(--stats-surface-subpanel);
+    box-shadow: var(--stats-subpanel-shadow);
+    backdrop-filter: blur(var(--stats-surface-blur-subpanel));
+    -webkit-backdrop-filter: blur(var(--stats-surface-blur-subpanel));
+  }
+
+  .stats-surface-chip {
+    border: 1px solid var(--stats-border-hairline);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-chip) 92%, var(--surface-glass) 8%), var(--stats-surface-chip)),
+      var(--stats-surface-chip);
+    box-shadow: var(--stats-subpanel-shadow);
+    backdrop-filter: blur(var(--stats-surface-blur-subpanel));
+    -webkit-backdrop-filter: blur(var(--stats-surface-blur-subpanel));
+  }
+
+  .stats-surface-input {
+    border: 1px solid var(--stats-border-hairline);
+    background: var(--stats-surface-input);
   }
 }

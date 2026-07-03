@@ -2,9 +2,20 @@ import type { ProjectManagementRepository } from "../../repositories/project-man
 import type { ExecutionControlService } from "../../services/execution-control-service.js";
 import type { ExecutionRepository } from "../../repositories/execution-repository.js";
 import type { ManagementResponseEnvelope, ManagementApproval, ManageCodeUxArgs } from "../../contracts/internal-management-types.js";
-import type { CreateSprintInput, UpdateSprintInput, PlanSprintOptions, PlanningOverrides, LinkedIssueProvider } from "../../contracts/project-management-types.js";
+import type {
+  CreateSprintInput,
+  IssuePromptContext,
+  PlanSprintOptions,
+  PlanningOverrides,
+  RepositoryIssueSearchResult,
+  SprintLinkedIssueInput,
+  SprintLinkedIssueRecord,
+  SprintRecord,
+  UpdateSprintInput,
+} from "../../contracts/project-management-types.js";
 import type { PlanningAgentService } from "../../services/planning-agent-service.js";
-import type { SprintIssueService } from "../../services/sprint-issue-service.js";
+import type { IssueSearchInput, SprintIssueService } from "../../services/sprint-issue-service.js";
+import { mergePromptWithLinkedIssues } from "../../services/linked-issue-prompt-markdown.js";
 
 const VALID_SPRINT_STATUSES = ["running", "paused", "completed", "failed", "cancelled", "idle"] as const;
 
@@ -48,6 +59,52 @@ function readStringAlias(payload: Record<string, unknown>, primaryKey: string, a
   return undefined;
 }
 
+function readStringArray(payload: Record<string, unknown>, key: string): string[] | undefined {
+  const value = payload[key];
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const strings = value
+    .map((item) => typeof item === "string" ? item.trim() : "")
+    .filter(Boolean);
+  return strings.length > 0 ? strings : undefined;
+}
+
+function readNumberArray(payload: Record<string, unknown>, key: string): number[] | undefined {
+  const value = payload[key];
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const numbers = value
+    .map((item) => typeof item === "number" ? item : typeof item === "string" ? Number(item.trim()) : NaN)
+    .filter((item) => Number.isFinite(item));
+  return numbers.length > 0 ? numbers : undefined;
+}
+
+function readOptionalNumber(payload: Record<string, unknown>, key: string): number | undefined {
+  const value = payload[key];
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function clampImportLimit(value: number | undefined): number | undefined {
+  if (!Number.isFinite(value)) {
+    return undefined;
+  }
+  return Math.max(1, Math.min(100, Math.trunc(value as number)));
+}
+
+function readEnum<T extends string>(payload: Record<string, unknown>, key: string, values: readonly T[]): T | undefined {
+  const value = readString(payload, key);
+  return value && values.includes(value as T) ? value as T : undefined;
+}
+
 function readSprintStatus(value: unknown): CreateSprintInput["status"] | UpdateSprintInput["status"] | undefined {
   return typeof value === "string" && VALID_SPRINT_STATUSES.includes(value as typeof VALID_SPRINT_STATUSES[number])
     ? value as CreateSprintInput["status"]
@@ -56,6 +113,105 @@ function readSprintStatus(value: unknown): CreateSprintInput["status"] | UpdateS
 
 function normalizeLinkedIssues(value: unknown): CreateSprintInput["linkedIssues"] | undefined {
   return Array.isArray(value) ? value as CreateSprintInput["linkedIssues"] : undefined;
+}
+
+function toLinkedIssueInput(issue: SprintLinkedIssueInput): SprintLinkedIssueInput {
+  return {
+    provider: issue.provider,
+    hostDomain: issue.hostDomain,
+    projectKey: issue.projectKey,
+    repository: issue.repository,
+    issueNumber: issue.issueNumber,
+    issueKey: issue.issueKey,
+    title: issue.title,
+    url: issue.url,
+    state: issue.state,
+    labels: issue.labels,
+    assignees: issue.assignees,
+    includeConversation: issue.includeConversation,
+    issueAuthor: issue.issueAuthor,
+    issueCreatedAt: issue.issueCreatedAt,
+    issueUpdatedAt: issue.issueUpdatedAt,
+  };
+}
+
+function hasSearchFilters(input: IssueSearchInput): boolean {
+  return Boolean(
+    input.search
+      || input.repository
+      || input.hostDomain
+      || input.projectKey
+      || input.state
+      || input.status
+      || input.labels?.length
+      || input.assignee
+      || input.assigneeText
+      || input.author
+      || input.reporter
+      || input.milestone
+      || input.issueText
+      || input.createdAfter
+      || input.createdBefore
+      || input.updatedAfter
+      || input.updatedBefore
+      || input.sortField
+      || input.sortDirection
+  );
+}
+
+function hasExplicitIssueReferences(input: IssueSearchInput): boolean {
+  return Boolean(input.issueKeys?.length || input.issueNumbers?.length || input.issueRefs?.length);
+}
+
+function buildImportIssueSearchInput(payload: Record<string, unknown>): IssueSearchInput {
+  const input: IssueSearchInput = {
+    search: readString(payload, "search"),
+    provider: readEnum(payload, "provider", ["github", "gitlab", "jira"] as const),
+    repository: readString(payload, "repository"),
+    hostDomain: readString(payload, "hostDomain"),
+    projectKey: readString(payload, "projectKey"),
+    state: readEnum(payload, "state", ["open", "closed", "all"] as const),
+    status: readEnum(payload, "status", ["open", "in_progress", "done", "all"] as const),
+    labels: readStringArray(payload, "labels"),
+    assignee: readString(payload, "assignee"),
+    assigneeText: readString(payload, "assigneeText"),
+    author: readString(payload, "author"),
+    reporter: readString(payload, "reporter"),
+    milestone: readString(payload, "milestone"),
+    issueText: readString(payload, "issueText"),
+    issueKeys: readStringArray(payload, "issueKeys"),
+    issueNumbers: readNumberArray(payload, "issueNumbers"),
+    issueRefs: readStringArray(payload, "issueRefs"),
+    includeConversation: payload.includeConversation === false ? false : undefined,
+    createdAfter: readString(payload, "createdAfter"),
+    createdBefore: readString(payload, "createdBefore"),
+    updatedAfter: readString(payload, "updatedAfter"),
+    updatedBefore: readString(payload, "updatedBefore"),
+    sortField: readEnum(payload, "sortField", ["updated", "created", "comments", "priority", "status", "assignee", "reporter"] as const),
+    sortDirection: readEnum(payload, "sortDirection", ["asc", "desc"] as const),
+    limit: clampImportLimit(readOptionalNumber(payload, "limit")),
+  };
+  return input;
+}
+
+function assertSprintBelongsToProject(sprint: SprintRecord | null | undefined, sprintId: string, projectId: string): SprintRecord {
+  if (!sprint) {
+    throw new Error(`Sprint not found: ${sprintId}`);
+  }
+  if (sprint.projectId !== projectId) {
+    throw new Error(`Sprint ${sprintId} does not belong to project ${projectId}`);
+  }
+  return sprint;
+}
+
+interface ImportIssuesResult {
+  mode: "search" | "explicit";
+  provider: IssueSearchInput["provider"] | null;
+  searchedIssues: RepositoryIssueSearchResult[];
+  importedContexts: IssuePromptContext[];
+  linkedIssues: SprintLinkedIssueRecord[];
+  sprint: SprintRecord | null;
+  planning: unknown | null;
 }
 
 function normalizeCreateSprintInput(payload: Record<string, unknown>): CreateSprintInput {
@@ -69,7 +225,7 @@ function normalizeCreateSprintInput(payload: Record<string, unknown>): CreateSpr
   const linkedIssues = normalizeLinkedIssues(payload.linkedIssues);
 
   if (originalPrompt !== undefined) input.originalPrompt = originalPrompt;
-  if (goal !== undefined) input.goal = goal;
+  if (goal !== undefined || linkedIssues) input.goal = mergePromptWithLinkedIssues(goal || "", linkedIssues || []);
   if (typeof payload.number === "number") input.number = payload.number;
   if (slug) input.slug = slug;
   if (status) input.status = status;
@@ -95,7 +251,7 @@ function normalizeUpdateSprintInput(payload: Record<string, unknown>): UpdateSpr
   const linkedIssues = normalizeLinkedIssues(payload.linkedIssues);
 
   if (originalPrompt !== undefined) input.originalPrompt = originalPrompt;
-  if (goal !== undefined) input.goal = goal;
+  if (goal !== undefined) input.goal = mergePromptWithLinkedIssues(goal, linkedIssues || []);
   if ("number" in payload && (typeof payload.number === "number" || payload.number === null)) input.number = payload.number;
   if ("slug" in payload) input.slug = slug || undefined;
   if (status) input.status = status;
@@ -203,18 +359,73 @@ export class SprintActions {
       case "import_issues": {
         const projectId = readRequiredString(payload, "projectId");
         const sprintId = readString(payload, "sprintId");
-        const searchInput = {
-          search: readString(payload, "search"),
-          provider: payload.provider as LinkedIssueProvider | undefined,
-          limit: typeof payload.limit === 'number' ? payload.limit : undefined,
-        };
+        const searchInput = buildImportIssueSearchInput(payload);
+        const explicitMode = hasExplicitIssueReferences(searchInput);
+        const attachToSprint = sprintId !== undefined && payload.attachToSprint !== false;
 
-        const issues = await this.deps.sprintIssueService.searchIssues(projectId, searchInput);
-
-        let result: unknown = issues;
-        if (sprintId) {
-          result = this.deps.projectManagementRepository.replaceSprintLinkedIssues(projectId, sprintId, issues);
+        if (!explicitMode && !hasSearchFilters(searchInput)) {
+          throw new Error("import_issues requires search filters or explicit issue references");
         }
+        if (payload.planAfterImport === true && !sprintId) {
+          throw new Error("sprintId is required when planAfterImport is true");
+        }
+
+        const searchedIssues = explicitMode
+          ? []
+          : await this.deps.sprintIssueService.searchIssues(projectId, searchInput);
+        const importedContexts = explicitMode
+          ? await this.deps.sprintIssueService.getIssuePromptContextsForReferences(projectId, searchInput)
+          : [];
+        const importedLinkedIssues = (explicitMode ? importedContexts : searchedIssues).map(toLinkedIssueInput);
+
+        let linkedIssues: SprintLinkedIssueRecord[] = [];
+        let sprint: SprintRecord | null = null;
+        if (sprintId && (attachToSprint || payload.planAfterImport === true)) {
+          sprint = assertSprintBelongsToProject(
+            this.deps.projectManagementRepository.getSprint(sprintId),
+            sprintId,
+            projectId,
+          );
+        }
+
+        if (sprintId && attachToSprint) {
+          linkedIssues = this.deps.projectManagementRepository.replaceSprintLinkedIssues(
+            projectId,
+            sprintId,
+            importedLinkedIssues,
+          );
+
+          if (importedContexts.length > 0 && sprint) {
+            sprint = this.deps.projectManagementRepository.updateSprint(sprintId, {
+              goal: mergePromptWithLinkedIssues(sprint.goal, importedContexts),
+            });
+          }
+        }
+
+        let planning: unknown = null;
+        if (payload.planAfterImport === true && sprintId) {
+          const options: PlanSprintOptions = {
+            autoStart: payload.autoStart === true,
+            replan: payload.replan === true,
+            planningAgentPresetId: readString(payload, "planningAgentPresetId"),
+            overrides: payload.overrides as PlanningOverrides | undefined,
+          };
+          planning = await this.deps.planningAgentService.planSprint(projectId, sprintId, options);
+        }
+
+        const provider = searchInput.provider
+          || importedContexts[0]?.provider
+          || searchedIssues[0]?.provider
+          || null;
+        const result: ImportIssuesResult = {
+          mode: explicitMode ? "explicit" : "search",
+          provider,
+          searchedIssues,
+          importedContexts,
+          linkedIssues,
+          sprint,
+          planning,
+        };
         return { result };
       }
       case "plan": {

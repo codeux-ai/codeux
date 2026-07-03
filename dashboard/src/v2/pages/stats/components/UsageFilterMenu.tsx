@@ -7,6 +7,8 @@ import type {
   ProjectExecutionStatsSnapshot,
 } from '../../../types.js';
 import styles from './UsageFilterMenu.module.css';
+import { UsageGraphLegend } from './UsageGraphLegend.js';
+import { groupChartSeries } from '../chart-view-models.js';
 
 interface UsageFilterMenuProps {
   isOpen: boolean;
@@ -77,10 +79,27 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
   if (!isOpen && !menuRef.current) return null;
 
   const activeSeriesCount = Object.values(enabledSeries).filter(Boolean).length;
+  const handleResetFilters = () => {
+    const chartSeries = stats?.chartSeries ?? [];
+    const resetSeries = chartSeries.reduce((acc, series) => {
+      acc[series.id] = series.defaultEnabled;
+      return acc;
+    }, {} as Record<string, boolean>);
+
+    if (chartSeries.length > 0 && Object.values(resetSeries).every((enabled) => !enabled)) {
+      resetSeries[chartSeries[0]!.id] = true;
+    }
+
+    setEnabledSeries(resetSeries);
+  };
+
+  const orderedSeriesGroups = groupChartSeries(stats?.chartSeries ?? []);
 
   return (
     <div
       ref={menuRef}
+      role="dialog"
+      aria-label="Graph filters"
       className={styles.menu}
       style={{ display: isOpen || (menuRef.current && gsap.getProperty(menuRef.current, 'opacity') as number > 0) ? 'block' : 'none' }}
     >
@@ -88,14 +107,14 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
         <div className={`${styles.header} flex items-center justify-between`}>
           <div aria-live="polite" className="sr-only">Showing {activeSeriesCount} filter{activeSeriesCount !== 1 ? 's' : ''}</div>
           <div className="flex items-center gap-3">
-            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-900 dark:text-white">
+            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-value-color)]">
               Graph Filters
             </span>
             {activeSeriesCount > 0 && (
               <button
                 type="button"
-                onClick={() => setEnabledSeries({})}
-                className="text-xs text-slate-400 transition-colors hover:text-amber-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 rounded"
+                onClick={handleResetFilters}
+                className="rounded text-xs text-[var(--stats-detail-color)] transition-colors hover:text-[var(--stats-value-color)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--stats-card-bg)] motion-reduce:transition-none"
               >
                 Reset filters
               </button>
@@ -106,7 +125,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Close graph filters"
-            className="rounded-full p-1 text-slate-400 hover:bg-black/[0.05] hover:text-slate-600 dark:hover:bg-white/[0.05] dark:hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900"
+            className="rounded-full p-1 text-[var(--stats-detail-color)] transition-colors hover:bg-[color:var(--fill-muted-hover)] hover:text-[var(--stats-value-color)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--stats-card-bg)] motion-reduce:transition-none"
           >
             <X className="h-4 w-4" />
           </button>
@@ -114,85 +133,19 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
 
         {stats && (
           <div className={styles.section}>
-            <label className={styles.label}>Metric Series</label>
-            <div className="flex max-h-[280px] flex-col gap-2 overflow-y-auto pr-2">
-              {(() => {
-                const groups = stats.chartSeries.reduce((acc, s) => {
-                  (acc[s.grouping] ??= []).push(s);
-                  return acc;
-                }, {} as Record<string, typeof stats.chartSeries>);
-                const displayOrder = ['core', 'purposes', 'providers', 'git'];
-                const orderedGroups = [
-                  ...displayOrder.filter((groupKey) => groups[groupKey]?.length),
-                  ...Object.keys(groups).filter((groupKey) => !displayOrder.includes(groupKey) && groups[groupKey]?.length),
-                ];
-
-                return orderedGroups.map((groupKey) => {
-                  const groupLabel = (
-                    groupKey === 'core'
-                      ? 'Core'
-                      : groupKey === 'purposes'
-                        ? 'Purposes'
-                        : groupKey === 'providers'
-                          ? 'Providers'
-                          : groupKey === 'git'
-                            ? 'Git'
-                            : groupKey.charAt(0).toUpperCase() + groupKey.slice(1)
-                  );
-
-                  return (
-                    <div key={groupKey} className="flex flex-col">
-                      <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 mt-3 mb-1 px-1">
-                        {groupLabel}
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        {groups[groupKey].map((s) => {
-                          const active = enabledSeries[s.id] || false;
-                          const disabled = activeSeriesCount === 1 && active;
-                          const groupActiveCount = groups[groupKey].filter((item) => enabledSeries[item.id]).length;
-                          return (
-                            <button
-                              key={s.id}
-                              type="button"
-                              onClick={() => {
-                                if (activeSeriesCount === 1 && enabledSeries[s.id]) return;
-                                setEnabledSeries((curr) => ({ ...curr, [s.id]: !curr[s.id] }));
-                              }}
-                              aria-disabled={disabled ? "true" : undefined}
-                              aria-pressed={active}
-                              className={`flex items-center justify-between rounded-xl border px-3 py-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 ${
-                                active
-                                  ? 'border-amber-500/28 bg-amber-500/12 text-amber-700 dark:text-amber-300'
-                                  : 'border-black/[0.05] bg-transparent text-slate-500 hover:border-black/[0.1] dark:border-white/[0.05] dark:text-slate-400'
-                              } ${disabled ? 'cursor-not-allowed opacity-60' : ''}`}
-                            >
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className="h-2 w-2 rounded-full"
-                                  style={{ backgroundColor: s.color || '#ccc' }}
-                                />
-                                <span className="text-[10px] font-bold uppercase tracking-[0.14em]">
-                                  {s.label}
-                                </span>
-                              </div>
-                              {active && (
-                                <div className="flex items-center gap-1.5">
-                                  {groupActiveCount > 1 && (
-                                    <div className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[8px] font-bold text-amber-700 dark:bg-amber-500/30 dark:text-amber-200">
-                                      +{groupActiveCount - 1}
-                                    </div>
-                                  )}
-                                  <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                                </div>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                });
-              })()}
+            <div className={styles.label}>Metric Series</div>
+            <div className="flex max-h-[320px] flex-col gap-4 overflow-y-auto pr-1">
+              <UsageGraphLegend
+                seriesGroups={orderedSeriesGroups}
+                enabledSeries={enabledSeries}
+                activeSeriesCount={activeSeriesCount}
+                onToggleSeries={(id) => {
+                  if (activeSeriesCount === 1 && enabledSeries[id]) {
+                    return;
+                  }
+                  setEnabledSeries((curr) => ({ ...curr, [id]: !curr[id] }));
+                }}
+              />
             </div>
           </div>
         )}

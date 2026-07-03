@@ -27,6 +27,7 @@ export interface BootMcpHttpTransportDeps {
   createServer: () => McpServer;
   recoveryService: RuntimeStartupRecoveryService;
   onRecovered?: (recoveredSprintRunIds: string[]) => void;
+  runStartupRecovery?: boolean;
 }
 
 export interface McpHttpTransportHandle {
@@ -136,13 +137,16 @@ export async function bootMcpTransport(deps: BootMcpTransportDeps): Promise<void
 }
 
 export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Promise<McpHttpTransportHandle | null> {
+  const runStartupRecovery = deps.runStartupRecovery ?? true;
   if (!deps.enabled || deps.port === null) {
-    try {
-      const recoveryResult = await deps.recoveryService.recover();
-      deps.logger.info("Recovery routine completed");
-      deps.onRecovered?.(recoveryResult.resumedSprintRunIds);
-    } catch (error) {
-      deps.logger.error("Failed to recover runtime state on startup", { error });
+    if (runStartupRecovery) {
+      try {
+        const recoveryResult = await deps.recoveryService.recover();
+        deps.logger.info("Recovery routine completed");
+        deps.onRecovered?.(recoveryResult.resumedSprintRunIds);
+      } catch (error) {
+        deps.logger.error("Failed to recover runtime state on startup", { error });
+      }
     }
     return null;
   }
@@ -267,12 +271,14 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
   const address = server.address() as AddressInfo | null;
   const resolvedPort = address?.port ?? deps.port;
 
-  try {
-    const recoveryResult = await deps.recoveryService.recover();
-    deps.logger.info("Recovery routine completed");
-    deps.onRecovered?.(recoveryResult.resumedSprintRunIds);
-  } catch (error) {
-    deps.logger.error("Failed to recover runtime state on startup", { error });
+  if (runStartupRecovery) {
+    try {
+      const recoveryResult = await deps.recoveryService.recover();
+      deps.logger.info("Recovery routine completed");
+      deps.onRecovered?.(recoveryResult.resumedSprintRunIds);
+    } catch (error) {
+      deps.logger.error("Failed to recover runtime state on startup", { error });
+    }
   }
 
   deps.logger.info(`${CODE_UX_DISPLAY_NAME} MCP HTTPS server running`, {

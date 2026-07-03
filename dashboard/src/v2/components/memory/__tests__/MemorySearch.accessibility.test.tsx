@@ -1,8 +1,8 @@
 /** @vitest-environment jsdom */
 import { h } from "preact";
-import { render, fireEvent } from "@testing-library/preact";
+import { act, render, fireEvent } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { expect, test, describe, afterEach } from "vitest";
+import { expect, test, describe, afterEach, vi } from "vitest";
 import { MemorySearch } from "../MemorySearch.js";
 import { searchQuerySignal } from "../memoryState.js";
 
@@ -11,13 +11,16 @@ expect.extend(matchers);
 describe("MemorySearch Accessibility", () => {
     afterEach(() => {
         document.body.innerHTML = "";
+        vi.useRealTimers();
+        searchQuerySignal.value = "";
     });
 
     test("input has accessible label", () => {
         searchQuerySignal.value = "";
         const { getByRole } = render(<MemorySearch />);
-        const input = getByRole("textbox", { name: "Search memory" });
+        const input = getByRole("textbox", { name: "Search memories" });
         expect(input).toBeInTheDocument();
+        expect(input).toHaveAttribute("placeholder", "Search memories by name or category");
     });
 
     test("clear button has accessible label and displays Esc shortcut text", () => {
@@ -31,7 +34,7 @@ describe("MemorySearch Accessibility", () => {
     test("ESC key clears search and keeps input focused", async () => {
         searchQuerySignal.value = "test search";
         const { getByRole } = render(<MemorySearch />);
-        const input = getByRole("textbox", { name: "Search memory" });
+        const input = getByRole("textbox", { name: "Search memories" });
         input.focus();
         expect(document.activeElement).toBe(input);
 
@@ -44,7 +47,7 @@ describe("MemorySearch Accessibility", () => {
     test("ESC key clears search and makes polite announcement", async () => {
         searchQuerySignal.value = "test search";
         const { getByRole, getByText } = render(<MemorySearch />);
-        const input = getByRole("textbox", { name: "Search memory" });
+        const input = getByRole("textbox", { name: "Search memories" });
         input.focus();
 
         await fireEvent.keyDown(input, { key: "Escape", code: "Escape" });
@@ -55,10 +58,32 @@ describe("MemorySearch Accessibility", () => {
     test("typing in search makes active-query polite announcement", async () => {
         searchQuerySignal.value = "";
         const { getByRole, getByText } = render(<MemorySearch />);
-        const input = getByRole("textbox", { name: "Search memory" });
+        const input = getByRole("textbox", { name: "Search memories" });
 
         await fireEvent.input(input, { target: { value: "test query" } });
 
         expect(getByText("Searching...")).toBeInTheDocument();
+    });
+
+    test("typing debounces writes to the memory search signal", async () => {
+        vi.useFakeTimers();
+        searchQuerySignal.value = "";
+        const { getByRole } = render(<MemorySearch />);
+        const input = getByRole("textbox", { name: "Search memories" });
+
+        await fireEvent.input(input, { target: { value: "architecture" } });
+
+        expect(input).toHaveValue("architecture");
+        expect(searchQuerySignal.value).toBe("");
+
+        act(() => {
+            vi.advanceTimersByTime(179);
+        });
+        expect(searchQuerySignal.value).toBe("");
+
+        act(() => {
+            vi.advanceTimersByTime(1);
+        });
+        expect(searchQuerySignal.value).toBe("architecture");
     });
 });

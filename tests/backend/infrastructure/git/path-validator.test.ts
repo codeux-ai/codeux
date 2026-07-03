@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll } from "vitest";
-import { validateSafeRepoName, validateSafeClonePath, validateNonEmptyDir, assertSafePathSegment } from "../../../../src/utils/path-validator.js";
+import { validateSafeRepoName, validateSafeClonePath, validateNonEmptyDir, assertSafePathSegment, isPathInside } from "../../../../src/utils/path-validator.js";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as fs from "node:fs";
@@ -100,6 +100,11 @@ describe("validateSafeClonePath", () => {
     const safePath = path.join(os.homedir(), "projects", "my-repo");
     expect(() => validateSafeClonePath(safePath, allowedRoot)).not.toThrow();
   });
+
+  it("returns the resolved path that callers can pass to filesystem sinks", () => {
+    const safePath = path.join(os.homedir(), "projects", "..", "projects", "my-repo");
+    expect(validateSafeClonePath(safePath)).toBe(path.resolve(safePath));
+  });
 });
 
 describe("validateNonEmptyDir", () => {
@@ -131,5 +136,23 @@ describe("validateNonEmptyDir", () => {
     fs.mkdirSync(testDir, { recursive: true });
     fs.writeFileSync(file, "hello");
     expect(() => validateNonEmptyDir(file)).toThrow(/Target path exists and is not a directory/);
+  });
+
+  it("returns the resolved target path", () => {
+    const target = path.join(testDir, "new-repo");
+    expect(validateNonEmptyDir(target)).toBe(path.resolve(target));
+  });
+});
+
+describe("isPathInside", () => {
+  it("accepts the base path and children", () => {
+    const base = path.join(os.tmpdir(), "codeux-root");
+    expect(isPathInside(base, base)).toBe(true);
+    expect(isPathInside(base, path.join(base, "child"))).toBe(true);
+  });
+
+  it("rejects sibling paths with a shared prefix", () => {
+    const base = path.join(os.tmpdir(), "codeux-root");
+    expect(isPathInside(base, `${base}-evil`)).toBe(false);
   });
 });

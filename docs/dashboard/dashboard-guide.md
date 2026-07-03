@@ -123,7 +123,7 @@ Legacy runtime:
   - websocket upgrade endpoint for dashboard realtime subscriptions (`projects`, `overview`, `project:<projectId>`, `thread:<threadId>`)
 - `GET /api/projects/:projectId/execution`
   - Project-scoped execution control-plane snapshot for the v2 runtime
-- `GET /api/projects/:projectId/stats?window=24h|7d|30d|all|custom&from=YYYY-MM-DD&to=YYYY-MM-DD`
+- `GET /api/projects/:projectId/stats?window=1h|24h|7d|30d|all|custom&from=YYYY-MM-DD&to=YYYY-MM-DD`
   - Project-scoped token/time statistics snapshot with adaptive hourly/daily/weekly buckets, task/sprint/provider/purpose rollups, and telemetry-source mix
   - `custom` requires both `from` and `to`; presets ignore them
 - `POST /api/projects/:projectId/attention-items/:attentionItemId/claim`
@@ -193,10 +193,23 @@ Legacy runtime:
 ## UI Sections
 
 ### Stats page
-- The Stats page keeps the time-window selector in the hero header, above the visual mode tabs, so preset and custom range controls remain visible no matter which analysis tab is active.
-- The trend-chart filter flyout is now metric-series only, which keeps the graph controls focused on series visibility while the header owns the time range.
-- The system invocation ledger beneath the stats analysis views is a sortable, card-row table with sticky sort controls for Time, In, Out, Total, and Duration; explicit input/output/cached/total token columns; status chips; task context chips; empty and loading states; and expandable detail placeholders that will later host message history.
-- The System stats view uses a local `useSystemViewData(projectId)` hook to fetch project invocation records, apply client-side search/filter/sort state, and derive summary metrics directly from the filtered list.
+- The Stats page is available at `/stats` and is scoped to the selected project. Without a selected project, it renders the Stats shell with a polite no-project state instead of attempting to fetch telemetry.
+- Stats data comes from `GET /api/projects/:projectId/stats`; System mode additionally uses `useSystemViewData(projectId)` and invocation APIs for paginated records and transcript detail. Background refreshes keep the previous snapshot visible while the studio state changes to `Refreshing`.
+- The header is the command surface for the page. It shows the page title, selected project, sprint lens, active mode guidance, and time-window controls without duplicating metric or freshness chips.
+- Time-window presets are `1h`, `24h`, `7d`, `30d`, `All time`, and `Custom`. Presets apply immediately. `Custom` only opens date fields; the range changes after a valid `Apply`. Incomplete or inverted ranges remain inline, mark the date inputs invalid, and announce the error.
+- Visual modes are `Trend`, `Composition`, `Models`, `Providers`, `Ledgers`, and `System`. `Providers` opens the reliability workspace while keeping the shorter user-facing label.
+- Mode-specific top cards are the single primary metric deck for the selected analysis surface. Trend emphasizes work, runtime, cost, invocation health, cache rate, and velocity; Composition emphasizes provider and token mix; Models emphasizes model performance; Providers emphasizes telemetry confidence and risk; Ledgers emphasizes entity volume and Git scope; System emphasizes invocation health.
+- The workspace starts directly after that metric deck. Avoid duplicate KPI bands, visible chart-summary card decks, repeated context strips, and stray metadata chips that restate the selected window or active mode.
+- Stats component styling is owned by shared Stats primitives and semantic tokens (`PANEL_CLASS`, `SUBPANEL_CLASS`, `CHIP_CLASS`, `STATUS_TONE_CLASS`, tab classes, empty states, and track classes). Do not use page-root global overrides to recolor or resize child components.
+- Trend mode is the chart workspace. It includes KPI tiles, trend deltas, health chips, the interactive usage chart, graph filters, minimap, screen-reader data table, purpose activity, and selected-range metadata. Filter switches change visible series only; they do not change the time window.
+- Composition mode explains provider share, token anatomy, cache behavior, source quality, purpose distribution, and low-data fallbacks using donuts, ribbons, and flow bars backed by snapshot totals.
+- Models mode ranks model activity by token volume and surfaces provider identity, success tone, latency, tokens per call, cache hit rate, reasoning share, output velocity, and sparse-telemetry states.
+- Providers mode summarizes reliability, fallback usage, source confidence, failure pressure, provider coverage, duration coverage, and provider-specific risk without fabricating health when telemetry is missing.
+- Ledgers mode provides Task Telemetry, Sprint Telemetry, and Git Telemetry tabs. Task and sprint ledgers include search, sort, progressive rendering, token-flow anatomy, status/provider/purpose context, recency, visible share, leader share, and optional duration percentile chips. Git ledgers use churn visuals for insertions and deletions so code change volume stays distinct from token flow.
+- System mode is a debugging workbench organized around Sprint State, Invocation Health, External API Activity, Error Categories, filters, pagination, an invocation ledger, and expandable message transcripts.
+- System filtering covers search, status, purpose, provider, error category, record mode (`All`, `Errors`, `System Msgs`), sort, page controls, clear-all, active-filter counts, and result counts. These controls wrap rather than clipping on narrow screens.
+- Loading, no-data, low-data, empty, and error states reuse the Stats shell. Loading panels use `role="status"` and error panels use `role="alert"` with retry where recovery is available.
+- For implementation details and page-level design rules, see [Stats & Analytics Design System](./design-system-stats.md). For telemetry collection semantics, see [Usage Telemetry And Stats](../architecture/usage-telemetry-and-stats.md).
 
 ### V2 project management
 - Interactive dashboard controls use pointer cursors consistently: enabled buttons, links, tab controls, form toggles, menu/popover triggers, DAG nodes, cards, and dismissible overlays expose a pointer affordance, while disabled controls retain `not-allowed`.
@@ -233,7 +246,7 @@ Legacy runtime:
 - Project setup runs display immediate toast feedback, an `Initializing` project-card state, and direct `Open invocation` actions while the background setup invocation is running and after it finishes.
 - Git URL projects are cloned into a local checkout before the project record is created. When the optional clone directory is left empty, Code UX uses `~/.code-ux/projects/<repo-name>` so Docker workspaces always seed from a real repository root instead of a relative placeholder path.
 - Project selector and project cards now refresh over websocket when the project collection or selected project changes
-- Sprints page is project-scoped, creates sprint records in sqlite, and exposes a structured Import flyout with Markdown plus GitHub/GitLab/Jira issue import capabilities, plus markdown export controls. See [Sprint Imports](./sprint-imports.md).
+- Sprints page is project-scoped, creates sprint records in sqlite, and exposes a structured Import flyout with Markdown plus provider-specific GitHub, GitLab, and Jira issue import entries. The issue import modals support guided filters, quick presets, select-all and clear-selection controls, conversation appends, linked-issue composer cards, and special remediation-task routing, while markdown export remains available for sprint round-tripping. See [Sprint Imports](./sprint-imports.md).
 - Sprint and Quicksprint planning route controls list virtual provider instances by their settings-page names (for example, `Codex Primary`) with provider brand icons, keep connected worker routes visually distinct, and show resolved default route/model labels such as `Default Route (Codex Primary)` and `Default Model (gpt-5.5)`.
 - Sprints page now also refreshes from project-structure realtime invalidation, so sprint CRUD and status-adjacent updates propagate across open dashboard tabs
 - Sprint cells and ledger rows now surface a dedicated human-intervention badge when a paused sprint needs merge work, planning, or another operator action, and the hover card explains what to do before resuming
@@ -256,7 +269,7 @@ Legacy runtime:
 - The planning feedback overlay surfaces both an ETA countdown and an elapsed runtime timer. ETA comes from `GET /api/projects/:projectId/sprints/composer/eta`, computed server-side from the latest 10 planning invocations for the selected project, with a 3:00 fallback when no usable sample exists.
 - When editing a sprint that already has planned tasks, the composer offers `Replan` (discard and regenerate subtasks), `Append Tasks` (open a task-creation modal pre-scoped to the sprint with dependency selection from existing tasks), and `Save Draft` (update name/goal only)
 - The sprint composer includes a planning-agent selector that allows operators to choose an alternate planning preset (filtered for presets with a `planning` label) for the current sprint. Leaving this on the default `Planning agent` preserves existing behavior, and any selection is honored by `Plan ahead with AI`, `Plan Only`, `Plan & Start`, and `Replan`.
-- Imported GitHub/GitLab/Jira issues render as linked issue cards directly under the Sprint Prompt field and are persisted with the sprint. The prompt receives a linked-issues markdown section so planning sees the imported issue scope.
+- Imported GitHub/GitLab/Jira issues render as linked issue cards directly under the Sprint Prompt field and are persisted with the sprint. Each card shows source metadata, state, labels, assignees, and whether conversation context is included. The prompt receives a linked-issues markdown section so planning sees the imported issue scope, while special remediation tasks render in a separate composer tray and are persisted through the imported-task endpoint instead of being folded into planning prose.
 - Settings -> Sprint -> Git Flow includes `Auto-close linked issues`, which closes imported GitHub/GitLab issues only after sprint completion and the main merge gate is no longer blocking. Jira auto-close is configured separately in Settings -> Integrations -> Jira and uses the configured transition name.
 - The sprint composer now features a visible, animated planning feedback overlay that replaces the generic spinner during `Plan ahead with AI`, `Plan Only`, `Plan & Start`, and `Replan` actions.
 - Planning feedback is deterministic and staged, using an animated ship treatment (Wooden Ship for AI improvement, Container Ship for planning) that drifts across the composer based on elapsed time to make progress visible
@@ -277,7 +290,7 @@ Legacy runtime:
 - The notification center now renders startup-check notifications from real readiness data, surfaces human-intervention alerts when a sprint needs operator attention, and persists read/dismissed notification state in browser storage.
 - GitLab support is available from Integrations with dashboard token persistence, backend GitLab host detection, `glab` support, and GitLab CI queries. `GITLAB_TOKEN` / `GLAB_TOKEN` remain supported as external fallbacks.
 - The Integrations catalog is grouped by purpose (`CLI`, `GIT`, `PM`) and keeps host hint import plus runtime auth-copy status in the panel header.
-- Jira support is available from Integrations with system-scoped site URL, account email, API token, default project key, close transition, and Jira-specific auto-close controls. The Sprints page Jira import opens directly from the Import menu and links selected issues into the same composer flow as GitHub/GitLab imports.
+- Jira support is available from Integrations with system-scoped site URL, account email, API token, default project key, close transition, and Jira-specific auto-close controls. The Sprints page Jira import opens directly from the Import menu and uses the same sprint composer flow as GitHub/GitLab imports, with advanced exact-key, user, label, date-window, sort, limit, and JQL override filters plus optional special-task routing for security and quality follow-ups.
 - Sprint data now hydrates cache-first when revisiting the page and refreshes in the background, so the showcase and ledger do not flash empty while the latest data loads. First-hydration uses skeleton placeholders while background refreshes continue, preserving existing data without reintroducing blocking loaders
 - Sprint and task list windows support selectable page size options (`10`, `20`, `50`, `100`, `All`) with a default of `20` (a frontend-only view change with no API contract change)
 - The Sprints page gallery show/hide control persists its browser-local visibility preference, so the gallery remains hidden or shown after navigation and reloads
@@ -332,7 +345,7 @@ Legacy runtime:
 - Tasks board is now scoped to the active sprint selection when one is set, filtering the view to only tasks for that sprint
 - Tasks page stores explicit task executor preference (`auto`, `docker_cli`, `jules`)
 - The Tasks board entrance animation now replays only for project/view/filter changes instead of every background task refresh
-- Stats page is project-scoped and visualizes tracked token, time, and Git usage (insertions, deletions, PRs) for the selected project with `24h`, `7d`, `30d`, `all time`, and custom date windows
+- Stats page is project-scoped and visualizes tracked token, time, model/provider, source, task/sprint, Git, and system invocation telemetry for the selected project with `1h`, `24h`, `7d`, `30d`, `all time`, and custom date windows.
 - Scheduler page is project-scoped and provides a calendar plus 24-hour day view for timed sprint starts, quicksprint launches, and `/chat` messages. Recurring entries expand into every visible day in the calendar and support minute-level recurrence (`minutely` in API/MCP payloads, `Minutes` in the form) plus endless, fixed-count, and end-date/time recurrence. It also supports editing existing entries directly from scheduled entries or occurrences with full form hydration, title customization, and cancellation support. See [Scheduler](./scheduler.md).
 - Browser page is project-scoped and provides a polished in-app browser surface for sprint preview containers:
   - floating horizontal slider in its own top strip, with large-screen five-card visibility for preview selection
@@ -356,20 +369,15 @@ Legacy runtime:
   - restrained panel surfaces for sidebar and viewer regions using shared neutral/light-dark borders and backgrounds
   - launch state card matching Browser Preview container-launch conventions (accent icon treatment, selector styling, and primary action button)
   - file browsing/diff behavior remains unchanged (`files` and `changes` modes, selected path display, side-by-side toggle, and status semantics)
-- Stats page now matches the high-interaction v2 dashboard card language more closely with a unified **Analysis Studio UX**, including light/dark mode support and responsive behavior across screen sizes:
-  - unified glass-panel system that mirrors the premium live card surfaces instead of using a separate visual treatment
-  - visual-mode navigation controls that focus the workspace on Trend, Composition, Models, Providers/Reliability, Ledgers, or System subpages
-  - a full-width interactive trend graph (Usage Graph) with hover bucket inspection and drag-to-zoom timeframe selection, integrating Tokens, Time, Git metrics, and Cost into unified groupings
-  - Settings Integrations provider-instance `Token pricing` values now feed Stats cost metrics; if a provider has no pricing configured (or $0.00), its invocations are tracked but contribute $0.00 to aggregate cost series
-  - a Trend Studio summary band above the chart and a purpose activity section below it, keeping the trend tab self-contained for window-level analysis
-  - a Composition Studio that layers cache efficiency, token-flight timing, and a per-provider activity ledger beneath donut charts so the provider picture stays readable without tab switching
-  - a persistent right-side selected-metrics rail for configuring the chart series; same-window refreshes preserve user chart selections
-  - hourly views keep one-hour hover targets while reducing visible axis labels to a three-hour rhythm for readability
-  - donut-style composition charts for providers, token anatomy, and telemetry-source mix now animate as interactive slices with hover emphasis and center-detail readouts
-  - Models and Providers/Reliability tracking specifically surface model performance, API error rates, and retry counts
-  - tabbed Ledgers telemetry section replaces the always-visible ledger layout, complete with search, sort-by-recency/tokens/time/input/output/name, and richer token/time breakdowns
-  - System subpage for deeper debugging and internal telemetry info, exposing internal cache hit rates, pub/sub connection stability, worker execution loops, queue lengths, and unhandled exception traces
-  - Git stats (Insertions, Deletions, Files Changed, Pull Requests, Merged PRs) are integrated directly alongside Tokens, Time, and Cost metrics in the Analysis Studio
+- Stats page uses a flatter project analytics workspace with light/dark support and responsive behavior across screen sizes:
+  - page-scoped Stats panels, chips, cards, inputs, ledgers, and focus rings come from `stats-theme.css` and the shared Stats primitives.
+  - visual-mode navigation focuses the workspace on Trend, Composition, Models, Providers, Ledgers, or System.
+  - Trend uses an interactive usage chart with hover and keyboard bucket inspection, minimap selection, drag zoom, graph filters, and accessible chart summaries.
+  - Composition layers provider share, token anatomy, source confidence, purpose activity, cache efficiency, and low-data fallbacks.
+  - Models ranks model usage and efficiency from snapshot model summaries, including success tone, latency, cache, reasoning, token volume, and output velocity.
+  - Providers surfaces reliability, telemetry confidence, failure pressure, provider coverage, duration coverage, and source mix from the existing stats snapshot.
+  - Ledgers uses tabbed Task Telemetry, Sprint Telemetry, and Git Telemetry with search, sort, progressive rendering, token-flow bars, and dedicated Git churn visuals.
+  - System splits operational debugging into sprint state, invocation health, external API activity, error categories, filters, pagination, invocation rows, and expandable transcript detail.
 - The Stats page uses the same project realtime invalidation channels as the rest of the v2 dashboard, then falls back to polling so usage graphs and tables stay current during active sprint execution
 - Overview widgets and headline stat cards now read project/task data from the same project-management API surface, and task streams are filtered to the currently selected active sprint only (a frontend-only view change with no API contract change)
 - Agents page features an immersive, showcase-first layout that defaults to presenting the selected agent's 3D animated avatar, details, and route-assignment tags, rather than a raw edit form.

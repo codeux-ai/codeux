@@ -112,6 +112,7 @@ describe("FeaturePrGateService", () => {
       persistMergedTask: vi.fn().mockResolvedValue(undefined),
       executionRepository: {
         getLatestTaskRun: vi.fn().mockReturnValue({ id: "run-1" }),
+        updateTaskRun: vi.fn(),
         appendTaskRunEvent: vi.fn(),
       } as any,
       sprintRunId: "sprint-run-1",
@@ -442,6 +443,38 @@ jobs:
     expect(context.executionRepository?.appendTaskRunEvent).not.toHaveBeenCalled();
   });
 
+  it("settles a completed task when its recorded worker branch no longer exists", async () => {
+    subtasks[0].status = "CODING_COMPLETED";
+    subtasks[0].worker_branch = "task/stale-branch";
+    subtasks[0].pr_url = undefined;
+    context.gitStatus.openPullRequests = [];
+    vi.mocked(context.executionRepository!.getLatestTaskRun).mockReturnValue({
+      id: "run-1",
+      state: "COMPLETED",
+      workerBranch: "task/stale-branch",
+    } as any);
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0].status).toBe("COMPLETED");
+    expect(result.subtasks[0].merge_indicator).toBeUndefined();
+    expect(result.subtasks[0].worker_branch).toBeUndefined();
+    expect(context.executionRepository?.updateTaskRun).toHaveBeenCalledWith("run-1", { workerBranch: null });
+    expect(context.persistMergedTask).toHaveBeenCalledWith(expect.objectContaining({
+      id: "T1",
+      status: "COMPLETED",
+      merge_indicator: undefined,
+    }));
+    expect(context.executionRepository?.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "ci_gate_status",
+      "system",
+      expect.objectContaining({ state: "no_merge_work", workerBranch: "task/stale-branch" }),
+      expect.any(Object),
+    );
+    expect(result.reportText).toContain("No merge work");
+  });
+
   it("normalizes pre-processing state before PR/CI processing", async () => {
     subtasks[0].status = "CODING_COMPLETED";
     subtasks[0].is_merged = true;
@@ -577,6 +610,37 @@ jobs:
     expect(result.subtasks[0].is_merged).toBe(true);
     expect(result.subtasks[0].merge_indicator).toBe("MERGED");
     expect(context.persistMergedTask).toHaveBeenCalledWith(expect.objectContaining({ id: "T1", is_merged: true }));
+    expect(result.reportText).toContain("Feature PR Merged");
+  });
+
+  it("reconciles a QA-blocked task when its PR was merged manually", async () => {
+    subtasks[0].status = "QA_REVIEW_FAILED";
+    subtasks[0].is_merged = false;
+    subtasks[0].merge_indicator = undefined;
+    context.gitStatus.openPullRequests = [];
+    context.gitStatus.mergedPullRequests = [
+      {
+        number: 101,
+        title: "PR 101",
+        url: "https://github.com/repo/pull/101",
+        headRefName: "feat/T1",
+        baseRefName: "feature/sprint1",
+        mergedAt: "2026-03-15T08:00:00.000Z",
+        mergedBy: "octocat",
+      },
+    ] as any;
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0].status).toBe("COMPLETED");
+    expect(result.subtasks[0].is_merged).toBe(true);
+    expect(result.subtasks[0].merge_indicator).toBe("MERGED");
+    expect(context.persistMergedTask).toHaveBeenCalledWith(expect.objectContaining({
+      id: "T1",
+      status: "COMPLETED",
+      is_merged: true,
+      merge_indicator: "MERGED",
+    }));
     expect(result.reportText).toContain("Feature PR Merged");
   });
 

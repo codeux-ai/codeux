@@ -41,6 +41,51 @@ export function backfillEstimatedDockerCliUsage(db: DatabaseAdapter): void {
   }));
 }
 
+export function backfillTokenAccountingV2(db: DatabaseAdapter): void {
+  const nowSql = "STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')";
+
+  db.prepare(`
+    UPDATE provider_invocations
+    SET
+      input_tokens = CASE
+        WHEN input_tokens >= cached_input_tokens THEN input_tokens - cached_input_tokens
+        ELSE 0
+      END,
+      total_tokens = CASE
+        WHEN total_tokens < input_tokens + output_tokens THEN input_tokens + output_tokens
+        ELSE total_tokens
+      END,
+      token_accounting_version = 2,
+      updated_at = ${nowSql}
+    WHERE token_accounting_version < 2
+      AND provider IN ('codex', 'opencode')
+      AND usage_source = 'reported'
+      AND cached_input_tokens > 0
+  `).run();
+
+  db.prepare(`
+    UPDATE provider_invocations
+    SET
+      total_tokens = CASE
+        WHEN total_tokens < input_tokens + cached_input_tokens + output_tokens
+          THEN input_tokens + cached_input_tokens + output_tokens
+        ELSE total_tokens
+      END,
+      token_accounting_version = 2,
+      updated_at = ${nowSql}
+    WHERE token_accounting_version < 2
+      AND provider IN ('gemini', 'claude-code', 'antigravity')
+      AND usage_source = 'reported'
+      AND cached_input_tokens > 0
+  `).run();
+
+  db.prepare(`
+    UPDATE provider_invocations
+    SET token_accounting_version = 2
+    WHERE token_accounting_version < 2
+  `).run();
+}
+
 /**
  * Rebuilds an existing `guardrail_ledger` table to drop the legacy
  * `FOREIGN KEY (task_id) REFERENCES tasks(id)` constraint.
@@ -161,6 +206,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureColumn(db, "execution_invocations", "last_error_category", "TEXT");
   ensureColumn(db, "execution_invocations", "last_error_message", "TEXT");
   ensureColumn(db, "execution_invocations", "last_retry_after_iso", "TEXT");
+  ensureColumn(db, "execution_invocations", "preserved_at", "TEXT");
   ensureColumn(db, "execution_invocations", "invocation_source", "TEXT NOT NULL DEFAULT 'internal'");
   ensureColumn(db, "execution_invocations", "agent_preset_id", "TEXT");
 
@@ -178,6 +224,8 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureColumn(db, "provider_invocations", "execution_mode", "TEXT");
   ensureColumn(db, "provider_invocations", "jules_tokens", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "provider_invocations", "invocation_source", "TEXT NOT NULL DEFAULT 'internal'");
+  ensureColumn(db, "provider_invocations", "token_accounting_version", "INTEGER NOT NULL DEFAULT 1");
+  backfillTokenAccountingV2(db);
   ensureIndex(db, "idx_provider_invocations_project_started", "provider_invocations", "project_id, started_at DESC");
   ensureIndex(db, "idx_provider_invocations_sprint_started", "provider_invocations", "sprint_id, started_at DESC");
   ensureIndex(db, "idx_provider_invocations_task_started", "provider_invocations", "task_id, started_at DESC");

@@ -144,6 +144,108 @@ describe("AppDbStorage", () => {
     });
   });
 
+  it("normalizes legacy cached-token accounting rows once", async () => {
+    const dbPath = await createTempDbPath();
+    const storage = new AppDbStorage(dbPath);
+    const db = storage.getDatabase();
+    const now = new Date().toISOString();
+
+    db.prepare(`
+      INSERT INTO projects (id, slug, name, base_dir, repo_url, source_id, default_branch, feature_branch_prefix, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run("project-token-v2", "project-token-v2", "Project Token V2", "/tmp/project-token-v2", null, null, "main", "feature/", "idle", now, now);
+
+    db.prepare(`
+      INSERT INTO provider_invocations (
+        id, project_id, session_id, provider, purpose, status, model, execution_mode, started_at,
+        input_tokens, cached_input_tokens, output_tokens, reasoning_output_tokens, total_tokens,
+        token_accounting_version, usage_source, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "usage-token-v2-codex",
+      "project-token-v2",
+      "session-1",
+      "codex",
+      "task_coding",
+      "completed",
+      "default",
+      "DOCKER",
+      now,
+      1000,
+      800,
+      50,
+      0,
+      1050,
+      1,
+      "reported",
+      now,
+      now,
+    );
+
+    db.prepare(`
+      INSERT INTO provider_invocations (
+        id, project_id, session_id, provider, purpose, status, model, execution_mode, started_at,
+        input_tokens, cached_input_tokens, output_tokens, reasoning_output_tokens, total_tokens,
+        token_accounting_version, usage_source, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "usage-token-v2-claude",
+      "project-token-v2",
+      "session-2",
+      "claude-code",
+      "task_coding",
+      "completed",
+      "default",
+      "DOCKER",
+      now,
+      100,
+      40,
+      20,
+      0,
+      120,
+      1,
+      "reported",
+      now,
+      now,
+    );
+
+    new AppDbStorage(dbPath);
+    new AppDbStorage(dbPath);
+
+    const rows = db.prepare(`
+      SELECT id, input_tokens, cached_input_tokens, output_tokens, total_tokens, token_accounting_version
+      FROM provider_invocations
+      WHERE project_id = ?
+      ORDER BY id ASC
+    `).all("project-token-v2") as Array<{
+      id: string;
+      input_tokens: number;
+      cached_input_tokens: number;
+      output_tokens: number;
+      total_tokens: number;
+      token_accounting_version: number;
+    }>;
+
+    expect(rows).toEqual([
+      {
+        id: "usage-token-v2-claude",
+        input_tokens: 100,
+        cached_input_tokens: 40,
+        output_tokens: 20,
+        total_tokens: 160,
+        token_accounting_version: 2,
+      },
+      {
+        id: "usage-token-v2-codex",
+        input_tokens: 200,
+        cached_input_tokens: 800,
+        output_tokens: 50,
+        total_tokens: 1050,
+        token_accounting_version: 2,
+      },
+    ]);
+  });
+
   it("resets all application tables while preserving the schema", async () => {
     const dbPath = await createTempDbPath();
     const storage = new AppDbStorage(dbPath);

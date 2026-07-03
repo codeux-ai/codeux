@@ -586,6 +586,7 @@ export class WorkerInboxReplyService {
     const effectiveModel = resolveEffectiveModel({
       provider: input.provider,
       model: input.model,
+      providerMountAuth: input.providerMountAuth,
       customModel: input.customModel,
       qwenAuthMode: input.qwenAuthMode,
       qwenModelId: input.qwenModelId,

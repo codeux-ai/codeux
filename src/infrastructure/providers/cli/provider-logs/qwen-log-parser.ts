@@ -1,12 +1,13 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import type { ParsedConversationTurn } from "./provider-conversation-types.js";
-import { parseUsageObject, toNumber } from "./usage-parse-utils.js";
+import { parseUsageObject } from "./usage-parse-utils.js";
 
 export interface QwenUsageTotals {
   inputTokens: number;
   cachedInputTokens: number;
   outputTokens: number;
+  reasoningOutputTokens: number;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -19,6 +20,12 @@ function asRecord(value: unknown): Record<string, unknown> | null {
  * provider-reported usage lives on the OpenAI `response.usage` object. Older
  * loggers (and our tests) place a bare `usage` at the top level, so we fall back
  * to that. Returns null when no usage object is present (e.g. error-only logs).
+ *
+ * Delegates to the shared `parseUsageObject` so cached/reasoning token
+ * detection stays in sync with Codex — including the Anthropic-shaped
+ * `cache_read_input_tokens` fallback, which matters here because qwen-code can
+ * be configured with `qwenProtocol: "anthropic"` against an Anthropic-compatible
+ * backend, whose usage payload won't carry OpenAI's `prompt_tokens_details`.
  */
 export function extractQwenUsageRecord(record: unknown): QwenUsageTotals | null {
   const root = asRecord(record);
@@ -27,18 +34,18 @@ export function extractQwenUsageRecord(record: unknown): QwenUsageTotals | null 
   const usage = asRecord(response?.usage) ?? asRecord(root.usage);
   if (!usage) return null;
 
-  const cachedDetails = asRecord(usage.prompt_tokens_details);
-
+  const parsed = parseUsageObject(usage);
   return {
-    inputTokens: toNumber(usage.prompt_tokens ?? usage.input_tokens ?? 0),
-    outputTokens: toNumber(usage.completion_tokens ?? usage.output_tokens ?? 0),
-    cachedInputTokens: toNumber(cachedDetails?.cached_tokens ?? usage.cached_tokens ?? 0),
+    inputTokens: parsed.inputTokens,
+    outputTokens: parsed.outputTokens,
+    cachedInputTokens: parsed.cachedInputTokens,
+    reasoningOutputTokens: parsed.reasoningOutputTokens,
   };
 }
 
 /** Sums usage across many qwen-code log records. Returns null when none report usage. */
 export function sumQwenOpenAiUsage(records: unknown[]): QwenUsageTotals | null {
-  const totals: QwenUsageTotals = { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 };
+  const totals: QwenUsageTotals = { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0 };
   let found = false;
   for (const record of records) {
     const usage = extractQwenUsageRecord(record);
@@ -46,6 +53,7 @@ export function sumQwenOpenAiUsage(records: unknown[]): QwenUsageTotals | null {
       totals.inputTokens += usage.inputTokens;
       totals.cachedInputTokens += usage.cachedInputTokens;
       totals.outputTokens += usage.outputTokens;
+      totals.reasoningOutputTokens += usage.reasoningOutputTokens;
       found = true;
     }
   }
@@ -83,7 +91,35 @@ function responseMessageFromRecord(record: unknown): Record<string, unknown> | n
 
 /** Pulls the chain-of-thought text from a message's `reasoning_content`/`reasoning` field. */
 function reasoningFromMessage(message: Record<string, unknown>): string {
-  return flattenOpenAiContent(message.reasoning_content ?? message.reasoning);
+  const reasoningContent = message.reasoning_content ?? message.reasoning ?? message.thinking ?? message.summary;
+  if (typeof reasoningContent === "string") {
+    return reasoningContent.trim();
+  }
+  if (!Array.isArray(reasoningContent)) {
+    return "";
+  }
+  const parts: string[] = [];
+  for (const item of reasoningContent) {
+    const rec = asRecord(item);
+    if (!rec) {
+      if (typeof item === "string") {
+        parts.push(item);
+      }
+      continue;
+    }
+    if (typeof rec.text === "string") {
+      parts.push(rec.text);
+    } else if (typeof rec.summary_text === "string") {
+      parts.push(rec.summary_text);
+    } else if (typeof rec.summary === "string") {
+      parts.push(rec.summary);
+    } else if (typeof rec.reasoning === "string") {
+      parts.push(rec.reasoning);
+    } else if (typeof rec.thinking === "string") {
+      parts.push(rec.thinking);
+    }
+  }
+  return parts.join("").trim();
 }
 
 /** Reads the id of an OpenAI tool-call entry. */

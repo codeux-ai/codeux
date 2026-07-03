@@ -93,6 +93,28 @@ describe("ProjectManagementRepository", () => {
     expect(repository.getSelectedSprintId(project.id)).toBeNull();
   });
 
+  it("blocks sprint deletion when it would prune a preserved invocation transcript", async () => {
+    const { repository, executionRepository } = await createRepository();
+    const project = repository.createProject({
+      name: "Preserved Invocation Project",
+      sourceType: "local",
+      sourceRef: "/workspace/preserved-invocation-project",
+    });
+    const sprint = repository.createSprint(project.id, {
+      name: "Planning Sprint",
+    });
+    const invocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: sprint.id,
+      type: "planning",
+      status: "failed",
+      preservedAt: "2026-07-02T22:20:00.000Z",
+    });
+
+    expect(() => repository.deleteSprint(sprint.id)).toThrow(`Sprint ${sprint.id} has preserved execution invocation ${invocation.id}`);
+    expect(repository.getSprint(sprint.id)).not.toBeNull();
+  });
+
   it("normalizes stale provided sprint numbers to the next project number", async () => {
     const { repository } = await createRepository();
     const project = repository.createProject({
@@ -134,7 +156,7 @@ describe("ProjectManagementRepository", () => {
     expect(sprint2.number).toBe(8);
   });
 
-  it("defaults blank local projects into the codex ux projects folder", async () => {
+  it("defaults blank local projects into the Code UX projects folder", async () => {
     const { repository } = await createRepository();
     const project = repository.createProject({
       name: "Blank Local Project",
@@ -142,9 +164,20 @@ describe("ProjectManagementRepository", () => {
       sourceRef: "",
     });
 
-    expect(project.baseDir).toBe(path.join(os.homedir(), ".codex-ux", "projects", project.slug));
+    expect(project.baseDir).toBe(path.join(os.homedir(), ".code-ux", "projects", project.slug));
     expect(project.lastRunAt).toBeNull();
     expect(project.lastRunStatus).toBeNull();
+  });
+
+  it("defaults Git projects into the Code UX projects folder", async () => {
+    const { repository } = await createRepository();
+    const project = repository.createProject({
+      name: "Git Project",
+      sourceType: "git",
+      sourceRef: "https://github.com/codeux-ai/example-project.git",
+    });
+
+    expect(project.baseDir).toBe(path.join(os.homedir(), ".code-ux", "projects", "example-project"));
   });
 
   it("creates projects, sprints, tasks, and dependency summaries in sqlite", async () => {
@@ -219,6 +252,107 @@ describe("ProjectManagementRepository", () => {
       executorType: "mcp_worker",
       status: "in_progress",
     });
+  });
+
+  it("creates imported special tasks with source metadata and prompt sections", async () => {
+    const { repository } = await createRepository();
+
+    const project = repository.createProject({
+      name: "Imported Tasks Project",
+      sourceType: "local",
+      sourceRef: "/workspace/imported-tasks-project",
+    });
+    const sprint = repository.createSprint(project.id, {
+      name: "Imported Tasks Sprint",
+    });
+    const prerequisite = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Prerequisite task",
+    });
+
+    const [securityTask, mergeConflictTask, failedCiTask] = repository.createImportedTasks(project.id, sprint.id, [
+      {
+        kind: "security",
+        title: "Security review import",
+        sourceUrl: "https://github.com/acme/widgets/issues/12",
+        provider: "github",
+        repository: "acme/widgets",
+        labels: ["security", "urgent"],
+        priority: "critical",
+      },
+      {
+        kind: "merge_conflict",
+        title: "Merge conflict import",
+        sourcePath: "/tmp/merge-conflict.log",
+        provider: "github",
+        repository: "acme/widgets",
+        branch: "feature/imported-task",
+        baseBranch: "main",
+        pullRequestNumber: 17,
+        pullRequestUrl: "https://github.com/acme/widgets/pull/17",
+        commitSha: "abc1234",
+        errorMessage: "Auto-merge failed with conflict markers.",
+      },
+      {
+        kind: "failed_ci",
+        title: "Failed CI import",
+        sourceUrl: "https://github.com/acme/widgets/actions/runs/55",
+        provider: "github",
+        repository: "acme/widgets",
+        branch: "feature/imported-task",
+        baseBranch: "main",
+        workflowRunId: "55",
+        workflowRunUrl: "https://github.com/acme/widgets/actions/runs/55",
+        commitSha: "def5678",
+        errorMessage: "npm test failed with exit code 1",
+        dependsOnTaskIds: [prerequisite.id],
+      },
+    ]);
+
+    expect(securityTask).toMatchObject({
+      priority: "critical",
+      executorType: "auto",
+      sourceType: "import:security",
+      sourcePath: "https://github.com/acme/widgets/issues/12",
+      agentPresetId: null,
+      isIndependent: true,
+      dependsOnTaskIds: [],
+    });
+    expect(securityTask.promptMarkdown).toContain("## Objective");
+    expect(securityTask.promptMarkdown).toContain("## Source");
+    expect(securityTask.promptMarkdown).toContain("## Context");
+    expect(securityTask.promptMarkdown).toContain("Imported security work item.");
+    expect(securityTask.promptMarkdown).toContain("acme/widgets");
+    expect(securityTask.promptMarkdown).toContain("Priority: critical");
+
+    expect(mergeConflictTask).toMatchObject({
+      priority: "critical",
+      executorType: "auto",
+      sourceType: "import:merge_conflict",
+      sourcePath: "/tmp/merge-conflict.log",
+      isIndependent: true,
+      dependsOnTaskIds: [],
+    });
+    expect(mergeConflictTask.promptMarkdown).toContain("### Branch Details");
+    expect(mergeConflictTask.promptMarkdown).toContain("feature/imported-task");
+    expect(mergeConflictTask.promptMarkdown).toContain("main");
+    expect(mergeConflictTask.promptMarkdown).toContain("Pull request: #17");
+
+    expect(failedCiTask).toMatchObject({
+      priority: "high",
+      executorType: "auto",
+      sourceType: "import:failed_ci",
+      sourcePath: "https://github.com/acme/widgets/actions/runs/55",
+      isIndependent: false,
+      dependsOnTaskIds: [prerequisite.id],
+    });
+    expect(failedCiTask.promptMarkdown).toContain("### CI Run Details");
+    expect(failedCiTask.promptMarkdown).toContain("Workflow run ID: 55");
+    expect(failedCiTask.promptMarkdown).toContain("npm test failed with exit code 1");
+
+    const tasks = repository.listTasks(project.id, sprint.id);
+    expect(tasks).toHaveLength(4);
+    expect(repository.listSprintLinkedIssues(project.id, sprint.id)).toHaveLength(0);
   });
 
   it("infers remote GitHub metadata for local projects from origin", async () => {

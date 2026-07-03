@@ -148,6 +148,24 @@ describe("computeTaskMergeGateStatus", () => {
     expect(result.mergeAllowed).toBe(false);
   });
 
+  it("retries recovered stale QA runs even when the verdict budget is spent", () => {
+    const result = computeTaskMergeGateStatus({
+      taskId: "task-1",
+      triggerType: "has_code_changes" as QaReviewTriggerType,
+      qaSettings: { ...mockSettings, maxTaskReviewRuns: 1 },
+      latestRun: createMockRun({
+        status: "failed",
+        outcome: null,
+        summaryMarkdown: `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after the backing invocation completed. Code UX will retry the review.`,
+      }),
+      runsUsed: 3,
+      decisiveRuns: 1,
+    });
+
+    expect(result.reason).toBe("review_failed");
+    expect(result.mergeAllowed).toBe(false);
+  });
+
   it("returns review_failed when latest run failed normally", () => {
     const result = computeTaskMergeGateStatus({
       taskId: "task-1",

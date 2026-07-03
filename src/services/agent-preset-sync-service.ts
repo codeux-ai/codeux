@@ -404,8 +404,7 @@ export class AgentPresetSyncService {
       title: "Push agent presets",
       featureBranch: defaultBranch,
       workerBranch: branchToPush,
-      taskDescription: "Push the project's .code-ux/agents markdown files into the repository.",
-      sprintDescription: `Project: ${project.name}`,
+      body: `Project: ${project.name}\n\nPush the project's .code-ux/agents markdown files into the repository.`,
     }, project.baseDir, {
       githubToken: this.deps.getGithubToken?.() || effectiveSettings.git.githubToken,
       gitlabToken: effectiveSettings.git.gitlabToken,

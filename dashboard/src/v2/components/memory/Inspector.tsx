@@ -3,8 +3,6 @@ import { useLayoutEffect, useRef } from "preact/hooks";
 import { X } from "lucide-react";
 import gsap from "gsap";
 import type { MemNode, Edge } from "../../lib/memory-graph.js";
-import { ConfirmDialog } from "../ui/ConfirmDialog.js";
-import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 const CAT: Record<string, { label: string; hex: string; r: number; g: number; b: number }> = {
@@ -26,7 +24,6 @@ export const Inspector: FunctionComponent<{
     onClose: () => void;
     onDelete: (id: string) => void;
 }> = ({ node, allNodes, edges, lobotomize, onClose, onDelete }) => {
-    const { isOpen, options, requestConfirm, handleConfirm, handleCancel, triggerRef } = useConfirmDialog();
     const contentRef = useRef<HTMLDivElement>(null);
     const reducedMotion = useReducedMotion();
 
@@ -49,17 +46,9 @@ export const Inspector: FunctionComponent<{
         });
     }, [node?.id, reducedMotion]);
 
-    const handleDeleteClick = async () => {
+    const handleDeleteClick = () => {
         if (!node) return;
-        const confirmed = await requestConfirm({
-            title: "Excise Memory",
-            body: "Are you sure you want to delete this memory? This action cannot be undone.",
-            confirmLabel: "Excise",
-            destructive: true
-        });
-        if (confirmed) {
-            onDelete(node.id);
-        }
+        onDelete(node.id);
     };
 
     const cat = node ? (CAT[node.category] || CAT.context) : CAT.architecture;
@@ -75,26 +64,30 @@ export const Inspector: FunctionComponent<{
 
     return (
         <div
-            className="absolute right-0 top-0 bottom-0 w-full lg:w-[300px] z-30
-                       bg-white/80 dark:bg-void-800/80 backdrop-blur-3xl
-                       border-l border-black/[0.06] dark:border-white/[0.06]
-                       shadow-[-20px_0_60px_rgba(0,0,0,0.08)] dark:shadow-[-20px_0_60px_rgba(0,0,0,0.4)]
-                       p-6 flex flex-col gap-4 overflow-y-auto dashboard-scrollbar
-                       transition-transform duration-500"
+            className="absolute inset-x-0 bottom-0 z-30 flex h-[min(56dvh,34rem)] w-full flex-col gap-4 overflow-hidden rounded-t-[1.5rem]
+                       border-t border-black/[0.06] bg-white/90 p-5 pt-12 shadow-[0_-24px_70px_rgba(0,0,0,0.12)]
+                       backdrop-blur-3xl transition-transform duration-500 dark:border-white/[0.06] dark:bg-void-800/88
+                       lg:inset-y-0 lg:left-auto lg:right-0 lg:h-full lg:w-[300px] lg:rounded-none lg:border-l lg:border-t-0
+                       lg:p-6 lg:pt-12 lg:shadow-[-20px_0_60px_rgba(0,0,0,0.08)] dark:lg:shadow-[-20px_0_60px_rgba(0,0,0,0.4)]"
             style={{
                 transform: `translateX(${node ? "0" : "100%"})`,
                 transitionTimingFunction: "cubic-bezier(0.33, 1, 0.68, 1)",
                 pointerEvents: node ? "auto" : "none",
             }}
         >
-            <button onClick={onClose}
-                className="absolute top-4 right-4 w-7 h-7 rounded-full flex items-center justify-center
-                           bg-black/[0.04] dark:bg-white/[0.04] hover:bg-black/[0.08] dark:hover:bg-white/[0.08]
-                           transition-colors duration-200">
+            <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close memory inspector"
+                title="Close memory inspector"
+                className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full
+                           bg-black/[0.04] text-slate-500 transition-colors duration-200 hover:bg-black/[0.08] hover:text-slate-700
+                           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-white dark:focus-visible:ring-offset-void-900"
+            >
                 <X className="w-3.5 h-3.5 text-slate-500" strokeWidth={2} />
             </button>
             {node && (
-                <div ref={contentRef} className="flex flex-col gap-4 h-full will-change-[opacity,transform]">
+                <div ref={contentRef} className="flex min-h-0 flex-col gap-4 overflow-y-auto overflow-x-hidden pr-1 will-change-[opacity,transform] dashboard-scrollbar">
                     <div className="flex items-center gap-2 pt-1">
                         <div className="w-2.5 h-2.5 rounded-full" style={{ background: cat.hex, boxShadow: `0 0 10px ${cat.hex}` }} />
                         <span className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono" style={{ color: cat.hex }}>
@@ -129,16 +122,22 @@ export const Inspector: FunctionComponent<{
                                 Synapses ({connected.length})
                             </span>
                             {connected.slice(0, 8).map(({ node: cn, similarity }) => (
-                                <div key={cn.id} className="flex items-start gap-2 py-1">
-                                    <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
-                                        style={{ background: (CAT[cn.category] || CAT.context).hex }} />
-                                    <span className="sr-only">{(CAT[cn.category] || CAT.context).label}</span>
-                                    <div className="flex-1 min-w-0 break-words">
-                                        <span className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 font-medium">
+                                <div key={cn.id} className="flex items-start gap-3 rounded-xl border border-black/[0.05] bg-black/[0.03] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.03]">
+                                    <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: (CAT[cn.category] || CAT.context).hex }} />
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                                            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+                                                {(CAT[cn.category] || CAT.context).label}
+                                            </span>
+                                            <span className="rounded-full bg-black/[0.04] px-1.5 py-0.5 text-[9px] font-mono text-slate-400 dark:bg-white/[0.04]">
+                                                {cn.scope}
+                                            </span>
+                                        </div>
+                                        <p className="mt-1 text-[11px] font-medium leading-relaxed break-words text-slate-600 dark:text-slate-300 line-clamp-2">
                                             {cn.content}
-                                        </span>
+                                        </p>
                                     </div>
-                                    <span className="text-[9px] font-mono text-slate-400 shrink-0 mt-0.5"
+                                    <span className="mt-0.5 shrink-0 text-[9px] font-mono text-slate-400"
                                         style={{ color: similarity > 0.7 ? (CAT[cn.category] || CAT.context).hex : undefined }}>
                                         {Math.round(similarity * 100)}%
                                     </span>
@@ -147,23 +146,16 @@ export const Inspector: FunctionComponent<{
                         </div>
                     )}
                     {lobotomize && (
-                        <>
-                            <button onClick={handleDeleteClick}
-                                ref={triggerRef as any}
-                                className="mt-auto flex items-center justify-center gap-2 w-full py-3 rounded-xl
-                                           bg-status-red text-white font-bold text-xs cursor-pointer
-                                           shadow-[0_0_20px_rgba(227,0,15,0.3)] hover:bg-status-red/90 hover:shadow-[0_0_30px_rgba(227,0,15,0.5)]
-                                           transition-[background-color,box-shadow,color] duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900">
-                                <X className="w-3.5 h-3.5" strokeWidth={2.5} />
-                                Excise Memory
-                            </button>
-                            <ConfirmDialog
-                                isOpen={isOpen}
-                                options={options}
-                                onConfirm={handleConfirm}
-                                onCancel={handleCancel}
-                            />
-                        </>
+                        <button
+                            type="button"
+                            onClick={handleDeleteClick}
+                            className="mt-auto flex w-full items-center justify-center gap-2 rounded-xl py-3
+                                       bg-status-red text-white font-bold text-xs cursor-pointer
+                                       shadow-[0_0_20px_rgba(227,0,15,0.3)] hover:bg-status-red/90 hover:shadow-[0_0_30px_rgba(227,0,15,0.5)]
+                                       transition-[background-color,box-shadow,color] duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900">
+                            <X className="w-3.5 h-3.5" strokeWidth={2.5} />
+                            Delete Immediately
+                        </button>
                     )}
                 </div>
             )}

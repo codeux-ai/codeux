@@ -22,6 +22,14 @@ describe("CommandRunner", () => {
     expect(result.stderr).toMatch(/ENOENT|EACCES/);
   });
 
+  it("rejects unsafe command names before spawning", async () => {
+    await expect(runner.run("bad/command", [])).rejects.toThrow(/Unsafe command name/);
+  });
+
+  it("rejects null bytes in command arguments before spawning", async () => {
+    await expect(runner.run(node, ["ok\0bad"])).rejects.toThrow(/null bytes/);
+  });
+
   it("should handle error exit code", async () => {
     const result = await runner.run(node, ["-e", "process.exit(1)"]);
     expect(result.ok).toBe(false);
@@ -100,6 +108,17 @@ describe("CommandRunner", () => {
 
       expect(result.ok).toBe(true);
       expect(result.stdout).toBe("from-file-stdin");
+    } finally {
+      await fsPromises.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects stdin paths that are not files", async () => {
+    const tempDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "code-ux-command-runner-stdin-"));
+    try {
+      await expect(runner.run(node, ["-e", "process.stdin.resume()"], {
+        stdinFile: tempDir,
+      })).rejects.toThrow(/stdinFile is not a readable file/);
     } finally {
       await fsPromises.rm(tempDir, { recursive: true, force: true });
     }

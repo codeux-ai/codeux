@@ -423,6 +423,59 @@ describe("GitStatusService", () => {
     });
   });
 
+  it("falls back to the open pull request list when filtered matching misses an existing PR", async () => {
+    let createCalled = false;
+    runner.mockImplementation(async (command, args) => {
+      if (command === "git" && args[0] === "remote" && args[1] === "get-url") return { ok: true, code: 0, stdout: "https://github.com/owner/repo.git\n", stderr: "" };
+      if (command === "git" && args[0] === "remote") return { ok: true, code: 0, stdout: "origin\thttps://github.com/owner/repo.git (fetch)\n", stderr: "" };
+      const fullCmd = `${command} ${args.join(" ")}`;
+      if (fullCmd === "gh pr list --state open --base main --head feature/sprint1 --limit 1 --json number,url") {
+        return { ok: true, stdout: "[]", stderr: "" };
+      }
+      if (fullCmd === "gh pr list --state open --limit 50 --json number,title,url,state,isDraft,headRefName,baseRefName,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup") {
+        return {
+          ok: true,
+          stdout: JSON.stringify([
+            {
+              number: 333,
+              title: "Sprint 1",
+              url: "https://example/pr/333",
+              state: "OPEN",
+              isDraft: false,
+              headRefName: "feature/sprint1",
+              baseRefName: "main",
+              mergeStateStatus: "CLEAN",
+              reviewDecision: null,
+              updatedAt: "2026-01-01T00:00:00Z",
+              comments: 0,
+              statusCheckRollup: [],
+            },
+          ]),
+          stderr: "",
+        };
+      }
+      if (fullCmd === "gh pr create --base main --head feature/sprint1 --title Sprint 1 --body body") {
+        createCalled = true;
+        return { ok: false, stdout: "", stderr: "duplicate" };
+      }
+      return { ok: true, stdout: "", stderr: "" };
+    });
+
+    const result = await service.resolveOrCreatePullRequest({
+      baseBranch: "main",
+      headBranch: "feature/sprint1",
+      title: "Sprint 1",
+      body: "body",
+    });
+
+    expect(result).toEqual({
+      created: false,
+      prNumber: 333,
+      prUrl: "https://example/pr/333",
+    });
+    expect(createCalled).toBe(false);
+  });
+
   it("creates a new matching pull request when none exists", async () => {
     let lookupCount = 0;
     runner.mockImplementation(async (command, args) => {
@@ -457,6 +510,35 @@ describe("GitStatusService", () => {
       created: true,
       prNumber: 322,
       prUrl: "https://example/pr/322",
+    });
+  });
+
+  it("returns gh create failure details when no pull request can be created", async () => {
+    runner.mockImplementation(async (command, args) => {
+      if (command === "git" && args[0] === "remote" && args[1] === "get-url") return { ok: true, code: 0, stdout: "https://github.com/owner/repo.git\n", stderr: "" };
+      if (command === "git" && args[0] === "remote") return { ok: true, code: 0, stdout: "origin\thttps://github.com/owner/repo.git (fetch)\n", stderr: "" };
+      const fullCmd = `${command} ${args.join(" ")}`;
+      if (fullCmd === "gh pr list --state open --base main --head feature/sprint1 --limit 1 --json number,url") {
+        return { ok: true, stdout: "[]", stderr: "" };
+      }
+      if (fullCmd === "gh pr create --base main --head feature/sprint1 --title Sprint 1 --body body") {
+        return { ok: false, stdout: "", stderr: "pull request create failed" };
+      }
+      return { ok: true, stdout: "", stderr: "" };
+    });
+
+    const result = await service.resolveOrCreatePullRequest({
+      baseBranch: "main",
+      headBranch: "feature/sprint1",
+      title: "Sprint 1",
+      body: "body",
+    });
+
+    expect(result).toEqual({
+      created: false,
+      prNumber: null,
+      prUrl: null,
+      errorMessage: "pull request create failed",
     });
   });
 

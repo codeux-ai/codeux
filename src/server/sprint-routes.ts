@@ -1,16 +1,23 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute, toErrorResponse, syncRoute } from "./route-utils.js";
-import { requireTrimmedString, parseTrimmedString , parseCreateSprintInput , parseUpdateSprintInput } from "./request-parsers.js";
+import { parseCreateSprintInput, parseTrimmedString, parseUpdateSprintInput, requireTrimmedString, parseSprintImportedTaskInput } from "./request-parsers.js";
 import type {
-  CreateSprintInput,
   IssuePromptContextInput,
+  JiraIssueSearchInput,
   SprintLinkedIssueInput,
   SprintMarkdownImportInput,
-  UpdateSprintInput,
+  RepositoryIssueSearchInput,
+  JiraIssueSearchAssignee,
+  JiraIssueSearchSortDirection,
+  JiraIssueSearchSortField,
+  JiraIssueSearchStatus,
+  RepositoryIssueSearchSortDirection,
+  RepositoryIssueSearchSortField,
+  RepositoryIssueSearchState,
 } from "../contracts/project-management-types.js";
 import type { SprintSettingsOverride } from "../contracts/settings-scope-types.js";
-import type { JiraIssueSearchAssignee, JiraIssueSearchStatus } from "../services/jira-api-client.js";
+import type { IssueSearchInput } from "../services/sprint-issue-service.js";
 
 export function registerSprintRoutes(router: Express, deps: DashboardDependencies): void {
   router.get("/api/projects/:projectId/sprints", syncRoute((req, res) => {
@@ -24,21 +31,7 @@ export function registerSprintRoutes(router: Express, deps: DashboardDependencie
   router.get("/api/projects/:projectId/jira/search", asyncRoute(async (req, res) => {
     try {
       const projectId = requireTrimmedString(req.params.projectId, "projectId");
-      const labels = typeof req.query.labels === "string"
-        ? req.query.labels.split(",").map((label) => label.trim()).filter(Boolean)
-        : [];
-      const status = parseJiraStatus(req.query.status);
-      const assignee = parseJiraAssignee(req.query.assignee);
-      res.json(await deps.searchJiraIssues(projectId, {
-        jql: parseTrimmedString(req.query.jql),
-        projectKey: parseTrimmedString(req.query.projectKey),
-        search: parseTrimmedString(req.query.search),
-        status,
-        assignee,
-        assigneeText: parseTrimmedString(req.query.assigneeText),
-        labels,
-        maxResults: typeof req.query.limit === "string" ? Number(req.query.limit) : undefined,
-      }));
+      res.json(await deps.searchJiraIssues(projectId, parseJiraIssueSearchQuery(req.query)));
     } catch (error) {
       res.status(400).json(toErrorResponse(error, "Failed to search Jira issues"));
     }
@@ -72,27 +65,41 @@ export function registerSprintRoutes(router: Express, deps: DashboardDependencie
     }
   }));
 
+  router.post("/api/projects/:projectId/sprints/:sprintId/imported-tasks", syncRoute((req, res) => {
+    if (!deps.createImportedTasks) {
+      res.status(501).json({ error: "Imported task creation is not available." });
+      return;
+    }
+    try {
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
+      const sprintId = requireTrimmedString(req.params.sprintId, "sprintId");
+      const sprint = deps.getSprint(sprintId);
+      if (!sprint) {
+        res.status(404).json({ error: `Sprint not found: ${sprintId}` });
+        return;
+      }
+      if (sprint.projectId !== projectId) {
+        res.status(400).json({ error: `Sprint ${sprintId} does not belong to project ${projectId}` });
+        return;
+      }
+      const importedTasks = Array.isArray(req.body?.tasks)
+        ? req.body.tasks.map((task: unknown, index: number) => parseSprintImportedTaskInput(task, index))
+        : [];
+      res.status(201).json(deps.createImportedTasks(projectId, sprintId, importedTasks));
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to add imported tasks"));
+    }
+  }));
+
   router.get("/api/projects/:projectId/issues", asyncRoute(async (req, res) => {
     if (!deps.sprintIssueService) {
       res.status(501).json({ error: "Issue import service is not available." });
       return;
     }
     try {
-      const labels = typeof req.query.labels === "string"
-        ? req.query.labels.split(",").map((label) => label.trim()).filter(Boolean)
-        : [];
       res.json(await deps.sprintIssueService.searchIssues(
         requireTrimmedString(req.params.projectId, "projectId"),
-        {
-          provider: req.query.provider === "gitlab" ? "gitlab" : req.query.provider === "github" ? "github" : undefined,
-          repository: parseTrimmedString(req.query.repository),
-          hostDomain: parseTrimmedString(req.query.hostDomain),
-          search: parseTrimmedString(req.query.search),
-          state: req.query.state === "closed" ? "closed" : req.query.state === "all" ? "all" : "open",
-          labels,
-          assignee: parseTrimmedString(req.query.assignee),
-          limit: typeof req.query.limit === "string" ? Number(req.query.limit) : undefined,
-        }
+        parseRepositoryIssueSearchQuery(req.query)
       ));
     } catch (error) {
       res.status(400).json(toErrorResponse(error, "Failed to search repository issues"));
@@ -121,7 +128,18 @@ export function registerSprintRoutes(router: Express, deps: DashboardDependencie
       if (payload.showcasePinned === undefined) {
         payload.showcasePinned = true;
       }
-      res.status(201).json(deps.createSprint(requireTrimmedString(req.params.projectId, "projectId"), payload));
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
+      const sprint = deps.createSprint(projectId, payload);
+      if (payload.importedTasks?.length) {
+        if (!deps.createImportedTasks) {
+          res.status(501).json({ error: "Imported task creation is not available." });
+          return;
+        }
+        deps.createImportedTasks(projectId, sprint.id, payload.importedTasks);
+        res.status(201).json(deps.getSprint(sprint.id) || sprint);
+        return;
+      }
+      res.status(201).json(sprint);
     } catch (error) {
       res.status(400).json(toErrorResponse(error, "Failed to create sprint"));
     }
@@ -239,14 +257,191 @@ export function registerSprintRoutes(router: Express, deps: DashboardDependencie
   }));
 }
 
+function parseRepositoryIssueSearchQuery(query: Record<string, unknown>): IssueSearchInput {
+  return {
+    provider: parseRepositoryProvider(query.provider),
+    repository: parseTrimmedQueryString(query.repository, "repository"),
+    hostDomain: parseTrimmedQueryString(query.hostDomain, "hostDomain"),
+    search: parseTrimmedQueryString(query.search, "search"),
+    state: parseRepositoryIssueState(query.state),
+    labels: parseIssueLabels(query.labels),
+    assignee: parseTrimmedQueryString(query.assignee, "assignee"),
+    author: parseTrimmedQueryString(query.author, "author"),
+    reporter: parseTrimmedQueryString(query.reporter, "reporter"),
+    milestone: parseTrimmedQueryString(query.milestone, "milestone"),
+    issueText: parseTrimmedQueryString(query.issueText, "issueText"),
+    createdAfter: parseDateLikeString(query.createdAfter, "createdAfter"),
+    createdBefore: parseDateLikeString(query.createdBefore, "createdBefore"),
+    updatedAfter: parseDateLikeString(query.updatedAfter, "updatedAfter"),
+    updatedBefore: parseDateLikeString(query.updatedBefore, "updatedBefore"),
+    sortField: parseRepositorySortField(query.sortField),
+    sortDirection: parseRepositorySortDirection(query.sortDirection),
+    limit: parseClampedLimit(query.limit, 1, 100, "limit"),
+  };
+}
+
+function parseJiraIssueSearchQuery(query: Record<string, unknown>): JiraIssueSearchInput {
+  return {
+    jql: parseTrimmedQueryString(query.jql, "jql"),
+    projectKey: parseTrimmedQueryString(query.projectKey, "projectKey"),
+    search: parseTrimmedQueryString(query.search, "search"),
+    issueKey: parseTrimmedQueryString(query.issueKey, "issueKey"),
+    status: parseJiraStatus(query.status),
+    assignee: parseJiraAssignee(query.assignee),
+    assigneeText: parseTrimmedQueryString(query.assigneeText, "assigneeText"),
+    reporterText: parseTrimmedQueryString(query.reporterText, "reporterText"),
+    issueType: parseTrimmedQueryString(query.issueType, "issueType"),
+    priority: parseTrimmedQueryString(query.priority, "priority"),
+    labels: parseIssueLabels(query.labels),
+    updatedAfter: parseDateLikeString(query.updatedAfter, "updatedAfter"),
+    updatedBefore: parseDateLikeString(query.updatedBefore, "updatedBefore"),
+    sortField: parseJiraSortField(query.sortField),
+    sortDirection: parseJiraSortDirection(query.sortDirection),
+    limit: parseClampedLimit(query.limit, 1, 100, "limit"),
+    maxResults: parseClampedLimit(query.maxResults, 1, 100, "maxResults"),
+  };
+}
+
+function parseIssueLabels(value: unknown): string[] {
+  const rawValues = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
+  return Array.from(new Set(rawValues
+    .flatMap((entry) => {
+      if (typeof entry !== "string") {
+        throw new Error("Invalid value for labels. Must be a comma-separated string.");
+      }
+      return entry.split(",");
+    })
+    .map((label) => label.trim())
+    .filter(Boolean))).slice(0, 12);
+}
+
+function parseTrimmedQueryString(value: unknown, fieldName: string): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== "string") {
+    throw new Error(`Invalid value for ${fieldName}. Must be a string.`);
+  }
+  return parseTrimmedString(value);
+}
+
+function parseRepositoryProvider(value: unknown): RepositoryIssueSearchInput["provider"] | undefined {
+  const trimmed = parseTrimmedQueryString(value, "provider");
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed !== "github" && trimmed !== "gitlab") {
+    throw new Error("Invalid value for provider. Must be one of: github, gitlab");
+  }
+  return trimmed;
+}
+
+function parseRepositoryIssueState(value: unknown): RepositoryIssueSearchState | undefined {
+  const trimmed = parseTrimmedQueryString(value, "state");
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed !== "open" && trimmed !== "closed" && trimmed !== "all") {
+    throw new Error("Invalid value for state. Must be one of: open, closed, all");
+  }
+  return trimmed;
+}
+
+function parseRepositorySortField(value: unknown): RepositoryIssueSearchSortField | undefined {
+  const trimmed = parseTrimmedQueryString(value, "sortField");
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed !== "updated" && trimmed !== "created" && trimmed !== "comments") {
+    throw new Error("Invalid value for sortField. Must be one of: updated, created, comments");
+  }
+  return trimmed;
+}
+
+function parseRepositorySortDirection(value: unknown): RepositoryIssueSearchSortDirection | undefined {
+  const trimmed = parseTrimmedQueryString(value, "sortDirection");
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed !== "asc" && trimmed !== "desc") {
+    throw new Error("Invalid value for sortDirection. Must be one of: asc, desc");
+  }
+  return trimmed;
+}
+
 function parseJiraStatus(value: unknown): JiraIssueSearchStatus | undefined {
-  return value === "all" || value === "done" || value === "in_progress" || value === "open"
-    ? value
-    : undefined;
+  const trimmed = parseTrimmedQueryString(value, "status");
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed !== "all" && trimmed !== "done" && trimmed !== "in_progress" && trimmed !== "open") {
+    throw new Error("Invalid value for status. Must be one of: open, in_progress, done, all");
+  }
+  return trimmed;
 }
 
 function parseJiraAssignee(value: unknown): JiraIssueSearchAssignee | undefined {
-  return value === "me" || value === "unassigned" || value === "any"
-    ? value
-    : undefined;
+  const trimmed = parseTrimmedQueryString(value, "assignee");
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed !== "me" && trimmed !== "unassigned" && trimmed !== "any") {
+    throw new Error("Invalid value for assignee. Must be one of: any, me, unassigned");
+  }
+  return trimmed;
+}
+
+function parseJiraSortField(value: unknown): JiraIssueSearchSortField | undefined {
+  const trimmed = parseTrimmedQueryString(value, "sortField");
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed !== "updated" && trimmed !== "created" && trimmed !== "priority" && trimmed !== "status" && trimmed !== "assignee" && trimmed !== "reporter") {
+    throw new Error("Invalid value for sortField. Must be one of: updated, created, priority, status, assignee, reporter");
+  }
+  return trimmed;
+}
+
+function parseJiraSortDirection(value: unknown): JiraIssueSearchSortDirection | undefined {
+  const trimmed = parseTrimmedQueryString(value, "sortDirection");
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed !== "asc" && trimmed !== "desc") {
+    throw new Error("Invalid value for sortDirection. Must be one of: asc, desc");
+  }
+  return trimmed;
+}
+
+function parseDateLikeString(value: unknown, fieldName: string): string | undefined {
+  const trimmed = parseTrimmedQueryString(value, fieldName);
+  if (!trimmed) {
+    return undefined;
+  }
+  if (Number.isNaN(Date.parse(trimmed))) {
+    throw new Error(`Invalid value for ${fieldName}. Must be a valid date or ISO timestamp.`);
+  }
+  return trimmed;
+}
+
+function parseClampedLimit(value: unknown, min: number, max: number, fieldName: string): number | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  let numeric: number;
+  if (typeof value === "number") {
+    numeric = value;
+  } else if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+    numeric = Number(trimmed);
+  } else {
+    throw new Error(`Invalid value for ${fieldName}. Must be a number.`);
+  }
+  if (!Number.isFinite(numeric)) {
+    throw new Error(`Invalid value for ${fieldName}. Must be a number.`);
+  }
+  return Math.max(min, Math.min(max, Math.trunc(numeric)));
 }

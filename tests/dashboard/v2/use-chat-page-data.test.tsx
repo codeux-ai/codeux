@@ -4,8 +4,10 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { useMessageCache } from "../../../dashboard/src/v2/hooks/useMessageCache.js";
 import { useChatThreadData } from "../../../dashboard/src/v2/hooks/use-chat-thread-data.js";
 import { useChatPageResources } from "../../../dashboard/src/v2/hooks/use-chat-page-resources.js";
-import { renderHook, act } from "@testing-library/preact";
+import { useInvocationPaneData, areInvocationMessagesEqual } from "../../../dashboard/src/v2/hooks/use-invocation-pane-data.js";
+import { renderHook, act, waitFor } from "@testing-library/preact";
 import { cancelThreadTurn } from "../../../dashboard/src/v2/lib/connection-api.js";
+import { fetchInvocationMessages } from "../../../dashboard/src/v2/lib/invocation-api.js";
 
 // Mock connection-api calls to prevent external requests
 vi.mock("../../../dashboard/src/v2/lib/connection-api.js", () => ({
@@ -25,7 +27,8 @@ vi.mock("../../../dashboard/src/v2/lib/connection-api.js", () => ({
 }));
 
 vi.mock("../../../dashboard/src/v2/lib/invocation-api.js", () => ({
-  fetchProjectInvocations: vi.fn(() => Promise.resolve([]))
+  fetchProjectInvocations: vi.fn(() => Promise.resolve([])),
+  fetchInvocationMessages: vi.fn(() => Promise.resolve([])),
 }));
 
 let mockRealtimeCallback: any = null;
@@ -41,6 +44,22 @@ describe("useChatPageResources integration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRealtimeCallback = null;
+  });
+
+  it("treats invocation messages as changed when reasoning content or metadata mutates in place", () => {
+    const baseMessage = {
+      id: "msg-1",
+      invocationId: "inv-1",
+      role: "assistant",
+      contentMarkdown: "Draft reasoning",
+      toolCallsJson: { call: "plan_task", args: { scope: "chat" } },
+      metadata: { stage: "draft" },
+      createdAt: "2026-03-10T12:00:00.000Z",
+    } as any;
+
+    expect(areInvocationMessagesEqual([baseMessage], [{ ...baseMessage }])).toBe(true);
+    expect(areInvocationMessagesEqual([baseMessage], [{ ...baseMessage, contentMarkdown: "Final reasoning" }])).toBe(false);
+    expect(areInvocationMessagesEqual([baseMessage], [{ ...baseMessage, metadata: { stage: "final" } }])).toBe(false);
   });
 
   it("handles real-time conversation message created correctly and updates state without broad refetch", async () => {
@@ -257,6 +276,104 @@ describe("useChatPageResources integration", () => {
     });
 
     expect(refreshInvocationMessages).toHaveBeenCalledWith("inv-1", { force: true });
+  });
+
+  it("refreshes a selected running invocation when its summary changes and keeps new reasoning content visible", async () => {
+    const staleMessages = [
+      {
+        id: "msg-1",
+        invocationId: "inv-1",
+        role: "assistant",
+        contentMarkdown: "Draft reasoning",
+        toolCallsJson: { call: "analysis", args: { mode: "draft" } },
+        metadata: { stage: "draft" },
+        createdAt: "2026-03-10T12:00:00.000Z",
+      },
+    ] as any[];
+    const freshMessages = [
+      {
+        id: "msg-1",
+        invocationId: "inv-1",
+        role: "assistant",
+        contentMarkdown: "Final reasoning",
+        toolCallsJson: { call: "analysis", args: { mode: "draft" } },
+        metadata: { stage: "final" },
+        createdAt: "2026-03-10T12:00:00.000Z",
+      },
+    ] as any[];
+
+    vi.mocked(fetchInvocationMessages).mockResolvedValueOnce(freshMessages);
+
+    const initialInvocation = {
+      id: "inv-1",
+      projectId: "proj-1",
+      sprintId: null,
+      taskId: null,
+      sprintRunId: null,
+      dispatchId: null,
+      taskRunId: null,
+      attentionItemId: null,
+      providerInvocationId: null,
+      type: "chat",
+      status: "running",
+      provider: "test-provider",
+      model: "test-model",
+      systemPrompt: null,
+      startedAt: "2026-03-10T12:00:00.000Z",
+      finishedAt: null,
+      errorMessage: null,
+      lastErrorCategory: null,
+      lastErrorMessage: null,
+      lastRetryAfterIso: null,
+      messageCount: 1,
+      lastMessageAt: "2026-03-10T12:00:00.000Z",
+      invocationSource: "internal",
+      agentPresetId: null,
+      inputTokens: 0,
+      cachedInputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      createdAt: "2026-03-10T12:00:00.000Z",
+      updatedAt: "2026-03-10T12:00:00.000Z",
+    } as any;
+
+    const updatedInvocation = {
+      ...initialInvocation,
+      messageCount: 2,
+      updatedAt: "2026-03-10T12:00:01.000Z",
+    } as any;
+
+    const { result } = renderHook(() => {
+      const cache = useMessageCache();
+      const invocationData = useInvocationPaneData({
+        selectedProject: { id: "proj-1" },
+        cache,
+      });
+
+      return { cache, invocationData };
+    });
+
+    await act(async () => {
+      result.current.cache.setInvocations("proj-1", [initialInvocation]);
+      result.current.cache.setInvocationMessages("inv-1", staleMessages);
+      result.current.invocationData.setInvocationsSnapshot([initialInvocation]);
+      await result.current.invocationData.activateInvocation("inv-1", {
+        preferredInvocation: initialInvocation,
+      });
+    });
+
+    expect(result.current.invocationData.selectedInvocationId).toBe("inv-1");
+    expect(result.current.invocationData.invocationMessages).toEqual(staleMessages);
+
+    await act(async () => {
+      result.current.cache.setInvocations("proj-1", [updatedInvocation]);
+      result.current.invocationData.setInvocationsSnapshot([updatedInvocation]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.invocationData.invocationMessages).toEqual(freshMessages);
+    });
+    expect(vi.mocked(fetchInvocationMessages)).toHaveBeenCalledWith("inv-1");
   });
 
   it("handles real-time thread deletion logic properly", async () => {

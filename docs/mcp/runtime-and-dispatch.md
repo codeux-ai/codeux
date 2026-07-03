@@ -10,11 +10,22 @@ Startup sequence:
 2. `src/index.ts` constructs `CodeUxServer`.
 3. `src/server/code-ux-server.ts` constructs repositories/services/handlers/orchestrator.
 4. `src/server/code-ux-server.ts` registers MCP request handlers.
-5. `src/server/code-ux-server.ts` starts dashboard server.
+5. `src/server/code-ux-server.ts` loads settings and prunes disconnected MCP connection rows.
+6. `src/server/code-ux-server.ts` starts dashboard server.
    - Dashboard API routes (such as project, sprint, task, conversation, and planning endpoints) are broken out into modular route files for maintainability.
    - Route wrappers and body request parsers are maintained as separate server-layer boundaries.
-6. `src/server/code-ux-server.ts` connects MCP stdio transport.
-7. `src/server/code-ux-server.ts` optionally starts the MCP HTTP transport with the same project-manager tool surface.
+7. `src/server/code-ux-server.ts` connects MCP stdio transport.
+8. `src/server/code-ux-server.ts` optionally starts the MCP HTTP transport with the same project-manager tool surface.
+9. `src/server/code-ux-server.ts` starts runtime intervals and schedules deferred startup work.
+
+Long-running startup work is intentionally off the synchronous boot path:
+
+- Startup recovery runs shortly after transports bind and resumes recoverable sprint runs.
+- Stale preview/file-browser container cleanup and Docker asset pruning run after the dashboard is available.
+- Branch reaping and database maintenance run later as background maintenance.
+- The first runtime cleanup and preview reconciliation interval passes are delayed so they do not compete with initial dashboard load.
+
+This keeps `/health`, `/ready`, the dashboard, and MCP transports responsive before Docker, git, and SQLite maintenance complete.
 
 ## Runtime Modes
 

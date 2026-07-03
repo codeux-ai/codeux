@@ -1,14 +1,75 @@
 import type {
   ExecutionUsageBucketSummary,
   ProjectExecutionStatsChartSeries,
-  ProjectExecutionStatsSnapshot
 } from '../../../types.js';
-import { formatStatsDuration, formatTokens, NUMBER_FORMATTER, sumUsage, formatCost } from './stats-utils.js';
+import { EMPTY_USAGE, formatStatsDuration, formatTokens, NUMBER_FORMATTER, formatCost } from './stats-utils.js';
 import {
   buildPoints,
   buildSmoothPath,
   buildSmoothAreaPath
 } from './components/StatsShared.js';
+
+const SERIES_GROUP_ORDER = [
+  "Core",
+  "Usage",
+  "Totals",
+  "Token details",
+  "Source confidence",
+  "Providers",
+  "Provider costs",
+  "Models",
+  "Model costs",
+  "Purpose time",
+  "Purpose calls",
+  "Git",
+];
+
+function normalizeSeriesGroupLabel(grouping: string | undefined): string {
+  const rawGrouping = grouping?.trim() || "Core";
+  const normalized = rawGrouping.toLowerCase().replace(/[\s-]+/g, "_");
+
+  switch (normalized) {
+    case "core":
+      return "Core";
+    case "usage":
+      return "Usage";
+    case "totals":
+      return "Totals";
+    case "details":
+      return "Token details";
+    case "reliability":
+      return "Source confidence";
+    case "providers":
+      return "Providers";
+    case "providers_cost":
+      return "Provider costs";
+    case "models":
+      return "Models";
+    case "models_cost":
+      return "Model costs";
+    case "purposes":
+    case "purposes_time":
+      return "Purpose time";
+    case "purposes_invocations":
+      return "Purpose calls";
+    case "git":
+      return "Git";
+    default:
+      return rawGrouping;
+  }
+}
+
+function compareSeriesGroups(left: string, right: string): number {
+  const leftIndex = SERIES_GROUP_ORDER.indexOf(left);
+  const rightIndex = SERIES_GROUP_ORDER.indexOf(right);
+
+  if (leftIndex !== -1 || rightIndex !== -1) {
+    return (leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex)
+      - (rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex);
+  }
+
+  return left.localeCompare(right, undefined, { sensitivity: "base" });
+}
 
 export interface NormalizedChartSeries extends Omit<ProjectExecutionStatsChartSeries, 'formatter'> {
   accentHex: string;
@@ -23,11 +84,16 @@ export interface NormalizedChartSeries extends Omit<ProjectExecutionStatsChartSe
 
 export interface ChartMetrics {
   peakTokens: number;
+  peakActiveTimeMs: number;
   peakTime: number;
   peakInvocations: number;
   averageTokens: number;
   peakCostUsd: number;
   totalCostUsd: number;
+  invocationDensity: number;
+  bucketCount: number;
+  totalTokens: number;
+  totalInvocations: number;
 }
 
 export interface TooltipState {
@@ -87,38 +153,78 @@ export function normalizeChartSeries(
 export function groupChartSeries(
   chartSeries: ProjectExecutionStatsChartSeries[]
 ): Record<string, ProjectExecutionStatsChartSeries[]> {
-  return chartSeries.reduce((acc, s) => {
-    if (!acc[s.grouping]) acc[s.grouping] = [];
-    acc[s.grouping].push(s);
+  const grouped = chartSeries.reduce((acc, series) => {
+    const grouping = normalizeSeriesGroupLabel(series.grouping);
+    (acc[grouping] ??= []).push(series);
     return acc;
   }, {} as Record<string, ProjectExecutionStatsChartSeries[]>);
+
+  return Object.keys(grouped)
+    .sort(compareSeriesGroups)
+    .reduce((acc, grouping) => {
+      acc[grouping] = [...grouped[grouping]!].sort((left, right) => (
+        (left.label ?? left.id).localeCompare(right.label ?? right.id, undefined, { sensitivity: "base" })
+          || left.id.localeCompare(right.id)
+      ));
+      return acc;
+    }, {} as Record<string, ProjectExecutionStatsChartSeries[]>);
 }
 
 export function calculateChartMetrics(visibleBuckets: ExecutionUsageBucketSummary[]): ChartMetrics {
-  const peakTokens = Math.max(0, ...visibleBuckets.map((bucket) => bucket.usage.totalTokens));
-  const peakTime = Math.max(0, ...visibleBuckets.map((bucket) => bucket.usage.activeTimeMs));
-  const peakInvocations = Math.max(0, ...visibleBuckets.map((bucket) => bucket.usage.invocationCount));
-  const peakCostUsd = Math.max(0, ...visibleBuckets.map((bucket) => bucket.usage.totalCostUsd || 0));
-  const totalCostUsd = visibleBuckets.reduce((acc, bucket) => acc + (bucket.usage.totalCostUsd || 0), 0);
-  const averageTokens = visibleBuckets.length > 0 ? Math.round(sumUsage(visibleBuckets.map((bucket) => ({
-    id: bucket.bucketStart,
-    label: bucket.label,
-    secondaryLabel: null,
-    status: null,
-    purpose: null,
-    provider: null,
-    usage: bucket.usage,
-    lastActivityAt: bucket.bucketEnd,
-  }))).totalTokens / visibleBuckets.length) : 0;
+  let peakTokens = 0;
+  let peakActiveTimeMs = 0;
+  let peakInvocations = 0;
+  let peakCostUsd = 0;
+  let totalTokens = 0;
+  let totalInvocations = 0;
+  let totalCostUsd = 0;
+
+  for (const bucket of visibleBuckets) {
+    const usage = bucket.usage ?? EMPTY_USAGE;
+    peakTokens = Math.max(peakTokens, usage.totalTokens);
+    peakActiveTimeMs = Math.max(peakActiveTimeMs, usage.activeTimeMs);
+    peakInvocations = Math.max(peakInvocations, usage.invocationCount);
+    peakCostUsd = Math.max(peakCostUsd, usage.totalCostUsd || 0);
+    totalTokens += usage.totalTokens;
+    totalInvocations += usage.invocationCount;
+    totalCostUsd += usage.totalCostUsd || 0;
+  }
+
+  const averageTokens = visibleBuckets.length > 0 ? Math.round(totalTokens / visibleBuckets.length) : 0;
+  const invocationDensity = visibleBuckets.length > 0 ? totalInvocations / visibleBuckets.length : 0;
 
   return {
     peakTokens,
-    peakTime,
+    peakActiveTimeMs,
+    peakTime: peakActiveTimeMs,
     peakInvocations,
     averageTokens,
     peakCostUsd,
     totalCostUsd,
+    invocationDensity,
+    bucketCount: visibleBuckets.length,
+    totalTokens,
+    totalInvocations,
   };
+}
+
+export function describeChartMetrics(
+  metrics: ChartMetrics,
+  activeSeriesLabels: string[],
+  zoomRangeLabel: string
+): string {
+  const seriesLabel = activeSeriesLabels.length > 0
+    ? activeSeriesLabels.join(", ")
+    : "No active series";
+
+  return [
+    `${metrics.bucketCount} visible buckets in ${zoomRangeLabel}.`,
+    `Peak tokens ${formatTokens(metrics.peakTokens)}.`,
+    `Peak active time ${formatStatsDuration(metrics.peakActiveTimeMs)}.`,
+    `Average tokens ${formatTokens(metrics.averageTokens)}.`,
+    `Invocation peak ${NUMBER_FORMATTER.format(metrics.peakInvocations)}.`,
+    `Active series: ${seriesLabel}.`,
+  ].join(" ");
 }
 
 export function calculateHoverRect(
@@ -141,10 +247,13 @@ export function getTooltipState(
   padding: number,
   width: number
 ): TooltipState {
-  const activeIndex = hoveredIndex ?? (visibleBuckets.length > 0 ? visibleBuckets.length - 1 : 0);
+  const activeIndex = Math.min(
+    Math.max(hoveredIndex ?? (visibleBuckets.length > 0 ? visibleBuckets.length - 1 : 0), 0),
+    Math.max(0, visibleBuckets.length - 1)
+  );
   const activeBucket = visibleBuckets[activeIndex] ?? null;
   const xPositions = chartData[0]?.points.map((point) => point.x) ?? [];
-  const tooltipLeft = xPositions[activeIndex]
+  const tooltipLeft = xPositions[activeIndex] !== undefined
     ? ((xPositions[activeIndex]! - padding) / Math.max(1, width - padding * 2)) * 100
     : 50;
 

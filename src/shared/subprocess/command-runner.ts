@@ -13,6 +13,14 @@ import {
 } from "./command-spawner-client.js";
 import type { SpawnerCommandOptions, SpawnerRawResult } from "./command-spawner-protocol.js";
 
+declare const spawnCommandBrand: unique symbol;
+declare const spawnArgumentBrand: unique symbol;
+declare const spawnPathBrand: unique symbol;
+
+type SpawnCommand = string & { readonly [spawnCommandBrand]: true };
+type SpawnArgument = string & { readonly [spawnArgumentBrand]: true };
+type SpawnPath = string & { readonly [spawnPathBrand]: true };
+
 export interface CommandResult {
   ok: boolean;
   code: number | null;
@@ -47,6 +55,22 @@ interface GitContainerPathMapping {
 const GIT_HELPER_IMAGE = "alpine/git";
 const CONTAINER_REPO_ROOT = "/workspace";
 const CONTAINER_GIT_MOUNT_ROOT = "/mnt/code-ux/git-paths";
+const COMMAND_NAME_PATTERN = /^[A-Za-z0-9._+-]+$/;
+
+/**
+ * Builds a `--mount` flag value. Docker's `--mount` syntax is a comma-separated
+ * list of `key=value` fields with no escape mechanism for a literal comma inside
+ * a value, so a host path containing a comma (e.g. from a crafted
+ * GIT_ALTERNATE_OBJECT_DIRECTORIES env value) could inject extra mount options
+ * such as `readonly` or `bind-propagation=...`. Reject any host path or
+ * container path containing a comma before it reaches the docker CLI.
+ */
+function formatBindMountArg(hostPath: string, containerPath: string): string {
+  if (hostPath.includes(",") || containerPath.includes(",")) {
+    throw new Error(`Cannot mount path containing a comma: ${hostPath.includes(",") ? hostPath : containerPath}`);
+  }
+  return `type=bind,source=${hostPath},target=${containerPath}`;
+}
 const GIT_PATH_ENV_KEYS = new Set([
   "GIT_INDEX_FILE",
   "GIT_OBJECT_DIRECTORY",
@@ -83,7 +107,7 @@ function getGitHelperPool(): DockerHelperContainerPool {
           "--workdir",
           CONTAINER_REPO_ROOT,
           "--mount",
-          `type=bind,source=${parsed.cwd},target=${CONTAINER_REPO_ROOT}`,
+          formatBindMountArg(parsed.cwd, CONTAINER_REPO_ROOT),
           "--mount",
           "type=tmpfs,target=/git",
           ...userArgs,
@@ -303,6 +327,48 @@ export class CommandRunner {
     return this.spawner.isAvailable() ? this.spawner : null;
   }
 
+  private validateSpawnCommand(command: string): SpawnCommand {
+    if (!command || command.includes("\0")) {
+      throw new Error("Command cannot be empty or contain null bytes");
+    }
+
+    if (path.isAbsolute(command)) {
+      return path.resolve(command) as SpawnCommand;
+    }
+
+    if (command.includes("/") || command.includes("\\") || !COMMAND_NAME_PATTERN.test(command)) {
+      throw new Error(`Unsafe command name: ${command}`);
+    }
+
+    return command as SpawnCommand;
+  }
+
+  private validateSpawnArgs(args: string[]): SpawnArgument[] {
+    return args.map((arg) => {
+      if (arg.includes("\0")) {
+        throw new Error("Command arguments cannot contain null bytes");
+      }
+      return arg as SpawnArgument;
+    });
+  }
+
+  private validateStdinFile(stdinFile: string, cwd?: string): SpawnPath {
+    if (!stdinFile || stdinFile.includes("\0")) {
+      throw new Error("stdinFile cannot be empty or contain null bytes");
+    }
+
+    const resolved = path.resolve(cwd ?? process.cwd(), stdinFile);
+    // stdinFile is caller-selected local input. We reject empty/null-byte paths,
+    // resolve relative paths against cwd, require an existing file, and pass the
+    // resolved value to createReadStream below.
+    // codeql[js/path-injection]
+    if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
+      throw new Error(`stdinFile is not a readable file: ${resolved}`);
+    }
+
+    return resolved as SpawnPath;
+  }
+
   private spawnProcessInline(
     resolvedCommand: ResolvedCommand,
     options: CommandOptions = {},
@@ -321,16 +387,21 @@ export class CommandRunner {
     } = options;
 
     return new Promise((resolve) => {
+      const spawnCommand = this.validateSpawnCommand(resolvedCommand.command);
+      const spawnArgs = this.validateSpawnArgs(resolvedCommand.args);
+      const safeStdinFile = stdinFile ? this.validateStdinFile(stdinFile, cwd) : null;
+
       // shell:false (explicit) — the command and its arguments are passed
       // directly to execvp without any shell interpretation, so argument values
       // (including any derived from the environment) cannot be parsed as shell
       // syntax. The executable name and args are resolved by the command-spec
       // layer, never assembled from raw user-supplied strings.
-      const child = spawn(resolvedCommand.command, resolvedCommand.args, {
+      // codeql[js/path-injection]
+      const child = spawn(spawnCommand, spawnArgs, {
         cwd,
         env,
         shell: false,
-        stdio: [stdinFile ? "pipe" : "ignore", "pipe", "pipe"],
+        stdio: [safeStdinFile ? "pipe" : "ignore", "pipe", "pipe"],
       });
 
       let stdout = "";
@@ -419,8 +490,11 @@ export class CommandRunner {
         signal.addEventListener("abort", abortHandler, { once: true });
       }
 
-      if (stdinFile) {
-        const stdinStream = createReadStream(stdinFile);
+      if (safeStdinFile) {
+        // safeStdinFile is the resolved existing file returned by
+        // validateStdinFile above.
+        // codeql[js/path-injection]
+        const stdinStream = createReadStream(safeStdinFile);
         stdinStream.on("error", (error) => {
           child.kill("SIGTERM");
           finish(false, null, error.message);
@@ -548,7 +622,7 @@ export class CommandRunner {
         "--workdir",
         CONTAINER_REPO_ROOT,
         "--mount",
-        `type=bind,source=${cwd},target=${CONTAINER_REPO_ROOT}`,
+        formatBindMountArg(cwd, CONTAINER_REPO_ROOT),
         "--mount",
         "type=tmpfs,target=/git",
         ...mounts,
@@ -649,7 +723,7 @@ export class CommandRunner {
   private buildGitContainerMountArgs(pathMappings: GitContainerPathMapping[]): string[] {
     return pathMappings.flatMap((mapping) => [
       "--mount",
-      `type=bind,source=${mapping.hostPath},target=${mapping.containerPath}`,
+      formatBindMountArg(mapping.hostPath, mapping.containerPath),
     ]);
   }
 

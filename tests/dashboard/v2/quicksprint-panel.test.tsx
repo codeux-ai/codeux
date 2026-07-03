@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, fireEvent, waitFor } from "@testing-library/preact";
+import { render, fireEvent, waitFor, within } from "@testing-library/preact";
 import { h } from "preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { cleanup } from "@testing-library/preact";
@@ -123,6 +123,37 @@ describe("QuicksprintPanel", () => {
     expect(getByText("Plan & Start")).toBeInTheDocument();
   });
 
+  it("clamps oversized template defaults when the subtask slider loads", async () => {
+    const mockOnExecute = vi.fn().mockResolvedValue(undefined);
+    const oversizedTemplate = {
+      ...mockTemplates[0],
+      id: "tpl-oversized",
+      name: "Oversized Template",
+      defaultTaskCount: 100,
+    };
+
+    const { getByText, getByRole } = render(
+      <QuicksprintPanel
+        {...defaultProps}
+        onExecute={mockOnExecute}
+        templates={[oversizedTemplate]}
+      />
+    );
+
+    fireEvent.click(getByText("Oversized Template"));
+
+    const slider = getByRole("slider", { name: "Subtask count" });
+    expect(slider).toHaveValue("30");
+    expect(slider).toHaveAttribute("aria-valuetext", "30 subtasks");
+
+    fireEvent.click(getByText("Plan Only"));
+
+    await waitFor(() => {
+      expect(mockOnExecute).toHaveBeenCalled();
+    });
+    expect(mockOnExecute.mock.calls[0]?.[1]).toBe(30);
+  });
+
   it("supports unlimited subtasks and disables the slider interaction state", async () => {
     const mockOnExecute = vi.fn().mockResolvedValue(undefined);
     const { getByText, getByRole, container } = render(
@@ -197,29 +228,28 @@ describe("QuicksprintPanel", () => {
     expect(queryByText("API Tests")).not.toBeInTheDocument();
   });
 
-  it("renders scrollable template rails with controls and stable overflow hooks", () => {
-    const { container, getByRole } = render(<QuicksprintPanel {...defaultProps} />);
+  it("renders the large default template catalog in an accessible scroll rail", () => {
+    const { getByRole, getByText, queryByText } = render(<QuicksprintPanel {...defaultProps} />);
 
-    const builtinRail = container.querySelector('[data-qs-template-rail="builtin-template-rail"]') as HTMLElement | null;
-    const customRail = container.querySelector('[data-qs-template-rail="custom-template-rail"]') as HTMLElement | null;
+    const defaultRail = getByRole("region", { name: "default templates" });
+    expect(defaultRail).toBeInTheDocument();
+    expect(defaultRail).toHaveAttribute("tabindex", "0");
 
-    expect(builtinRail).toBeInTheDocument();
-    expect(customRail).toBeInTheDocument();
-    expect(builtinRail?.className).toContain("overflow-x-auto");
-    expect(builtinRail?.className).toContain("overflow-y-visible");
-    expect(builtinRail?.className).toContain("grid-rows-1");
-    expect(builtinRail?.className).toContain("lg:grid-rows-3");
-    expect(customRail?.className).toContain("touch-pan-x");
-    expect(customRail?.className).toContain("scrollbar-hide");
+    const scrollLeft = getByRole("button", { name: "Scroll default templates left" });
+    const scrollRight = getByRole("button", { name: "Scroll default templates right" });
+    expect(scrollLeft).toBeDisabled();
+    expect(scrollRight).not.toBeDisabled();
 
-    expect(getByRole("button", { name: "Scroll default templates left" })).toBeInTheDocument();
-    expect(getByRole("button", { name: "Scroll default templates right" })).toBeInTheDocument();
-    expect(getByRole("button", { name: "Scroll custom templates left" })).toBeInTheDocument();
-    expect(getByRole("button", { name: "Scroll custom templates right" })).toBeInTheDocument();
+    expect(within(defaultRail).getAllByRole("button")).toHaveLength(13);
+    expect(within(defaultRail).getByRole("button", { name: "API Tests" })).toBeInTheDocument();
+    for (let index = 2; index <= 13; index += 1) {
+      expect(within(defaultRail).getByRole("button", { name: `Default Template ${index}` })).toBeInTheDocument();
+    }
 
-    expect(container.querySelectorAll('[data-qs-template-rail="builtin-template-rail"] [role="button"]')).toHaveLength(13);
-    expect(container.querySelectorAll('[data-qs-template-rail="custom-template-rail"] [role="button"]')).toHaveLength(2);
-    expect(builtinRail?.className).not.toContain("overflow-hidden");
+    fireEvent.click(within(defaultRail).getByRole("button", { name: "Default Template 13" }));
+
+    expect(queryByText("Launch A Quicksprint.")).not.toBeInTheDocument();
+    expect(getByText("Configure Quicksprint")).toBeInTheDocument();
   });
 
   it("scrolls the built-in rail without triggering template selection", () => {
@@ -237,19 +267,61 @@ describe("QuicksprintPanel", () => {
     expect(queryByText("Configure Quicksprint")).not.toBeInTheDocument();
   });
 
-  it("opens the editor when the custom template edit button is used", async () => {
+  it("renders custom templates in an accessible rail with edit and selection affordances", async () => {
     const { getByRole, getByText, queryByText } = render(<QuicksprintPanel {...defaultProps} />);
 
-    const editButtons = getByRole("region", { name: "custom templates" }).querySelectorAll('button[title="Edit template"]');
-    expect(editButtons).toHaveLength(2);
+    const customRail = getByRole("region", { name: "custom templates" });
+    expect(customRail).toBeInTheDocument();
 
-    fireEvent.click(editButtons[0] as HTMLButtonElement);
+    expect(getByRole("button", { name: "Scroll custom templates left" })).toBeDisabled();
+    expect(getByRole("button", { name: "Scroll custom templates right" })).toBeDisabled();
+    expect(within(customRail).getByRole("button", { name: "Custom Sprint Flow" })).toBeInTheDocument();
+    expect(within(customRail).getByRole("button", { name: "Custom Review Flow" })).toBeInTheDocument();
+
+    const editCustomSprint = within(customRail).getByRole("button", { name: "Edit Custom Sprint Flow template" });
+    expect(editCustomSprint).toHaveAttribute("title", "Edit template");
+
+    fireEvent.click(editCustomSprint);
 
     await waitFor(() => {
       expect(getByText("Edit Template")).toBeInTheDocument();
     });
     expect(queryByText("Configure Quicksprint")).not.toBeInTheDocument();
     expect(queryByText("New Template")).not.toBeInTheDocument();
+  });
+
+  it("skips the empty default rail when a project only has custom quicksprint templates", () => {
+    const customOnlyTemplates = mockTemplates.filter((template) => !template.isBuiltIn);
+    const { getByRole, getByText, queryByRole, queryByText } = render(
+      <QuicksprintPanel {...defaultProps} templates={customOnlyTemplates} />
+    );
+
+    expect(queryByText("Default Templates")).not.toBeInTheDocument();
+    expect(queryByRole("region", { name: "default templates" })).not.toBeInTheDocument();
+
+    const customRail = getByRole("region", { name: "custom templates" });
+    expect(customRail).toBeInTheDocument();
+    expect(getByText("Custom Sprint Flow")).toBeInTheDocument();
+    expect(getByText("Custom Review Flow")).toBeInTheDocument();
+  });
+
+  it("selects custom templates from the rail", () => {
+    const { getByRole, getByText, queryByText } = render(<QuicksprintPanel {...defaultProps} />);
+
+    fireEvent.click(within(getByRole("region", { name: "custom templates" })).getByRole("button", { name: "Custom Review Flow" }));
+
+    expect(queryByText("Launch A Quicksprint.")).not.toBeInTheDocument();
+    expect(getByText("Configure Quicksprint")).toBeInTheDocument();
+  });
+
+  it("preserves the empty custom template browse path", () => {
+    const { getByRole, getByText, queryByRole } = render(
+      <QuicksprintPanel {...defaultProps} templates={mockTemplates.filter((template) => template.isBuiltIn)} />
+    );
+
+    expect(queryByRole("region", { name: "custom templates" })).not.toBeInTheDocument();
+    expect(getByText("Create your first custom template")).toBeInTheDocument();
+    expect(getByRole("button", { name: "New Template" })).toBeInTheDocument();
   });
 
   it("shows planning overlay on execute and allows dismiss", async () => {

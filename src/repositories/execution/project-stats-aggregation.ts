@@ -26,6 +26,13 @@ export const usageFields = `
     SUM(reasoning_output_tokens) as reasoningOutputTokens,
     SUM(total_tokens) as totalTokens,
     SUM(tool_call_count) as toolCallCount,
+    SUM(
+      CASE
+        WHEN raw_usage_json IS NOT NULL AND json_valid(raw_usage_json)
+        THEN COALESCE(CAST(json_extract(raw_usage_json, '$.cost') AS REAL), 0)
+        ELSE 0
+      END
+    ) as reportedCostUsd,
     SUM(CASE WHEN usage_source = 'reported' THEN 1 ELSE 0 END) as reportedInvocationCount,
     SUM(CASE WHEN usage_source = 'estimated' THEN 1 ELSE 0 END) as estimatedInvocationCount,
     SUM(CASE WHEN usage_source = 'unsupported' THEN 1 ELSE 0 END) as unsupportedInvocationCount,
@@ -41,6 +48,7 @@ export interface UsageAggregationRow {
   reasoningOutputTokens: number | string | null;
   totalTokens: number | string | null;
   toolCallCount: number | string | null;
+  reportedCostUsd?: number | string | null;
   reportedInvocationCount: number | string | null;
   estimatedInvocationCount: number | string | null;
   unsupportedInvocationCount: number | string | null;
@@ -76,6 +84,11 @@ export function mapAggregatedUsage(row: UsageAggregationRow, pricingResolver?: S
       u.cachedInputCostUsd = (u.cachedInputTokens / 1_000_000) * (pricing.cachedInputTokens || 0);
       u.totalCostUsd = u.inputCostUsd + u.outputCostUsd + u.cachedInputCostUsd;
     }
+  }
+
+  const reportedCostUsd = toNumber(row.reportedCostUsd);
+  if (u.totalCostUsd <= 0 && reportedCostUsd > 0) {
+    u.totalCostUsd = reportedCostUsd;
   }
 
   return u;

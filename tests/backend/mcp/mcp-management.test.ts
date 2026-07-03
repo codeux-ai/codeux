@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+
+vi.mock("../../../src/services/project-git-clone-service.js", () => ({
+  prepareGitProjectCreateInput: vi.fn(async (input: unknown) => input),
+}));
+
 import { ManagementToolHandler } from "../../../src/mcp/management-tool-handler.js";
+import { prepareGitProjectCreateInput } from "../../../src/services/project-git-clone-service.js";
+import { TOOL_DEFINITIONS } from "../../../src/contracts/mcp-tool-definitions.js";
 import type { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import type { SprintPreviewService } from "../../../src/services/sprint-preview-service.js";
 import type { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
@@ -13,11 +20,18 @@ import type { EmbeddingModelManager } from "../../../src/services/embedding-mode
 import type { PlanningAgentService } from "../../../src/services/planning-agent-service.js";
 import type { SprintIssueService } from "../../../src/services/sprint-issue-service.js";
 
+interface JsonSchemaProperty {
+  type?: unknown;
+  enum?: readonly unknown[];
+  items?: JsonSchemaProperty;
+}
+
 describe("ManagementToolHandler", () => {
   let handler: ManagementToolHandler;
   let deps: any;
 
   beforeEach(() => {
+    vi.mocked(prepareGitProjectCreateInput).mockImplementation(async (input) => input);
     deps = {
       projectManagementRepository: {
         listProjects: vi.fn(),
@@ -33,7 +47,16 @@ describe("ManagementToolHandler", () => {
       executionRepository: {
         listSprintRuns: vi.fn(),
       },
-      getDashboardSettings: vi.fn(),
+      getDashboardSettings: vi.fn(() => ({
+        git: {
+          githubToken: "",
+          gitlabToken: "",
+        },
+        integrations: {
+          githubToken: "",
+          gitlabToken: "",
+        },
+      })),
       executionControlService: {
         orchestrateSprint: vi.fn(),
       },
@@ -157,6 +180,43 @@ describe("ManagementToolHandler", () => {
     expect(parsed.result).toEqual({ entries: [], occurrences: [], from: "from", to: "to" });
   });
 
+  it("exposes the expanded import_issues MCP schema on manage_sprints", () => {
+    const tool = TOOL_DEFINITIONS.find((definition) => definition.name === "manage_sprints");
+    expect(tool).toBeDefined();
+
+    const schema = tool?.inputSchema as { properties: Record<string, JsonSchemaProperty> } | undefined;
+    const properties = schema?.properties ?? {};
+
+    expect(properties.action?.enum).toContain("import_issues");
+    expect(properties.provider?.enum).toEqual(["github", "gitlab", "jira"]);
+    expect(properties.state?.enum).toEqual(["open", "closed", "all"]);
+    expect(properties.labels).toMatchObject({ type: "array", items: { type: "string" } });
+    expect(properties.issueKeys).toMatchObject({ type: "array", items: { type: "string" } });
+    expect(properties.issueNumbers).toMatchObject({ type: "array", items: { type: "number" } });
+    expect(properties.issueRefs).toMatchObject({ type: "array", items: { type: "string" } });
+
+    for (const field of [
+      "repository",
+      "hostDomain",
+      "projectKey",
+      "status",
+      "assignee",
+      "assigneeText",
+      "includeConversation",
+      "attachToSprint",
+      "planAfterImport",
+      "autoStart",
+      "search",
+      "limit",
+      "sprintId",
+      "planningAgentPresetId",
+      "replan",
+      "overrides",
+    ]) {
+      expect(properties[field], field).toBeDefined();
+    }
+  });
+
   it("should execute handleManageProjects delete action if approval is provided", async () => {
     deps.projectManagementRepository.deleteProject.mockReturnValue({ ok: true });
     const response = await handler.handleManageProjects({ action: "delete", projectId: "p1", approval: { confirmed: true } });
@@ -185,6 +245,56 @@ describe("ManagementToolHandler", () => {
     response = await handler.handleManageProjects({ action: "update", projectId: "p1", name: "updated-project" });
     parsed = JSON.parse(response.content[0].text);
     expect(parsed.result).toEqual({ id: "p1", name: "updated-project" });
+  });
+
+  it("prepares Git projects before creating them through manage_projects", async () => {
+    const preparedInput = {
+      action: "create",
+      name: "Remote Project",
+      sourceType: "git",
+      sourceRef: "https://github.com/codeux-ai/example-project.git",
+      cloneDir: "/home/test/.code-ux/projects",
+    };
+    vi.mocked(prepareGitProjectCreateInput).mockResolvedValue(preparedInput as any);
+    deps.getDashboardSettings.mockReturnValue({
+      git: {
+        githubToken: "git-token",
+        gitlabToken: "lab-token",
+      },
+      integrations: {
+        githubToken: "",
+        gitlabToken: "",
+      },
+    });
+    deps.projectManagementRepository.createProject.mockReturnValue({
+      id: "p1",
+      name: "Remote Project",
+      baseDir: "/home/test/.code-ux/projects/example-project",
+    });
+
+    const response = await handler.handleManageProjects({
+      action: "create",
+      name: "Remote Project",
+      sourceType: "git",
+      sourceRef: "https://github.com/codeux-ai/example-project.git",
+    });
+    const parsed = JSON.parse(response.content[0].text);
+
+    expect(prepareGitProjectCreateInput).toHaveBeenCalledWith(expect.objectContaining({
+      action: "create",
+      name: "Remote Project",
+      sourceType: "git",
+      sourceRef: "https://github.com/codeux-ai/example-project.git",
+    }), {
+      githubToken: "git-token",
+      gitlabToken: "lab-token",
+    });
+    expect(deps.projectManagementRepository.createProject).toHaveBeenCalledWith(preparedInput);
+    expect(parsed.result).toEqual({
+      id: "p1",
+      name: "Remote Project",
+      baseDir: "/home/test/.code-ux/projects/example-project",
+    });
   });
 
   it("should cover the full lifecycle of sprint management and require approval for delete", async () => {

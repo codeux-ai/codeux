@@ -1,24 +1,80 @@
 /* istanbul ignore file */
 import { h } from "preact";
-import { useState, useRef, useEffect } from "preact/hooks";
+import { createPortal } from "preact/compat";
+import { useCallback, useState, useRef, useEffect, useLayoutEffect } from "preact/hooks";
 import { Download, FileText, Github, Gitlab } from "lucide-preact";
 import { JiraIcon } from "../icons/JiraIcon.js";
 
 interface SprintImportMenuProps {
   disabled?: boolean;
   onImportMarkdown: () => void;
-  onImportIssues: () => void;
+  onImportGitHubIssues: () => void;
+  onImportGitLabIssues: () => void;
   onImportJira?: () => void;
 }
 
-export const SprintImportMenu = ({ disabled, onImportMarkdown, onImportIssues, onImportJira }: SprintImportMenuProps) => {
+export const SprintImportMenu = ({
+  disabled,
+  onImportMarkdown,
+  onImportGitHubIssues,
+  onImportGitLabIssues,
+  onImportJira,
+}: SprintImportMenuProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const [menuId] = useState(() => `menu-${Math.random().toString(36).substr(2, 9)}`);
+
+  const calculateMenuPosition = useCallback((): { top: number; left: number } | null => {
+    if (!triggerRef.current) {
+      return null;
+    }
+    const triggerRect = triggerRef.current.getBoundingClientRect();
+    const menuWidth = 288;
+    const menuHeight = menuRef.current?.getBoundingClientRect().height ?? 238;
+    const viewportPadding = 16;
+    const maxLeft = Math.max(viewportPadding, window.innerWidth - menuWidth - viewportPadding);
+    const maxTop = Math.max(viewportPadding, window.innerHeight - menuHeight - viewportPadding);
+    const left = Math.min(
+      Math.max(viewportPadding, triggerRect.right - menuWidth),
+      maxLeft,
+    );
+    const top = Math.min(
+      triggerRect.bottom + 8,
+      maxTop,
+    );
+    return { top, left };
+  }, []);
+
+  const updateMenuPosition = useCallback(() => {
+    const nextPosition = calculateMenuPosition();
+    if (nextPosition) {
+      setMenuPosition(nextPosition);
+    }
+  }, [calculateMenuPosition]);
+
+  const handleTriggerClick = useCallback(() => {
+    if (isOpen) {
+      setIsOpen(false);
+      return;
+    }
+    const nextPosition = calculateMenuPosition();
+    if (nextPosition) {
+      setMenuPosition(nextPosition);
+    }
+    setIsOpen(true);
+  }, [calculateMenuPosition, isOpen]);
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        containerRef.current
+        && !containerRef.current.contains(target)
+        && (!menuRef.current || !menuRef.current.contains(target))
+      ) {
         setIsOpen(false);
         containerRef.current?.querySelector("button")?.focus();
       }
@@ -31,21 +87,33 @@ export const SprintImportMenu = ({ disabled, onImportMarkdown, onImportIssues, o
     };
 
     if (isOpen) {
+      updateMenuPosition();
       document.addEventListener("mousedown", handleOutsideClick);
       document.addEventListener("keydown", handleEscapeKey);
+      window.addEventListener("resize", updateMenuPosition);
+      window.addEventListener("scroll", updateMenuPosition, { capture: true, passive: true });
     }
 
     return () => {
       document.removeEventListener("mousedown", handleOutsideClick);
       document.removeEventListener("keydown", handleEscapeKey);
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, { capture: true });
     };
-  }, [isOpen]);
+  }, [isOpen, updateMenuPosition]);
+
+  useLayoutEffect(() => {
+    if (isOpen) {
+      updateMenuPosition();
+    }
+  }, [isOpen, updateMenuPosition]);
 
   return (
     <div className="relative inline-block" ref={containerRef}>
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleTriggerClick}
         disabled={disabled}
         aria-haspopup="menu"
         aria-expanded={isOpen}
@@ -56,15 +124,14 @@ export const SprintImportMenu = ({ disabled, onImportMarkdown, onImportIssues, o
         Import
       </button>
 
-      <div
-        role="menu"
-        id={menuId}
-        className={`absolute top-[calc(100%+0.5rem)] right-0 z-[200] w-72 transform origin-top overflow-hidden rounded-[1.2rem] border border-black/[0.08] bg-white p-2 shadow-[0_18px_38px_rgba(15,23,42,0.18)] ring-1 ring-black/[0.03] transition-all duration-300 dark:border-white/[0.08] dark:bg-void-800 dark:ring-white/[0.03] ${
-          isOpen
-            ? "translate-y-0 scale-100 opacity-100 pointer-events-auto"
-            : "-translate-y-4 scale-95 opacity-0 pointer-events-none"
-        }`}
-      >
+      {isOpen && typeof document !== "undefined" && createPortal(
+        <div
+          ref={menuRef}
+          role="menu"
+          id={menuId}
+          className="fixed z-[9999] w-72 origin-top overflow-hidden rounded-[1.2rem] border border-black/[0.08] bg-white p-2 shadow-[0_18px_38px_rgba(15,23,42,0.18)] ring-1 ring-black/[0.03] dark:border-white/[0.08] dark:bg-void-800 dark:ring-white/[0.03]"
+          style={{ top: menuPosition.top, left: menuPosition.left }}
+        >
         <div className="flex flex-col gap-1">
           <button
             type="button"
@@ -93,7 +160,7 @@ export const SprintImportMenu = ({ disabled, onImportMarkdown, onImportIssues, o
             role="menuitem"
             onClick={() => {
               setIsOpen(false);
-              onImportIssues();
+              onImportGitHubIssues();
             }}
             className="group flex w-full items-center gap-3 rounded-[0.9rem] px-3 py-2.5 text-left transition-all hover:bg-black/[0.04] dark:hover:bg-white/[0.05]"
           >
@@ -115,7 +182,7 @@ export const SprintImportMenu = ({ disabled, onImportMarkdown, onImportIssues, o
             role="menuitem"
             onClick={() => {
               setIsOpen(false);
-              onImportIssues();
+              onImportGitLabIssues();
             }}
             className="group flex w-full items-center gap-3 rounded-[0.9rem] px-3 py-2.5 text-left transition-all hover:bg-black/[0.04] dark:hover:bg-white/[0.05]"
           >
@@ -154,7 +221,9 @@ export const SprintImportMenu = ({ disabled, onImportMarkdown, onImportIssues, o
             </div>
           </button>
         </div>
-      </div>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 };

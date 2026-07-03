@@ -9,6 +9,16 @@ import { SprintImportMenu } from "../../../../../dashboard/src/v2/components/spr
 expect.extend(matchers);
 
 describe("SprintImportMenu", () => {
+  const renderMenu = (overrides: Partial<Parameters<typeof SprintImportMenu>[0]> = {}) => render(
+    <SprintImportMenu
+      disabled={false}
+      onImportMarkdown={vi.fn()}
+      onImportGitHubIssues={vi.fn()}
+      onImportGitLabIssues={vi.fn()}
+      {...overrides}
+    />,
+  );
+
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -16,19 +26,28 @@ describe("SprintImportMenu", () => {
 
   it("renders disabled state", () => {
     const onImport = vi.fn();
-    render(<SprintImportMenu disabled={true} onImportMarkdown={onImport} onImportIssues={vi.fn()} />);
+    renderMenu({ disabled: true, onImportMarkdown: onImport });
     const trigger = screen.getAllByRole("button").find(btn => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown"));
     expect(trigger).toBeDisabled();
   });
 
   it("opens the menu and clicks markdown", () => {
     const onImport = vi.fn();
-    render(<SprintImportMenu disabled={false} onImportMarkdown={onImport} onImportIssues={vi.fn()} />);
+    renderMenu({ onImportMarkdown: onImport });
 
     const trigger = screen.getAllByRole("button").find(btn => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown"));
     fireEvent.click(trigger);
 
+    const menu = screen.getByRole("menu");
+    expect(menu).toHaveClass("fixed", "z-[9999]");
+    expect(menu).not.toHaveClass("transition-all");
+    expect(menu).toHaveStyle({ top: "8px", left: "16px" });
+    expect(menu.parentElement).toBe(document.body);
     expect(screen.getAllByText("GitHub Issues")[0]).toBeInTheDocument();
+    expect(screen.getByText("Structured sprint and task bundle")).toBeInTheDocument();
+    expect(screen.getByText("Search, filter, and multi-select")).toBeInTheDocument();
+    expect(screen.getByText("Import issue scope from GitLab")).toBeInTheDocument();
+    expect(screen.getByText("Import issue scope from Jira")).toBeInTheDocument();
 
     const markdownBtn = screen.getByRole("menuitem", { name: /markdown/i });
     fireEvent.click(markdownBtn);
@@ -36,7 +55,7 @@ describe("SprintImportMenu", () => {
   });
 
   it("closes on escape key", () => {
-    render(<SprintImportMenu disabled={false} onImportMarkdown={vi.fn()} onImportIssues={vi.fn()} />);
+    renderMenu();
     const trigger = screen.getAllByRole("button").find(btn => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown"));
 
     fireEvent.click(trigger);
@@ -46,7 +65,7 @@ describe("SprintImportMenu", () => {
   });
 
   it("closes on outside click", () => {
-    render(<SprintImportMenu disabled={false} onImportMarkdown={vi.fn()} onImportIssues={vi.fn()} />);
+    renderMenu();
     const trigger = screen.getAllByRole("button").find(btn => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown"));
 
     fireEvent.click(trigger);
@@ -55,16 +74,32 @@ describe("SprintImportMenu", () => {
     fireEvent.mouseDown(document.body);
   });
 
-  it("clicks issue import", () => {
-    const onImportIssues = vi.fn();
-    render(<SprintImportMenu disabled={false} onImportMarkdown={vi.fn()} onImportIssues={onImportIssues} />);
+  it("clicks GitHub issue import without triggering GitLab", () => {
+    const onImportGitHubIssues = vi.fn();
+    const onImportGitLabIssues = vi.fn();
+    renderMenu({ onImportGitHubIssues, onImportGitLabIssues });
 
     const trigger = screen.getAllByRole("button").find(btn => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown"));
     fireEvent.click(trigger);
 
     const githubBtn = screen.getByRole("menuitem", { name: /github issues/i });
     fireEvent.click(githubBtn);
-    expect(onImportIssues).toHaveBeenCalledTimes(1);
+    expect(onImportGitHubIssues).toHaveBeenCalledTimes(1);
+    expect(onImportGitLabIssues).not.toHaveBeenCalled();
+  });
+
+  it("clicks GitLab issue import without triggering GitHub", () => {
+    const onImportGitHubIssues = vi.fn();
+    const onImportGitLabIssues = vi.fn();
+    renderMenu({ onImportGitHubIssues, onImportGitLabIssues });
+
+    const trigger = screen.getAllByRole("button").find(btn => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown"));
+    fireEvent.click(trigger);
+
+    const gitlabBtn = screen.getByRole("menuitem", { name: /gitlab issues/i });
+    fireEvent.click(gitlabBtn);
+    expect(onImportGitLabIssues).toHaveBeenCalledTimes(1);
+    expect(onImportGitHubIssues).not.toHaveBeenCalled();
   });
 
   it("clicks Jira issue import", () => {
@@ -73,7 +108,8 @@ describe("SprintImportMenu", () => {
       <SprintImportMenu
         disabled={false}
         onImportMarkdown={vi.fn()}
-        onImportIssues={vi.fn()}
+        onImportGitHubIssues={vi.fn()}
+        onImportGitLabIssues={vi.fn()}
         onImportJira={onImportJira}
       />
     );

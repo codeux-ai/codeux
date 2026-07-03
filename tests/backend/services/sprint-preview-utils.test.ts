@@ -108,7 +108,7 @@ describe("sprint-preview-utils", () => {
     expect(detection.runCommand).not.toContain("pnpm dev");
   });
 
-  it("does not use a dev script as an automatic preview fallback", async () => {
+  it("uses a dev script as the last automatic preview fallback", async () => {
     const repoDir = await createTempRepo();
     await fs.writeFile(path.join(repoDir, "package.json"), JSON.stringify({
       scripts: {
@@ -118,7 +118,85 @@ describe("sprint-preview-utils", () => {
 
     const detection = await detectSprintPreviewCommands(repoDir);
 
+    expect(detection.runCommand).toContain("npm run dev");
+    expect(detection.runCommand).toContain("PORT=\"$SPRINT_PREVIEW_PORT\"");
+  });
+
+  it("detects commands from an injected source instead of the host checkout", async () => {
+    const repoDir = await createTempRepo();
+    await fs.writeFile(path.join(repoDir, "package.json"), JSON.stringify({
+      scripts: {
+        start: "node host.js",
+      },
+    }), "utf8");
+    const sourceFiles = new Map<string, string>([
+      ["pnpm-lock.yaml", "lockfileVersion: '9.0'\n"],
+      ["package.json", JSON.stringify({
+        scripts: {
+          build: "vite build",
+          preview: "vite preview",
+        },
+      })],
+    ]);
+
+    const detection = await detectSprintPreviewCommands(repoDir, {
+      exists: async (filePath) => sourceFiles.has(filePath),
+      readTextFile: async (filePath) => {
+        const content = sourceFiles.get(filePath);
+        if (content === undefined) {
+          throw new Error(`Missing ${filePath}`);
+        }
+        return content;
+      },
+    });
+
+    expect(detection.packageManager).toBe("pnpm");
+    expect(detection.buildCommand).toBe("pnpm build");
+    expect(detection.runCommand).toContain("pnpm preview");
+    expect(detection.runCommand).not.toContain("host.js");
+  });
+
+  it("does not run broad workspace root dev/build scripts when no web preview package is found", async () => {
+    const repoDir = await createTempRepo();
+    await fs.writeFile(path.join(repoDir, "pnpm-workspace.yaml"), "packages:\n  - apps/*\n", "utf8");
+    await fs.writeFile(path.join(repoDir, "package.json"), JSON.stringify({
+      scripts: {
+        build: "pnpm -r build",
+        dev: "pnpm -r --parallel dev",
+      },
+      workspaces: ["apps/*"],
+    }), "utf8");
+
+    const detection = await detectSprintPreviewCommands(repoDir);
+
+    expect(detection.packageManager).toBe("pnpm");
+    expect(detection.buildCommand).toBeNull();
     expect(detection.runCommand).toBeNull();
+  });
+
+  it("selects a nested workspace web app over broad root dev scripts", async () => {
+    const repoDir = await createTempRepo();
+    await fs.writeFile(path.join(repoDir, "pnpm-workspace.yaml"), "packages:\n  - apps/*\n", "utf8");
+    await fs.writeFile(path.join(repoDir, "package.json"), JSON.stringify({
+      scripts: {
+        build: "pnpm -r build",
+        dev: "pnpm -r --parallel dev",
+      },
+      workspaces: ["apps/*"],
+    }), "utf8");
+    await fs.mkdir(path.join(repoDir, "apps/game-client"), { recursive: true });
+    await fs.writeFile(path.join(repoDir, "apps/game-client/package.json"), JSON.stringify({
+      scripts: {
+        build: "vite build",
+        dev: "vite --host 0.0.0.0",
+      },
+    }), "utf8");
+
+    const detection = await detectSprintPreviewCommands(repoDir);
+
+    expect(detection.buildCommand).toBeNull();
+    expect(detection.runCommand).toContain("pnpm --dir 'apps/game-client' dev");
+    expect(detection.runCommand).not.toContain("pnpm -r --parallel dev");
   });
 
   it("falls back to serving built static output when no runtime script exists", async () => {

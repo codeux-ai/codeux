@@ -1,12 +1,8 @@
 import { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
-import { useState } from "preact/hooks";
-import { activeMemoryIdSignal, hoveredMemoryIdSignal, lobotomizeModeSignal, memoriesSignal, memoryMutationsSignal } from "./memoryState.js";
+import { activeMemoryIdSignal, hoveredMemoryIdSignal, lobotomizeModeSignal, memoryMutationsSignal, selectedMemoryIdsSignal, toggleSelectedMemoryId } from "./memoryState.js";
 import { useComputed } from "@preact/signals";
-import { X } from "lucide-preact";
-import { deleteMemory } from "../../lib/memory-api.js";
-import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
-import { ConfirmDialog } from "../ui/ConfirmDialog.js";
+import { ArrowUpRight, Check, X } from "lucide-preact";
 import { useInteractionTokens } from "../../lib/motion/index.js";
 import type { MemoryScope } from "../../memory-types.js";
 
@@ -40,22 +36,19 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
 }) => {
     const cat = CAT[category] || CAT.context;
     const isSelected = useComputed(() => activeMemoryIdSignal.value === id);
-    const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel, triggerRef } = useConfirmDialog();
+    const isBatchSelected = useComputed(() => selectedMemoryIdsSignal.value.includes(id));
     const interactionTokens = useInteractionTokens();
+    const scopeLabel = scope || "unknown";
+    const strengthPercent = Math.round(strength * 100);
 
-    const handleDelete = async (e: Event) => {
+    const handleDelete = (e: Event) => {
         e.stopPropagation();
-        const confirmed = await requestConfirm({
-            title: "Delete Memory",
-            body: `Are you sure you want to delete this memory from ${cat.label}?`,
-            confirmLabel: "Delete Memory",
-            cancelLabel: "Cancel",
-            destructive: true
-        });
+        memoryMutationsSignal.value.removeMemory(id);
+    };
 
-        if (confirmed) {
-            memoryMutationsSignal.value.removeMemory(id);
-        }
+    const handleOpen = (e: Event) => {
+        e.stopPropagation();
+        onClick();
     };
 
     return (
@@ -63,11 +56,14 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
             role="option"
             tabIndex={0}
             aria-selected={isSelected.value}
-            aria-label={`${cat.label} memory, scope ${scope || 'unknown'}, strength ${Math.round(strength * 100)}%. ${content}`}
+            aria-label={`${cat.label} memory, scope ${scopeLabel}, strength ${strengthPercent}%. ${content}`}
             onClick={onClick}
             onMouseEnter={() => { hoveredMemoryIdSignal.value = id; }}
             onMouseLeave={() => { hoveredMemoryIdSignal.value = null; }}
             onKeyDown={(e) => {
+                if (e.currentTarget !== e.target) {
+                    return;
+                }
                 if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
                     onClick();
@@ -79,52 +75,91 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
                 transitionTimingFunction: interactionTokens.enterExit.ease,
             }}
             className={`
-                group relative cursor-pointer p-4 rounded-[1.25rem] border text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
+                group relative w-full cursor-pointer overflow-hidden rounded-xl border p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                 ${isSelected.value
-                    ? "bg-signal-500/5 dark:bg-signal-500/10 border-signal-500 ring-1 ring-signal-500 shadow-[0_4px_24px_rgba(0,224,160,0.15)] scale-[1.02] z-10"
-                    : "bg-white/60 dark:bg-void-800/50 border-black/[0.06] dark:border-white/[0.06] hover:bg-white dark:hover:bg-void-800 hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)] dark:hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] scale-100"
+                    ? "z-10 border-signal-500/80 bg-signal-500/[0.08] shadow-[0_8px_24px_rgba(0,224,160,0.12)] ring-1 ring-signal-500/40"
+                    : isBatchSelected.value
+                        ? "border-signal-500/35 bg-signal-500/[0.05] ring-1 ring-signal-500/20"
+                        : "border-black/[0.06] bg-white/70 hover:border-black/[0.1] hover:bg-white hover:shadow-[0_6px_18px_rgba(0,0,0,0.06)] dark:border-white/[0.06] dark:bg-void-800/70 dark:hover:border-white/[0.12] dark:hover:bg-void-800 dark:hover:shadow-[0_10px_24px_rgba(0,0,0,0.26)]"
                 }
-                ${lobotomizeModeSignal.value ? "ring-1 ring-status-red/50 hover:bg-status-red/10 hover:border-status-red hover:ring-status-red hover:shadow-[0_4px_24px_rgba(227,0,15,0.15)]" : ""}
+                ${lobotomizeModeSignal.value ? "border-status-red/35 ring-1 ring-status-red/25 hover:border-status-red/70 hover:bg-status-red/[0.08] hover:ring-status-red/45" : ""}
             `}
         >
-            {lobotomizeModeSignal.value && (
-                <button
-                    type="button"
-                    ref={triggerRef as any}
-                    aria-label={`Delete ${cat.label} memory: ${content.substring(0, 30)}...`}
-                    onClick={handleDelete}
-                    className={`absolute top-2 right-2 z-10 p-1.5 rounded-full transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
-                                bg-white/80 dark:bg-void-800/80 backdrop-blur border border-status-red/20 text-status-red shadow-sm hover:bg-status-red hover:text-white hover:border-status-red active:bg-status-red/90 active:scale-95
-                                ${isSelected.value ? "" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"}`}
-                >
-                    <X size={14} strokeWidth={2.5} />
-                </button>
-            )}
-            <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ background: cat.hex, boxShadow: `0 0 8px ${cat.hex}` }} />
-                    <span className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: cat.hex }}>
-                        {cat.label}
+            <div
+                className={`absolute inset-y-2 left-0 w-0.5 rounded-r-full transition-opacity duration-150 ${isSelected.value || isBatchSelected.value ? "opacity-100" : "opacity-55 group-hover:opacity-100"}`}
+                style={{ background: cat.hex, boxShadow: isSelected.value ? `0 0 12px ${cat.hex}` : undefined }}
+                aria-hidden="true"
+            />
+            <div className="flex min-w-0 flex-col gap-2.5 pl-2">
+                <div className="flex min-w-0 items-start justify-between gap-2">
+                    <div className="flex min-w-0 flex-col gap-1">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: cat.hex }} aria-hidden="true" />
+                            <span className="truncate text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: cat.hex }}>
+                                {cat.label}
+                            </span>
+                        </div>
+                        <span className="truncate text-[10px] font-mono font-medium uppercase text-slate-400 dark:text-slate-500">
+                            {scopeLabel} scope
+                        </span>
+                    </div>
+                    <span className="shrink-0 rounded-md border border-black/[0.06] bg-black/[0.03] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+                        {strengthPercent}%
                     </span>
                 </div>
-                <span className="text-[10px] font-mono text-slate-400">{Math.round(strength * 100)}%</span>
-            </div>
-            <p className="text-[13px] text-slate-700 dark:text-slate-300 font-medium leading-relaxed line-clamp-3">
-                {content}
-            </p>
-            <span className="sr-only">Press Enter to open details.</span>
 
-            <ConfirmDialog
-                isOpen={isConfirmOpen}
-                options={confirmOptions}
-                onConfirm={handleConfirm}
-                onCancel={handleCancel}
-            />
+                <p className="line-clamp-3 break-words text-[13px] font-semibold leading-snug text-slate-700 dark:text-void-100">
+                    {content}
+                </p>
+
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-t border-black/[0.05] pt-2 dark:border-white/[0.06]">
+                    <button
+                        type="button"
+                        aria-pressed={isBatchSelected.value}
+                        aria-label={isBatchSelected.value ? `Deselect ${cat.label} memory` : `Select ${cat.label} memory`}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            toggleSelectedMemoryId(id);
+                        }}
+                        className={`inline-flex h-7 min-w-0 items-center gap-1.5 rounded-md border px-2 text-[11px] font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
+                            ${isBatchSelected.value
+                                ? "border-signal-500 bg-signal-500 text-void-950 shadow-[0_4px_14px_rgba(0,224,160,0.18)]"
+                                : "border-black/[0.06] bg-black/[0.03] text-slate-500 hover:border-signal-500/45 hover:bg-signal-500/[0.08] hover:text-signal-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:text-signal-400"
+                            }`}
+                    >
+                        <Check size={13} strokeWidth={3} aria-hidden="true" className={isBatchSelected.value ? "opacity-100" : "opacity-45"} />
+                        <span className="truncate">{isBatchSelected.value ? "Selected" : "Select"}</span>
+                    </button>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                        <button
+                            type="button"
+                            aria-label={`Open ${cat.label} memory details`}
+                            onClick={handleOpen}
+                            className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-semibold text-slate-500 transition-colors duration-150 hover:bg-black/[0.04] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white dark:focus-visible:ring-offset-void-900"
+                        >
+                            <span>Open</span>
+                            <ArrowUpRight size={13} strokeWidth={2.5} aria-hidden="true" />
+                        </button>
+                        {lobotomizeModeSignal.value && (
+                            <button
+                                type="button"
+                                aria-label={`Delete ${cat.label} memory: ${content.substring(0, 30)}...`}
+                                onClick={handleDelete}
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-status-red/30 bg-status-red/[0.08] text-status-red transition-colors duration-150 hover:border-status-red hover:bg-status-red hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 active:bg-status-red/90 dark:focus-visible:ring-offset-void-900"
+                            >
+                                <X size={14} strokeWidth={2.5} aria-hidden="true" />
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+            <span className="sr-only">Press Enter to open details.</span>
         </div>
     );
 }, (prevProps, nextProps) => {
     return prevProps.id === nextProps.id &&
            prevProps.content === nextProps.content &&
            prevProps.category === nextProps.category &&
-           prevProps.strength === nextProps.strength
+           prevProps.strength === nextProps.strength &&
+           prevProps.scope === nextProps.scope
 });

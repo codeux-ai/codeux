@@ -207,7 +207,7 @@ import type { MemoryRemediationScheduleCadence } from "../../../types.js";
         </SectionCard>
 
         <SectionCard title="Limits" watermark="CAP" badge={getBadge("memory")} icon={<Gauge strokeWidth={2.4} />}>
-          <Row label="Promotion threshold" description="Minimum score (0.0–1.0) a sprint memory needs to be auto-promoted to project scope." badge={getFieldBadge("memory.promotionThreshold")}>
+          <Row label="Promotion threshold" description="Minimum score (0.0-1.0) for deterministic promotion. AI remediation may review lower-scored candidates before selecting durable memories." badge={getFieldBadge("memory.promotionThreshold")}>
             <NumberInput
               value={editableSettings.memory.promotionThreshold}
               min={0}

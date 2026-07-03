@@ -13,10 +13,9 @@ export interface IPrService {
     taskId: string;
     provider: Exclude<ProviderId, "jules">;
     title: string;
+    body: string;
     featureBranch: string;
     workerBranch: string;
-    taskDescription?: string;
-    sprintDescription?: string;
   }, repoPath: string, hostToken?: string | GitHostTokens): Promise<string | undefined>;
 
   hasUnpushedCommits(repoPath: string, workerBranch: string, featureBranch: string, runner?: Runner): Promise<boolean>;
@@ -42,10 +41,9 @@ export class PrService implements IPrService {
       taskId: string;
       provider: Exclude<ProviderId, "jules">;
       title: string;
+      body: string;
       featureBranch: string;
       workerBranch: string;
-      taskDescription?: string;
-      sprintDescription?: string;
     },
     repoPath: string,
     hostToken?: string | GitHostTokens
@@ -68,19 +66,7 @@ export class PrService implements IPrService {
     } catch { /* fall through */ }
 
     try {
-      const taskSection = args.taskDescription?.trim() ? `**Task Context:**\n${args.taskDescription.trim()}` : `**Task Context:**\nNo task description provided.`;
-      const sprintSection = args.sprintDescription?.trim() ? `**Sprint Context:**\n${args.sprintDescription.trim()}` : `**Sprint Context:**\nNo sprint description provided.`;
-
-      const bodyLines = [
-        `Automated task execution for \`${args.taskId}\` via ${args.provider}.`,
-        "",
-      ];
-      bodyLines.push(taskSection, "");
-      bodyLines.push(sprintSection, "");
-      bodyLines.push(`Base: \`${args.featureBranch}\``, `Head: \`${args.workerBranch}\``);
-
-      const prTitle = `${args.title} (${args.provider})`;
-      let createResult = await client.ghPrCreate(args.featureBranch, args.workerBranch, prTitle, bodyLines.join("\n"), effectiveToken);
+      let createResult = await client.ghPrCreate(args.featureBranch, args.workerBranch, args.title, args.body, effectiveToken);
 
       if (!createResult.ok) {
         // A feature branch can disappear from origin between sprints (e.g. deleted by an
@@ -88,7 +74,7 @@ export class PrService implements IPrService {
         // locally, restore it and retry once instead of failing the whole workflow.
         const restored = await this.pushMissingBaseBranch(repoPath, args.featureBranch, hostToken);
         if (restored) {
-          createResult = await client.ghPrCreate(args.featureBranch, args.workerBranch, prTitle, bodyLines.join("\n"), effectiveToken);
+          createResult = await client.ghPrCreate(args.featureBranch, args.workerBranch, args.title, args.body, effectiveToken);
         }
       }
 

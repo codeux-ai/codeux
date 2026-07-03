@@ -4,6 +4,7 @@
 import { useState } from "preact/hooks";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as matchers from "@testing-library/jest-dom/matchers";
 import { fetchInvocationMessages } from "../../../lib/invocation-api.js";
 import { InvocationsTable } from "../components/system/InvocationsTable.js";
 import type { SystemSort } from "../hooks/use-system-view-data.js";
@@ -14,6 +15,8 @@ vi.mock("../../../lib/invocation-api.js", () => ({
 }));
 
 const mockedFetchInvocationMessages = vi.mocked(fetchInvocationMessages);
+
+expect.extend(matchers);
 
 afterEach(() => {
   cleanup();
@@ -62,9 +65,11 @@ const mockInvocations: ExecutionInvocationRecord[] = [
 function Harness({
   invocations = mockInvocations,
   loading = false,
+  error = null,
 }: {
   invocations?: ExecutionInvocationRecord[];
   loading?: boolean;
+  error?: string | null;
 }) {
   const [sort, setSort] = useState<SystemSort>({ key: "startedAt", dir: "desc" });
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -77,6 +82,7 @@ function Harness({
       expandedId={expandedId}
       onRowExpand={setExpandedId}
       loading={loading}
+      error={error}
     />
   );
 }
@@ -142,21 +148,35 @@ describe("InvocationsTable", () => {
     expect(onSortChange).toHaveBeenCalledWith({ key: "startedAt", dir: "asc" });
   });
 
-  it("handles row expansion", async () => {
-    mockedFetchInvocationMessages.mockResolvedValue([]);
+  it("handles row expansion and renders transcript details", async () => {
+    mockedFetchInvocationMessages.mockResolvedValue([
+      {
+        id: "msg-1",
+        invocationId: "inv-1",
+        role: "assistant",
+        contentMarkdown: "Telemetry summary ready.",
+        ordinal: 1,
+        createdAt: "2024-06-03T10:00:05Z",
+      } as any,
+    ]);
     const { getByText, queryByText, getAllByRole } = render(<Harness />);
 
-    // The first 5 buttons are sort headers in the thead
     const expandButton = getAllByRole("button", { name: "Expand invocation inv-1" })[0];
     fireEvent.click(expandButton);
+    expect(expandButton).toHaveAttribute("aria-expanded", "true");
     await waitFor(() => {
       expect(getByText("Loading messages")).toBeTruthy();
     });
+    await waitFor(() => {
+      expect(getByText("Telemetry summary ready.")).toBeTruthy();
+    });
 
     fireEvent.click(expandButton);
+    expect(expandButton).toHaveAttribute("aria-expanded", "false");
     await waitFor(() => {
       expect(queryByText("Loading messages")).toBeNull();
     });
+    expect(queryByText("Telemetry summary ready.")).toBeNull();
   });
 
   it("initially limits rows and reveals more", () => {
@@ -189,5 +209,12 @@ describe("InvocationsTable", () => {
   it("renders empty state", () => {
     const { getByText } = render(<Harness invocations={[]} />);
     expect(getByText("No invocations match the current filters")).toBeTruthy();
+  });
+
+  it("renders error state", () => {
+    const { getByRole, getByText } = render(<Harness error="network offline" />);
+    expect(getByRole("alert")).toBeTruthy();
+    expect(getByText("Failed to load invocation records")).toBeTruthy();
+    expect(getByText("network offline")).toBeTruthy();
   });
 });

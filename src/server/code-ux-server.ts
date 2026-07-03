@@ -52,6 +52,7 @@ import { DatabaseMaintenanceService } from "../services/database-maintenance-ser
 import { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
 import { AgentPresetSyncService } from "../services/agent-preset-sync-service.js";
 import { PlanningAgentService } from "../services/planning-agent-service.js";
+import { ExecutionInvocationControlService } from "../services/execution-invocation-control-service.js";
 import { createRuntimeDependencies, ServerContext } from "../app/dependency-factory.js";
 import { generateCorrelationId, runWithCorrelationId } from "../shared/logging/correlation-id.js";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
@@ -113,6 +114,10 @@ export class CodeUxServer {
   private static readonly RUNTIME_CLEANUP_INTERVAL_MS = 15_000;
   private static readonly LIVE_SNAPSHOT_REFRESH_INTERVAL_MS = 30_000;
   private static readonly WAL_CHECKPOINT_INTERVAL_MS = 60_000;
+  private static readonly LOOP_INITIAL_DELAY_MS = 15_000;
+  private static readonly STARTUP_RECOVERY_DELAY_MS = 1_000;
+  private static readonly STARTUP_CONTAINER_CLEANUP_DELAY_MS = 5_000;
+  private static readonly STARTUP_MAINTENANCE_DELAY_MS = 30_000;
   private static activeSigintHandler: (() => void) | null = null;
   private readonly projectRoot: string;
   private readonly appConfig: AppConfig;
@@ -154,6 +159,7 @@ export class CodeUxServer {
   private activityCacheService: ActivityCacheService;
   private taskRerunService: TaskRerunService;
   private executionControlService: ExecutionControlService;
+  private executionInvocationControlService: ExecutionInvocationControlService;
   private planningAgentService: PlanningAgentService;
   private quicksprintService: import("../services/quicksprint-service.js").QuicksprintService;
   private projectSetupService: import("../services/project-setup-service.js").ProjectSetupService;
@@ -172,6 +178,7 @@ export class CodeUxServer {
   private sprintPreviewInterval: ReturnType<typeof setInterval> | null = null;
   private liveSnapshotInterval: ReturnType<typeof setInterval> | null = null;
   private walCheckpointInterval: ReturnType<typeof setInterval> | null = null;
+  private readonly startupTaskTimers = new Set<ReturnType<typeof setTimeout>>();
   private mcpHttpHandle: McpHttpTransportHandle | null = null;
   private dashboardHandle: DashboardServerHandle | null = null;
   private mcpServiceBound = false;
@@ -221,6 +228,7 @@ export class CodeUxServer {
     this.activityCacheService = deps.activityCacheService;
     this.taskRerunService = deps.taskRerunService;
     this.executionControlService = deps.executionControlService;
+    this.executionInvocationControlService = deps.executionInvocationControlService;
     this.planningAgentService = deps.planningAgentService;
     this.quicksprintService = deps.quicksprintService;
     this.projectSetupService = deps.projectSetupService;
@@ -294,6 +302,10 @@ export class CodeUxServer {
       clearInterval(this.walCheckpointInterval);
       this.walCheckpointInterval = null;
     }
+    for (const timer of this.startupTaskTimers) {
+      clearTimeout(timer);
+    }
+    this.startupTaskTimers.clear();
     if (this.mcpHttpHandle) {
       await this.mcpHttpHandle.close().catch(() => undefined);
       this.mcpHttpHandle = null;
@@ -368,7 +380,7 @@ export class CodeUxServer {
       }
     };
 
-    const initialTimer = setTimeout(runCleanup, 0);
+    const initialTimer = setTimeout(runCleanup, CodeUxServer.LOOP_INITIAL_DELAY_MS);
     initialTimer.unref?.();
     this.runtimeCleanupInterval = setInterval(runCleanup, CodeUxServer.RUNTIME_CLEANUP_INTERVAL_MS);
     this.runtimeCleanupInterval.unref?.();
@@ -388,7 +400,7 @@ export class CodeUxServer {
       });
     };
 
-    const initialTimer = setTimeout(reconcile, 0);
+    const initialTimer = setTimeout(reconcile, CodeUxServer.LOOP_INITIAL_DELAY_MS);
     initialTimer.unref?.();
     this.sprintPreviewInterval = setInterval(reconcile, CodeUxServer.RUNTIME_CLEANUP_INTERVAL_MS);
     this.sprintPreviewInterval.unref?.();
@@ -410,7 +422,7 @@ export class CodeUxServer {
       this.dashboardRealtimeService.scheduleProjectGitRefresh(projectId);
     };
 
-    const initialTimer = setTimeout(refreshLiveSnapshot, 0);
+    const initialTimer = setTimeout(refreshLiveSnapshot, 250);
     initialTimer.unref?.();
     this.liveSnapshotInterval = setInterval(refreshLiveSnapshot, CodeUxServer.LIVE_SNAPSHOT_REFRESH_INTERVAL_MS);
     this.liveSnapshotInterval.unref?.();
@@ -963,7 +975,7 @@ export class CodeUxServer {
     defaultBranch: string;
     title: string;
     body: string;
-  }): Promise<{ created: boolean; prNumber: number | null; prUrl: string | null } | null> {
+  }): Promise<{ created: boolean; prNumber: number | null; prUrl: string | null; errorMessage?: string } | null> {
     const gitStatusService = new GitStatusService(args.repoPath, defaultRunner, true);
     try {
       return await gitStatusService.resolveOrCreatePullRequest({
@@ -972,8 +984,20 @@ export class CodeUxServer {
         title: args.title,
         body: args.body,
       }, this.getEffectiveGitHostTokens());
-    } catch {
-      return null;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn("Failed to resolve or create main branch PR", {
+        repoPath: args.repoPath,
+        featureBranch: args.featureBranch,
+        defaultBranch: args.defaultBranch,
+        error: message,
+      });
+      return {
+        created: false,
+        prNumber: null,
+        prUrl: null,
+        errorMessage: message,
+      };
     }
   }
 
@@ -981,23 +1005,54 @@ export class CodeUxServer {
     return await this.activityCacheService.getLiveActivitiesForActiveTasks();
   }
 
-  async run() {
-    await bootSettings({
-      runtimeContext: this.runtimeContext,
-      projectRoot: this.projectRoot,
-      logger: this.logger,
-    });
-    this.refreshJulesApiKey();
+  private scheduleStartupTask(label: string, delayMs: number, task: () => Promise<void>): void {
+    const timer = setTimeout(() => {
+      this.startupTaskTimers.delete(timer);
+      if (this.isClosing) {
+        return;
+      }
+      void task().catch((error) => {
+        this.logger.error(`${label} failed`, { error });
+      });
+    }, delayMs);
+    timer.unref?.();
+    this.startupTaskTimers.add(timer);
+  }
+
+  private scheduleBackgroundStartupTasks(): void {
+    this.scheduleStartupTask(
+      "Startup recovery",
+      CodeUxServer.STARTUP_RECOVERY_DELAY_MS,
+      () => this.runStartupRecovery(),
+    );
+    this.scheduleStartupTask(
+      "Startup container cleanup",
+      CodeUxServer.STARTUP_CONTAINER_CLEANUP_DELAY_MS,
+      () => this.runStartupContainerCleanup(),
+    );
+    this.scheduleStartupTask(
+      "Startup maintenance",
+      CodeUxServer.STARTUP_MAINTENANCE_DELAY_MS,
+      () => this.runStartupMaintenance(),
+    );
+  }
+
+  private async runStartupRecovery(): Promise<void> {
     try {
-      const startupPrune = this.connectionChatRepository.pruneDisconnectedConnectionsOnStartup();
-      if (startupPrune.prunedConnectionIds.length > 0) {
-        this.logger.info("Pruned disconnected MCP connections on startup", {
-          prunedCount: startupPrune.prunedConnectionIds.length,
-        });
+      const recoveryResult = await this.runtimeStartupRecoveryService.recover();
+      this.logger.info("Recovery routine completed");
+      for (const runId of recoveryResult.resumedSprintRunIds) {
+        const sprintRun = this.executionRepository.getSprintRun(runId);
+        if (sprintRun) {
+          this.dashboardRealtimeService.scheduleProjectLiveRefresh(sprintRun.projectId);
+        }
       }
     } catch (error) {
-      this.logger.error("Failed to prune disconnected MCP connections on startup", { error });
+      this.logger.error("Failed to recover runtime state on startup", { error });
     }
+  }
+
+  private async runStartupContainerCleanup(): Promise<void> {
     try {
       await this.sprintPreviewService.cleanupStaleContainersOnStartup();
     } catch (error) {
@@ -1008,14 +1063,17 @@ export class CodeUxServer {
     } catch (error) {
       this.logger.error("Failed to clean up stale file browser containers on startup", { error });
     }
-    let recoveredSprintRunIds: string[] = [];
-    void new DockerAssetPruneService(
-      this.sessionTracking,
-      this.logger.child({ component: "docker-asset-prune-service" }),
-    ).cleanupOnStartup().catch((error) => {
+    try {
+      await new DockerAssetPruneService(
+        this.sessionTracking,
+        this.logger.child({ component: "docker-asset-prune-service" }),
+      ).cleanupOnStartup();
+    } catch (error) {
       this.logger.error("Failed to prune stale Docker assets on startup", { error });
-    });
+    }
+  }
 
+  private async runStartupMaintenance(): Promise<void> {
     try {
       await new BranchReaperService({
         listProjects: () => this.projectManagementRepository.listProjects().projects.map((project) => ({
@@ -1050,6 +1108,25 @@ export class CodeUxServer {
     } catch (error) {
       this.logger.error("Failed to run database maintenance on startup", { error });
     }
+  }
+
+  async run(): Promise<void> {
+    await bootSettings({
+      runtimeContext: this.runtimeContext,
+      projectRoot: this.projectRoot,
+      logger: this.logger,
+    });
+    this.refreshJulesApiKey();
+    try {
+      const startupPrune = this.connectionChatRepository.pruneDisconnectedConnectionsOnStartup();
+      if (startupPrune.prunedConnectionIds.length > 0) {
+        this.logger.info("Pruned disconnected MCP connections on startup", {
+          prunedCount: startupPrune.prunedConnectionIds.length,
+        });
+      }
+    } catch (error) {
+      this.logger.error("Failed to prune disconnected MCP connections on startup", { error });
+    }
 
     if (this.isDashboardEnabled()) {
       this.dashboardHandle = await bootDashboard({
@@ -1076,6 +1153,7 @@ export class CodeUxServer {
         activityCacheService: this.activityCacheService,
         taskRerunService: this.taskRerunService,
         executionControlService: this.executionControlService,
+        executionInvocationControlService: this.executionInvocationControlService,
         planningAgentService: this.planningAgentService,
         quicksprintService: this.quicksprintService,
         projectSetupService: this.projectSetupService,
@@ -1117,16 +1195,6 @@ export class CodeUxServer {
         embeddingService: this.embeddingService,
         memoryRepository: this.memoryRepository,
       });
-
-      // Trigger rehydration of the dashboard after it's fully booted and configured
-      if (recoveredSprintRunIds.length > 0) {
-        for (const runId of recoveredSprintRunIds) {
-           const sprintRun = this.executionRepository.getSprintRun(runId);
-           if (sprintRun) {
-               this.dashboardRealtimeService.scheduleProjectLiveRefresh(sprintRun.projectId);
-           }
-        }
-      }
     } else {
       this.logger.info("Dashboard startup skipped for headless Code UX runtime", {
         runtimeRole: this.appConfig.runtimeRole,
@@ -1151,9 +1219,7 @@ export class CodeUxServer {
       logger: this.logger.child({ component: "mcp-http-transport" }),
       createServer: () => this.createMcpServerInstance("project_manager"),
       recoveryService: this.runtimeStartupRecoveryService,
-      onRecovered: (ids) => {
-        recoveredSprintRunIds = ids;
-      },
+      runStartupRecovery: false,
     });
     this.mcpServiceBound = true;
     this.startRuntimeCleanupLoop();
@@ -1161,5 +1227,6 @@ export class CodeUxServer {
     this.startLiveSnapshotLoop();
     this.startWalCheckpointLoop();
     this.virtualWorkerService.start();
+    this.scheduleBackgroundStartupTasks();
   }
 }

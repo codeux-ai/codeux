@@ -79,6 +79,7 @@ export interface ExecutionInvocationRecord {
   lastErrorCategory: ProviderErrorCategory | null;
   lastErrorMessage: string | null;
   lastRetryAfterIso: string | null;
+  preservedAt?: string | null;
   messageCount: number;
   lastMessageAt: string | null;
   invocationSource?: "internal" | "EXTERNAL_API";
@@ -128,6 +129,7 @@ export interface CreateExecutionInvocationInput {
   lastErrorCategory?: ProviderErrorCategory | null;
   lastErrorMessage?: string | null;
   lastRetryAfterIso?: string | null;
+  preservedAt?: string | null;
   invocationSource?: "internal" | "EXTERNAL_API";
   agentPresetId?: string | null;
 }
@@ -148,6 +150,7 @@ export interface UpdateExecutionInvocationInput {
   lastErrorCategory?: ProviderErrorCategory | null;
   lastErrorMessage?: string | null;
   lastRetryAfterIso?: string | null;
+  preservedAt?: string | null;
 }
 
 export interface AppendExecutionInvocationMessageInput {

@@ -611,8 +611,7 @@ describe("AgentPresetSyncService", () => {
       title: "Push agent presets",
       featureBranch: "main",
       workerBranch: pushedBranch,
-      taskDescription: "Push the project's .code-ux/agents markdown files into the repository.",
-      sprintDescription: `Project: ${project.name}`,
+      body: `Project: ${project.name}\n\nPush the project's .code-ux/agents markdown files into the repository.`,
     }, repoPath, {
       githubToken: "runtime-github-token",
       gitlabToken: settings.git.gitlabToken,

@@ -9,15 +9,23 @@ describe("jira-api-client", () => {
   it("builds guided Jira search filters into JQL", () => {
     expect(buildJiraSearchJql({
       projectKey: "ops",
-      search: "login failure",
+      search: "OPS-123",
       status: "in_progress",
       assigneeText: "dev@example.com",
+      reporterText: "me",
+      issueType: "Bug",
+      priority: "High",
       labels: ["customer escalation", "p0"],
-    })).toBe('project = OPS AND text ~ "login failure" AND statusCategory = "In Progress" AND assignee = "dev@example.com" AND labels in ("customer escalation", "p0") ORDER BY updated DESC');
+      updatedAfter: "2026-05-01",
+      updatedBefore: "2026-05-31",
+      sortField: "priority",
+      sortDirection: "asc",
+    })).toBe('project = OPS AND key = OPS-123 AND statusCategory = "In Progress" AND assignee = "dev@example.com" AND reporter = currentUser() AND issuetype = "Bug" AND priority = "High" AND updated >= "2026-05-01" AND updated <= "2026-05-31" AND labels in ("customer escalation", "p0") ORDER BY priority ASC');
   });
 
   it("keeps text assignee shortcuts for current user and unassigned issues", () => {
     expect(buildJiraSearchJql({ assigneeText: "me" })).toBe("statusCategory != Done AND assignee = currentUser() ORDER BY updated DESC");
+    expect(buildJiraSearchJql({ assigneeText: "currentUser()" })).toBe("statusCategory != Done AND assignee = currentUser() ORDER BY updated DESC");
     expect(buildJiraSearchJql({ assigneeText: "unassigned" })).toBe("statusCategory != Done AND assignee is EMPTY ORDER BY updated DESC");
   });
 
@@ -27,7 +35,8 @@ describe("jira-api-client", () => {
       expect(init?.method).toBe("POST");
       expect(JSON.parse(String(init?.body))).toEqual(expect.objectContaining({
         jql: "project = OPS AND statusCategory != Done ORDER BY updated DESC",
-        maxResults: 25,
+        maxResults: 100,
+        fields: ["summary", "status", "assignee", "labels", "project", "description", "issuetype", "priority", "updated", "created", "reporter", "fixVersions", "comment"],
       }));
       return new Response(JSON.stringify({
         issues: [
@@ -37,11 +46,15 @@ describe("jira-api-client", () => {
               summary: "Import Jira backlog",
               status: { name: "In Progress" },
               assignee: { displayName: "Pierre" },
+              reporter: { displayName: "Alice" },
               labels: ["jira"],
               project: { key: "OPS" },
               issuetype: { name: "Story" },
               priority: { name: "High" },
+              created: "2026-05-19T10:00:00.000+0000",
               updated: "2026-05-20T10:00:00.000+0000",
+              fixVersions: [{ name: "v1" }],
+              comment: { total: 4, comments: [{ body: { type: "text", text: "ignored" } }] },
               description: {
                 type: "doc",
                 content: [{ type: "paragraph", content: [{ type: "text", text: "Full Jira issue body." }] }],
@@ -55,8 +68,7 @@ describe("jira-api-client", () => {
 
     await expect(searchIssues("https://acme.atlassian.net/", "dev@example.com", "token", {
       projectKey: "OPS",
-      status: "open",
-      maxResults: 25,
+      limit: 250,
     })).resolves.toEqual([
       expect.objectContaining({
         key: "OPS-42",
@@ -66,7 +78,12 @@ describe("jira-api-client", () => {
         issueType: "Story",
         priority: "High",
         bodyPreview: "Full Jira issue body.",
+        createdAt: "2026-05-19T10:00:00.000+0000",
         updatedAt: "2026-05-20T10:00:00.000+0000",
+        issueReporter: "Alice",
+        issueMilestone: "v1",
+        issueCommentCount: 4,
+        sourceProvider: "jira",
       }),
     ]);
   });

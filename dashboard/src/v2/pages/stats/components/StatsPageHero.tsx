@@ -1,40 +1,63 @@
-import type { FunctionComponent } from "preact";
-import { useState } from "preact/hooks";
-import { Activity, BarChart3, Clock3, Cpu, ShieldCheck, Zap } from "lucide-preact";
+import type { FunctionComponent, ComponentType } from "preact";
+import { useEffect, useState } from "preact/hooks";
+import {
+  BarChart3,
+  CalendarDays,
+  CheckCircle2,
+  Layers3,
+  Sparkles,
+} from "lucide-preact";
 import type {
   Source,
   ProjectExecutionStatsSnapshot,
   ProjectStatsQuery,
   ProjectStatsWindow,
 } from "../../../types.js";
-import { formatDateTime, formatStatsDuration, formatTokens, isValidCustomRange } from "../stats-utils.js";
-import { PageHeader } from "../../../components/layout/PageHeader.js";
+import { isValidCustomRange } from "../stats-utils.js";
 import {
   PANEL_CLASS,
   CHIP_CLASS,
   INPUT_CLASS,
+  SUBPANEL_CLASS,
   ViewToggle,
   type StatsVisualMode,
 } from "./StatsShared.js";
+import styles from "../StatsPage.module.css";
 
-const HeroKpi: FunctionComponent<{
-  icon: typeof Zap;
+export const WINDOW_PRESETS = ["1h", "24h", "7d", "30d", "all", "custom"] as const;
+
+export const MODE_DESCRIPTIONS: Record<StatsVisualMode, string> = {
+  trend: "Token, invocation, and runtime movement across the selected range.",
+  composition: "Provider, token, purpose, and source mix for the current telemetry window.",
+  models: "Model activity, latency, cache behavior, and reliability signals.",
+  reliability: "Provider health, source confidence, failures, and integrity notes.",
+  ledgers: "Dense task, sprint, and git telemetry rows for audit-style review.",
+  system: "Invocation health, filters, transcript detail, and debugging context.",
+};
+
+const MODE_LABELS: Record<StatsVisualMode, string> = {
+  trend: "Trend",
+  composition: "Composition",
+  models: "Models",
+  reliability: "Providers",
+  ledgers: "Ledgers",
+  system: "System",
+};
+
+const HERO_PANEL_CLASS = PANEL_CLASS.replace("overflow-hidden", "overflow-visible");
+
+const ContextBadge: FunctionComponent<{
+  icon: ComponentType<any>;
   label: string;
   value: string;
-  valueClassName?: string;
-}> = ({ icon: Icon, label, value, valueClassName = "text-slate-900 dark:text-white" }) => (
-  <div className="flex items-center gap-3 rounded-2xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] px-4 py-3 backdrop-blur-xl">
-    <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-signal-500/10 text-signal-600 dark:text-signal-400">
-      <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
-    </div>
-    <div className="min-w-0">
-      <div className={`truncate text-base font-black leading-tight ${valueClassName}`}>{value}</div>
-      <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">{label}</div>
-    </div>
+}> = ({ icon: Icon, label, value }) => (
+  <div className={`${CHIP_CLASS} ${styles.heroContextBadge}`}>
+    <Icon className={styles.heroContextBadgeIcon} strokeWidth={2.2} aria-hidden="true" />
+    <span className={styles.heroContextBadgeLabel}>{label}</span>
+    <span aria-hidden="true" className={styles.heroContextBadgeDivider}>/</span>
+    <span className={styles.heroContextBadgeValue}>{value}</span>
   </div>
 );
-
-const WINDOW_PRESETS = ["1h", "24h", "7d", "30d", "all"] as const;
 
 export function getRelativeTime(isoString: string): string {
   const diff = Date.now() - new Date(isoString).getTime();
@@ -49,14 +72,27 @@ export function getRelativeTime(isoString: string): string {
   return `${day} day${day > 1 ? "s" : ""} ago`;
 }
 
-const MODE_DESCRIPTIONS: Record<StatsVisualMode, string> = {
-  trend: "Time-series view of token throughput, invocations, and compute time across the selected window.",
-  composition: "Provider share, token anatomy, and purpose breakdown for the selected window.",
-  models: "Per-model performance rankings: latency, velocity, efficiency, and reliability.",
-  reliability: "Telemetry source quality, provider confidence, and data integrity audit.",
-  ledgers: "Deep operational ledgers for individual tasks and sprints.",
-  system: "Live system debug: invocations, errors, sprint state, and external API activity.",
-};
+function formatWindowLabel(activeQuery: ProjectStatsQuery): string {
+  if (activeQuery.window !== "custom") {
+    return activeQuery.window === "all" ? "All time" : activeQuery.window;
+  }
+
+  const from = activeQuery.from || "Start";
+  const to = activeQuery.to || "End";
+  return `${from} → ${to}`;
+}
+
+function getCustomRangeMessage(from: string, to: string): string {
+  if (!from || !to) {
+    return "Choose both dates before applying a custom range.";
+  }
+
+  if (!isValidCustomRange(from, to)) {
+    return "End date must be after start date.";
+  }
+
+  return "";
+}
 
 export interface StatsPageHeroProps {
   selectedProject: Source | null;
@@ -65,6 +101,7 @@ export interface StatsPageHeroProps {
   customFrom: string;
   customTo: string;
   applyPresetWindow: (window: Exclude<ProjectStatsWindow, "custom">) => void;
+  applyCustomWindow?: () => void;
   setCustomFrom: (value: string) => void;
   setCustomTo: (value: string) => void;
   applyCustomRange: () => void;
@@ -86,154 +123,211 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
   setVisualMode,
 }) => {
   const [customRangeError, setCustomRangeError] = useState<string>("");
+  const [customControlsOpen, setCustomControlsOpen] = useState(activeQuery.window === "custom");
+
+  const customRangeMessage = customControlsOpen ? getCustomRangeMessage(customFrom, customTo) : "";
+  const rangeMessage = customRangeError || customRangeMessage;
+  const rangeHasError = Boolean(rangeMessage);
+  const canApplyCustomRange = isValidCustomRange(customFrom, customTo);
+  const selectedProjectLabel = selectedProject?.name || "No project selected";
+  const rangeScopeLabel = stats?.range?.label || formatWindowLabel(activeQuery);
+  const activeModeLabel = MODE_LABELS[visualMode];
+  const activeModeDescription = MODE_DESCRIPTIONS[visualMode];
+
+  useEffect(() => {
+    if (activeQuery.window === "custom") {
+      setCustomControlsOpen(true);
+    }
+  }, [activeQuery.window]);
 
   const handleApplyCustom = () => {
-    if (customFrom && customTo && new Date(customFrom) > new Date(customTo)) {
-      setCustomRangeError("End date must be after start date.");
-    } else {
-      setCustomRangeError("");
-      applyCustomRange();
+    if (!canApplyCustomRange) {
+      setCustomRangeError(rangeMessage);
+      return;
     }
+
+    setCustomRangeError("");
+    applyCustomRange();
   };
 
-  const usage = stats?.usage;
-  const finishedCount = stats?.statusCounts
-    ? stats.statusCounts.completed + stats.statusCounts.failed + stats.statusCounts.cancelled
-    : 0;
+  const handlePresetClick = (window: typeof WINDOW_PRESETS[number]) => {
+    setCustomRangeError("");
 
-  let successRateColor = "text-slate-900 dark:text-white";
-  let successRateString = "—";
-  if (stats?.statusCounts && finishedCount > 0) {
-    const rate = Math.round((stats.statusCounts.completed / finishedCount) * 100);
-    successRateString = `${rate}%`;
-    if (rate >= 95) {
-      successRateColor = "text-emerald-600 dark:text-emerald-400";
-    } else if (rate >= 80) {
-      successRateColor = "text-amber-600 dark:text-amber-400";
-    } else {
-      successRateColor = "text-red-500 dark:text-red-400";
+    if (window === "custom") {
+      setCustomControlsOpen(true);
+      return;
     }
-  }
+
+    setCustomControlsOpen(false);
+    applyPresetWindow(window);
+  };
 
   return (
-    <section className={`${PANEL_CLASS} rounded-[2.5rem] p-8 md:p-10`}>
-      <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-        <div className="max-w-4xl">
-          <PageHeader
-            icon={BarChart3}
-            eyebrow="Telemetry Atlas"
-            title="Statistics"
-            subtitle={MODE_DESCRIPTIONS[visualMode]}
-          />
-          <div className="mt-6 flex flex-wrap gap-3">
-            <div className={`px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
-              {selectedProject?.name || "No project selected"}
-            </div>
-            <div className={`px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
-              {stats?.activeSprint ? `Live sprint ${stats.activeSprint.sprintNumber ?? "?"}` : "Historical lens"}
-            </div>
-            <div className={`px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
-              Generated {stats ? formatDateTime(stats.generatedAt) : "--"}
-            </div>
-            {stats ? (
-              <div className={`px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
-                {stats.range.resolutionLabel}
+    <section className={`${HERO_PANEL_CLASS} ${styles.heroPanel}`} aria-labelledby="stats-hero-title">
+      <div className={styles.heroGrid}>
+        <div className={styles.heroIntro}>
+          <div className={styles.heroTitleBlock}>
+            <div className={styles.heroHeader}>
+              <div className={styles.heroKicker}>
+                <span className={styles.heroKickerIcon} aria-hidden="true">
+                  <BarChart3 strokeWidth={2.2} />
+                </span>
+                <span>Project Analytics</span>
               </div>
-            ) : null}
-          </div>
-          {stats?.generatedAt ? (
-            <div className="mt-3 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-              Updated {getRelativeTime(stats.generatedAt)}
+              <div className={styles.heroTitleRow}>
+                <h1 id="stats-hero-title" className={styles.heroTitle}>Stats</h1>
+                <span className={styles.heroStatusPill}>
+                  <span className={styles.heroStatusDot} aria-hidden="true" />
+                  Current
+                </span>
+              </div>
+              <p className={styles.heroSubtitle}>
+                Telemetry, usage movement, and operational ledgers for the selected project.
+              </p>
             </div>
-          ) : null}
-          {usage ? (
-            <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
-              <HeroKpi icon={Zap} label="Tokens" value={formatTokens(usage.totalTokens)} />
-              <HeroKpi icon={Activity} label="Invocations" value={usage.invocationCount.toLocaleString()} />
-              <HeroKpi icon={Clock3} label="Active Time" value={formatStatsDuration(usage.activeTimeMs)} />
-              <HeroKpi
-                icon={ShieldCheck}
-                label="Success Rate"
-                value={successRateString}
-                valueClassName={successRateColor}
+
+            <div className={styles.heroSignalRow} aria-label="Stats active lens">
+              <div className={`${CHIP_CLASS} ${styles.heroSignalBadge}`}>
+                <Sparkles className={styles.heroSignalIcon} strokeWidth={2.1} aria-hidden="true" />
+                <span>Window</span>
+                <strong>{rangeScopeLabel}</strong>
+              </div>
+              <div className={`${CHIP_CLASS} ${styles.heroSignalBadge}`}>
+                <CheckCircle2 className={styles.heroSignalIcon} strokeWidth={2.1} aria-hidden="true" />
+                <span>Mode</span>
+                <strong>{activeModeLabel}</strong>
+              </div>
+            </div>
+
+            <div className={styles.heroContextGrid} aria-label="Stats project context">
+              <ContextBadge icon={Layers3} label="Project" value={selectedProjectLabel} />
+              <ContextBadge
+                icon={CalendarDays}
+                label="Sprint"
+                value={stats?.activeSprint ? `#${stats.activeSprint.sprintNumber ?? "?"}` : "Historical lens"}
               />
-              <HeroKpi icon={Cpu} label="Models" value={String(stats?.models?.length ?? 0)} />
             </div>
-          ) : null}
-        </div>
-        <div className="flex flex-col sm:flex-row lg:flex-col items-start sm:items-center lg:items-end gap-4 lg:justify-end w-full lg:w-auto mt-6 lg:mt-0 min-w-0 flex-wrap">
-          <div role="group" aria-label="Time window presets" className={`inline-flex flex-wrap p-1 w-full sm:w-auto ${CHIP_CLASS}`}>
-            {WINDOW_PRESETS.map((window) => {
-              const isActive = activeQuery.window === window;
-              return (
-                <button
-                  key={window}
-                  type="button"
-                  onClick={() => applyPresetWindow(window)}
-                  aria-pressed={isActive}
-                  className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.2em] transition-all border border-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] ${
-                    isActive
-                      ? "bg-amber-500/15 border-amber-500/30 text-amber-700 dark:text-amber-300"
-                      : "text-slate-500 hover:bg-[color:var(--fill-muted)] hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-                  }`}
-                >
-                  {window === "all" ? "All time" : window}
-                </button>
-              );
-            })}
           </div>
-          {activeQuery.window === "custom" ? (
-            <div className="w-full flex flex-col gap-2">
-              <div className="grid w-full gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-                <input
-                  type="date"
-                  aria-label="Custom start date"
-                  value={customFrom}
-                  onInput={(event) => {
-                    setCustomFrom((event.currentTarget as HTMLInputElement).value);
-                    setCustomRangeError("");
-                  }}
-                  className={`${INPUT_CLASS} !h-10 !px-3 !text-[12px]`}
-                  aria-invalid={!isValidCustomRange(customFrom, customTo) ? "true" : undefined}
-                  aria-errormessage={!isValidCustomRange(customFrom, customTo) ? "custom-range-error" : undefined}
-                />
-                <input
-                  type="date"
-                  aria-label="Custom end date"
-                  value={customTo}
-                  onInput={(event) => {
-                    setCustomTo((event.currentTarget as HTMLInputElement).value);
-                    setCustomRangeError("");
-                  }}
-                  className={`${INPUT_CLASS} !h-10 !px-3 !text-[12px]`}
-                  aria-invalid={!isValidCustomRange(customFrom, customTo) ? "true" : undefined}
-                  aria-errormessage={!isValidCustomRange(customFrom, customTo) ? "custom-range-error" : undefined}
-                />
+        </div>
+
+        <div className={`${SUBPANEL_CLASS} ${styles.heroControls}`} aria-label="Stats command controls">
+          <div className={styles.heroControlSection}>
+            <div className={styles.heroControlHeader}>
+              <div className={styles.heroControlHeaderText}>
+                <div className={styles.heroControlEyebrow}>
+                  Time window
+                </div>
+                <div className={styles.heroControlDescription}>
+                  Select the telemetry range for every analysis mode.
+                </div>
+              </div>
+              <div className={styles.heroControlSummary} aria-label={`Current time window ${rangeScopeLabel}`}>
+                <span>Current</span>
+                <strong>{rangeScopeLabel}</strong>
+              </div>
+              <CalendarDays className={styles.heroControlIcon} strokeWidth={2.2} aria-hidden="true" />
+            </div>
+
+            <div role="group" aria-label="Time window presets" className={`${CHIP_CLASS} flex-wrap ${styles.heroPresetGroup}`}>
+              {WINDOW_PRESETS.map((window) => {
+                const isActive = window === "custom" ? customControlsOpen : activeQuery.window === window;
+                return (
+                  <button
+                    key={window}
+                    type="button"
+                    onClick={() => handlePresetClick(window)}
+                    aria-pressed={isActive}
+                    aria-expanded={window === "custom" ? customControlsOpen : undefined}
+                    aria-controls={window === "custom" ? "stats-custom-range-controls" : undefined}
+                    className={`${styles.heroPresetButton} ${isActive ? styles.heroPresetButtonActive : ""}`}
+                  >
+                    {window === "all" ? "All time" : window === "custom" ? "Custom" : window}
+                  </button>
+                );
+              })}
+            </div>
+
+            {customControlsOpen ? (
+              <div id="stats-custom-range-controls" className={styles.customRangeControls}>
+                <label className={styles.customRangeField}>
+                  <span className={styles.customRangeLabel}>Start</span>
+                  <input
+                    id="stats-custom-start"
+                    type="date"
+                    aria-label="Custom start date"
+                    value={customFrom}
+                    onInput={(event) => {
+                      setCustomFrom((event.currentTarget as HTMLInputElement).value);
+                      setCustomRangeError("");
+                    }}
+                    className={`${INPUT_CLASS} !h-10 w-full !px-3 !text-[12px]`}
+                    aria-invalid={rangeHasError ? "true" : "false"}
+                    aria-errormessage={rangeHasError ? "stats-custom-range-error" : undefined}
+                    aria-describedby="stats-custom-range-help"
+                  />
+                </label>
+                <label className={styles.customRangeField}>
+                  <span className={styles.customRangeLabel}>End</span>
+                  <input
+                    id="stats-custom-end"
+                    type="date"
+                    aria-label="Custom end date"
+                    value={customTo}
+                    onInput={(event) => {
+                      setCustomTo((event.currentTarget as HTMLInputElement).value);
+                      setCustomRangeError("");
+                    }}
+                    className={`${INPUT_CLASS} !h-10 w-full !px-3 !text-[12px]`}
+                    aria-invalid={rangeHasError ? "true" : "false"}
+                    aria-errormessage={rangeHasError ? "stats-custom-range-error" : undefined}
+                    aria-describedby="stats-custom-range-help"
+                  />
+                </label>
                 <button
                   type="button"
                   onClick={handleApplyCustom}
-                  disabled={!customFrom || !customTo}
-                  aria-disabled={!customFrom || !customTo ? "true" : undefined}
-                  className="inline-flex h-10 items-center justify-center rounded-2xl bg-slate-900 px-4 text-[11px] font-bold uppercase tracking-[0.2em] text-white shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-transform hover:-translate-y-0.5 dark:bg-white dark:text-void-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!canApplyCustomRange}
+                  aria-disabled={!canApplyCustomRange ? "true" : undefined}
+                  className={styles.customRangeApply}
                 >
                   Apply
                 </button>
-              </div>
-              <div className="min-h-[1.25rem]">
-                {!isValidCustomRange(customFrom, customTo) && customFrom && customTo && (
-                  <span id="custom-range-error" className="text-xs text-red-500 dark:text-red-400 font-medium" role="alert">
-                    End date cannot be before start date
-                  </span>
-                )}
-              </div>
-            {customRangeError ? (
-              <div aria-live="polite" className="text-xs text-red-500 dark:text-red-400">
-                {customRangeError}
+                <div id="stats-custom-range-help" className={styles.customRangeHelp}>
+                  {rangeHasError ? (
+                    <span id="stats-custom-range-error" role="alert" className={styles.customRangeError}>
+                      {rangeMessage}
+                    </span>
+                  ) : (
+                    <span>Custom ranges apply only when both dates are valid.</span>
+                  )}
+                </div>
               </div>
             ) : null}
           </div>
-          ) : null}
-          <ViewToggle value={visualMode} onChange={setVisualMode} />
+
+          <div className={`${styles.heroControlSection} ${styles.heroModeSection}`}>
+            <div className={styles.heroControlHeader}>
+              <div className={styles.heroControlHeaderText}>
+                <div className={styles.heroControlEyebrow}>
+                  Analysis mode
+                </div>
+                <div className={styles.heroControlDescription}>
+                  {activeModeDescription}
+                </div>
+              </div>
+              <div className={styles.heroControlSummary} aria-label={`Active analysis mode ${activeModeLabel}`}>
+                <span>Mode</span>
+                <strong>{activeModeLabel}</strong>
+              </div>
+              <CheckCircle2 className={styles.heroModeIcon} strokeWidth={2.2} aria-hidden="true" />
+            </div>
+            <ViewToggle
+              value={visualMode}
+              onChange={setVisualMode}
+              ariaLabel="Analytics modes"
+              className={styles.heroViewToggle}
+            />
+          </div>
         </div>
       </div>
     </section>

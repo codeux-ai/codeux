@@ -2,29 +2,35 @@ import type { FunctionComponent } from "preact";
 import {
   Brain,
   Activity,
+  BarChart3,
   Clock3,
   Cpu,
   Database,
+  DollarSign,
   Gauge,
   ShieldCheck,
   TrendingUp,
   Zap,
+  type LucideIcon,
 } from "lucide-preact";
 import type { ExecutionModelStatsSummary, ProjectExecutionStatsSnapshot } from "../../../types.js";
-import { formatStatsDuration, formatTokens, formatDateTime, formatPercent } from "../stats-utils.js";
+import { formatStatsDuration, formatTokens, formatDateTime, formatPercent, formatCost } from "../stats-utils.js";
 import {
   PANEL_CLASS,
   SUBPANEL_CLASS,
   CHIP_CLASS,
+  DASHED_EMPTY_CLASS,
   DonutCard,
+  STATUS_TONE_CLASS,
   StudioHeader,
+  TEXT_DETAIL_CLASS,
+  TEXT_LABEL_CLASS,
+  TEXT_VALUE_CLASS,
   TokenFlowBar,
   getProviderIcon,
 } from "./StatsShared.js";
 import {
   buildModelHighlights,
-  buildVelocityHighlight,
-  buildReasoningHighlight,
   buildModelSegments,
   computeUsageEfficiency,
   formatSuccessRate,
@@ -32,15 +38,47 @@ import {
   type ModelHighlight,
 } from "../model-insights.js";
 
+const LOW_SAMPLE_THRESHOLD = 3;
+
 const SUCCESS_TONE_CLASS: Record<ReturnType<typeof getSuccessTone>, string> = {
-  strong: "border-status-green/30 bg-status-green/10 text-status-green",
-  warn: "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  critical: "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400",
-  neutral: "border-slate-500/20 bg-slate-500/10 text-slate-500 dark:text-slate-400",
+  strong: STATUS_TONE_CLASS.positive,
+  warn: STATUS_TONE_CLASS.warning,
+  critical: STATUS_TONE_CLASS.negative,
+  neutral: STATUS_TONE_CLASS.neutral,
 };
 
-const HighlightTile: FunctionComponent<{
-  icon: typeof Zap;
+const formatEfficiencyPercent = (value: number | null): string => (
+  value === null ? "—" : formatPercent(value * 100)
+);
+
+const formatMetricTokens = (value: number | null): string => (
+  value === null ? "—" : formatTokens(Math.round(value))
+);
+
+const formatVelocity = (value: number | null): string => (
+  value === null || value <= 0 ? "—" : `${formatTokens(Math.round(value))} tok/s`
+);
+
+const formatPricingValue = (value: number | null): string => (
+  value === null || value <= 0 ? "—" : formatCost(value)
+);
+
+const formatShare = (value: number): string => (
+  value > 0 ? `${value.toFixed(1)}% share` : "no token share"
+);
+
+const getInvocationSignal = (count: number): string => {
+  if (count === 0) {
+    return "No calls yet";
+  }
+  if (count < LOW_SAMPLE_THRESHOLD) {
+    return "Low sample";
+  }
+  return `${count.toLocaleString()} calls`;
+};
+
+export const HighlightTile: FunctionComponent<{
+  icon: LucideIcon;
   label: string;
   highlight: ModelHighlight | null;
   tone: string;
@@ -50,28 +88,29 @@ const HighlightTile: FunctionComponent<{
       <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
       {label}
     </div>
-    <div className="mt-3 truncate text-lg font-black text-slate-900 dark:text-white">
+    <div className={`mt-3 break-words text-lg font-black ${TEXT_VALUE_CLASS}`}>
       {highlight ? highlight.model.label : "—"}
     </div>
-    <div className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+    <div className={`mt-1 text-xs font-medium ${TEXT_DETAIL_CLASS}`}>
       {highlight ? highlight.value : "Not enough telemetry yet"}
     </div>
+    {highlight?.detail ? <div className={`mt-1 text-[10px] font-bold uppercase tracking-[0.14em] ${TEXT_LABEL_CLASS}`}>{highlight.detail}</div> : null}
   </div>
 );
 
-const ModelMetric: FunctionComponent<{
+export const ModelMetric: FunctionComponent<{
   label: string;
   value: string;
   detail?: string;
 }> = ({ label, value, detail }) => (
   <div className={`${SUBPANEL_CLASS} p-4`}>
-    <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{label}</div>
-    <div className="mt-2 text-lg font-black text-slate-900 dark:text-white">{value}</div>
-    {detail ? <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{detail}</div> : null}
+    <div className={`text-[10px] font-bold uppercase tracking-[0.16em] ${TEXT_LABEL_CLASS}`}>{label}</div>
+    <div className={`mt-2 text-lg font-black ${value === "—" ? TEXT_DETAIL_CLASS : TEXT_VALUE_CLASS}`}>{value}</div>
+    {detail ? <div className={`mt-1 text-[10px] font-bold uppercase tracking-[0.14em] ${TEXT_LABEL_CLASS}`}>{detail}</div> : null}
   </div>
 );
 
-const ModelCard: FunctionComponent<{
+export const ModelCard: FunctionComponent<{
   model: ExecutionModelStatsSummary;
   rank: number;
   shareOfTotal: number;
@@ -79,33 +118,59 @@ const ModelCard: FunctionComponent<{
   const { icon: Icon, bg, text } = getProviderIcon(model.provider);
   const efficiency = computeUsageEfficiency(model.usage);
   const successTone = getSuccessTone(model.successRate);
+  const hasDuration = model.duration.sampleCount > 0;
+  const hasLowTelemetry = model.usage.invocationCount > 0 && model.usage.invocationCount < LOW_SAMPLE_THRESHOLD;
+  const hasCost = Number.isFinite(model.usage.totalCostUsd) && model.usage.totalCostUsd > 0;
+  const costPerCall = hasCost && model.usage.invocationCount > 0
+    ? model.usage.totalCostUsd / model.usage.invocationCount
+    : null;
+  const costPerMillionTokens = hasCost && model.usage.totalTokens > 0
+    ? model.usage.totalCostUsd / (model.usage.totalTokens / 1_000_000)
+    : null;
+  const statusSummary = `${model.statusCounts.completed} completed · ${model.statusCounts.failed} failed · ${model.statusCounts.running} running · ${model.statusCounts.cancelled} cancelled`;
 
   return (
-    <div className={`${PANEL_CLASS} p-5`}>
+    <article className={`${PANEL_CLASS} p-4 md:p-5`} aria-label={`${model.label} model leaderboard rank ${rank}`}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className={`rounded-xl p-2 ${bg} ${text}`}>
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <div className={`shrink-0 rounded-xl p-2 ${bg} ${text}`}>
             <Icon className="h-4 w-4" strokeWidth={2.1} />
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">#{rank}</span>
-              <span className="truncate text-base font-black text-slate-900 dark:text-white">{model.label}</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`inline-flex shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${CHIP_CLASS}`}>
+                #{rank}
+              </span>
+              <h3 className="min-w-0 max-w-full break-words text-base font-black leading-tight text-[color:var(--stats-value-color)]" title={model.label}>
+                {model.label}
+              </h3>
             </div>
-            <div className="mt-1 text-sm text-slate-500 dark:text-slate-400 capitalize">
-              {model.provider} · {shareOfTotal > 0 ? `${shareOfTotal.toFixed(1)}% of window volume` : "no token volume"}
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-[color:var(--stats-detail-color)]">
+              <span className="capitalize">{model.provider}</span>
+              <span aria-hidden="true">·</span>
+              <span>{formatShare(shareOfTotal)}</span>
+              <span aria-hidden="true">·</span>
+              <span>{getInvocationSignal(model.usage.invocationCount)}</span>
             </div>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 self-start">
-<div className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${CHIP_CLASS}`}>
-            #{rank} by volume
+          <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${CHIP_CLASS}`}>
+            Volume rank
           </div>
-          <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
-            <span className="text-base font-black normal-case tracking-tight text-slate-900 dark:text-white">
+          <div className={`inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
+            <BarChart3 className="h-3.5 w-3.5 text-[color:var(--stats-signal-text)]" strokeWidth={2.2} />
+            <span className="text-base font-black normal-case text-[color:var(--stats-value-color)]">
               {formatTokens(model.usage.totalTokens)}
             </span>
-            <span className="text-slate-400">tokens</span>
+            <span className="text-[color:var(--stats-label-color)]">tokens</span>
+          </div>
+          <div className={`inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
+            <DollarSign className="h-3.5 w-3.5 text-[color:var(--stats-positive-text)]" strokeWidth={2.2} />
+            <span className="text-base font-black normal-case text-[color:var(--stats-value-color)]">
+              {formatPricingValue(hasCost ? model.usage.totalCostUsd : null)}
+            </span>
+            <span className="text-[color:var(--stats-label-color)]">cost</span>
           </div>
           <div className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${SUCCESS_TONE_CLASS[successTone]}`}>
             <ShieldCheck className="h-3 w-3" strokeWidth={2.4} />
@@ -114,91 +179,96 @@ const ModelCard: FunctionComponent<{
         </div>
       </div>
 
-      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-3">
+      {hasLowTelemetry || !hasDuration ? (
+        <div className={`${DASHED_EMPTY_CLASS} mt-4 py-3 text-left text-xs font-medium ${TEXT_DETAIL_CLASS}`}>
+          {hasLowTelemetry ? "Leaderboard placement is based on limited invocation telemetry." : "Latency percentiles will appear after this model records duration samples."}
+        </div>
+      ) : null}
+
+      <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-5">
         <ModelMetric
           label="Invocations"
           value={model.usage.invocationCount.toLocaleString()}
-          detail={`${model.statusCounts.failed > 0 ? `${model.statusCounts.failed} failed` : "no failures"}`}
+          detail={model.statusCounts.failed > 0 ? `${model.statusCounts.failed} failed` : "no failures"}
         />
         <ModelMetric
-          label="Median Latency"
-          value={model.duration.sampleCount > 0 ? formatStatsDuration(model.duration.p50Ms) : "—"}
-          detail={model.duration.sampleCount > 0 ? `p95 ${formatStatsDuration(model.duration.p95Ms)}` : "no samples"}
-        />
-        <ModelMetric
-          label="Cache Hit Rate"
-          value={efficiency.cacheHitRate !== null ? `${Math.round(efficiency.cacheHitRate * 100)}%` : "—"}
-          detail={`${formatTokens(model.usage.cachedInputTokens)} cached`}
+          label="Latency"
+          value={hasDuration ? formatStatsDuration(model.duration.p50Ms) : "—"}
+          detail={hasDuration ? `p50 · p95 ${formatStatsDuration(model.duration.p95Ms)}` : "no duration samples"}
         />
         <ModelMetric
           label="Tokens / Call"
-          value={efficiency.tokensPerCall !== null ? formatTokens(Math.round(efficiency.tokensPerCall)) : "—"}
-          detail="avg per invocation"
+          value={formatMetricTokens(efficiency.tokensPerCall)}
+          detail={model.usage.invocationCount > 0 ? "avg volume" : "no calls"}
+        />
+        <ModelMetric
+          label="Success"
+          value={formatSuccessRate(model.successRate)}
+          detail={model.successRate === null ? "pending outcomes" : statusSummary}
+        />
+        <ModelMetric
+          label="Cost"
+          value={formatPricingValue(hasCost ? model.usage.totalCostUsd : null)}
+          detail={costPerCall !== null ? `${formatCost(costPerCall)}/call` : "no pricing signal"}
+        />
+        <ModelMetric
+          label="$ / 1M Tok"
+          value={formatPricingValue(costPerMillionTokens)}
+          detail={costPerMillionTokens !== null ? "blended token rate" : "pricing unavailable"}
         />
         <ModelMetric
           label="Output Velocity"
-          value={model.usage.outputTokens > 0 && model.usage.activeTimeMs > 0 ? formatTokens(Math.round(model.usage.outputTokens / (model.usage.activeTimeMs / 1000))) + "/s" : "—"}
-          detail="tok/s output"
+          value={formatVelocity(efficiency.outputTokensPerSecond)}
+          detail={efficiency.outputTokensPerSecond === null ? "no active output" : "generated output"}
         />
         <ModelMetric
-          label="Reasoning Share"
-          value={model.usage.reasoningOutputTokens > 0 && model.usage.outputTokens > 0 ? formatPercent((model.usage.reasoningOutputTokens / model.usage.outputTokens) * 100) : "—"}
-          detail="of output"
+          label="Cache Rate"
+          value={formatEfficiencyPercent(efficiency.cacheHitRate)}
+          detail={`${formatTokens(model.usage.cachedInputTokens)} cached`}
+        />
+        <ModelMetric
+          label="Reasoning"
+          value={formatEfficiencyPercent(efficiency.reasoningShare)}
+          detail={`${formatTokens(model.usage.reasoningOutputTokens)} reasoning`}
+        />
+        <ModelMetric
+          label="Output / Input"
+          value={efficiency.outputInputRatio !== null ? efficiency.outputInputRatio.toFixed(2) : "—"}
+          detail="generation ratio"
         />
       </div>
 
-
-      <div className={`${SUBPANEL_CLASS} mt-5 grid grid-cols-2 p-4`}>
-        <div>
-          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">p50</div>
-          <div className="mt-1 text-base font-black text-slate-900 dark:text-white">
-            {model.duration.sampleCount > 0 ? formatStatsDuration(model.duration.p50Ms) : "—"}
+      <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-[0.85fr_1.15fr]">
+        <div className={`${SUBPANEL_CLASS} p-4`}>
+          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Outcome Mix</div>
+          <div className="mt-2 text-sm font-black text-[color:var(--stats-value-color)]">{statusSummary}</div>
+          <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">
+            Last active {formatDateTime(model.lastActivityAt)}
           </div>
         </div>
-        <div>
-          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">p95</div>
-          <div className="mt-1 text-base font-black text-slate-900 dark:text-white">
-            {model.duration.sampleCount > 0 ? formatStatsDuration(model.duration.p95Ms) : "—"}
+        <div className={`${SUBPANEL_CLASS} p-4`}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Token-Flow Anatomy</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">{formatTokens(model.usage.totalTokens)} total</div>
+          </div>
+          <div className="mt-3">
+            <TokenFlowBar
+              input={model.usage.inputTokens}
+              cached={model.usage.cachedInputTokens}
+              output={model.usage.outputTokens}
+              reasoning={model.usage.reasoningOutputTokens}
+              total={model.usage.totalTokens}
+            />
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--stats-label-color)] sm:grid-cols-4">
+            <span>In {formatTokens(model.usage.inputTokens)}</span>
+            <span>Cache {formatTokens(model.usage.cachedInputTokens)}</span>
+            <span>Out {formatTokens(model.usage.outputTokens)}</span>
+            <span>Think {formatTokens(model.usage.reasoningOutputTokens)}</span>
           </div>
         </div>
       </div>
-
-      <div className="mt-5">
-        <TokenFlowBar
-          input={model.usage.inputTokens}
-          cached={model.usage.cachedInputTokens}
-          output={model.usage.outputTokens}
-          reasoning={model.usage.reasoningOutputTokens}
-          total={model.usage.totalTokens}
-        />
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
-          <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-status-green ${CHIP_CLASS}`}>
-            {model.statusCounts.completed} completed
-          </span>
-          {model.statusCounts.failed > 0 ? (
-            <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-rose-500 dark:text-rose-400 ${CHIP_CLASS}`}>
-              {model.statusCounts.failed} failed
-            </span>
-          ) : null}
-          {model.statusCounts.running > 0 ? (
-            <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-600 dark:text-cyan-400 ${CHIP_CLASS}`}>
-              {model.statusCounts.running} running
-            </span>
-          ) : null}
-          {model.statusCounts.cancelled > 0 ? (
-            <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400 ${CHIP_CLASS}`}>
-              {model.statusCounts.cancelled} cancelled
-            </span>
-          ) : null}
-        </div>
-        <div className="text-[11px] font-mono text-slate-400 dark:text-slate-500">
-          Last active {formatDateTime(model.lastActivityAt)}
-        </div>
-      </div>
-    </div>
+    </article>
   );
 };
 
@@ -208,10 +278,17 @@ export const ModelsStudio: FunctionComponent<{
   const models = stats.models || [];
   const segments = buildModelSegments(models);
   const highlights = buildModelHighlights(models);
-  const velocityHighlight = buildVelocityHighlight(models);
-  const reasoningHighlight = buildReasoningHighlight(models);
   const totalTokens = models.reduce((sum, model) => sum + model.usage.totalTokens, 0);
-  const sorted = [...models].sort((left, right) => right.usage.totalTokens - left.usage.totalTokens);
+  const totalCalls = models.reduce((sum, model) => sum + model.usage.invocationCount, 0);
+  const totalOutput = models.reduce((sum, model) => sum + model.usage.outputTokens, 0);
+  const totalReasoning = models.reduce((sum, model) => sum + model.usage.reasoningOutputTokens, 0);
+  const totalCached = models.reduce((sum, model) => sum + model.usage.cachedInputTokens, 0);
+  const totalCost = models.reduce((sum, model) => sum + model.usage.totalCostUsd, 0);
+  const sampledModels = models.filter((model) => model.duration.sampleCount > 0).length;
+  const sorted = [...models].sort((left, right) => {
+    const delta = right.usage.totalTokens - left.usage.totalTokens;
+    return delta !== 0 ? delta : left.label.localeCompare(right.label);
+  });
 
   return (
     <section className="space-y-6">
@@ -225,12 +302,18 @@ export const ModelsStudio: FunctionComponent<{
       </div>
 
       {models.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-12 text-center text-sm text-slate-400 dark:border-white/[0.08]">
-          No model telemetry landed in this window yet.
+        <div className={`${PANEL_CLASS} border-dashed p-10 text-center`}>
+          <div className={`mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-chip)] ${TEXT_LABEL_CLASS}`}>
+            <Cpu className="h-5 w-5" strokeWidth={2.2} />
+          </div>
+          <div className="mt-4 text-lg font-black text-[color:var(--stats-value-color)]">No model telemetry yet</div>
+          <div className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
+            This window has no model entries, so volume, latency, cache, and reasoning comparisons will appear after provider invocations are recorded.
+          </div>
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1.05fr_0.95fr]">
+          <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[0.95fr_1.05fr_0.8fr]">
             <DonutCard
               title="Model Share"
               eyebrow="Distribution"
@@ -241,69 +324,87 @@ export const ModelsStudio: FunctionComponent<{
             />
             <div className={`${PANEL_CLASS} p-6`}>
               <div className="flex items-center gap-3">
-                <Gauge className="h-4 w-4 text-signal-500" strokeWidth={2} />
-                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Efficiency Highlights</div>
+                <Gauge className="h-4 w-4 text-[color:var(--stats-signal-text)]" strokeWidth={2} />
+                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Efficiency Highlights</div>
               </div>
-              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 <HighlightTile
                   icon={TrendingUp}
-                  label="Busiest"
+                  label="Volume Leader"
                   highlight={highlights.busiest}
-                  tone="text-signal-600 dark:text-signal-400"
+                  tone="text-[color:var(--stats-signal-text)]"
                 />
                 <HighlightTile
                   icon={Clock3}
                   label="Fastest"
                   highlight={highlights.fastest}
-                  tone="text-cyan-600 dark:text-cyan-400"
+                  tone="text-[color:var(--stats-accent-cyan)]"
                 />
                 <HighlightTile
                   icon={ShieldCheck}
                   label="Most Reliable"
                   highlight={highlights.mostReliable}
-                  tone="text-emerald-600 dark:text-emerald-400"
+                  tone="text-[color:var(--stats-positive-text)]"
                 />
                 <HighlightTile
                   icon={Database}
                   label="Best Cache Efficiency"
                   highlight={highlights.bestCache}
-                  tone="text-amber-600 dark:text-amber-400"
+                  tone="text-[color:var(--stats-warning-text)]"
                 />
                 <HighlightTile
                   icon={Zap}
                   label="Highest Velocity"
-                  highlight={velocityHighlight}
-                  tone="text-cyan-600 dark:text-cyan-400"
+                  highlight={highlights.highestVelocity}
+                  tone="text-[color:var(--stats-accent-cyan)]"
                 />
                 <HighlightTile
                   icon={Brain}
                   label="Highest Reasoning"
-                  highlight={reasoningHighlight}
-                  tone="text-rose-600 dark:text-rose-400"
+                  highlight={highlights.strongestReasoning}
+                  tone="text-[color:var(--stats-negative-text)]"
                 />
               </div>
-              <div className={`${SUBPANEL_CLASS} mt-4 p-4`}>
-                <div className="flex items-center justify-between gap-4">
-                  <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                    <Activity className="h-3.5 w-3.5" strokeWidth={2.2} />
-                    Window Volume
-                  </div>
-                  <div className="text-lg font-black text-slate-900 dark:text-white">{formatTokens(totalTokens)} tokens</div>
-                </div>
-                <div className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                  Highlights prefer models with at least 3 invocations so a single lucky call can't win a category.
-                </div>
+            </div>
+            <div className={`${PANEL_CLASS} p-6`}>
+              <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">
+                <Activity className="h-3.5 w-3.5 text-[color:var(--stats-signal-text)]" strokeWidth={2.2} />
+                Window Volume
+              </div>
+              <div className="mt-4 text-3xl font-black text-[color:var(--stats-value-color)]">{formatTokens(totalTokens)}</div>
+              <div className="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">tokens ranked by model volume</div>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <ModelMetric label="Calls" value={totalCalls.toLocaleString()} detail={totalCalls < LOW_SAMPLE_THRESHOLD ? "sparse sample" : "invocations"} />
+                <ModelMetric label="Output" value={formatTokens(totalOutput)} detail="generated" />
+                <ModelMetric label="Cached" value={formatTokens(totalCached)} detail="input reuse" />
+                <ModelMetric label="Reasoning" value={formatTokens(totalReasoning)} detail="thinking tokens" />
+                <ModelMetric label="Cost" value={formatPricingValue(totalCost)} detail={totalCost > 0 ? "priced usage" : "no pricing signal"} />
+              </div>
+              <div className={`${DASHED_EMPTY_CLASS} mt-4 py-3 text-left text-xs leading-relaxed ${TEXT_DETAIL_CLASS}`}>
+                {sampledModels === 0
+                  ? "No model has duration samples yet; latency highlights and p50/p95 cells stay intentionally empty."
+                  : `${sampledModels.toLocaleString()} of ${models.length.toLocaleString()} models have duration samples. Highlights prefer models with at least ${LOW_SAMPLE_THRESHOLD} calls.`}
               </div>
             </div>
           </div>
 
           <div className="space-y-4">
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Model Leaderboard</div>
-              <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                Every model ranked by token volume, with reliability, latency percentiles, and efficiency anatomy per model.
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Model Leaderboard</div>
+                <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
+                  Ranked by token volume, then model label. Each entry keeps reliability, p50/p95 latency, speed, cache, reasoning, and token anatomy visible for comparison.
+                </div>
+              </div>
+              <div className={`self-start px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)] ${CHIP_CLASS}`}>
+                Sort: tokens desc
               </div>
             </div>
+            {totalTokens === 0 ? (
+              <div className={`${DASHED_EMPTY_CLASS} py-5 text-left text-sm ${TEXT_DETAIL_CLASS}`}>
+                Models are present, but none reported token volume in this window. Ranking falls back to labels until usage totals arrive.
+              </div>
+            ) : null}
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               {sorted.map((model, index) => (
                 <ModelCard

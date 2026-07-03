@@ -56,16 +56,16 @@ describe("GitTelemetryTab", () => {
   it("renders Task Leaderboard by default", () => {
     render(<GitTelemetryTab gitStats={mockGitStats as any} />);
     expect(screen.getByText("Task Git Ledger")).toBeInTheDocument();
-    expect(screen.getByText("Fix issue 1")).toBeInTheDocument();
-    expect(screen.getByText("Add feature X")).toBeInTheDocument();
+    expect(screen.getAllByText("Fix issue 1").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Add feature X").length).toBeGreaterThan(0);
   });
 
   it("switches to Sprint Leaderboard", () => {
     render(<GitTelemetryTab gitStats={mockGitStats as any} />);
-    const buttons = screen.getAllByRole("button", { name: "Sprint Leaderboard" });
+    const buttons = screen.getAllByRole("tab", { name: /Sprint Leaderboard/ });
     fireEvent.click(buttons[0] as HTMLElement);
     expect(screen.getByText("Sprint Git Ledger")).toBeInTheDocument();
-    expect(screen.getByText("Sprint 1")).toBeInTheDocument();
+    expect(screen.getAllByText("Sprint 1").length).toBeGreaterThan(0);
   });
 
   it("can sort by insertions, deletions, files, prs, merges", () => {

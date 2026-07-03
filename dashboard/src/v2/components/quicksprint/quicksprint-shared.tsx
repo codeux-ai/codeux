@@ -1,8 +1,17 @@
-import { useRef, useCallback } from "preact/hooks";
 import type { FunctionComponent } from "preact";
 import { Sparkles, ShieldCheck, Accessibility, Zap, Bug, Code2, Database, FileSearch, FlaskConical, GitBranch, Globe, Hammer, Heart, Layers, LayoutGrid, Lock, Microscope, Monitor, Paintbrush, RefreshCw, Search, Server, Shield, Terminal, TestTube2, Wrench, Settings2 } from "lucide-preact";
 import type { LucideProps } from "lucide-preact";
 import type { QuicksprintTemplateRecord } from "../../../../../src/contracts/quicksprint-types.js";
+
+export const SUBTASK_SLIDER_MIN = 1;
+export const SUBTASK_SLIDER_MAX = 30;
+
+export function clampSubtaskSliderValue(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 5;
+  }
+  return Math.min(SUBTASK_SLIDER_MAX, Math.max(SUBTASK_SLIDER_MIN, Math.round(value)));
+}
 
 export const IconMap: Record<string, FunctionComponent<LucideProps>> = {
   Sparkles, ShieldCheck, Accessibility, Zap,
@@ -91,40 +100,41 @@ export const TemplateCard: FunctionComponent<{
           onSelect();
         }
       }}
-      className="group relative flex h-full min-h-[16.5rem] cursor-pointer flex-col rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-5 text-left transition-all hover:border-ember-500/30 hover:shadow-[0_0_24px_rgba(255,107,0,0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-white/[0.06] dark:bg-void-800/60 dark:focus-visible:ring-offset-void-800 dark:hover:border-ember-500/30"
+      className="group relative flex h-[16.25rem] min-w-0 cursor-pointer flex-col overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-5 text-left transition-all hover:border-ember-500/30 hover:shadow-[0_0_24px_rgba(255,107,0,0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-white/[0.06] dark:bg-void-800/60 dark:focus-visible:ring-offset-void-800 dark:hover:border-ember-500/30"
     >
       {!template.isBuiltIn && onEdit && (
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onEdit(); }}
-          className="absolute top-4 right-4 rounded-lg min-h-[44px] min-w-[44px] p-1.5 text-slate-300 opacity-0 transition-all group-hover:opacity-100 hover:bg-ember-500/10 hover:text-ember-500 dark:text-slate-500"
+          aria-label={`Edit ${template.name} template`}
+          className="absolute top-4 right-4 z-10 rounded-lg min-h-[44px] min-w-[44px] p-1.5 text-slate-300 opacity-0 transition-all group-hover:opacity-100 hover:bg-ember-500/10 hover:text-ember-500 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-slate-500 dark:focus-visible:ring-offset-void-800"
           title="Edit template"
         >
           <Settings2 className="h-3.5 w-3.5" />
         </button>
       )}
 
-      <div className="mb-3 flex items-center gap-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-ember-500/[0.08] text-ember-500 transition-colors group-hover:bg-ember-500/[0.14]">
+      <div className="mb-3 flex min-w-0 items-center gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-ember-500/[0.08] text-ember-500 transition-colors group-hover:bg-ember-500/[0.14]">
           <Icon className="h-4.5 w-4.5" />
         </div>
-        <h3 id={titleId} className="flex-1 pr-6 text-sm font-bold leading-tight text-slate-900 dark:text-white">{template.name}</h3>
+        <h3 id={titleId} className="line-clamp-2 min-w-0 flex-1 pr-6 text-sm font-bold leading-tight text-slate-900 dark:text-white">{template.name}</h3>
       </div>
 
-      <p id={descriptionId} className="line-clamp-3 flex-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{template.description}</p>
+      <p id={descriptionId} className="line-clamp-4 min-h-0 flex-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{template.description}</p>
 
-      <div className="mt-4 flex items-center justify-between gap-3">
+      <div className="mt-4 flex min-w-0 items-center justify-between gap-3">
         <span
-          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ${getTagStyles(tagColor).bg} ${getTagStyles(tagColor).text}`}
+          className={`inline-flex min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ${getTagStyles(tagColor).bg} ${getTagStyles(tagColor).text}`}
           style={getTagStyles(tagColor).style?.["--accent"] ? { backgroundColor: "color-mix(in srgb, var(--accent) 15%, transparent)", color: "var(--accent)", ...getTagStyles(tagColor).style } : undefined}
         >
           <span
-            className={`block h-1.5 w-1.5 rounded-full ${getTagStyles(tagColor).dot}`}
+            className={`block h-1.5 w-1.5 shrink-0 rounded-full ${getTagStyles(tagColor).dot}`}
             style={getTagStyles(tagColor).style?.["--accent"] ? { backgroundColor: "var(--accent)", ...getTagStyles(tagColor).style } : undefined}
           />
-          {template.category}
+          <span className="truncate">{template.category}</span>
         </span>
-        <span className="text-[10px] font-medium text-slate-400">
+        <span className="shrink-0 text-[10px] font-medium text-slate-400">
           {template.defaultTaskCount} subtask{template.defaultTaskCount !== 1 ? "s" : ""}
         </span>
       </div>
@@ -140,30 +150,8 @@ export const SubtaskSlider: FunctionComponent<{
   onChange: (v: number) => void;
   disabled?: boolean;
 }> = ({ value, onChange, disabled = false }) => {
-  const min = 1;
-  const max = 30;
-  const pct = ((value - min) / (max - min)) * 100;
-  const trackRef = useRef<HTMLDivElement>(null);
-
-  const handlePointer = useCallback((e: PointerEvent) => {
-    if (disabled || !trackRef.current) return;
-    const rect = trackRef.current.getBoundingClientRect();
-    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    onChange(Math.round(min + x * (max - min)));
-  }, [disabled, onChange]);
-
-  const handlePointerDown = useCallback((e: PointerEvent) => {
-    if (disabled) return;
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    handlePointer(e);
-  }, [disabled, handlePointer]);
-
-  const handlePointerMove = useCallback((e: PointerEvent) => {
-    if (disabled) return;
-    if (e.buttons === 1) {
-      handlePointer(e);
-    }
-  }, [disabled, handlePointer]);
+  const displayValue = clampSubtaskSliderValue(value);
+  const pct = ((displayValue - SUBTASK_SLIDER_MIN) / (SUBTASK_SLIDER_MAX - SUBTASK_SLIDER_MIN)) * 100;
 
   return (
     <div className={`select-none ${disabled ? "opacity-55" : ""}`}>
@@ -172,22 +160,31 @@ export const SubtaskSlider: FunctionComponent<{
         <span className={`font-mono text-[3.5rem] font-black leading-none tracking-tighter tabular-nums ${
           disabled ? "text-slate-400 dark:text-slate-500" : "text-slate-900 dark:text-white"
         }`}>
-          {String(value).padStart(2, "0")}
+          {String(displayValue).padStart(2, "0")}
         </span>
         <span className={`text-sm font-medium ${disabled ? "text-slate-400 dark:text-slate-500" : "text-slate-400"}`}>
-          subtask{value !== 1 ? "s" : ""}
+          subtask{displayValue !== 1 ? "s" : ""}
         </span>
       </div>
 
       {/* Track */}
       <div
-        ref={trackRef}
         className={`relative h-10 ${disabled ? "cursor-not-allowed pointer-events-none" : "cursor-pointer touch-none"}`}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
       >
+        <input
+          type="range"
+          min={SUBTASK_SLIDER_MIN}
+          max={SUBTASK_SLIDER_MAX}
+          step="1"
+          value={displayValue}
+          disabled={disabled}
+          aria-label="Subtask count"
+          aria-valuetext={`${displayValue} subtask${displayValue === 1 ? "" : "s"}`}
+          onInput={(e) => onChange(clampSubtaskSliderValue(parseInt((e.target as HTMLInputElement).value, 10)))}
+          className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+        />
         {/* Background track */}
-        <div className="absolute top-1/2 left-0 right-0 h-2 -translate-y-1/2 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.06]">
+        <div className="pointer-events-none absolute top-1/2 left-0 right-0 h-2 -translate-y-1/2 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.06]">
           {/* Fill */}
           <div
             className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-ember-500 to-ember-400 transition-[width] duration-75"
@@ -196,10 +193,10 @@ export const SubtaskSlider: FunctionComponent<{
         </div>
 
         {/* Notches */}
-        <div className="absolute top-1/2 left-0 right-0 -translate-y-1/2 flex justify-between px-[2px]">
-          {Array.from({ length: max - min + 1 }, (_, i) => {
-            const n = min + i;
-            const isActive = n <= value;
+        <div className="pointer-events-none absolute top-1/2 left-0 right-0 -translate-y-1/2 flex justify-between px-[2px]">
+          {Array.from({ length: SUBTASK_SLIDER_MAX - SUBTASK_SLIDER_MIN + 1 }, (_, i) => {
+            const n = SUBTASK_SLIDER_MIN + i;
+            const isActive = n <= displayValue;
             const isMajor = n === 1 || n === 5 || n === 10 || n === 15 || n === 20 || n === 25 || n === 30;
             return (
               <div
@@ -214,7 +211,7 @@ export const SubtaskSlider: FunctionComponent<{
 
         {/* Thumb */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-[left] duration-75"
+          className="pointer-events-none absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-[left] duration-75"
           style={{ left: `${pct}%` }}
         >
           <div className="relative">

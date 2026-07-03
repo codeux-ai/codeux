@@ -6,6 +6,7 @@ import { executePrepareStage } from "../../../../../src/services/cli-workflow/pi
 import { executePrFinalizeStage } from "../../../../../src/services/cli-workflow/pipeline/pr-finalize-stage.js";
 import { executeCleanupStage } from "../../../../../src/services/cli-workflow/pipeline/cleanup-stage.js";
 import * as providerRetryPolicy from "../../../../../src/shared/providers/provider-retry-policy.js";
+import { DEFAULT_TASK_SECTION_ORDER, DEFAULT_SPRINT_SECTION_ORDER } from "../../../../../src/domain/sprint/composer/pr-description-composer.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -65,6 +66,12 @@ const createMockContext = (): PipelineContext => {
         defaultBranch: "main",
         featureBranchPrefix: "feature/",
         sprintBranchScheme: "sprint",
+        prDescription: {
+          task: { summary: true, modelAndProvider: true, timing: true, fullPrompt: true, tokenUsage: true, qaFindings: true, branchInfo: true },
+          sprint: { summary: true, taskChecklist: true, providerBreakdown: true, planningModel: true, mainPrompt: true, timing: true, tokenUsage: true, qaFindings: true, branchInfo: true },
+          taskSectionOrder: [...DEFAULT_TASK_SECTION_ORDER],
+          sprintSectionOrder: [...DEFAULT_SPRINT_SECTION_ORDER],
+        },
       },
       cliWorkflow: {
         cleanupWorktreeOnSuccess: true,
@@ -179,6 +186,8 @@ const createMockContext = (): PipelineContext => {
         updateExecutionInvocation: vi.fn(),
         getTaskRun: vi.fn().mockReturnValue({ id: "tr-1", projectId: "p-1" }),
         appendTaskRunEvent: vi.fn(),
+        getTaskUsageGroups: vi.fn().mockReturnValue([]),
+        listProviderInvocationsForTask: vi.fn().mockReturnValue([]),
       } as any,
       memoryService: {
         listBySprintAndAgent: vi.fn(),
@@ -587,11 +596,10 @@ describe("executePrFinalizeStage", () => {
       expect.objectContaining({
         taskId: "T1",
         provider: "gemini",
-        title: "test title",
+        title: "test task (gemini)",
         featureBranch: "feature-branch",
         workerBranch: "worker-branch",
-        taskDescription: "test prompt",
-        sprintDescription: "Mock Sprint Goal",
+        body: expect.stringContaining("test prompt"),
       }),
       ctx.repoPath,
       {
@@ -599,10 +607,58 @@ describe("executePrFinalizeStage", () => {
         gitlabToken: undefined,
       }
     );
+    expect(ctx.prService.resolveOrCreateFeaturePr).toHaveBeenCalledWith(
+      expect.objectContaining({ body: expect.stringContaining("Mock Sprint Goal") }),
+      ctx.repoPath,
+      expect.anything(),
+    );
     expect(ctx.deps.sessionTracking.updateSession).toHaveBeenCalledWith(ctx.sessionId, { state: "COMPLETED", prUrl: "https://github.com/pr/1" });
     expect(ctx.deps.sessionTracking.appendActivity).toHaveBeenCalledWith(ctx.sessionId, expect.objectContaining({
       description: "Workflow completed. PR: https://github.com/pr/1"
     }));
+  });
+
+  it("renders completion timing in the task PR body while the task run row is still open", async () => {
+    const ctx = createMockContext();
+    ctx.taskRunId = "tr-1";
+    ctx.settings.git.githubMode = "REMOTE";
+    vi.mocked(ctx.deps.executionRepository!.getTaskRun).mockReturnValue({
+      id: "tr-1",
+      projectId: "p-1",
+      sprintId: "sprint-1",
+      sprintRunId: "sprint-run-1",
+      taskId: "task-1",
+      dispatchId: "dispatch-1",
+      connectionId: null,
+      provider: "codex",
+      mode: "docker_cli",
+      sessionId: "test-session",
+      sessionName: null,
+      state: "RUNNING",
+      workerBranch: "worker-branch",
+      prUrl: null,
+      startedAt: "2026-07-03T02:18:16.000Z",
+      finishedAt: null,
+      durationMs: null,
+    });
+    vi.mocked(ctx.prService.resolveOrCreateFeaturePr).mockResolvedValue("https://github.com/pr/1");
+
+    await executePrFinalizeStage(ctx, { completionTimestamp: "2026-07-03T02:31:30.000Z" });
+
+    expect(ctx.prService.resolveOrCreateFeaturePr).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.stringContaining("| Finished | 2026-07-03 02:31:30 UTC |"),
+      }),
+      ctx.repoPath,
+      expect.anything(),
+    );
+    expect(ctx.prService.resolveOrCreateFeaturePr).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.stringContaining("| Duration | 13m 14s |"),
+      }),
+      ctx.repoPath,
+      expect.anything(),
+    );
   });
 
   it("skips PR creation if autoCreatePr is false", async () => {

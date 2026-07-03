@@ -2,7 +2,7 @@
 // @vitest-environment happy-dom
 import { h } from "preact";
 import { describe, it, expect, vi } from "vitest";
-import { render } from "@testing-library/preact";
+import { fireEvent, render } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { ChatMessageBubble } from "../../../dashboard/src/v2/components/chat/ChatMessageBubble.js";
 import { InvocationMessageBubble } from "../../../dashboard/src/v2/components/chat/InvocationMessageBubble.js";
@@ -250,6 +250,42 @@ describe("Chat Message Bubbles", () => {
       const { container } = render(<InvocationMessageBubble message={message} />);
       expect(container.innerHTML).toContain("Using tool");
       expect(container.innerHTML).toContain('"tool": "test"');
+    });
+
+    it("renders reasoning turns in the dedicated widget and expands long text", () => {
+      const longReasoning = [
+        "First pass through the plan.",
+        "Second pass to validate the constraints.",
+        "Third pass confirms the implementation shape.",
+        "Fourth pass keeps the UI predictable on mobile.",
+        "Fifth pass checks the assistant bubble never renders here.",
+        "Sixth pass preserves sanitized output.",
+      ].join(" ");
+
+      const message: ExecutionInvocationMessageRecord = {
+        id: "msg_reasoning",
+        invocationId: "inv_1",
+        role: "assistant",
+        contentMarkdown: longReasoning,
+        toolCallsJson: null,
+        createdAt: new Date().toISOString(),
+        metadata: {
+          kind: "reasoning",
+          provider: "anthropic",
+          model: "claude-3.7-sonnet",
+          tokens: { reasoning: 84 },
+        },
+      };
+
+      const { getByRole, getByText, queryByText } = render(<InvocationMessageBubble message={message} />);
+      expect(getByRole("region", { name: /Reasoning turn/i })).toBeInTheDocument();
+      expect(getByText("anthropic")).toBeInTheDocument();
+      expect(getByText("claude-3.7-sonnet")).toBeInTheDocument();
+      expect(getByText("84 tok")).toBeInTheDocument();
+      expect(queryByText(longReasoning)).toBeNull();
+
+      fireEvent.click(getByRole("button", { name: /Show reasoning/i }));
+      expect(getByText(longReasoning)).toBeInTheDocument();
     });
 
     it("does not render Invalid Date for malformed invocation timestamps", () => {

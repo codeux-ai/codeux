@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { render, fireEvent, cleanup } from '@testing-library/preact';
 import gsap from 'gsap';
 
@@ -20,6 +20,11 @@ vi.mock('gsap', () => ({
 import { UsageFilterMenu } from '../components/UsageFilterMenu.js';
 
 describe('UsageFilterMenu', () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
   const mockProps = {
     isOpen: true,
     onClose: vi.fn(),
@@ -47,28 +52,48 @@ describe('UsageFilterMenu', () => {
   });
 
   it('should call setEnabledSeries when a metric button is clicked', () => {
-    const { getAllByText } = render(<UsageFilterMenu {...mockProps} />);
-    const metricButton = getAllByText('Tokens')[0];
+    const { getByRole } = render(<UsageFilterMenu {...mockProps} />);
+    const metricButton = getByRole('switch', { name: 'Tokens series, enabled' });
+    expect(metricButton.getAttribute('aria-checked')).toBe('true');
     fireEvent.click(metricButton);
     expect(mockProps.setEnabledSeries).toHaveBeenCalled();
   });
 
+  it('should reset filters to default enabled series and preserve one active series', () => {
+    const setEnabledSeriesSpy = vi.fn();
+    const props = {
+      ...mockProps,
+      stats: {
+        chartSeries: [
+          { id: 'tokens', label: 'Tokens', color: '#00E0A0', defaultEnabled: false },
+          { id: 'active', label: 'Active Time', color: '#FFB800', defaultEnabled: false }
+        ]
+      } as any,
+      setEnabledSeries: setEnabledSeriesSpy,
+    };
+
+    const { getByRole } = render(<UsageFilterMenu {...props} />);
+    fireEvent.click(getByRole('button', { name: 'Reset filters' }));
+
+    expect(setEnabledSeriesSpy).toHaveBeenCalledWith({ tokens: true, active: false });
+  });
+
   it('should not allow disabling the last enabled series', () => {
-    cleanup();
     const setEnabledSeriesSpy = vi.fn();
     const singleSeriesProps = {
       ...mockProps,
       enabledSeries: { tokens: true, active: false }, setEnabledSeries: setEnabledSeriesSpy
     };
-    const { getAllByText, getByText } = render(<UsageFilterMenu {...singleSeriesProps} />);
+    const { getByRole, getByText } = render(<UsageFilterMenu {...singleSeriesProps} />);
     setEnabledSeriesSpy.mockClear();
 
     // Check live region
     expect(getByText('Showing 1 filter')).toBeTruthy();
 
-    const tokensButton = getAllByText('Tokens')[0].closest('button');
-    expect(tokensButton!.getAttribute('aria-disabled')).toBe('true');
-    fireEvent.click(tokensButton!);
+    const tokensButton = getByRole('switch', { name: /tokens/i });
+    expect(tokensButton.getAttribute('aria-disabled')).toBe('true');
+    expect(tokensButton.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(tokensButton);
     expect(setEnabledSeriesSpy).not.toHaveBeenCalled();
   });
 });

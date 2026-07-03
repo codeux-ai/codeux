@@ -27,6 +27,7 @@ When the frontend queries for Git analytics, the payload returned from `GET /api
 - `totalFilesChanged`: Number of distinct files touched across these events.
 - `pullRequests`: Number of distinct PRs created in the current scope.
 - `pullRequestsMerged`: Number of those PRs that ultimately landed (`is_merged = true`).
+- `mergeConflictCount`: Number of merge conflicts captured in the current window.
 - `perAuthor` (or analogous breakdown): A split aggregating which provider (or virtual worker vs human intervention) originated the metrics.
 
 ## Analysis Studio Git Behavior
@@ -36,5 +37,6 @@ The dashboard incorporates these fields directly into the unified **Analysis Stu
 - Git metrics are part of the embedded grouped metric selector, alongside the **Tokens** and **Time** groupings.
 - Changing the time window (e.g., from `7d` to `30d`) re-fetches the underlying snapshot and updates the Git metrics dynamically.
 - The UI surfaces these as high-level summary cards (Insertions, Deletions, Files Changed) and visualizes the commit/PR success flow (PRs Opened vs PRs Merged).
+- The UI now also highlights merge conflicts and ranking snapshots for buckets, tasks, and sprints so the busiest git lanes are easy to inspect without leaving the page.
 - New Git series are fully integrated into the **Usage Graph**, allowing users to plot Git insertions, deletions, files, and PRs as trend lines alongside token or time telemetry via the right-side selected-metrics rail.
 - Because it shares the `useProjectStats` hook and data model with the token telemetry, realtime updates and fallback polling automatically keep the Git analytics fresh as new `task_run_events` are inserted into SQLite.

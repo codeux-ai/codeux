@@ -8,7 +8,7 @@ import type { BuiltinPurposeOption } from "../../lib/quicksprint-panel-state.js"
 
 const RAIL_SCROLL_STEP_RATIO = 0.88;
 const RAIL_MIN_SCROLL_STEP = 320;
-const RAIL_ROWS = 3;
+const RAIL_ROWS = 2;
 
 type TemplateRailProps = {
   railId: string;
@@ -55,7 +55,10 @@ const TemplateRail: FunctionComponent<TemplateRailProps> = ({
   }, []);
 
   useEffect(() => {
-    syncScrollState();
+    const frame = window.requestAnimationFrame(syncScrollState);
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
   }, [syncScrollState, templates.length]);
 
   useEffect(() => {
@@ -70,10 +73,17 @@ const TemplateRail: FunctionComponent<TemplateRailProps> = ({
 
     rail.addEventListener("scroll", handleScroll, { passive: true });
     window.addEventListener("resize", syncScrollState);
+    const resizeObserver = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(() => {
+        syncScrollState();
+      });
+    resizeObserver?.observe(rail);
 
     return () => {
       rail.removeEventListener("scroll", handleScroll);
       window.removeEventListener("resize", syncScrollState);
+      resizeObserver?.disconnect();
     };
   }, [syncScrollState]);
 
@@ -128,7 +138,7 @@ const TemplateRail: FunctionComponent<TemplateRailProps> = ({
         aria-label={ariaLabel}
         onKeyDown={onRailKeyDown}
         data-qs-template-rail={railId}
-        className="dashboard-scrollbar grid max-w-full grid-flow-col grid-rows-1 gap-4 overflow-x-auto overflow-y-visible pb-3 pr-2 outline-none scrollbar-hide touch-pan-x scroll-smooth auto-cols-[16rem] sm:auto-cols-[17rem] lg:grid-rows-3 lg:auto-cols-[18rem]"
+        className="dashboard-scrollbar grid max-w-full grid-flow-col grid-rows-2 gap-4 overflow-x-auto overflow-y-visible overscroll-x-contain pb-4 pr-2 outline-none scrollbar-hide touch-pan-x scroll-smooth auto-cols-[minmax(15rem,calc(100vw-4rem))] sm:auto-cols-[17rem] lg:auto-cols-[18rem]"
       >
         {templates.map((template) => (
           <TemplateCard
@@ -166,6 +176,9 @@ export const QuicksprintBrowseView: FunctionComponent<{
   openEditor,
   onClose,
 }) => {
+  const hasBuiltinTemplates = visibleBuiltinTemplates.length > 0;
+  const customSectionClass = hasBuiltinTemplates ? "mt-10" : "mt-8";
+
   return (
     <div className="p-6 sm:p-8 lg:p-10">
       {/* Header */}
@@ -201,6 +214,7 @@ export const QuicksprintBrowseView: FunctionComponent<{
       ) : (
         <>
           {/* Built-in templates */}
+          {hasBuiltinTemplates && (
           <div data-qs-stagger className="mt-10">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
               <div className="space-y-2">
@@ -209,6 +223,7 @@ export const QuicksprintBrowseView: FunctionComponent<{
                   Built-in templates are organized by purpose so the catalog can expand into additional language and product families over time.
                 </p>
               </div>
+              {builtinPurposeOptions.length > 0 && (
               <div className="w-full max-w-sm rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
                 <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Purpose</div>
                 <div className="mt-2">
@@ -225,6 +240,7 @@ export const QuicksprintBrowseView: FunctionComponent<{
                   />
                 </div>
               </div>
+              )}
             </div>
             {activeBuiltinPurpose?.description && (
               <p className="mt-4 max-w-3xl text-xs leading-relaxed text-slate-400 dark:text-slate-500">
@@ -233,9 +249,10 @@ export const QuicksprintBrowseView: FunctionComponent<{
             )}
             <TemplateRail railId="builtin-template-rail" ariaLabel="default templates" templates={visibleBuiltinTemplates} onSelectTemplate={handleSelectTemplate} />
           </div>
+          )}
 
           {/* Custom templates */}
-          <div data-qs-stagger className="mt-10">
+          <div data-qs-stagger className={customSectionClass}>
             <div className="flex items-center justify-between gap-3 mb-5">
               <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Custom Templates</div>
               <button

@@ -30,13 +30,16 @@ function encodeVarintField(fieldNumber: number, value: number): Buffer {
   return Buffer.concat([encodeVarint(key), encodeVarint(value)]);
 }
 
-function buildTestProto(input: number, output: number, reasoning: number, candidates: number): Buffer {
-  const f2Buffer = Buffer.concat([
+function buildTestProto(input: number, output: number, reasoning: number, candidates: number, cached = 0): Buffer {
+  const fields = [
     encodeVarintField(2, input),
     encodeVarintField(3, output),
-    encodeVarintField(9, reasoning),
-    encodeVarintField(10, candidates),
-  ]);
+  ];
+  if (cached > 0) {
+    fields.push(encodeVarintField(5, cached));
+  }
+  fields.push(encodeVarintField(9, reasoning), encodeVarintField(10, candidates));
+  const f2Buffer = Buffer.concat(fields);
   const f2Message = encodeLengthDelimited(2, f2Buffer);
   const f17Buffer = encodeLengthDelimited(17, f2Message);
   return encodeLengthDelimited(1, f17Buffer);
@@ -76,29 +79,52 @@ describe("Antigravity Log Parser - parseAntigravityTranscript", () => {
     });
   });
 
-  it("parses planner response and tool calls", () => {
-    const jsonl = JSON.stringify({
-      type: "PLANNER_RESPONSE",
-      content: "Let me check the directory.",
-      tool_calls: [
-        { name: "list_dir", args: { path: "/workspace" } }
-      ],
-      created_at: "2026-06-01T10:00:00.000Z",
-    });
+  it("parses planner response tool calls and keeps toolCallId ordering", () => {
+    const jsonl = [
+      JSON.stringify({
+        type: "PLANNER_RESPONSE",
+        reasoning: "I should list the directory before editing.",
+        content: "Let me check the directory.",
+        tool_calls: [
+          { id: "call-1", name: "list_dir", args: { path: "/workspace" } }
+        ],
+        created_at: "2026-06-01T10:00:00.000Z",
+      }),
+      JSON.stringify({
+        type: "RUN_COMMAND",
+        content: "ls /workspace",
+        tool_call_id: "call-1",
+        tool_name: "list_dir",
+        created_at: "2026-06-01T10:00:01.000Z",
+      }),
+    ].join("\n");
 
     const turns = parseAntigravityTranscript(jsonl);
-    expect(turns).toHaveLength(2);
+    expect(turns).toHaveLength(4);
     expect(turns[0]).toEqual({
+      kind: "reasoning",
+      text: "I should list the directory before editing.",
+      timestampMs: Date.parse("2026-06-01T10:00:00.000Z"),
+    });
+    expect(turns[1]).toEqual({
       kind: "assistant",
       text: "Let me check the directory.",
       timestampMs: Date.parse("2026-06-01T10:00:00.000Z"),
     });
-    expect(turns[1]).toEqual({
+    expect(turns[2]).toEqual({
       kind: "tool_call",
       text: "Calling tool list_dir",
       toolName: "list_dir",
+      toolCallId: "call-1",
       toolArguments: JSON.stringify({ path: "/workspace" }),
       timestampMs: Date.parse("2026-06-01T10:00:00.000Z"),
+    });
+    expect(turns[3]).toEqual({
+      kind: "tool_result",
+      text: "ls /workspace",
+      toolName: "list_dir",
+      toolCallId: "call-1",
+      timestampMs: Date.parse("2026-06-01T10:00:01.000Z"),
     });
   });
 
@@ -107,11 +133,15 @@ describe("Antigravity Log Parser - parseAntigravityTranscript", () => {
       JSON.stringify({
         type: "RUN_COMMAND",
         content: "npm test output",
+        call_id: "call-2",
+        name: "run_command",
         created_at: "2026-06-01T10:00:00.000Z",
       }),
       JSON.stringify({
         type: "TOOL_RESPONSE",
         content: "File written successfully",
+        toolCallId: "call-3",
+        toolName: "write_file",
         created_at: "2026-06-01T10:00:01.000Z",
       }),
       JSON.stringify({
@@ -126,11 +156,15 @@ describe("Antigravity Log Parser - parseAntigravityTranscript", () => {
     expect(turns[0]).toEqual({
       kind: "tool_result",
       text: "npm test output",
+      toolName: "run_command",
+      toolCallId: "call-2",
       timestampMs: Date.parse("2026-06-01T10:00:00.000Z"),
     });
     expect(turns[1]).toEqual({
       kind: "tool_result",
       text: "File written successfully",
+      toolName: "write_file",
+      toolCallId: "call-3",
       timestampMs: Date.parse("2026-06-01T10:00:01.000Z"),
     });
     expect(turns[2]).toEqual({
@@ -203,12 +237,18 @@ describe("Antigravity Log Parser - parseAntigravityDatabase", () => {
     expect(result).toBeNull();
   });
 
-  it("correctly parses protobuf token totals from latest gen_metadata row", () => {
+  it("sums token totals across every gen_metadata row, not just the latest", () => {
+    // Each row is a separate model call within the same conversation (an
+    // agentic multi-turn run), not a running cumulative total — confirmed
+    // against live antigravity conversation databases, where consecutive
+    // rows' input tokens fluctuate rather than grow. Taking only the latest
+    // row (the old behavior) undercounted a run's real usage by up to the
+    // number of generations in the run.
     const db = new DatabaseSync(tempDbPath);
     db.exec("CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB);");
 
     const protoData1 = buildTestProto(100, 200, 50, 150);
-    const protoData2 = buildTestProto(500, 800, 200, 600); // Latest row (higher idx)
+    const protoData2 = buildTestProto(500, 800, 200, 600);
 
     const insert = db.prepare("INSERT INTO gen_metadata (idx, data) VALUES (?, ?)");
     insert.run(1, protoData1);
@@ -218,16 +258,12 @@ describe("Antigravity Log Parser - parseAntigravityDatabase", () => {
     const result = parseAntigravityDatabase(tempDbPath);
     expect(result).not.toBeNull();
     expect(result!.usage).toEqual({
-      inputTokens: 500,
-      outputTokens: 800,
-      reasoningTokens: 200,
+      inputTokens: 600,
+      outputTokens: 1000,
+      reasoningTokens: 250,
+      cachedInputTokens: 0,
     });
-    expect(result!.rawUsageJson).toEqual({
-      inputTokens: 500,
-      outputTokens: 800,
-      reasoningTokens: 200,
-      candidatesTokens: 600,
-    });
+    expect(result!.lastIdx).toBe(2);
   });
 
   it("falls back to reasoning + candidates for outputTokens if output field is 0/missing", () => {
@@ -243,5 +279,59 @@ describe("Antigravity Log Parser - parseAntigravityDatabase", () => {
     const result = parseAntigravityDatabase(tempDbPath);
     expect(result).not.toBeNull();
     expect(result!.usage!.outputTokens).toBe(350); // 100 reasoning + 250 candidates
+  });
+
+  it("sums cached tokens (field 5) across rows, treating its absence as zero", () => {
+    const db = new DatabaseSync(tempDbPath);
+    db.exec("CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB);");
+
+    // First turn: no cache hit yet (field 5 omitted). Second turn: the first
+    // turn's context is now served from cache.
+    const protoData1 = buildTestProto(21647, 171, 60, 111, 0);
+    const protoData2 = buildTestProto(1516, 115, 53, 62, 20368);
+
+    const insert = db.prepare("INSERT INTO gen_metadata (idx, data) VALUES (?, ?)");
+    insert.run(1, protoData1);
+    insert.run(2, protoData2);
+    db.close();
+
+    const result = parseAntigravityDatabase(tempDbPath);
+    expect(result!.usage!.cachedInputTokens).toBe(20368);
+    expect(result!.usage!.inputTokens).toBe(21647 + 1516);
+  });
+
+  it("only sums rows past sinceIdx, isolating a follow-up run's own generations", () => {
+    // The conversation db accumulates rows across `agy --conversation=<id>`
+    // resumes, just like Codex's rollout file. A follow-up run must not
+    // re-sum the generations an earlier invocation already reported.
+    const db = new DatabaseSync(tempDbPath);
+    db.exec("CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB);");
+
+    const insert = db.prepare("INSERT INTO gen_metadata (idx, data) VALUES (?, ?)");
+    insert.run(0, buildTestProto(1000, 100, 0, 20)); // prior invocation
+    insert.run(1, buildTestProto(2000, 200, 0, 30)); // prior invocation
+    insert.run(2, buildTestProto(300, 40, 0, 5)); // this follow-up's own generation
+    db.close();
+
+    const result = parseAntigravityDatabase(tempDbPath, 1);
+    expect(result).not.toBeNull();
+    expect(result!.usage).toEqual({
+      inputTokens: 300,
+      outputTokens: 40,
+      reasoningTokens: 0,
+      cachedInputTokens: 0,
+    });
+    expect(result!.lastIdx).toBe(2);
+  });
+
+  it("returns null when a follow-up run added no new rows past sinceIdx", () => {
+    const db = new DatabaseSync(tempDbPath);
+    db.exec("CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB);");
+    const insert = db.prepare("INSERT INTO gen_metadata (idx, data) VALUES (?, ?)");
+    insert.run(0, buildTestProto(1000, 100, 0, 20));
+    db.close();
+
+    const result = parseAntigravityDatabase(tempDbPath, 0);
+    expect(result).toBeNull();
   });
 });

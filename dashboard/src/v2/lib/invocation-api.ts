@@ -38,6 +38,34 @@ export const fetchProjectInvocationsQuery = async (
   return fetchProjectInvocations(projectId, query, init) as Promise<ProjectInvocationsQueryResult>;
 };
 
-export const fetchInvocationMessages = async (invocationId: string): Promise<ExecutionInvocationMessageRecord[]> => {
-  return fetchJson<ExecutionInvocationMessageRecord[]>(`/api/execution/invocations/${encodeURIComponent(invocationId)}/messages`);
+export const fetchInvocationMessages = async (
+  invocationId: string,
+  init?: RequestInit,
+): Promise<ExecutionInvocationMessageRecord[]> => {
+  return fetchJson<ExecutionInvocationMessageRecord[]>(
+    `/api/execution/invocations/${encodeURIComponent(invocationId)}/messages`,
+    init,
+  );
+};
+
+export type InvocationRestartMode = "retry_full_prompt" | "continue_session";
+
+export const restartExecutionInvocation = async (
+  invocationId: string,
+  mode: InvocationRestartMode = "retry_full_prompt",
+): Promise<{ invocationId?: string }> => {
+  return fetchJson<{ invocationId?: string }>(`/api/execution/invocations/${encodeURIComponent(invocationId)}/restart`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode }),
+  });
+};
+
+export const cancelExecutionInvocation = async (
+  invocationId: string,
+): Promise<{ cancelled: boolean; invocationId: string; stoppedContainerIds?: string[]; message?: string }> => {
+  return fetchJson<{ cancelled: boolean; invocationId: string; stoppedContainerIds?: string[]; message?: string }>(
+    `/api/execution/invocations/${encodeURIComponent(invocationId)}/cancel`,
+    { method: "POST" },
+  );
 };

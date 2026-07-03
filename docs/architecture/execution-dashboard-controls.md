@@ -98,6 +98,9 @@ That startup pass is intentionally different from stale-runtime cleanup:
 - Code UX releases the orphaned in-process sprint lease from the old server process before reacquiring a fresh lease for the resumed watch loop
 - if corrupted state left more than one active `queued` or `running` run for the same sprint, Code UX resumes only the newest run and fails older duplicates as superseded
 - interrupted local CLI task dispatches (`docker_cli`) are not treated as still running after process restart; they are rewritten to failed/retryable state so the resumed sprint loop can launch them again safely
+- Docker workspace/runtime volumes for those tracked CLI sessions are preserved even after the session is marked `FAILED`, so the retry can bind to the old workspace when same-workspace retry is enabled
+- rerun recovery resolves the resume target from the latest `cli_workspace_bound` task event before falling back to older task-run metadata. This keeps the reusable workspace volume tied to the real workspace session id even when a restarted provider invocation recorded a newer local session id before being interrupted.
+- missing recorded-session recovery is provider-scoped: only Jules task sessions are checked against the Jules API and failed as missing remote sessions. Local CLI session ids such as `cli-codex-*` are not queried through Jules and are left to the CLI runtime/session-tracking recovery paths.
 - remote/durable executor paths remain attached to the original run:
   - Jules sessions continue through session-sync against the remote provider state
   - connected MCP worker dispatches keep their durable dispatch row and can continue once the worker reconnects with the same connection key

@@ -2,8 +2,10 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, fireEvent, waitFor } from "@testing-library/preact";
 import { h } from "preact";
+import { useState } from "preact/hooks";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { cleanup } from "@testing-library/preact";
+import type { SprintLinkedIssueInput } from "../../../dashboard/src/v2/types.js";
 /** @jsx h */
 
 expect.extend(matchers);
@@ -81,31 +83,178 @@ describe("SprintComposer", () => {
     expect(document.body.querySelectorAll('img[src="/lobe-icons/codex-color.svg"]').length).toBeGreaterThan(1);
   });
 
-  it("renders linked issue cards and submits them", async () => {
+  it("renders linked issue cards for GitHub, GitLab, and Jira", () => {
+    const issues: SprintLinkedIssueInput[] = [
+      {
+        provider: "github",
+        hostDomain: "github.com",
+        repository: "openai/example",
+        issueNumber: 12,
+        issueKey: "#12",
+        title: "Improve GitHub issue import",
+        url: "https://github.com/openai/example/issues/12",
+        state: "open",
+        labels: ["ux"],
+        assignees: ["pierre"],
+        includeConversation: true,
+      },
+      {
+        provider: "gitlab",
+        hostDomain: "gitlab.com",
+        repository: "platform/runtime",
+        issueNumber: 34,
+        issueKey: "#34",
+        title: "Handle GitLab labels without clipping",
+        url: "https://gitlab.com/platform/runtime/-/issues/34",
+        state: "opened",
+        labels: ["frontend-polish"],
+        assignees: ["alex"],
+        includeConversation: false,
+      },
+      {
+        provider: "jira",
+        hostDomain: "example.atlassian.net",
+        projectKey: "OPS",
+        repository: "OPS",
+        issueNumber: 56,
+        issueKey: "OPS-56",
+        title: "Review Jira sprint scope",
+        url: "https://example.atlassian.net/browse/OPS-56",
+        state: "To Do",
+        labels: ["triage"],
+        assignees: ["sam"],
+        includeConversation: false,
+      },
+    ];
+
+    const { getAllByText, getByRole, getByText } = render(
+      <SprintComposer {...defaultProps} linkedIssues={issues} />
+    );
+
+    expect(getByText("Linked Issues")).toBeInTheDocument();
+    expect(getByText("3 imported")).toBeInTheDocument();
+    expect(getAllByText("GitHub").length).toBeGreaterThan(0);
+    expect(getAllByText("GitLab").length).toBeGreaterThan(0);
+    expect(getAllByText("Jira").length).toBeGreaterThan(0);
+    expect(getByText("open")).toBeInTheDocument();
+    expect(getByText("opened")).toBeInTheDocument();
+    expect(getByText("To Do")).toBeInTheDocument();
+    expect(getByText("platform/runtime")).toBeInTheDocument();
+    expect(getByText("OPS")).toBeInTheDocument();
+    expect(getByText("Conversation included")).toBeInTheDocument();
+    expect(getAllByText("Conversation omitted")).toHaveLength(2);
+    expect(getByRole("link", { name: /open source issue #12/i })).toHaveAttribute("href", issues[0]!.url);
+    expect(getByRole("link", { name: /open source issue OPS-56/i })).toHaveAttribute("href", issues[2]!.url);
+  });
+
+  it("removes linked issues before submit and preserves submitted issue payloads", async () => {
     const onSubmit = vi.fn();
-    const issue = {
-      provider: "github" as const,
-      hostDomain: "github.com",
-      repository: "openai/example",
-      issueNumber: 12,
-      issueKey: "#12",
-      title: "Improve issue import",
-      url: "https://github.com/openai/example/issues/12",
-      labels: ["ux"],
-      assignees: ["pierre"],
+    const issues: SprintLinkedIssueInput[] = [
+      {
+        provider: "github",
+        hostDomain: "github.com",
+        repository: "openai/example",
+        issueNumber: 12,
+        issueKey: "#12",
+        title: "Improve issue import",
+        url: "https://github.com/openai/example/issues/12",
+        state: "open",
+        labels: ["ux"],
+        assignees: ["pierre"],
+        issueBodyMarkdown: "Full GitHub body",
+        issueConversationMarkdown: "GitHub discussion",
+        includeConversation: true,
+      },
+      {
+        provider: "jira",
+        hostDomain: "example.atlassian.net",
+        projectKey: "OPS",
+        repository: "OPS",
+        issueNumber: 56,
+        issueKey: "OPS-56",
+        title: "Remove this imported issue",
+        url: "https://example.atlassian.net/browse/OPS-56",
+        state: "To Do",
+        labels: ["triage"],
+        assignees: ["sam"],
+        issueBodyMarkdown: "Full Jira body",
+        issueConversationMarkdown: "Jira discussion",
+        includeConversation: false,
+      },
+    ];
+
+    const Harness = () => {
+      const [linkedIssues, setLinkedIssues] = useState<SprintLinkedIssueInput[]>(issues);
+
+      return (
+        <SprintComposer
+          {...defaultProps}
+          onSubmit={onSubmit}
+          linkedIssues={linkedIssues}
+          onRemoveLinkedIssue={(issue) => {
+            setLinkedIssues((current) => current.filter((candidate) => (
+              candidate.provider !== issue.provider
+              || candidate.hostDomain !== issue.hostDomain
+              || candidate.repository !== issue.repository
+              || candidate.issueNumber !== issue.issueNumber
+            )));
+          }}
+        />
+      );
     };
-    const { getByText, getByPlaceholderText, getAllByText } = render(
-      <SprintComposer {...defaultProps} onSubmit={onSubmit} linkedIssues={[issue]} />
+
+    const { getByText, getByPlaceholderText, getAllByText, getByRole, queryByText } = render(
+      <Harness />
     );
 
     fireEvent.input(getByPlaceholderText("Runtime hardening"), { target: { value: "Import sprint" } });
     expect(getByText("Improve issue import")).toBeInTheDocument();
+    expect(getByText("Remove this imported issue")).toBeInTheDocument();
+
+    fireEvent.click(getByRole("button", { name: /remove linked issue OPS-56/i }));
+    expect(queryByText("Remove this imported issue")).not.toBeInTheDocument();
 
     fireEvent.click(getAllByText("Plan & Start").pop()!);
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalled();
     });
-    expect(onSubmit.mock.calls[0]?.[0].linkedIssues).toEqual([issue]);
+    expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({
+      goal: "",
+      linkedIssues: [issues[0]],
+    });
+  });
+
+  it("renders imported special tasks with metadata, removal controls, and task-import feedback", async () => {
+    const onRemoveImportedTask = vi.fn();
+    const task = {
+      kind: "security" as const,
+      title: "Security follow-up: Fix CI",
+      sourceUrl: "https://github.com/openai/example/issues/12",
+      sourcePath: "https://github.com/openai/example/issues/12",
+      provider: "github",
+      repository: "openai/example",
+      priority: "high" as const,
+    };
+
+    const { getByText, getByRole, getAllByText } = render(
+      <SprintComposer
+        {...defaultProps}
+        importedTasks={[task]}
+        onRemoveImportedTask={onRemoveImportedTask}
+        importedTaskFeedback={{ status: "error", message: "Special imported tasks were not added: API error" }}
+        onClearImportedTaskFeedback={vi.fn()}
+        clearImportedTaskError={vi.fn()}
+      />
+    );
+
+    expect(getByText("Special Imported Tasks")).toBeInTheDocument();
+    expect(getByText("Security")).toBeInTheDocument();
+    expect(getAllByText("High").length).toBeGreaterThan(0);
+    expect(getByRole("link", { name: task.sourceUrl! })).toBeInTheDocument();
+    expect(getByText("Special imported tasks were not added: API error")).toBeInTheDocument();
+
+    fireEvent.click(getByRole("button", { name: /remove task/i }));
+    expect(onRemoveImportedTask).toHaveBeenCalledWith(task);
   });
 
   it("uses default planning and worker agents for new sprint submissions", async () => {

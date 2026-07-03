@@ -2,9 +2,13 @@
 
 Sprint imports support three production paths from the Sprints page: structured markdown bundles, GitHub/GitLab issue imports, and Jira issue imports.
 
+Internal MCP clients use the same importer services through `manage_sprints` action `import_issues`. For payload examples covering search-only imports, assigned-work searches, explicit Jira keys, explicit GitHub/GitLab issue numbers, sprint attachment, and plan-after-import flows, see [MCP Tools and Contracts: `manage_sprints import_issues`](../mcp/tools-and-contracts.md#manage_sprints-import_issues).
+
 ## Markdown Import
 
 Use `Import -> Markdown` to create a sprint from a sprint metadata document plus an optional task bundle.
+
+The Import flyout renders as a viewport-level overlay while open, so it remains above the sprint gallery cells and their hover controls instead of being trapped by animated page stacking contexts.
 
 Sprint markdown supports:
 
@@ -40,27 +44,37 @@ Supported task fields include `title`, `depends_on`, `is_independent`, `merged` 
 
 ## GitHub/GitLab Issue Import
 
-Use `Import -> GitHub Issues` or `Import -> GitLab Issues` to search the selected project's remote backlog. The import modal supports provider selection, repository override, full-text search, state filtering, label filtering, and multi-select.
+Use `Import -> GitHub Issues` or `Import -> GitLab Issues` to browse the selected project's remote backlog. Each provider has its own menu entry, and the entry opens the shared issue importer with that provider selected. Operators can still switch providers inside the modal, override the repository, search by text, filter by state, labels, assignee, author, milestone, exact issue number, created or updated date windows, sort order, and bounded result limit.
+
+The importer result list supports multi-select, `Select all visible results`, `Clear selection`, and per-card `Append Conversation` controls. The footer keeps the selected count visible and lets operators import selected issues as linked sprint issues or, when available, route selected issues into special remediation tasks.
+
+Result cards preserve the imported issue title, preview body, repository, issue key, labels, assignees, source link, and provider metadata such as authors, milestones, timestamps, and comment counts when the provider returns those fields.
+
+Quick presets are available for common triage flows: open backlog, recently updated work, assigned-to-me or text-user matches, security-labeled items, quality and tech-debt items, failed-CI follow-ups, and merge-conflict follow-ups.
 
 For local projects, the dashboard reads the repository's `remote.origin.url` from `.git/config` when available. This pre-fills the provider and `owner/repository` target for projects that were added from a local checkout instead of a Git clone URL.
 
-Imported issues appear in the sprint composer under the Sprint Prompt field as linked issue cards. Each card shows the provider, repository, issue key, title, labels, assignees, and a direct link to the source issue. The import view includes an `Append Conversation` toggle on each issue card. When enabled, the sprint prompt receives the full issue body plus issue comments/notes; when disabled, it receives the full issue body without the conversation.
+Imported issues appear in the sprint composer under the Sprint Prompt field as linked issue cards. Each card shows the provider, repository or Jira project key, issue key, title, state, labels, assignees, source link, conversation-included state, and a remove control for pruning imported scope before submission. The import view includes an `Append Conversation` toggle on each issue card. When enabled, the sprint prompt receives the full issue body plus issue comments or notes; when disabled, it receives the full issue body without the conversation.
 
-When the sprint is submitted, selected issues are persisted as linked sprint issue records and the sprint prompt receives a structured `Linked Issues` markdown section. Each imported issue is appended with source metadata, labels, assignees, author/timestamps when available, the complete issue body, and the selected conversation context. This gives the Planning agent and task agents the actual issue text instead of only a remote link.
+When the sprint is submitted, selected issues are persisted as linked sprint issue records and the sprint prompt receives a structured `Linked Issues` markdown section. Each imported issue is appended with source metadata, labels, assignees, author and timestamps when available, the complete issue body, and the selected conversation context. This gives the Planning agent and task agents the actual issue text instead of only a remote link.
+
+Special imported tasks selected from the same import flows appear in their own composer tray instead of the linked-issue markdown section. Security and quality selections still come from issue search results, but they are created as imported sprint tasks so they bypass planning prose and land directly on the sprint. Merge-conflict and failed-CI selections are also created directly as sprint tasks, using the imported-task endpoint, so they attach to the sprint immediately without being folded into the planning prompt. The composer shows the task kind, source, priority, and removal controls so operators can review remediation work before the sprint is created or updated.
 
 Issue import uses the saved integration tokens:
 - GitHub: system/project effective `git.githubToken`, usually configured in Settings -> Integrations.
-- GitLab: system/project effective `git.gitlabToken`, also available through `GITLAB_TOKEN` / `GLAB_TOKEN` host hints.
+- GitLab: system/project effective `git.gitlabToken`, usually configured in Settings -> Integrations or seeded from `GITLAB_TOKEN` / `GLAB_TOKEN` host hints.
 
-When the GitHub token is empty, GitHub issue search, issue context loading, and auto-close fail with a token-required error. Code UX does not fall back to local `gh` CLI authentication for dashboard issue workflows; Docker auth-copy mount settings help worker containers, but dashboard import and close operations need saved GitHub/GitLab tokens.
+When the GitHub token is empty, GitHub issue search, issue context loading, and auto-close fail with a token-required error. Code UX does not fall back to local `gh` or `glab` CLI authentication for dashboard or MCP importer workflows; Docker auth-copy mount settings help worker containers, but issue search, explicit import, linked sprint attachment, planning imports, and close operations need saved GitHub/GitLab tokens.
 
 ## Jira Issue Import
 
-Use `Import -> Jira Issues` to search Jira with guided filters, multi-select issues, and attach them to the sprint composer. The Jira modal follows the same interaction model as the GitHub/GitLab importer: project key, search text, status, assignee text, optional labels, selectable issue cards, source links, and per-issue `Append Conversation` toggles.
+Use `Import -> Jira Issues` to search Jira with guided filters, multi-select issues, and attach them to the sprint composer. The Jira modal keeps Jira-specific controls for project key, exact issue key lookup, free-text search, status, assignee text, reporter text, issue type, priority, labels, updated-date windows, sort controls, bounded result limits, and optional JQL override.
 
-Operators do not need to write JQL in the dashboard. The server builds the Jira query from the selected filters, defaults to open issues sorted by recent updates, and uses `Settings -> Integrations -> Jira -> Default project` to prefill the project key when available.
+Jira results use selectable issue cards with source links, `Select all visible`, `Clear selection`, bulk conversation selection, and per-card `Append Conversation` toggles. The selected count stays visible while operators choose whether each issue should become linked sprint context or, for detected security and quality follow-ups, a special imported task.
 
-The assignee field accepts a Jira user full name, email address, or account ID. It also accepts `me` / `currentUser()` for the connected Jira account and `unassigned` / `empty` for issues without an assignee.
+The assignee field accepts a Jira user full name, email address, or account ID. It also accepts `me` / `currentUser()` for the connected Jira account and `unassigned` / `empty` for issues without an assignee. The server builds the Jira query from the selected filters, defaults to open issues sorted by recent updates, and uses `Settings -> Integrations -> Jira -> Default project` to prefill the project key when available. Clearing the project key browses all Jira issues the saved credentials can see.
+
+The search endpoint also honors an exact issue key, user text, issue type, priority, labels, updated-date windows, sort field, sort direction, and a bounded result limit. Jira import requests use the same trimming, label deduplication, malformed-limit rejection, and pre-client result-limit clamp as repository issue search. Advanced users can open the JQL override and replace the guided query entirely; when JQL is present, it overrides the other filters.
 
 Jira uses system-scoped settings from `Settings -> Integrations -> Jira`:
 - site URL, for example `https://company.atlassian.net`
@@ -70,10 +84,16 @@ Jira uses system-scoped settings from `Settings -> Integrations -> Jira`:
 - close transition name, defaulting to `Done`
 - Jira-specific auto-close toggle
 
-Selected Jira issues are loaded through the same prompt-context path as GitHub/GitLab imports. The sprint prompt receives the Jira description and, when `Append Conversation` is enabled, Jira comments. Imported Jira cards are persisted as linked sprint issues with provider `jira`, project key, issue key, labels, assignees, status, and source URL. The import result cards also surface Jira issue type, priority, assignee, labels, status, and a description preview when Jira returns those fields.
+Jira dashboard and MCP importer workflows require those saved Jira settings. They do not use browser sessions, Atlassian CLI state, or local git configuration as an authentication fallback.
+
+Selected Jira issues are loaded through the same prompt-context path as GitHub/GitLab imports. The sprint prompt receives the Jira description and, when `Append Conversation` is enabled, Jira comments. Imported Jira cards are persisted as linked sprint issues with provider `jira`, host extracted from the Jira URL, project key, repository fallback, parsed issue number from keys such as `OPS-42`, issue key, labels, assignees, status, source URL, and the selected conversation flag. The import result cards also surface Jira issue type, priority, reporter, assignee, labels, status, updated timestamps, and a description preview when Jira returns those fields.
+
+When the dashboard detects Jira issues that look like security or quality follow-ups, it can emit imported task payloads instead of linked issue contexts. Those special tasks are created directly on the sprint and bypass planning prose, while ordinary Jira issues still become linked issues that feed the sprint prompt and linked issue records.
+
+The Jira import modal keeps each selected card's stored mode choice across result refreshes and uses that saved mode at import time, so a task that was marked special does not drift back to linked just because the search results were refreshed.
 
 ## Auto-Close
 
 `Settings -> Sprint -> Git Flow -> Auto-close linked issues` controls whether imported GitHub/GitLab issues are closed automatically. `Settings -> Integrations -> Jira -> Auto-close Jira issues` separately controls Jira transitions.
 
-When enabled, the sprint loop closes linked issues only after the sprint reaches terminal completion and the main merge gate is no longer blocking. GitHub/GitLab issues are closed through their host APIs or `gh`; Jira issues are moved through the configured transition. Closing failures are recorded per issue and surfaced in the sprint completion report without hiding the sprint result.
+When enabled, the sprint loop closes linked issues only after the sprint reaches terminal completion and the main merge gate is no longer blocking. GitHub and GitLab issues are closed through their configured host APIs using saved tokens; Jira issues are moved through the configured transition using saved Jira settings. Closing failures are recorded per issue and surfaced in the sprint completion report without hiding the sprint result.

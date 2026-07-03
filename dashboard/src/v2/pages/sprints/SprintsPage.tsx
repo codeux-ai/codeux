@@ -39,6 +39,7 @@ import { SprintJiraImportModal } from "../../components/sprints/SprintJiraImport
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog.js";
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { ActionFeedbackRegion } from "../../components/ui/ActionFeedbackRegion.js";
+import { useActionFeedback } from "../../hooks/use-action-feedback.js";
 import { useSprintsPageData } from "./use-sprints-page-data.js";
 import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "../../lib/list-window.js";
 import { ExecutionTimelineProvider } from "../../../hooks/ExecutionTimelineContext.js";
@@ -46,9 +47,28 @@ import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { PageContainer } from "../../components/layout/PageContainer.js";
 import { PageHeader } from "../../components/layout/PageHeader.js";
 import type { SprintLinkedIssueInput } from "../../types.js";
+import type { SprintImportedTaskInput } from "../../types.js";
 
 const ACCENT_CYCLE = ["text-signal-500", "text-ember-500", "text-status-green"] as const;
 const SPRINT_GALLERY_VISIBILITY_STORAGE_KEY = "code_ux_sprints_show_gallery";
+type RepositoryIssueImportProvider = "github" | "gitlab";
+
+const getImportedTaskKey = (task: SprintImportedTaskInput): string => (
+  [
+    task.kind,
+    task.provider || "",
+    task.repository || "",
+    task.sourceUrl || task.sourcePath || "",
+  ].join("::")
+);
+
+const dedupeImportedTasks = (tasks: SprintImportedTaskInput[]): SprintImportedTaskInput[] => {
+  const deduped = new Map<string, SprintImportedTaskInput>();
+  for (const task of tasks) {
+    deduped.set(getImportedTaskKey(task), task);
+  }
+  return Array.from(deduped.values());
+};
 
 const readStoredSprintGalleryVisibility = (): boolean => {
   try {
@@ -152,8 +172,17 @@ export const SprintsPage: FunctionComponent = () => {
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
   const [showSprintGallery, setShowSprintGallery] = useState(readStoredSprintGalleryVisibility);
   const [showIssueImportModal, setShowIssueImportModal] = useState(false);
+  const [issueImportProvider, setIssueImportProvider] = useState<RepositoryIssueImportProvider>("github");
   const [isJiraModalOpen, setIsJiraModalOpen] = useState(false);
   const [linkedIssues, setLinkedIssues] = useState<SprintLinkedIssueInput[]>([]);
+  const [pendingImportedTasks, setPendingImportedTasks] = useState<SprintImportedTaskInput[]>([]);
+  const {
+    feedback: importedTaskFeedback,
+    setPending: setImportedTaskFeedbackPending,
+    setError: setImportedTaskFeedbackError,
+    clearFeedback: clearImportedTaskFeedback,
+    clearError: clearImportedTaskFeedbackError,
+  } = useActionFeedback();
   const [rowMenu, setRowMenu] = useState<{
     sprintId: string;
     top: number;
@@ -225,6 +254,20 @@ export const SprintsPage: FunctionComponent = () => {
   const activeRowMenuSprint = useMemo(() => rowMenu
     ? sortedSprints.find((sprint) => sprint.id === rowMenu.sprintId) || null
     : null, [rowMenu, sortedSprints]);
+
+  const mergeImportedTasks = useCallback((tasks: SprintImportedTaskInput[]) => {
+    setPendingImportedTasks((current) => dedupeImportedTasks([...current, ...tasks]));
+  }, []);
+
+  const removeImportedTask = useCallback((task: SprintImportedTaskInput) => {
+    const key = getImportedTaskKey(task);
+    setPendingImportedTasks((current) => current.filter((candidate) => getImportedTaskKey(candidate) !== key));
+  }, []);
+
+  const clearImportedTaskDrafts = useCallback(() => {
+    setPendingImportedTasks([]);
+    clearImportedTaskFeedback();
+  }, [clearImportedTaskFeedback]);
 
   const openRowActionsMenu = useCallback((event: MouseEvent, sprintId: string) => {
     event.stopPropagation();
@@ -347,16 +390,56 @@ export const SprintsPage: FunctionComponent = () => {
   }, [prefersReducedMotion]);
 
   const onSprintSubmit = useCallback(async (payload: any) => {
-    await handleSubmitSprint(payload);
+    const importedTasks = dedupeImportedTasks(pendingImportedTasks);
+    const importedTaskCallbacks = importedTasks.length > 0
+      ? {
+        onPending: (count: number) => {
+          setImportedTaskFeedbackPending(
+            `Adding ${count} special imported task${count === 1 ? "" : "s"}...`,
+          );
+        },
+        onSuccess: () => {
+          clearImportedTaskFeedback();
+        },
+        onError: (message: string) => {
+          setImportedTaskFeedbackError(
+            `Special imported tasks were not added: ${message}`,
+            { autoDismiss: false },
+          );
+        },
+      }
+      : undefined;
+    await handleSubmitSprint({
+      ...payload,
+      importedTasks: importedTasks.length > 0 ? importedTasks : undefined,
+      importedTaskCallbacks,
+    });
     if ((payload.shouldHandleResult?.() ?? true) && !editingSprint) {
-        animateLatestCell();
-        setLinkedIssues([]);
+      animateLatestCell();
     }
-  }, [handleSubmitSprint, editingSprint, animateLatestCell]);
+    setLinkedIssues([]);
+    clearImportedTaskDrafts();
+  }, [animateLatestCell, clearImportedTaskDrafts, editingSprint, handleSubmitSprint, pendingImportedTasks, clearImportedTaskFeedback, setImportedTaskFeedbackError, setImportedTaskFeedbackPending]);
 
   useEffect(() => {
     setLinkedIssues(editingSprint?.linkedIssues || []);
   }, [editingSprint?.id]);
+
+  useEffect(() => {
+    if (!editingSprint) {
+      clearImportedTaskDrafts();
+    }
+  }, [clearImportedTaskDrafts, editingSprint]);
+
+  useEffect(() => {
+    if (pendingImportedTasks.length === 0) {
+      clearImportedTaskFeedback();
+    }
+  }, [clearImportedTaskFeedback, pendingImportedTasks.length]);
+
+  useEffect(() => {
+    clearImportedTaskDrafts();
+  }, [clearImportedTaskDrafts, selectedProject?.id]);
 
   const mergeLinkedIssues = useCallback((issues: SprintLinkedIssueInput[]) => {
     setLinkedIssues((current) => {
@@ -396,8 +479,9 @@ export const SprintsPage: FunctionComponent = () => {
   const handleEditSprintFromLedger = useCallback((sprint: typeof sortedSprints[number]) => {
     setEditingSprint(sprint);
     setLinkedIssues(sprint.linkedIssues || []);
+    clearImportedTaskDrafts();
     setShowCreateComposer(false);
-  }, [setEditingSprint, setShowCreateComposer]);
+  }, [clearImportedTaskDrafts, setEditingSprint, setShowCreateComposer]);
 
   const handleExportSprintFromLedger = useCallback((sprint: typeof sortedSprints[number]) => {
     void handleOpenExport(sprint.id, sprint.name);
@@ -480,7 +564,14 @@ export const SprintsPage: FunctionComponent = () => {
             <SprintImportMenu
               disabled={!selectedProject}
               onImportMarkdown={() => setShowImportModal(true)}
-              onImportIssues={() => setShowIssueImportModal(true)}
+              onImportGitHubIssues={() => {
+                setIssueImportProvider("github");
+                setShowIssueImportModal(true);
+              }}
+              onImportGitLabIssues={() => {
+                setIssueImportProvider("gitlab");
+                setShowIssueImportModal(true);
+              }}
               onImportJira={() => setIsJiraModalOpen(true)}
             />
             <button
@@ -512,9 +603,11 @@ export const SprintsPage: FunctionComponent = () => {
                   setEditingSprint(null);
                   setShowCreateComposer(false);
                   setLinkedIssues([]);
+                  clearImportedTaskDrafts();
                   return;
                 }
                 setLinkedIssues([]);
+                clearImportedTaskDrafts();
                 setShowCreateComposer(true);
               }}
               disabled={!selectedProject}
@@ -587,10 +680,11 @@ export const SprintsPage: FunctionComponent = () => {
                         onAddTasks={() => { void handleOpenAppendTasks(sprint); }}
                         onMarkCompleted={() => { void handleMarkCompleted(sprint.id); }}
                         onEdit={() => {
-                          setEditingSprint(sprint);
-                          setShowCreateComposer(false);
-                          setLinkedIssues(sprint.linkedIssues || []);
-                        }}
+                      setEditingSprint(sprint);
+                      setShowCreateComposer(false);
+                      setLinkedIssues(sprint.linkedIssues || []);
+                      clearImportedTaskDrafts();
+                    }}
                         onDelete={() => {
                           void requestConfirm({
                             title: "Delete Sprint?",
@@ -616,6 +710,7 @@ export const SprintsPage: FunctionComponent = () => {
                     onClick={() => {
                       setEditingSprint(null);
                       setLinkedIssues([]);
+                      clearImportedTaskDrafts();
                       setShowCreateComposer(true);
                     }}
                     disabled={!selectedProject}
@@ -659,6 +754,7 @@ export const SprintsPage: FunctionComponent = () => {
                     nextId={nextId}
                     initialSprint={editingSprint}
                     linkedIssues={linkedIssues}
+                    importedTasks={pendingImportedTasks}
                     virtualProviders={virtualProviders}
                     defaultRouteOptionLabel={defaultRouteOptionLabel}
                     defaultModelOptionLabel={defaultModelOptionLabel}
@@ -673,6 +769,7 @@ export const SprintsPage: FunctionComponent = () => {
                       setShowCreateComposer(false);
                       setEditingSprint(null);
                       setLinkedIssues([]);
+                      clearImportedTaskDrafts();
                     }}
                     onImprovePrompt={handleImprovePrompt}
                     onSubmit={onSprintSubmit}
@@ -681,6 +778,7 @@ export const SprintsPage: FunctionComponent = () => {
                       setEditingSprint(null);
                       setShowCreateComposer(true);
                       setLinkedIssues([]);
+                      clearImportedTaskDrafts();
                     }}
                     onAppendTasks={editingSprint ? () => { void handleOpenAppendTasks(editingSprint); } : undefined}
                     onRemoveLinkedIssue={(issue) => {
@@ -691,6 +789,10 @@ export const SprintsPage: FunctionComponent = () => {
                         || candidate.issueNumber !== issue.issueNumber
                       )));
                     }}
+                    onRemoveImportedTask={removeImportedTask}
+                    importedTaskFeedback={importedTaskFeedback}
+                    onClearImportedTaskFeedback={clearImportedTaskFeedback}
+                    clearImportedTaskError={clearImportedTaskFeedbackError}
                   />
                 </div>
               </div>
@@ -783,9 +885,18 @@ export const SprintsPage: FunctionComponent = () => {
       {showIssueImportModal && selectedProject && (
         <SprintIssueImportModal
           project={selectedProject}
+          initialProvider={issueImportProvider}
           onClose={() => setShowIssueImportModal(false)}
           onImport={(issues) => {
             mergeLinkedIssues(issues);
+            setShowIssueImportModal(false);
+            setShowQuicksprint(false);
+            if (!editingSprint) {
+              setShowCreateComposer(true);
+            }
+          }}
+          onImportSpecialTasks={(tasks) => {
+            mergeImportedTasks(tasks);
             setShowIssueImportModal(false);
             setShowQuicksprint(false);
             if (!editingSprint) {
@@ -801,6 +912,14 @@ export const SprintsPage: FunctionComponent = () => {
           onClose={() => setIsJiraModalOpen(false)}
           onImport={(issues) => {
             mergeLinkedIssues(issues);
+            setIsJiraModalOpen(false);
+            setShowQuicksprint(false);
+            if (!editingSprint) {
+              setShowCreateComposer(true);
+            }
+          }}
+          onImportSpecialTasks={(tasks) => {
+            mergeImportedTasks(tasks);
             setIsJiraModalOpen(false);
             setShowQuicksprint(false);
             if (!editingSprint) {

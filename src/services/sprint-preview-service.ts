@@ -37,6 +37,7 @@ import {
   normalizePreviewPath,
   readOptionalSprintPreviewScript,
   resolvePreviewScriptPath,
+  type SprintPreviewCommandSource,
 } from "./sprint-preview-utils.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { getHomeCodeUxPath, getRepoCodeUxPath } from "../shared/config/code-ux-paths.js";
@@ -102,9 +103,20 @@ export class SprintPreviewService {
       const effectiveSettings = this.resolveSettings(projectId, sprintId);
       const settings = effectiveSettings.sprintPreview;
       this.assertPreviewEnabled(settings);
-      const preparedScript = await this.prepareStartupScript(project.baseDir, settings);
       const featureBranch = sprint.featureBranch?.trim() || this.resolveSprintFeatureBranch(projectId, sprintId);
       const defaultBranch = effectiveSettings.git.defaultBranch?.trim() || project.defaultBranch?.trim() || "main";
+      const syncLatestFromOrigin = effectiveSettings.git.githubMode === "REMOTE";
+      const previewSourceRef = await this.resolvePreviewSourceRef(
+        project.baseDir,
+        featureBranch,
+        defaultBranch,
+        syncLatestFromOrigin,
+        {
+          githubToken: effectiveSettings.git.githubToken,
+          gitlabToken: effectiveSettings.git.gitlabToken,
+        },
+      );
+      const preparedScript = await this.prepareStartupScript(project.baseDir, settings, previewSourceRef);
       const projectRuntimeRoot = resolveDockerRuntimeRoot(project.baseDir);
       const runtimeRoot = path.join(projectRuntimeRoot, "preview", sprintId);
       const workspacePath = path.join(runtimeRoot, "workspace");
@@ -186,11 +198,12 @@ export class SprintPreviewService {
           workspacePath,
           featureBranch,
           defaultBranch,
-          effectiveSettings.git.githubMode === "REMOTE",
+          false,
           {
             githubToken: effectiveSettings.git.githubToken,
             gitlabToken: effectiveSettings.git.gitlabToken,
           },
+          previewSourceRef,
         );
         await fs.mkdir(path.dirname(startupRuntimePath), { recursive: true });
         await fs.writeFile(startupRuntimePath, preparedScript.content, "utf8");
@@ -201,7 +214,7 @@ export class SprintPreviewService {
         // Resolve the exact commit being previewed so the container's startup script can
         // skip the (expensive) build when the branch hasn't changed since the last cached
         // build. Build artifacts persist across restarts in the per-sprint Docker volume.
-        const sourceCommit = await this.resolvePreviewSourceCommit(project.baseDir, featureBranch);
+        const sourceCommit = await this.resolvePreviewSourceCommit(project.baseDir, previewSourceRef);
 
         const setupScriptPath = await this.resolveContainerSetupScriptPath(project.baseDir, effectiveSettings.cliWorkflow);
         const baseImage = effectiveSettings.cliWorkflow.containerImage.trim() || "node:24-bookworm";
@@ -235,17 +248,13 @@ export class SprintPreviewService {
         const userSpec = await this.resolveDockerUserSpec(workspacePath);
         const volumeName = `code-ux-preview-volume-${sprintId}`;
         await this.ensureSprintVolume(volumeName, projectId, sprintId, session.id, project.baseDir);
-        if (userSpec) {
-          await runCommandStrict("docker", [
-            "run",
-            "--rm",
-            "-v", `${volumeName}:/volume-data`,
-            "alpine:3.20",
-            "sh",
-            "-c",
-            `chown -R ${userSpec} /volume-data && chmod 777 /volume-data`
-          ], project.baseDir).catch(() => undefined);
-        }
+        await this.prepareSprintVolumeRuntimePaths(volumeName, userSpec, [
+          containerWorkspacePath,
+          containerRuntimeHome,
+          containerNpmPrefix,
+          containerNpmCache,
+          pathPosix.join(containerNpmCache, "pnpm-store"),
+        ], project.baseDir);
 
         const dockerArgs = buildSprintPreviewDockerCreateArgs({
           projectId,
@@ -332,6 +341,41 @@ export class SprintPreviewService {
       "--label", `code-ux.sprint-id=${sprintId}`,
       "--label", `code-ux.session-id=${sessionId}`,
       volumeName,
+    ], cwd);
+  }
+
+  private async prepareSprintVolumeRuntimePaths(
+    volumeName: string,
+    userSpec: string | null,
+    containerPaths: string[],
+    cwd: string,
+  ): Promise<void> {
+    const volumePaths = containerPaths.map((containerPath) => {
+      const relative = pathPosix.relative(CONTAINER_PREVIEW_RUNTIME_ROOT, containerPath);
+      if (relative.startsWith("..") || pathPosix.isAbsolute(relative)) {
+        throw new Error(`Preview runtime path is outside the preview volume: ${containerPath}`);
+      }
+      return pathPosix.join("/volume-data", relative);
+    });
+    const mkdirCommands = volumePaths.map((volumePath) => `mkdir -p ${this.shellQuote(volumePath)}`);
+    const ownerRepair = userSpec
+      ? `{ chown -R ${this.shellQuote(userSpec)} /volume-data 2>/dev/null || true; }`
+      : "true";
+    const script = [
+      ...mkdirCommands,
+      ownerRepair,
+      "chmod -R u+rwX,go+rwX /volume-data",
+    ].join(" && ");
+
+    await runCommandStrict("docker", [
+      "run",
+      "--rm",
+      "--user", "0:0",
+      "-v", `${volumeName}:/volume-data`,
+      "alpine:3.20",
+      "sh",
+      "-c",
+      script,
     ], cwd);
   }
 
@@ -431,11 +475,20 @@ export class SprintPreviewService {
 
   async getScript(projectId: string, sprintId: string): Promise<SprintPreviewScript> {
     const project = this.requireProject(projectId);
-    this.requireSprint(projectId, sprintId);
-    const settings = this.resolveSettings(projectId, sprintId).sprintPreview;
+    const sprint = this.requireSprint(projectId, sprintId);
+    const effectiveSettings = this.resolveSettings(projectId, sprintId);
+    const settings = effectiveSettings.sprintPreview;
+    const featureBranch = sprint.featureBranch?.trim() || (effectiveSettings.git ? this.resolveSprintFeatureBranch(projectId, sprintId) : null);
+    const defaultBranch = effectiveSettings.git?.defaultBranch?.trim() || project.defaultBranch?.trim() || "main";
+    const sourceRef = featureBranch
+      ? await this.tryResolvePreviewSourceRef(project.baseDir, featureBranch, defaultBranch)
+      : null;
     const scriptPath = await resolvePreviewScriptPath(project.baseDir, settings.startupScriptPath);
-    const script = await readOptionalSprintPreviewScript(scriptPath);
-    const detected = await detectSprintPreviewCommands(project.baseDir);
+    const script = await this.readOptionalStartupScript(project.baseDir, scriptPath, sourceRef);
+    const detected = await detectSprintPreviewCommands(
+      project.baseDir,
+      sourceRef ? this.buildGitRefCommandSource(project.baseDir, sourceRef) : undefined,
+    );
 
     return {
       projectId,
@@ -899,7 +952,7 @@ export class SprintPreviewService {
       ["logs", "--tail", String(Math.max(1, tail)), containerRef],
       cwd,
     );
-    return result.stdout || result.stderr || "";
+    return [result.stdout, result.stderr].filter((output) => output.trim().length > 0).join("\n");
   }
 
   private extractPreviewError(logs: string): string | null {
@@ -920,10 +973,13 @@ export class SprintPreviewService {
     return `${projectId}:${sprintId}`;
   }
 
-  private async prepareStartupScript(repoPath: string, settings: SprintPreviewSettings): Promise<PreparedStartupScript> {
+  private async prepareStartupScript(repoPath: string, settings: SprintPreviewSettings, sourceRef?: string | null): Promise<PreparedStartupScript> {
     const scriptPath = await resolvePreviewScriptPath(repoPath, settings.startupScriptPath);
-    const script = await readOptionalSprintPreviewScript(scriptPath);
-    const detected = await detectSprintPreviewCommands(repoPath);
+    const script = await this.readOptionalStartupScript(repoPath, scriptPath, sourceRef);
+    const detected = await detectSprintPreviewCommands(
+      repoPath,
+      sourceRef ? this.buildGitRefCommandSource(repoPath, sourceRef) : undefined,
+    );
 
     if (script.exists) {
       return {
@@ -955,12 +1011,10 @@ export class SprintPreviewService {
     defaultBranch: string,
     syncLatestFromOrigin = true,
     gitAuthOptions?: GitHttpAuthOptions,
+    resolvedExportRef?: string,
   ): Promise<void> {
-    if (syncLatestFromOrigin) {
-      await fetchOriginIfAvailable(repoPath, gitAuthOptions);
-    }
-    await this.ensurePreviewBranchExists(repoPath, featureBranch, defaultBranch, gitAuthOptions);
-    const exportRef = await this.resolvePreviewExportRef(repoPath, featureBranch);
+    const exportRef = resolvedExportRef
+      || await this.resolvePreviewSourceRef(repoPath, featureBranch, defaultBranch, syncLatestFromOrigin, gitAuthOptions);
     const archivePath = `${workspacePath}.tar`;
 
     await fs.rm(workspacePath, { recursive: true, force: true }).catch(() => undefined);
@@ -1007,10 +1061,35 @@ export class SprintPreviewService {
    * Resolves the commit SHA of the branch being previewed. Returns null on any failure so
    * the container falls back to building unconditionally (cache disabled, never wrong).
    */
-  private async resolvePreviewSourceCommit(repoPath: string, branch: string): Promise<string | null> {
+  private async resolvePreviewSourceRef(
+    repoPath: string,
+    featureBranch: string,
+    defaultBranch: string,
+    syncLatestFromOrigin = true,
+    gitAuthOptions?: GitHttpAuthOptions,
+  ): Promise<string> {
+    if (syncLatestFromOrigin) {
+      await fetchOriginIfAvailable(repoPath, gitAuthOptions);
+    }
+    await this.ensurePreviewBranchExists(repoPath, featureBranch, defaultBranch, gitAuthOptions);
+    return await this.resolvePreviewExportRef(repoPath, featureBranch);
+  }
+
+  private async tryResolvePreviewSourceRef(
+    repoPath: string,
+    featureBranch: string,
+    defaultBranch: string,
+  ): Promise<string | null> {
     try {
-      const exportRef = await this.resolvePreviewExportRef(repoPath, branch);
-      const result = await runCommandStrict("git", ["rev-parse", exportRef], repoPath);
+      return await this.resolvePreviewSourceRef(repoPath, featureBranch, defaultBranch, false);
+    } catch {
+      return null;
+    }
+  }
+
+  private async resolvePreviewSourceCommit(repoPath: string, sourceRef: string): Promise<string | null> {
+    try {
+      const result = await runCommandStrict("git", ["rev-parse", sourceRef], repoPath);
       const sha = result.stdout.trim();
       return sha || null;
     } catch {
@@ -1058,6 +1137,83 @@ export class SprintPreviewService {
     } catch {
       return false;
     }
+  }
+
+  private async readOptionalStartupScript(
+    repoPath: string,
+    scriptPath: string,
+    sourceRef?: string | null,
+  ): Promise<{ exists: boolean; content: string }> {
+    const localScript = await readOptionalSprintPreviewScript(scriptPath);
+    if (localScript.exists || !sourceRef) {
+      return localScript;
+    }
+
+    const relativeScriptPath = this.toGitObjectPath(path.relative(repoPath, scriptPath));
+    if (!relativeScriptPath || relativeScriptPath.startsWith("../")) {
+      return localScript;
+    }
+
+    try {
+      const result = await runCommandStrict(
+        "git",
+        ["show", `${sourceRef}:${relativeScriptPath}`],
+        repoPath,
+        process.env,
+        { trimOutput: false },
+      );
+      return result.stdout.trim().length > 0
+        ? { exists: true, content: result.stdout }
+        : localScript;
+    } catch {
+      return localScript;
+    }
+  }
+
+  private buildGitRefCommandSource(repoPath: string, sourceRef: string): SprintPreviewCommandSource {
+    return {
+      exists: async (filePath: string) => {
+        const objectPath = this.toGitObjectPath(filePath);
+        if (!objectPath || objectPath.startsWith("../")) {
+          return false;
+        }
+        try {
+          await runCommandStrict("git", ["cat-file", "-e", `${sourceRef}:${objectPath}`], repoPath);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      readTextFile: async (filePath: string) => {
+        const objectPath = this.toGitObjectPath(filePath);
+        if (!objectPath || objectPath.startsWith("../")) {
+          throw new Error(`Invalid preview source path: ${filePath}`);
+        }
+        const result = await runCommandStrict(
+          "git",
+          ["show", `${sourceRef}:${objectPath}`],
+          repoPath,
+          process.env,
+          { trimOutput: false },
+        );
+        return result.stdout;
+      },
+      listFiles: async () => {
+        const result = await runCommandStrict(
+          "git",
+          ["ls-tree", "-r", "--name-only", sourceRef],
+          repoPath,
+        );
+        return result.stdout
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean);
+      },
+    };
+  }
+
+  private toGitObjectPath(filePath: string): string {
+    return filePath.replace(/\\/g, "/").replace(/^\/+/, "");
   }
 
   private countCompletedTasks(projectId: string, sprintId: string): number {
@@ -1186,6 +1342,10 @@ export class SprintPreviewService {
     if (workspaceMapping.length > 0) mapped = mapPathPrefix(mapped, repoPath, workspaceMapping);
     if (homeMapping.length > 0) mapped = mapPathPrefix(mapped, os.homedir(), homeMapping);
     return mapped;
+  }
+
+  private shellQuote(value: string): string {
+    return `'${value.replace(/'/g, `'\\''`)}'`;
   }
 
   private async resolveDockerUserSpec(workspacePath: string): Promise<string> {

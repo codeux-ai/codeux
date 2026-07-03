@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import {
   classifyProviderError,
   computeResetAfterFromClockTime,
@@ -18,7 +18,26 @@ const makeResult = (stdout: string, stderr: string): CommandResult => ({
   stderr,
 });
 
+const withMorningClock = (fn: () => void): void => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(2026, 5, 2, 1, 0, 0, 0));
+  try {
+    fn();
+  } finally {
+    vi.useRealTimers();
+  }
+};
+
 describe("classifyProviderError", () => {
+  beforeAll(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 5, 2, 1, 0, 0, 0));
+  });
+
+  afterAll(() => {
+    vi.useRealTimers();
+  });
+
   describe("gemini", () => {
     it("detects quota exhaustion with reset time", () => {
       const result = makeResult(
@@ -246,7 +265,7 @@ describe("classifyProviderError", () => {
       expect(classification.category).toBe("QUOTA_EXHAUSTED");
     });
 
-    it("detects the real `codex exec` usage-limit error and extracts the reset time", () => {
+    it("detects the real `codex exec` usage-limit error and extracts the reset time", () => withMorningClock(() => {
       const result = makeResult(
         "",
         "ERROR: You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 3:54 AM.",
@@ -258,7 +277,7 @@ describe("classifyProviderError", () => {
       expect(classification.resetAfter).toMatch(/^\d+h\d+m\d+s$/);
       expect(classification.resetAtIso).toBeTruthy();
       expect(new Date(classification.resetAtIso!).getTime()).toBeGreaterThan(Date.now());
-    });
+    }));
 
     it("detects usage-limit exhaustion even without a parseable reset time", () => {
       const result = makeResult(
@@ -354,13 +373,13 @@ describe("classifyProviderError", () => {
         expect(classification.category).toBe("QUOTA_EXHAUSTED");
       });
 
-      it("classifies a JSONL-wrapped usage-limit event and extracts the clock-time reset", () => {
+      it("classifies a JSONL-wrapped usage-limit event and extracts the clock-time reset", () => withMorningClock(() => {
         const stdout = '{"type":"error","message":"You\'ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 3:54 AM."}';
         const classification = classifyProviderError("codex", makeResult(stdout, ""));
         expect(classification.category).toBe("QUOTA_EXHAUSTED");
         expect(classification.resetAfter).toMatch(/^\d+h\d+m\d+s$/);
         expect(classification.resetAtIso).toBeTruthy();
-      });
+      }));
     });
 
     describe("rate-limit variants", () => {
@@ -430,7 +449,7 @@ describe("classifyProviderError", () => {
       expect(classification.userMessage).toContain("Qwen Code quota exhausted");
     });
 
-    it("preserves qwen usage-limit reset extraction", () => {
+    it("preserves qwen usage-limit reset extraction", () => withMorningClock(() => {
       const result = makeResult(
         "",
         "ERROR: You've hit your usage limit. Upgrade to Pro to purchase more credits or try again at 3:54 AM.",
@@ -439,7 +458,7 @@ describe("classifyProviderError", () => {
       expect(classification.category).toBe("QUOTA_EXHAUSTED");
       expect(classification.resetAfter).toMatch(/^\d+h\d+m\d+s$/);
       expect(classification.resetAtIso).toBeTruthy();
-    });
+    }));
 
     it("detects qwen custom provider auth failures", () => {
       const result = makeResult("", "Error: Incorrect API key provided for OPENAI_API_KEY");

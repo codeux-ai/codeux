@@ -84,6 +84,9 @@ export interface ProcessManagementActionArgs {
   customModel?: string;
   sessionId: string;
   continueSessionId?: string | null;
+  /** Baseline for opencode's cumulative session export, when `continueSessionId`
+   *  resumes an earlier chat turn's session. See chat-thread-runtime-service.ts. */
+  openCodeBaselineRawUsageJson?: Record<string, unknown> | null;
   settings: DashboardSettings;
   prompt: string;
   repoPath: string;
@@ -98,6 +101,14 @@ export interface ProcessManagementActionArgs {
 
 export class ChatManagementActionService {
   constructor(private readonly deps: ChatManagementActionServiceDeps) {}
+
+  private isExecutionInvocationActiveForFinalize(invocationId: string): boolean {
+    if (typeof this.deps.executionRepository.getExecutionInvocation !== "function") {
+      return true;
+    }
+    const current = this.deps.executionRepository.getExecutionInvocation(invocationId);
+    return current?.status !== "cancelled";
+  }
 
   async executeApprovedAction(projectId: string, provider: string, model: string, action: ManageCodeUxArgs): Promise<ManagementActionProposedResult> {
     const startedAt = new Date().toISOString();
@@ -209,6 +220,7 @@ export class ChatManagementActionService {
         customModel: args.customModel,
         sessionId: args.sessionId,
         continueSessionId: args.continueSessionId,
+        openCodeBaselineRawUsageJson: args.openCodeBaselineRawUsageJson,
         workflowSettings: args.settings.cliWorkflow,
         repoPath: args.repoPath,
         invocationId: execInvocationId,
@@ -230,10 +242,12 @@ export class ChatManagementActionService {
         contentMarkdown: replyText || "_No response from provider._",
       });
 
-      this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
-        status: args.signal?.aborted ? "cancelled" : (result.ok ? "completed" : "failed"),
-        finishedAt: new Date().toISOString(),
-      });
+      if (this.isExecutionInvocationActiveForFinalize(execInvocationId)) {
+        this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
+          status: args.signal?.aborted ? "cancelled" : (result.ok ? "completed" : "failed"),
+          finishedAt: new Date().toISOString(),
+        });
+      }
 
       if (!result.ok) {
         throw new Error(`Virtual ${args.provider} worker failed: ${result.stderr || result.stdout}`);
@@ -252,10 +266,12 @@ export class ChatManagementActionService {
         role: "system",
         contentMarkdown: wasCancelled ? "Superseded by a newer chat message." : `Error: ${errMessage}`,
       });
-      this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
-        status: wasCancelled ? "cancelled" : "failed",
-        finishedAt: new Date().toISOString(),
-      });
+      if (this.isExecutionInvocationActiveForFinalize(execInvocationId)) {
+        this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
+          status: wasCancelled ? "cancelled" : "failed",
+          finishedAt: new Date().toISOString(),
+        });
+      }
       throw err;
     }
   }
@@ -313,6 +329,7 @@ export class ChatManagementActionService {
         customModel: args.customModel,
         sessionId: args.sessionId,
         continueSessionId: args.continueSessionId,
+        openCodeBaselineRawUsageJson: args.openCodeBaselineRawUsageJson,
         workflowSettings: args.settings.cliWorkflow,
         repoPath: args.repoPath,
         settings: args.settings,
@@ -339,10 +356,12 @@ export class ChatManagementActionService {
 
       if (!parsed.action || !parsed.action.domain || !parsed.action.action) {
         // No action proposed, just a reply
-        this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
-          status: "completed",
-          finishedAt: new Date().toISOString(),
-        });
+        if (this.isExecutionInvocationActiveForFinalize(execInvocationId)) {
+          this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
+            status: "completed",
+            finishedAt: new Date().toISOString(),
+          });
+        }
         return {
           replyMarkdown: parsed.replyMarkdown,
           action: null,
@@ -366,10 +385,12 @@ export class ChatManagementActionService {
         contentMarkdown: `Action result: ${JSON.stringify(envelope, null, 2)}`,
       });
 
-      this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
-        status: "completed",
-        finishedAt: new Date().toISOString(),
-      });
+      if (this.isExecutionInvocationActiveForFinalize(execInvocationId)) {
+        this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
+          status: "completed",
+          finishedAt: new Date().toISOString(),
+        });
+      }
 
       return {
         replyMarkdown: parsed.replyMarkdown,
@@ -387,10 +408,12 @@ export class ChatManagementActionService {
         role: "system",
         contentMarkdown: wasCancelled ? "Superseded by a newer chat message." : `Error: ${errMessage}`,
       });
-      this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
-        status: wasCancelled ? "cancelled" : "failed",
-        finishedAt: new Date().toISOString(),
-      });
+      if (this.isExecutionInvocationActiveForFinalize(execInvocationId)) {
+        this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
+          status: wasCancelled ? "cancelled" : "failed",
+          finishedAt: new Date().toISOString(),
+        });
+      }
       throw err;
     }
   }

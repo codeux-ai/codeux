@@ -3,6 +3,9 @@ import type { ExecutionModelStatsSummary, ExecutionUsageTotals } from "../../../
 import {
   buildModelHighlights,
   buildModelSegments,
+  buildReasoningHighlight,
+  buildTelemetrySourceSummary,
+  buildVelocityHighlight,
   computeUsageEfficiency,
   formatSuccessRate,
   getSuccessTone,
@@ -52,6 +55,7 @@ describe("computeUsageEfficiency", () => {
     expect(efficiency.cacheHitRate).toBeCloseTo(0.5);
     expect(efficiency.tokensPerCall).toBeCloseTo(260);
     expect(efficiency.outputTokensPerMinute).toBeCloseTo(50);
+    expect(efficiency.outputTokensPerSecond).toBeCloseTo(500 / 600);
     expect(efficiency.reasoningShare).toBeCloseTo(100 / 600);
   });
 
@@ -68,6 +72,7 @@ describe("computeUsageEfficiency", () => {
     expect(efficiency.cacheHitRate).toBeNull();
     expect(efficiency.tokensPerCall).toBeNull();
     expect(efficiency.outputTokensPerMinute).toBeNull();
+    expect(efficiency.outputTokensPerSecond).toBeNull();
     expect(efficiency.reasoningShare).toBeNull();
   });
 });
@@ -108,6 +113,8 @@ describe("buildModelHighlights", () => {
     expect(highlights.fastest?.model.id).toBe(fastReliable.id);
     expect(highlights.mostReliable?.model.id).toBe(fastReliable.id);
     expect(highlights.bestCache?.model.id).toBe(busyCached.id);
+    expect(highlights.highestVelocity).not.toBeNull();
+    expect(highlights.strongestReasoning).not.toBeNull();
   });
 
   it("ignores low-volume models when higher-volume candidates exist", () => {
@@ -132,6 +139,107 @@ describe("buildModelHighlights", () => {
     expect(highlights.fastest).toBeNull();
     expect(highlights.mostReliable).toBeNull();
     expect(highlights.bestCache).toBeNull();
+    expect(highlights.highestVelocity).toBeNull();
+    expect(highlights.strongestReasoning).toBeNull();
+  });
+});
+
+describe("buildTelemetrySourceSummary", () => {
+  it("summarizes empty telemetry as unavailable", () => {
+    const summary = buildTelemetrySourceSummary({
+      reportedInvocationCount: 0,
+      estimatedInvocationCount: 0,
+      unavailableInvocationCount: 0,
+      unsupportedInvocationCount: 0,
+    });
+
+    expect(summary.label).toBe("Unavailable");
+    expect(summary.tone).toBe("neutral");
+    expect(summary.mix.total).toBe(0);
+    expect(summary.caveat).toMatch(/compare/i);
+  });
+
+  it("describes mixed telemetry with a clear caveat", () => {
+    const summary = buildTelemetrySourceSummary({
+      reportedInvocationCount: 8,
+      estimatedInvocationCount: 3,
+      unavailableInvocationCount: 1,
+      unsupportedInvocationCount: 2,
+    });
+
+    expect(summary.label).toBe("Reported");
+    expect(summary.tone).toBe("warn");
+    expect(summary.detail).toContain("8 reported");
+    expect(summary.detail).toContain("3 estimated");
+    expect(summary.caveat).toMatch(/fallback/i);
+  });
+});
+
+describe("buildModelHighlights velocity and reasoning", () => {
+  it("prefers the fastest and most reasoning-heavy models when data is available", () => {
+    const velocityLeader = createModel({
+      id: "fast::model",
+      label: "fast-model",
+      usage: createUsage({ outputTokens: 900, activeTimeMs: 90000, reasoningOutputTokens: 90, totalTokens: 2000 }),
+    });
+    const reasoningLeader = createModel({
+      id: "think::model",
+      label: "think-model",
+      usage: createUsage({ outputTokens: 1000, activeTimeMs: 300000, reasoningOutputTokens: 400, totalTokens: 2200 }),
+    });
+
+    const highlights = buildModelHighlights([velocityLeader, reasoningLeader]);
+
+    expect(highlights.highestVelocity?.model.id).toBe(velocityLeader.id);
+    expect(highlights.strongestReasoning?.model.id).toBe(reasoningLeader.id);
+  });
+
+  it("formats standalone velocity and reasoning highlights with sparse-safe fallbacks", () => {
+    const noVelocity = createModel({
+      id: "idle::model",
+      label: "idle-model",
+      usage: createUsage({ outputTokens: 0, activeTimeMs: 0, reasoningOutputTokens: 0 }),
+    });
+    const runner = createModel({
+      id: "runner::model",
+      label: "runner-model",
+      usage: createUsage({ outputTokens: 1200, activeTimeMs: 120000, reasoningOutputTokens: 300, totalTokens: 3200 }),
+    });
+
+    expect(buildVelocityHighlight([noVelocity])).toBeNull();
+    expect(buildReasoningHighlight([noVelocity])).toBeNull();
+
+    const velocity = buildVelocityHighlight([runner]);
+    const reasoning = buildReasoningHighlight([runner]);
+
+    expect(velocity?.model.id).toBe(runner.id);
+    expect(velocity?.value).toBe("10 tok/s");
+    expect(reasoning?.model.id).toBe(runner.id);
+    expect(reasoning?.value).toBe("20% reasoning");
+  });
+
+  it("handles zero-invocation models and missing duration samples without invalid rankings", () => {
+    const sparseModel = createModel({
+      id: "sparse::model",
+      label: "sparse-model",
+      usage: createUsage({
+        invocationCount: 0,
+        totalTokens: 0,
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        reasoningOutputTokens: 0,
+        activeTimeMs: 0,
+      }),
+      duration: { sampleCount: 0, avgMs: 0, p50Ms: 0, p95Ms: 0, maxMs: 0 },
+      successRate: null,
+    });
+
+    const highlights = buildModelHighlights([sparseModel]);
+
+    expect(highlights.fastest).toBeNull();
+    expect(highlights.highestVelocity).toBeNull();
+    expect(highlights.strongestReasoning).toBeNull();
   });
 });
 

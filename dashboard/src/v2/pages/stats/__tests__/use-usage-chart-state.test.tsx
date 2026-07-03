@@ -4,6 +4,10 @@ import { renderHook, act } from "@testing-library/preact";
 import { useUsageChartState, parseEnabledSeries, reconcileSeries } from "../use-usage-chart-state.js";
 import type { ProjectExecutionStatsSnapshot } from "../../../types.js";
 
+const seriesKey = (projectId: string) => `codeux_stats_enabled_series_${projectId}`;
+const legacySeriesKey = (projectId: string) => `jules_stats_enabled_series_${projectId}`;
+const modeKey = (projectId: string) => `codeux_stats_visual_mode_${projectId}`;
+
 const baseStats = {
   range: { from: "a", to: "b", resolution: "day" },
   buckets: [],
@@ -62,7 +66,7 @@ describe("useUsageChartState", () => {
   });
 
   it("handles restricted localStorage environment safely", () => {
-    const originalGet = localStorage.getItem;
+    const originalLocalStorage = window.localStorage;
     try {
       Object.defineProperty(window, 'localStorage', {
         value: {
@@ -70,25 +74,23 @@ describe("useUsageChartState", () => {
           setItem: () => { throw new Error("SecurityError"); },
           clear: () => {}
         },
-        writable: true
+        writable: true,
+        configurable: true
       });
       const { result } = renderHook(() => useUsageChartState("proj-restricted", baseStats));
       expect(result.current.enabledSeries).toEqual({ tokens: true, active: false });
     } finally {
       Object.defineProperty(window, 'localStorage', {
-        value: {
-          getItem: originalGet,
-          setItem: localStorage.setItem,
-          clear: localStorage.clear
-        },
-        writable: true
+        value: originalLocalStorage,
+        writable: true,
+        configurable: true
       });
     }
   });
 
   it("scopes enabled series storage by projectId", () => {
-    localStorage.setItem('jules_stats_enabled_series_proj-1', JSON.stringify({ tokens: false, active: true }));
-    localStorage.setItem('jules_stats_enabled_series_proj-2', JSON.stringify({ tokens: true, active: false }));
+    localStorage.setItem(seriesKey("proj-1"), JSON.stringify({ tokens: false, active: true }));
+    localStorage.setItem(seriesKey("proj-2"), JSON.stringify({ tokens: true, active: false }));
 
     let currentProj = "proj-1";
     const { result, rerender } = renderHook(() => useUsageChartState(currentProj, baseStats as any));
@@ -100,19 +102,35 @@ describe("useUsageChartState", () => {
 
     // Verify it loads the new project's config, and doesn't overwrite proj-2 with proj-1's config
     expect(result.current.enabledSeries).toEqual({ tokens: true, active: false });
-    expect(localStorage.getItem('jules_stats_enabled_series_proj-2')).toBe(JSON.stringify({ tokens: true, active: false }));
+    expect(localStorage.getItem(seriesKey("proj-2"))).toBe(JSON.stringify({ tokens: true, active: false }));
   });
 
   it("prunes stale stored series ids", () => {
-    localStorage.setItem('jules_stats_enabled_series_proj-1', JSON.stringify({ old_metric: true, tokens: true }));
+    localStorage.setItem(seriesKey("proj-1"), JSON.stringify({ old_metric: true, tokens: true }));
     const { result } = renderHook(() => useUsageChartState("proj-1", baseStats));
     expect(result.current.enabledSeries.old_metric).toBeUndefined();
     expect(result.current.enabledSeries.tokens).toBe(true);
   });
 
   it("recovers from all-series-disabled by forcing at least one active", () => {
-    localStorage.setItem('jules_stats_enabled_series_proj-1', JSON.stringify({ tokens: false, active: false }));
+    localStorage.setItem(seriesKey("proj-1"), JSON.stringify({ tokens: false, active: false }));
     const { result } = renderHook(() => useUsageChartState("proj-1", baseStats as any));
     expect(result.current.enabledSeries.tokens).toBe(true);
+  });
+
+  it("migrates legacy series storage into the codeux key and persists visual mode per project", () => {
+    localStorage.setItem(legacySeriesKey("proj-legacy"), JSON.stringify({ tokens: false, active: true }));
+    localStorage.setItem(modeKey("proj-legacy"), "models");
+
+    const { result } = renderHook(() => useUsageChartState("proj-legacy", baseStats as any));
+    expect(result.current.enabledSeries).toEqual({ tokens: false, active: true });
+    expect(result.current.visualMode).toBe("models");
+    expect(localStorage.getItem(seriesKey("proj-legacy"))).toBe(JSON.stringify({ tokens: false, active: true }));
+
+    act(() => {
+      result.current.setVisualMode("system");
+    });
+
+    expect(localStorage.getItem(modeKey("proj-legacy"))).toBe("system");
   });
 });

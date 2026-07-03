@@ -73,7 +73,10 @@ import type {
   UserOnboardingState,
   LocalDirectoryBrowserEntry,
   LocalDirectoryBrowserResponse,
-  BackgroundPattern
+  BackgroundPattern,
+  TaskPrTemplateSections,
+  SprintPrTemplateSections,
+  PrDescriptionSettings
 } from "../../src/contracts/app-types.js";
 import type {
   EffectiveSettingsResponse,
@@ -166,6 +169,9 @@ export type {
   LocalDirectoryBrowserEntry,
   LocalDirectoryBrowserResponse,
   BackgroundPattern,
+  TaskPrTemplateSections,
+  SprintPrTemplateSections,
+  PrDescriptionSettings,
   EffectiveSettingsResponse,
   ProjectProviderSettings,
   ProjectSettings,

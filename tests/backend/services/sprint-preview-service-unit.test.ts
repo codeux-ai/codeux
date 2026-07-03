@@ -395,6 +395,27 @@ describe("SprintPreviewService unit tests", () => {
         ]),
         "/repo",
       );
+      const prepareVolumeCallIndex = vi.mocked(runCommandStrict).mock.calls.findIndex((call) =>
+        call[0] === "docker" && call[1][0] === "run" && call[1].includes("alpine:3.20")
+      );
+      const createCallIndex = vi.mocked(runCommandStrict).mock.calls.findIndex((call) =>
+        call[0] === "docker" && call[1][0] === "create"
+      );
+      expect(prepareVolumeCallIndex).toBeGreaterThan(-1);
+      expect(createCallIndex).toBeGreaterThan(prepareVolumeCallIndex);
+      const prepareVolumeArgs = vi.mocked(runCommandStrict).mock.calls[prepareVolumeCallIndex][1];
+      expect(prepareVolumeArgs).toEqual(expect.arrayContaining([
+        "--user",
+        "0:0",
+        "-v",
+        "code-ux-preview-volume-sprint-1:/volume-data",
+      ]));
+      const prepareScript = prepareVolumeArgs.at(-1) || "";
+      expect(prepareScript).toContain("mkdir -p '/volume-data/preview/sprint-1/workspace'");
+      expect(prepareScript).toContain("mkdir -p '/volume-data/preview/sprint-1/home-preview'");
+      expect(prepareScript).toContain("mkdir -p '/volume-data/npm-cache/pnpm-store'");
+      expect(prepareScript).toContain("chown -R '1000:1000' /volume-data");
+      expect(prepareScript).toContain("chmod -R u+rwX,go+rwX /volume-data");
       expect(vi.mocked(runCommandStrict).mock.calls.some((call) => call[0] === "docker" && call[1][0] === "cp" && call[1][2].endsWith(":/tmp/workspace.tar"))).toBe(true);
       expect(vi.mocked(runCommandStrict).mock.calls.some((call) => call[0] === "docker" && call[1][0] === "cp" && call[1][2].endsWith(":/tmp/preview-start.sh"))).toBe(true);
       expect(vi.mocked(runCommandStrict).mock.calls.some((call) => call[0] === "docker" && call[1][0] === "start")).toBe(true);
