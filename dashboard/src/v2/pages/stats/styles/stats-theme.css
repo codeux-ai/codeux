@@ -10,6 +10,11 @@
     --stats-card-padding-compact: 1rem;
     --stats-card-min-height: 10rem;
     --stats-card-compact-min-height: 8rem;
+    --stats-card-value-size: 2rem;
+    --stats-card-value-size-compact: 1.5rem;
+    --stats-card-title-letter-spacing: 0.12em;
+    --stats-surface-blur-panel: 18px;
+    --stats-surface-blur-subpanel: 12px;
     
     /* Surface Tokens (Light Mode) */
     --stats-surface-panel: var(--surface-glass);
@@ -27,12 +32,12 @@
     --stats-card-shadow-hover: var(--elevation-raised);
     --stats-card-shadow-focus: var(--elevation-raised);
     --stats-panel-shadow: var(--elevation-base);
-    --stats-subpanel-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+    --stats-subpanel-shadow: var(--elevation-base);
     --stats-border-hairline: var(--border-hairline);
-    --stats-border-strong: rgba(15, 23, 42, 0.12);
+    --stats-border-strong: color-mix(in srgb, var(--stats-value-color) 12%, transparent);
     --stats-control-shadow: var(--elevation-base);
-    --stats-control-shadow-active: 0 3px 10px rgba(0, 122, 94, 0.14);
-    --stats-control-border-active: rgba(0, 122, 94, 0.24);
+    --stats-control-shadow-active: var(--elevation-raised);
+    --stats-control-border-active: color-mix(in srgb, var(--stats-accent-signal) 24%, transparent);
     
     /* Accent Tokens */
     --stats-accent-signal: var(--signal-600);
@@ -68,14 +73,14 @@
     /* Surface Tokens (Dark Mode) */
     --stats-card-bg: var(--stats-surface-panel);
     --stats-card-border: var(--border-hairline);
-    --stats-card-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
-    --stats-card-shadow-hover: 0 10px 24px rgba(0, 0, 0, 0.24);
-    --stats-card-shadow-focus: 0 10px 24px rgba(0, 0, 0, 0.24);
-    --stats-panel-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
-    --stats-subpanel-shadow: 0 1px 2px rgba(0, 0, 0, 0.16);
-    --stats-border-strong: rgba(250, 244, 237, 0.14);
-    --stats-control-shadow-active: 0 3px 12px rgba(0, 224, 160, 0.16);
-    --stats-control-border-active: rgba(0, 224, 160, 0.26);
+    --stats-card-shadow: var(--elevation-base);
+    --stats-card-shadow-hover: var(--elevation-raised);
+    --stats-card-shadow-focus: var(--elevation-raised);
+    --stats-panel-shadow: var(--elevation-base);
+    --stats-subpanel-shadow: var(--elevation-base);
+    --stats-border-strong: color-mix(in srgb, var(--stats-value-color) 14%, transparent);
+    --stats-control-shadow-active: var(--elevation-raised);
+    --stats-control-border-active: color-mix(in srgb, var(--stats-accent-signal) 26%, transparent);
     
     /* Accent Tokens (Dark Mode) */
     --stats-accent-cyan: #38bdf8;
@@ -85,5 +90,36 @@
     --stats-accent-rose-fill: rgba(255, 77, 77, 0.075);
     --stats-accent-emerald-fill: rgba(0, 163, 126, 0.075);
     --stats-accent-muted-fill: rgba(250, 244, 237, 0.045);
+  }
+}
+
+@layer components {
+  .stats-surface-panel {
+    border: 1px solid var(--stats-border-hairline);
+    background: var(--stats-surface-panel);
+    box-shadow: var(--stats-panel-shadow);
+    backdrop-filter: blur(var(--stats-surface-blur-panel));
+    -webkit-backdrop-filter: blur(var(--stats-surface-blur-panel));
+  }
+
+  .stats-surface-subpanel {
+    border: 1px solid var(--stats-border-hairline);
+    background: var(--stats-surface-subpanel);
+    box-shadow: var(--stats-subpanel-shadow);
+    backdrop-filter: blur(var(--stats-surface-blur-subpanel));
+    -webkit-backdrop-filter: blur(var(--stats-surface-blur-subpanel));
+  }
+
+  .stats-surface-chip {
+    border: 1px solid var(--stats-border-hairline);
+    background: var(--stats-surface-chip);
+    box-shadow: var(--stats-subpanel-shadow);
+    backdrop-filter: blur(var(--stats-surface-blur-subpanel));
+    -webkit-backdrop-filter: blur(var(--stats-surface-blur-subpanel));
+  }
+
+  .stats-surface-input {
+    border: 1px solid var(--stats-border-hairline);
+    background: var(--stats-surface-input);
   }
 }

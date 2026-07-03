@@ -33,6 +33,17 @@ When using the `Table` component for responsive data displays:
 4. **Accessible Sort States:** Apply `ariaSort` explicitly only on the active sort column.
 5. **Handling Long Strings:** To ensure long continuous strings do not overflow the mobile cards or desktop columns, `TableCell` internals must use `min-w-0 break-words` classes. Content rendered inside the cell must support text wrapping safely without breaking the mobile layout.
 
+## Stats Analytics Surfaces
+
+The Stats page combines fixed header-adjacent navigation, chart controls, tabbed ledgers, and dense tables. Its responsive contract is stricter than a simple card grid:
+
+1. **Header Controls:** Time-window presets, custom date fields, and visual modes must wrap inside the Stats hero before any component introduces horizontal overflow. The page itself must not scroll sideways.
+2. **Mode Navigation:** The `Trend`, `Composition`, `Models`, `Providers`, `Ledgers`, and `System` control remains keyboard reachable at phone widths. Icon-only mobile rendering must keep stable accessible names and visible focus rings.
+3. **Custom Ranges:** Date validation text must stay directly associated with the date inputs and remain visible without overlaying KPI cards or mode controls.
+4. **Charts:** Trend charts must keep a readable summary, keyboard bucket exploration, minimap controls, and the screen-reader data table in DOM order even when the visual rail stacks below the plot. Chart values must not depend on hover-only or motion-only disclosure.
+5. **Ledgers and Tables:** Ledger tabs use real tab semantics, while task, sprint, Git, and system rows preserve table headers or mobile labels. Long prompts, model names, provider ids, errors, and transcript text must wrap inside the row or detail panel.
+6. **Reduced Motion:** Stats shell entrance, chart updates, donut/ribbon animation, hover lift, and tab transitions must respect `prefers-reduced-motion`; disabling motion must not hide filter state, validation errors, chart values, or transcript content.
+
 ## Horizontal Dashboard Rails
 
 Horizontally overflowing dashboard surfaces, including Quicksprint template rails, should contain their own horizontal scrolling within the component boundary. The page itself must not gain horizontal scroll at mobile, tablet, or desktop widths.

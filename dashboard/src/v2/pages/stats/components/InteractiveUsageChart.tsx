@@ -24,6 +24,7 @@ import {
   getVisibleBuckets,
   normalizeChartSeries,
   calculateChartMetrics,
+  describeChartMetrics,
   getTooltipState,
   groupChartSeries,
   calculateHoverRect,
@@ -132,7 +133,10 @@ export const InteractiveUsageChart: FunctionComponent<{
   const seriesGroups = useMemo(() => groupChartSeries(stats.chartSeries), [stats.chartSeries]);
   const activeSeriesCount = Object.values(enabledSeries).filter(Boolean).length;
 
-  const visibleSeries = chartData.filter((series) => enabledSeries[series.id]);
+  const visibleSeries = useMemo(
+    () => chartData.filter((series) => enabledSeries[series.id]),
+    [chartData, enabledSeries]
+  );
 
   const { activeIndex, activeBucket, tooltipLeft, xPositions } = useMemo(() => getTooltipState(
     visibleBuckets, chartData, hoveredIndex, padding, width
@@ -149,14 +153,24 @@ export const InteractiveUsageChart: FunctionComponent<{
     : stats.range.label;
   const axisLabelStep = getAxisLabelStep(stats.range);
 
-  const { peakTokens, peakActiveTimeMs, peakInvocations, averageTokens, totalCostUsd, invocationDensity } = useMemo(() => calculateChartMetrics(visibleBuckets), [visibleBuckets]);
+  const visibleMetrics = useMemo(() => calculateChartMetrics(visibleBuckets), [visibleBuckets]);
+  const { peakTokens, peakActiveTimeMs, peakInvocations, averageTokens, totalCostUsd, invocationDensity } = visibleMetrics;
   const invocationDensityLabel = visibleBuckets.length > 0 ? `${invocationDensity.toFixed(1)} / bucket` : "—";
+  const activeSeriesLabels = useMemo(() => visibleSeries.map((series) => series.label), [visibleSeries]);
+  const chartSummaryText = useMemo(
+    () => describeChartMetrics(
+      visibleMetrics,
+      activeSeriesLabels,
+      zoomLabel
+    ),
+    [activeSeriesLabels, visibleMetrics, zoomLabel]
+  );
   const summaryCards = [
     { label: 'Peak tokens', value: formatTokens(peakTokens), detail: 'highest bucket' },
     { label: 'Peak active time', value: formatStatsDuration(peakActiveTimeMs), detail: 'highest bucket' },
     { label: 'Average tokens', value: formatTokens(averageTokens), detail: 'per bucket' },
     { label: 'Peak invocations', value: peakInvocations.toLocaleString(), detail: 'highest bucket' },
-    { label: 'Total cost', value: formatCost(totalCostUsd), detail: 'visible window' },
+    { label: 'Visible cost', value: formatCost(totalCostUsd), detail: 'visible window' },
     { label: 'Invocation density', value: invocationDensityLabel, detail: 'visible window' },
   ];
 
@@ -238,12 +252,11 @@ export const InteractiveUsageChart: FunctionComponent<{
         <div className="sr-only" aria-live="polite" aria-atomic="true">
           <h2 id="chart-summary-heading" className="sr-only">Data Visualization for {zoomRange ? "zoomed timeframe" : stats.range.label}</h2>
           <p>
-            Currently showing {visibleBuckets.length} buckets.
+            {chartSummaryText}
             {activeBucket ? `Focused bucket: ${activeBucket.label}. Tokens: ${activeBucket.usage.totalTokens}` : "No bucket focused."}
-            Active series: {visibleSeries.map(s => s.label).join(", ")}.
-            Peak Tokens: {formatTokens(peakTokens)}. Peak Time: {formatStatsDuration(peakActiveTimeMs)}. Average Tokens: {formatTokens(averageTokens)}. Peak Invocations: {peakInvocations.toLocaleString()}.
           </p>
           <table className="sr-only">
+            <caption>Usage chart data for {zoomLabel}</caption>
             <thead>
               <tr>
                 <th>Time</th>
@@ -288,27 +301,38 @@ export const InteractiveUsageChart: FunctionComponent<{
           />
         </div>
 
-        <div
-          aria-label="Usage chart summary metrics"
-          className="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6"
-        >
-          {summaryCards.map((card) => (
-            <article
-              key={card.label}
-              data-chart-card
-              aria-label={`${card.label}: ${card.value}, ${card.detail}`}
-              className="min-w-0 rounded-[1.15rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-4 py-3"
-            >
-              <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">{card.label}</div>
-              <div className="mt-2 break-words text-lg font-black leading-tight text-[var(--stats-value-color)]">{card.value}</div>
-              <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]">{card.detail}</div>
-            </article>
-          ))}
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_18rem] xl:items-stretch">
+          <div
+            aria-label="Usage chart summary metrics"
+            className="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6"
+          >
+            {summaryCards.map((card) => (
+              <article
+                key={card.label}
+                data-chart-card
+                aria-label={`${card.label}: ${card.value}, ${card.detail}`}
+                className="min-w-0 rounded-[1.15rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-4 py-3"
+              >
+                <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">{card.label}</div>
+                <div className="mt-2 break-words text-lg font-black leading-tight text-[var(--stats-value-color)]">{card.value}</div>
+                <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]">{card.detail}</div>
+              </article>
+            ))}
+          </div>
+          <div className="rounded-[1.15rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-4 py-3">
+            <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">Active series</div>
+            <div className="mt-2 text-sm font-bold leading-snug text-[var(--stats-value-color)]">
+              {activeSeriesLabels.length > 0 ? activeSeriesLabels.join(", ") : "No active series"}
+            </div>
+            <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]">
+              {zoomLabel}
+            </div>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_20rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]">
           <div className="flex min-w-0 flex-col gap-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.15rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-4 py-3">
+            <div id="usage-chart-instructions" className="flex flex-wrap items-center justify-between gap-3 rounded-[1.15rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-4 py-3">
               <div className="min-w-0">
                 <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">Interactive plot</div>
                 <div className="mt-1 text-xs leading-relaxed text-[var(--stats-detail-color)]">
@@ -540,7 +564,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                   onInput={handleSliderChange}
                   onChange={handleSliderChange}
                   onKeyDown={handleSliderKeyDown}
-                  aria-describedby="usage-chart-tooltip"
+                  aria-describedby="usage-chart-tooltip usage-chart-instructions"
                   aria-valuetext={activeBucket ? `${activeBucket.label}, ${visibleSeries.map((s) => `${s.label}: ${s.formatter(s.values[activeIndex] ?? 0)}`).join(', ')}` : 'No bucket focused'}
                   className="mt-3 w-full accent-[color:var(--accent-focus-ring)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)]"
                   disabled={visibleBuckets.length === 0}

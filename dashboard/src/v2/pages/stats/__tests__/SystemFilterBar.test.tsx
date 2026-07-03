@@ -78,6 +78,7 @@ describe("SystemFilterBar", () => {
     const rateLimitButton = getByRole("button", { name: "RateLimit" });
     fireEvent.click(rateLimitButton);
     expect(rateLimitButton).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("5 active filters")).toBeTruthy();
 
     const searchInput = getByPlaceholderText("Search system stats") as HTMLInputElement;
     fireEvent.input(searchInput, { target: { value: "beta" } });
@@ -96,6 +97,7 @@ describe("SystemFilterBar", () => {
     expect(rateLimitButton).toHaveAttribute("aria-pressed", "false");
     expect(searchInput.value).toBe("");
     expect(screen.getByText("Showing 7 of 24")).toBeTruthy();
+    expect(screen.getByText("0 active filters")).toBeTruthy();
   });
 
   it("exposes pagination controls when a server page is provided", () => {

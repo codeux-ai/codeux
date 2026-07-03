@@ -9,6 +9,7 @@ export interface ModelEfficiencyMetrics {
   cacheHitRate: number | null;
   tokensPerCall: number | null;
   outputTokensPerMinute: number | null;
+  outputTokensPerSecond: number | null;
   reasoningShare: number | null;
   outputInputRatio: number | null;
 }
@@ -52,10 +53,12 @@ export interface TelemetrySourceSummary {
 export function computeUsageEfficiency(usage: ExecutionUsageTotals): ModelEfficiencyMetrics {
   const cacheDenominator = usage.inputTokens + usage.cachedInputTokens;
   const activeMinutes = usage.activeTimeMs / 60000;
+  const activeSeconds = usage.activeTimeMs / 1000;
   return {
     cacheHitRate: cacheDenominator > 0 ? usage.cachedInputTokens / cacheDenominator : null,
     tokensPerCall: usage.invocationCount > 0 ? usage.totalTokens / usage.invocationCount : null,
     outputTokensPerMinute: activeMinutes > 0 ? usage.outputTokens / activeMinutes : null,
+    outputTokensPerSecond: activeSeconds > 0 ? usage.outputTokens / activeSeconds : null,
     reasoningShare: usage.outputTokens + usage.reasoningOutputTokens > 0
       ? usage.reasoningOutputTokens / (usage.outputTokens + usage.reasoningOutputTokens)
       : null,
@@ -208,24 +211,6 @@ export function buildModelHighlights(models: ExecutionModelStatsSummary[]): Mode
     })
     : null;
 
-  const withVelocity = pool.filter((model) => model.usage.outputTokens > 0 && model.usage.activeTimeMs > 0);
-  const highestVelocity = withVelocity.length > 0
-    ? withVelocity.reduce((best, model) => {
-      const bestVelocity = best.usage.outputTokens / Math.max(1, best.usage.activeTimeMs / 1000);
-      const velocity = model.usage.outputTokens / Math.max(1, model.usage.activeTimeMs / 1000);
-      return velocity > bestVelocity ? model : best;
-    })
-    : null;
-
-  const withReasoning = pool.filter((model) => model.usage.reasoningOutputTokens > 0 && model.usage.outputTokens > 0);
-  const strongestReasoning = withReasoning.length > 0
-    ? withReasoning.reduce((best, model) => {
-      const bestShare = best.usage.reasoningOutputTokens / Math.max(1, best.usage.outputTokens);
-      const share = model.usage.reasoningOutputTokens / Math.max(1, model.usage.outputTokens);
-      return share > bestShare ? model : best;
-    })
-    : null;
-
   return {
     busiest: busiest
       ? {
@@ -255,20 +240,8 @@ export function buildModelHighlights(models: ExecutionModelStatsSummary[]): Mode
           detail: `${formatCompactTokens(bestCache.usage.cachedInputTokens)} cached`,
         }
       : null,
-    highestVelocity: highestVelocity
-      ? {
-          model: highestVelocity,
-          value: `${Math.round(highestVelocity.usage.outputTokens / Math.max(1, highestVelocity.usage.activeTimeMs / 1000))} tok/s`,
-          detail: `${formatCompactDuration(highestVelocity.usage.activeTimeMs)} active`,
-        }
-      : null,
-    strongestReasoning: strongestReasoning
-      ? {
-          model: strongestReasoning,
-          value: `${Math.round((strongestReasoning.usage.reasoningOutputTokens / Math.max(1, strongestReasoning.usage.outputTokens)) * 100)}% reasoning`,
-          detail: `${formatCompactTokens(strongestReasoning.usage.reasoningOutputTokens)} reasoning tokens`,
-        }
-      : null,
+    highestVelocity: buildVelocityHighlight(pool),
+    strongestReasoning: buildReasoningHighlight(pool),
   };
 }
 
@@ -292,18 +265,21 @@ export function buildVelocityHighlight(models: ExecutionModelStatsSummary[]): Mo
   const eligible = models.filter((model) => model.usage.invocationCount >= MIN_HIGHLIGHT_CALLS);
   const pool = eligible.length > 0 ? eligible : models;
 
-  const valid = pool.filter((model) => model.usage.outputTokens > 0 && model.usage.activeTimeMs > 0);
+  const valid = pool.filter((model) => {
+    const efficiency = computeUsageEfficiency(model.usage);
+    return efficiency.outputTokensPerSecond !== null && efficiency.outputTokensPerSecond > 0;
+  });
   if (valid.length === 0) {
     return null;
   }
 
   const best = valid.reduce((best, model) => {
-    const bestVelocity = best.usage.outputTokens / Math.max(1, best.usage.activeTimeMs / 1000);
-    const velocity = model.usage.outputTokens / Math.max(1, model.usage.activeTimeMs / 1000);
+    const bestVelocity = computeUsageEfficiency(best.usage).outputTokensPerSecond ?? 0;
+    const velocity = computeUsageEfficiency(model.usage).outputTokensPerSecond ?? 0;
     return velocity > bestVelocity ? model : best;
   });
 
-  const velocity = Math.round(best.usage.outputTokens / Math.max(1, best.usage.activeTimeMs / 1000));
+  const velocity = Math.round(computeUsageEfficiency(best.usage).outputTokensPerSecond ?? 0);
   return { model: best, value: `${velocity} tok/s`, detail: `${formatCompactDuration(best.usage.activeTimeMs)} active` };
 }
 
@@ -311,18 +287,21 @@ export function buildReasoningHighlight(models: ExecutionModelStatsSummary[]): M
   const eligible = models.filter((model) => model.usage.invocationCount >= MIN_HIGHLIGHT_CALLS);
   const pool = eligible.length > 0 ? eligible : models;
 
-  const valid = pool.filter((model) => model.usage.reasoningOutputTokens > 0 && model.usage.outputTokens > 0);
+  const valid = pool.filter((model) => {
+    const efficiency = computeUsageEfficiency(model.usage);
+    return efficiency.reasoningShare !== null && efficiency.reasoningShare > 0;
+  });
   if (valid.length === 0) {
     return null;
   }
 
   const best = valid.reduce((best, model) => {
-    const bestShare = best.usage.reasoningOutputTokens / Math.max(1, best.usage.outputTokens);
-    const share = model.usage.reasoningOutputTokens / Math.max(1, model.usage.outputTokens);
+    const bestShare = computeUsageEfficiency(best.usage).reasoningShare ?? 0;
+    const share = computeUsageEfficiency(model.usage).reasoningShare ?? 0;
     return share > bestShare ? model : best;
   });
 
-  const share = Math.round((best.usage.reasoningOutputTokens / Math.max(1, best.usage.outputTokens)) * 100);
+  const share = Math.round((computeUsageEfficiency(best.usage).reasoningShare ?? 0) * 100);
   return { model: best, value: `${share}% reasoning`, detail: `${formatCompactTokens(best.usage.reasoningOutputTokens)} reasoning tokens` };
 }
 

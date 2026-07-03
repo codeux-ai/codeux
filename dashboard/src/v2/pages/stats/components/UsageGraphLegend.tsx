@@ -15,9 +15,9 @@ export const UsageGraphLegend: FunctionComponent<UsageGraphLegendProps> = ({
   onToggleSeries,
 }) => {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4" role="group" aria-label="Usage chart series switches">
       {Object.entries(seriesGroups).map(([grouping, groupSeries]) => (
-        <div key={grouping} className="flex flex-col gap-3">
+        <div key={grouping} className="flex flex-col gap-3" role="group" aria-label={`${grouping} series`}>
           <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-[var(--stats-label-color)]">
             {grouping}
           </div>
@@ -37,7 +37,7 @@ export const UsageGraphLegend: FunctionComponent<UsageGraphLegendProps> = ({
                   aria-checked={active}
                   aria-disabled={disabled ? "true" : undefined}
                   disabled={disabled}
-                  aria-label={`${s.label}, ${active ? 'enabled' : 'disabled'}`}
+                  aria-label={`${s.label} series, ${active ? 'enabled' : 'disabled'}${disabled ? ', required because it is the last active series' : ''}`}
                   onClick={() => {
                     if (!disabled) onToggleSeries(s.id);
                   }}

@@ -4,6 +4,7 @@
 /// <reference types="@testing-library/jest-dom" />
 import { h } from "preact";
 import { render, screen, cleanup, fireEvent, within } from "@testing-library/preact";
+import userEvent from "@testing-library/user-event";
 import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { TelemetryLedgerTabs } from "../components/TelemetryLedgerTabs.js";
@@ -67,11 +68,14 @@ const mockStats: ProjectExecutionStatsSnapshot = {
   activeSprint: null,
   buckets: [],
   tasks: [
-    entity("task-1", "Alpha migration", {
+    {
+      ...entity("task-1", "Alpha migration", {
       secondaryLabel: "T01",
-      usage: usage({ totalTokens: 1_200, inputTokens: 700, outputTokens: 420, invocationCount: 3 }),
+      usage: usage({ totalTokens: 1_200, inputTokens: 700, outputTokens: 420, invocationCount: 3, totalCostUsd: 0.015 }),
       provider: "codex",
-    }),
+      }),
+      duration: { p50Ms: 12_000, p95Ms: 24_000 },
+    } as ExecutionStatsEntitySummary & { duration: { p50Ms: number; p95Ms: number } },
     entity("task-2", "Beta repair", {
       secondaryLabel: "T02",
       usage: usage({ totalTokens: 450, inputTokens: 230, outputTokens: 160, invocationCount: 2 }),
@@ -165,6 +169,14 @@ describe("TelemetryLedgerTabs", () => {
     expect(tabs[1]).toHaveAttribute("aria-selected", "true");
     expect(tabs[1]).toHaveFocus();
 
+    fireEvent.keyDown(tablist, { key: "ArrowDown" });
+    expect(tabs[2]).toHaveAttribute("aria-selected", "true");
+    expect(tabs[2]).toHaveFocus();
+
+    fireEvent.keyDown(tablist, { key: "ArrowUp" });
+    expect(tabs[1]).toHaveAttribute("aria-selected", "true");
+    expect(tabs[1]).toHaveFocus();
+
     fireEvent.keyDown(tablist, { key: "End" });
     expect(tabs[2]).toHaveAttribute("aria-selected", "true");
     expect(tabs[2]).toHaveFocus();
@@ -174,11 +186,38 @@ describe("TelemetryLedgerTabs", () => {
     expect(tabs[0]).toHaveFocus();
   });
 
+  it("allows keyboard tabbing from ledger tabs into search and sort controls", async () => {
+    const user = userEvent.setup();
+    render(<TelemetryLedgerTabs stats={mockStats} />);
+
+    const taskTab = screen.getByRole("tab", { name: "Task Telemetry, 2 entries" });
+    taskTab.focus();
+
+    await user.tab();
+    expect(screen.getByRole("tabpanel")).toHaveFocus();
+
+    await user.tab();
+    expect(screen.getByPlaceholderText("Search tasks")).toHaveFocus();
+
+    await user.tab();
+    const latestSort = screen.getByRole("button", { name: "Latest" });
+    expect(latestSort).toHaveFocus();
+    expect(latestSort).toHaveAttribute("aria-pressed", "false");
+
+    await user.tab();
+    const tokensSort = screen.getByRole("button", { name: "Tokens" });
+    expect(tokensSort).toHaveFocus();
+    expect(tokensSort).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("filters task rows and shows clear empty-state context", () => {
     render(<TelemetryLedgerTabs stats={mockStats} />);
 
     expect(screen.getByLabelText("Alpha migration tasks telemetry row")).toBeInTheDocument();
     expect(screen.getByLabelText("Beta repair tasks telemetry row")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Alpha migration tasks telemetry row")).getByText("Leader")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Alpha migration tasks telemetry row")).getByText("$0.015")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Alpha migration tasks telemetry row")).getByText("p50")).toBeInTheDocument();
 
     fireEvent.input(screen.getByPlaceholderText("Search tasks"), { target: { value: "beta" } });
     expect(screen.queryByLabelText("Alpha migration tasks telemetry row")).not.toBeInTheDocument();
@@ -204,6 +243,11 @@ describe("TelemetryLedgerTabs", () => {
     const sortedByTokensRows = screen.getAllByLabelText(/tasks telemetry row/);
     expect(sortedByTokensRows[0]).toHaveAccessibleName("Alpha migration tasks telemetry row");
     expect(sortedByTokensRows[1]).toHaveAccessibleName("Beta repair tasks telemetry row");
+
+    fireEvent.click(screen.getByRole("button", { name: /Tokens/ }));
+    const sortedByTokensAscendingRows = screen.getAllByLabelText(/tasks telemetry row/);
+    expect(sortedByTokensAscendingRows[0]).toHaveAccessibleName("Beta repair tasks telemetry row");
+    expect(sortedByTokensAscendingRows[1]).toHaveAccessibleName("Alpha migration tasks telemetry row");
   });
 
   it("renders sprint and git ledger summaries with sortable searchable content", () => {
@@ -214,7 +258,9 @@ describe("TelemetryLedgerTabs", () => {
     expect(screen.getByLabelText("Sprint One sprints telemetry row")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: "Git Telemetry, 3 entries" }));
+    expect(screen.getByRole("region", { name: "Git telemetry overview" })).toBeInTheDocument();
     expect(screen.getByText("Visible Churn")).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "Git telemetry leaderboards" })).toBeInTheDocument();
     expect(screen.getByLabelText("Alpha migration git telemetry row")).toBeInTheDocument();
 
     fireEvent.input(screen.getByPlaceholderText("Search tasks"), { target: { value: "nomatch" } });
@@ -223,6 +269,7 @@ describe("TelemetryLedgerTabs", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Clear search" })[0]);
     const gitLedger = screen.getByLabelText("Alpha migration git telemetry row");
     expect(within(gitLedger).getByText("Churn mix")).toBeInTheDocument();
+    expect(within(gitLedger).getByText("Leader")).toBeInTheDocument();
   });
 
   it("renders empty states for empty ledgers", () => {
@@ -233,5 +280,14 @@ describe("TelemetryLedgerTabs", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Git Telemetry, 0 entries" }));
     expect(screen.getByText("No git telemetry available in this window.")).toBeInTheDocument();
+  });
+
+  it("omits the git tab when git telemetry is not available", () => {
+    const statsWithoutGit = { ...mockStats, git: null } as unknown as ProjectExecutionStatsSnapshot;
+
+    render(<TelemetryLedgerTabs stats={statsWithoutGit} />);
+
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
+    expect(screen.queryByRole("tab", { name: /Git Telemetry/ })).not.toBeInTheDocument();
   });
 });

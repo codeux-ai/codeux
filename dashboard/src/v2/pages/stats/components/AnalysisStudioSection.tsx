@@ -1,15 +1,15 @@
 import type { ProjectExecutionStatsSnapshot, ExecutionStatsEntitySummary, SegmentDefinition } from "../../../types.js";
 import type { UsageChartState } from "../use-usage-chart-state.js";
-import type { StatsVisualMode } from "./StatsShared.js";
 import type { FunctionComponent } from "preact";
 import { BarChart3, Cpu, Layers3, PieChart, ShieldCheck, Terminal } from "lucide-preact";
+import { TrendStudio } from "./TrendStudio.js";
+import { CompositionStudio } from "./CompositionStudio.js";
+import { ReliabilityStudio } from "./ReliabilityStudio.js";
 import {
-  TrendStudio,
-  CompositionStudio,
-  ReliabilityStudio,
+  PANEL_CLASS,
   StudioHeader,
-} from "./StatsShared.js";
-import { PANEL_CLASS } from "./stats-ui-primitives.js";
+  type StatsVisualMode,
+} from "./stats-ui-primitives.js";
 import { SystemStudio } from "./system/SystemStudio.js";
 import { ModelsStudio } from "./ModelsStudio.js";
 import { TelemetryLedgerTabs } from "./TelemetryLedgerTabs.js";

@@ -25,7 +25,7 @@ vi.mock("gsap", () => ({
 import * as matchers from "@testing-library/jest-dom/matchers";
 expect.extend(matchers);
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/preact';
+import { cleanup, render, screen, within } from '@testing-library/preact';
 import { StatsPage } from '../StatsPage.js';
 import * as useProjectDataModule from '../../../context/project-data.js';
 import * as useStatsPageDataModule from '../use-stats-page-data.js';
@@ -342,5 +342,25 @@ describe('StatsPage visual tests', () => {
     expect(getByTestId('system-studio')).toBeTruthy();
     expect(getByText('Invocation Filters')).toBeTruthy();
     expect(getByText('Invocation Table')).toBeTruthy();
+  });
+
+  it('exposes every stats mode in the hero segmented control', () => {
+    mockStatsPageData('composition');
+
+    render(<StatsPage />);
+
+    const modeGroup = screen.getByRole('group', { name: 'Analytics modes' });
+    const expectedModes = [
+      ['Trend', 'false'],
+      ['Composition', 'true'],
+      ['Models', 'false'],
+      ['Providers', 'false'],
+      ['Ledgers', 'false'],
+      ['System', 'false'],
+    ] as const;
+
+    for (const [label, pressed] of expectedModes) {
+      expect(within(modeGroup).getByRole('button', { name: label })).toHaveAttribute('aria-pressed', pressed);
+    }
   });
 });

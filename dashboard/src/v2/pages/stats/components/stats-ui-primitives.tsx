@@ -2,6 +2,7 @@ import { buildDonutSlices } from "./stats-geometry.js";
 import type { FunctionComponent, ComponentType } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
+import "../styles/stats-theme.css";
 import {
   Activity,
   ArrowDown,
@@ -24,6 +25,7 @@ import {
   Workflow,
   Bot,
   Terminal,
+  type LucideIcon,
 } from "lucide-preact";
 import { Sparkline } from "../../../components/ui/Sparkline.js";
 import { StatsCard, type StatsCardAccent } from "./StatsCard.js";
@@ -64,13 +66,13 @@ export interface ChartZoomRange {
   end: number;
 }
 
-export const PANEL_CLASS = "relative overflow-hidden rounded-[var(--stats-panel-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-panel)] p-6 shadow-[var(--stats-panel-shadow)] backdrop-blur-xl transition-[background-color,border-color,box-shadow] duration-200 motion-reduce:transition-none";
-export const SUBPANEL_CLASS = "rounded-[var(--stats-subpanel-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-subpanel)] p-4 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-200 motion-reduce:transition-none";
-export const CHIP_CLASS = "rounded-[var(--stats-chip-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-chip)] shadow-[var(--stats-subpanel-shadow)] backdrop-blur-md transition-[background-color,border-color,color,box-shadow] duration-200 motion-reduce:transition-none";
+export const PANEL_CLASS = "stats-surface-panel relative overflow-hidden rounded-[var(--stats-panel-radius)] p-6 transition-[background-color,border-color,box-shadow] duration-200 motion-reduce:transition-none";
+export const SUBPANEL_CLASS = "stats-surface-subpanel rounded-[var(--stats-subpanel-radius)] p-4 transition-[background-color,border-color,box-shadow] duration-200 motion-reduce:transition-none";
+export const CHIP_CLASS = "stats-surface-chip rounded-[var(--stats-chip-radius)] transition-[background-color,border-color,color,box-shadow] duration-200 motion-reduce:transition-none";
 export const CONTROL_FOCUS_CLASS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--stats-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--stats-focus-ring-offset)]";
-export const INPUT_CLASS = `h-11 rounded-[var(--stats-control-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-input)] px-4 text-sm text-[color:var(--stats-value-color)] outline-none transition-[background-color,border-color,box-shadow,color] duration-200 placeholder:text-[color:var(--stats-detail-color)] focus:border-[color:var(--stats-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`;
-export const LEDGER_ROW_CLASS = "group rounded-[var(--stats-subpanel-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-subpanel)] p-4 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-md transition-[transform,background-color,border-color,box-shadow] duration-200 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-subpanel-hover)] hover:shadow-[var(--stats-card-shadow-hover)] motion-safe:hover:-translate-y-0.5 motion-reduce:transition-none";
-export const LEDGER_ROW_MODERN_CLASS = "group relative overflow-hidden rounded-[var(--stats-panel-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-panel)] p-6 shadow-[var(--stats-panel-shadow)] backdrop-blur-xl transition-[transform,background-color,border-color,box-shadow] duration-200 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-panel-hover)] hover:shadow-[var(--stats-card-shadow-hover)] motion-safe:hover:-translate-y-0.5 motion-reduce:transition-none";
+export const INPUT_CLASS = `stats-surface-input h-11 rounded-[var(--stats-control-radius)] px-4 text-sm text-[color:var(--stats-value-color)] outline-none transition-[background-color,border-color,box-shadow,color] duration-200 placeholder:text-[color:var(--stats-detail-color)] focus:border-[color:var(--stats-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`;
+export const LEDGER_ROW_CLASS = "stats-surface-subpanel group rounded-[var(--stats-subpanel-radius)] p-4 transition-[transform,background-color,border-color,box-shadow] duration-200 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-subpanel-hover)] hover:shadow-[var(--stats-card-shadow-hover)] motion-safe:hover:-translate-y-0.5 motion-reduce:transition-none";
+export const LEDGER_ROW_MODERN_CLASS = "stats-surface-panel group relative overflow-hidden rounded-[var(--stats-panel-radius)] p-6 transition-[transform,background-color,border-color,box-shadow] duration-200 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-panel-hover)] hover:shadow-[var(--stats-card-shadow-hover)] motion-safe:hover:-translate-y-0.5 motion-reduce:transition-none";
 const CONTROL_BASE_CLASS = `inline-flex min-w-0 items-center justify-center rounded-[var(--stats-chip-radius)] border px-3 text-[11px] font-bold uppercase tracking-[0.14em] transition-[background-color,border-color,box-shadow,color] duration-200 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`;
 const CONTROL_IDLE_CLASS = "border-transparent text-[color:var(--stats-control-text)] hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[color:var(--stats-control-text-hover)]";
 const CONTROL_ACTIVE_CLASS = "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-surface-control-active)] text-[color:var(--stats-control-text-active)] shadow-[var(--stats-control-shadow-active)]";
@@ -180,20 +182,20 @@ export const ViewToggle: FunctionComponent<{
   ariaLabel?: string;
   className?: string;
 }> = ({ value, onChange, ariaLabel = "Analytics modes", className = "" }) => {
-  const modes: Array<{ id: StatsVisualMode; label: string; icon: ComponentType<any> }> = [
-    { id: "trend", label: "Trend", icon: BarChart3 },
-    { id: "composition", label: "Composition", icon: PieChart },
-    { id: "models", label: "Models", icon: Cpu },
-    { id: "reliability", label: "Providers", icon: ShieldCheck },
-    { id: "ledgers", label: "Ledgers", icon: Layers3 },
-    { id: "system", label: "System", icon: Terminal },
+  const modes: Array<{ id: StatsVisualMode; label: string; accessibleLabel: string; icon: LucideIcon }> = [
+    { id: "trend", label: "Trend", accessibleLabel: "Trend", icon: BarChart3 },
+    { id: "composition", label: "Composition", accessibleLabel: "Composition", icon: PieChart },
+    { id: "models", label: "Models", accessibleLabel: "Models", icon: Cpu },
+    { id: "reliability", label: "Providers", accessibleLabel: "Providers", icon: ShieldCheck },
+    { id: "ledgers", label: "Ledgers", accessibleLabel: "Ledgers", icon: Layers3 },
+    { id: "system", label: "System", accessibleLabel: "System", icon: Terminal },
   ];
 
   return (
     <div
       role="group"
       aria-label={ariaLabel}
-      className={`flex w-full max-w-full flex-wrap gap-1 p-1 ${CHIP_CLASS} ${className}`.trim()}
+      className={`flex w-full max-w-full min-w-0 flex-wrap gap-1 p-1 ${CHIP_CLASS} ${className}`.trim()}
     >
       {modes.map((mode) => {
         const Icon = mode.icon;
@@ -204,9 +206,9 @@ export const ViewToggle: FunctionComponent<{
             type="button"
             onClick={() => onChange(mode.id)}
             aria-pressed={selected}
-            aria-label={mode.label}
+            aria-label={mode.accessibleLabel}
             title={mode.label}
-            className={`${CONTROL_BASE_CLASS} h-10 min-w-10 flex-1 shrink-0 basis-[calc(33.333%-0.25rem)] gap-2 px-3 sm:min-w-[7.25rem] sm:basis-auto sm:px-4 ${
+            className={`${CONTROL_BASE_CLASS} min-h-10 min-w-10 flex-[1_1_calc(33.333%-0.25rem)] gap-2 px-2 py-2 sm:min-w-[7rem] sm:flex-[1_1_auto] sm:px-4 ${
               selected
                 ? CONTROL_ACTIVE_CLASS
                 : CONTROL_IDLE_CLASS
@@ -481,7 +483,7 @@ export const DonutCard: FunctionComponent<{
                 <div className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">
                   {activeSegment ? formatTokens(activeSegment.value) : centerValue}
                 </div>
-                <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                <div className="mt-1 max-w-[7.5rem] break-words text-center text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
                   {activeSegment ? activeSegment.label : centerLabel}
                 </div>
                 <div className="mt-2 text-[11px] font-mono text-slate-500 dark:text-slate-400">
@@ -508,7 +510,8 @@ export const DonutCard: FunctionComponent<{
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: segment.color }} />
-                        <span className={`truncate text-sm font-semibold ${segment.textClassName}`}>{segment.label}</span>
+                        <span className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">#{index + 1}</span>
+                        <span className={`min-w-0 break-words text-sm font-semibold ${segment.textClassName}`} title={segment.label}>{segment.label}</span>
                       </div>
                       <div className="mt-1 text-[11px] font-mono text-slate-400 dark:text-slate-500">
                         {formatPercent(segment.share)} of visible volume
@@ -541,46 +544,77 @@ export const DonutCard: FunctionComponent<{
 
 export const PurposeRibbon: FunctionComponent<{
   purposes: ExecutionStatsEntitySummary[];
-}> = ({ purposes }) => (
-  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-    {purposes.slice(0, 4).map((purpose) => {
-      const config = getPurposeConfig(purpose.id);
-      const Icon = config.icon;
-      const accentTextClass: Record<StatsCardAccent, string> = {
-        default: "text-slate-500 dark:text-slate-400",
-        signal: "text-signal-600 dark:text-signal-400",
-        amber: "text-amber-600 dark:text-amber-400",
-        cyan: "text-cyan-600 dark:text-cyan-400",
-        rose: "text-rose-600 dark:text-rose-400",
-        emerald: "text-emerald-600 dark:text-emerald-400",
-      };
-      return (
-        <div key={purpose.id} className={`${SUBPANEL_CLASS} flex min-h-[9rem] flex-col justify-between p-4`}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="truncate text-sm font-black capitalize text-slate-900 dark:text-white">
-                {purpose.label.replace(/_/g, " ")}
+  totalTokens?: number;
+  dominantPurposeId?: string | null;
+}> = ({ purposes, totalTokens = 0, dominantPurposeId = null }) => {
+  const rankedPurposes = [...purposes].sort((left, right) => {
+    const delta = right.usage.totalTokens - left.usage.totalTokens;
+    return delta !== 0 ? delta : left.label.localeCompare(right.label);
+  });
+
+  if (rankedPurposes.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-8 text-center text-sm text-slate-400 dark:border-white/[0.08]">
+        No purpose data for this window.
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+      {rankedPurposes.slice(0, 4).map((purpose) => {
+        const config = getPurposeConfig(purpose.id);
+        const Icon = config.icon;
+        const tokenShare = totalTokens > 0 ? (purpose.usage.totalTokens / totalTokens) * 100 : null;
+        const isDominant = dominantPurposeId === purpose.id;
+        const accentTextClass: Record<StatsCardAccent, string> = {
+          default: "text-slate-500 dark:text-slate-400",
+          signal: "text-signal-600 dark:text-signal-400",
+          amber: "text-amber-600 dark:text-amber-400",
+          cyan: "text-cyan-600 dark:text-cyan-400",
+          rose: "text-rose-600 dark:text-rose-400",
+          emerald: "text-emerald-600 dark:text-emerald-400",
+        };
+        return (
+          <div key={purpose.id} className={`${SUBPANEL_CLASS} flex min-h-[9rem] flex-col justify-between p-4`}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="break-words text-sm font-black capitalize text-slate-900 dark:text-white" title={purpose.label.replace(/_/g, " ")}>
+                  {purpose.label.replace(/_/g, " ")}
+                </div>
+                <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                  {purpose.usage.invocationCount.toLocaleString()} calls / {formatStatsDuration(purpose.usage.activeTimeMs)} active
+                </div>
               </div>
-              <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                {formatStatsDuration(purpose.usage.activeTimeMs)} active
+              <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-chip)] ${accentTextClass[config.accent]}`}>
+                <Icon className="h-4 w-4" strokeWidth={2.2} />
               </div>
             </div>
-            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-chip)] ${accentTextClass[config.accent]}`}>
-              <Icon className="h-4 w-4" strokeWidth={2.2} />
+            <div>
+              <div className="mt-4 flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <div className="text-xl font-black text-slate-900 dark:text-white">{formatTokens(purpose.usage.totalTokens)}</div>
+                  <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                    {tokenShare !== null ? `${formatPercent(tokenShare)} token share` : "No token share"}
+                  </div>
+                </div>
+                {isDominant ? (
+                  <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-400 ${CHIP_CLASS}`}>
+                    Dominant
+                  </div>
+                ) : null}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <TokenChip icon={ArrowDownRight} label="In" value={purpose.usage.inputTokens} tone="border-black/[0.06] bg-white/55 text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300" />
+                <TokenChip icon={ArrowUpRight} label="Out" value={purpose.usage.outputTokens} tone="border-black/[0.06] bg-white/55 text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300" />
+              </div>
             </div>
           </div>
-          <div>
-            <div className="mt-4 text-xl font-black text-slate-900 dark:text-white">{formatTokens(purpose.usage.totalTokens)}</div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <TokenChip icon={ArrowDownRight} label="In" value={purpose.usage.inputTokens} tone="border-black/[0.06] bg-white/55 text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300" />
-              <TokenChip icon={ArrowUpRight} label="Out" value={purpose.usage.outputTokens} tone="border-black/[0.06] bg-white/55 text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300" />
-            </div>
-          </div>
-        </div>
-      );
-    })}
-  </div>
-);
+        );
+      })}
+    </div>
+  );
+};
 
 export const StudioHeader: FunctionComponent<{
   icon: typeof Activity | typeof PieChart | typeof ShieldCheck | typeof Layers3;

@@ -9,13 +9,15 @@ export const UsageSeriesSidebar: FunctionComponent<{
   const visibleSeries = series.filter(s => enabledSeries[s.id]);
 
   return visibleSeries.length > 0 ? (
-    <div className="grid gap-2">
+    <div className="grid gap-2" role="list" aria-label="Current values for active series">
       {visibleSeries.map((s) => {
         const currentValue = s.values[activeIndex] || 0;
 
         return (
           <div
             key={s.id}
+            role="listitem"
+            aria-label={`${s.label}: ${s.formatter(currentValue)}, ${s.signalLabel || 'Metric'}`}
             className="rounded-[1.05rem] border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/68 px-3 py-3 transition-colors hover:bg-[var(--stats-card-bg)] motion-reduce:transition-none"
           >
             <div className="flex items-start gap-3">

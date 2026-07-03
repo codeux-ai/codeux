@@ -54,6 +54,7 @@ describe("UsageChartMinimap", () => {
     const strip = container.querySelector("[data-testid='usage-chart-minimap']");
     expect(strip).toBeTruthy();
     expect(strip?.getAttribute("aria-label")).toBe("Chart minimap zoom region, full range of 1 bucket");
+    expect(strip?.getAttribute("aria-describedby")).toBe("usage-chart-minimap-help");
     expect(strip?.getAttribute("aria-disabled")).toBe("true");
     expect(strip?.textContent).toContain("Zoom becomes available after the next bucket lands.");
   });
