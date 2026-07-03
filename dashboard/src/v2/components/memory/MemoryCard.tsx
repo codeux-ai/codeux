@@ -3,9 +3,6 @@ import { memo } from "preact/compat";
 import { activeMemoryIdSignal, hoveredMemoryIdSignal, lobotomizeModeSignal, memoryMutationsSignal, selectedMemoryIdsSignal, toggleSelectedMemoryId } from "./memoryState.js";
 import { useComputed } from "@preact/signals";
 import { Check, X } from "lucide-preact";
-import { deleteMemory } from "../../lib/memory-api.js";
-import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
-import { ConfirmDialog } from "../ui/ConfirmDialog.js";
 import { useInteractionTokens } from "../../lib/motion/index.js";
 import type { MemoryScope } from "../../memory-types.js";
 
@@ -40,22 +37,11 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
     const cat = CAT[category] || CAT.context;
     const isSelected = useComputed(() => activeMemoryIdSignal.value === id);
     const isBatchSelected = useComputed(() => selectedMemoryIdsSignal.value.includes(id));
-    const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel, triggerRef } = useConfirmDialog();
     const interactionTokens = useInteractionTokens();
 
-    const handleDelete = async (e: Event) => {
+    const handleDelete = (e: Event) => {
         e.stopPropagation();
-        const confirmed = await requestConfirm({
-            title: "Delete Memory",
-            body: `Are you sure you want to delete this memory from ${cat.label}?`,
-            confirmLabel: "Delete Memory",
-            cancelLabel: "Cancel",
-            destructive: true
-        });
-
-        if (confirmed) {
-            memoryMutationsSignal.value.removeMemory(id);
-        }
+        memoryMutationsSignal.value.removeMemory(id);
     };
 
     return (
@@ -119,7 +105,6 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
             {lobotomizeModeSignal.value && (
                 <button
                     type="button"
-                    ref={triggerRef as any}
                     aria-label={`Delete ${cat.label} memory: ${content.substring(0, 30)}...`}
                     onClick={handleDelete}
                     className={`absolute top-2 right-2 z-10 p-1.5 rounded-full transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
@@ -133,13 +118,6 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
                 {content}
             </p>
             <span className="sr-only">Press Enter to open details.</span>
-
-            <ConfirmDialog
-                isOpen={isConfirmOpen}
-                options={confirmOptions}
-                onConfirm={handleConfirm}
-                onCancel={handleCancel}
-            />
         </div>
     );
 }, (prevProps, nextProps) => {

@@ -52,9 +52,10 @@ When the UI generates visual graphs of memory items:
 
 The memory map uses a pointer-centered camera so users can inspect dense graphs without losing spatial context:
 - Mouse wheel zoom keeps the world point under the cursor stable as closely as possible while clamping to the configured zoom range.
-- The zoom controls step through the same range as the wheel and can reach a deep-readability zoom for dense maps.
+- The zoom controls step through the same range as the wheel with the same short camera tween, and can reach a deep-readability zoom for dense maps.
 - Selecting a node from the canvas or list recenters the camera on that memory at a readable zoom level, and Reset returns to the default overview without leaving a stale selection behind.
-- At higher zoom levels the canvas renders a focused label bubble for the selected or hovered memory instead of flooding the graph with full text at every node.
+- Node and category labels are drawn in inverse-zoom screen space so the graph positions zoom while text remains readable instead of growing with the map.
+- Hovering a node highlights it and updates the cursor only. At higher zoom levels the canvas renders the focused label bubble for the selected memory instead of creating hover-only overlays.
 - Dense maps are expected to remain navigable at 200+ memories without forcing every memory label to render at once.
 
 ## Storage Requirements
@@ -118,13 +119,17 @@ If deterministic prefiltering finds no cleanup candidates, Code UX records a com
 The Memory settings panel also manages one project-scoped scheduler entry for long-term remediation. Users can set it to Off, Every day, or Every week without leaving Settings. Entries created this way are marked as `memoryRemediationTarget.source = "memory_settings"` so manually created Scheduler page entries are not overwritten.
 
 ## UI Updates and Accessibility
+- The Memory page model catalog is presented as a Warm Void panel with a state summary and responsive model cards. It distinguishes active, downloaded, downloading, stale, and unavailable models without using legacy violet action styling.
+- Model catalog primary actions use Signal Jade for download and activation, stale re-embedding warnings use Ember, and destructive/error states use status red. The downloaded-model delete action is icon-only with an accessible label and is disabled while the model is active.
 - The memory sidebar now starts collapsed by default and exposes a compact rail/tab so the graph canvas remains visible until the user explicitly expands it.
-- Closing the sidebar clears the current search query; Escape still clears the field while the sidebar is open, and the live announcement remains polite.
+- Expanding the sidebar opens directly to the current alive memory list for the selected tier, sprint, and agent filter set. Browsing all visible memories is the default path; search is not required before the list is useful.
+- Closing the sidebar clears the current search query and selected memory IDs so returning to the sidebar starts from the current visible memory list. `MemorySearch.tsx` remains available as a standalone accessible search control.
 - Added keyboard-accessible clear search functionality to `MemorySearch.tsx` (supports clearing via `Escape` and a dedicated clear button with an explicit `<kbd>Esc</kbd>` visual affordance).
-- Enhanced `MemoryList.tsx` to prominently display active search result counts directly in the UI instead of relying solely on `sr-only` live regions, while keeping the list layout `min-w-0` and overflow-safe on narrow screens.
+- Enhanced `MemoryList.tsx` to prominently display visible memory counts directly in the UI instead of relying solely on `sr-only` live regions, while keeping the list layout `min-w-0` and overflow-safe on narrow screens.
 - Added per-memory selection toggles and a batch action bar to the sidebar list so users can select visible memories, clear the selection, or select all currently filtered results without touching hidden records.
 - Batch deletion requires an explicit confirmation dialog when more than one memory is selected. The delete flow is optimistic, restores any failed deletions, and reports partial failures through the memory feedback region with a retry action.
+- Lobotomize mode is immediate by design: a single click on a graph node deletes it through the canvas deletion animation, and inspector/sidebar single-memory delete buttons do not open confirmation dialogs. Because deletion is immediate, the active mode must use explicit danger styling and visible copy that tells users single-memory deletion will not ask again. Sidebar card deletion still uses the existing optimistic removal path with undo feedback.
 - Selection is pruned automatically when search, tier, sprint, agent, or sidebar state changes make a memory invisible, which keeps batch actions scoped to the current visible slice of memory.
 - Improved memory list accessibility and reduced motion fallbacks in `MemoryList.tsx`, utilizing `useInteractionTokens` to respect OS-level reduced motion preferences.
-- Updated the memory map camera so wheel, button, and click focus interactions all preserve readable navigation on dense graphs.
+- Updated the memory map camera so wheel, button, and click focus interactions preserve readable navigation on dense graphs. Wheel zoom uses smoother proportional movement, and graph labels keep stable on-screen sizing during zoom so text remains readable while node positions scale.
 - `MemoryFilters.tsx` implements proper tab semantics and uses clear, high-contrast danger state indicators (`bg-status-red`) for lobotomize (delete) mode to prevent accidental removals.
