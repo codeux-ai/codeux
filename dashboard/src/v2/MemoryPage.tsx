@@ -1,6 +1,6 @@
 import { useMemoryPageData } from "./hooks/use-memory-page-data.js";
 import { useEmbeddingModelStatus } from "./hooks/use-embedding-model-status.js";
-import { ModelCard } from "./components/memory/ModelCard.js";
+import { EmbeddingModelCatalog } from "./components/memory/EmbeddingModelCatalog.js";
 import { effect } from "@preact/signals";
 import { Inspector } from "./components/memory/Inspector.js";
 import { MemoryFilters, MemoryDetails, MemoryCard } from "./components/memory/index.js";
@@ -11,8 +11,8 @@ import { AddMemoryModal } from "./components/memory/AddMemoryModal.js";
 import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef, useState, useCallback, useEffect } from "preact/hooks";
 import gsap from "gsap";
-import { Brain, Search, X, AlertTriangle, Save, Check, RotateCcw, ZoomIn, ZoomOut, Maximize2, Plus, Download, Trash2, Power, Loader2, HardDrive, RefreshCw } from "lucide-preact";
-import { listMemories, createMemory, deleteMemory as apiDeleteMemory, searchMemories, listEmbeddingModels, downloadEmbeddingModel, selectEmbeddingModel, deleteEmbeddingModel, getMemoryStats, startReembed, getReembedProgress, getEmbeddingMap, type EmbeddingModelWithStatus, type ReembedProgress, type EmbeddingMapResult } from "./lib/memory-api.js";
+import { Brain, Search, X, AlertTriangle, ZoomIn, ZoomOut, Maximize2, Plus, Loader2 } from "lucide-preact";
+import { listMemories, createMemory, deleteMemory as apiDeleteMemory, searchMemories, listEmbeddingModels, downloadEmbeddingModel, selectEmbeddingModel, deleteEmbeddingModel, getMemoryStats, startReembed, getReembedProgress, getEmbeddingMap, type ReembedProgress, type EmbeddingMapResult } from "./lib/memory-api.js";
 import type { MemoryRecord, MemoryScope, MemoryCategory } from "./memory-types.js";
 import { useProjectData } from "./context/project-data.js";
 import { useSprints } from "../hooks/useSprints.js";
@@ -936,95 +936,15 @@ export const MemoryPage: FunctionComponent = () => {
 
             {/* ── Model Management ────────────────────────────────────── */}
             {showModels && (
-                <section aria-labelledby="embedding-model-catalog-title" className="space-y-3">
-                    <div className="flex flex-wrap items-end justify-between gap-2">
-                        <div>
-                            <h2 id="embedding-model-catalog-title" className="text-sm font-bold text-slate-800 dark:text-white">
-                                Embedding model catalog
-                            </h2>
-                            <p className="text-[11px] text-slate-500">
-                                Download compatible ONNX models for local memory search.
-                            </p>
-                        </div>
-                        {models.length > 0 && (
-                            <span className="text-[10px] font-mono text-slate-400">
-                                {models.length} available
-                            </span>
-                        )}
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {models.map((model: EmbeddingModelWithStatus) => (
-                            <ModelCard key={model.id} model={model}
-                                onDownload={handleDownloadModel}
-                                onSelect={handleSelectModelWithStats}
-                                onDelete={handleDeleteModel}
-                                onReembed={handleReembed}
-                                reembedding={!!reembed?.active}
-                                staleCount={stats.staleEmbeddings} />
-                        ))}
-                        {models.length === 0 && (
-                            <p className="text-sm text-slate-400 font-medium col-span-2 text-center py-8">
-                                Loading embedding models…
-                            </p>
-                        )}
-                    </div>
-                </section>
-            )}
-
-            {/* ── Re-embed banner ─────────────────────────────────────── */}
-            {showModels && stats.staleEmbeddings > 0 && !reembed?.active && (
-                <div className="flex items-center gap-4 px-5 py-4 rounded-2xl
-                               bg-amber-500/[0.06] border border-amber-500/20
-                               dark:bg-amber-500/[0.04] dark:border-amber-400/15">
-                    <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" strokeWidth={2.5} />
-                    <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-amber-600 dark:text-amber-400">
-                            {stats.staleEmbeddings} {stats.staleEmbeddings === 1 ? "memory needs" : "memories need"} re-embedding
-                        </p>
-                        <p className="text-[10px] text-amber-600/70 dark:text-amber-400/60 mt-0.5">
-                            These memories were embedded with a different model and won't appear in semantic search until re-embedded.
-                        </p>
-                    </div>
-                    <button onClick={handleReembed}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[11px] font-bold shrink-0
-                                   bg-amber-500 text-white hover:bg-amber-600
-                                   transition-colors duration-200 shadow-[0_2px_8px_rgba(245,158,11,0.25)]">
-                        <RefreshCw className="w-3 h-3" strokeWidth={2.5} />
-                        Re-embed All
-                    </button>
-                </div>
-            )}
-
-            {/* ── Re-embed progress ───────────────────────────────────── */}
-            {showModels && reembed?.active && (
-                <div className="flex flex-col gap-3 px-5 py-4 rounded-2xl
-                               bg-signal-500/[0.06] border border-signal-500/20
-                               dark:bg-signal-500/[0.04] dark:border-signal-500/15">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <RefreshCw className="w-3.5 h-3.5 text-signal-500 animate-spin" strokeWidth={2.5} />
-                            <span className="text-xs font-bold text-signal-600 dark:text-signal-400">Re-embedding memories…</span>
-                        </div>
-                        <span className="text-[10px] font-mono text-signal-500">
-                            {reembed.completed}/{reembed.total}
-                        </span>
-                    </div>
-                    <div className="h-2 w-full bg-black/[0.06] dark:bg-white/[0.06] rounded-full overflow-hidden">
-                        <div className="h-full rounded-full bg-signal-500 transition-all duration-500 ease-out"
-                            style={{ width: `${reembed.total > 0 ? Math.round((reembed.completed / reembed.total) * 100) : 0}%` }} />
-                    </div>
-                </div>
-            )}
-
-            {/* ── Re-embed complete ───────────────────────────────────── */}
-            {showModels && reembed && !reembed.active && reembed.completed > 0 && stats.staleEmbeddings === 0 && (
-                <div className="flex items-center gap-3 px-5 py-3 rounded-2xl
-                               bg-signal-500/[0.06] border border-signal-500/20">
-                    <Check className="w-4 h-4 text-signal-500" strokeWidth={2.5} />
-                    <p className="text-xs font-bold text-signal-600 dark:text-signal-400">
-                        Re-embedding complete — {reembed.completed} {reembed.completed === 1 ? "memory" : "memories"} updated.
-                    </p>
-                </div>
+                <EmbeddingModelCatalog
+                    models={models}
+                    stats={stats}
+                    reembed={reembed}
+                    onDownload={handleDownloadModel}
+                    onSelect={handleSelectModelWithStats}
+                    onDelete={handleDeleteModel}
+                    onReembed={handleReembed}
+                />
             )}
 
             {/* ── Lobotomize warning ──────────────────────────────────── */}
