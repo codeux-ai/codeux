@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { Bot, Code2, GitBranch, Zap } from "lucide-preact";
-import { ReliabilityStudio } from "../components/StatsShared.js";
+import { ReliabilityStudio } from "../components/ReliabilityStudio.js";
 import { getProviderIcon } from "../components/stats-ui-primitives.js";
 
 expect.extend(matchers);
