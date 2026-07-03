@@ -141,7 +141,7 @@ describe("ModelsStudio", () => {
     expect(screen.getAllByText(longLabel).length).toBeGreaterThan(0);
     expect(container.textContent).toContain("Low sample");
     expect(container.textContent).toContain("Leaderboard placement is based on limited invocation telemetry.");
-    expect(container.querySelector(".text-rose-700")).toBeTruthy();
+    expect(container.innerHTML).toContain("--stats-negative-text");
   });
 
   it("renders sparse model telemetry intentionally when duration and token volume are missing", () => {

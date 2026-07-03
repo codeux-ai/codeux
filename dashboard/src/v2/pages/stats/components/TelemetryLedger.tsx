@@ -17,11 +17,16 @@ import type { ExecutionStatsEntitySummary } from "../../../types.js";
 import { formatTokens, formatStatsDuration, formatDateTime, formatPercent, formatCost } from "../stats-utils.js";
 import {
   CHIP_CLASS,
+  CONTROL_FOCUS_CLASS,
+  DASHED_EMPTY_CLASS,
   INPUT_CLASS,
   LEDGER_ROW_MODERN_CLASS,
   PANEL_CLASS,
+  STATUS_TONE_CLASS,
   SUBPANEL_CLASS,
   SortButton,
+  TEXT_DETAIL_CLASS,
+  TRACK_CLASS,
   TokenChip,
   TokenFlowBar,
   getProviderIcon,
@@ -33,18 +38,18 @@ import {
 export function getStatusChipTone(status: string): string {
   const normalized = status.toLowerCase();
   if (normalized.includes("complete") || normalized.includes("done") || normalized.includes("merged")) {
-    return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
+    return STATUS_TONE_CLASS.positive;
   }
   if (normalized.includes("fail") || normalized.includes("error") || normalized.includes("blocked")) {
-    return "bg-rose-500/10 text-rose-600 dark:text-rose-400";
+    return STATUS_TONE_CLASS.negative;
   }
   if (normalized.includes("running") || normalized.includes("progress") || normalized.includes("active")) {
-    return "bg-signal-500/[0.08] text-signal-700 dark:text-signal-300";
+    return STATUS_TONE_CLASS.signal;
   }
   if (normalized.includes("cancel") || normalized.includes("paused")) {
-    return "bg-amber-500/10 text-amber-600 dark:text-amber-400";
+    return STATUS_TONE_CLASS.warning;
   }
-  return "bg-slate-500/10 text-slate-500 dark:text-slate-300";
+  return STATUS_TONE_CLASS.neutral;
 }
 
 export const LedgerSummaryTile: FunctionComponent<{
@@ -53,14 +58,14 @@ export const LedgerSummaryTile: FunctionComponent<{
   value: string;
   detail: string;
   tone?: string;
-}> = ({ icon: Icon, label, value, detail, tone = "text-signal-500" }) => (
+}> = ({ icon: Icon, label, value, detail, tone = "text-[color:var(--stats-signal-text)]" }) => (
   <div className={`${SUBPANEL_CLASS} p-4`}>
-    <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+    <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">
       <Icon className={`h-3.5 w-3.5 ${tone}`} strokeWidth={2.2} />
       {label}
     </div>
-    <div className="mt-2 text-xl font-black tracking-tight text-slate-900 dark:text-white">{value}</div>
-    <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{detail}</div>
+    <div className="mt-2 text-xl font-black tracking-tight text-[color:var(--stats-value-color)]">{value}</div>
+    <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">{detail}</div>
   </div>
 );
 
@@ -82,19 +87,19 @@ const LedgerComparisonCard: FunctionComponent<{
     <div className={`${SUBPANEL_CLASS} p-4 lg:col-span-2`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Token Flow Comparison</div>
-          <div className="mt-2 text-sm font-bold text-slate-900 dark:text-white">
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">Token Flow Comparison</div>
+          <div className="mt-2 text-sm font-bold text-[color:var(--stats-value-color)]">
             Filtered {kindLabel} vs leading lane
           </div>
         </div>
-        <div className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+        <div className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
           {filteredItems.length.toLocaleString()} visible
         </div>
       </div>
 
       <div className="mt-4 space-y-4">
         <div>
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
             <span>Filtered mix</span>
             <span>{formatTokens(totals.filteredTokens)} total tokens</span>
           </div>
@@ -105,13 +110,13 @@ const LedgerComparisonCard: FunctionComponent<{
             reasoning={totals.filteredReasoningTokens}
             total={Math.max(1, totals.filteredTokens)}
           />
-          <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+          <div className="mt-2 text-[11px] text-[color:var(--stats-detail-color)]">
             Combined filtered throughput across the current view.
           </div>
         </div>
 
         <div>
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
             <span>Top lane</span>
             <span>{topItem ? topItem.label : "No lane yet"}</span>
           </div>
@@ -124,12 +129,12 @@ const LedgerComparisonCard: FunctionComponent<{
                 reasoning={topItem.usage.reasoningOutputTokens}
                 total={topItem.usage.totalTokens}
               />
-              <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+              <div className="mt-2 text-[11px] text-[color:var(--stats-detail-color)]">
                 {formatTokens(topItem.usage.totalTokens)} tokens, {formatPercent(totals.totalTokens > 0 ? (topItem.usage.totalTokens / totals.totalTokens) * 100 : 0)} of all window tokens.
               </div>
             </>
           ) : (
-            <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-5 text-sm text-slate-400 dark:border-white/[0.08]">
+          <div className={`${DASHED_EMPTY_CLASS} py-5 text-left text-sm`}>
               No top lane to compare yet.
             </div>
           )}
@@ -270,14 +275,14 @@ export const TelemetryLedger: FunctionComponent<{
       <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">{eyebrow}</div>
-            <div className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</div>
-            <div className="mt-2 max-w-3xl text-sm text-slate-500 dark:text-slate-400">
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">{eyebrow}</div>
+            <div className="mt-2 text-2xl font-black tracking-tight text-[color:var(--stats-value-color)]">{title}</div>
+            <div className="mt-2 max-w-3xl text-sm text-[color:var(--stats-detail-color)]">
               Search, sort, and compare {kindLabel} by recency, tokens, active time, and directional token flow.
             </div>
           </div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/72 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300">
-            <Hash className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.2} />
+          <div className={`inline-flex items-center gap-2 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${CHIP_CLASS} ${TEXT_DETAIL_CLASS}`}>
+            <Hash className="h-3.5 w-3.5 text-[color:var(--stats-signal-text)]" strokeWidth={2.2} />
             {filteredItems.length.toLocaleString()} visible / {items.length.toLocaleString()} total
           </div>
         </div>
@@ -295,7 +300,7 @@ export const TelemetryLedger: FunctionComponent<{
               label="Total Tokens"
               value={formatTokens(overallTotals.totalTokens)}
               detail={`${overallTotals.invocationCount.toLocaleString()} calls · ${formatCost(overallTotals.totalCostUsd)}`}
-              tone="text-cyan-500"
+              tone="text-[color:var(--stats-accent-cyan)]"
             />
             <LedgerSummaryTile
               icon={Zap}
@@ -320,11 +325,11 @@ export const TelemetryLedger: FunctionComponent<{
               label="Top Contributor"
               value={topItem ? topItem.label : "—"}
               detail={topItem ? `${formatTokens(topItem.usage.totalTokens)} tokens` : "no leader"}
-              tone="text-indigo-500"
+              tone="text-[color:var(--stats-signal-text)]"
             />
           </div>
         ) : (
-          <div className={`${SUBPANEL_CLASS} px-4 py-8 text-center text-sm text-slate-400`}>
+          <div className={`${SUBPANEL_CLASS} px-4 py-8 text-center text-sm text-[color:var(--stats-label-color)]`}>
             No {kindLabel} telemetry is available in this window yet.
           </div>
         )}
@@ -334,7 +339,7 @@ export const TelemetryLedger: FunctionComponent<{
             <label htmlFor={`${kindLabel}-ledger-search`} className="sr-only">
               Search {kindLabel}
             </label>
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" strokeWidth={2} />
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--stats-detail-color)]" strokeWidth={2} />
             <input
               id={`${kindLabel}-ledger-search`}
               type="text"
@@ -348,7 +353,7 @@ export const TelemetryLedger: FunctionComponent<{
                 type="button"
                 onClick={() => setQuery("")}
                 aria-label="Clear search"
-                className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:hover:bg-white/[0.06] dark:hover:text-slate-200 dark:focus-visible:ring-offset-void-900"
+                className={`absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-[color:var(--stats-label-color)] transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[color:var(--stats-value-color)] ${CONTROL_FOCUS_CLASS}`}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -397,21 +402,21 @@ export const TelemetryLedger: FunctionComponent<{
                   label="Search Results"
                   value={filteredItems.length.toLocaleString()}
                   detail={queryIsActive ? `matching "${query.trim()}"` : "all visible"}
-                  tone="text-amber-500"
+                  tone="text-[color:var(--stats-warning-text)]"
                 />
                 <LedgerSummaryTile
                   icon={Brain}
                   label="Top Lane"
                   value={topItem ? topItem.label : "—"}
                   detail={topItem ? `${formatTokens(topItem.usage.totalTokens)} tokens` : "no lane yet"}
-                  tone="text-indigo-500"
+                  tone="text-[color:var(--stats-signal-text)]"
                 />
                 <LedgerSummaryTile
                   icon={Database}
                   label="Visible Share"
                   value={totals.totalTokens > 0 ? formatPercent(filteredShare) : "—"}
                   detail="of current window tokens"
-                  tone="text-cyan-500"
+                  tone="text-[color:var(--stats-accent-cyan)]"
                 />
               </div>
             </div>
@@ -439,13 +444,13 @@ export const TelemetryLedger: FunctionComponent<{
                     <div className="flex flex-col gap-4">
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
-                          <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] text-[10px] font-black uppercase leading-none text-slate-900 shadow-sm backdrop-blur-xl dark:text-white">
-                            <span className="text-[8px] tracking-[0.12em] text-slate-400">Rank</span>
+                          <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-xl border border-[color:var(--stats-card-border)] bg-[color:var(--stats-card-bg)] text-[10px] font-black uppercase leading-none text-[color:var(--stats-value-color)] shadow-sm backdrop-blur-xl">
+                            <span className="text-[8px] tracking-[0.12em] text-[color:var(--stats-label-color)]">Rank</span>
                             <span className="mt-0.5 text-xs">{index + 1}</span>
                           </div>
                           <div className="min-w-0">
-                            <div className="truncate text-base font-black tracking-tight text-slate-900 dark:text-white">{item.label}</div>
-                            <div className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                            <div className="truncate text-base font-black tracking-tight text-[color:var(--stats-value-color)]">{item.label}</div>
+                            <div className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">
                               {formatTokens(tokenPerCall)}/call · last {formatDateTime(item.lastActivityAt)}
                             </div>
                             <div className="mt-1.5 flex flex-wrap items-center gap-2 min-w-0">
@@ -460,13 +465,13 @@ export const TelemetryLedger: FunctionComponent<{
                                 );
                               })() : null}
                               {item.purpose ? (
-                                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-600 bg-emerald-500/10 dark:text-emerald-400 ${CHIP_CLASS}`}>
+                                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${STATUS_TONE_CLASS.positive} ${CHIP_CLASS}`}>
                                   <Activity className="h-3 w-3" strokeWidth={2.5} />
                                   {item.purpose.replace(/_/g, " ")}
                                 </span>
                               ) : null}
                               {item.secondaryLabel ? (
-                                <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+                                <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
                                   {item.secondaryLabel}
                                 </span>
                               ) : null}
@@ -480,28 +485,28 @@ export const TelemetryLedger: FunctionComponent<{
                         </div>
                         <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-3 xl:w-auto xl:min-w-[46rem] xl:grid-cols-6 xl:text-right">
                           <div>
-                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Tokens</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatTokens(item.usage.totalTokens)}</div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Tokens</div>
+                            <div className="mt-1 text-lg font-black tracking-tight text-[color:var(--stats-value-color)]">{formatTokens(item.usage.totalTokens)}</div>
                           </div>
                           <div>
-                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Active</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatStatsDuration(item.usage.activeTimeMs)}</div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Active</div>
+                            <div className="mt-1 text-lg font-black tracking-tight text-[color:var(--stats-value-color)]">{formatStatsDuration(item.usage.activeTimeMs)}</div>
                           </div>
                           <div>
-                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Calls</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{item.usage.invocationCount.toLocaleString()}</div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Calls</div>
+                            <div className="mt-1 text-lg font-black tracking-tight text-[color:var(--stats-value-color)]">{item.usage.invocationCount.toLocaleString()}</div>
                           </div>
                           <div>
-                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Share</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatPercent(shareOfTotal)}</div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Share</div>
+                            <div className="mt-1 text-lg font-black tracking-tight text-[color:var(--stats-value-color)]">{formatPercent(shareOfTotal)}</div>
                           </div>
                           <div>
-                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Leader</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatPercent(shareOfLeader)}</div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Leader</div>
+                            <div className="mt-1 text-lg font-black tracking-tight text-[color:var(--stats-value-color)]">{formatPercent(shareOfLeader)}</div>
                           </div>
                           <div>
-                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Cost</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatCost(item.usage.totalCostUsd)}</div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Cost</div>
+                            <div className="mt-1 text-lg font-black tracking-tight text-[color:var(--stats-value-color)]">{formatCost(item.usage.totalCostUsd)}</div>
                           </div>
                         </div>
                       </div>
@@ -517,24 +522,24 @@ export const TelemetryLedger: FunctionComponent<{
                         <div
                           role="img"
                           aria-label={`${item.label} contributes ${formatPercent(shareOfLeader)} of the leading ${singularKind} token volume.`}
-                          className="h-1 rounded-full bg-black/[0.04] dark:bg-white/[0.05]"
+                          className={`h-1 rounded-full ${TRACK_CLASS}`}
                         >
                           <div
                             aria-hidden="true"
-                            className="h-1 rounded-full bg-emerald-500/60 motion-safe:transition-all motion-safe:duration-500"
+                            className="h-1 rounded-full bg-[color:var(--stats-positive-text)] motion-safe:transition-all motion-safe:duration-500"
                             style={{ width: `${Math.min(100, Math.max(shareOfLeader > 0 ? 3 : 0, shareOfLeader))}%` }}
                           />
                         </div>
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <div className="flex flex-wrap gap-2">
-                            <TokenChip icon={ArrowDownRight} label="Input" value={item.usage.inputTokens} tone="border-signal-500/16 bg-signal-500/8 text-signal-600 dark:text-signal-400" />
-                            <TokenChip icon={Database} label="Cached" value={item.usage.cachedInputTokens} tone="border-cyan-500/16 bg-cyan-500/8 text-cyan-600 dark:text-cyan-400" />
-                            <TokenChip icon={ArrowUpRight} label="Output" value={item.usage.outputTokens} tone="border-amber-500/16 bg-amber-500/8 text-amber-600 dark:text-amber-400" />
-                            <TokenChip icon={Brain} label="Reasoning" value={item.usage.reasoningOutputTokens} tone="border-rose-500/16 bg-rose-500/8 text-rose-600 dark:text-rose-400" />
-                            <TokenChip icon={Clock3} label="p50" value={duration?.p50Ms != null ? formatStatsDuration(duration.p50Ms) : "—"} tone="border-indigo-500/16 bg-indigo-500/8 text-indigo-600 dark:text-indigo-400" />
-                            <TokenChip icon={Activity} label="p95" value={duration?.p95Ms != null ? formatStatsDuration(duration.p95Ms) : "—"} tone="border-orange-500/16 bg-orange-500/8 text-orange-600 dark:text-orange-400" />
+                            <TokenChip icon={ArrowDownRight} label="Input" value={item.usage.inputTokens} tone={STATUS_TONE_CLASS.signal} />
+                            <TokenChip icon={Database} label="Cached" value={item.usage.cachedInputTokens} tone={STATUS_TONE_CLASS.cyan} />
+                            <TokenChip icon={ArrowUpRight} label="Output" value={item.usage.outputTokens} tone={STATUS_TONE_CLASS.warning} />
+                            <TokenChip icon={Brain} label="Reasoning" value={item.usage.reasoningOutputTokens} tone={STATUS_TONE_CLASS.negative} />
+                            <TokenChip icon={Clock3} label="p50" value={duration?.p50Ms != null ? formatStatsDuration(duration.p50Ms) : "—"} tone={STATUS_TONE_CLASS.neutral} />
+                            <TokenChip icon={Activity} label="p95" value={duration?.p95Ms != null ? formatStatsDuration(duration.p95Ms) : "—"} tone={STATUS_TONE_CLASS.neutral} />
                           </div>
-                          <div className="max-w-full text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                          <div className="max-w-full text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">
                             {providerLabel} · {purposeLabel} · {statusLabel} · {percentileSummary}
                           </div>
                         </div>
@@ -544,27 +549,27 @@ export const TelemetryLedger: FunctionComponent<{
                 );
               })}
               {visibleItems.length < filteredItems.length ? (
-                <div ref={sentinelRef} className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-4 text-center text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:border-white/[0.08]">
+                <div ref={sentinelRef} className={`${DASHED_EMPTY_CLASS} py-4 text-[11px] font-bold uppercase tracking-[0.16em]`}>
                   Loading more telemetry lanes...
                 </div>
               ) : null}
             </div>
           </div>
         ) : items.length > 0 && queryIsActive ? (
-          <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-12 text-center text-sm text-slate-400 dark:border-white/[0.08]">
+          <div className={`${DASHED_EMPTY_CLASS} py-12`}>
             <div className="space-y-3">
               <div>No {kindLabel} match “{query.trim()}”.</div>
               <button
                 type="button"
                 onClick={() => setQuery("")}
-                className="inline-flex items-center rounded-full border border-black/[0.06] bg-white/72 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300 dark:hover:text-white"
+                className={`inline-flex items-center rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] transition-colors hover:text-[color:var(--stats-value-color)] ${CHIP_CLASS} ${CONTROL_FOCUS_CLASS}`}
               >
                 Clear search
               </button>
             </div>
           </div>
         ) : items.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-12 text-center text-sm text-slate-400 dark:border-white/[0.08]">
+          <div className={`${DASHED_EMPTY_CLASS} py-12`}>
             {emptyLabel}
           </div>
         ) : null}

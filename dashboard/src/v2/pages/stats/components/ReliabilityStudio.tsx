@@ -25,7 +25,9 @@ import {
   CHIP_CLASS,
   DonutCard,
   PANEL_CLASS,
+  STATUS_TONE_CLASS,
   SUBPANEL_CLASS,
+  TRACK_CLASS,
   TokenFlowBar,
   getProviderIcon,
 } from "./stats-ui-primitives.js";
@@ -103,30 +105,30 @@ const SOURCE_META: Record<ReliabilitySource, {
 };
 
 const SOURCE_TONE_CLASS: Record<SourceTone, string> = {
-  strong: "border-status-green/20 bg-status-green/[0.08] text-status-green",
-  fallback: "border-amber-500/22 bg-amber-500/[0.08] text-amber-700 dark:text-amber-300",
-  critical: "border-rose-500/22 bg-rose-500/[0.08] text-rose-700 dark:text-rose-300",
-  neutral: "border-slate-500/20 bg-slate-500/10 text-slate-500 dark:text-slate-400",
+  strong: STATUS_TONE_CLASS.positive,
+  fallback: STATUS_TONE_CLASS.warning,
+  critical: STATUS_TONE_CLASS.negative,
+  neutral: STATUS_TONE_CLASS.neutral,
 };
 
 const SOURCE_TEXT_CLASS: Record<SourceTone, string> = {
-  strong: "text-status-green",
-  fallback: "text-amber-700 dark:text-amber-300",
-  critical: "text-rose-700 dark:text-rose-300",
-  neutral: "text-slate-500 dark:text-slate-400",
+  strong: "text-[color:var(--stats-positive-text)]",
+  fallback: "text-[color:var(--stats-warning-text)]",
+  critical: "text-[color:var(--stats-negative-text)]",
+  neutral: "text-[color:var(--stats-detail-color)]",
 };
 
 const SUCCESS_TONE_CLASS: Record<ReturnType<typeof getSuccessTone>, string> = {
-  strong: "border-status-green/20 bg-status-green/[0.08] text-status-green",
-  warn: "border-amber-500/22 bg-amber-500/[0.08] text-amber-700 dark:text-amber-300",
-  critical: "border-rose-500/22 bg-rose-500/[0.08] text-rose-700 dark:text-rose-300",
-  neutral: "border-slate-500/20 bg-slate-500/10 text-slate-500 dark:text-slate-400",
+  strong: STATUS_TONE_CLASS.positive,
+  warn: STATUS_TONE_CLASS.warning,
+  critical: STATUS_TONE_CLASS.negative,
+  neutral: STATUS_TONE_CLASS.neutral,
 };
 
 const RISK_TONE_CLASS = {
-  low: "border-status-green/20 bg-status-green/[0.08] text-status-green",
-  medium: "border-amber-500/22 bg-amber-500/[0.08] text-amber-700 dark:text-amber-300",
-  high: "border-rose-500/22 bg-rose-500/[0.08] text-rose-700 dark:text-rose-300",
+  low: STATUS_TONE_CLASS.positive,
+  medium: STATUS_TONE_CLASS.warning,
+  high: STATUS_TONE_CLASS.negative,
 };
 
 function getUsageSourceCount(usage: ExecutionUsageTotals, source: TokenUsageSource): number {
@@ -305,14 +307,14 @@ const StudioMetricTile: FunctionComponent<{
   detail: string;
   toneClass?: string;
   icon?: ComponentType<any>;
-}> = ({ label, value, detail, toneClass = "text-slate-500 dark:text-slate-400", icon: Icon }) => (
+}> = ({ label, value, detail, toneClass = "text-[color:var(--stats-detail-color)]", icon: Icon }) => (
   <div className={`${SUBPANEL_CLASS} p-4`}>
     <div className="flex items-center justify-between gap-3">
       <div className={`text-[10px] font-bold uppercase tracking-[0.18em] ${toneClass}`}>{label}</div>
       {Icon ? <Icon className={`h-3.5 w-3.5 ${toneClass}`} strokeWidth={2.2} aria-hidden="true" /> : null}
     </div>
-    <div className="mt-2 break-words text-xl font-black text-slate-900 dark:text-white">{value}</div>
-    <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{detail}</div>
+    <div className="mt-2 break-words text-xl font-black text-[color:var(--stats-value-color)]">{value}</div>
+    <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">{detail}</div>
   </div>
 );
 
@@ -321,8 +323,8 @@ const EmptyTelemetryPanel: FunctionComponent<{
   detail: string;
 }> = ({ title, detail }) => (
   <div className={`${SUBPANEL_CLASS} border-dashed px-4 py-10 text-center`}>
-    <div className="text-sm font-black text-slate-700 dark:text-slate-200">{title}</div>
-    <div className="mx-auto mt-2 max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">{detail}</div>
+    <div className="text-sm font-black text-[color:var(--stats-value-color)]">{title}</div>
+    <div className="mx-auto mt-2 max-w-2xl text-sm leading-relaxed text-[color:var(--stats-detail-color)]">{detail}</div>
   </div>
 );
 
@@ -337,21 +339,21 @@ const SourceCountCard: FunctionComponent<{
           <Icon className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden="true" />
           {row.label}
         </div>
-        <div className="text-[11px] font-mono text-slate-400">
+        <div className="text-[11px] font-mono text-[color:var(--stats-label-color)]">
           {row.share !== null ? formatPercent(row.share * 100) : "—"}
         </div>
       </div>
-      <div className="mt-3 text-2xl font-black text-slate-900 dark:text-white">{row.count.toLocaleString()}</div>
-      <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{row.detail}</div>
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-black/[0.05] dark:bg-white/[0.06]">
+      <div className="mt-3 text-2xl font-black text-[color:var(--stats-value-color)]">{row.count.toLocaleString()}</div>
+      <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">{row.detail}</div>
+      <div className={`mt-3 h-1.5 overflow-hidden rounded-full ${TRACK_CLASS}`}>
         <div
           className={`h-full rounded-full ${row.tone === "strong"
-            ? "bg-status-green"
+            ? "bg-[color:var(--stats-positive-text)]"
             : row.tone === "fallback"
-              ? "bg-amber-500/75"
+              ? "bg-[color:var(--stats-warning-text)]"
               : row.tone === "critical"
-                ? "bg-rose-500/70"
-                : "bg-slate-500/45"}`}
+                ? "bg-[color:var(--stats-negative-text)]"
+                : "bg-[color:var(--stats-detail-color)]"}`}
           style={{ width: `${row.share !== null ? Math.max(4, row.share * 100) : 0}%` }}
         />
       </div>
@@ -376,8 +378,8 @@ const ProviderReliabilityCard: FunctionComponent<{
             <Icon className="h-4 w-4" strokeWidth={2.1} aria-hidden="true" />
           </div>
           <div className="min-w-0">
-            <div className="break-words text-base font-black text-slate-900 dark:text-white" title={provider.label}>{provider.label}</div>
-            <div className="mt-1 break-words text-sm text-slate-500 dark:text-slate-400">{provider.secondaryLabel ?? "No secondary label"}</div>
+            <div className="break-words text-base font-black text-[color:var(--stats-value-color)]" title={provider.label}>{provider.label}</div>
+            <div className="mt-1 break-words text-sm text-[color:var(--stats-detail-color)]">{provider.secondaryLabel ?? "No secondary label"}</div>
             <div className="mt-2 flex flex-wrap gap-2">
               <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${SOURCE_TONE_CLASS[row.sourceTone]}`}>
                 {row.sourceSummaryLabel}
@@ -390,16 +392,16 @@ const ProviderReliabilityCard: FunctionComponent<{
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
-            <span className="text-base font-black normal-case tracking-tight text-slate-900 dark:text-white">
+            <span className="text-base font-black normal-case tracking-tight text-[color:var(--stats-value-color)]">
               {provider.usage.totalTokens > 0 ? formatTokens(provider.usage.totalTokens) : "—"}
             </span>
-            <span className="text-slate-400">tokens</span>
+            <span className="text-[color:var(--stats-label-color)]">tokens</span>
           </div>
           <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
-            <span className="text-base font-black normal-case tracking-tight text-slate-900 dark:text-white">
+            <span className="text-base font-black normal-case tracking-tight text-[color:var(--stats-value-color)]">
               {provider.usage.invocationCount.toLocaleString()}
             </span>
-            <span className="text-slate-400">calls</span>
+            <span className="text-[color:var(--stats-label-color)]">calls</span>
           </div>
         </div>
       </div>
@@ -409,20 +411,20 @@ const ProviderReliabilityCard: FunctionComponent<{
           label="Failures"
           value={row.failedCount.toLocaleString()}
           detail={`${row.completedCount.toLocaleString()} completed · ${row.runningCount.toLocaleString()} running · ${row.cancelledCount.toLocaleString()} cancelled`}
-          toneClass={row.failedCount > 0 ? "text-rose-700 dark:text-rose-300" : "text-status-green"}
+          toneClass={row.failedCount > 0 ? "text-[color:var(--stats-negative-text)]" : "text-[color:var(--stats-positive-text)]"}
           icon={row.failedCount > 0 ? AlertTriangle : CheckCircle2}
         />
         <div className={`${SUBPANEL_CLASS} p-4`}>
           <div className="flex items-center justify-between gap-3">
-            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Success Rate</div>
-            <ShieldCheck className="h-3.5 w-3.5 text-slate-400" strokeWidth={2.2} aria-hidden="true" />
+            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">Success Rate</div>
+            <ShieldCheck className="h-3.5 w-3.5 text-[color:var(--stats-label-color)]" strokeWidth={2.2} aria-hidden="true" />
           </div>
           <div className="mt-2">
             <span className={`inline-flex rounded-full border px-3 py-1.5 text-lg font-black ${SUCCESS_TONE_CLASS[successTone]}`}>
               {formatSuccessRate(row.successRate)}
             </span>
           </div>
-          <div className="mt-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+          <div className="mt-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">
             {row.finishedCount > 0 ? `${row.finishedCount.toLocaleString()} finished model runs` : "No finished model runs"}
           </div>
         </div>
@@ -430,20 +432,20 @@ const ProviderReliabilityCard: FunctionComponent<{
           label="Token Volume"
           value={formatTokens(provider.usage.totalTokens)}
           detail={provider.usage.invocationCount > 0 ? `${formatTokens(Math.round(provider.usage.totalTokens / provider.usage.invocationCount))}/call` : "No calls yet"}
-          toneClass="text-signal-600 dark:text-signal-400"
+          toneClass="text-[color:var(--stats-signal-text)]"
         />
         <StudioMetricTile
           label="Active Time"
           value={formatStatsDuration(provider.usage.activeTimeMs)}
           detail={providerActiveVsWall !== null ? `${formatPercent(providerActiveVsWall * 100)} active utilization` : "Wall time not tracked"}
-          toneClass="text-amber-600 dark:text-amber-400"
+          toneClass="text-[color:var(--stats-warning-text)]"
           icon={TimerReset}
         />
         <StudioMetricTile
           label="Duration"
           value={row.duration.sampleCount > 0 ? formatStatsDuration(row.duration.p50Ms) : "—"}
           detail={row.duration.sampleCount > 0 ? `${row.duration.sampleCount.toLocaleString()} samples · p95 ${formatStatsDuration(row.duration.p95Ms)}` : "No duration samples"}
-          toneClass="text-cyan-600 dark:text-cyan-400"
+          toneClass="text-[color:var(--stats-accent-cyan)]"
           icon={Clock3}
         />
         <StudioMetricTile
@@ -503,9 +505,9 @@ export const ReliabilityStudio: FunctionComponent<{
               <ShieldCheck className="h-5 w-5" strokeWidth={2.2} aria-hidden="true" />
             </div>
             <div className="min-w-0">
-              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Reliability Mode</div>
-              <div className="mt-1 break-words text-2xl font-black tracking-tight text-slate-900 dark:text-white">Provider confidence & failure risk</div>
-              <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">Reliability Mode</div>
+              <div className="mt-1 break-words text-2xl font-black tracking-tight text-[color:var(--stats-value-color)]">Provider confidence & failure risk</div>
+              <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
                 Telemetry confidence, source mix, provider health, fallback usage, and failure pressure for the selected Stats window.
               </div>
             </div>
@@ -532,21 +534,21 @@ export const ReliabilityStudio: FunctionComponent<{
             label="Fallback Usage"
             value={fallbackCount.toLocaleString()}
             detail={`${sourceRows.find((row) => row.source === "estimated")!.count.toLocaleString()} estimated · ${sourceRows.find((row) => row.source === "unknown")!.count.toLocaleString()} unknown`}
-            toneClass="text-amber-700 dark:text-amber-300"
+            toneClass="text-[color:var(--stats-warning-text)]"
             icon={Sparkles}
           />
           <StudioMetricTile
             label="Failure Pressure"
             value={stats.statusCounts.failed.toLocaleString()}
             detail={`${failureRiskCount.toLocaleString()} unavailable or unsupported source counts`}
-            toneClass={stats.statusCounts.failed > 0 || failureRiskCount > 0 ? "text-rose-700 dark:text-rose-300" : "text-status-green"}
+            toneClass={stats.statusCounts.failed > 0 || failureRiskCount > 0 ? "text-[color:var(--stats-negative-text)]" : "text-[color:var(--stats-positive-text)]"}
             icon={stats.statusCounts.failed > 0 || failureRiskCount > 0 ? AlertTriangle : CheckCircle2}
           />
           <StudioMetricTile
             label="Provider Coverage"
             value={providerRows.length > 0 ? `${providerRows.length.toLocaleString()} providers` : "No providers"}
             detail={highestRiskProvider ? `Highest risk: ${highestRiskProvider.provider.label}` : "No provider telemetry landed"}
-            toneClass="text-cyan-600 dark:text-cyan-400"
+            toneClass="text-[color:var(--stats-accent-cyan)]"
           />
         </div>
       </div>
@@ -563,9 +565,9 @@ export const ReliabilityStudio: FunctionComponent<{
           />
         ) : (
           <div className={`${PANEL_CLASS} p-6`}>
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Source Confidence</div>
-            <div className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Telemetry Source Mix</div>
-            <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Source Confidence</div>
+            <div className="mt-2 text-2xl font-black tracking-tight text-[color:var(--stats-value-color)]">Telemetry Source Mix</div>
+            <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
               Reported, estimated, unavailable, unsupported, and unknown invocation-source counts across this window.
             </div>
             <div className="mt-6">
@@ -587,9 +589,9 @@ export const ReliabilityStudio: FunctionComponent<{
           />
         ) : (
           <div className={`${PANEL_CLASS} p-6`}>
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Volume Context</div>
-            <div className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Provider Share</div>
-            <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Volume Context</div>
+            <div className="mt-2 text-2xl font-black tracking-tight text-[color:var(--stats-value-color)]">Provider Share</div>
+            <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
               Token volume by provider appears here when the selected window includes provider segments.
             </div>
             <div className="mt-6">
@@ -605,12 +607,12 @@ export const ReliabilityStudio: FunctionComponent<{
       <div className={`${PANEL_CLASS} p-6`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Source Count Board</div>
-            <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Source Count Board</div>
+            <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
               Invocation-source counts are separated so estimated and unknown data are clear without treating fallback estimates as failures.
             </div>
           </div>
-          <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ${CHIP_CLASS}`}>
+          <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
             {sourceAudit.total.toLocaleString()} counted
           </div>
         </div>
@@ -622,12 +624,12 @@ export const ReliabilityStudio: FunctionComponent<{
       <div className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Provider Confidence Board</div>
-            <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Provider Confidence Board</div>
+            <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
               Providers are sorted by risk first, then token volume. Cards surface failures, success rate, token volume, active time, duration, and source confidence.
             </div>
           </div>
-          <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ${CHIP_CLASS}`}>
+          <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
             {providerRows.length.toLocaleString()} providers
           </div>
         </div>
@@ -645,29 +647,29 @@ export const ReliabilityStudio: FunctionComponent<{
 
       <div className={`${PANEL_CLASS} p-6`}>
         <div className="flex items-center gap-3">
-          <AlertTriangle className="h-4 w-4 text-amber-500" strokeWidth={2} aria-hidden="true" />
-          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Fallback & Error Audit</div>
+          <AlertTriangle className="h-4 w-4 text-[color:var(--stats-warning-text)]" strokeWidth={2} aria-hidden="true" />
+          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Fallback & Error Audit</div>
         </div>
         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
           <div className={SUBPANEL_CLASS}>
-            <div className="text-sm font-semibold text-slate-900 dark:text-white">Fallback mix</div>
-            <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+            <div className="text-sm font-semibold text-[color:var(--stats-value-color)]">Fallback mix</div>
+            <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
               {fallbackCount > 0
                 ? `${fallbackCount.toLocaleString()} invocations relied on estimated or unknown source counters. Estimates remain usable, but precision is lower than provider-reported counts.`
                 : "No estimated or unknown invocation-source counts were recorded in this window."}
             </div>
           </div>
           <div className={SUBPANEL_CLASS}>
-            <div className="text-sm font-semibold text-slate-900 dark:text-white">Failure risk</div>
-            <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+            <div className="text-sm font-semibold text-[color:var(--stats-value-color)]">Failure risk</div>
+            <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
               {stats.statusCounts.failed > 0 || failureRiskCount > 0
                 ? `${stats.statusCounts.failed.toLocaleString()} invocations failed and ${failureRiskCount.toLocaleString()} source counts were unavailable or unsupported.`
                 : "No failed invocations or unavailable source counts were recorded in this window."}
             </div>
           </div>
           <div className={SUBPANEL_CLASS}>
-            <div className="text-sm font-semibold text-slate-900 dark:text-white">Duration coverage</div>
-            <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+            <div className="text-sm font-semibold text-[color:var(--stats-value-color)]">Duration coverage</div>
+            <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
               {stats.duration.sampleCount > 0
                 ? `Latency is backed by ${stats.duration.sampleCount.toLocaleString()} samples: p50 ${formatStatsDuration(stats.duration.p50Ms)}, p95 ${formatStatsDuration(stats.duration.p95Ms)}.`
                 : "No duration samples were recorded, so latency remains unavailable rather than inferred."}

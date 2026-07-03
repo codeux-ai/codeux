@@ -22,7 +22,7 @@ Do not document or render speculative metrics. Missing telemetry is a first-clas
 The redesigned Stats page uses a stable top-to-bottom shell:
 
 1. Header command band
-   - The hero names the Stats workspace, selected project, sprint lens, generated time, freshness, telemetry source quality, range resolution, time window, and active visual mode.
+   - The hero names the Stats workspace and keeps only selected project, sprint lens, time window, and active visual mode controls visible.
    - Time presets are `1h`, `24h`, `7d`, `30d`, `All time`, and `Custom`.
    - Choosing `Custom` opens start and end date fields. The selected range changes only after `Apply` succeeds.
    - Invalid or incomplete custom ranges keep focusable controls visible, set `aria-invalid`, connect `aria-errormessage`, and announce inline error text.
@@ -36,7 +36,7 @@ The redesigned Stats page uses a stable top-to-bottom shell:
    - Cards expose title, value, and string description as the analytics article name. Long values must wrap inside stable card slots.
 4. Workspace body
    - Mode content starts directly after the metric deck without an extra studio header, readiness chip, duplicated KPI strip, summary-card deck, or duplicated workspace context card.
-   - Workspace bodies may differ substantially, but they should share the same page-scoped panel, chip, input, ledger row, focus, and motion tokens.
+   - Workspace bodies may differ substantially, but each component must consume the shared Stats panel, chip, input, ledger row, status tone, chart track, focus, and motion tokens directly.
 5. Feedback states
    - No-project, first-load loading, first-load error, empty, refresh, and reduced-data states preserve the shell rhythm.
    - Loading states use polite status semantics. Error states use alert semantics and expose retry when recovery is available.
@@ -133,10 +133,11 @@ Cost displays use two fractional digits for scanability, rounding values such as
 Use page-scoped Stats primitives instead of one-off analytics chrome:
 
 - `stats-theme.css` defines Stats-specific aliases for panel surfaces, subpanels, chips, inputs, focus rings, status fills, borders, shadows, and motion.
-- `PANEL_CLASS`, `SUBPANEL_CLASS`, `CHIP_CLASS`, `INPUT_CLASS`, `LEDGER_ROW_CLASS`, and `LEDGER_ROW_MODERN_CLASS` provide the shell vocabulary.
+- `PANEL_CLASS`, `SUBPANEL_CLASS`, `CHIP_CLASS`, `INPUT_CLASS`, `LEDGER_ROW_CLASS`, `LEDGER_ROW_MODERN_CLASS`, `STATUS_TONE_CLASS`, `TAB_ACTIVE_CLASS`, `TAB_IDLE_CLASS`, `DASHED_EMPTY_CLASS`, and `TRACK_CLASS` provide the shell vocabulary.
 - `StatsCard`, `StudioHeader`, `SignalMetricCard`, `DonutCard`, `PurposeRibbon`, `TokenChip`, `TokenFlowBar`, `ChurnFlowBar`, `SortButton`, `ViewToggle`, and `SeriesLegendButton` cover repeated Stats patterns.
 - Typed view-model helpers should own reusable derivations for trend, chart, model, provider, and ledger projections. Avoid recalculating meaningful bucket or efficiency summaries directly in JSX.
 - New or touched Stats surfaces should use semantic Stats variables for backgrounds, borders, text, status tones, focus rings, chart tracks, selection fills, and scrims instead of raw slate/white/black light-dark utility pairs.
+- Do not fix design drift with broad page-root `:global()` color or spacing overrides. Tokenize the owning component or extend the shared primitive vocabulary so Trend, Composition, Models, Providers, Ledgers, and System stay consistent without hidden CSS bridges.
 - Metric cards with sparkline micrographs use the standard card surface, not a separate muted graph background. The sparkline must fit its own stable slot so hover glow and line geometry are not cut off by card overflow.
 
 Dense analytics layouts should stay calm: restrained contrast, low-opacity fills, semantic color, stable grids, and short labels. Avoid nested decorative cards; repeated cards, ledger rows, modals, and tool panels may be framed, while page sections should read as workspaces.

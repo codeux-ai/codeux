@@ -7,6 +7,7 @@ import { CompositionStudio } from "./CompositionStudio.js";
 import { ReliabilityStudio } from "./ReliabilityStudio.js";
 import {
   PANEL_CLASS,
+  STATUS_TONE_CLASS,
   type StatsVisualMode,
 } from "./stats-ui-primitives.js";
 import { SystemStudio } from "./system/SystemStudio.js";
@@ -52,11 +53,11 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
 }) => {
   const renderEmptyState = (mode: StatsVisualMode) => (
     <div role="status" aria-live="polite" className={`${PANEL_CLASS} flex flex-col items-center justify-center py-20 text-center`}>
-      <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-[1.25rem] border border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+      <div className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-[1.25rem] ${STATUS_TONE_CLASS.warning}`}>
         <Layers3 className="h-8 w-8" strokeWidth={2} />
       </div>
-      <div className="text-base font-bold text-slate-900 dark:text-white">Waiting for Telemetry</div>
-      <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">{STUDIO_EMPTY_MESSAGES[mode]}</div>
+      <div className="text-base font-bold text-[color:var(--stats-value-color)]">Waiting for Telemetry</div>
+      <div className="mt-2 text-sm text-[color:var(--stats-detail-color)]">{STUDIO_EMPTY_MESSAGES[mode]}</div>
     </div>
   );
 

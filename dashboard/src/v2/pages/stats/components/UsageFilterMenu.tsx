@@ -107,7 +107,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
         <div className={`${styles.header} flex items-center justify-between`}>
           <div aria-live="polite" className="sr-only">Showing {activeSeriesCount} filter{activeSeriesCount !== 1 ? 's' : ''}</div>
           <div className="flex items-center gap-3">
-            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-900 dark:text-white">
+            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-value-color)]">
               Graph Filters
             </span>
             {activeSeriesCount > 0 && (

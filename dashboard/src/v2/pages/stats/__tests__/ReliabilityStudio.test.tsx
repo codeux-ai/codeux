@@ -377,8 +377,8 @@ describe("ReliabilityStudio", () => {
     const fiftyPercent = screen.getByText("50%");
     const eightyThreePercent = screen.getByText(/83%/);
 
-    expect(fiftyPercent.className).toContain("text-rose");
-    expect(eightyThreePercent.className).toContain("text-amber");
+    expect(fiftyPercent.className).toContain("--stats-negative-text");
+    expect(eightyThreePercent.className).toContain("--stats-warning-text");
   });
 
   it("uses dedicated icons for the newer provider names", () => {
