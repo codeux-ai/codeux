@@ -100,8 +100,15 @@ export class ShutdownContainerService {
         if (!container) {
           return false;
         }
-        return Object.keys(container.labels).some((key) => key.startsWith("code-ux."));
+        return this.isCodeUxContainer(container);
       });
+  }
+
+  private isCodeUxContainer(container: ShutdownContainerSummary): boolean {
+    if (Object.keys(container.labels).some((key) => key.startsWith("code-ux."))) {
+      return true;
+    }
+    return container.names.split(",").some((name) => name.trim().startsWith("code-ux-"));
   }
 
   private parseDockerPsJsonLine(line: string): ShutdownContainerSummary | null {

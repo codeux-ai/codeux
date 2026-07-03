@@ -128,7 +128,7 @@ Checks:
   - If auth is expected from host login state, is the relevant Docker auth mount enabled and is its mount path valid?
   - Docker mode requires daemon-visible workspace paths. Runtime now prefers repo-scoped worktree paths for Docker sessions.
   - Docker runtime state is stored under `~/.code-ux/runtime/docker/<repo-hash>/` by default (override with `JULES_DOCKER_RUNTIME_ROOT`). Cached setup image build contexts and build locks live under that root so setup-cache images survive dashboard restarts and concurrent post-restart jobs wait on the same build instead of starting duplicate builds.
-  - During normal Code UX shutdown (`SIGINT`, `SIGTERM`, `SIGHUP`, or Electron quit), the server requests active dispatch aborts and then kills any still-running Docker containers with `code-ux.*` labels. It does not remove Docker workspace/runtime volumes. On the next start, recovery closes shutdown-interrupted local CLI invocations and dispatches as `cancelled`, moves task-backed work back to a retryable state, and can retry from the preserved workspace volume when `Resume failed task in same workspace` is enabled.
+  - During normal Code UX shutdown (`SIGINT`, `SIGTERM`, `SIGHUP`, or Electron quit), the server requests active dispatch aborts and then kills any still-running Docker containers with `code-ux.*` labels or deterministic `code-ux-*` runtime names, including workspace helper containers. It does not remove Docker workspace/runtime volumes. On the next start, recovery closes shutdown-interrupted local CLI invocations and dispatches as `cancelled`, moves task-backed work back to a retryable state, and can retry from the preserved workspace volume when `Resume failed task in same workspace` is enabled.
   - Dashboard and MCP HTTP listeners track and destroy open sockets during shutdown, including upgraded dashboard WebSocket sockets, so open browser tabs do not delay process exit or leave ports bound during rapid restarts.
   - Docker workspace/runtime volumes for tracked CLI sessions are preserved across startup pruning after recovery marks the interrupted session `CANCELLED`; the next retry can still resume the old workspace volume when `Resume failed task in same workspace` is enabled.
   - Rerun resume uses the latest `cli_workspace_bound` event as the source of truth for the workspace session id. If the latest interrupted provider invocation has a different `session_id`, Code UX still resumes the Docker volume named by the recorded workspace binding.
@@ -153,6 +153,7 @@ Checks:
   - `Settings -> CLI Workflow -> Cleanup worktree on failure` should remain disabled (recommended default).
 - To continue retries in the same failed workspace:
   - `Settings -> CLI Workflow -> Resume failed task in same workspace` should remain enabled (default).
+- Dashboard **Resume** for a paused sprint run reactivates that same run and starts the recovery/watch-loop path in place. It should not create a replacement sprint run. If another queued/running/cancel-pending run already exists for the same sprint, resume is rejected until that active run is cancelled or completed.
 
 ### 5. Planning retry message appears but no provider work is visible
 Checks:
@@ -248,6 +249,7 @@ Transient provider failures are classified and managed in `src/shared/providers/
 - Re-enable steps after diagnosis to restore normal operation.
 - On startup, interrupted local CLI sessions (`cli-*` with `RUNNING`) are auto-recovered to `CANCELLED` so invocation error-rate statistics do not treat app shutdown/restart as provider failure.
 - On startup, active `queued` and `running` sprint runs are resumed automatically in place; Code UX now restores the watch loop instead of requiring a manual sprint restart.
+- Manual dashboard resume uses the same existing-run recovery path as startup recovery, so paused runs keep their original run id and heartbeat history when monitoring restarts.
 - Local `docker_cli` task invocations and dispatches are closed as `cancelled` during that recovery, while the task itself is moved back to a retryable state. Durable Jules sessions and connected-worker dispatches remain attached to the resumed sprint run.
 - If a restart finds active Jules task runs with persisted session ids but their sprint run was left `failed` or `cancelled` while the sprint is still active, startup recovery rehydrates a single sprint run, moves those durable Jules rows onto it, reopens their dispatch/provider runtime links, and resumes monitoring.
 - Failed CLI sessions can preserve their worktree for manual follow-up or assisted retry, based on CLI Workflow settings.

@@ -32,6 +32,8 @@ describe("ShutdownContainerService", () => {
             dockerPsLine({ id: "container-1", names: "code-ux-codex-session-1", labels: "code-ux.session-id=session-1" }),
             dockerPsLine({ id: "container-2", names: "unrelated", labels: "com.example.owner=test" }),
             dockerPsLine({ id: "container-3", names: "code-ux-login", labels: "code-ux.login=true" }),
+            dockerPsLine({ id: "container-4", names: "code-ux-vol-helper-workspace", labels: "code-ux.helper=volume" }),
+            dockerPsLine({ id: "container-5", names: "code-ux-git-helper-project", labels: "" }),
           ].join("\n"),
         };
       }
@@ -43,11 +45,13 @@ describe("ShutdownContainerService", () => {
 
     expect(result).toEqual({
       requestedDispatchStops: 1,
-      killedContainerIds: ["container-1", "container-3"],
+      killedContainerIds: ["container-1", "container-3", "container-4", "container-5"],
     });
     expect(requestStop).toHaveBeenCalledWith("test shutdown");
     expect(commandRunner).toHaveBeenCalledWith("docker", ["kill", "container-1"], process.cwd());
     expect(commandRunner).toHaveBeenCalledWith("docker", ["kill", "container-3"], process.cwd());
+    expect(commandRunner).toHaveBeenCalledWith("docker", ["kill", "container-4"], process.cwd());
+    expect(commandRunner).toHaveBeenCalledWith("docker", ["kill", "container-5"], process.cwd());
     expect(commandRunner).not.toHaveBeenCalledWith("docker", ["kill", "container-2"], process.cwd());
   });
 

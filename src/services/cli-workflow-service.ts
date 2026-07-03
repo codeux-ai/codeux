@@ -138,6 +138,22 @@ export class CliWorkflowService {
       ? {
         sessionId: input.resumeWorkspaceSessionId,
         workerBranch: input.resumeWorkerBranch,
+        worktreePath: null as string | null,
+      }
+      : null;
+    const taskRun = input.taskRunId && this.deps.executionRepository
+      ? this.deps.executionRepository.getTaskRun(input.taskRunId)
+      : null;
+    const workspaceResumeTarget = !input.forceFreshWorkspace && workflowSettings.resumeFailedTaskInSameWorkspace && this.deps.executionRepository
+      ? this.deps.executionRepository.getLatestTaskWorkspaceResumeTarget(input.task.id, taskRun?.sprintRunId || undefined)
+      : null;
+    const executionResumeTarget = workspaceResumeTarget
+      && workspaceResumeTarget.workerBranch
+      && (!workspaceResumeTarget.provider || workspaceResumeTarget.provider === input.provider)
+      ? {
+        sessionId: workspaceResumeTarget.sessionId,
+        workerBranch: workspaceResumeTarget.workerBranch,
+        worktreePath: workspaceResumeTarget.worktreePath,
       }
       : null;
     const sessionTracking = this.deps.sessionTracking as SessionTrackingRepository & {
@@ -151,12 +167,14 @@ export class CliWorkflowService {
         repoPath: input.repoPath,
       })
       : null;
-    const resumeTarget = explicitResumeTarget || failedResumeTarget;
+    const resumeTarget = explicitResumeTarget || executionResumeTarget || (failedResumeTarget
+      ? { ...failedResumeTarget, worktreePath: null as string | null }
+      : null);
 
     const workerBranch = resumeTarget?.workerBranch || buildWorkerBranch(input.featureBranch, input.task.id, input.provider);
-    const resumeWorktreePath = resumeTarget
+    const resumeWorktreePath = resumeTarget?.worktreePath || (resumeTarget
       ? await this.workspaceManager.resolveResumeWorktreePath(input.repoPath, resumeTarget.sessionId, workflowSettings.executionMode)
-      : undefined;
+      : undefined);
     
     const title = `Sprint ${input.sprintNumber}: ${buildTaskRunTag(input.repoPath, input.sprintNumber, input.task.id)} [${input.task.id}] ${input.task.title}`;
 

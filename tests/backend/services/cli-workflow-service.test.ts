@@ -471,6 +471,57 @@ describe("CliWorkflowService unpushed commit detection", () => {
     expect(deps.sessionTracking.appendActivity).toHaveBeenCalledWith(session.id, { originator: "system", description: "Retry configured to resume workspace from old-session at /tmp/repo/.worktrees/old-session." });
   });
 
+  it("prefers the latest bound workspace over provider session telemetry when retrying", async () => {
+    const deps = {
+      sessionTracking: {
+        findLatestFailedCliSessionForTask: vi.fn().mockReturnValue({ sessionId: "provider-session", workerBranch: "worker/provider-branch" }),
+        createSession: vi.fn().mockImplementation((input) => ({ ...input, name: `sessions/${input.id}`, outputs: [] })),
+        appendActivity: vi.fn(),
+        updateSession: vi.fn(),
+      },
+      executionRepository: {
+        getTaskRun: vi.fn().mockReturnValue({ sprintRunId: "sprint-run-1" }),
+        getLatestTaskWorkspaceResumeTarget: vi.fn().mockReturnValue({
+          taskRunId: "previous-run",
+          provider: "opencode",
+          sessionId: "workspace-session",
+          sessionName: "sessions/workspace-session",
+          workerBranch: "worker/bound-branch",
+          prUrl: null,
+          worktreePath: "docker-volume://code-ux-project-workspace-session",
+        }),
+      },
+      getDashboardSettings: vi.fn().mockReturnValue({ cliWorkflow: { resumeFailedTaskInSameWorkspace: true, executionMode: "docker" } }),
+      agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue({ instructionMarkdown: "guide" }) },
+      getGithubToken: vi.fn().mockReturnValue("token"),
+      logger: { error: vi.fn() },
+    };
+    const service = new CliWorkflowService(deps as any);
+    (service as any).runTaskWorkflow = vi.fn().mockResolvedValue(undefined);
+    (service as any).workspaceManager.resolveResumeWorktreePath = vi.fn();
+
+    const session = await service.startTask({
+      provider: "opencode",
+      task: { id: "T1", prompt: "prompt", title: "title" } as any,
+      repoPath: "/repo",
+      featureBranch: "main",
+      sprintNumber: 1,
+      taskRunId: "current-run",
+    });
+
+    expect(deps.executionRepository.getLatestTaskWorkspaceResumeTarget).toHaveBeenCalledWith("T1", "sprint-run-1");
+    expect((service as any).workspaceManager.resolveResumeWorktreePath).not.toHaveBeenCalled();
+    expect(deps.sessionTracking.appendActivity).toHaveBeenCalledWith(session.id, {
+      originator: "system",
+      description: "Retry configured to resume workspace from workspace-session at docker-volume://code-ux-project-workspace-session.",
+    });
+    expect((service as any).runTaskWorkflow).toHaveBeenCalledWith(expect.objectContaining({
+      workerBranch: "worker/bound-branch",
+      resumeFromFailedSessionId: "workspace-session",
+      resumeWorktreePath: "docker-volume://code-ux-project-workspace-session",
+    }));
+  });
+
   it("starts a task and returns a session", async () => {
     const deps = {
       sessionTracking: {

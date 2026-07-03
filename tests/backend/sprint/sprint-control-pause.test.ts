@@ -18,6 +18,7 @@ async function createFixture(): Promise<{
   executionRepository: ExecutionRepository;
   service: ExecutionControlService;
   executeOrchestrator: ReturnType<typeof vi.fn>;
+  recoverSprintRun: ReturnType<typeof vi.fn>;
 }> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-sprint-pause-"));
   tempDirs.push(dir);
@@ -26,6 +27,7 @@ async function createFixture(): Promise<{
   const projectRepository = new ProjectManagementRepository(storage);
   const executionRepository = new ExecutionRepository(storage);
   const executeOrchestrator = vi.fn().mockResolvedValue({ ok: true });
+  const recoverSprintRun = vi.fn().mockResolvedValue({ ok: true });
 
   const service = new ExecutionControlService({
     projectManagementRepository: projectRepository,
@@ -35,12 +37,12 @@ async function createFixture(): Promise<{
       new ProjectWorkerAssignmentRepository(storage),
     ),
     taskRerunService: { rerunTask: vi.fn() } as any,
-    sprintOrchestrator: { execute: executeOrchestrator, setConsecutiveFailures: vi.fn() } as any,
+    sprintOrchestrator: { execute: executeOrchestrator, recoverSprintRun, setConsecutiveFailures: vi.fn() } as any,
     julesApi: { sendSessionMessage: vi.fn().mockResolvedValue({ ok: true }) } as any,
     activeDispatchRegistry: { requestStop: vi.fn().mockResolvedValue({ accepted: true }) } as any,
   });
 
-  return { projectRepository, executionRepository, service, executeOrchestrator };
+  return { projectRepository, executionRepository, service, executeOrchestrator, recoverSprintRun };
 }
 
 afterEach(async () => {
@@ -70,21 +72,33 @@ describe("sprint pause/resume control", () => {
   });
 
   it("resumes a paused sprint by scheduling orchestration and recording a resume event", async () => {
-    const { projectRepository, executionRepository, service, executeOrchestrator } = await createFixture();
+    const { projectRepository, executionRepository, service, executeOrchestrator, recoverSprintRun } = await createFixture();
     const project = projectRepository.createProject({ name: "Resume Project", sourceType: "local", sourceRef: "/workspace/resume-project" });
     const sprint = projectRepository.createSprint(project.id, { name: "Resume Sprint", number: 1 });
     const sprintRun = executionRepository.createSprintRun({ projectId: project.id, sprintId: sprint.id, status: "paused" });
 
-    await service.resumeSprintRun(sprintRun.id);
+    const resumed = await service.resumeSprintRun(sprintRun.id);
 
-    expect(executeOrchestrator).toHaveBeenCalledWith(expect.objectContaining({
-      action: "orchestrate",
-      project_id: project.id,
-      sprint_id: sprint.id,
-      wait: true,
-    }));
+    expect(resumed.status).toBe("running");
+    expect(executionRepository.getSprintRun(sprintRun.id)?.status).toBe("running");
+    expect(executionRepository.getSprintRun(sprintRun.id)?.lastHeartbeatAt).toEqual(expect.any(String));
+    expect(recoverSprintRun).toHaveBeenCalledWith(sprintRun.id);
+    expect(executeOrchestrator).not.toHaveBeenCalled();
     expect(executionRepository.listSprintRunEvents(sprintRun.id)).toEqual(expect.arrayContaining([
       expect.objectContaining({ eventType: "sprint_resume_requested" }),
     ]));
+  });
+
+  it("does not resume a paused sprint run while another run for the sprint is active", async () => {
+    const { projectRepository, executionRepository, service, executeOrchestrator } = await createFixture();
+    const project = projectRepository.createProject({ name: "Duplicate Resume Project", sourceType: "local", sourceRef: "/workspace/duplicate-resume-project" });
+    const sprint = projectRepository.createSprint(project.id, { name: "Duplicate Resume Sprint", number: 2 });
+    const pausedRun = executionRepository.createSprintRun({ projectId: project.id, sprintId: sprint.id, status: "paused" });
+    const activeRun = executionRepository.createSprintRun({ projectId: project.id, sprintId: sprint.id, status: "running" });
+
+    await expect(service.resumeSprintRun(pausedRun.id)).rejects.toThrow(`run ${activeRun.id}, status running`);
+
+    expect(executionRepository.getSprintRun(pausedRun.id)?.status).toBe("paused");
+    expect(executeOrchestrator).not.toHaveBeenCalled();
   });
 });
