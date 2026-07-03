@@ -89,7 +89,7 @@ describe("SprintIssueImportModal", () => {
     });
 
     await user.click(screen.getByRole("button", { name: /^gitlab$/i }));
-    fireEvent.change(screen.getByPlaceholderText("github.com"), { target: { value: "gitlab.example.com" } });
+    fireEvent.change(screen.getByPlaceholderText("gitlab.com"), { target: { value: "gitlab.example.com" } });
     fireEvent.change(screen.getByPlaceholderText("owner/repository"), { target: { value: "acme/widgets" } });
     await user.type(screen.getByPlaceholderText("Title, body, or issue text"), "pipeline");
     await user.type(screen.getByPlaceholderText("me or username"), "alice");
@@ -127,9 +127,9 @@ describe("SprintIssueImportModal", () => {
     });
 
     expect(await screen.findByText("Fix CI")).toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole("button", { name: /select visible/i })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: /select all visible results/i })[0]);
 
-    expect(screen.getByText(/1 issue queued for import/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 selected issue will be imported/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText("Append conversation for all selected issues"));
     fireEvent.click(screen.getByRole("button", { name: /import as linked issues/i }));
@@ -167,7 +167,7 @@ describe("SprintIssueImportModal", () => {
     );
 
     await screen.findByText("Fix CI");
-    fireEvent.click(screen.getByLabelText("Select Fix CI"));
+    fireEvent.click(screen.getByText("Fix CI"));
     fireEvent.click(screen.getByRole("button", { name: /import as security/i }));
 
     await waitFor(() => {
@@ -184,5 +184,28 @@ describe("SprintIssueImportModal", () => {
         }),
       ]);
     });
+  });
+
+  it("uses the requested initial provider and default host while preserving repository inference", async () => {
+    vi.mocked(searchProjectIssues).mockResolvedValue([]);
+
+    render(
+      <SprintIssueImportModal
+        project={project}
+        initialProvider="gitlab"
+        onClose={vi.fn()}
+        onImport={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(searchProjectIssues).toHaveBeenCalledWith("project-1", expect.objectContaining({
+        provider: "gitlab",
+        hostDomain: "gitlab.com",
+        repository: "acme/widgets",
+      }), expect.any(AbortSignal));
+    });
+
+    expect(screen.getByText("GitLab issue import")).toBeInTheDocument();
   });
 });

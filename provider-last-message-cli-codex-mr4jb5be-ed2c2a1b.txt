@@ -1,0 +1,15 @@
+Implemented the provider-aware GitHub/GitLab issue importer refactor.
+
+Changed:
+- `SprintIssueImportModal.tsx`: now uses shared importer shell, summary rail, loading/error/empty states, issue cards, and view-model helpers. Added `initialProvider`, provider-aware host defaults, selected count, select-visible, clear selection, improved disabled labels, and responsive filters.
+- `SprintImportMenu.tsx`: split GitHub and GitLab callbacks.
+- `SprintsPage.tsx`: tracks requested issue provider and passes it into the modal.
+- Tests updated for provider-specific menu behavior, request payloads, selection/import payloads, and conversation toggle flow.
+- `docs/dashboard/sprint-imports.md` updated.
+- `.task-learnings.md` created as required.
+
+Verification passed:
+- `pnpm run test:dashboard -- tests/dashboard/v2/components/sprints/SprintIssueImportModal.test.tsx tests/dashboard/v2/components/sprints/SprintImportMenu.test.tsx`
+- `pnpm run typecheck:dashboard`
+
+Note: the dashboard test script runs the full `tests/dashboard` suite before the extra file args; it passed all 160 dashboard test files.
