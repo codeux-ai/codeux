@@ -46,6 +46,7 @@ describe("DashboardRealtimeWebSocketServer", () => {
 
     logger = {
       info: vi.fn(),
+      debug: vi.fn(),
       warn: vi.fn(),
       error: vi.fn(),
     } as unknown as vi.Mocked<Logger>;
@@ -426,6 +427,57 @@ describe("DashboardRealtimeWebSocketServer", () => {
       scopes: ["project:p1"],
       lastSequence: 100,
     });
+  });
+
+  it("logs and isolates websocket broadcast failures with event context", () => {
+    const { sendClientMessage, socket } = setupClient();
+
+    realtimeService.getLatestSequence.mockReturnValue(10);
+    sendClientMessage({
+      type: "set_subscriptions",
+      scopes: ["project:p1"],
+      lastSequence: 0,
+    });
+
+    (socket.write as any).mockImplementation(() => {
+      throw new Error("broken pipe");
+    });
+
+    const subscribeCallback = realtimeService.subscribe.mock.calls[0][0];
+    subscribeCallback({
+      sequence: 11,
+      emittedAt: "2026-03-30T09:00:00.000Z",
+      scopeType: "project",
+      scopeId: "p1",
+      scope: "project:p1",
+      eventType: "project.execution.updated",
+      entityType: "project",
+      entityId: "p1",
+      projectId: "p1",
+      sprintId: null,
+      threadId: null,
+      taskId: null,
+      dispatchId: null,
+      sprintRunId: null,
+      taskRunId: null,
+      connectionId: null,
+      correlationId: "corr-1",
+      payload: {},
+    });
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      "dashboard_realtime_websocket_broadcast_failed",
+      expect.objectContaining({
+        logPurpose: "realtime",
+        eventType: "project.execution.updated",
+        sequence: 11,
+        scope: "project:p1",
+        projectId: "p1",
+        correlationId: "corr-1",
+        error: expect.any(Error),
+      }),
+    );
+    expect(socket.destroy).toHaveBeenCalled();
   });
 });
 

@@ -181,9 +181,19 @@ export function bootDashboardRealtimeWebSocketServer(args: {
       client.lastPushedSequence = event.sequence;
       try {
         client.socket.write(frame);
-      } catch {
-        // A failed write means the socket is already torn down; the close/error handlers
-        // remove it from the client set, so there is nothing to do here.
+      } catch (error) {
+        clients.delete(client.socket);
+        args.logger.warn("dashboard_realtime_websocket_broadcast_failed", {
+          logPurpose: "realtime",
+          eventType: event.eventType,
+          sequence: event.sequence,
+          scope: event.scope,
+          projectId: event.projectId,
+          correlationId: event.correlationId,
+          clientId: client.socket.remoteAddress || "unknown",
+          error,
+        });
+        client.socket.destroy();
       }
     }
   });
