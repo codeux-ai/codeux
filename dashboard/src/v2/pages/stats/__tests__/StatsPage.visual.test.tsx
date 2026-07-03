@@ -9,11 +9,18 @@ vi.mock("gsap", () => ({
     set: vi.fn(),
     context: vi.fn(() => ({ revert: vi.fn() })),
     registerPlugin: vi.fn(),
-    timeline: vi.fn(() => ({ to: vi.fn().mockReturnThis(), fromTo: vi.fn().mockReturnThis(), set: vi.fn().mockReturnThis() }))
+    timeline: vi.fn(() => ({
+      to: vi.fn().mockReturnThis(),
+      fromTo: vi.fn().mockReturnThis(),
+      set: vi.fn().mockReturnThis(),
+      kill: vi.fn()
+    }))
   }
 }));
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/preact';
+import * as matchers from "@testing-library/jest-dom/matchers";
+expect.extend(matchers);
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/preact';
 import { StatsPage } from '../StatsPage.js';
 import * as useProjectDataModule from '../../../context/project-data.js';
 import * as useStatsPageDataModule from '../use-stats-page-data.js';
@@ -35,6 +42,10 @@ vi.mock('../use-stats-page-data.js', () => ({
 }));
 
 describe('StatsPage visual tests', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     vi.spyOn(useProjectDataModule, 'useProjectData').mockReturnValue({
       selectedProjectId: 'proj-1',
@@ -143,8 +154,77 @@ describe('StatsPage visual tests', () => {
     });
 
     const { getByText, queryByText } = render(<StatsPage />);
-    expect(getByText('Select a project')).toBeTruthy();
+    expect(screen.getByRole('status')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'No project selected' })).toBeTruthy();
+    expect(getByText('Stats panel idle')).toBeTruthy();
     expect(queryByText('Time-series and throughput analysis')).toBeNull();
+  });
+
+  it('renders the loading state as a polite status panel', () => {
+    vi.mocked(useStatsPageDataModule.useStatsPageData).mockReturnValue({
+      stats: null,
+      loading: true,
+      error: null,
+      refresh: vi.fn(),
+      usage: null as any,
+      tokenSeries: [],
+      activeTimeSeries: [],
+      wallTimeSeries: [],
+      planningUsage: null,
+      activeQuery: { window: '24h' },
+      customFrom: '2026-01-01',
+      setCustomFrom: vi.fn(),
+      customTo: '2026-01-02',
+      setCustomTo: vi.fn(),
+      visualMode: 'trend',
+      setVisualMode: vi.fn(),
+      chartState: { enabledSeries: {} } as any,
+      providerSegments: [],
+      sourceSegments: [],
+      tokenSegments: [],
+      applyPresetWindow: vi.fn(),
+      applyCustomRange: vi.fn(),
+      completionConfidence: '100%'
+    });
+
+    render(<StatsPage />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Loading telemetry field');
+    expect(screen.getByRole('status')).toHaveTextContent('Stats panel refreshing');
+    expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite');
+  });
+
+  it('renders the error state as an alert panel', () => {
+    vi.mocked(useStatsPageDataModule.useStatsPageData).mockReturnValue({
+      stats: null,
+      loading: false,
+      error: 'Stats fetch failed.',
+      refresh: vi.fn(),
+      usage: null as any,
+      tokenSeries: [],
+      activeTimeSeries: [],
+      wallTimeSeries: [],
+      planningUsage: null,
+      activeQuery: { window: '24h' },
+      customFrom: '2026-01-01',
+      setCustomFrom: vi.fn(),
+      customTo: '2026-01-02',
+      setCustomTo: vi.fn(),
+      visualMode: 'trend',
+      setVisualMode: vi.fn(),
+      chartState: { enabledSeries: {} } as any,
+      providerSegments: [],
+      sourceSegments: [],
+      tokenSegments: [],
+      applyPresetWindow: vi.fn(),
+      applyCustomRange: vi.fn(),
+      completionConfidence: '100%'
+    });
+
+    render(<StatsPage />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Stats panel unavailable');
+    expect(screen.getByRole('alert')).toHaveTextContent('Stats fetch failed.');
   });
 
   it('renders the system studio without crashing', () => {

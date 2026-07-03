@@ -194,7 +194,8 @@ Legacy runtime:
 
 ### Stats page
 - Shared Stats surfaces use `stats-theme.css` as the visual foundation: warm-void panel, subpanel, chip, input, ledger row, and card primitives map onto dashboard semantic tokens for surface, hairline border, focus ring, motion, elevation, and low-opacity status/accent fills.
-- The Stats page keeps the time-window selector in the hero header, above the visual mode toggle, so preset and custom range controls remain visible no matter which analysis view is active.
+- The Stats page hero uses a two-zone warm-void command header: project, sprint, generated-at, freshness, and telemetry-source context sit beside compact time-window controls, custom date entry, and the visual mode rail.
+- The Stats page keeps the time-window selector in the hero header, above the visual mode toggle, so preset and custom range controls remain visible no matter which analysis view is active. Choosing `Custom` reveals date fields, while the validated `Apply` action is the only custom-range apply path.
 - The mode toggle exposes `trend`, `composition`, `models`, `reliability`, `ledgers`, and `system` as the primary analytics views.
 - Trend mode uses a compact metric strip, the interactive usage chart, and a persistent right-side summary rail; the graph filter menu only controls series visibility.
 - The chart summary stays keyboard and screen-reader friendly, with hover, focus, and drag zoom all feeding the same active-bucket state.
