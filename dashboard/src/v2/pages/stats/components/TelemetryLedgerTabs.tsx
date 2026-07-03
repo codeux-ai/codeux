@@ -77,7 +77,7 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
         role="tablist"
         aria-orientation="horizontal"
         aria-label="Telemetry ledgers"
-        className="sticky top-3 z-20 flex w-full max-w-full gap-1 overflow-x-auto overscroll-x-contain rounded-2xl border border-black/[0.05] bg-white/82 p-1 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl scrollbar-hide dark:border-white/[0.05] dark:bg-void-900/75"
+        className="sticky top-3 z-20 flex w-full max-w-full flex-wrap gap-1 overflow-visible rounded-2xl border border-black/[0.05] bg-white/82 p-1 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/75"
         onKeyDown={(e) => {
           if (tabs.length === 0) {
             return;
@@ -119,14 +119,14 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
               tabIndex={isActive ? 0 : -1}
               onClick={() => setActiveTab(tab.id)}
               aria-label={`${tab.label}, ${tab.count.toLocaleString()} ${tab.count === 1 ? "entry" : "entries"}`}
-              className={`inline-flex min-w-max flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] transition-all motion-safe:duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 sm:px-4 dark:focus-visible:ring-offset-void-900 ${
+              className={`inline-flex min-w-0 flex-1 basis-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-center text-[11px] font-bold uppercase tracking-[0.14em] transition-[background-color,box-shadow,color] motion-safe:duration-200 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 sm:basis-[calc(33.333%-0.25rem)] sm:px-4 dark:focus-visible:ring-offset-void-900 ${
                 isActive
                   ? "bg-slate-900 text-white shadow-sm dark:bg-white dark:text-void-900"
                   : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
               }`}
             >
               <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
-              <span className="whitespace-nowrap">{tab.label}</span>
+              <span className="min-w-0 break-words leading-tight">{tab.label}</span>
               <span className={`inline-flex min-w-8 justify-center px-2 py-0.5 text-[9px] font-black tabular-nums tracking-wider ${CHIP_CLASS} ${
                   isActive
                     ? "bg-white/20 text-white dark:bg-void-900/15 dark:text-void-900"
@@ -145,7 +145,7 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
         aria-labelledby={`tab-${activeTab}`}
         tabIndex={0}
         ref={contentRef}
-        className="min-w-0 focus-visible:outline-none"
+        className="min-w-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--stats-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--stats-focus-ring-offset)]"
       >
         {activeTab === "git" && stats.git ? (
           <GitTelemetryTab gitStats={stats.git} />

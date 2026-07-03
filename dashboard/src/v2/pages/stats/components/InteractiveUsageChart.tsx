@@ -328,8 +328,8 @@ export const InteractiveUsageChart: FunctionComponent<{
                   </div>
                 ) : null}
                 {loading && !error ? (
-                  <div className="absolute right-3 top-3 z-20 flex items-center gap-2 rounded-full border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/88 px-3 py-1.5 shadow-sm backdrop-blur-md" aria-busy="true" aria-label="Loading new data">
-                    <Activity className="h-3.5 w-3.5 animate-pulse text-signal-500 motion-reduce:animate-none" />
+                  <div className="absolute right-3 top-3 z-20 flex items-center gap-2 rounded-full border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/88 px-3 py-1.5 shadow-sm backdrop-blur-md" role="status" aria-live="polite" aria-busy="true" aria-label="Loading new chart data">
+                    <Activity className="h-3.5 w-3.5 animate-pulse text-signal-500 motion-reduce:animate-none" aria-hidden="true" />
                     <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
                       Syncing
                     </span>
@@ -445,7 +445,9 @@ export const InteractiveUsageChart: FunctionComponent<{
                           onMouseEnter={() => setHoveredIndex(index)}
                           onFocus={() => setHoveredIndex(index)}
                           onBlur={() => setHoveredIndex(null)}
-                          aria-label={buckets[absoluteIndex]?.label || "Bucket"}
+                          aria-label={buckets[absoluteIndex]
+                            ? `${buckets[absoluteIndex].label} bucket: ${visibleSeries.map((series) => `${series.label} ${series.formatter(series.values[index] ?? 0)}`).join(", ")}`
+                            : "Telemetry bucket"}
                           onMouseMove={() => {
                             if (dragStartIndex !== null) {
                               setDragCurrentIndex(absoluteIndex);

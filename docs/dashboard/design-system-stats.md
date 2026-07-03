@@ -45,6 +45,7 @@ The Stats surface has six persistent layers:
 - Metric cards are compact and stable. Values, badges, secondary detail, sparklines, quality hints, and loading content must not resize the card footprint unexpectedly.
 - Summary rows should wrap cleanly instead of overflowing horizontally. Use `min-w-0`, truncation, and responsive grid tracks for long project names, model names, and custom date labels.
 - Sticky controls in ledgers and system workbench should use warm-void subpanel styling with backdrop blur and semantic borders.
+- Sticky tab, sort, and filter toolbars wrap before they scroll. Use `minmax(0, 1fr)` grid tracks and stable button dimensions so mobile and tablet layouts do not clip controls or create page-level horizontal overflow.
 
 ### Typography
 
@@ -95,6 +96,8 @@ The Stats surface has six persistent layers:
 - The page root is a named Statistics region and marks itself busy while first-load telemetry is pending.
 - No-project and loading states use polite `status` regions; error states use `alert`.
 - Chart workspaces expose a readable summary, focusable bucket targets, keyboard exploration, and a screen-reader-only data table for exact values.
+- Chart refresh badges use semantic status regions in addition to animation, and each focusable bucket exposes the visible series values in its accessible name.
+- Token flow bars, churn bars, donuts, sparklines, status bars, and other micro-visuals must either expose a concise `role="img"` label or be covered by a nearby consolidated summary so color and motion are never the only signal.
 - Mode navigation, time presets, tabs, switches, filter chips, and sort buttons expose state through standard ARIA attributes.
 - Focus rings use `--stats-focus-ring` or the dashboard focus-ring token and must remain visible in light and dark themes.
 

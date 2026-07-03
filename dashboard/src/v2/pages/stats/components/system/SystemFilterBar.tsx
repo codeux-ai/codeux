@@ -85,7 +85,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
 
   return (
     <div className={`${SUBPANEL_CLASS} sticky top-3 z-20 flex min-w-0 max-w-full flex-col gap-4 p-4 md:p-5`}>
-      <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(16rem,1fr)_minmax(18rem,auto)] xl:items-start">
+      <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,32rem)] xl:items-start">
         <div className="relative min-w-0">
           <label htmlFor="system-filter-search" className="sr-only">Search system stats</label>
           <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" strokeWidth={2} />
@@ -193,7 +193,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
                 onFiltersChange({ status: [], purpose: [], provider: [], errorCategories: [] });
                 onSearchChange("");
               }}
-              className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400 transition-colors hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:hover:text-slate-200 dark:focus-visible:ring-offset-void-900"
+              className="rounded-full text-xs font-bold uppercase tracking-[0.16em] text-slate-400 transition-colors hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:hover:text-slate-200 dark:focus-visible:ring-offset-void-900"
             >
               Clear all
             </button>
@@ -209,7 +209,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
         </div>
 
         {page !== undefined && onPageChange ? (
-          <div className="flex flex-wrap items-center gap-2 lg:justify-end" aria-label="Invocation pagination">
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end" role="group" aria-label="Invocation pagination">
             <button
               type="button"
               disabled={page === 0}

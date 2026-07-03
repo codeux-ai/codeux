@@ -3,14 +3,19 @@
  */
 /// <reference types="@testing-library/jest-dom" />
 import { h } from "preact";
+import { useState } from "preact/hooks";
 import { render, screen, cleanup, fireEvent } from "@testing-library/preact";
 import { describe, it, expect, vi, afterEach, beforeAll } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
+import gsap from "gsap";
 import { StatsPage } from "../../../src/v2/pages/stats/StatsPage.js";
 import { StatsPageHero } from "../../../src/v2/pages/stats/components/StatsPageHero.js";
 import { InteractiveUsageChart } from "../../../src/v2/pages/stats/components/InteractiveUsageChart.js";
+import { TelemetryLedgerTabs } from "../../../src/v2/pages/stats/components/TelemetryLedgerTabs.js";
+import { SystemFilterBar } from "../../../src/v2/pages/stats/components/system/SystemFilterBar.js";
 import { isValidCustomRange } from "../../../src/v2/pages/stats/stats-utils.js";
 import { useUsageChartState } from "../../../src/v2/pages/stats/use-usage-chart-state.js";
+import type { SystemFilters } from "../../../src/v2/pages/stats/hooks/use-system-view-data.js";
 
 expect.extend(matchers);
 
@@ -263,6 +268,23 @@ function createChartState() {
   return useUsageChartState("project-1", chartStats as any);
 }
 
+function mockReducedMotion(matches: boolean): void {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(prefers-reduced-motion: reduce)" ? matches : false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+}
+
 beforeAll(() => {
   if (typeof window.SVGPathElement !== "undefined") {
     Object.defineProperty(window.SVGPathElement.prototype, "getTotalLength", {
@@ -274,6 +296,7 @@ beforeAll(() => {
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
+  vi.clearAllMocks();
 });
 
 describe("StatsPage accessibility", () => {
@@ -308,6 +331,7 @@ describe("StatsPage accessibility", () => {
     expect(screen.getByText("Invocations")).toBeInTheDocument();
     expect(screen.getByText("Success rate")).toBeInTheDocument();
     expect(screen.getAllByText("Models").length).toBeGreaterThan(1);
+    expect(screen.getByRole("article", { name: /Tokens: .*Mixed telemetry/i })).toBeInTheDocument();
 
     const modeGroup = screen.getByRole("group", { name: "Analytics modes" });
     expect(modeGroup).toBeInTheDocument();
@@ -317,6 +341,8 @@ describe("StatsPage accessibility", () => {
     expect(screen.getByRole("button", { name: "Providers" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ledgers" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "System" })).toBeInTheDocument();
+    screen.getByRole("button", { name: "Trend" }).focus();
+    expect(screen.getByRole("button", { name: "Trend" })).toHaveFocus();
 
     expect(screen.getByRole("group", { name: "Time window presets" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Custom" })).toHaveAttribute("aria-pressed", "true");
@@ -325,6 +351,15 @@ describe("StatsPage accessibility", () => {
 
     expect(isValidCustomRange("2026-06-30", "2026-07-01")).toBe(true);
     expect(isValidCustomRange("2026-07-01", "2026-06-30")).toBe(false);
+  });
+
+  it("skips page shell GSAP entrance animation when reduced motion is preferred", () => {
+    mockReducedMotion(true);
+
+    render(<StatsPage />);
+
+    expect(gsap.fromTo).not.toHaveBeenCalled();
+    expect(screen.getByRole("status")).toHaveTextContent("Loading telemetry field");
   });
 
   it("exposes the usage chart, live summary, and filter switches", () => {
@@ -364,11 +399,122 @@ describe("StatsPage accessibility", () => {
     expect(activeSwitch!).toHaveAttribute("aria-checked", "true");
     expect(invocationSwitch!).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("tooltip")).toHaveTextContent("Live values");
+    expect(screen.getByLabelText(/Jun 30 bucket: Tokens/i)).toBeInTheDocument();
 
     const srTable = document.querySelector("table.sr-only");
     expect(srTable).toBeInTheDocument();
     expect(srTable).toHaveTextContent("Jun 30");
     expect(srTable).toHaveTextContent("1.3k");
+  });
+
+  it("announces chart refresh without relying on the loading animation", () => {
+    function ChartHarness() {
+      const chartState = createChartState();
+      return (
+        <InteractiveUsageChart
+          stats={chartStats as any}
+          loading={true}
+          error={null}
+          refresh={async () => {}}
+          chartState={chartState}
+        />
+      );
+    }
+
+    render(<ChartHarness />);
+
+    const refreshStatus = screen.getByRole("status", { name: "Loading new chart data" });
+    expect(refreshStatus).toHaveTextContent("Syncing");
+    expect(refreshStatus).toHaveAttribute("aria-busy", "true");
+  });
+
+  it("keeps ledger tabs stateful and reachable by keyboard", () => {
+    const ledgerStats = {
+      ...chartStats,
+      tasks: [
+        {
+          id: "task-1",
+          label: "Planning task",
+          secondaryLabel: "T01",
+          status: "completed",
+          purpose: "planning",
+          provider: "codex",
+          usage: chartStats.usage,
+          lastActivityAt: "2026-07-01T12:00:00.000Z",
+        },
+      ],
+      sprints: [
+        {
+          id: "sprint-ledger-1",
+          label: "Sprint ledger",
+          secondaryLabel: null,
+          status: "completed",
+          purpose: "planning",
+          provider: "codex",
+          usage: chartStats.usage,
+          lastActivityAt: "2026-07-01T12:00:00.000Z",
+        },
+      ],
+      git: {
+        ...chartStats.git,
+        tasks: [],
+        sprints: [],
+        buckets: [],
+      },
+    };
+
+    render(<TelemetryLedgerTabs stats={ledgerStats as any} />);
+
+    const tablist = screen.getByRole("tablist", { name: "Telemetry ledgers" });
+    const taskTab = screen.getByRole("tab", { name: "Task Telemetry, 1 entry" });
+    const sprintTab = screen.getByRole("tab", { name: "Sprint Telemetry, 1 entry" });
+
+    expect(taskTab).toHaveAttribute("aria-selected", "true");
+    taskTab.focus();
+    fireEvent.keyDown(tablist, { key: "ArrowRight" });
+    expect(sprintTab).toHaveAttribute("aria-selected", "true");
+    expect(sprintTab).toHaveFocus();
+    expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", "tab-sprints");
+  });
+
+  it("keeps system filters and pagination keyboard reachable with exposed state", () => {
+    function SystemFilterHarness() {
+      const [filters, setFilters] = useState<SystemFilters>({ status: [], purpose: [], provider: [], errorCategories: [] });
+      const [search, setSearch] = useState("");
+      const [page, setPage] = useState(0);
+
+      return (
+        <SystemFilterBar
+          filters={filters}
+          onFiltersChange={setFilters}
+          search={search}
+          onSearchChange={setSearch}
+          availablePurposes={["planning"]}
+          availableProviders={["codex"]}
+          totalCount={12}
+          filteredCount={4}
+          page={page}
+          onPageChange={setPage}
+          hasMore={true}
+        />
+      );
+    }
+
+    render(<SystemFilterHarness />);
+
+    const searchInput = screen.getByRole("searchbox", { name: "Search system stats" });
+    searchInput.focus();
+    expect(searchInput).toHaveFocus();
+
+    const running = screen.getByRole("button", { name: "Running" });
+    fireEvent.click(running);
+    expect(running).toHaveAttribute("aria-pressed", "true");
+
+    const pagination = screen.getByRole("group", { name: "Invocation pagination" });
+    expect(pagination).toBeInTheDocument();
+    const next = screen.getByRole("button", { name: "Next" });
+    next.focus();
+    expect(next).toHaveFocus();
   });
 
   it("keeps at least one series enabled when graph filters are reset", () => {
