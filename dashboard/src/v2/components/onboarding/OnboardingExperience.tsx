@@ -45,12 +45,10 @@ import { SectionCard } from "../settings/panels/SharedPanelComponents.js";
 import { JiraIcon } from "../icons/JiraIcon.js";
 
 type IntroPhase = "intro" | "transitioning" | "onboarding";
-import type { OnboardingProviderCredentialStatus, OnboardingRuntimeReadiness, ProviderConfigId, ProviderId, ProjectSettings, SystemSettings } from "../../../types.js";
+import type { OnboardingProviderCredentialStatus, ProviderConfigId, ProviderId, ProjectSettings, SystemSettings } from "../../../types.js";
 import { getSafeUrl } from "../../lib/safe-url.js";
 import {
   buildProviderConfigId,
-  getFirstCliProviderConfigId,
-  getProviderInitialSelection,
   getSystemProvidersByType,
   syncProjectProvidersToIntegrationCatalog
 } from "../../lib/onboarding-settings-draft.js";
@@ -61,6 +59,12 @@ import {
   getProviderTypeLabel,
   sortProviderConfigEntries,
 } from "../../lib/settings-view-models.js";
+import {
+  cloneSystemSettings,
+  onboardingProviderTypes,
+  useOnboardingStepFlow,
+  type StepId,
+} from "./use-onboarding-step-flow.js";
 
 const CODEUX_REPO_URL = "https://github.com/codeux-ai/codeux";
 
@@ -91,20 +95,6 @@ const DeepOceanBackground = lazy(async () => {
   return { default: mod.DeepOceanBackground as FunctionComponent<{ forceDark?: boolean; className?: string }> };
 });
 
-type StepId = "installation" | "introduction" | "providers" | "provider-setup" | "git" | "jira" | "defaults" | "automation" | "appearance";
-
-const steps: Array<{ id: StepId; label: string; icon: typeof Settings }> = [
-  { id: "installation", label: "Installation", icon: Box },
-  { id: "introduction", label: "Introduction", icon: ShieldCheck },
-  { id: "providers", label: "Select Providers", icon: Cpu },
-  { id: "provider-setup", label: "Providers", icon: Settings },
-  { id: "git", label: "Git", icon: GitBranch },
-  { id: "jira", label: "Jira", icon: ClipboardList },
-  { id: "defaults", label: "Default providers", icon: Layers },
-  { id: "automation", label: "Automation", icon: Sparkles },
-  { id: "appearance", label: "Appearance", icon: Monitor },
-];
-
 const DEFAULT_JIRA_SETTINGS: SystemSettings["integrations"]["jira"] = {
   host: "",
   email: "",
@@ -133,7 +123,7 @@ const providerLabels: Record<ProviderId, string> = {
   antigravity: "Antigravity",
 };
 
-const PROVIDER_TYPES: ProviderId[] = ["jules", "gemini", "antigravity", "codex", "claude-code", "qwen-code", "opencode"];
+const PROVIDER_TYPES = onboardingProviderTypes;
 
 const providerDescriptions: Record<ProviderId, string> = {
   jules: "Google Jules API service for agent session and workspace orchestration.",
@@ -154,19 +144,6 @@ const getProviderWatermark = (providerId: ProviderId): string => (
             : providerId === "antigravity" ? "AGY"
               : "CLD"
 );
-
-const defaultReadiness: OnboardingRuntimeReadiness = {
-  checkedAt: "",
-  cluster: {
-    status: "not_ready",
-    label: "Checking",
-    detail: "Runtime checks are loading.",
-  },
-  dependencies: [],
-  providers: [],
-};
-
-const cloneSettings = (settings: SystemSettings): SystemSettings => JSON.parse(JSON.stringify(settings)) as SystemSettings;
 
 const platform = (typeof window !== "undefined" && window.codeUxDesktop?.platform) || "linux";
 
@@ -217,13 +194,23 @@ export const OnboardingExperience: FunctionComponent = () => {
   const shellRef = useRef<HTMLElement>(null);
   const sideRef = useRef<HTMLElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
-  const [activeStep, setActiveStep] = useState(0);
-  const [readiness, setReadiness] = useState<OnboardingRuntimeReadiness>(defaultReadiness);
-  const [settings, setSettings] = useState<SystemSettings | null>(null);
-  const [selectedProviders, setSelectedProviders] = useState<ProviderId[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    dispatch,
+    open,
+    activeStep,
+    readiness,
+    settings,
+    selectedProviders,
+    selectedProviderTypes,
+    saving,
+    error,
+    activeStepData: active,
+    setActiveStep,
+    goToNextStep,
+    goToPreviousStep,
+    steps,
+    updateSettings,
+  } = useOnboardingStepFlow();
   const [introPhase, setIntroPhase] = useState<IntroPhase>("intro");
   const reducedMotion = useReducedMotion();
   const {
@@ -237,14 +224,13 @@ export const OnboardingExperience: FunctionComponent = () => {
     if (onboardingStateLoading) {
       return;
     }
-    setOpen(!onboardingUserState.completed);
+    dispatch({ type: "set-open", open: !onboardingUserState.completed });
   }, [onboardingStateLoading, onboardingUserState.completed]);
 
   useEffect(() => {
     const handleOpen = () => {
-      setActiveStep(0);
       void resetOnboardingState();
-      setOpen(true);
+      dispatch({ type: "reset-and-open" });
       setIntroPhase("intro");
     };
     window.addEventListener(ONBOARDING_OPEN_EVENT, handleOpen);
@@ -259,7 +245,7 @@ export const OnboardingExperience: FunctionComponent = () => {
       if (e.key === "Escape") {
         void markOnboardingCompleted("cancel");
         window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
-        setOpen(false);
+        dispatch({ type: "close" });
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -280,12 +266,9 @@ export const OnboardingExperience: FunctionComponent = () => {
         fetchOnboardingReadiness(),
         fetchSystemSettings(),
       ]);
-      setReadiness(nextReadiness);
-      setSettings(nextSettings);
-      setSelectedProviders((current) => current.length > 0 ? current : getProviderInitialSelection(nextReadiness.providers, nextSettings));
-      setError(null);
+      dispatch({ type: "load-success", readiness: nextReadiness, settings: nextSettings });
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : String(loadError));
+      dispatch({ type: "load-failure", error: loadError instanceof Error ? loadError.message : String(loadError) });
     }
   };
 
@@ -348,19 +331,10 @@ export const OnboardingExperience: FunctionComponent = () => {
     return () => ctx.revert();
   }, [activeStep, selectedProviders.length, settings, reducedMotion]);
 
-  const active = steps[activeStep] ?? steps[0]!;
   const readinessByProvider = useMemo(
     () => Object.fromEntries(readiness.providers.map((provider) => [provider.provider, provider])) as Partial<Record<ProviderId, OnboardingProviderCredentialStatus>>,
     [readiness.providers],
   );
-  const selectedProviderTypes = useMemo(
-    () => PROVIDER_TYPES.filter((provider) => selectedProviders.includes(provider)),
-    [readiness.providers, selectedProviders],
-  );
-
-  const updateSettings = (recipe: (current: SystemSettings) => SystemSettings) => {
-    setSettings((current) => current ? recipe(cloneSettings(current)) : current);
-  };
 
   const updateAppearance = (updates: Partial<SystemSettings["defaults"]["appearance"]>) => {
     updateSettings((current) => {
@@ -380,15 +354,10 @@ export const OnboardingExperience: FunctionComponent = () => {
   };
 
   const toggleProvider = (provider: ProviderId) => {
-    setSelectedProviders((current) => {
-      const nextSelected = current.includes(provider)
-        ? current.filter((item) => item !== provider)
-        : [...current, provider];
-      if (!current.includes(provider)) {
-        ensureProviderInstance(provider);
-      }
-      return nextSelected;
-    });
+    if (!selectedProviders.includes(provider)) {
+      ensureProviderInstance(provider);
+    }
+    dispatch({ type: "toggle-provider", provider });
   };
 
   const updateIntegrationProviders = (
@@ -436,7 +405,7 @@ export const OnboardingExperience: FunctionComponent = () => {
       ...providers,
       [providerConfigId]: createSystemProviderDraft(provider, providerName),
     }));
-    setSelectedProviders((current) => current.includes(provider) ? current : [...current, provider]);
+    dispatch({ type: "select-provider", provider });
   };
 
   const removeProviderInstance = (providerConfigId: ProviderConfigId): void => {
@@ -540,14 +509,14 @@ export const OnboardingExperience: FunctionComponent = () => {
     if (!settings) {
       await markOnboardingCompleted("complete");
       window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
-      setOpen(false);
+      dispatch({ type: "close" });
       await navigate({ to: "/" });
       window.setTimeout(startDashboardTour, 260);
       return;
     }
-    setSaving(true);
+    dispatch({ type: "set-saving", saving: true });
     try {
-      let nextSettings = cloneSettings(settings);
+      let nextSettings = cloneSystemSettings(settings);
       for (const provider of selectedProviderTypes) {
         if (!Object.values(nextSettings.integrations.providers).some((entry) => entry.provider === provider)) {
           nextSettings.integrations.providers[provider] = createSystemProviderDraft(provider, providerLabels[provider]);
@@ -608,16 +577,16 @@ export const OnboardingExperience: FunctionComponent = () => {
         nextSettings.integrations.providers[providerConfigId] = sanitizeSystemProviderConfig(integrationProvider);
       }
       nextSettings = await saveSystemSettings(nextSettings);
-      setSettings(nextSettings);
+      dispatch({ type: "set-settings", settings: nextSettings });
       await markOnboardingCompleted("complete");
       window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
-      setOpen(false);
+      dispatch({ type: "close" });
       await navigate({ to: "/" });
       window.setTimeout(startDashboardTour, 260);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : String(saveError));
+      dispatch({ type: "set-error", error: saveError instanceof Error ? saveError.message : String(saveError) });
     } finally {
-      setSaving(false);
+      dispatch({ type: "set-saving", saving: false });
     }
   };
 
@@ -806,7 +775,7 @@ export const OnboardingExperience: FunctionComponent = () => {
               onClick={async () => {
                 await markOnboardingCompleted("cancel");
                 window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
-                setOpen(false);
+                dispatch({ type: "close" });
               }}
               className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 dark:hover:bg-white/[0.06] dark:hover:text-white"
               aria-label="Close onboarding"
@@ -1470,7 +1439,7 @@ export const OnboardingExperience: FunctionComponent = () => {
             <button
               type="button"
               disabled={activeStep === 0}
-              onClick={() => setActiveStep((step) => Math.max(0, step - 1))}
+              onClick={goToPreviousStep}
               className="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-bold text-slate-500 transition-colors hover:bg-black/[0.04] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-white/[0.06]"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -1508,7 +1477,7 @@ export const OnboardingExperience: FunctionComponent = () => {
               <button
                 type="button"
                 disabled={!canGoNext}
-                onClick={() => setActiveStep((step) => Math.min(steps.length - 1, step + 1))}
+                onClick={goToNextStep}
                 className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.18)] transition-colors hover:bg-slate-700 disabled:opacity-60 dark:bg-white dark:text-void-900"
               >
                 Next
