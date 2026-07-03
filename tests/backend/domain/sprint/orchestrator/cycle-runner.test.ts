@@ -1761,6 +1761,84 @@ describe("CycleRunner attention sync", () => {
       );
       expect(deps.projectAttentionService.openItems).not.toHaveBeenCalled();
     });
+
+    it("retries recovered stale QA reviews instead of escalating at the exhausted cap", async () => {
+      const deps = buildDeps();
+      const reviewCompletedTask = vi.fn().mockResolvedValue({
+        reviewed: false,
+        reopenedTask: false,
+        mergeBlocked: true,
+        reportText: "",
+      });
+      deps.qualityAssuranceService = {
+        getTaskMergeGateStatus: vi.fn().mockReturnValue({
+          mergeAllowed: false,
+          reason: "review_failed",
+          summary: "Recovered stale QA review run after the backing invocation completed. Code UX will retry the review.",
+          latestRun: {
+            id: "qa-run-3",
+            projectId: "project-1",
+            status: "failed",
+            outcome: null,
+            startedAt: "2026-07-02T07:36:57.000Z",
+            finishedAt: "2026-07-02T07:38:22.000Z",
+          },
+          runsUsed: 3,
+          maxRuns: 1,
+        }),
+        reviewCompletedTask,
+      } as any;
+      deps.getDashboardSettings = vi.fn().mockReturnValue({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        agents: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents,
+          qualityAssurance: {
+            ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+            enabled: true,
+            maxTaskReviewRuns: 1,
+            exhaustionPolicy: "ESCALATE_TO_HUMAN",
+          },
+        },
+      });
+
+      const runner = new CycleRunner(deps);
+      const task: any = {
+        id: "T07",
+        record_id: "task-7",
+        project_id: "project-1",
+        title: "Post-QA verification",
+        prompt: "do work",
+        depends_on: [],
+        is_independent: true,
+        status: "CODING_COMPLETED",
+        provider: "codex",
+      };
+
+      await (runner as any).reviewCompletedTasks(
+        [task],
+        new Map([["T07", "CODING_COMPLETED"]]),
+        {
+          executionContext: {
+            project: { id: "project-1", name: "Project 1" } as any,
+            sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+            sprintNumber: 1,
+            repoPath: "/repo/project-1",
+            featureBranch: "feature/sprint-1",
+            defaultBranch: "main",
+          },
+          repoPath: "/repo/project-1",
+          sprintRunId: "run-1",
+        } as any,
+        deps.getDashboardSettings(),
+      );
+
+      expect(reviewCompletedTask).toHaveBeenCalledTimes(1);
+      expect(deps.projectManagementRepository.updateTask).not.toHaveBeenCalledWith(
+        "task-7",
+        expect.objectContaining({ status: "QA_REVIEW_FAILED" }),
+      );
+      expect(deps.projectAttentionService.openItems).not.toHaveBeenCalled();
+    });
   });
 
   it("does not rerun task QA after a passing review even if the task becomes code-complete again", async () => {

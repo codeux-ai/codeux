@@ -70,6 +70,17 @@ export function computeTaskMergeGateStatus(input: {
 
   const recoveredStaleLatestRun = isRecoveredStaleQaRun(latestRun);
 
+  if (latestRun?.status === "failed" && recoveredStaleLatestRun) {
+    return {
+      mergeAllowed: false,
+      reason: "review_failed",
+      summary: latestRun.summaryMarkdown || "QA review failed and must be retried before merge.",
+      latestRun,
+      runsUsed,
+      maxRuns,
+    };
+  }
+
   // Only runs that produced a real verdict (pass / changes_requested) spend
   // the review budget. Reviewer crashes (missing auth, container/parse
   // failures) are infra noise that produced no judgement, so they are retried
@@ -101,17 +112,6 @@ export function computeTaskMergeGateStatus(input: {
       mergeAllowed: false,
       reason: "changes_requested",
       summary: latestRun.summaryMarkdown || "QA requested follow-up fixes.",
-      latestRun,
-      runsUsed,
-      maxRuns,
-    };
-  }
-
-  if (latestRun?.status === "failed" && recoveredStaleLatestRun) {
-    return {
-      mergeAllowed: false,
-      reason: "review_failed",
-      summary: latestRun.summaryMarkdown || "QA review failed and must be retried before merge.",
       latestRun,
       runsUsed,
       maxRuns,
