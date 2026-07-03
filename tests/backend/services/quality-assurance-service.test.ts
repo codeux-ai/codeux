@@ -2477,6 +2477,145 @@ describe("QualityAssuranceService", () => {
     expect((service as any).workspaceArtifactService.exportBinaryPatch).toHaveBeenCalledWith("/worktree", "pushed-worker-tip");
   });
 
+  it("resets stale merged state when a CLI QA follow-up opens a new PR", async () => {
+    const runProvider = vi.fn().mockResolvedValue({
+      ok: true,
+      stdout: "",
+      stderr: "",
+      text: "done",
+      usageTelemetry: {
+        transcriptText: "",
+        inputTokens: 0,
+        outputTokens: 0,
+        cachedInputTokens: 0,
+        reasoningOutputTokens: 0,
+        totalTokens: 0,
+        usageSource: "reported",
+        rawUsageJson: null,
+      },
+    });
+    const updateTask = vi.fn();
+    const updateTaskRun = vi.fn();
+    const service = new QualityAssuranceService({
+      projectManagementRepository: {
+        updateTask,
+        getSprint: vi.fn().mockReturnValue(null),
+      } as any,
+      executionRepository: {
+        getLatestProviderInvocationUsageBySession: vi.fn().mockReturnValue(null),
+        createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-followup" }),
+        appendExecutionInvocationMessage: vi.fn(),
+        updateExecutionInvocation: vi.fn(),
+        createProviderInvocationUsage: vi.fn().mockReturnValue({ id: "usage-followup" }),
+        updateProviderInvocationUsage: vi.fn(),
+        updateTaskRun,
+        appendTaskRunEvent: vi.fn(),
+        getTaskUsageGroups: vi.fn().mockReturnValue([]),
+        listProviderInvocationsForTask: vi.fn().mockReturnValue([]),
+      } as any,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {
+        updateSession: vi.fn(),
+        appendActivity: vi.fn(),
+      } as any,
+      qaReviewRepository: {} as any,
+      taskService: {} as any,
+      agentPresetSyncService: {
+        getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue(undefined),
+      } as any,
+      providerRunner: {
+        runProvider,
+        runProviderForText: vi.fn(),
+      } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        git: {
+          ...DEFAULT_DASHBOARD_SETTINGS.git,
+          autoCreatePr: true,
+          githubMode: "REMOTE",
+        },
+        memory: {
+          ...DEFAULT_DASHBOARD_SETTINGS.memory,
+          enabled: false,
+        },
+      }),
+      getGithubToken: () => "gh-token",
+      sendSessionMessage: async () => ({}),
+    });
+
+    vi.spyOn((service as any).workspaceManager, "resolveResumeWorktreePath").mockResolvedValue("/worktree");
+    vi.spyOn((service as any).workspaceManager, "buildWorktreePath").mockReturnValue("/worktree");
+    vi.spyOn((service as any).workspaceManager, "resolveCurrentBranch").mockResolvedValue("task/feature-sprint-1-t1-codex");
+    vi.spyOn((service as any).workspaceManager, "fastForwardResumedWorkspace").mockResolvedValue(true);
+    vi.spyOn((service as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("");
+    vi.spyOn(service as any, "runWorkspaceCommand").mockResolvedValue({ stdout: "base-head\n", stderr: "" });
+    vi.spyOn((service as any).workspaceArtifactService, "exportBinaryPatch").mockResolvedValue("binary patch");
+    vi.spyOn((service as any).workspaceArtifactService, "applyPatchToBranch").mockResolvedValue({ hasChanges: true });
+    vi.spyOn((service as any).prService, "resolveOrCreateFeaturePr")
+      .mockResolvedValue("https://github.com/org/repo/pull/1911");
+
+    const taskShape = {
+      id: "T1",
+      record_id: "task-record-1",
+      project_id: "project-1",
+      sprint_id: "sprint-1",
+      title: "Fix thing",
+      prompt: "Implement the fix",
+      depends_on: [],
+      is_independent: true,
+      status: "COMPLETED",
+      is_merged: true,
+      merge_indicator: "MERGED",
+      worker_branch: "task/feature-sprint-1-t1-codex",
+      pr_url: "https://github.com/org/repo/pull/1901",
+    };
+    const taskRunShape = {
+      id: "task-run-1",
+      taskId: "task-record-1",
+      sprintRunId: "sprint-run-1",
+      dispatchId: "dispatch-1",
+      workerBranch: "task/feature-sprint-1-t1-codex",
+      prUrl: "https://github.com/org/repo/pull/1901",
+    };
+
+    await (service as any).continueCliTaskSession({
+      provider: "codex",
+      sessionId: "session-1",
+      task: taskShape,
+      taskRun: taskRunShape,
+      repoPath: "/repo",
+      featureBranch: "feature/sprint-1",
+      scope: {
+        projectId: "project-1",
+        sprintId: "sprint-1",
+      },
+      followUpPrompt: "Address QA findings",
+    });
+
+    expect((service as any).prService.resolveOrCreateFeaturePr).toHaveBeenCalledWith(
+      expect.objectContaining({
+        featureBranch: "feature/sprint-1",
+        workerBranch: "task/feature-sprint-1-t1-codex",
+      }),
+      "/repo",
+      "gh-token",
+    );
+    expect(updateTaskRun).toHaveBeenCalledWith("task-run-1", {
+      workerBranch: "task/feature-sprint-1-t1-codex",
+      prUrl: "https://github.com/org/repo/pull/1911",
+    });
+    expect(updateTask).toHaveBeenCalledWith("task-record-1", {
+      status: "coding_completed",
+      isMerged: false,
+      mergeIndicator: null,
+    });
+    expect(taskShape.status).toBe("CODING_COMPLETED");
+    expect(taskShape.is_merged).toBe(false);
+    expect(taskShape.merge_indicator).toBeUndefined();
+    expect(taskShape.pr_url).toBe("https://github.com/org/repo/pull/1911");
+    expect(taskRunShape.prUrl).toBe("https://github.com/org/repo/pull/1911");
+  });
+
   it("continues QA follow-up on an existing docker workspace when branch metadata is only recoverable from workspace state", async () => {
     const runProvider = vi.fn().mockResolvedValue({
       ok: true,
