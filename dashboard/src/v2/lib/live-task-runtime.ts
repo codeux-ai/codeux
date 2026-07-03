@@ -318,9 +318,10 @@ export function projectLiveTask(
   task: Subtask,
   dispatches: ExecutionTaskDispatchSummary[],
   events: ExecutionRuntimeEventSummary[],
+  index?: IndexedExecutionHistory,
 ): Subtask {
-  const dispatch = pickLatestTaskDispatch(task, dispatches);
-  const taskEvents = getTaskEventsForLiveTask(task, dispatch, events);
+  const dispatch = pickLatestTaskDispatch(task, dispatches, index);
+  const taskEvents = getTaskEventsForLiveTask(task, dispatch, events, index);
   const terminalSignal = findLatestTerminalTaskSignal(taskEvents);
 
   return {
