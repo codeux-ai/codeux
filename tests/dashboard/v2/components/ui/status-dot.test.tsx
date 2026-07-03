@@ -12,25 +12,29 @@ describe("StatusDot", () => {
     const { container } = render(<StatusDot status="running" />);
     expect(screen.getByRole("img", { name: "Status: running" })).toBeInTheDocument();
     expect(container.innerHTML).toContain("motion-reduce:animate-none");
+    expect(container.innerHTML).toContain("motion-reduce:ring-[color:var(--status-static-running-aura)]");
   });
 
   it("renders running state", () => {
     const { container } = render(<StatusDot status="running" />);
     expect(container.innerHTML).toContain("animate-ping");
+    expect(container.innerHTML).toContain("shadow-[0_0_10px_var(--status-static-running-ring)]");
   });
 
   it("renders failed state", () => {
     const { container } = render(<StatusDot status="failed" />);
     expect(container.innerHTML).toContain("bg-status-red");
+    expect(container.innerHTML).toContain("status-static-failed-ring");
   });
 
   it("renders intervention state", () => {
     const { container } = render(<StatusDot status="intervention" />);
     expect(container.innerHTML).toContain("bg-status-amber");
+    expect(container.innerHTML).toContain("status-static-intervention-aura");
   });
 
   it("renders idle state", () => {
     const { container } = render(<StatusDot status="idle" />);
-    expect(container.innerHTML).toContain("bg-slate-400");
+    expect(container.innerHTML).toContain("bg-[var(--text-metadata)]");
   });
 });

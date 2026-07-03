@@ -1,6 +1,8 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 
 interface RollingNumberProps {
     value: number;
@@ -10,6 +12,8 @@ interface RollingNumberProps {
 export const RollingNumber: FunctionComponent<RollingNumberProps> = ({ value, className = "" }) => {
     const nodeRef = useRef<HTMLSpanElement>(null);
     const valueRef = useRef<number>(value);
+    const isReducedMotion = useReducedMotion();
+    const tokens = useGsapInteractionTokens();
 
     useEffect(() => {
         if (!nodeRef.current) return;
@@ -25,11 +29,18 @@ export const RollingNumber: FunctionComponent<RollingNumberProps> = ({ value, cl
             return;
         }
 
+        if (isReducedMotion) {
+            gsap.killTweensOf(nodeRef.current);
+            nodeRef.current.textContent = value.toString();
+            valueRef.current = value;
+            return;
+        }
+
         const proxy = { val: valueRef.current };
         gsap.to(proxy, {
             val: value,
-            duration: 0.5,
-            ease: "power2.out",
+            duration: tokens.asyncFeedback.duration,
+            ease: tokens.asyncFeedback.ease,
             snap: { val: 1 },
             onUpdate: () => {
                 if (nodeRef.current) {
@@ -39,10 +50,10 @@ export const RollingNumber: FunctionComponent<RollingNumberProps> = ({ value, cl
         });
 
         valueRef.current = value;
-    }, [value]);
+    }, [value, isReducedMotion, tokens.asyncFeedback.duration, tokens.asyncFeedback.ease]);
 
     return (
-        <span ref={nodeRef} className={className}>
+        <span ref={nodeRef} className={`inline-block min-w-0 tabular-nums ${className}`}>
             {valueRef.current}
         </span>
     );
