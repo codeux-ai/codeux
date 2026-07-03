@@ -65,4 +65,16 @@ describe("StatsCard", () => {
     expect(footer).toBeNull();
   });
 
+  it("renders visual children directly in the card so backgrounds reach the edges", () => {
+    const { container } = render(
+      <StatsCard title="With Visual" value="42">
+        <svg data-testid="edge-visual" />
+      </StatsCard>
+    );
+
+    const card = container.firstChild as HTMLElement;
+    const visual = screen.getByTestId("edge-visual");
+    expect(visual.parentElement).toBe(card);
+  });
+
 });
