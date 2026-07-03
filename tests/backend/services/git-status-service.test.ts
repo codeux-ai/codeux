@@ -513,6 +513,62 @@ describe("GitStatusService", () => {
     });
   });
 
+  it("creates a missing remote base branch from origin HEAD before creating a pull request", async () => {
+    let lookupCount = 0;
+    runner.mockImplementation(async (command, args) => {
+      if (command === "git" && args[0] === "remote" && args[1] === "get-url") return { ok: true, code: 0, stdout: "https://github.com/owner/repo.git\n", stderr: "" };
+      if (command === "git" && args[0] === "remote") return { ok: true, code: 0, stdout: "origin\thttps://github.com/owner/repo.git (fetch)\n", stderr: "" };
+      const fullCmd = `${command} ${args.join(" ")}`;
+      if (fullCmd === "gh pr list --state open --base dev --head feature/sprint1 --limit 1 --json number,url") {
+        lookupCount += 1;
+        return {
+          ok: true,
+          stdout: lookupCount === 1
+            ? "[]"
+            : JSON.stringify([{ number: 400, url: "https://example/pr/400" }]),
+          stderr: "",
+        };
+      }
+      if (fullCmd === "git ls-remote --heads origin dev") {
+        return { ok: true, stdout: "", stderr: "" };
+      }
+      if (fullCmd === "git show-ref --verify --quiet refs/heads/dev") {
+        return { ok: false, stdout: "", stderr: "" };
+      }
+      if (fullCmd === "git symbolic-ref --quiet --short refs/remotes/origin/HEAD") {
+        return { ok: true, stdout: "origin/main\n", stderr: "" };
+      }
+      if (fullCmd === "git rev-parse --verify origin/main") {
+        return { ok: true, stdout: "abc123\n", stderr: "" };
+      }
+      if (fullCmd === "git branch dev origin/main") {
+        return { ok: true, stdout: "", stderr: "" };
+      }
+      if (fullCmd === "git push -u origin refs/heads/dev:refs/heads/dev") {
+        return { ok: true, stdout: "", stderr: "" };
+      }
+      if (fullCmd === "gh pr create --base dev --head feature/sprint1 --title Sprint 1 --body body") {
+        return { ok: true, stdout: "https://example/pr/400\n", stderr: "" };
+      }
+      return { ok: true, stdout: "", stderr: "" };
+    });
+
+    const result = await service.resolveOrCreatePullRequest({
+      baseBranch: "dev",
+      headBranch: "feature/sprint1",
+      title: "Sprint 1",
+      body: "body",
+    });
+
+    expect(result).toEqual({
+      created: true,
+      prNumber: 400,
+      prUrl: "https://example/pr/400",
+    });
+    expect(runner).toHaveBeenCalledWith("git", ["branch", "dev", "origin/main"], { cwd: "/repo", hostToken: undefined });
+    expect(runner).toHaveBeenCalledWith("git", ["push", "-u", "origin", "refs/heads/dev:refs/heads/dev"], { cwd: "/repo", hostToken: undefined });
+  });
+
   it("returns gh create failure details when no pull request can be created", async () => {
     runner.mockImplementation(async (command, args) => {
       if (command === "git" && args[0] === "remote" && args[1] === "get-url") return { ok: true, code: 0, stdout: "https://github.com/owner/repo.git\n", stderr: "" };
