@@ -242,7 +242,7 @@ The dashboard now has a dedicated `/stats` page.
 
 The page focuses on:
 
-- the hero keeps the project and window context visible, with preset chips and custom date inputs always available above the mode toggle
+- the hero keeps project, sprint, snapshot freshness, range resolution, and active-mode context visible, with wrap-first preset chips and explicit custom date inputs above the mode toggle
 - the mode toggle exposes trend, composition, models, reliability, ledgers, and system as primary analysis surfaces
 - trend mode uses a compact metric strip, an interactive usage chart, a persistent side rail, and a graph filter menu that only controls series visibility
 - chart controls keep hover, keyboard focus, and drag zoom synchronized so the accessible summary and the plot always describe the same bucket
