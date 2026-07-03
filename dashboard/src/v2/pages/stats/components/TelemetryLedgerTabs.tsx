@@ -14,6 +14,16 @@ export interface TelemetryLedgerTabsProps {
 
 type LedgerTab = "tasks" | "sprints" | "git";
 
+function formatCompactCount(value: number): string {
+  if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(1)}M`;
+  }
+  if (value >= 1_000) {
+    return `${(value / 1_000).toFixed(1)}k`;
+  }
+  return value.toLocaleString();
+}
+
 export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = ({ stats }) => {
   const [activeTab, setActiveTab] = useState<LedgerTab>("tasks");
   const contentRef = useRef<HTMLDivElement>(null);
@@ -67,7 +77,7 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
         role="tablist"
         aria-orientation="horizontal"
         aria-label="Telemetry ledgers"
-        className="sticky top-3 z-20 flex max-w-full gap-1 overflow-x-auto overscroll-x-contain rounded-2xl border border-black/[0.05] bg-white/82 p-1 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl scrollbar-hide dark:border-white/[0.05] dark:bg-void-900/75"
+        className="sticky top-3 z-20 flex w-full max-w-full gap-1 overflow-x-auto overscroll-x-contain rounded-2xl border border-black/[0.05] bg-white/82 p-1 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl scrollbar-hide dark:border-white/[0.05] dark:bg-void-900/75"
         onKeyDown={(e) => {
           if (tabs.length === 0) {
             return;
@@ -108,20 +118,21 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
               aria-controls={`tabpanel-${tab.id}`}
               tabIndex={isActive ? 0 : -1}
               onClick={() => setActiveTab(tab.id)}
-              className={`inline-flex min-w-max items-center gap-2 rounded-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-all motion-safe:duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 ${
+              aria-label={`${tab.label}, ${tab.count.toLocaleString()} ${tab.count === 1 ? "entry" : "entries"}`}
+              className={`inline-flex min-w-max flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] transition-all motion-safe:duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 sm:px-4 dark:focus-visible:ring-offset-void-900 ${
                 isActive
                   ? "bg-slate-900 text-white shadow-sm dark:bg-white dark:text-void-900"
                   : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
               }`}
             >
               <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
-              {tab.label}
-              <span className={`inline-flex min-w-10 justify-center px-2 py-0.5 text-[9px] font-black tabular-nums tracking-wider ${CHIP_CLASS} ${
+              <span className="whitespace-nowrap">{tab.label}</span>
+              <span className={`inline-flex min-w-8 justify-center px-2 py-0.5 text-[9px] font-black tabular-nums tracking-wider ${CHIP_CLASS} ${
                   isActive
                     ? "bg-white/20 text-white dark:bg-void-900/15 dark:text-void-900"
                     : "text-slate-500 dark:text-slate-400"
               }`}>
-                {tab.count.toLocaleString()}
+                {formatCompactCount(tab.count)}
               </span>
             </button>
           );

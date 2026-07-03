@@ -66,7 +66,7 @@ describe("useUsageChartState", () => {
   });
 
   it("handles restricted localStorage environment safely", () => {
-    const originalGet = localStorage.getItem;
+    const originalLocalStorage = window.localStorage;
     try {
       Object.defineProperty(window, 'localStorage', {
         value: {
@@ -74,18 +74,16 @@ describe("useUsageChartState", () => {
           setItem: () => { throw new Error("SecurityError"); },
           clear: () => {}
         },
-        writable: true
+        writable: true,
+        configurable: true
       });
       const { result } = renderHook(() => useUsageChartState("proj-restricted", baseStats));
       expect(result.current.enabledSeries).toEqual({ tokens: true, active: false });
     } finally {
       Object.defineProperty(window, 'localStorage', {
-        value: {
-          getItem: originalGet,
-          setItem: localStorage.setItem,
-          clear: localStorage.clear
-        },
-        writable: true
+        value: originalLocalStorage,
+        writable: true,
+        configurable: true
       });
     }
   });
