@@ -69,11 +69,13 @@ The final Stats page is organized into four layers:
 ### Charts
 
 - Chart regions must expose an accessible name, a readable summary, and a non-visual alternative for exact values.
-- Use a three-part layout for the trend workspace: summary cards, SVG plot, and persistent side rail.
+- Use a three-part layout for the trend workspace: a compact ordered KPI band, a stable-height SVG plot workspace, and a persistent focused-bucket/series side rail that moves below the plot on narrow screens.
 - Graph filters should control series visibility only. The time window belongs to the hero.
 - Series toggles must be implemented as `button role="switch"` controls with `aria-checked`.
 - Keep at least one series enabled so the plot never collapses into an empty chart by accident.
 - Hover, keyboard focus, and drag zoom should all feed the same active-bucket summary.
+- Keep trend chart controls on a compact wrapping row above the SVG: zoom context, filter trigger, reset zoom, and helper chips must not overlap the plot or tooltip.
+- Chart strokes, fills, grid lines, minimap overlays, and tooltip surfaces should stay calm and warm-muted; preserve distinguishable series colors without saturated area fills or heavy glow.
 
 ### Ledgers
 

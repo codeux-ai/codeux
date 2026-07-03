@@ -14,7 +14,6 @@ import {
 import {
   CHIP_CLASS,
   PANEL_CLASS,
-  SUBPANEL_CLASS,
   getAxisLabelStep,
   formatAxisLabel,
 } from './StatsShared.js';
@@ -151,9 +150,8 @@ export const InteractiveUsageChart: FunctionComponent<{
     : stats.range.label;
   const axisLabelStep = getAxisLabelStep(stats.range);
 
-  const { peakTokens, peakActiveTimeMs, peakInvocations, averageTokens, totalCostUsd, peakCostUsd, invocationDensity } = useMemo(() => calculateChartMetrics(visibleBuckets), [visibleBuckets]);
+  const { peakTokens, peakActiveTimeMs, peakInvocations, averageTokens, totalCostUsd, invocationDensity } = useMemo(() => calculateChartMetrics(visibleBuckets), [visibleBuckets]);
   const invocationDensityLabel = visibleBuckets.length > 0 ? `${invocationDensity.toFixed(1)} / bucket` : "—";
-  const selectedAverageLabel = `${formatTokens(averageTokens)}`;
 
   useEffect(() => {
     const handleMouseUp = () => {
@@ -264,83 +262,61 @@ export const InteractiveUsageChart: FunctionComponent<{
           description="Normalized telemetry lines reveal shape instead of forcing tokens, duration, and invocation counts into one scale. Drag across the plot or the overview strip to zoom a timeframe, hover for exact bucket values, and use filters to focus the graph."
         />
 
-        <div className="relative z-50">
-          <UsageFilterMenu
-            isOpen={isFiltersOpen}
-            onClose={closeFilters}
-            stats={stats}
-            enabledSeries={enabledSeries}
-            setEnabledSeries={setEnabledSeries}
-          />
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-5`}>
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">Total Cost</div>
-            <div className="mt-2 text-2xl font-black text-[var(--stats-value-color)]">{formatCost(totalCostUsd)}</div>
-            <div className="mt-1 text-xs text-[var(--stats-detail-color)]">Peak bucket {formatCost(peakCostUsd)}</div>
-          </div>
-          <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-5`}>
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">Peak Active Time</div>
-            <div className="mt-2 text-2xl font-black text-[var(--stats-value-color)]">{formatStatsDuration(peakActiveTimeMs)}</div>
-            <div className="mt-1 text-xs text-[var(--stats-detail-color)]">Longest active bucket</div>
-          </div>
-          <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-5`}>
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">Invocation Density</div>
-            <div className="mt-2 text-2xl font-black text-[var(--stats-value-color)]">{invocationDensityLabel}</div>
-            <div className="mt-1 text-xs text-[var(--stats-detail-color)]">{stats.range.resolutionLabel}</div>
-          </div>
-          <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-5`}>
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">Selected Average</div>
-            <div className="mt-2 text-2xl font-black text-[var(--stats-value-color)]">{selectedAverageLabel}</div>
-            <div className="mt-1 text-xs text-[var(--stats-detail-color)]">{formatTokens(peakTokens)} peak tokens</div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-8 items-start xl:grid-cols-[minmax(0,1fr)_21rem] 2xl:grid-cols-[minmax(0,1fr)_24rem]">
-          <div className="flex flex-col gap-5">
-            <div className={`${SUBPANEL_CLASS} flex flex-col border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-5 md:p-6`}>
-              <div className="mb-6 flex flex-wrap items-center gap-4">
-                <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--stats-label-color)]">Interactive Plot</div>
-                <div className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] ${CHIP_CLASS} max-w-full whitespace-normal break-words text-center`}>
-                  Hover buckets for exact values
-                </div>
-                <div className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] ${CHIP_CLASS} max-w-full whitespace-normal break-words text-center`}>
-                  {zoomLabel}
-                </div>
+        <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_20rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]">
+          <div className="flex min-w-0 flex-col gap-4">
+            <div className="relative z-50 flex flex-wrap items-center gap-2 rounded-[1.15rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-3 py-3">
+              <div className="mr-auto min-w-0 text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">Interactive Plot</div>
+              <div className={`max-w-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)] ${CHIP_CLASS}`}>
+                {zoomLabel}
+              </div>
+              <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)] ${CHIP_CLASS}`}>
+                {formatCost(totalCostUsd)} total
+              </div>
+              <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)] ${CHIP_CLASS}`}>
+                {invocationDensityLabel}
+              </div>
+              <button
+                type="button"
+                onClick={toggleFilters}
+                aria-expanded={isFiltersOpen}
+                className={`group inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors motion-reduce:transition-none active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] ${CHIP_CLASS} ${
+                  isFiltersOpen
+                    ? 'border-signal-500/30 bg-signal-500/[0.08] text-signal-600 dark:text-signal-400'
+                    : 'text-[var(--stats-detail-color)] hover:bg-[color:var(--fill-muted-hover)] hover:text-[var(--stats-value-color)]'
+                }`}
+              >
+                <Filter className={`h-3 w-3 transition-colors motion-reduce:transition-none ${isFiltersOpen ? 'text-signal-500' : 'text-[var(--stats-detail-color)] group-hover:text-signal-500'}`} strokeWidth={2.2} />
+                Filters
+              </button>
+              {zoomRange ? (
                 <button
                   type="button"
-                  onClick={toggleFilters}
-                  aria-expanded={isFiltersOpen}
-                  className={`group flex items-center gap-2 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] transition-all border shadow-sm active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] ${CHIP_CLASS} ${
-                    isFiltersOpen
-                      ? 'border-signal-500/30 bg-signal-500/[0.08] text-signal-500 shadow-signal-500/5'
-                      : 'border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] text-[var(--stats-detail-color)] hover:bg-[color:var(--fill-muted-hover)] hover:text-[var(--stats-value-color)] hover:border-[var(--stats-value-color)]/20'
-                  }`}
+                  onClick={() => setZoomRange(null)}
+                  className="rounded-full border border-signal-500/20 bg-signal-500/[0.06] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/[0.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] motion-reduce:transition-none dark:text-signal-400"
                 >
-                  <Filter className={`h-3 w-3 transition-colors ${isFiltersOpen ? 'text-signal-500' : 'text-[var(--stats-detail-color)] group-hover:text-signal-500'}`} strokeWidth={2.2} />
-                  Filters
+                  Reset zoom <span className="sr-only">to {stats.range.label}</span>
                 </button>
-                {zoomRange ? (
-                  <button
-                    type="button"
-                    onClick={() => setZoomRange(null)}
-                    className="px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500 transition-all hover:bg-[color:var(--fill-muted)] border border-signal-500/20 rounded-full active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)]"
-                  >
-                    Reset zoom <span className="sr-only">to {stats.range.label}</span>
-                  </button>
-                ) : null}
-              </div>
-              <div ref={svgContainerRef} className="relative min-h-[18rem] w-full sm:min-h-[24rem] md:min-h-[30rem] lg:min-h-[36rem]">
+              ) : null}
+              <UsageFilterMenu
+                isOpen={isFiltersOpen}
+                onClose={closeFilters}
+                stats={stats}
+                enabledSeries={enabledSeries}
+                setEnabledSeries={setEnabledSeries}
+              />
+            </div>
+
+            <div className="rounded-[1.35rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] p-3 md:p-4">
+              <div ref={svgContainerRef} className="relative h-[22rem] w-full sm:h-[26rem] lg:h-[30rem]">
                 {error ? (
-                  <div className="absolute inset-0 z-20 flex items-center justify-center bg-[var(--stats-card-bg)]/50 backdrop-blur-sm">
+                  <div className="absolute inset-0 z-20 flex items-center justify-center rounded-[1.1rem] bg-[var(--stats-card-bg)]/72 backdrop-blur-sm">
                     <UsageGraphError message={error} onRetry={() => { refresh().catch(() => {}); }} />
                   </div>
                 ) : null}
                 {loading && !error ? (
-                  <div className="absolute right-4 top-4 z-20 flex items-center gap-2 rounded-full border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/80 px-3 py-1.5 shadow-sm backdrop-blur-md" aria-busy="true" aria-label="Loading new data">
-                    <Activity className="h-3.5 w-3.5 animate-pulse text-signal-500" />
-                    <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)]">
+                  <div className="absolute right-3 top-3 z-20 flex items-center gap-2 rounded-full border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/88 px-3 py-1.5 shadow-sm backdrop-blur-md" aria-busy="true" aria-label="Loading new data">
+                    <Activity className="h-3.5 w-3.5 animate-pulse text-signal-500 motion-reduce:animate-none" />
+                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
                       Syncing
                     </span>
                   </div>
@@ -354,7 +330,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                     <defs>
                       {chartData.map((series) => (
                         <linearGradient key={`fill-${series.id}`} id={`stats-area-${series.id}`} x1="0" x2="0" y1="0" y2="1">
-                          <stop offset="0%" stop-color={series.accentHex} stop-opacity="0.25" />
+                          <stop offset="0%" stop-color={series.accentHex} stop-opacity="0.1" />
                           <stop offset="100%" stop-color={series.accentHex} stop-opacity="0" />
                         </linearGradient>
                       ))}
@@ -367,7 +343,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                         y1={padding + ((height - padding * 2) / 4) * index}
                         y2={padding + ((height - padding * 2) / 4) * index}
                         stroke="currentColor"
-                        strokeOpacity="0.08"
+                        strokeOpacity="0.045"
                       />
                     ))}
                     {selectionBounds && xPositions.length > 0 ? (
@@ -381,8 +357,8 @@ export const InteractiveUsageChart: FunctionComponent<{
                         )}
                         height={height - padding * 2}
                         rx="18"
-                        fill="rgba(0,224,160,0.08)"
-                        stroke="rgba(0,224,160,0.4)"
+                        fill="rgba(0,224,160,0.055)"
+                        stroke="rgba(0,224,160,0.28)"
                         strokeDasharray="8 8"
                       />
                     ) : null}
@@ -390,20 +366,21 @@ export const InteractiveUsageChart: FunctionComponent<{
                       <g key={series.id}>
                         <path
                           data-chart-area
-                          data-area-opacity={series.id === "tokens" ? "1" : "0.45"}
+                          data-area-opacity={series.id === "tokens" ? "0.45" : "0.22"}
                           d={series.areaPath}
                           fill={`url(#stats-area-${series.id})`}
-                          opacity={series.id === "tokens" ? 1 : 0.45}
+                          opacity={series.id === "tokens" ? 0.45 : 0.22}
                         />
                         <path
                           data-chart-path
                           d={series.path}
                           fill="none"
                           stroke={series.accentHex}
-                          strokeWidth={series.id === "tokens" ? "4.2" : "3.1"}
+                          strokeWidth={series.id === "tokens" ? "3.2" : "2.6"}
                           strokeLinecap="round"
                           strokeLinejoin="round"
-                          className="drop-shadow-[0_4px_12px_rgba(0,0,0,0.12)]"
+                          opacity="0.92"
+                          className="drop-shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
                         />
                       </g>
                     ))}
@@ -414,7 +391,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                         y1={padding}
                         y2={height - padding}
                         stroke="currentColor"
-                        strokeOpacity="0.18"
+                        strokeOpacity="0.14"
                         strokeDasharray="6 8"
                       />
                     ) : null}
@@ -425,11 +402,11 @@ export const InteractiveUsageChart: FunctionComponent<{
                           key={`${series.id}-${index}`}
                           cx={point.x}
                           cy={point.y}
-                          r={hoveredIndex === index ? 6 : 4}
+                          r={hoveredIndex === index ? 5 : 3.2}
                           fill={series.accentHex}
-                          stroke="white"
+                          stroke="var(--stats-card-bg)"
                           strokeWidth={hoveredIndex === index ? 2 : 0}
-                          fillOpacity={hoveredIndex === null || hoveredIndex === index ? 1 : 0.4}
+                          fillOpacity={hoveredIndex === null || hoveredIndex === index ? 0.9 : 0.32}
                           style={{ transition: 'r 0.2s, fill-opacity 0.2s, stroke-width 0.2s' }}
                         />
                       ))
@@ -440,7 +417,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                       return (
                         <rect
                           key={`hover-${index}`}
-                          tabIndex={-1}
+                          tabIndex={0}
                           x={startX}
                           y={padding}
                           width={rectWidth}
@@ -483,7 +460,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                           x={xPositions[index] ?? padding}
                           y={height - 8}
                           textAnchor="middle"
-                          className="fill-[var(--stats-label-color)] text-[9px] font-bold uppercase tracking-[0.25em]"
+                          className="fill-[var(--stats-detail-color)] text-[9px] font-bold uppercase tracking-[0.14em]"
                         >
                           {formatAxisLabel(bucket, stats.range)}
                         </text>
@@ -502,16 +479,16 @@ export const InteractiveUsageChart: FunctionComponent<{
             </div>
           </div>
 
-          <div className="flex flex-col gap-5">
-            <div className={`${SUBPANEL_CLASS} flex flex-col gap-4 border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-5`}>
+          <aside className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-6">
+            <div className="rounded-[1.35rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--stats-label-color)]">Series rail</div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">Focused bucket</div>
                   <div className="mt-1 text-sm font-black text-[var(--stats-value-color)]">
                     {activeBucket ? activeBucket.label : "No bucket focused"}
                   </div>
                 </div>
-                <div className="rounded-full border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] px-3 py-1 text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--stats-detail-color)]">
+                <div className="rounded-full border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] px-3 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
                   {visibleSeries.length} visible
                 </div>
               </div>
@@ -527,14 +504,14 @@ export const InteractiveUsageChart: FunctionComponent<{
                   value: s.formatter(s.values[activeIndex] ?? 0)
                 }))}
               />
-              <div className="rounded-[1.35rem] border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-4">
+              <div className="mt-4 rounded-[1.1rem] border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/70 p-4">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">Bucket focus</div>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-detail-color)]">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">Range focus</div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]">
                     {activeBucket ? formatDateTime(activeBucket.bucketStart) : "Move focus to inspect"}
                   </div>
                 </div>
-                <label htmlFor="bucket-focus-slider" className="mt-3 block text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-detail-color)]">
+                <label htmlFor="bucket-focus-slider" className="mt-3 block text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
                   Explore chart data across time
                 </label>
                 <input
@@ -548,19 +525,19 @@ export const InteractiveUsageChart: FunctionComponent<{
                   onKeyDown={handleSliderKeyDown}
                   aria-describedby="usage-chart-tooltip"
                   aria-valuetext={activeBucket ? `${activeBucket.label}, ${visibleSeries.map((s) => `${s.label}: ${s.formatter(s.values[activeIndex] ?? 0)}`).join(', ')}` : 'No bucket focused'}
-                  className="mt-3 w-full accent-[color:var(--accent-focus-ring)]"
+                  className="mt-3 w-full accent-[color:var(--accent-focus-ring)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)]"
                   disabled={visibleBuckets.length === 0}
                 />
                 <div className="mt-2 text-[11px] leading-relaxed text-[var(--stats-detail-color)]">
-                  Use arrow keys, drag, or hover to move through the active window. Press Enter on the plot to zoom the focused bucket.
+                  Use arrow keys, drag, or hover to move through the active window. Press Enter to zoom the focused bucket.
                 </div>
               </div>
             </div>
 
-            <div className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-5`}>
+            <div className="rounded-[1.35rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] p-4">
               <div className="mb-4 flex items-center justify-between gap-3">
-                <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--stats-label-color)]">Series switches</div>
-                <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-detail-color)]">
+                <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">Series switches</div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
                   {activeSeriesCount} active
                 </div>
               </div>
@@ -572,14 +549,20 @@ export const InteractiveUsageChart: FunctionComponent<{
               />
             </div>
 
-            <div className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-5`}>
+            <div className="rounded-[1.35rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">Live values</div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
+                  Peak {formatTokens(peakTokens)}
+                </div>
+              </div>
               <UsageSeriesSidebar
                 series={chartData}
                 enabledSeries={enabledSeries}
                 activeIndex={activeIndex}
               />
             </div>
-          </div>
+          </aside>
         </div>
       </div>
     </div>
