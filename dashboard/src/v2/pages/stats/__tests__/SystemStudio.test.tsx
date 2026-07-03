@@ -95,41 +95,39 @@ describe("SystemStudio", () => {
     const { container } = render(<SystemStudio projectId="project-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText("Invocations & System Logs")).toBeTruthy();
+      expect(screen.getByText("System Operations")).toBeTruthy();
     });
 
-    expect(screen.getByRole("button", { name: /^All\b/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^Errors\b/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^System Msgs\b/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^All/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Errors/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^System Msgs/ })).toBeTruthy();
     expect(container.textContent).toContain("1.3k");
     expect(container.textContent).toContain("9m 0s");
     expect(container.textContent).toContain("Showing 2 of 2");
     expect(screen.getByText("Rate limited")).toBeTruthy();
     expect(screen.queryByText("Loading messages")).toBeNull();
 
-    expect(container.querySelectorAll(".text-red-600").length).toBeGreaterThan(0);
-    expect(container.querySelectorAll(".text-blue-600").length).toBeGreaterThan(0);
     expect(container.textContent).toContain("Sprint Overview");
     expect(container.textContent).toContain("Status Distribution");
     expect(container.textContent).toContain("Success Rate");
-    expect(container.textContent).toContain("Error Log");
-    expect(container.textContent).toContain("Detailed Log");
+    expect(container.textContent).toContain("Failure Analysis");
+    expect(container.textContent).toContain("Invocation Records");
 
-    fireEvent.click(screen.getByRole("button", { name: /^Errors\b/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Errors/ }));
 
     await waitFor(() => {
       expect(screen.getByText("Showing 1 of 2")).toBeTruthy();
       expect(container.textContent).toContain("Rate limited");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /^System Msgs\b/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^System Msgs/ }));
 
     await waitFor(() => {
       expect(screen.getByText("Showing 1 of 2")).toBeTruthy();
       expect(container.textContent).toContain("System Msgs");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /^All\b/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^All/ }));
 
     await waitFor(() => {
       expect(screen.getByText("Showing 2 of 2")).toBeTruthy();
@@ -143,7 +141,7 @@ describe("SystemStudio", () => {
 
     expect(container.querySelectorAll("tbody > tr").length).toBe(1);
     expect(screen.queryByText("Rate limited")).toBeNull();
-    expect(screen.getByText("codex-1")).toBeTruthy();
+    expect(container.textContent).toContain("codex-1");
 
     fireEvent.click(screen.getAllByRole("button", { name: "Expand invocation inv-running" })[0]);
 

@@ -119,13 +119,13 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
   };
 
   return (
-    <div className="mt-2 max-h-[500px] w-full min-w-0 max-w-full space-y-3 overflow-y-auto rounded-2xl border border-white/[0.05] bg-slate-950/70 p-4">
+    <div className="mt-2 max-h-[560px] w-full min-w-0 max-w-full space-y-3 overflow-y-auto rounded-2xl border border-white/[0.05] bg-slate-950/70 p-3 text-slate-200 sm:p-4">
       {invocation.lastErrorMessage ? (
         <details className="mb-4 group">
-          <summary className="cursor-pointer list-none text-sm font-bold uppercase tracking-[0.16em] text-red-500 dark:text-red-400 hover:text-red-600 transition-colors">
+          <summary className="cursor-pointer list-none rounded px-1 text-sm font-bold uppercase tracking-[0.16em] text-red-400 transition-colors hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500">
             Error Summary
           </summary>
-          <div className="mt-2 rounded-2xl bg-red-500/10 border border-red-500/20 p-4 text-sm text-red-600 dark:text-red-300">
+          <div className="mt-2 whitespace-pre-wrap break-words rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm leading-relaxed text-red-200 [overflow-wrap:anywhere]">
             {invocation.lastErrorMessage}
           </div>
         </details>
@@ -168,7 +168,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
         </div>
 
         {invocation.lastErrorMessage ? (
-          <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+          <div className="whitespace-pre-wrap break-words rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm leading-relaxed text-red-200 [overflow-wrap:anywhere]">
             {invocation.lastErrorMessage}
           </div>
         ) : null}
@@ -198,30 +198,31 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
                 WebkitBoxOrient: "vertical",
                 WebkitLineClamp: 5,
                 overflow: "hidden",
+                overflowWrap: "anywhere",
               } as JSX.CSSProperties)
               : undefined;
 
             return (
-              <div key={message.id} className={`${ROLE_CARD_CLASS[message.role]} ${index % 2 === 1 ? "bg-transparent" : "bg-black/[0.015] dark:bg-white/[0.015]"} ${(message.role as any) === "error" || message.contentMarkdown?.includes("Error") ? "border-l-2 border-red-400 text-red-600 dark:text-red-300" : ""}`}>
+              <div key={message.id} className={`${ROLE_CARD_CLASS[message.role]} min-w-0 ${index % 2 === 1 ? "bg-transparent" : "bg-black/[0.015] dark:bg-white/[0.015]"} ${message.contentMarkdown?.includes("Error") ? "border-l-2 border-red-400 text-red-300" : ""}`}>
                 <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
                     <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full ${ROLE_ICON_CLASS[message.role]}`}>
                       {message.role === "system" ? <Settings className="h-3.5 w-3.5" /> : null}
                       {message.role === "user" ? <User className="h-3.5 w-3.5" /> : null}
                       {message.role === "assistant" ? <Bot className="h-3.5 w-3.5" /> : null}
                       {message.role === "tool" ? <Code2 className="h-3.5 w-3.5" /> : null}
                     </span>
-                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                    <div className="min-w-0 truncate text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
                       {message.role === "assistant" ? (invocation.model || "ASSISTANT") : message.role.toUpperCase()}
                     </div>
                   </div>
 
-                  <div className="text-[10px] text-slate-500">
+                  <div className="shrink-0 text-[10px] text-slate-500">
                     {formatDateTime(message.createdAt)}
                   </div>
                 </div>
 
-                <pre className="mt-2 max-w-full whitespace-pre-wrap break-words text-xs text-slate-300" style={contentStyle}>
+                <pre className="mt-2 max-w-full whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-slate-300 [overflow-wrap:anywhere]" style={contentStyle}>
                   {message.contentMarkdown}
                 </pre>
 
@@ -229,7 +230,8 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
                   <button
                     type="button"
                     onClick={() => toggleSystemMessage(message.id)}
-                    className="mt-2 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 rounded px-1"
+                    aria-expanded={isExpanded}
+                    className="mt-2 inline-flex items-center gap-1.5 rounded px-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500"
                   >
                     {isExpanded ? "Show less" : "Show more"}
                   </button>

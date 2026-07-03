@@ -163,14 +163,14 @@ describe("SystemStudio and filters", () => {
 
     render(<SystemStudio projectId="project-1" />);
 
-    expect(screen.getByText("Invocations & System Logs")).toBeInTheDocument();
+    expect(screen.getByText("System Operations")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^All/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Errors/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^System Msgs/ })).toBeInTheDocument();
     expect(screen.getByText("Showing 3 of 3")).toBeInTheDocument();
     expect(screen.getByText("Rate limited")).toBeInTheDocument();
     expect(screen.getByText("Sprint Overview")).toBeInTheDocument();
-    expect(screen.getByText("Invocation Filters")).toBeInTheDocument();
+    expect(screen.getAllByText("Invocation Records").length).toBeGreaterThan(0);
     expect(screen.getByPlaceholderText("Search system stats")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Running" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Completed" })).toBeInTheDocument();
@@ -184,7 +184,7 @@ describe("SystemStudio and filters", () => {
     expect(screen.queryByText("system message")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /^System Msgs/ }));
-    expect(screen.getByText("Showing 3 of 3")).toBeInTheDocument();
+    expect(screen.getByText("Showing 1 of 3")).toBeInTheDocument();
     expect(screen.getByText("system message")).toBeInTheDocument();
   });
 
