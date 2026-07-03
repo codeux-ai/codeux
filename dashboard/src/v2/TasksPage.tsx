@@ -449,7 +449,7 @@ export const TasksPage: FunctionComponent = () => {
       }
     });
     return () => ctx.revert();
-  }, [selectedProject?.id, statusFilter, priorityFilter, taskScopeSprintId, loading, showSkeletons, reducedMotion]);
+  }, [selectedProject?.id, statusFilter, priorityFilter, taskScopeSprintId, listWindow, loading, showSkeletons, reducedMotion]);
 
   useLayoutEffect(() => {
     if (!resolvedTaskId || !boardRef.current) return;

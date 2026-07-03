@@ -68,5 +68,7 @@ Heavy list views, such as stats ledgers, utilize a progressive list rendering ap
 - Lists render an initial lightweight viewport of items.
 - As the user scrolls, an intersection observer triggers progressive unrolling of the remaining items in batches.
 - This prevents main-thread blocking when rendering hundreds of tasks or sprint rows, while still allowing the full dataset to be available for client-side search and sorting.
+- Overview task streams keep the full active task collection available for filter counts and sprint grouping metadata, but render only the progressive visible window initially. Filter changes provide a reset key so the visible range clamps back to the first window before progressive unrolling continues.
 - The Sprints page ledger is the exception: it keeps the full sprint collection available to its filter/sort/selection/task-count calculations and relies on its built-in `Show` selector for deterministic row windowing.
+- Task board and sprint ledger views should use `resolveListWindow`/`sliceListWindow` for deterministic `Show` selectors, and reserve progressive rendering for feeds where the user expects the list to continue filling in without changing controls.
 - Heavy lists within complex components, such as the `InvocationsTable`, utilize a simpler `useInvocationsWindow` custom hook to deterministically limit row rendering and lazily append more records on user interaction.

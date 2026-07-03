@@ -115,6 +115,62 @@ describe("TasksList", () => {
         expect(gsap.fromTo).toHaveBeenCalled();
     });
 
+    it("bounds the initial active-stream render for large task lists", () => {
+        const largeTasks = Array.from({ length: 25 }, (_, index) => ({
+            ...mockTask,
+            id: `bulk-${index + 1}`,
+            title: `Overview Bulk Task ${index + 1}`,
+            status: "in_progress",
+        }));
+
+        render(
+            <ProjectDataProvider initialProject={null}>
+                <TasksList pageData={{ ...pageData, tasks: largeTasks }} />
+            </ProjectDataProvider>
+        );
+
+        expect(screen.getByText("Overview Bulk Task 1")).toBeInTheDocument();
+        expect(screen.getByText("Overview Bulk Task 20")).toBeInTheDocument();
+        expect(screen.queryByText("Overview Bulk Task 21")).not.toBeInTheDocument();
+        expect(screen.getByText("25 active")).toBeInTheDocument();
+        expect(screen.getByText("25 tasks")).toBeInTheDocument();
+    });
+
+    it("resets the visible active-stream window when filters change", async () => {
+        const mixedTasks = [
+            ...Array.from({ length: 25 }, (_, index) => ({
+                ...mockTask,
+                id: `running-${index + 1}`,
+                title: `Running Bulk Task ${index + 1}`,
+                status: "in_progress",
+            })),
+            ...Array.from({ length: 25 }, (_, index) => ({
+                ...mockTask,
+                id: `completed-${index + 1}`,
+                title: `Completed Bulk Task ${index + 1}`,
+                status: "completed",
+            })),
+        ];
+
+        render(
+            <ProjectDataProvider initialProject={null}>
+                <TasksList pageData={{ ...pageData, tasks: mixedTasks }} />
+            </ProjectDataProvider>
+        );
+
+        expect(screen.getByText("Running Bulk Task 20")).toBeInTheDocument();
+        expect(screen.queryByText("Running Bulk Task 21")).not.toBeInTheDocument();
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole("tab", { name: "Completed" }));
+        });
+
+        expect(screen.getByText("Completed Bulk Task 1")).toBeInTheDocument();
+        expect(screen.getByText("Completed Bulk Task 20")).toBeInTheDocument();
+        expect(screen.queryByText("Completed Bulk Task 21")).not.toBeInTheDocument();
+        expect(screen.queryByText("Running Bulk Task 1")).not.toBeInTheDocument();
+    });
+
 
 
 
