@@ -42,39 +42,40 @@ export const StatsMetricCard: FunctionComponent<StatsMetricCardProps> = ({
       title={label}
       value={value}
       trend={
-        <div className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400 ${CHIP_CLASS}`}>
+        <div className={`max-w-full whitespace-normal break-words px-3 py-1 text-center text-[10px] font-bold uppercase leading-tight tracking-[0.14em] text-slate-500 dark:text-slate-400 ${CHIP_CLASS}`}>
           {signalLabel}
         </div>
       }
+      description={detail}
       accent={accent}
       density="compact"
       tone="muted"
-      className="min-w-0 min-h-[12rem]"
+      className="min-h-[14rem] min-w-0"
     >
-      <div className="relative z-10 mt-3 min-h-[2.75rem]">
+      <div
+        className="relative z-10 mt-4 min-h-[3.25rem] overflow-hidden rounded-[var(--stats-control-radius)]"
+        role="img"
+        aria-label={
+          hasSparkline
+            ? `${label} ${signalLabel.toLowerCase()} sparkline across the selected window.`
+            : `${label} has no ${signalLabel.toLowerCase()} sparkline data for the selected window.`
+        }
+      >
         {hasSparkline ? (
           <Sparkline points={sparkline} color={accentHex} />
         ) : (
           <div
-            className="pointer-events-none h-11 rounded-[var(--stats-control-radius)] border border-dashed border-black/[0.06] bg-slate-500/[0.035] dark:border-white/[0.07] dark:bg-white/[0.025]"
+            className="pointer-events-none h-12 rounded-[var(--stats-control-radius)] border border-dashed border-black/[0.06] bg-slate-500/[0.035] dark:border-white/[0.07] dark:bg-white/[0.025]"
             aria-hidden="true"
           />
         )}
       </div>
-      <div className="sr-only">
-        {hasSparkline
-          ? `${label} metric sparkline showing activity across the selected window.`
-          : `${label} metric has no sparkline data for the selected window.`}
-      </div>
-      <div className="relative z-10 mt-4 grid min-h-[4.25rem] min-w-0 content-end gap-2 border-t border-black/[0.06] pt-3 dark:border-white/[0.06]">
-        <div className="min-w-0 text-[11px] font-semibold leading-relaxed text-slate-600 dark:text-slate-300">
-          {detail}
-        </div>
+      <div className="relative z-10 mt-4 grid min-h-[2.5rem] min-w-0 content-end gap-2 border-t border-black/[0.06] pt-3 dark:border-white/[0.06]">
         {(secondaryDetail || qualityHint) && (
           <div className="flex min-w-0 flex-wrap items-center gap-2 text-[10px] font-medium leading-snug text-slate-500 dark:text-slate-400">
-            {secondaryDetail && <span className="min-w-0 max-w-full truncate">{secondaryDetail}</span>}
+            {secondaryDetail && <span className="min-w-0 max-w-full flex-1 basis-32 break-words">{secondaryDetail}</span>}
             {qualityHint && (
-              <span className="min-w-0 max-w-full rounded-full border border-black/[0.06] bg-white/[0.42] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400">
+              <span className="min-w-0 max-w-full rounded-full border border-black/[0.06] bg-white/[0.42] px-2 py-0.5 text-[9px] font-bold uppercase leading-tight tracking-[0.1em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400">
                 {qualityHint}
               </span>
             )}

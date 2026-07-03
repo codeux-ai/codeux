@@ -19,6 +19,8 @@ The redesigned Stats page follows a stable top-to-bottom rhythm:
    - It appears for selected-project, no-project, loading, error, and low-data paths so the page never drops into an unanchored state.
 3. Top cards
    - Each visual mode renders a compact summary deck before the deeper workspace.
+   - Card order should put the highest-signal decision metric first for the active mode: work/cost/throughput in Trend, dominant provider and token mix in Composition, active model health in Models, telemetry quality in Providers, entity volume in Ledgers, and live health in System.
+   - Secondary detail should use existing snapshot data such as cost, cache rate, success rate, p50/p95 latency, active sprint/task counts, Git churn/conflicts, token source confidence, and top provider or model context when available.
    - Cards use the shared `StatsCard` primitive and expose the title, value, and description as one named analytics article.
    - Empty or partial telemetry must use explicit labels such as `No data`, `No tokens`, `No runs`, or `Low data` instead of presenting zero as a meaningful measurement.
 4. Analysis studio

@@ -19,6 +19,7 @@ export interface MetricSeriesBundle {
   gitFilesChanged: number[];
   gitPrs: number[];
   gitMerges: number[];
+  gitMergeConflicts: number[];
 }
 
 function emptySeries(stats: ProjectExecutionStatsSnapshot | null): number[] {
@@ -82,5 +83,6 @@ export function buildMetricSeries(stats: ProjectExecutionStatsSnapshot | null): 
     gitFilesChanged: extractChartSeries(stats, "git_files_changed"),
     gitPrs: extractChartSeries(stats, "git_prs"),
     gitMerges: extractChartSeries(stats, "git_merges"),
+    gitMergeConflicts: extractChartSeries(stats, "git_merge_conflicts"),
   };
 }
