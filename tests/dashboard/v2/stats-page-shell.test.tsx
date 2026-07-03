@@ -248,10 +248,10 @@ expect(gsap.fromTo).toHaveBeenCalled();
 
   it("renders metric cards", () => {
     render(<StatsPage />);
-    expect(screen.getByText("Active Providers")).toBeInTheDocument();
-    expect(screen.getByText("Top Provider")).toBeInTheDocument();
-    expect(screen.getByText("Input Tokens")).toBeInTheDocument();
-    expect(screen.getByText("Output Tokens")).toBeInTheDocument();
+    expect(screen.getAllByText("Provider Share")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("Token Anatomy")[0]).toBeInTheDocument();
+    expect(screen.getByText("Purpose Activity")).toBeInTheDocument();
+    expect(screen.getByText("Merge Conflicts")).toBeInTheDocument();
   });
 
 
@@ -294,8 +294,8 @@ expect(gsap.fromTo).toHaveBeenCalled();
     
     render(<StatsPage />);
     expect(screen.getByText("Composition analysis")).toBeInTheDocument();
-    expect(screen.getByText("Provider Share")).toBeInTheDocument();
-    expect(screen.getByText("Token Anatomy")).toBeInTheDocument();
+    expect(screen.getAllByText("Provider Share")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("Token Anatomy")[0]).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Composition" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Reliability" })).toHaveAttribute("aria-pressed", "false");
   });
