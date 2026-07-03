@@ -8,6 +8,10 @@ The dashboard resource layer manages data fetching, caching, and invalidation fo
 
 Importantly, **API routes and backend contracts remain unchanged**. The optimizations are entirely focused on frontend read-model consumption, backend read-model projection efficiency, and client-side rendering.
 
+Backend dashboard routes are registered through a typed boundary in `src/server/dashboard-route-registration.ts`. `dashboard-server.ts` owns Express setup concerns only: pre-route middleware, security headers, `/health`, `/ready`, route registration handoff, static serving, preview host upgrades, and websocket bootstrapping. The route registrar receives a plain `DashboardRouteRegistrationOptions` object and constructs `DashboardDependencies` from `DashboardServerOptions`, excluding server-only setup fields such as the app instance, dashboard directory, port, and cache TTL.
+
+The registrar groups route modules by operational area: project resources, sprint/task orchestration, preview/file-browser, runtime/telemetry, settings/system integrations, execution controls, and optional memory/knowledge features. These groups are invoked in the same relative order as the previous flat route list. Each route module still receives dependencies explicitly through the typed `DashboardDependencies` object; optional feature routes are registered only when their service/repository dependencies are present. This keeps API URLs and middleware ordering stable while making the dashboard route map easier to audit and test.
+
 To support cleaner, more testable backend projections, `ProjectRuntimeRepository` has been split into narrower modules (`RuntimeContextStore` and `RuntimeStatusProjection`) under `src/repositories/project-runtime/`. This modularization decouples persistence and caching from the actual live status assembly, ensuring that runtime state aggregation remains easy to trace and test independently.
 
 ## Shared Resource Provider
