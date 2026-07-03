@@ -27,6 +27,7 @@ async function createFixture(options?: {
   recoverSprintRun?: SprintOrchestrator["recoverSprintRun"];
   logger?: Pick<Logger, "info" | "error">;
   dockerService?: { listContainers: () => Promise<Array<{ labels?: Record<string, string> }>> };
+  isProcessAlive?: (pid: number) => boolean;
 }) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-startup-recovery-"));
   tempDirs.push(dir);
@@ -60,6 +61,7 @@ async function createFixture(options?: {
     } as SprintOrchestrator,
     dockerService: options?.dockerService,
     getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
+    isProcessAlive: options?.isProcessAlive,
     logger: options?.logger,
   });
 
@@ -2079,6 +2081,95 @@ describe("RuntimeStartupRecoveryService", () => {
       sprintId: sprint.id,
       executorMode: "mixed",
       status: "running",
+    });
+
+    const result = await service.recover();
+
+    expect(result.resumedSprintRunIds).toEqual([sprintRun.id]);
+    expect(result.supersededSprintRunIds).toEqual([]);
+    expect(recoverSprintRun).toHaveBeenCalledWith(sprintRun.id);
+  });
+
+  it("does not recover an active sprint run while its unexpired lease owner process is alive", async () => {
+    const livePid = 4242;
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+      recoverSprintRun,
+    } = await createFixture({
+      isProcessAlive: (pid) => pid === livePid,
+    });
+
+    const project = projectRepository.createProject({
+      name: "Live Lease Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/live-lease-recovery-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Live Lease Sprint",
+      number: 91,
+      status: "idle",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "mixed",
+      status: "running",
+    });
+    executionRepository.acquireLease({
+      scopeType: "sprint",
+      scopeId: sprint.id,
+      ownerKey: `sprint_orchestrator:${livePid}`,
+      leaseToken: "live-token",
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+
+    const result = await service.recover();
+
+    expect(result.resumedSprintRunIds).toEqual([]);
+    expect(result.supersededSprintRunIds).toEqual([]);
+    expect(recoverSprintRun).not.toHaveBeenCalled();
+    expect(executionRepository.getSprintRun(sprintRun.id)?.status).toBe("running");
+    expect(executionRepository.getLease("sprint", sprint.id)).toMatchObject({
+      ownerKey: `sprint_orchestrator:${livePid}`,
+      leaseToken: "live-token",
+    });
+  });
+
+  it("recovers an active sprint run when its unexpired lease owner process is gone", async () => {
+    const deadPid = 5151;
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+      recoverSprintRun,
+    } = await createFixture({
+      isProcessAlive: () => false,
+    });
+
+    const project = projectRepository.createProject({
+      name: "Dead Lease Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/dead-lease-recovery-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Dead Lease Sprint",
+      number: 92,
+      status: "idle",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "mixed",
+      status: "running",
+    });
+    executionRepository.acquireLease({
+      scopeType: "sprint",
+      scopeId: sprint.id,
+      ownerKey: `sprint_orchestrator:${deadPid}`,
+      leaseToken: "dead-token",
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
     });
 
     const result = await service.recover();

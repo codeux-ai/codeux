@@ -53,7 +53,6 @@ import { buildSprintQaSnapshot, evaluateSprintQaReviewDecision, shouldRunSprintQ
 type CliQaProvider = Exclude<ProviderId, "jules">;
 
 const SPRINT_RUN_KEEPALIVE_MS = 30_000;
-const SPRINT_LEASE_EXTENSION_MS = 5 * 60 * 1000;
 
 export interface TaskQaReviewOutcome {
   reviewed: boolean;
@@ -1035,8 +1034,6 @@ export class QualityAssuranceService {
     if (
       typeof executionRepository.getSprintRun !== "function"
       || typeof executionRepository.updateSprintRun !== "function"
-      || typeof executionRepository.getLease !== "function"
-      || typeof executionRepository.renewLease !== "function"
     ) {
       return;
     }
@@ -1050,26 +1047,6 @@ export class QualityAssuranceService {
     executionRepository.updateSprintRun(sprintRunId, {
       lastHeartbeatAt: now,
     });
-
-    const lease = executionRepository.getLease("sprint", sprintId);
-    if (!lease) {
-      return;
-    }
-
-    try {
-      executionRepository.renewLease({
-        scopeType: "sprint",
-        scopeId: sprintId,
-        leaseToken: lease.leaseToken,
-        expiresAt: new Date(Date.now() + SPRINT_LEASE_EXTENSION_MS).toISOString(),
-      });
-    } catch (error) {
-      this.deps.logger?.warn("Failed to renew sprint lease during QA review", {
-        sprintRunId,
-        sprintId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
   }
 
   private buildReviewPrompt(args: {

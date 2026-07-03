@@ -249,7 +249,9 @@ Transient provider failures are classified and managed in `src/shared/providers/
 - Re-enable steps after diagnosis to restore normal operation.
 - On startup, interrupted local CLI sessions (`cli-*` with `RUNNING`) are auto-recovered to `CANCELLED` so invocation error-rate statistics do not treat app shutdown/restart as provider failure.
 - On startup, active `queued` and `running` sprint runs are resumed automatically in place; Code UX now restores the watch loop instead of requiring a manual sprint restart.
+- Startup recovery does not steal an unexpired sprint lease when the recorded `sprint_orchestrator:<pid>` owner is still alive. This prevents a second dashboard process from creating a duplicate watch loop for work another live process already owns.
 - Manual dashboard resume uses the same existing-run recovery path as startup recovery, so paused runs keep their original run id and heartbeat history when monitoring restarts.
+- Dashboard sprint cancellation force-closes active task dispatch rows, task runs, and task status after the provider containers are stopped. Late provider callbacks from an already-cancelled sprint are ignored so cancelled work cannot revive stale `running` dispatch state.
 - Local `docker_cli` task invocations and dispatches are closed as `cancelled` during that recovery, while the task itself is moved back to a retryable state. Durable Jules sessions and connected-worker dispatches remain attached to the resumed sprint run.
 - If a restart finds active Jules task runs with persisted session ids but their sprint run was left `failed` or `cancelled` while the sprint is still active, startup recovery rehydrates a single sprint run, moves those durable Jules rows onto it, reopens their dispatch/provider runtime links, and resumes monitoring.
 - Failed CLI sessions can preserve their worktree for manual follow-up or assisted retry, based on CLI Workflow settings.
