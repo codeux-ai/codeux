@@ -76,10 +76,20 @@ export interface TaskActivityRow {
   payload_json: string | null;
 }
 
+export interface ProviderActivityVersionRow {
+  id: string;
+  created_at: string;
+}
+
 export interface MappedTask {
   row: TaskRow;
   dependsOnTaskIds: string[];
   latestReview?: SprintReviewSummary;
+}
+
+interface RecentActivitiesCacheEntry {
+  version: string;
+  activitiesByTaskId: Map<string, JulesActivity[]>;
 }
 
 export function asString(value: unknown): string | undefined {
@@ -117,6 +127,8 @@ function resolveProjectedTaskStatus(row: TaskRow, run?: TaskRunRow): Subtask["st
 }
 
 export class RuntimeStatusProjection {
+  private readonly recentActivitiesCache = new Map<string, RecentActivitiesCacheEntry>();
+
   constructor(
     private readonly storage: AppDbStorage,
     private readonly db: DatabaseAdapter
@@ -129,7 +141,7 @@ export class RuntimeStatusProjection {
   ): DashboardStatus {
     const tasks = this.getMappedTasks(projectId, sprintIdToLoad);
     const latestRuns = this.getLatestRuns(tasks.map((task) => task.row.id));
-    const recentActivitiesByTaskId = this.getRecentActivitiesByTask(tasks.map((task) => task.row.id));
+    const recentActivitiesByTaskId = this.getRecentActivitiesByTask(projectId, sprintIdToLoad, tasks.map((task) => task.row.id));
     const taskKeyByRecordId = new Map(tasks.map((task) => [task.row.id, task.row.task_key]));
 
     const subtasks: Subtask[] = tasks.map((task) => {
@@ -293,9 +305,16 @@ export class RuntimeStatusProjection {
     return map;
   }
 
-  getRecentActivitiesByTask(taskIds: string[], limitPerTask: number = 5): Map<string, JulesActivity[]> {
+  getRecentActivitiesByTask(projectId: string, sprintId: string | null, taskIds: string[], limitPerTask: number = 5): Map<string, JulesActivity[]> {
     if (taskIds.length === 0) {
       return new Map();
+    }
+
+    const cacheKey = this.getRecentActivitiesCacheKey(projectId, sprintId, taskIds, limitPerTask);
+    const version = this.getProviderActivityVersion(projectId);
+    const cached = this.recentActivitiesCache.get(cacheKey);
+    if (cached?.version === version) {
+      return this.cloneActivitiesByTaskId(cached.activitiesByTaskId);
     }
 
     const rows = this.storage.executeChunkedInQuery<TaskActivityRow>({
@@ -304,8 +323,8 @@ export class RuntimeStatusProjection {
         session_id,
         session_name,
         provider,
-        activity_id,
-        activity_name,
+        ${this.db.dialect.jsonExtract("payload_json", "$.activityId")} AS activity_id,
+        ${this.db.dialect.jsonExtract("payload_json", "$.activityName")} AS activity_name,
         created_at,
         originator,
         payload_json
@@ -315,8 +334,6 @@ export class RuntimeStatusProjection {
           tr.session_id,
           tr.session_name,
           tr.provider,
-          ${this.db.dialect.jsonExtract("tre.payload_json", "$.activityId")} AS activity_id,
-          ${this.db.dialect.jsonExtract("tre.payload_json", "$.activityName")} AS activity_name,
           tre.created_at,
           tre.originator,
           tre.payload_json,
@@ -346,7 +363,45 @@ export class RuntimeStatusProjection {
       activitiesByTaskId.set(row.task_id, existing);
     }
 
+    this.setRecentActivitiesCache(cacheKey, {
+      version,
+      activitiesByTaskId: this.cloneActivitiesByTaskId(activitiesByTaskId),
+    });
+
     return activitiesByTaskId;
+  }
+
+  private getRecentActivitiesCacheKey(projectId: string, sprintId: string | null, taskIds: string[], limitPerTask: number): string {
+    return [projectId, sprintId || "", String(limitPerTask), ...taskIds].join("\u0000");
+  }
+
+  private getProviderActivityVersion(projectId: string): string {
+    const row = this.db.prepare(`
+      SELECT id, created_at
+      FROM task_run_events
+      WHERE project_id = ?
+        AND event_type = 'provider_activity'
+      ORDER BY created_at DESC, id DESC
+      LIMIT 1
+    `).get(projectId) as ProviderActivityVersionRow | undefined;
+
+    return row ? `${row.created_at}\u0000${row.id}` : "";
+  }
+
+  private cloneActivitiesByTaskId(activitiesByTaskId: Map<string, JulesActivity[]>): Map<string, JulesActivity[]> {
+    return new Map([...activitiesByTaskId.entries()].map(([taskId, activities]) => [taskId, [...activities]]));
+  }
+
+  private setRecentActivitiesCache(cacheKey: string, entry: RecentActivitiesCacheEntry): void {
+    this.recentActivitiesCache.delete(cacheKey);
+    this.recentActivitiesCache.set(cacheKey, entry);
+    while (this.recentActivitiesCache.size > 100) {
+      const oldestKey = this.recentActivitiesCache.keys().next().value;
+      if (typeof oldestKey !== "string") {
+        return;
+      }
+      this.recentActivitiesCache.delete(oldestKey);
+    }
   }
 
   mapTaskActivityRow(row: TaskActivityRow): JulesActivity | null {

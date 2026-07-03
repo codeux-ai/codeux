@@ -240,6 +240,11 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_task_dispatches_task", "task_dispatches", "task_id, created_at DESC");
   ensureIndex(db, "idx_execution_leases_scope", "execution_leases", "scope_type, scope_id");
   ensureIndex(db, "idx_task_run_events_task_run_created", "task_run_events", "task_run_id, created_at DESC");
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_task_run_events_provider_activity_run_created
+    ON task_run_events (task_run_id, created_at DESC, id DESC)
+    WHERE event_type = 'provider_activity'
+  `);
   ensureUniqueIndex(db, "idx_task_run_events_source_event", "task_run_events", "task_run_id, source_event_key");
   // Denormalize project_id onto task_run_events so the live execution feed can fetch a project's
   // most-recent events via an index walk instead of joining task_runs, scanning every event for the
@@ -252,6 +257,11 @@ export function runMigrations(db: DatabaseAdapter): void {
   // stay NULL (correctly excluded from the feed — they have no resolvable project).
   ensureColumn(db, "task_run_events", "project_id", "TEXT");
   ensureIndex(db, "idx_task_run_events_project_created", "task_run_events", "project_id, created_at DESC, id DESC");
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_task_run_events_provider_activity_project_created
+    ON task_run_events (project_id, created_at DESC, id DESC)
+    WHERE event_type = 'provider_activity'
+  `);
   db.exec(`
     UPDATE task_run_events
     SET project_id = (SELECT tr.project_id FROM task_runs tr WHERE tr.id = task_run_events.task_run_id)

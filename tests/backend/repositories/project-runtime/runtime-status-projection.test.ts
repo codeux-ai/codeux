@@ -175,11 +175,12 @@ describe("RuntimeStatusProjection", () => {
     `).run("run-1", project.id, sprint.id, task.id, "RUNNING", "2024-01-01T10:00:00Z");
 
     db.prepare(`
-      INSERT INTO task_run_events (id, task_run_id, event_type, originator, payload_json, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO task_run_events (id, task_run_id, project_id, event_type, originator, payload_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       "event-1",
       "run-1",
+      project.id,
       "provider_activity",
       "agent",
       JSON.stringify({
@@ -199,5 +200,26 @@ describe("RuntimeStatusProjection", () => {
       originator: "agent",
       agentMessaged: { agentMessage: "Hello" }
     });
+
+    db.prepare(`
+      INSERT INTO task_run_events (id, task_run_id, project_id, event_type, originator, payload_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "event-2",
+      "run-1",
+      project.id,
+      "provider_activity",
+      "agent",
+      JSON.stringify({
+        activityId: "act-2",
+        activityName: "Activity 2",
+        progressUpdated: { message: "Still working" }
+      }),
+      "2024-01-01T10:06:00Z"
+    );
+
+    const refreshedStatus = projection.buildProjectStatus(project.id, sprint.id, null);
+
+    expect(refreshedStatus.subtasks[0]?.activities?.map((activity) => activity.id)).toEqual(["act-1", "act-2"]);
   });
 });

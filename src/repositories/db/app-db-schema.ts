@@ -228,6 +228,7 @@ CREATE TABLE IF NOT EXISTS task_runs (
 CREATE TABLE IF NOT EXISTS task_run_events (
         id TEXT PRIMARY KEY,
         task_run_id TEXT NOT NULL,
+        project_id TEXT,
         event_type TEXT NOT NULL,
         originator TEXT,
         payload_json TEXT,
@@ -685,6 +686,8 @@ CREATE TABLE IF NOT EXISTS scheduler_entries (
 CREATE INDEX IF NOT EXISTS idx_provider_invocations_provider_status ON provider_invocations (provider, status);
 CREATE INDEX IF NOT EXISTS idx_task_dispatches_project_executor_status_priority ON task_dispatches (project_id, executor_type, status, priority);
 CREATE INDEX IF NOT EXISTS idx_task_runs_task_sprint_session ON task_runs (task_id, sprint_run_id, session_id);
+CREATE INDEX IF NOT EXISTS idx_task_run_events_provider_activity_run_created ON task_run_events (task_run_id, created_at DESC, id DESC) WHERE event_type = 'provider_activity';
+CREATE INDEX IF NOT EXISTS idx_task_run_events_provider_activity_project_created ON task_run_events (project_id, created_at DESC, id DESC) WHERE event_type = 'provider_activity';
 CREATE INDEX IF NOT EXISTS idx_project_attention_items_project_owner_status ON project_attention_items (project_id, owner_type, status);
 CREATE INDEX IF NOT EXISTS idx_execution_invocations_provider_invocation ON execution_invocations (provider_invocation_id);
 `;

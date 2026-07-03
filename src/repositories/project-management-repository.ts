@@ -790,7 +790,15 @@ export class ProjectManagementRepository {
 
 
   getSelectedSprintId(projectId: string): string | null {
-    this.requireProject(projectId);
+    const projectExists = this.db.prepare(`
+      SELECT 1 AS exists_flag
+      FROM projects
+      WHERE id = ?
+      LIMIT 1
+    `).get(projectId) as { exists_flag: number } | undefined;
+    if (!projectExists) {
+      throw new EntityNotFoundError(`Project not found: ${projectId}`);
+    }
     const row = this.db.prepare(`
       SELECT payload
       FROM app_settings
@@ -807,6 +815,16 @@ export class ProjectManagementRepository {
     } catch {
       return null;
     }
+  }
+
+  sprintBelongsToProject(projectId: string, sprintId: string): boolean {
+    const row = this.db.prepare(`
+      SELECT 1 AS exists_flag
+      FROM sprints
+      WHERE id = ? AND project_id = ?
+      LIMIT 1
+    `).get(sprintId, projectId) as { exists_flag: number } | undefined;
+    return Boolean(row);
   }
 
   setSelectedSprintId(projectId: string, sprintId: string | null): string | null {

@@ -9,6 +9,8 @@ describe("getProjectLiveSnapshot", () => {
     deps = {
       projectManagementRepository: {
         getSelectedProjectId: vi.fn().mockReturnValue("proj-1"),
+        getSelectedSprintId: vi.fn().mockReturnValue("sprint-1"),
+        sprintBelongsToProject: vi.fn().mockReturnValue(true),
         listSprints: vi.fn().mockReturnValue({ selectedSprintId: "sprint-1", sprints: [{ id: "sprint-1" }] }),
       } as any,
       projectRuntimeRepository: {
@@ -32,7 +34,9 @@ describe("getProjectLiveSnapshot", () => {
     expect(snapshot.updatedAt).toBeDefined();
 
     expect(deps.projectManagementRepository.getSelectedProjectId).toHaveBeenCalled();
-    expect(deps.projectManagementRepository.listSprints).toHaveBeenCalledWith("proj-1");
+    expect(deps.projectManagementRepository.getSelectedSprintId).toHaveBeenCalledWith("proj-1");
+    expect(deps.projectManagementRepository.sprintBelongsToProject).toHaveBeenCalledWith("proj-1", "sprint-1");
+    expect(deps.projectManagementRepository.listSprints).not.toHaveBeenCalled();
     expect(deps.projectRuntimeRepository.getProjectStatus).toHaveBeenCalledWith("proj-1", "sprint-1");
     expect(deps.getProjectExecutionSnapshot).toHaveBeenCalledWith("proj-1", { selectedSprintId: "sprint-1" });
     expect(deps.getGitStatus).toHaveBeenCalled();
@@ -81,7 +85,7 @@ describe("getProjectLiveSnapshot", () => {
 
     expect(snapshot.projectId).toBe("proj-hint");
     expect(deps.projectManagementRepository.getSelectedProjectId).not.toHaveBeenCalled();
-    expect(deps.projectManagementRepository.listSprints).toHaveBeenCalledWith("proj-hint");
+    expect(deps.projectManagementRepository.getSelectedSprintId).toHaveBeenCalledWith("proj-hint");
     expect(deps.projectRuntimeRepository.getProjectStatus).toHaveBeenCalledWith("proj-hint", "sprint-1");
     expect(deps.getProjectExecutionSnapshot).toHaveBeenCalledWith("proj-hint", { selectedSprintId: "sprint-1" });
   });
