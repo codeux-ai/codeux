@@ -24,7 +24,7 @@ The dashboard's Live page and runtime components follow a distinct visual system
 - **Idle**: Clean empty states with minimal animation, inviting the start of a sprint.
 - **Active**: Crisp, clear execution feed and task cards. Focus is on data and controls.
 - **Paused / Intervention**: Attention items and blocked states are clearly labeled but visually separated to not overwhelm.
-- **Recovering / Error**: Disconnects or errors use restrained alert styling (e.g., standard red/amber borders) rather than full-screen takeovers.
+- **Recovering / Stale / Error**: Reconnecting, background refresh, and stale snapshot states use polite status banners and keep cached runtime content visible. Disconnected transport and connection errors use restrained assertive alert styling (e.g., standard red/amber borders) rather than full-screen takeovers.
 - **Stopped**: A stable final state reflecting the completed execution.
 
 By adhering to these rules, the Live page remains a focused, professional workspace.
@@ -32,6 +32,7 @@ By adhering to these rules, the Live page remains a focused, professional worksp
 ## Accessibility Rules
 
 - Event feeds and timelines should use `role="log"` or `role="region"` with clear `aria-label`s.
+- Invocation, execution, connection, and attention panels should expose loading with polite `role="status"` and `aria-busy="true"`. Active runtime logs may set `aria-busy` while work is still running, but stale data and background refresh notices should remain polite and avoid replacing cached rows.
 - Transient elements must handle focus properly.
 - Action buttons (claim, resolve, dismiss, cancel, etc.) must include accessible labels specifying their target item.
 - Runtime confirmation dialogs are portaled to `document.body`, use a viewport-fixed overlay, restore focus with `preventScroll`, and should not focus `document.body` when the originating action disappears after a resolve/dismiss mutation.

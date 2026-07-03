@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/preact";
+import { fireEvent, render, screen, cleanup } from "@testing-library/preact";
 import { HelpCircle } from "lucide-preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { NotificationPanel } from "../../../dashboard/src/v2/components/NotificationPanel.js";
@@ -20,6 +20,13 @@ vi.mock("gsap", () => ({
 vi.mock("../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({
   useResolvedMotionDuration: (d: any) => d,
   useReducedMotion: () => true,
+}));
+
+vi.mock("../../../dashboard/src/v2/lib/motion/constants.js", () => ({
+  useGsapInteractionTokens: () => ({
+    enterExit: { duration: 0, ease: "power2.out" },
+    listReveal: { duration: 0, ease: "power2.out" },
+  }),
 }));
 
 describe("NotificationPanel", () => {
@@ -78,5 +85,42 @@ describe("NotificationPanel", () => {
     const panel = screen.getByLabelText("Notifications Panel");
     expect(panel).toHaveClass("flex");
     expect(panel).toHaveClass("flex-col");
+    expect(screen.getByRole("list", { name: "Notifications list" })).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("marks retry-style actions read and safely releases focus to the panel", () => {
+    const onAction = vi.fn();
+    const onMarkRead = vi.fn();
+    render(
+      <NotificationPanel
+        notifications={[
+          {
+            id: "retry-1",
+            severity: "critical",
+            title: "Startup checks blocked",
+            body: "Docker must be available before provider CLIs can run.",
+            time: "now",
+            unread: true,
+            dismissible: false,
+            icon: HelpCircle,
+            actionLabel: "Retry",
+            onAction,
+          },
+        ]}
+        unreadCount={1}
+        onMarkAllRead={vi.fn()}
+        onMarkRead={onMarkRead}
+        onDismiss={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    const retry = screen.getByRole("button", { name: "Retry for Startup checks blocked" });
+    retry.focus();
+    fireEvent.click(retry);
+
+    expect(onMarkRead).toHaveBeenCalledWith("retry-1");
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(screen.getByLabelText("Notifications Panel"));
   });
 });
