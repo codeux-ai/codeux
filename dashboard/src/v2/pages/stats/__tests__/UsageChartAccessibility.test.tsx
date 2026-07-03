@@ -133,8 +133,9 @@ describe("UsageChartAccessibility", () => {
   it("renders a textual summary of the chart", () => {
     render(<Wrapper />);
     expect(screen.getAllByText(/Data Visualization for/i)[0]).toBeInTheDocument();
-    expect(screen.getByText(/Currently showing 3 buckets/i)).toBeInTheDocument();
-    expect(screen.getByText(/Peak Tokens: 200/i)).toBeInTheDocument();
+    expect(screen.getByText(/3 visible buckets in Last 7 Days/i)).toBeInTheDocument();
+    expect(screen.getByText(/Peak tokens 200/i)).toBeInTheDocument();
+    expect(screen.getByText(/Active series: Tokens/i)).toBeInTheDocument();
   });
 
   it("makes bucket focus keyboard-accessible with a slider", () => {
@@ -142,7 +143,8 @@ describe("UsageChartAccessibility", () => {
     const slider = screen.getByLabelText(/Explore chart data across time/i);
     expect(slider).toBeInTheDocument();
 
-    expect(slider).toHaveAttribute('aria-describedby', 'usage-chart-tooltip');
+    expect(slider.getAttribute('aria-describedby')).toContain('usage-chart-tooltip');
+    expect(slider.getAttribute('aria-describedby')).toContain('usage-chart-instructions');
 
     fireEvent.input(slider, { target: { value: '1' } });
 
@@ -165,7 +167,7 @@ describe("UsageChartAccessibility", () => {
     expect(screen.getByRole("toolbar", { name: /Usage graph controls/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/Usage chart summary metrics/i)).toBeInTheDocument();
     expect(screen.getByRole("article", { name: /Peak tokens: 200/i })).toBeInTheDocument();
-    expect(screen.getByRole("article", { name: /Total cost: \$0.45/i })).toBeInTheDocument();
+    expect(screen.getByRole("article", { name: /Visible cost: \$0.45/i })).toBeInTheDocument();
   });
 
   it("announces zoom reset", () => {
@@ -197,6 +199,7 @@ describe("UsageChartAccessibility", () => {
     const switches = screen.getAllByRole("switch");
     expect(switches.length).toBeGreaterThan(0);
     expect(switches.some((button) => button.getAttribute('aria-checked') === 'true')).toBe(true);
+    expect(screen.getAllByRole("group", { name: /Usage chart series switches/i }).length).toBeGreaterThan(0);
   });
 
   it("provides status roles for loading, empty, and error states", () => {

@@ -29,6 +29,9 @@ export interface ChartMetrics {
   peakCostUsd: number;
   totalCostUsd: number;
   invocationDensity: number;
+  bucketCount: number;
+  totalTokens: number;
+  totalInvocations: number;
 }
 
 export interface TooltipState {
@@ -89,8 +92,9 @@ export function groupChartSeries(
   chartSeries: ProjectExecutionStatsChartSeries[]
 ): Record<string, ProjectExecutionStatsChartSeries[]> {
   return chartSeries.reduce((acc, s) => {
-    if (!acc[s.grouping]) acc[s.grouping] = [];
-    acc[s.grouping].push(s);
+    const grouping = s.grouping || 'Core';
+    if (!acc[grouping]) acc[grouping] = [];
+    acc[grouping].push(s);
     return acc;
   }, {} as Record<string, ProjectExecutionStatsChartSeries[]>);
 }
@@ -127,7 +131,29 @@ export function calculateChartMetrics(visibleBuckets: ExecutionUsageBucketSummar
     peakCostUsd,
     totalCostUsd,
     invocationDensity,
+    bucketCount: visibleBuckets.length,
+    totalTokens,
+    totalInvocations,
   };
+}
+
+export function describeChartMetrics(
+  metrics: ChartMetrics,
+  activeSeriesLabels: string[],
+  zoomRangeLabel: string
+): string {
+  const seriesLabel = activeSeriesLabels.length > 0
+    ? activeSeriesLabels.join(", ")
+    : "No active series";
+
+  return [
+    `${metrics.bucketCount} visible buckets in ${zoomRangeLabel}.`,
+    `Peak tokens ${formatTokens(metrics.peakTokens)}.`,
+    `Peak active time ${formatStatsDuration(metrics.peakActiveTimeMs)}.`,
+    `Average tokens ${formatTokens(metrics.averageTokens)}.`,
+    `Invocation peak ${NUMBER_FORMATTER.format(metrics.peakInvocations)}.`,
+    `Active series: ${seriesLabel}.`,
+  ].join(" ");
 }
 
 export function calculateHoverRect(

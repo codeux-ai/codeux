@@ -40,11 +40,12 @@ Mode-specific studio implementations are owned by dedicated component files unde
 Trend mode is the chart-first workspace for time-series telemetry.
 
 - The top deck summarizes throughput, runtime, cost, invocations, cache rate, and token velocity.
+- The studio body orders trend content for scanning: KPI tiles first, trend deltas and compact health chips next, then the interactive chart, purpose activity, and final range metadata.
 - The trend chart shows enabled series from the same selected time window; chart filters never change the time window.
-- The chart header is the single action toolbar for range context, zoom reset, and filter access.
+- The chart header keeps filter access and zoom reset visible beside the graph title, while the toolbar focuses on selected range, bucket count, resolution, and active zoom state.
 - Series toggles use `role="switch"` with `aria-checked`; at least one series must remain enabled.
 - Hover, keyboard focus, minimap selection, drag zoom, and active bucket controls all update the same focused-bucket summary.
-- The chart must keep its nonvisual summary and screen-reader-only data table in sync with the visible SVG.
+- The chart must keep its nonvisual summary and screen-reader-only data table in sync with the visible SVG, including peak tokens, peak active time, average tokens, invocation peak, active series, and active zoom range.
 
 ### Composition
 
