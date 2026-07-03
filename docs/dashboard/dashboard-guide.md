@@ -194,9 +194,10 @@ Legacy runtime:
 
 ### Stats page
 - Shared Stats surfaces use `stats-theme.css` as the warm-void visual foundation. Panel, subpanel, chip, input, ledger row, and card primitives map onto dashboard semantic tokens for surfaces, hairline borders, focus rings, motion, elevation, and low-opacity status/accent fills.
-- Shared Stats controls now route selected, hover, focus, disabled, shadow, and compact segmented-navigation states through the same stats theme tokens. The analysis mode rail keeps accessible `aria-pressed` buttons, icon-first compact rendering, horizontal scroll boundaries, and visible focus rings.
+- Shared Stats controls now route selected, hover, focus, disabled, shadow, and compact segmented-navigation states through the same stats theme tokens. The analysis mode rail keeps accessible `aria-pressed` buttons, icon-first compact rendering, wrap-first responsive rows, and visible focus rings.
 - Shared Stats cards render as named analytics articles with stable height, restrained hover elevation, long-value wrapping, and protected sparkline layering so dense metric decks do not shift or overlap as labels and values change.
-- The Stats hero is a two-zone command band. Project, sprint, generated-at, freshness, and telemetry-source context sit beside compact time-window controls, custom date entry, and the analysis mode rail.
+- The Stats hero is a two-zone command band. Project, sprint, generated-at, freshness, telemetry-source, and range-resolution context sit beside compact time-window controls, explicit custom date entry, active-mode guidance, and the analysis mode rail.
+- A lightweight workspace context strip follows the Stats hero and keeps the active mode, selected data window, freshness, resolution, and sprint scope visible without repeating the hero controls.
 - Time-window presets always stay in the hero. Choosing `Custom` reveals date inputs without applying the range; the validated `Apply` action is the only path that changes a custom range, and invalid ranges announce inline errors.
 - The analysis mode rail exposes Trend, Composition, Models, Providers, Ledgers, and System. Providers maps to the reliability workspace while keeping the user-facing label short.
 - The top summary cards change with the selected mode. Trend emphasizes tokens, active time, cost, invocations, and cache rate; Composition, Models, Reliability, Ledgers, and System use mode-specific cards for provider mix, model performance, telemetry confidence, ledger volume, and invocation health.
@@ -208,6 +209,7 @@ Legacy runtime:
 - The system invocation toolbar groups search, status, purpose, provider, error-category chips, clear-all, result counts, and pagination into responsive wrapping control groups so filters remain operable on narrow screens.
 - The system invocation table preserves subdued status indicators, semantic column headers, provider/model/type labels, task context chips, token and duration columns, loading/error/empty states, mobile-friendly row cards, and expandable transcript detail rows.
 - Invocation transcript detail wraps long prompts, system messages, and errors inside the panel while preserving keyboard-accessible expansion and plain-text rendering.
+- No-project, first-load loading, and first-load error states reuse the same Stats visual shell under the hero and context strip; loading remains a polite status and errors expose a retry action.
 - Stats data comes from `GET /api/projects/:projectId/stats`, and the System stats view additionally uses `useSystemViewData(projectId)` to fetch invocation records. Stats refresh through the normal dashboard polling/realtime path: existing snapshots remain visible while loading states mark the studio as refreshing.
 
 ### V2 project management

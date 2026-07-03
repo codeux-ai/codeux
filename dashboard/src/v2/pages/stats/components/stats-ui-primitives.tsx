@@ -193,7 +193,7 @@ export const ViewToggle: FunctionComponent<{
     <div
       role="group"
       aria-label={ariaLabel}
-      className={`flex max-w-full flex-wrap gap-1 overflow-x-auto overscroll-x-contain scroll-px-1 p-1 ${CHIP_CLASS} ${className}`.trim()}
+      className={`flex w-full max-w-full flex-wrap gap-1 p-1 ${CHIP_CLASS} ${className}`.trim()}
     >
       {modes.map((mode) => {
         const Icon = mode.icon;
@@ -206,7 +206,7 @@ export const ViewToggle: FunctionComponent<{
             aria-pressed={selected}
             aria-label={mode.label}
             title={mode.label}
-            className={`${CONTROL_BASE_CLASS} h-10 min-w-10 shrink-0 gap-2 px-3 sm:min-w-[7.25rem] sm:px-4 ${
+            className={`${CONTROL_BASE_CLASS} h-10 min-w-10 flex-1 shrink-0 basis-[calc(33.333%-0.25rem)] gap-2 px-3 sm:min-w-[7.25rem] sm:basis-auto sm:px-4 ${
               selected
                 ? CONTROL_ACTIVE_CLASS
                 : CONTROL_IDLE_CLASS
@@ -217,7 +217,6 @@ export const ViewToggle: FunctionComponent<{
           </button>
         );
       })}
-      <span className="w-px shrink-0" aria-hidden="true" />
     </div>
   );
 };
