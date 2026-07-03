@@ -6,6 +6,7 @@ import { ExecutionRepository } from "../../../src/repositories/execution-reposit
 import { PlanningAgentService } from "../../../src/services/planning-agent-service.js";
 import { SprintIssueService } from "../../../src/services/sprint-issue-service.js";
 import type { ManageCodeUxArgs } from "../../../src/contracts/internal-management-types.js";
+import { validateToolArguments } from "../../../src/api/mcp/validators/tool-validators.js";
 
 describe("SprintActions", () => {
   let projectRepo: ProjectManagementRepository;
@@ -216,6 +217,40 @@ describe("SprintActions", () => {
     });
     expect(projectRepo.replaceSprintLinkedIssues).toHaveBeenCalledWith("p1", "s1", mockIssues);
     expect(result.result).toEqual(mockLinkedRecords);
+  });
+
+  it("validates the expanded import_issues MCP payload contract", () => {
+    expect(() => validateToolArguments("manage_sprints", {
+      action: "import_issues",
+      projectId: "p1",
+      sprintId: "s1",
+      provider: "jira",
+      repository: "acme/widgets",
+      hostDomain: "acme.atlassian.net",
+      projectKey: "OPS",
+      search: "login failure",
+      state: "all",
+      status: "in_progress",
+      labels: ["triage", "backend"],
+      assignee: "alice",
+      assigneeText: "me",
+      issueKeys: ["OPS-42"],
+      issueNumbers: [42],
+      issueRefs: ["#42", "OPS-42"],
+      includeConversation: true,
+      attachToSprint: true,
+      planAfterImport: true,
+      autoStart: false,
+      limit: 25,
+      planningAgentPresetId: "agent-1",
+      replan: true,
+      overrides: { route: "planner" },
+    })).not.toThrow();
+
+    expect(() => validateToolArguments("manage_sprints", {
+      action: "import_issues",
+      provider: "bitbucket",
+    })).toThrow("Invalid arguments for tool manage_sprints");
   });
 
   it("plans a sprint with options", async () => {
