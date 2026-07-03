@@ -11,6 +11,41 @@
     --motion-ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
     --motion-ease-linear: linear;
 
+    /* Interaction Contracts */
+    --interaction-control-feedback-duration: var(--motion-fast);
+    --interaction-control-feedback-ease: var(--motion-ease-standard);
+    --interaction-enter-exit-duration: var(--motion-standard);
+    --interaction-enter-exit-ease: var(--motion-ease-standard);
+    --interaction-expansion-collapse-duration: var(--motion-standard);
+    --interaction-expansion-collapse-ease: var(--motion-ease-standard);
+    --interaction-selection-movement-duration: var(--motion-fast);
+    --interaction-selection-movement-ease: var(--motion-ease-standard);
+    --interaction-list-reveal-duration: var(--motion-standard);
+    --interaction-list-reveal-ease: var(--motion-ease-standard);
+    --interaction-list-reorder-duration: var(--motion-fast);
+    --interaction-list-reorder-ease: var(--motion-ease-standard);
+    --interaction-inline-validation-duration: var(--motion-fast);
+    --interaction-inline-validation-ease: var(--motion-ease-bounce);
+    --interaction-async-feedback-duration: var(--motion-slow);
+    --interaction-async-feedback-ease: var(--motion-ease-linear);
+
+    /* Shared Visual Primitive Tokens */
+    --focus-ring-signal: var(--accent-focus-ring);
+    --focus-ring-danger: rgb(227 0 15 / 0.55);
+    --surface-metric-card: rgba(255, 255, 255, 0.8);
+    --surface-metric-card-dark: rgba(24, 20, 17, 0.75);
+    --surface-metric-hover: rgba(0, 224, 160, 0.035);
+    --primitive-signal-highlight: rgba(0, 224, 160, 0.1);
+    --primitive-signal-glow: 0 0 0 6px rgba(0, 224, 160, 0.3);
+    --primitive-signal-glow-empty: 0 0 0 0 rgba(0, 224, 160, 0);
+    --status-static-running-ring: rgba(0, 171, 132, 0.42);
+    --status-static-running-aura: rgba(0, 171, 132, 0.18);
+    --status-static-failed-ring: rgba(227, 0, 15, 0.42);
+    --status-static-failed-aura: rgba(227, 0, 15, 0.18);
+    --status-static-intervention-ring: rgba(245, 158, 11, 0.4);
+    --status-static-intervention-aura: rgba(245, 158, 11, 0.18);
+    --shadow-drag-active: 0 20px 40px rgba(0, 0, 0, 0.2);
+
     /* Elevation Tokens */
     --elevation-base: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.02);
     --elevation-raised: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
@@ -29,9 +64,9 @@
 
   @media (prefers-reduced-motion: reduce) {
     :root {
-      --motion-fast: 0.001s;
-      --motion-standard: 0.001s;
-      --motion-slow: 0.001s;
+      --motion-fast: 0ms;
+      --motion-standard: 0ms;
+      --motion-slow: 0ms;
       --transition-hover: none;
       --transition-enter: none;
       --transition-exit: none;
@@ -44,9 +79,9 @@
   }
 
   :root[data-reduced-motion="true"] {
-    --motion-fast: 0.001s;
-    --motion-standard: 0.001s;
-    --motion-slow: 0.001s;
+    --motion-fast: 0ms;
+    --motion-standard: 0ms;
+    --motion-slow: 0ms;
     --transition-hover: none;
     --transition-enter: none;
     --transition-exit: none;

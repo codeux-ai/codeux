@@ -51,3 +51,17 @@ test('renders custom icon', () => {
     const svg = btn.querySelector('svg');
     expect(svg).toBeInTheDocument();
 });
+
+test('uses signal focus by default and danger focus only for danger variant', () => {
+    render(
+        <ProjectDataProvider>
+            <div>
+                <Button>Default focus</Button>
+                <Button variant="danger">Delete</Button>
+            </div>
+        </ProjectDataProvider>
+    );
+
+    expect(screen.getByRole('button', { name: /Default focus/i })).toHaveClass('focus-visible:ring-[var(--focus-ring-signal)]');
+    expect(screen.getByRole('button', { name: /Delete/i })).toHaveClass('focus-visible:ring-[var(--focus-ring-danger)]');
+});

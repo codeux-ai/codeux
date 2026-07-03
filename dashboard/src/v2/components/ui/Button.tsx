@@ -5,11 +5,11 @@ import { Check, X, Loader2 } from "lucide-preact";
 import gsap from "gsap";
 import { useActionFeedback } from "../../hooks/use-action-feedback.js";
 import { useMagnetic } from "../../hooks/use-magnetic.js";
-import { useGsapDurations, GSAP_DURATIONS, GSAP_EASINGS, GSAP_INTERACTION_TOKENS, useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
-export const SHARED_INTERACTION_CLASSES = "cursor-pointer transition-all duration-[150ms] motion-reduce:duration-0 ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:ease-none focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 disabled:opacity-50 disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:cursor-not-allowed motion-safe:active:scale-[0.98] active:brightness-95 dark:active:brightness-110 touch-target";
+export const SHARED_INTERACTION_CLASSES = "cursor-pointer transition-all duration-[var(--interaction-control-feedback-duration)] motion-reduce:duration-0 ease-[var(--interaction-control-feedback-ease)] motion-reduce:ease-none focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--focus-ring-signal)] focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 disabled:opacity-50 disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:cursor-not-allowed motion-safe:active:scale-[0.98] active:brightness-95 dark:active:brightness-110 touch-target";
 
 export interface ButtonProps extends ComponentProps<"button"> {
   success?: boolean;
@@ -53,7 +53,6 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   const isSuccess = success || feedback.status === "success";
   const isError = feedback.status === "error";
   const gsapTokens = useGsapInteractionTokens();
-  const durations = useGsapDurations();
   const reducedMotion = useReducedMotion();
   const tokens = useInteractionTokens();
 
@@ -87,7 +86,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
         gsap.fromTo(
           activeIcon,
           { x: -4, scale: 0.6, opacity: 0 },
-          { x: 0, scale: 1, opacity: 1, duration: gsapTokens.controlFeedback.duration, ease: "power2.out", clearProps: "all" }
+          { x: 0, scale: 1, opacity: 1, duration: gsapTokens.controlFeedback.duration, ease: gsapTokens.controlFeedback.ease, clearProps: "all" }
         );
       }
     }
@@ -95,37 +94,37 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
     if (!reducedMotion) {
       if (isPending && !prev.isPending) {
         if (labelRef.current && spinnerRef.current) {
-          gsap.to(labelRef.current, { opacity: 0, duration: durations.fast, ease: GSAP_EASINGS.smooth });
+          gsap.to(labelRef.current, { opacity: 0, duration: gsapTokens.controlFeedback.duration, ease: gsapTokens.controlFeedback.ease });
           gsap.fromTo(
             spinnerRef.current,
             { opacity: 0, scale: 0.7 },
-            { opacity: 1, scale: 1, duration: durations.fast, ease: GSAP_EASINGS.spring }
+            { opacity: 1, scale: 1, duration: gsapTokens.inlineValidation.duration, ease: gsapTokens.inlineValidation.ease }
           );
         }
       }
 
       if (isSuccess && !prev.isSuccess) {
         if (labelRef.current && spinnerRef.current) {
-          gsap.to(labelRef.current, { opacity: 1, duration: durations.fast, ease: GSAP_EASINGS.smooth });
-          gsap.to(spinnerRef.current, { opacity: 0, scale: 0.7, duration: durations.fast, ease: GSAP_EASINGS.smooth });
+          gsap.to(labelRef.current, { opacity: 1, duration: gsapTokens.controlFeedback.duration, ease: gsapTokens.controlFeedback.ease });
+          gsap.to(spinnerRef.current, { opacity: 0, scale: 0.7, duration: gsapTokens.controlFeedback.duration, ease: gsapTokens.controlFeedback.ease });
         }
         if (buttonRef.current) {
           if (gsap.timeline) {
             const tl = gsap.timeline();
             tl.to(buttonRef.current, {
-              boxShadow: "0 0 0 6px rgba(var(--accent-primary-rgb), 0.3)",
+              boxShadow: "var(--primitive-signal-glow)",
               duration: gsapTokens.controlFeedback.duration,
-              ease: "power2.out",
+              ease: gsapTokens.controlFeedback.ease,
             }).to(buttonRef.current, {
-              boxShadow: "0 0 0 0px rgba(var(--accent-primary-rgb), 0)",
+              boxShadow: "var(--primitive-signal-glow-empty)",
               duration: gsapTokens.controlFeedback.duration,
-              ease: "power2.in",
+              ease: gsapTokens.controlFeedback.ease,
             });
           } else {
              gsap.to(buttonRef.current, {
-              boxShadow: "0 0 0 6px rgba(var(--accent-primary-rgb), 0.3)",
+              boxShadow: "var(--primitive-signal-glow)",
               duration: gsapTokens.controlFeedback.duration,
-              ease: "power2.out",
+              ease: gsapTokens.controlFeedback.ease,
             });
           }
         }
@@ -133,8 +132,8 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
 
       if (isError && !prev.isError) {
         if (labelRef.current && spinnerRef.current) {
-          gsap.to(labelRef.current, { opacity: 1, duration: durations.fast, ease: GSAP_EASINGS.smooth });
-          gsap.to(spinnerRef.current, { opacity: 0, scale: 0.7, duration: durations.fast, ease: GSAP_EASINGS.smooth });
+          gsap.to(labelRef.current, { opacity: 1, duration: gsapTokens.controlFeedback.duration, ease: gsapTokens.controlFeedback.ease });
+          gsap.to(spinnerRef.current, { opacity: 0, scale: 0.7, duration: gsapTokens.controlFeedback.duration, ease: gsapTokens.controlFeedback.ease });
         }
         if (buttonRef.current) {
           gsap.to(buttonRef.current, {
@@ -148,8 +147,8 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
       if (!isPending && !isSuccess && !isError && (prev.isPending || prev.isSuccess || prev.isError)) {
         // Restore label when returning to idle
         if (labelRef.current && spinnerRef.current) {
-          gsap.to(labelRef.current, { opacity: 1, duration: durations.fast, ease: GSAP_EASINGS.smooth });
-          gsap.to(spinnerRef.current, { opacity: 0, duration: durations.fast, ease: GSAP_EASINGS.smooth });
+          gsap.to(labelRef.current, { opacity: 1, duration: gsapTokens.controlFeedback.duration, ease: gsapTokens.controlFeedback.ease });
+          gsap.to(spinnerRef.current, { opacity: 0, duration: gsapTokens.controlFeedback.duration, ease: gsapTokens.controlFeedback.ease });
         }
       }
     } else {
@@ -162,7 +161,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
     }
 
     previousState.current = { isPending, isSuccess, isError };
-  }, [isPending, isSuccess, isError, durations.fast, reducedMotion]);
+  }, [isPending, isSuccess, isError, gsapTokens.controlFeedback.duration, gsapTokens.controlFeedback.ease, gsapTokens.inlineValidation.duration, gsapTokens.inlineValidation.ease, reducedMotion]);
 
   const handleClick = useCallback(
     (e: any) => {
@@ -188,7 +187,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
     [onClick, isPending, setPending, setSuccess, setError]
   );
 
-  const baseClasses = `group/btn inline-flex items-center justify-center gap-2 font-bold ${SHARED_INTERACTION_CLASSES}`;
+  const baseClasses = `group/btn inline-flex min-w-0 max-w-full items-center justify-center gap-2 font-bold ${SHARED_INTERACTION_CLASSES}`;
   const variantClasses = VARIANTS[variant];
   const sizeClasses = SIZES[size];
 
@@ -196,6 +195,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   if (isSuccess) overrideClasses = "!bg-status-green !text-white !border-status-green ring-2 ring-status-green ring-offset-2 ring-offset-white dark:ring-offset-void-900";
   else if (isError) overrideClasses = "!bg-status-red !text-white !border-transparent";
   if (isPending) overrideClasses += " pointer-events-none";
+  if (variant === "danger") overrideClasses += " focus-visible:ring-[var(--focus-ring-danger)]";
 
   return (
     <button
@@ -209,7 +209,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
       className={`${baseClasses} ${variantClasses} ${sizeClasses} ${overrideClasses} relative overflow-hidden ${className}`}
     >
 
-      <div ref={contentRef} className={`flex items-center justify-center gap-2`}>
+      <div ref={contentRef} className="flex min-w-0 max-w-full items-center justify-center gap-2">
         {(Icon || isSuccess || isError) && (
           <div ref={iconContainerRef} className="relative flex items-center justify-center w-4 h-4 shrink-0">
             <div data-active={!isPending && !isSuccess && !isError} className={`absolute inset-0 flex items-center justify-center transition-all  ${isPending || isSuccess || isError ? "scale-0 opacity-0 pointer-events-none" : "scale-100 opacity-100"}`}
@@ -226,10 +226,10 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
             </div>
           </div>
         )}
-        <div className="relative flex items-center justify-center">
-          <span ref={labelRef} className="flex items-center justify-center gap-2" style={{ opacity: isPending ? 0 : 1 }}>{children}</span>
+        <div className="relative flex min-w-0 max-w-full items-center justify-center">
+          <span ref={labelRef} className="flex min-w-0 max-w-full items-center justify-center gap-2 truncate" style={{ opacity: isPending ? 0 : 1 }}>{children}</span>
           <div ref={spinnerRef} className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ opacity: isPending ? 1 : 0, transform: isPending ? "scale(1)" : "scale(0.7)" }}>
-            <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+            <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
           </div>
         </div>
       </div>

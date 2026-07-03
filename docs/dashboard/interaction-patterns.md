@@ -8,6 +8,7 @@ We export two sets of tokens to accommodate different styling approaches:
 
 When components use standard interaction contracts, they dynamically apply durations and easings via inline `style` tags referencing `useInteractionTokens`.
 - **`useInteractionTokens`** (from `tokens.ts`): Provides CSS transition durations (e.g., `"150ms"`) and CSS easings.
+- **`INTERACTION_CSS_VARIABLES`** and **`buildInteractionTransition`** (from `tokens.ts`): Provide CSS custom-property based contracts such as `--interaction-control-feedback-duration` and a helper for composing transition strings without hardcoded timing.
 - **`useGsapInteractionTokens`** (from `constants.ts`): Provides GSAP-compatible numeric durations (e.g., `0.15`) and string easings suitable for GSAP tweens.
 
 ## Interaction Contracts
@@ -61,6 +62,7 @@ All interaction timings automatically respect the user's system preferences or d
 - This ensures visual state changes happen instantly while preserving logical flows and React/Preact lifecycle events that depend on state transitions.
 - Do not hardcode custom fallback logic for `duration`. Use the hooks, and the components will naturally skip the animation timing.
 - Decorative or continuous animations (e.g., GSAP, SVG `<animate>`, Tailwind flow) must be explicitly disabled. State-communicating animations must be replaced with static visual equivalents (like badges or colored shadows) rather than simply being removed, to preserve state comprehension.
+- Shared visual primitives use tokenized static cues in reduced motion: status dots retain semantic halos, active wave fills remain visible without drifting, sparklines render as static lines, and live duration flashes use an instant inset Signal Jade highlight.
 
 ## Overlay Transitions & Focus Management
 
