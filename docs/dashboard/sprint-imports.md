@@ -2,6 +2,8 @@
 
 Sprint imports support three production paths from the Sprints page: structured markdown bundles, GitHub/GitLab issue imports, and Jira issue imports.
 
+Internal MCP clients use the same importer services through `manage_sprints` action `import_issues`. For payload examples covering search-only imports, assigned-work searches, explicit Jira keys, explicit GitHub/GitLab issue numbers, sprint attachment, and plan-after-import flows, see [MCP Tools and Contracts: `manage_sprints import_issues`](../mcp/tools-and-contracts.md#manage_sprints-import_issues).
+
 ## Markdown Import
 
 Use `Import -> Markdown` to create a sprint from a sprint metadata document plus an optional task bundle.
@@ -60,7 +62,7 @@ Issue import uses the saved integration tokens:
 - GitHub: system/project effective `git.githubToken`, usually configured in Settings -> Integrations.
 - GitLab: system/project effective `git.gitlabToken`, also available through `GITLAB_TOKEN` / `GLAB_TOKEN` host hints.
 
-When the GitHub token is empty, GitHub issue search, issue context loading, and auto-close fail with a token-required error. Code UX does not fall back to local `gh` CLI authentication for dashboard issue workflows; Docker auth-copy mount settings help worker containers, but dashboard import and close operations need saved GitHub/GitLab tokens.
+When the GitHub token is empty, GitHub issue search, issue context loading, and auto-close fail with a token-required error. Code UX does not fall back to local `gh` or `glab` CLI authentication for dashboard or MCP importer workflows; Docker auth-copy mount settings help worker containers, but issue search, explicit import, linked sprint attachment, planning imports, and close operations need saved GitHub/GitLab tokens.
 
 ## Jira Issue Import
 
@@ -77,6 +79,8 @@ Jira uses system-scoped settings from `Settings -> Integrations -> Jira`:
 - default project key
 - close transition name, defaulting to `Done`
 - Jira-specific auto-close toggle
+
+Jira dashboard and MCP importer workflows require those saved Jira settings. They do not use browser sessions, Atlassian CLI state, or local git configuration as an authentication fallback.
 
 Selected Jira issues are loaded through the same prompt-context path as GitHub/GitLab imports. The sprint prompt receives the Jira description and, when `Append Conversation` is enabled, Jira comments. Imported Jira cards are persisted as linked sprint issues with provider `jira`, project key, issue key, labels, assignees, status, and source URL. The import result cards also surface Jira issue type, priority, reporter, assignee, labels, status, updated timestamps, and a description preview when Jira returns those fields.
 
