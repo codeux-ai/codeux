@@ -45,6 +45,13 @@ describe("classifyProviderBilling", () => {
     expect(classifyProviderBilling("claude-code", { mountAuth: true })).toBe("subscription");
   });
 
+  it("classifies dashboard credential paths as subscription even if mountAuth is stale", () => {
+    expect(classifyProviderBilling("codex", {
+      mountAuth: false,
+      authPath: "~/.code-ux/credentials/codex",
+    })).toBe("subscription");
+  });
+
   it("falls back to mountAuth=false meaning billed when authType is absent", () => {
     expect(classifyProviderBilling("claude-code", { mountAuth: false })).toBe("billed");
   });
@@ -103,6 +110,37 @@ describe("foldUsageGroups", () => {
     expect(folded.subscriptionInvocationCount).toBe(0);
     expect(folded.costUsd).toBeCloseTo(0.1, 5);
     expect(folded.includedCostUsd).toBeNull();
+  });
+
+  it("does not mark an ambiguous same-model dashboard-login provider group as API billed", () => {
+    const groups: PrUsageGroup[] = [
+      { provider: "codex", model: "gpt-5.5", usage: usage({ invocationCount: 8, totalCostUsd: 9.35 }) },
+    ];
+
+    const folded = foldUsageGroups(groups, {
+      codex: { provider: "codex", model: "gpt-5.5", mountAuth: true, authPath: "~/.code-ux/credentials/codex" },
+      "codex-api": { provider: "codex", model: "gpt-5.5", authType: "apiKey", mountAuth: false },
+    });
+
+    expect(folded.billedInvocationCount).toBe(0);
+    expect(folded.subscriptionInvocationCount).toBe(8);
+    expect(folded.costUsd).toBeNull();
+    expect(folded.includedCostUsd).toBe(9.35);
+  });
+
+  it("uses provider-family matches when usage has no model", () => {
+    const groups: PrUsageGroup[] = [
+      { provider: "codex", model: null, usage: usage({ invocationCount: 2, totalCostUsd: 0.25 }) },
+    ];
+
+    const folded = foldUsageGroups(groups, {
+      "codex-dashboard": { provider: "codex", model: "gpt-5.5", mountAuth: true },
+    });
+
+    expect(folded.billedInvocationCount).toBe(0);
+    expect(folded.subscriptionInvocationCount).toBe(2);
+    expect(folded.costUsd).toBeNull();
+    expect(folded.includedCostUsd).toBe(0.25);
   });
 
   it("prices subscription groups at the same catalog rate into includedCostUsd, separate from costUsd", () => {

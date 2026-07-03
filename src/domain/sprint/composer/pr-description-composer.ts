@@ -156,13 +156,13 @@ function renderUsageBlock(usage: PrUsageStats | null, heading: string): string {
 
   const noteLines: string[] = [];
   if (usage.billedInvocationCount > 0 && billedCostLabel) {
-    noteLines.push(`**Est. cost (API-billed):** ${billedCostLabel}`);
+    noteLines.push(`**Estimated metered cost (API-billed):** ${billedCostLabel}`);
   }
   if (usage.subscriptionInvocationCount > 0 && includedCostLabel) {
-    noteLines.push(`**Included cost (subscription):** ${includedCostLabel}`);
+    noteLines.push(`**Included usage estimate (subscription/local login):** ${includedCostLabel}`);
   }
   if (billedCostLabel && includedCostLabel && totalCostLabel) {
-    noteLines.push(`**Total cost:** ${totalCostLabel}`);
+    noteLines.push(`**Reference total (metered + included estimate):** ${totalCostLabel}`);
   }
   if (usage.subscriptionInvocationCount > 0) {
     noteLines.push(

@@ -11,6 +11,7 @@ export interface PrBillingModeProviderConfig {
   openCodeModelId?: string;
   authType?: "apiKey" | "localAuth" | "dashboardAuth";
   mountAuth?: boolean;
+  authPath?: string;
 }
 
 /**
@@ -25,6 +26,9 @@ export function classifyProviderBilling(
   providerConfig: PrBillingModeProviderConfig | null | undefined,
 ): PrBillingMode {
   if (provider === "jules") return "subscription";
+
+  const authPath = normalized(providerConfig?.authPath);
+  if (authPath?.includes(".code-ux/credentials")) return "subscription";
 
   const authType = providerConfig?.authType || (providerConfig?.mountAuth ? "localAuth" : "apiKey");
   return authType === "apiKey" ? "billed" : "subscription";
@@ -61,27 +65,39 @@ function hasProviderConfig(
   return Boolean(entry[1]);
 }
 
+function classifyConfigMatches(matches: Array<[string, PrBillingModeProviderConfig]>): PrBillingMode | null {
+  if (matches.length === 0) return null;
+
+  const modes = matches.map(([configId, config]) => classifyProviderBilling(config.provider || configId, config));
+  if (modes.every((mode) => mode === "billed")) return "billed";
+
+  // provider_invocations currently stores provider family + model, not the exact provider config id.
+  // When same-family/same-model configs mix API-key and dashboard/local login auth, avoid claiming
+  // that the whole grouped usage was API-billed. The included-cost estimate remains visible, but it
+  // is explicitly not reported as a metered charge.
+  return "subscription";
+}
+
 function classifyUsageGroupBilling(
   group: PrUsageGroup,
   providerConfigs: Record<string, PrBillingModeProviderConfig | undefined>,
 ): PrBillingMode {
   if (group.provider === "jules") return "subscription";
 
+  const providerMatches = Object.entries(providerConfigs)
+    .filter(hasProviderConfig)
+    .filter(([configId, config]) => configProviderMatches(group.provider, configId, config));
+
   const groupModel = normalized(group.model);
   if (groupModel) {
-    const modelMatches = Object.entries(providerConfigs)
-      .filter(hasProviderConfig)
-      .filter(([configId, config]) => configProviderMatches(group.provider, configId, config))
+    const modelMatches = providerMatches
       .filter(([, config]) => configModelCandidates(config).includes(groupModel));
 
-    if (modelMatches.length > 0) {
-      return modelMatches.some(([configId, config]) => classifyProviderBilling(config?.provider || configId, config) === "billed")
-        ? "billed"
-        : "subscription";
-    }
+    const mode = classifyConfigMatches(modelMatches);
+    if (mode) return mode;
   }
 
-  return classifyProviderBilling(group.provider, providerConfigs[group.provider]);
+  return classifyConfigMatches(providerMatches) ?? classifyProviderBilling(group.provider, providerConfigs[group.provider]);
 }
 
 /**

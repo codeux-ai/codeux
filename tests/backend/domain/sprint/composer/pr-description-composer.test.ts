@@ -197,7 +197,7 @@ describe("composeTaskPrBody", () => {
     expect(body).toContain("Total tokens");
   });
 
-  it("shows Est. cost, Included cost, and Total cost rows when usage is a mix of billed and subscription", () => {
+  it("shows metered, included estimate, and reference total rows when usage is a mix of billed and subscription", () => {
     const body = composeTaskPrBody({
       ...baseTaskInput,
       usage: {
@@ -208,12 +208,12 @@ describe("composeTaskPrBody", () => {
         subscriptionInvocationCount: 1,
       },
     });
-    expect(body).toContain("**Est. cost (API-billed):** $0.42");
-    expect(body).toContain("**Included cost (subscription):** $0.10");
-    expect(body).toContain("**Total cost:** $0.52");
+    expect(body).toContain("**Estimated metered cost (API-billed):** $0.42");
+    expect(body).toContain("**Included usage estimate (subscription/local login):** $0.10");
+    expect(body).toContain("**Reference total (metered + included estimate):** $0.52");
   });
 
-  it("shows only Included cost, no Total cost row, when usage is entirely subscription-priced", () => {
+  it("shows only the included estimate, no reference total row, when usage is entirely subscription-priced", () => {
     const body = composeTaskPrBody({
       ...baseTaskInput,
       usage: {
@@ -225,7 +225,7 @@ describe("composeTaskPrBody", () => {
       },
     });
     expect(body).not.toContain("Est. cost");
-    expect(body).toContain("**Included cost (subscription):** $0.25");
+    expect(body).toContain("**Included usage estimate (subscription/local login):** $0.25");
     expect(body).not.toContain("Total cost");
   });
 });
@@ -315,11 +315,11 @@ describe("composeSprintPrBody", () => {
     expect(body).toContain("ran via subscription/local login");
   });
 
-  it("shows Est. cost, Included cost, and Total cost rows for the aggregate sprint usage mix", () => {
+  it("shows metered, included estimate, and reference total rows for the aggregate sprint usage mix", () => {
     const body = composeSprintPrBody(baseSprintInput);
-    expect(body).toContain("**Est. cost (API-billed):** $1.80");
-    expect(body).toContain("**Included cost (subscription):** $0.35");
-    expect(body).toContain("**Total cost:** $2.15");
+    expect(body).toContain("**Estimated metered cost (API-billed):** $1.80");
+    expect(body).toContain("**Included usage estimate (subscription/local login):** $0.35");
+    expect(body).toContain("**Reference total (metered + included estimate):** $2.15");
   });
 });
 
