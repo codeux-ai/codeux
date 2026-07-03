@@ -207,8 +207,8 @@ describe("QuicksprintPanel", () => {
     expect(customRail).toBeInTheDocument();
     expect(builtinRail?.className).toContain("overflow-x-auto");
     expect(builtinRail?.className).toContain("overflow-y-visible");
-    expect(builtinRail?.className).toContain("grid-rows-1");
-    expect(builtinRail?.className).toContain("lg:grid-rows-3");
+    expect(builtinRail?.className).toContain("grid-rows-3");
+    expect(builtinRail?.className).toContain("auto-cols-[minmax(15rem,calc(100vw-4rem))]");
     expect(customRail?.className).toContain("touch-pan-x");
     expect(customRail?.className).toContain("scrollbar-hide");
 

@@ -55,7 +55,7 @@ The Quicksprint panel separates templates into two groups:
 - `Custom Templates`
 
 Default templates are now organized by `purpose`.
-The browse panel renders both groups in horizontally scrollable rails so large catalogs stay readable without cutting off rows on smaller viewports. Desktop browse rails use a three-row layout by default, each rail exposes left/right controls for page-style scrolling, and mobile or touch users can swipe the rail directly with normal horizontal scrolling. Trackpad scrolling works the same way.
+The browse panel renders both groups in horizontally scrollable rails so large catalogs stay readable without cutting off rows on smaller viewports. Browse rails keep template cards arranged in three rows at every viewport size, each rail exposes left/right controls for page-style scrolling, and mobile or touch users can swipe the rail directly with normal horizontal scrolling. Trackpad scrolling works the same way.
 
 This browse-slider treatment only changes how templates are discovered and selected. Template execution still uses the same quicksprint planning flow, subtask-count controls, and `Plan Only` / `Plan & Start` behavior as before.
 
