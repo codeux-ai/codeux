@@ -2,7 +2,11 @@ import type { PipelineContext } from "./pipeline-context.js";
 import { buildTaskPrComposerInput } from "../../../domain/sprint/composer/task-pr-input-builder.js";
 import { composeTaskPrBody, composeTaskPrTitle } from "../../../domain/sprint/composer/pr-description-composer.js";
 
-export async function executePrFinalizeStage(ctx: PipelineContext): Promise<{ prUrl?: string }> {
+export interface PrFinalizeStageOptions {
+  completionTimestamp?: string;
+}
+
+export async function executePrFinalizeStage(ctx: PipelineContext, options: PrFinalizeStageOptions = {}): Promise<{ prUrl?: string }> {
   let prUrl: string | undefined;
 
   // In LOCAL git mode there is no remote host to open a PR against — the worker
@@ -22,6 +26,7 @@ export async function executePrFinalizeStage(ctx: PipelineContext): Promise<{ pr
       featureBranch: ctx.featureBranch,
       workerBranch: ctx.workerBranch,
       taskRun,
+      completionTimestamp: options.completionTimestamp,
       aiProviderSettings: ctx.settings.aiProvider,
       sections: ctx.settings.git.prDescription.task,
       sectionOrder: ctx.settings.git.prDescription.taskSectionOrder,

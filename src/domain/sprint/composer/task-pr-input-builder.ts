@@ -13,10 +13,22 @@ export interface BuildTaskPrComposerInputArgs {
   featureBranch: string;
   workerBranch: string;
   taskRun: TaskRunRecord | null;
+  completionTimestamp?: string;
   aiProviderSettings: AiProviderSettings;
   sections: TaskPrTemplateSections;
   sectionOrder?: TaskPrSectionKey[];
   executionRepository?: ExecutionRepository;
+}
+
+function resolveTaskRunDurationMs(taskRun: TaskRunRecord | null, finishedAt: string | null): number | null {
+  if (!taskRun) return null;
+  if (taskRun.durationMs != null) return taskRun.durationMs;
+  if (!taskRun.startedAt || !finishedAt) return null;
+
+  const startedMs = new Date(taskRun.startedAt).getTime();
+  const finishedMs = new Date(finishedAt).getTime();
+  if (!Number.isFinite(startedMs) || !Number.isFinite(finishedMs)) return null;
+  return Math.max(0, finishedMs - startedMs);
 }
 
 export function buildTaskPrComposerInput(args: BuildTaskPrComposerInputArgs): TaskPrComposerInput {
@@ -41,6 +53,7 @@ export function buildTaskPrComposerInput(args: BuildTaskPrComposerInputArgs): Ta
       finishedAt: args.task.latestReview.finishedAt,
     }
     : null;
+  const finishedAt = args.taskRun?.finishedAt ?? args.completionTimestamp ?? null;
 
   return {
     taskId: args.task.id,
@@ -54,8 +67,8 @@ export function buildTaskPrComposerInput(args: BuildTaskPrComposerInputArgs): Ta
     featureBranch: args.featureBranch,
     workerBranch: args.workerBranch,
     startedAt: args.taskRun?.startedAt ?? null,
-    finishedAt: args.taskRun?.finishedAt ?? null,
-    durationMs: args.taskRun?.durationMs ?? null,
+    finishedAt,
+    durationMs: resolveTaskRunDurationMs(args.taskRun, finishedAt),
     usage,
     qa,
     sections: args.sections,
