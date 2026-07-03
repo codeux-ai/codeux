@@ -91,8 +91,8 @@ System mode is the invocation workbench.
 Use the page-scoped Stats primitives instead of building one-off analytics chrome:
 
 - `stats-theme.css` for Stats-specific tokens, including card backgrounds, borders, chips, labels, detail text, focus rings, and status fills.
-- `PANEL_CLASS`, `SUBPANEL_CLASS`, `CHIP_CLASS`, `INPUT_CLASS`, and `LEDGER_ROW_MODERN_CLASS` for shells, inner panels, command chips, inputs, and dense rows.
-- `StatsCard` for top-deck metric cards and reusable metric summaries.
+- `PANEL_CLASS`, `SUBPANEL_CLASS`, `CHIP_CLASS`, `INPUT_CLASS`, `LEDGER_ROW_CLASS`, and `LEDGER_ROW_MODERN_CLASS` for shells, inner panels, command chips, inputs, and dense rows. These constants should delegate surface, border, blur, hover, focus, and elevation behavior to `--stats-*` aliases backed by shared `--surface-*`, `--fill-*`, `--border-*`, and `--elevation-*` tokens rather than repeating ad hoc shadows or glass styling.
+- `StatsCard` for top-deck metric cards and reusable metric summaries. Cards must tolerate long provider and model labels by wrapping or truncating within stable slots, keeping icon and trend content from forcing layout shifts.
 - `StudioHeader`, `SignalMetricCard`, `DonutCard`, `PurposeRibbon`, `TokenChip`, `TokenFlowBar`, `ChurnFlowBar`, `SortButton`, `ViewToggle`, and `SeriesLegendButton` for repeated Stats-specific visual patterns.
 - Typed view-model helpers for trend, model, provider, chart, and ledger projections. Keep telemetry derivation out of JSX when it is reused or has meaningful edge cases.
 
@@ -112,6 +112,7 @@ Navigation controls must never be clipped or require page-level horizontal scrol
 - Avoid overflow-hidden ancestors around controls that can wrap, open popovers, or show validation messages.
 - Keep button accessible names stable. Current tests and users rely on labels such as `Trend`, `Composition`, `Models`, `Providers`, `Ledgers`, `System`, `Custom`, `Apply`, and `Filters`.
 - Use `role="group"` plus `aria-pressed` for local visual modes, filter chips, and sort choices. Use tab semantics only for actual tabbed ledgers.
+- The visual mode rail is a segmented control with icon-first buttons and stable accessible names: `Trend`, `Composition`, `Models`, `Providers`, `Ledgers`, and `System`. It must wrap and may scroll within its own rail on very narrow widths, but it must not create page-level horizontal overflow.
 - Date inputs require visible labels, `aria-invalid`, `aria-errormessage`, and an inline alert when the custom range is incomplete or inverted.
 
 ## Low-Data And Empty States

@@ -3,7 +3,7 @@
 import { h } from "preact";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { render, screen, cleanup, fireEvent } from "@testing-library/preact";
+import { render, screen, cleanup, fireEvent, within } from "@testing-library/preact";
 import { StatsCard } from "../../components/StatsCard.js";
 import { CHART_SERIES, SeriesLegendButton, SortButton, ViewToggle } from "../../components/stats-ui-primitives.js";
 import { Activity } from "lucide-preact";
@@ -77,37 +77,54 @@ describe("StatsCard", () => {
     expect(visual.parentElement).toBe(card);
   });
 
-  it("keeps long labels and values exposed without changing the card contract", () => {
+  it("keeps long labels, values, and descriptions exposed without changing the card contract", () => {
     const longTitle = "Extremely Long Provider Throughput Label That Should Wrap";
-    const longValue = "123456789012345678901234567890 tokens";
+    const longValue = "codex/gpt-5-codex-super-long-provider-model-name-with-1234567890 tokens";
+    const longDescription = "Sustained window with a long descriptive phrase for provider and model comparisons";
 
     render(
       <StatsCard
         title={longTitle}
         value={longValue}
-        description="Sustained window with a long descriptive phrase"
+        description={longDescription}
       />,
     );
 
+    const card = screen.getByRole("article", {
+      name: `${longTitle}: ${longValue}: ${longDescription}`,
+    });
+
     expect(screen.getByText(longTitle)).toBeDefined();
     expect(screen.getByText(longValue)).toBeDefined();
-    expect(
-      screen.getByRole("article", {
-        name: `${longTitle}: ${longValue}: Sustained window with a long descriptive phrase`,
-      }),
-    ).toBeDefined();
+    expect(screen.getByText(longDescription)).toBeDefined();
+    expect(card).toHaveTextContent(longTitle);
+    expect(card).toHaveTextContent(longValue);
+    expect(card).toHaveTextContent(longDescription);
   });
 
-  it("renders ViewToggle as pressed segmented controls with icon-first labels", () => {
+  it("renders ViewToggle as pressed segmented controls with icon-first labels for every mode", () => {
     const onChange = vi.fn();
+    const modes = [
+      { label: "Trend", value: "trend" },
+      { label: "Composition", value: "composition" },
+      { label: "Models", value: "models" },
+      { label: "Providers", value: "reliability" },
+      { label: "Ledgers", value: "ledgers" },
+      { label: "System", value: "system" },
+    ] as const;
 
     render(<ViewToggle value="models" onChange={onChange} ariaLabel="Stats mode" />);
 
-    expect(screen.getByRole("group", { name: "Stats mode" })).toBeDefined();
-    expect(screen.getByRole("button", { name: "Models" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "Trend" })).toHaveAttribute("aria-pressed", "false");
+    const group = screen.getByRole("group", { name: "Stats mode" });
+    expect(group).toBeDefined();
 
-    fireEvent.click(screen.getByRole("button", { name: "Ledgers" }));
+    for (const mode of modes) {
+      const button = within(group).getByRole("button", { name: mode.label });
+      expect(button).toHaveAttribute("aria-pressed", mode.value === "models" ? "true" : "false");
+      expect(button.firstElementChild?.tagName.toLowerCase()).toBe("svg");
+    }
+
+    fireEvent.click(within(group).getByRole("button", { name: "Ledgers" }));
 
     expect(onChange).toHaveBeenCalledWith("ledgers");
   });
