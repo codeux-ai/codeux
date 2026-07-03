@@ -52,9 +52,10 @@ When the UI generates visual graphs of memory items:
 
 The memory map uses a pointer-centered camera so users can inspect dense graphs without losing spatial context:
 - Mouse wheel zoom keeps the world point under the cursor stable as closely as possible while clamping to the configured zoom range.
-- The zoom controls step through the same range as the wheel and can reach a deep-readability zoom for dense maps.
+- The zoom controls step through the same range as the wheel with the same short camera tween, and can reach a deep-readability zoom for dense maps.
 - Selecting a node from the canvas or list recenters the camera on that memory at a readable zoom level, and Reset returns to the default overview without leaving a stale selection behind.
-- At higher zoom levels the canvas renders a focused label bubble for the selected or hovered memory instead of flooding the graph with full text at every node.
+- Node and category labels are drawn in inverse-zoom screen space so the graph positions zoom while text remains readable instead of growing with the map.
+- Hovering a node highlights it and updates the cursor only. At higher zoom levels the canvas renders the focused label bubble for the selected memory instead of creating hover-only overlays.
 - Dense maps are expected to remain navigable at 200+ memories without forcing every memory label to render at once.
 
 ## Storage Requirements
