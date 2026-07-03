@@ -47,7 +47,10 @@ Trend mode is the chart-first workspace for time-series telemetry.
 
 Composition mode explains where usage comes from.
 
-- Use source mix, purpose mix, token flow, provider share, and confidence summaries derived from the existing stats snapshot.
+- Lead with the most actionable composition signals from the existing stats snapshot: top provider share, token mix, cache rate, output/reasoning proportions, then purpose lanes.
+- Token flight panels should expose input, cached input, output, reasoning, cache-hit rate, output ratio, and total cost when the snapshot includes a non-zero `totalCostUsd`.
+- Purpose lanes should show invocation count, active time, token share, and the dominant purpose without introducing a second conflicting purpose summary.
+- Donut legends should rank visible segments, tolerate long provider or purpose labels, and render explicit empty states when no provider or token segments are available.
 - Source-confidence cards should distinguish reported, estimated, unavailable, and unsupported telemetry without inventing alternate totals in the browser.
 - Donuts, ribbons, and flow bars must be paired with concise text summaries or `role="img"` labels so color is not the only signal.
 

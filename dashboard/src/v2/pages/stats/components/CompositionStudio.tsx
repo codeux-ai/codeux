@@ -4,6 +4,8 @@ import {
   ArrowUpRight,
   Brain,
   Database,
+  DollarSign,
+  PieChart,
   TimerReset,
 } from "lucide-preact";
 import type {
@@ -22,6 +24,7 @@ import {
   PANEL_CLASS,
   PurposeRibbon,
   SUBPANEL_CLASS,
+  TokenChip,
   TokenFlowBar,
   getProviderIcon,
 } from "./stats-ui-primitives.js";
@@ -43,6 +46,14 @@ const StudioMetricTile: FunctionComponent<{
   </div>
 );
 
+const getPercent = (value: number, total: number): number | null => (
+  total > 0 ? (value / total) * 100 : null
+);
+
+const formatPercentOrFallback = (value: number | null, fallback = "No token volume"): string => (
+  value === null ? fallback : formatPercent(value)
+);
+
 export const CompositionStudio: FunctionComponent<{
   stats: ProjectExecutionStatsSnapshot;
   providerSegments: SegmentDefinition[];
@@ -60,16 +71,15 @@ export const CompositionStudio: FunctionComponent<{
     const delta = right.usage.totalTokens - left.usage.totalTokens;
     return delta !== 0 ? delta : left.label.localeCompare(right.label);
   })[0] || null;
-  const topProviderShare = stats.usage.totalTokens > 0 && topProvider
-    ? (topProvider.usage.totalTokens / stats.usage.totalTokens) * 100
-    : null;
-  const topPurposeShare = stats.usage.totalTokens > 0 && topPurpose
-    ? (topPurpose.usage.totalTokens / stats.usage.totalTokens) * 100
-    : null;
+  const topProviderShare = topProvider ? getPercent(topProvider.usage.totalTokens, stats.usage.totalTokens) : null;
+  const inputShare = getPercent(stats.usage.inputTokens + stats.usage.cachedInputTokens, stats.usage.totalTokens);
+  const outputShare = getPercent(stats.usage.outputTokens, stats.usage.totalTokens);
+  const reasoningShare = getPercent(stats.usage.reasoningOutputTokens, stats.usage.totalTokens);
+  const hasCost = Number.isFinite(stats.usage.totalCostUsd) && stats.usage.totalCostUsd > 0;
 
   return (
     <section className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <StudioMetricTile
           label="Provider Share"
           value={topProvider ? topProvider.label : "No providers"}
@@ -77,24 +87,32 @@ export const CompositionStudio: FunctionComponent<{
           toneClass="text-signal-500 dark:text-signal-400"
         />
         <StudioMetricTile
-          label="Purpose Distribution"
-          value={topPurpose ? topPurpose.label.replace(/_/g, " ") : "No purposes"}
-          detail={topPurpose && topPurposeShare !== null ? `${formatPercent(topPurposeShare)} of token volume` : "No purpose data"}
+          label="Token Mix"
+          value={formatTokens(stats.usage.totalTokens)}
+          detail={inputShare !== null ? `${formatPercent(inputShare)} input footprint` : "No token volume"}
           toneClass="text-amber-600 dark:text-amber-400"
+          icon={PieChart}
         />
         <StudioMetricTile
-          label="Cache Efficiency"
+          label="Cache Rate"
           value={cacheRate !== null ? `${cacheRate.toFixed(1)}%` : "—"}
           detail={cacheRate !== null ? `~${formatTokens(stats.usage.cachedInputTokens)} tokens saved` : "No cacheable input yet"}
           toneClass="text-cyan-600 dark:text-cyan-400"
           icon={Database}
         />
         <StudioMetricTile
-          label="Active vs Wall Time"
-          value={activeVsWallRate !== null ? `${formatPercent(activeVsWallRate * 100)} active` : "No wall time"}
-          detail={activeVsWallRate !== null ? `${formatStatsDuration(stats.usage.activeTimeMs)} active / ${formatStatsDuration(stats.usage.wallTimeMs)} wall` : "Wall time was not recorded"}
+          label="Output Ratio"
+          value={formatPercentOrFallback(outputShare, "—")}
+          detail={stats.usage.totalTokens > 0 ? `${formatTokens(stats.usage.outputTokens)} generated` : "No output tokens"}
+          toneClass="text-amber-600 dark:text-amber-400"
+          icon={ArrowUpRight}
+        />
+        <StudioMetricTile
+          label="Reasoning Share"
+          value={formatPercentOrFallback(reasoningShare, "—")}
+          detail={stats.usage.reasoningOutputTokens > 0 ? `${formatTokens(stats.usage.reasoningOutputTokens)} reasoning` : "No reasoning tokens"}
           toneClass="text-rose-600 dark:text-rose-400"
-          icon={TimerReset}
+          icon={Brain}
         />
       </div>
 
@@ -118,49 +136,52 @@ export const CompositionStudio: FunctionComponent<{
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <div className="space-y-4">
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Purpose Distribution</div>
-            <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-              Token volume and active time by invocation purpose over the selected window.
-            </div>
-          </div>
-          <PurposeRibbon purposes={stats.purposes} />
-        </div>
         <div className={`${PANEL_CLASS} p-6`}>
           <div className="flex items-center gap-3">
             <TimerReset className="h-4 w-4 text-amber-500" strokeWidth={2} />
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Token Flight</div>
           </div>
+          <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+            End-to-end token movement across input, cached input, output, reasoning, and cost signals from the selected snapshot.
+          </div>
           <div className="mt-4 grid grid-cols-2 gap-4">
             <StudioMetricTile
               label="Input"
               value={formatTokens(stats.usage.inputTokens)}
-              detail={stats.usage.totalTokens > 0 ? `${Math.round((stats.usage.inputTokens / stats.usage.totalTokens) * 100)}% of total` : "No total volume"}
+              detail={stats.usage.totalTokens > 0 ? `${formatPercent((stats.usage.inputTokens / stats.usage.totalTokens) * 100)} of total` : "No total volume"}
               toneClass="text-signal-600 dark:text-signal-400"
               icon={ArrowDownRight}
             />
             <StudioMetricTile
-              label="Cached"
+              label="Cached Input"
               value={formatTokens(stats.usage.cachedInputTokens)}
-              detail={stats.usage.totalTokens > 0 ? `${Math.round((stats.usage.cachedInputTokens / stats.usage.totalTokens) * 100)}% of total` : "No total volume"}
+              detail={cacheRate !== null ? `${cacheRate.toFixed(1)}% cache-hit rate` : "No cache signal"}
               toneClass="text-cyan-600 dark:text-cyan-400"
               icon={Database}
             />
             <StudioMetricTile
               label="Output"
               value={formatTokens(stats.usage.outputTokens)}
-              detail={stats.usage.totalTokens > 0 ? `${Math.round((stats.usage.outputTokens / stats.usage.totalTokens) * 100)}% of total` : "No total volume"}
+              detail={outputShare !== null ? `${formatPercent(outputShare)} output ratio` : "No total volume"}
               toneClass="text-amber-600 dark:text-amber-400"
               icon={ArrowUpRight}
             />
             <StudioMetricTile
               label="Reasoning"
               value={formatTokens(stats.usage.reasoningOutputTokens)}
-              detail={stats.usage.totalTokens > 0 ? `${Math.round((stats.usage.reasoningOutputTokens / stats.usage.totalTokens) * 100)}% of total` : "No total volume"}
+              detail={reasoningShare !== null ? `${formatPercent(reasoningShare)} of total` : "No total volume"}
               toneClass="text-rose-600 dark:text-rose-400"
               icon={Brain}
             />
+            {hasCost ? (
+              <StudioMetricTile
+                label="Total Cost"
+                value={formatCost(stats.usage.totalCostUsd)}
+                detail="Snapshot cost rollup"
+                toneClass="text-emerald-600 dark:text-emerald-400"
+                icon={DollarSign}
+              />
+            ) : null}
             <div className="col-span-2 rounded-2xl border border-slate-500/16 bg-slate-500/10 p-4">
               <div className="flex items-center justify-between gap-4">
                 <div>
@@ -178,10 +199,29 @@ export const CompositionStudio: FunctionComponent<{
             </div>
           </div>
           <div className={`${SUBPANEL_CLASS} mt-4 p-5`}>
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Cache Efficiency</div>
-            <div className="mt-2 text-3xl font-black text-slate-900 dark:text-white">{cacheRate !== null ? cacheRate.toFixed(1) : "—"}%</div>
-            <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500">
-              {stats.usage.cachedInputTokens > 0 ? `~${formatTokens(stats.usage.cachedInputTokens)} tokens saved` : "No cache savings recorded"}
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Flight Legend</div>
+                <div className="mt-2 text-3xl font-black text-slate-900 dark:text-white">{cacheRate !== null ? cacheRate.toFixed(1) : "—"}%</div>
+                <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500">
+                  {stats.usage.cachedInputTokens > 0 ? `~${formatTokens(stats.usage.cachedInputTokens)} cached input` : "No cache savings recorded"}
+                </div>
+              </div>
+              {hasCost ? (
+                <div className="text-right">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Cost</div>
+                  <div className="mt-2 text-lg font-black text-slate-900 dark:text-white">{formatCost(stats.usage.totalCostUsd)}</div>
+                </div>
+              ) : null}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <TokenChip icon={ArrowDownRight} label="Input" value={stats.usage.inputTokens} tone="border-signal-500/16 bg-signal-500/8 text-signal-600 dark:text-signal-400" />
+              <TokenChip icon={Database} label="Cached" value={stats.usage.cachedInputTokens} tone="border-cyan-500/16 bg-cyan-500/8 text-cyan-600 dark:text-cyan-400" />
+              <TokenChip icon={ArrowUpRight} label="Output" value={stats.usage.outputTokens} tone="border-amber-500/16 bg-amber-500/8 text-amber-600 dark:text-amber-400" />
+              <TokenChip icon={Brain} label="Reasoning" value={stats.usage.reasoningOutputTokens} tone="border-rose-500/16 bg-rose-500/8 text-rose-600 dark:text-rose-400" />
+              {hasCost ? (
+                <TokenChip icon={DollarSign} label="Cost" value={formatCost(stats.usage.totalCostUsd)} tone="border-emerald-500/16 bg-emerald-500/8 text-emerald-600 dark:text-emerald-400" />
+              ) : null}
             </div>
             <div className="mt-4">
               <TokenFlowBar
@@ -193,6 +233,19 @@ export const CompositionStudio: FunctionComponent<{
               />
             </div>
           </div>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Purpose Lanes</div>
+            <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+              Invocation count, active time, and token share by purpose over the selected window.
+            </div>
+          </div>
+          <PurposeRibbon
+            purposes={stats.purposes}
+            totalTokens={stats.usage.totalTokens}
+            dominantPurposeId={topPurpose?.id ?? null}
+          />
         </div>
       </div>
 

@@ -37,7 +37,7 @@ describe("CompositionStudio", () => {
               inputCostUsd: 0,
               outputCostUsd: 0,
               cachedInputCostUsd: 0,
-              totalCostUsd: 0,
+              totalCostUsd: 12.3456,
               outputTokens: 500,
               reasoningOutputTokens: 125,
               totalTokens: 1875,
@@ -97,7 +97,7 @@ describe("CompositionStudio", () => {
                   inputCostUsd: 0,
                   outputCostUsd: 0,
                   cachedInputCostUsd: 0,
-                  totalCostUsd: 0,
+                  totalCostUsd: 0.5,
                   outputTokens: 75,
                   reasoningOutputTokens: 0,
                   totalTokens: 200,
@@ -124,22 +124,28 @@ describe("CompositionStudio", () => {
 
     const providerShare = screen.getAllByText("Provider Share").at(-1);
     const tokenAnatomy = screen.getByText("Token Anatomy");
-    const purposeRibbon = screen.getAllByText("Planning").at(-1);
     const tokenFlight = screen.getByText("Token Flight");
-    const cacheEfficiency = screen.getAllByText("Cache Efficiency").at(-1);
+    const purposeLanes = screen.getByText("Purpose Lanes");
     const providerActivity = screen.getByText("Provider Activity");
 
     expect(providerShare).toBeDefined();
     expect(providerShare!.compareDocumentPosition(tokenAnatomy) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getAllByText("cost").length).toBeGreaterThan(0);
-    expect(tokenAnatomy.compareDocumentPosition(purposeRibbon!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(purposeRibbon!.compareDocumentPosition(tokenFlight) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(cacheEfficiency).toBeDefined();
-    expect(tokenFlight.compareDocumentPosition(cacheEfficiency!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(cacheEfficiency!.compareDocumentPosition(providerActivity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tokenAnatomy.compareDocumentPosition(tokenFlight) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tokenFlight.compareDocumentPosition(purposeLanes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(purposeLanes.compareDocumentPosition(providerActivity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     expect(screen.getAllByText("20.0%").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/250 tokens saved/i).length).toBeGreaterThan(0);
+    expect(screen.getByText("Cache Rate")).toBeInTheDocument();
+    expect(screen.getByText("Cached Input")).toBeInTheDocument();
+    expect(screen.getByText("Output Ratio")).toBeInTheDocument();
+    expect(screen.getByText("Reasoning Share")).toBeInTheDocument();
+    expect(screen.getByText("Total Cost")).toBeInTheDocument();
+    expect(screen.getAllByText("$12.3456").length).toBeGreaterThan(0);
+    expect(screen.getByText("2 calls / 1m 0s active")).toBeInTheDocument();
+    expect(screen.getByText("11% token share")).toBeInTheDocument();
+    expect(screen.getByText("Dominant")).toBeInTheDocument();
     expect(screen.getByText("9m 0s")).toBeInTheDocument();
     expect(screen.getByText("0s")).toBeInTheDocument();
 
@@ -151,5 +157,42 @@ describe("CompositionStudio", () => {
 
     expect(geminiLabel.compareDocumentPosition(claudeLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(container.textContent).not.toContain("No provider data for this window.");
+  });
+
+  it("renders explicit empty states when provider and token segments are unavailable", () => {
+    render(
+      <CompositionStudio
+        stats={
+          {
+            usage: {
+              inputTokens: 0,
+              cachedInputTokens: 0,
+              inputCostUsd: 0,
+              outputCostUsd: 0,
+              cachedInputCostUsd: 0,
+              totalCostUsd: 0,
+              outputTokens: 0,
+              reasoningOutputTokens: 0,
+              totalTokens: 0,
+              invocationCount: 0,
+              activeTimeMs: 0,
+              wallTimeMs: 0,
+            },
+            providers: [],
+            purposes: [],
+            models: [],
+          } as any
+        }
+        providerSegments={[]}
+        tokenSegments={[]}
+      />,
+    );
+
+    expect(screen.getByText("No providers")).toBeInTheDocument();
+    expect(screen.getAllByText("No token volume").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("No telemetry landed in this composition yet.")).toHaveLength(2);
+    expect(screen.getByText("No purpose data for this window.")).toBeInTheDocument();
+    expect(screen.getByText("No provider data for this window.")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "No token flow data available." })).toBeInTheDocument();
   });
 });
