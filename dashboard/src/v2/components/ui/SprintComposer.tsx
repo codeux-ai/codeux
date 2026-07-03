@@ -2,17 +2,12 @@ import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef, useState, useEffect, useMemo } from "preact/hooks";
 import gsap from "gsap";
 import {
-  ExternalLink,
-  Github,
-  Gitlab,
   Link as LinkIcon,
   Loader2,
   Sparkles,
-  Tag,
   Target,
   Workflow,
   X,
-  Users
 } from "lucide-preact";
 import type { Sprint, AgentPreset, SprintImportedTaskInput, SprintLinkedIssueInput } from "../../types.js";
 import { AvantgardeSelect } from "./AvantgardeSelect.js";
@@ -32,11 +27,11 @@ import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import type { ImprovePromptInput } from "../../types.js";
 import type { ActionFeedbackState } from "../../hooks/use-action-feedback.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
-import { JiraIcon } from "../icons/JiraIcon.js";
 import { AgentSelectAvatarIcon } from "../agents/AgentSelectAvatarIcon.js";
 import { getSafeUrl } from "../../lib/safe-url.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import type { ProviderId } from "../../types.js";
+import { LinkedIssueTag } from "../sprint/LinkedIssueTag.js";
 
 interface VirtualProviderOption {
   id?: string;
@@ -760,69 +755,15 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                   </div>
                 </div>
                 <div className="grid gap-3 lg:grid-cols-2">
-                  {visibleLinkedIssues.map((issue) => {
-                    const ProviderIcon = issue.provider === "gitlab" ? Gitlab : issue.provider === "jira" ? JiraIcon : Github;
-                    return (
-                      <article
-                        key={`${issue.provider}:${issue.repository}:${issue.issueNumber}`}
-                        className="group relative overflow-hidden rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] p-4 transition-all hover:-translate-y-0.5 hover:border-signal-500/24 hover:bg-white/88 dark:border-white/[0.07] dark:bg-white/[0.03] dark:hover:bg-white/[0.055]"
-                      >
-                        <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-signal-500 via-ember-500 to-slate-300 opacity-70" />
-                        <div className="flex items-start gap-3">
-                          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[0.85rem] border ${
-                            issue.provider === "jira"
-                              ? "border-[#0052CC]/20 bg-[#0052CC]/10 text-[#0052CC] dark:border-[#4C9AFF]/20 dark:bg-[#4C9AFF]/10 dark:text-[#4C9AFF]"
-                              : issue.provider === "gitlab"
-                              ? "border-ember-500/20 bg-ember-500/10 text-ember-600 dark:text-ember-400"
-                              : "border-slate-900/10 bg-slate-900/[0.06] text-slate-800 dark:border-white/10 dark:bg-white/[0.07] dark:text-white"
-                          }`}>
-                            <ProviderIcon className="h-4 w-4" strokeWidth={2.1} />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                              <span className="min-w-0 truncate">{issue.repository}</span>
-                              <span className="text-signal-600 dark:text-signal-300 shrink-0">{issue.issueKey || `#${issue.issueNumber}`}</span>
-                            </div>
-                            <h3 className="mt-1 line-clamp-2 min-w-0 text-sm font-black leading-snug text-slate-900 dark:text-white">
-                              {issue.title}
-                            </h3>
-                          </div>
-                          <a
-                            href={getSafeUrl(issue.url)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-900 dark:hover:bg-white/[0.06] dark:hover:text-white"
-                            aria-label={`Open ${issue.title}`}
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" strokeWidth={2.2} />
-                          </a>
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-1.5">
-                          {(issue.labels || []).slice(0, 5).map((label) => (
-                            <span key={label} className="inline-flex max-w-full items-center gap-1 rounded-full bg-signal-500/[0.08] px-2 py-1 text-[10px] font-semibold text-signal-700 dark:text-signal-300">
-                              <Tag className="h-3 w-3 shrink-0" strokeWidth={2} />
-                              <span className="truncate">{label}</span>
-                            </span>
-                          ))}
-                          {(issue.assignees || []).slice(0, 3).map((assignee) => (
-                            <span key={assignee} className="inline-flex max-w-full items-center gap-1 rounded-full bg-ember-500/[0.09] px-2 py-1 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
-                              <Users className="h-3 w-3 shrink-0" strokeWidth={2} />
-                              <span className="truncate">{assignee}</span>
-                            </span>
-                          ))}
-                        </div>
-                        {onRemoveLinkedIssue && !isBusy && (
-                          <button
-                            type="button"
-                            onClick={() => onRemoveLinkedIssue(issue)}
-                            className="mt-3 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 transition-colors hover:text-status-red"
-                          >
-                            Remove Link
-                          </button>
-                        )}
-                      </article>
-                    );
-                  })}
+                  {visibleLinkedIssues.map((issue) => (
+                    <LinkedIssueTag
+                      key={`${issue.provider}:${issue.repository}:${issue.issueNumber}`}
+                      issue={issue}
+                      variant="composer-card"
+                      disabled={isBusy}
+                      onRemove={onRemoveLinkedIssue ? () => onRemoveLinkedIssue(issue) : undefined}
+                    />
+                  ))}
                 </div>
               </div>
             )}
