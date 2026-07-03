@@ -58,9 +58,10 @@ Composition mode explains where usage comes from.
 
 Models mode compares model activity and efficiency.
 
-- Surface active model counts, token distribution, cost, cache behavior, latency, and top contributors.
-- Missing model arrays or empty model usage should render low-data states rather than failing or implying all models are idle.
-- Keep long model names wrapped or truncated inside stable cards and rows with `min-w-0`.
+- The overview should balance model-share distribution, efficiency highlights, and total window volume. Avoid oversized repeat panels; the leaderboard is the primary comparison surface.
+- Rank the leaderboard by `usage.totalTokens` descending, with label tie-breaks. Every row should still expose secondary comparison signals: success tone, p50/p95 latency, tokens per call, output velocity, cache hit rate, reasoning share, and token-flow anatomy.
+- Surface sparse telemetry intentionally. Missing model arrays, zero model usage, zero duration samples, and low invocation counts should render explicit low-data states rather than failing or implying all models are idle.
+- Keep long model and provider names wrapped inside stable cards and rows with `min-w-0`; rank chips, status chips, and metric cells should not force horizontal overflow.
 
 ### Providers
 
