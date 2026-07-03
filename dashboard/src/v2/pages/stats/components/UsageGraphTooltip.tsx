@@ -57,9 +57,9 @@ export const UsageGraphTooltip: FunctionComponent<UsageGraphTooltipProps> = ({
           {visible ? 'Bucket values' : 'Idle'}
         </div>
       </div>
-      <div className="mt-3 h-1 rounded-full bg-black/5 dark:bg-white/10">
+      <div className="mt-3 h-1 rounded-full bg-[color:var(--stats-quiet-track)]">
         <span
-          className="block h-full w-3 rounded-full bg-signal-500"
+          className="block h-full w-3 rounded-full bg-[color:var(--stats-signal-text)]"
           style={{ marginLeft: `${Math.min(92, Math.max(8, left))}%`, transform: 'translateX(-50%)' }}
         />
       </div>

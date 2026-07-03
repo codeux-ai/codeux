@@ -329,7 +329,7 @@ export const InteractiveUsageChart: FunctionComponent<{
           </div>
         </div>
 
-        <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-[minmax(0,1fr)_20rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_20rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]">
           <div className="flex min-w-0 flex-col gap-3">
             <div id="usage-chart-instructions" className="flex flex-wrap items-center justify-between gap-3 rounded-[1.05rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-3 py-2.5">
               <div className="min-w-0">
@@ -352,7 +352,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                 ) : null}
                 {loading && !error ? (
                   <div className="absolute right-3 top-3 z-20 flex items-center gap-2 rounded-full border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/88 px-3 py-1.5 shadow-sm backdrop-blur-md" role="status" aria-live="polite" aria-busy="true" aria-label="Loading new chart data">
-                    <Activity className="h-3.5 w-3.5 animate-pulse text-signal-500 motion-reduce:animate-none" aria-hidden="true" />
+                    <Activity className="h-3.5 w-3.5 animate-pulse text-[color:var(--stats-signal-text)] motion-reduce:animate-none" aria-hidden="true" />
                     <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
                       Syncing
                     </span>
@@ -394,8 +394,8 @@ export const InteractiveUsageChart: FunctionComponent<{
                         )}
                         height={height - padding * 2}
                         rx="18"
-                        fill="rgba(0,224,160,0.055)"
-                        stroke="rgba(0,224,160,0.28)"
+                        fill="var(--stats-selection-fill)"
+                        stroke="var(--stats-selection-border)"
                         strokeDasharray="8 8"
                       />
                     ) : null}
@@ -460,7 +460,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                           width={rectWidth}
                           height={height - padding * 2}
                           fill="transparent"
-                          className="focus:outline-none focus:ring-2 focus:ring-signal-500"
+                          className="focus:outline-none focus:ring-2 focus:ring-[color:var(--stats-focus-ring)]"
                           onMouseDown={() => {
                             setDragStartIndex(absoluteIndex);
                             setDragCurrentIndex(absoluteIndex);
@@ -518,8 +518,8 @@ export const InteractiveUsageChart: FunctionComponent<{
             </div>
           </div>
 
-          <aside className="flex min-w-0 flex-col gap-3 xl:sticky xl:top-6 xl:max-h-[clamp(32rem,62vh,52rem)] xl:overflow-y-auto xl:pr-1">
-            <div className="max-h-full overflow-y-auto rounded-[1.1rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] p-3">
+          <aside className="flex h-full min-w-0 flex-col gap-3 xl:sticky xl:top-6 xl:max-h-[clamp(32rem,62vh,52rem)] xl:overflow-y-auto xl:pr-1">
+            <div className="flex h-full min-h-full flex-col overflow-y-auto rounded-[1.1rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">Focused bucket</div>

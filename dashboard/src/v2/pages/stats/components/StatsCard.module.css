@@ -1,8 +1,10 @@
 @import "tailwindcss";
 
 .card {
-  @apply relative flex min-w-0 flex-col justify-between overflow-hidden motion-safe:transform-gpu;
-  background: var(--stats-card-bg);
+  @apply relative flex min-w-0 flex-col justify-between overflow-visible motion-safe:transform-gpu;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--stats-card-bg) 95%, var(--stats-card-accent-fill, transparent) 5%), var(--stats-card-bg)),
+    var(--stats-card-bg);
   backdrop-filter: blur(var(--stats-surface-blur-panel));
   -webkit-backdrop-filter: blur(var(--stats-surface-blur-panel));
   border: 1px solid var(--stats-card-border);
@@ -20,7 +22,9 @@
 
 .card:hover,
 .card.active {
-  background: var(--stats-surface-panel-hover);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-panel-hover) 92%, var(--stats-card-accent-fill, transparent) 8%), var(--stats-surface-panel-hover)),
+    var(--stats-surface-panel-hover);
   border-color: var(--stats-border-strong);
   box-shadow: var(--stats-card-shadow-hover);
 }
@@ -47,11 +51,15 @@
 }
 
 .toneWarm {
-  background: var(--stats-surface-panel);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-panel) 95%, var(--stats-card-accent-fill, transparent) 5%), var(--stats-surface-panel)),
+    var(--stats-surface-panel);
 }
 
 .toneMuted {
-  background: var(--stats-surface-subpanel);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-subpanel) 95%, var(--stats-card-accent-fill, transparent) 5%), var(--stats-surface-subpanel)),
+    var(--stats-surface-subpanel);
 }
 
 .header {
@@ -120,6 +128,7 @@
 /* Accent Tints */
 .tint {
   @apply pointer-events-none absolute inset-0 opacity-0;
+  border-radius: inherit;
   background: var(--stats-card-accent-fill, var(--stats-accent-muted-fill));
   transition: opacity var(--stats-motion-standard);
 }

@@ -49,7 +49,7 @@ export const UsageGraphLegend: FunctionComponent<UsageGraphLegendProps> = ({
                   }}
                   className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[1.05rem] border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--stats-card-bg)] motion-reduce:transition-none ${
                     active
-                      ? 'border-signal-500/20 bg-signal-500/[0.06] text-[var(--stats-value-color)]'
+                      ? 'border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-surface-control-active)] text-[var(--stats-value-color)]'
                       : 'border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] text-[var(--stats-detail-color)] hover:border-[color:var(--stats-value-color)]/20 hover:bg-[color:var(--fill-muted-hover)]'
                   } ${disabled ? 'cursor-not-allowed opacity-55' : 'active:scale-[0.995]'}`}
                   title={disabled ? 'Keep one series enabled to preserve the chart.' : `${s.label} is ${activeCountLabel}`}
@@ -65,13 +65,13 @@ export const UsageGraphLegend: FunctionComponent<UsageGraphLegendProps> = ({
                     aria-hidden="true"
                     className={`relative h-5 w-9 rounded-full border transition-colors motion-reduce:transition-none ${
                       active
-                        ? 'border-signal-500/35 bg-signal-500/25'
+                        ? 'border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-accent-signal-fill)]'
                         : 'border-[var(--stats-card-border)] bg-[color:var(--fill-muted)]'
                     }`}
                   >
                     <span
                       className={`absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full shadow-sm transition-transform motion-reduce:transition-none ${
-                        active ? 'translate-x-[1.15rem] bg-signal-500' : 'translate-x-0.5 bg-[var(--stats-detail-color)]/55'
+                        active ? 'translate-x-[1.15rem] bg-[color:var(--stats-signal-text)]' : 'translate-x-0.5 bg-[var(--stats-detail-color)]/55'
                       }`}
                     />
                   </span>

@@ -243,9 +243,11 @@ export const SignalMetricCard: FunctionComponent<{
     // We map hex to known accent if possible, or just pass children
     accent={accentHex === "#00E0A0" ? "signal" : accentHex === "#FFB800" ? "amber" : "cyan"}
   >
-    <Sparkline points={sparkline} color={accentHex} />
-    <div className="mt-4 flex flex-col gap-1 border-t border-black/[0.06] pt-4 dark:border-white/[0.06]">
-      <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+    <div className="relative z-10 mt-4 h-16 rounded-[var(--stats-control-radius)]">
+      <Sparkline points={sparkline} color={accentHex} className="absolute inset-0 h-full w-full pointer-events-none" />
+    </div>
+    <div className="mt-4 flex flex-col gap-1 border-t border-[color:var(--stats-card-border)] pt-4">
+      <div className="text-xs font-medium text-[color:var(--stats-detail-color)]">
         {detail}
       </div>
     </div>

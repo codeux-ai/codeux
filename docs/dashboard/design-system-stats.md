@@ -34,13 +34,10 @@ The redesigned Stats page uses a stable top-to-bottom shell:
    - The hero KPI runway summarizes tokens, active time, invocations, success rate, models/providers, and selected range.
    - Mode-specific top cards follow the workspace context strip. They use `StatsCard` and should put the most actionable metric first for the selected mode.
    - Cards expose title, value, and string description as the analytics article name. Long values must wrap inside stable card slots.
-4. Workspace context strip
-   - The context strip repeats only the orientation facts needed while scrolling: active mode, selected window, freshness, range resolution, and sprint scope.
-   - It remains present for selected-project, loading, error, empty, and low-data paths.
-5. Workspace body
+4. Workspace body
    - Mode content starts directly after the KPI deck without an extra studio header, readiness chip, or duplicated workspace context card.
    - Workspace bodies may differ substantially, but they should share the same page-scoped panel, chip, input, ledger row, focus, and motion tokens.
-6. Feedback states
+5. Feedback states
    - No-project, first-load loading, first-load error, empty, refresh, and reduced-data states preserve the shell rhythm.
    - Loading states use polite status semantics. Error states use alert semantics and expose retry when recovery is available.
 
@@ -58,7 +55,7 @@ Trend is the chart-first workspace for time-series telemetry.
 - The primary plot should use a tall, viewport-bounded canvas area so the graph remains the dominant element in Trend mode.
 - Short daily windows show compact bucket labels under the overview strip so the minimap carries its own context without relying only on the main x-axis labels.
 - Series controls sit in a full-width band under the usage graph, grouped into readable categories such as totals, token details, source confidence, providers, models, purposes, and Git. Controls use `role="switch"` and `aria-checked`; at least one series remains enabled.
-- Hover, keyboard focus, minimap selection, drag zoom, and active bucket controls all update the same focused-bucket summary; avoid a second live-values panel that repeats those values. The focused-bucket card should cap to the graph height and scroll internally when the graph is tall.
+- Hover, keyboard focus, minimap selection, drag zoom, and active bucket controls all update the same focused-bucket summary; avoid a second live-values panel that repeats those values. The focused-bucket card fills the height of its chart-side column, caps to the graph height, and scrolls internally when the graph is tall.
 - The visible SVG, readable chart summary, and screen-reader-only table must agree on peak tokens, peak active time, average tokens, invocation peak, active series, and zoom range.
 
 ### Composition
@@ -137,6 +134,8 @@ Use page-scoped Stats primitives instead of one-off analytics chrome:
 - `PANEL_CLASS`, `SUBPANEL_CLASS`, `CHIP_CLASS`, `INPUT_CLASS`, `LEDGER_ROW_CLASS`, and `LEDGER_ROW_MODERN_CLASS` provide the shell vocabulary.
 - `StatsCard`, `StudioHeader`, `SignalMetricCard`, `DonutCard`, `PurposeRibbon`, `TokenChip`, `TokenFlowBar`, `ChurnFlowBar`, `SortButton`, `ViewToggle`, and `SeriesLegendButton` cover repeated Stats patterns.
 - Typed view-model helpers should own reusable derivations for trend, chart, model, provider, and ledger projections. Avoid recalculating meaningful bucket or efficiency summaries directly in JSX.
+- New or touched Stats surfaces should use semantic Stats variables for backgrounds, borders, text, status tones, focus rings, chart tracks, selection fills, and scrims instead of raw slate/white/black light-dark utility pairs.
+- Metric cards with sparkline micrographs use the standard card surface, not a separate muted graph background. The sparkline must fit its own stable slot so hover glow and line geometry are not cut off by card overflow.
 
 Dense analytics layouts should stay calm: restrained contrast, low-opacity fills, semantic color, stable grids, and short labels. Avoid nested decorative cards; repeated cards, ledger rows, modals, and tool panels may be framed, while page sections should read as workspaces.
 

@@ -32,7 +32,7 @@ function getWindowLabel(window: string): string {
 }
 
 const ContextChip: FunctionComponent<{ children: ComponentChildren }> = ({ children }) => (
-  <div className={`px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+  <div className={`px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
     {children}
   </div>
 );
@@ -125,12 +125,12 @@ export const StatsPage: FunctionComponent = () => {
       <div className={styles.statePanelInner}>
         {renderContextRail()}
         <div className={`${SUBPANEL_CLASS} ${styles.stateMessage}`}>
-          <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700 dark:text-amber-300 ${CHIP_CLASS}`}>
+          <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-warning-text)] ${CHIP_CLASS}`}>
             {options.badge}
           </div>
           <div className={styles.stateMessageContent}>
             <div className={styles.stateMessageIcon} aria-hidden="true">
-              <options.icon className={`h-8 w-8 text-amber-600 dark:text-amber-300 ${options.iconClassName || ""}`} />
+              <options.icon className={`h-8 w-8 text-[color:var(--stats-warning-text)] ${options.iconClassName || ""}`} />
             </div>
             <h3 className={styles.stateMessageTitle}>{options.title}</h3>
             <p className={styles.stateMessageDescription}>{options.description}</p>
@@ -168,7 +168,7 @@ export const StatsPage: FunctionComponent = () => {
             title: error,
             description: `${selectedProject.name} remains selected for the ${getWindowLabel(activeQuery.window)} window.`,
             role: "alert",
-            iconClassName: "text-rose-500 dark:text-rose-400",
+            iconClassName: "text-[color:var(--stats-negative-text)]",
             badge: "Stats panel unavailable",
             primaryAction: (
               <Button variant="danger" size="sm" onClick={() => refresh()}>

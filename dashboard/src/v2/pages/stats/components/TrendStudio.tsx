@@ -37,15 +37,15 @@ const TrendKpiTile: FunctionComponent<{
   const deltaTone = !delta || delta.direction === "flat"
     ? "text-[var(--stats-detail-color)]"
     : delta.direction === "up"
-      ? "text-emerald-700 dark:text-emerald-300"
-      : "text-rose-700 dark:text-rose-300";
+      ? "text-[color:var(--stats-positive-text)]"
+      : "text-[color:var(--stats-negative-text)]";
 
   return (
     <div className={`${SUBPANEL_CLASS} flex min-h-[7rem] flex-col justify-between p-3.5`}>
       <div className="flex items-center justify-between gap-2">
         <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">{label}</div>
         {showDelta ? (
-          <div className={`inline-flex items-center gap-1 rounded-full border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] ${deltaTone}`}>
+          <div className={`inline-flex items-center gap-1 rounded-full border border-[var(--stats-card-border)] bg-[color:var(--stats-surface-chip)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] ${deltaTone}`}>
             {delta!.direction === "up" ? (
               <ArrowUpRight className="h-3 w-3" strokeWidth={2.6} />
             ) : delta!.direction === "down" ? (
@@ -69,7 +69,7 @@ const TrendSignalCard: FunctionComponent<{
   value: string;
 }> = ({ icon: Icon, label, value }) => (
   <div className={`${SUBPANEL_CLASS} flex min-h-[4.75rem] min-w-0 items-center gap-3 p-3`}>
-    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--stats-control-radius)] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] text-signal-500">
+    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--stats-control-radius)] border border-[var(--stats-card-border)] bg-[color:var(--stats-accent-signal-fill)] text-[color:var(--stats-signal-text)]">
       <Icon className="h-4 w-4" strokeWidth={2.2} />
     </div>
     <div className="min-w-0">
@@ -186,20 +186,20 @@ export const TrendStudio: FunctionComponent<{
         {purposeRows.length > 0 ? purposeRows.map((purpose) => (
           <div key={purpose.id} className={`${LEDGER_ROW_MODERN_CLASS} grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center`}>
             <div className="min-w-0">
-              <div className="break-words text-sm font-bold capitalize text-slate-900 dark:text-white">
+              <div className="break-words text-sm font-bold capitalize text-[color:var(--stats-value-color)]">
                 {purpose.label.replace(/_/g, " ")}
               </div>
               <div className="mt-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]">
                 {formatTokens(purpose.usage?.totalTokens || 0)} tokens
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3 text-sm text-slate-500 sm:min-w-[18rem]">
+            <div className="grid grid-cols-2 gap-3 text-sm text-[color:var(--stats-detail-color)] sm:min-w-[18rem]">
               <div>
-                <span className="block font-medium text-slate-700 dark:text-slate-300">{(purpose.usage?.invocationCount || 0).toLocaleString()}</span>
+                <span className="block font-medium text-[color:var(--stats-value-color)]">{(purpose.usage?.invocationCount || 0).toLocaleString()}</span>
                 <span className="text-[10px] font-bold uppercase tracking-[0.12em]">invocations</span>
               </div>
               <div>
-                <span className="block font-medium text-slate-700 dark:text-slate-300">{formatStatsDuration(purpose.usage?.activeTimeMs || 0)}</span>
+                <span className="block font-medium text-[color:var(--stats-value-color)]">{formatStatsDuration(purpose.usage?.activeTimeMs || 0)}</span>
                 <span className="text-[10px] font-bold uppercase tracking-[0.12em]">active time</span>
               </div>
             </div>
@@ -212,17 +212,17 @@ export const TrendStudio: FunctionComponent<{
       </div>
     </div>
     <div className="flex flex-wrap gap-3" aria-label="Trend range metadata">
-      <div className={`self-start px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-500 bg-amber-500/10 ${CHIP_CLASS}`}>Trend</div>
-      <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ${CHIP_CLASS}`}>
+      <div className={`self-start px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-warning-text)] ${CHIP_CLASS}`}>Trend</div>
+      <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
         {stats.range.label}
       </div>
-      <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ${CHIP_CLASS}`}>
+      <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
         {stats.range.resolutionLabel}
       </div>
-      <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ${CHIP_CLASS}`}>
+      <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
         {stats.buckets.length} buckets
       </div>
-      <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ${CHIP_CLASS}`}>
+      <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
         Peak bucket cost {chartMetrics && chartMetrics.peakCostUsd > 0 ? formatCost(chartMetrics.peakCostUsd) : "—"}
       </div>
     </div>
