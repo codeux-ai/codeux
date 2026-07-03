@@ -65,11 +65,12 @@ Resolution order:
 2. default project-relative path `.code-ux/browser/start-preview.sh`
 3. generated fallback script when no custom preview script exists
 
-Command detection reads `package.json` and lockfiles to infer:
+Command detection reads `package.json` and lockfiles from the same Git ref that will be exported into the preview workspace, rather than assuming the host checkout is on the sprint branch. This keeps preview startup aligned with the sprint snapshot even when the project working tree is on `main` or another branch. It infers:
 - package manager
 - install command
 - build command
 - runtime command
+- workspace app package command, when the root package only exposes broad monorepo scripts
 
 Install behavior:
 - preview runtime now uses `pnpm install --prefer-offline --no-frozen-lockfile` so non-fatal manifest/lockfile drift does not spam container logs and warmed runtime caches are reused before going back to the registry
@@ -83,7 +84,10 @@ Runtime command preference:
 1. `preview`
 2. `start`
 3. `serve`
-4. static build-directory fallback via `serve`
+4. `dev`
+5. static build-directory fallback via `serve`
+
+For workspace roots, preview command detection does not treat broad root scripts such as recursive `dev` or `build` commands as the browser app by default. It scans common app package directories and prefers an app-level web server script. `dev` is only selected when the script resembles a web dev server such as Vite, Next, Astro, Nuxt, Remix, Parcel, or a similar listener, and a selected `dev` fallback skips the production build step.
 
 The setup script configured in `cliWorkflow.containerSetupScriptPath` still prepares the container environment. It does not replace the preview startup script.
 
@@ -191,7 +195,7 @@ The legacy path-proxy endpoint remains available for compatibility and diagnosti
 Current intentional limits:
 - one persisted preview session row per project+sprint pair
 - preview host routing assumes projects use relative URLs or origin-derived absolute URLs for API/websocket traffic
-- script detection prefers production-style preview/start commands and does not automatically fall back to `dev`
+- script detection prefers production-style preview/start/serve commands before using `dev`
 
 ## File Browser Limits and Policy
 
