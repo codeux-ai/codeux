@@ -235,17 +235,13 @@ export class SprintPreviewService {
         const userSpec = await this.resolveDockerUserSpec(workspacePath);
         const volumeName = `code-ux-preview-volume-${sprintId}`;
         await this.ensureSprintVolume(volumeName, projectId, sprintId, session.id, project.baseDir);
-        if (userSpec) {
-          await runCommandStrict("docker", [
-            "run",
-            "--rm",
-            "-v", `${volumeName}:/volume-data`,
-            "alpine:3.20",
-            "sh",
-            "-c",
-            `chown -R ${userSpec} /volume-data && chmod 777 /volume-data`
-          ], project.baseDir).catch(() => undefined);
-        }
+        await this.prepareSprintVolumeRuntimePaths(volumeName, userSpec, [
+          containerWorkspacePath,
+          containerRuntimeHome,
+          containerNpmPrefix,
+          containerNpmCache,
+          pathPosix.join(containerNpmCache, "pnpm-store"),
+        ], project.baseDir);
 
         const dockerArgs = buildSprintPreviewDockerCreateArgs({
           projectId,
@@ -332,6 +328,41 @@ export class SprintPreviewService {
       "--label", `code-ux.sprint-id=${sprintId}`,
       "--label", `code-ux.session-id=${sessionId}`,
       volumeName,
+    ], cwd);
+  }
+
+  private async prepareSprintVolumeRuntimePaths(
+    volumeName: string,
+    userSpec: string | null,
+    containerPaths: string[],
+    cwd: string,
+  ): Promise<void> {
+    const volumePaths = containerPaths.map((containerPath) => {
+      const relative = pathPosix.relative(CONTAINER_PREVIEW_RUNTIME_ROOT, containerPath);
+      if (relative.startsWith("..") || pathPosix.isAbsolute(relative)) {
+        throw new Error(`Preview runtime path is outside the preview volume: ${containerPath}`);
+      }
+      return pathPosix.join("/volume-data", relative);
+    });
+    const mkdirCommands = volumePaths.map((volumePath) => `mkdir -p ${this.shellQuote(volumePath)}`);
+    const ownerRepair = userSpec
+      ? `{ chown -R ${this.shellQuote(userSpec)} /volume-data 2>/dev/null || true; }`
+      : "true";
+    const script = [
+      ...mkdirCommands,
+      ownerRepair,
+      "chmod -R u+rwX,go+rwX /volume-data",
+    ].join(" && ");
+
+    await runCommandStrict("docker", [
+      "run",
+      "--rm",
+      "--user", "0:0",
+      "-v", `${volumeName}:/volume-data`,
+      "alpine:3.20",
+      "sh",
+      "-c",
+      script,
     ], cwd);
   }
 
@@ -1186,6 +1217,10 @@ export class SprintPreviewService {
     if (workspaceMapping.length > 0) mapped = mapPathPrefix(mapped, repoPath, workspaceMapping);
     if (homeMapping.length > 0) mapped = mapPathPrefix(mapped, os.homedir(), homeMapping);
     return mapped;
+  }
+
+  private shellQuote(value: string): string {
+    return `'${value.replace(/'/g, `'\\''`)}'`;
   }
 
   private async resolveDockerUserSpec(workspacePath: string): Promise<string> {
