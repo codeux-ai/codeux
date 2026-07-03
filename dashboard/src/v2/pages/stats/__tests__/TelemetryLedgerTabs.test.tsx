@@ -4,6 +4,7 @@
 /// <reference types="@testing-library/jest-dom" />
 import { h } from "preact";
 import { render, screen, cleanup, fireEvent, within } from "@testing-library/preact";
+import userEvent from "@testing-library/user-event";
 import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { TelemetryLedgerTabs } from "../components/TelemetryLedgerTabs.js";
@@ -183,6 +184,30 @@ describe("TelemetryLedgerTabs", () => {
     fireEvent.keyDown(tablist, { key: "Home" });
     expect(tabs[0]).toHaveAttribute("aria-selected", "true");
     expect(tabs[0]).toHaveFocus();
+  });
+
+  it("allows keyboard tabbing from ledger tabs into search and sort controls", async () => {
+    const user = userEvent.setup();
+    render(<TelemetryLedgerTabs stats={mockStats} />);
+
+    const taskTab = screen.getByRole("tab", { name: "Task Telemetry, 2 entries" });
+    taskTab.focus();
+
+    await user.tab();
+    expect(screen.getByRole("tabpanel")).toHaveFocus();
+
+    await user.tab();
+    expect(screen.getByPlaceholderText("Search tasks")).toHaveFocus();
+
+    await user.tab();
+    const latestSort = screen.getByRole("button", { name: "Latest" });
+    expect(latestSort).toHaveFocus();
+    expect(latestSort).toHaveAttribute("aria-pressed", "false");
+
+    await user.tab();
+    const tokensSort = screen.getByRole("button", { name: "Tokens" });
+    expect(tokensSort).toHaveFocus();
+    expect(tokensSort).toHaveAttribute("aria-pressed", "true");
   });
 
   it("filters task rows and shows clear empty-state context", () => {

@@ -104,9 +104,9 @@ describe("GitTelemetryTab", () => {
     expect(screen.getByText(/Jun 1/)).toBeTruthy();
     expect(screen.getAllByText("TASK-1").length).toBeGreaterThan(0);
 
-    expect(screen.getByRole("button", { name: /Task Leaderboard/i })).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(screen.getByRole("button", { name: /Sprint Leaderboard/i }));
-    expect(screen.getByRole("button", { name: /Sprint Leaderboard/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("tab", { name: /Task Leaderboard/i })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(screen.getByRole("tab", { name: /Sprint Leaderboard/i }));
+    expect(screen.getByRole("tab", { name: /Sprint Leaderboard/i })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Sprint Git Telemetry")).toBeTruthy();
   });
 });
