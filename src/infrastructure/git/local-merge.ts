@@ -112,6 +112,85 @@ export async function findRecoverableWorkerBranch(args: {
   return best?.name ?? null;
 }
 
+async function gitRefExists(
+  repoPath: string,
+  ref: string,
+  runner: LocalMergeRunner,
+): Promise<boolean> {
+  try {
+    await runner("git", ["show-ref", "--verify", "--quiet", ref], repoPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function gitRevListCount(
+  repoPath: string,
+  range: string,
+  runner: LocalMergeRunner,
+): Promise<number> {
+  try {
+    const res = await runner("git", ["rev-list", "--count", range], repoPath);
+    return Number.parseInt(res.stdout.trim(), 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Returns true only when the recorded worker branch still exists and carries
+ * commits that are not already in the feature branch. This is used to clear stale
+ * branch names left behind by no-output runs without force-settling real work.
+ */
+export async function workerBranchHasMergeWork(args: {
+  repoPath: string;
+  featureBranch: string;
+  workerBranch: string;
+  runner?: LocalMergeRunner;
+}): Promise<boolean> {
+  const runner = args.runner ?? defaultRunner;
+  const branch = args.workerBranch.trim();
+  if (!branch) return false;
+
+  const sourceRefs = [
+    `refs/heads/${branch}`,
+    `refs/remotes/origin/${branch}`,
+  ];
+  const existingSourceRefs: string[] = [];
+  for (const ref of sourceRefs) {
+    if (await gitRefExists(args.repoPath, ref, runner)) {
+      existingSourceRefs.push(ref);
+    }
+  }
+  if (existingSourceRefs.length === 0) {
+    return false;
+  }
+
+  const baseRefs = [
+    `refs/remotes/origin/${args.featureBranch}`,
+    `refs/heads/${args.featureBranch}`,
+  ];
+  const existingBaseRefs: string[] = [];
+  for (const ref of baseRefs) {
+    if (await gitRefExists(args.repoPath, ref, runner)) {
+      existingBaseRefs.push(ref);
+    }
+  }
+  if (existingBaseRefs.length === 0) {
+    return true;
+  }
+
+  for (const sourceRef of existingSourceRefs) {
+    for (const baseRef of existingBaseRefs) {
+      if ((await gitRevListCount(args.repoPath, `${baseRef}..${sourceRef}`, runner)) > 0) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 /**
  * Merges `sourceBranch` into `targetBranch` with a `--no-ff` merge commit, entirely
  * on the local host repo (LOCAL git mode has no remote PR to merge). Checks out the

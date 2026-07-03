@@ -975,7 +975,7 @@ export class CodeUxServer {
     defaultBranch: string;
     title: string;
     body: string;
-  }): Promise<{ created: boolean; prNumber: number | null; prUrl: string | null } | null> {
+  }): Promise<{ created: boolean; prNumber: number | null; prUrl: string | null; errorMessage?: string } | null> {
     const gitStatusService = new GitStatusService(args.repoPath, defaultRunner, true);
     try {
       return await gitStatusService.resolveOrCreatePullRequest({
@@ -984,8 +984,20 @@ export class CodeUxServer {
         title: args.title,
         body: args.body,
       }, this.getEffectiveGitHostTokens());
-    } catch {
-      return null;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn("Failed to resolve or create main branch PR", {
+        repoPath: args.repoPath,
+        featureBranch: args.featureBranch,
+        defaultBranch: args.defaultBranch,
+        error: message,
+      });
+      return {
+        created: false,
+        prNumber: null,
+        prUrl: null,
+        errorMessage: message,
+      };
     }
   }
 

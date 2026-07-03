@@ -112,6 +112,7 @@ describe("FeaturePrGateService", () => {
       persistMergedTask: vi.fn().mockResolvedValue(undefined),
       executionRepository: {
         getLatestTaskRun: vi.fn().mockReturnValue({ id: "run-1" }),
+        updateTaskRun: vi.fn(),
         appendTaskRunEvent: vi.fn(),
       } as any,
       sprintRunId: "sprint-run-1",
@@ -440,6 +441,38 @@ jobs:
     expect(result.subtasks[0].merge_indicator).toBeUndefined();
     expect(result.reportText).toBe("");
     expect(context.executionRepository?.appendTaskRunEvent).not.toHaveBeenCalled();
+  });
+
+  it("settles a completed task when its recorded worker branch no longer exists", async () => {
+    subtasks[0].status = "CODING_COMPLETED";
+    subtasks[0].worker_branch = "task/stale-branch";
+    subtasks[0].pr_url = undefined;
+    context.gitStatus.openPullRequests = [];
+    vi.mocked(context.executionRepository!.getLatestTaskRun).mockReturnValue({
+      id: "run-1",
+      state: "COMPLETED",
+      workerBranch: "task/stale-branch",
+    } as any);
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0].status).toBe("COMPLETED");
+    expect(result.subtasks[0].merge_indicator).toBeUndefined();
+    expect(result.subtasks[0].worker_branch).toBeUndefined();
+    expect(context.executionRepository?.updateTaskRun).toHaveBeenCalledWith("run-1", { workerBranch: null });
+    expect(context.persistMergedTask).toHaveBeenCalledWith(expect.objectContaining({
+      id: "T1",
+      status: "COMPLETED",
+      merge_indicator: undefined,
+    }));
+    expect(context.executionRepository?.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "ci_gate_status",
+      "system",
+      expect.objectContaining({ state: "no_merge_work", workerBranch: "task/stale-branch" }),
+      expect.any(Object),
+    );
+    expect(result.reportText).toContain("No merge work");
   });
 
   it("normalizes pre-processing state before PR/CI processing", async () => {
