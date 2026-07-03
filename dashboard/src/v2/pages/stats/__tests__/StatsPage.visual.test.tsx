@@ -25,7 +25,14 @@ import { StatsPage } from '../StatsPage.js';
 import * as useProjectDataModule from '../../../context/project-data.js';
 import * as useStatsPageDataModule from '../use-stats-page-data.js';
 vi.mock('../components/system/SystemStudio.js', () => ({
-  SystemStudio: (props: { projectId: string }) => <div data-testid="system-studio">{props.projectId}</div>
+  SystemStudio: (props: { projectId: string }) => (
+    <section data-testid="system-studio" aria-label="System workbench">
+      <h3>System Workbench</h3>
+      <div>Invocation Filters</div>
+      <div>Invocation Table</div>
+      <div>{props.projectId}</div>
+    </section>
+  )
 }));
 
 vi.mock('../../../context/project-data.js', () => {
@@ -177,18 +184,21 @@ describe('StatsPage visual tests', () => {
   });
 
   it.each([
-    ['trend', ['Total Tokens', 'Active Time', 'Cost', 'Invocations', 'Cache Rate']],
-    ['composition', ['Provider Share', 'Token Anatomy', 'Purpose Activity', 'Merge Conflicts']],
-    ['models', ['Active Models', 'Top Model', 'Median Latency', 'Success Rate', 'Cache Hit Rate']],
-    ['reliability', ['Provider Health', 'Telemetry Mix', 'Failures', 'Retry Signals', 'Telemetry Gaps']],
-    ['ledgers', ['Task Rows', 'Sprint Rows', 'Pull Requests', 'Files Changed', 'Merge Conflicts']],
-    ['system', ['Invocation Rows', 'Provider Rows', 'Model Rows', 'Source Rows', 'System Health']],
-  ] as const)('renders %s mode top cards', (mode, labels) => {
+    ['trend', 'Trend', ['Total Tokens', 'Active Time', 'Cost', 'Invocations', 'Cache Rate']],
+    ['composition', 'Composition', ['Provider Share', 'Token Anatomy', 'Purpose Activity', 'Merge Conflicts']],
+    ['models', 'Models', ['Active Models', 'Top Model', 'Median Latency', 'Success Rate', 'Cache Hit Rate']],
+    ['reliability', 'Reliability', ['Provider Health', 'Telemetry Mix', 'Failures', 'Retry Signals', 'Telemetry Gaps']],
+    ['ledgers', 'Ledgers', ['Task Rows', 'Sprint Rows', 'Pull Requests', 'Files Changed', 'Merge Conflicts']],
+    ['system', 'System', ['Invocation Rows', 'Provider Rows', 'Model Rows', 'Source Rows', 'System Health']],
+  ] as const)('renders %s mode top cards and studio shell', (mode, studioTitle, labels) => {
     mockStatsPageData(mode);
     const { getAllByText } = render(<StatsPage />);
     for (const label of labels) {
       expect(getAllByText(label).length).toBeGreaterThan(0);
     }
+    expect(screen.getByText('Analysis Studio')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: studioTitle })).toBeTruthy();
+    expect(screen.getByText('Ready')).toBeTruthy();
   });
 
   it('renders empty states with new amber visual language', () => {
@@ -307,7 +317,9 @@ describe('StatsPage visual tests', () => {
   it('renders the system studio without crashing', () => {
     mockStatsPageData('system');
 
-    const { getByTestId } = render(<StatsPage />);
+    const { getByTestId, getByText } = render(<StatsPage />);
     expect(getByTestId('system-studio')).toBeTruthy();
+    expect(getByText('Invocation Filters')).toBeTruthy();
+    expect(getByText('Invocation Table')).toBeTruthy();
   });
 });

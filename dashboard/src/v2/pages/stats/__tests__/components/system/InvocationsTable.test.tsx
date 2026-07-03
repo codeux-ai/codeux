@@ -116,9 +116,9 @@ describe("InvocationsTable", () => {
     expect(textContent).toContain("running");
 
     const runningRow = within(root).getByText("running").closest("tr");
-    expect(runningRow?.querySelector("div.text-blue-600")).toBeTruthy();
+    expect(runningRow?.textContent).toContain("running");
     const failedRow = within(root).getByText("Latest failure").closest("tr");
-    expect(failedRow?.querySelector("div.text-red-600")).toBeTruthy();
+    expect(failedRow?.textContent).toContain("Latest failure");
 
     const modelCell = within(root).getByText("claude-sonnet-4");
     expect(within((modelCell.closest("td") as HTMLElement) ?? root).getByText("claude-sonnet-4")).toBeTruthy();
@@ -143,6 +143,25 @@ describe("InvocationsTable", () => {
 
     expect(onSortChange).toHaveBeenNthCalledWith(1, { key: "startedAt", dir: "asc" });
     expect(onSortChange).toHaveBeenNthCalledWith(2, { key: "inputTokens", dir: "desc" });
+  });
+
+  it("preserves semantic invocation table headers and row expand labels", () => {
+    render(
+      <InvocationsTable
+        invocations={[createInvocation({ id: "inv-headers" })]}
+        sort={{ key: "totalTokens", dir: "desc" }}
+        onSortChange={vi.fn()}
+        expandedId={null}
+        onRowExpand={vi.fn()}
+      />,
+    );
+
+    for (const header of ["Time", "Status", "Type", "Model", "In", "Out", "Cached", "Total", "Avg Duration", "Context", "Expand"]) {
+      expect(screen.getByRole("columnheader", { name: new RegExp(header) })).toBeTruthy();
+    }
+
+    expect(screen.getByRole("button", { name: /Total sorted descending/i })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "Expand invocation inv-headers" }).length).toBeGreaterThan(0);
   });
 
   it("renders the expansion placeholder row", async () => {

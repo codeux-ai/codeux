@@ -2,110 +2,114 @@
 
 ## Purpose
 
-This page defines the visual and interaction standards for the dashboard’s `/stats` surface. The Stats page is a dense analytics workspace, but it should still feel calm, legible, and operationally focused.
+The `/stats` page is the telemetry command surface for a selected project. Its design language is the warm void: quiet dark and light canvases, warm amber emphasis, compact operational density, and restrained status treatment. The page should read as one analytics workspace across Trend, Composition, Models, Reliability, Ledgers, and System modes.
 
 ## Information Architecture
 
-The final Stats page is organized into four layers:
+The Stats surface has five persistent layers:
 
-1. Hero
-   - Project and window context live at the top of the page.
-   - Time-window chips and custom date inputs stay visible regardless of the selected mode.
-   - The hero also exposes summary metrics and the analysis mode toggle.
-2. Mode navigation
-   - The page supports `trend`, `composition`, `models`, `reliability`, `ledgers`, and `system`.
-   - Modes are treated as first-class analysis surfaces, not as hidden subpages.
-3. Analysis studio
-   - Trend mode combines summary cards, the interactive usage chart, a persistent side rail, and the graph filter menu.
-   - Composition, models, and reliability modes use compact metric cards and supporting charts or summaries.
-   - Ledgers mode uses tabbed task, sprint, and git views.
-   - System mode uses a controlled filter bar and a dense invocation table.
-4. Feedback states
-   - Loading, empty, error, and reduced-data states must preserve layout and keep the page usable.
+1. Hero command band
+   - Project, sprint, generated-at, freshness, source quality, time window, custom range, analysis mode, and executive summary stay visible before the workspace changes.
+   - The hero owns all time-window decisions. Downstream charts and tables respond to the selected range; they do not duplicate range controls.
+2. Mode summary cards
+   - Each mode renders a compact top-card deck tuned to the active analysis question.
+   - Trend focuses on throughput, runtime, cost, invocations, and cache rate.
+   - Composition, Models, Reliability, Ledgers, and System use their own mode-specific card taxonomy while preserving the same card density.
+3. Analysis studio header
+   - Every mode starts with a warm-void header band containing the mode icon, mode name, short description, and loading state.
+   - The header keeps operators oriented when switching between dense workspaces.
+4. Mode workspace
+   - Trend renders the KPI band, chart workspace, active bucket rail, graph filters, minimap, and purpose activity ledger.
+   - Composition, Models, and Reliability render secondary studio panels for mix, performance, telemetry confidence, and provider health.
+   - Ledgers renders tabbed Task Telemetry, Sprint Telemetry, and Git Telemetry.
+   - System renders the invocation workbench with summaries, controlled filters, and the invocation table.
+5. Feedback states
+   - No-project, loading, error, empty, and reduced-data states preserve page rhythm and use semantic `status` or `alert` roles.
 
-## Visual Standards
+## Warm-Void Visual Language
 
-### Density
+### Surfaces
 
-- Prefer compact cards and stacked panels over large empty containers.
-- Keep the hero dense enough to communicate scope, but not so crowded that the mode switcher becomes hard to scan.
-- Use the shared `PANEL_CLASS`, `SUBPANEL_CLASS`, and `CHIP_CLASS` primitives instead of ad-hoc one-off shells.
+- Use `stats-theme.css` variables as the source of truth for Stats-specific surfaces: `--stats-card-bg`, `--stats-card-border`, `--stats-surface-chip`, `--stats-detail-color`, `--stats-label-color`, and `--stats-focus-ring`.
+- Use shared primitives (`PANEL_CLASS`, `SUBPANEL_CLASS`, `CHIP_CLASS`, `INPUT_CLASS`, `LEDGER_ROW_MODERN_CLASS`, `StatsCard`) instead of one-off panel shells.
+- Outer panels should feel soft and atmospheric; inner panels should be quieter and flatter so dense data remains scan-friendly.
+- Avoid nested decorative cards. A repeated metric, ledger row, modal, or tool panel can be carded; page sections should stay as full-width bands or unframed layouts.
+
+### Spacing And Density
+
+- Keep vertical rhythm tight: hero, top cards, studio header, and workspace sections use consistent `gap-5` to `gap-8` spacing depending on viewport.
+- Metric cards are compact and stable. Values, badges, sparklines, and loading content must not resize the card footprint unexpectedly.
+- Summary rows should wrap cleanly instead of overflowing horizontally. Use `min-w-0`, truncation, and responsive grid tracks for long project names, model names, and custom date labels.
+- Sticky controls in ledgers and system workbench should use warm-void subpanel styling with backdrop blur and semantic borders.
 
 ### Typography
 
-- Use small uppercase labels for metric headers and control groups.
-- Reserve large text for key values, chart titles, and table summaries.
-- Keep labels concise. If a metric needs a long explanation, put the explanation in a subordinate detail line.
-
-### Spacing
-
-- Use consistent vertical rhythm between the hero, the mode cards, and the analysis studio.
-- Keep control clusters tight enough to read as a single system, but separate them enough that keyboard focus remains obvious.
-- Preserve panel height across loading and empty states so the layout does not jump.
-- Metric cards use the established `StatsCard` radius and internal padding (`1.85rem` radius, `1.75rem` padding) so the dashboard overview and Stats page share the same card proportions.
-- Chart and bar background layers inside metric cards render as direct card children so their absolute positioning reaches the card edges; do not wrap them in a padded content container.
+- Use small uppercase labels for metric headings, control groups, badges, table context labels, and ledger metadata.
+- Reserve large bold type for metric values, mode titles, chart summaries, and table result counts.
+- Keep explanatory copy short and subordinate. Long implementation notes do not belong in the page UI.
+- Do not scale font size with viewport width. Use responsive layout changes rather than viewport-based typography.
 
 ### Color
 
-- Use signal colors to encode state, not decoration.
-- Status chips, tab pills, and legend switches should remain legible in both light and dark themes.
-- Avoid introducing new color tokens when existing semantic tokens already describe the same intent.
-- Metric cards use solid card surfaces (`#FFFFFF` in light mode, `#181411` in dark mode) rather than the shared translucent glass surface, which prevents the page background from reading as inner card padding.
+- Use warm amber for primary Stats emphasis, selected mode controls, and command context.
+- Use semantic status colors only for state: green/signal for healthy or running, amber for warning or in-progress, rose/red for failures, and muted slate/void for neutral detail.
+- Chart colors must come from named semantic Stats color tokens. Do not pass arbitrary saturated hex colors through renderers.
+- Area fills, grid lines, minimap overlays, tooltip surfaces, and table row rails should be low-opacity and warm-muted. Avoid glow-heavy chart styling.
 
-## Interaction Rules
+## Controls
 
-### Hero and Window Controls
+### Hero Controls
 
-- Time-window presets should remain visible in the hero.
-- Custom ranges must validate immediately and display an inline error when the range is missing or inverted.
-- The custom range action should stay keyboard accessible and should not rely on another control elsewhere in the app.
+- Time presets are a grouped set of buttons with `aria-pressed`.
+- `Custom` reveals date fields without applying a range. The guarded Apply action is the only custom-range apply path.
+- Custom date inputs use explicit labels, `aria-invalid`, `aria-errormessage`, and an inline `role="alert"` message when dates are missing or inverted.
+- The analysis mode rail is a grouped toggle with stable labels: `Trend`, `Composition`, `Models`, `Providers`, `Ledgers`, and `System`. The `Providers` label maps to reliability mode and should not be renamed casually.
 
-### Mode Navigation
+### Chart Controls
 
-- Use a single accessible grouped toggle for the mode switcher.
-- Mode buttons should expose pressed state and should remain stable in label order.
-- Do not rename modes casually; the page and regression tests rely on these labels as part of the public UI contract.
+- Graph filters control series visibility only. They should never change the selected time window.
+- Series controls are switches (`role="switch"`, `aria-checked`) with text labels that remain understandable without color.
+- At least one series must remain enabled so the chart does not collapse into an accidental empty state.
+- Hover, keyboard focus, slider exploration, minimap selection, and drag zoom all update the same active-bucket summary.
 
-### Charts
+### Ledger And System Controls
 
-- Chart regions must expose an accessible name, a readable summary, and a non-visual alternative for exact values.
-- Use a three-part layout for the trend workspace: a compact ordered KPI band, a stable-height SVG plot workspace, and a persistent focused-bucket/series side rail that moves below the plot on narrow screens.
-- Graph filters should control series visibility only. The time window belongs to the hero.
-- Series toggles must be implemented as `button role="switch"` controls with `aria-checked`.
-- Keep at least one series enabled so the plot never collapses into an empty chart by accident.
-- Hover, keyboard focus, and drag zoom should all feed the same active-bucket summary.
-- Keep trend chart controls on a compact wrapping row above the SVG: zoom context, filter trigger, reset zoom, and helper chips must not overlap the plot or tooltip.
-- Chart strokes, fills, grid lines, minimap overlays, and tooltip surfaces should stay calm and warm-muted; preserve distinguishable series colors without saturated area fills or heavy glow.
+- Ledger tabs use standard tab semantics, roving focus, `aria-controls`, and stable count badges.
+- System filters are explicit controlled inputs and chip groups for search, status, purpose, provider, and error category.
+- Invocation table sort controls live in column headers and preserve `scope="col"` relationships.
+- Expand controls name the target invocation and preserve keyboard access on desktop and mobile layouts.
 
-### Ledgers
+## Ledgers
 
-- Tabbed ledgers should use roving focus and expose numeric badge counts.
-- Keep the tab labels short: `Task Telemetry`, `Sprint Telemetry`, and `Git Telemetry`.
-- Rows should keep status, context, and token columns readable without forcing the operator to expand every entry.
-- Expanded rows should preserve the ledger footprint and only add detail beneath the active record.
+- Task, sprint, and git ledgers are dense operational records, not report cards.
+- Rows should show status, context, usage, recency, and source detail without requiring expansion for basic triage.
+- Search, sort, and progressive rendering must keep large ledgers responsive.
+- Expanded rows add detail beneath the selected record without changing the surrounding ledger vocabulary.
 
-### System Tables
+## Accessibility
 
-- The system view should keep its filters and table separate so counts remain understandable at a glance.
-- Search, status, purpose, provider, and error filters must be controlled explicitly and should not be hidden inside the table.
-- Table headers should stay sortable and preserve header relationships for assistive tech.
-- Result counts should stay visible while the list is filtered or paginated.
+- The page root is a named Statistics region and marks itself busy while first-load telemetry is pending.
+- No-project and loading states use polite `status` regions; error states use `alert`.
+- Chart workspaces expose a readable summary, focusable bucket targets, keyboard exploration, and a screen-reader-only data table for exact values.
+- Mode navigation, time presets, tabs, switches, filter chips, and sort buttons expose state through standard ARIA attributes.
+- Focus rings use `--stats-focus-ring` or the dashboard focus-ring token and must remain visible in light and dark themes.
 
-## Motion and Reduced Motion
+## Motion
 
-- Use subtle entrance motion for page sections and mode transitions.
-- Honor `prefers-reduced-motion` by disabling chart and tab animation while keeping state changes clear.
-- Do not depend on animation to reveal essential information.
+- Use subtle section and mode-transition motion for orientation only.
+- Honor `prefers-reduced-motion` by disabling entrance, chart, and tab animation while preserving state changes.
+- Never depend on motion to reveal essential information, validation errors, or table content.
 
-## Accessibility Requirements
+## Responsive Behavior
 
-- Every analysis mode must remain reachable by keyboard.
-- Chart summaries should be available to screen readers even when the plot is visually dense.
-- Tabs, switches, and result counters must expose their state through standard ARIA patterns instead of custom text alone.
-- Loading, empty, and error states must use semantic status or alert roles.
-- Decorative chart substructure should be hidden from assistive tech when a parent element already provides the meaningful summary.
+- The hero uses a two-zone layout on wide screens and stacks on smaller screens. Time presets and mode controls may scroll horizontally inside their rails, but the page must not produce horizontal overflow.
+- Trend mode uses a chart-first column with a persistent focused-bucket/series rail on desktop; the rail moves below the plot on narrow screens.
+- Mode cards collapse from five-column desktop decks to two-column and single-column layouts while preserving card order.
+- Tables and ledgers expose mobile labels inside rows when column headers are visually hidden.
+- All controls must remain reachable by keyboard and touch at mobile widths.
 
 ## Implementation Notes
 
-- The design system assumes the shared stats primitives stay in place, especially the panel shells, chips, legend switches, and metric cards.
-- Keep the visual language consistent across modes so the page feels like one analytics workspace, not six separate pages.
+- Keep Stats visuals aligned with `dashboard/src/v2/pages/stats/styles/stats-theme.css` and the shared primitives re-exported by `StatsShared.tsx`.
+- Documentation and tests should describe the integrated behavior: hero command band, mode card taxonomy, studio header, trend chart workspace, secondary studios, ledgers, system workbench, and realtime/polling refresh states.
+- Small visual fixes are acceptable only when needed to keep tests or docs truthful; redesign changes belong in dedicated UI tasks.
