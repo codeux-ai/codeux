@@ -166,6 +166,36 @@ describe('StatsPageHero', () => {
     expect(screen.getByLabelText('Executive summary')).toBeTruthy();
   });
 
+  it('invokes preset and visual-mode callbacks from the command controls', () => {
+    const applyPresetWindow = vi.fn();
+    const setVisualMode = vi.fn();
+
+    render(
+      <StatsPageHero
+        selectedProject={{ id: 'proj-1', name: 'Project 1' } as any}
+        stats={createStats()}
+        activeQuery={{ window: '24h' } as any}
+        customFrom="2026-05-01"
+        customTo="2026-05-02"
+        applyPresetWindow={applyPresetWindow}
+        setCustomFrom={vi.fn()}
+        setCustomTo={vi.fn()}
+        applyCustomRange={vi.fn()}
+        visualMode="trend"
+        setVisualMode={setVisualMode}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '7d' }));
+    expect(applyPresetWindow).toHaveBeenCalledWith('7d');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Providers' }));
+    expect(setVisualMode).toHaveBeenCalledWith('reliability');
+
+    fireEvent.click(screen.getByRole('button', { name: 'System' }));
+    expect(setVisualMode).toHaveBeenCalledWith('system');
+  });
+
   it('renders enriched KPI details from usage, statuses, models, sprint, and range', () => {
     render(
       <StatsPageHero

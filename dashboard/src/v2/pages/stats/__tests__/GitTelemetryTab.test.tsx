@@ -3,7 +3,10 @@
  */
 import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
 import { afterEach, describe, expect, it } from "vitest";
+import * as matchers from "@testing-library/jest-dom/matchers";
 import { GitTelemetryTab } from "../components/GitTelemetryTab.js";
+
+expect.extend(matchers);
 
 afterEach(() => {
   cleanup();
@@ -95,13 +98,15 @@ describe("GitTelemetryTab", () => {
   it("renders summary cards, rankings, and leaderboard tabs", () => {
     render(<GitTelemetryTab gitStats={mockGitStats} />);
 
-    expect(screen.getByText("Insertions")).toBeTruthy();
+    expect(screen.getAllByText("Insertions").length).toBeGreaterThan(0);
     expect(screen.getByText("Merge Conflicts")).toBeTruthy();
     expect(screen.getByText("Ranking Snapshot")).toBeTruthy();
-    expect(screen.getByText("Jun 1")).toBeTruthy();
-    expect(screen.getByText("TASK-1")).toBeTruthy();
+    expect(screen.getByText(/Jun 1/)).toBeTruthy();
+    expect(screen.getAllByText("TASK-1").length).toBeGreaterThan(0);
 
+    expect(screen.getByRole("button", { name: /Task Leaderboard/i })).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getByRole("button", { name: /Sprint Leaderboard/i }));
+    expect(screen.getByRole("button", { name: /Sprint Leaderboard/i })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("Sprint Git Telemetry")).toBeTruthy();
   });
 });

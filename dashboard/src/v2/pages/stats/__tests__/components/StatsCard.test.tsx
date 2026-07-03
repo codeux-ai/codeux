@@ -33,11 +33,8 @@ describe("StatsCard", () => {
 
   it("renders icon component when provided", () => {
     const { container } = render(<StatsCard title="Test" value="0" icon={Activity} />);
-    // The icon container should be present
-    const iconContainer = container.querySelector('[class*="iconContainer"]');
-    expect(iconContainer).not.toBeNull();
-    // Lucide icons render as SVG
-    expect(iconContainer?.querySelector("svg")).not.toBeNull();
+    expect(screen.getByRole("article", { name: "Test: 0" })).toBeDefined();
+    expect(container.querySelector("svg")).not.toBeNull();
   });
 
   it("renders trend and description slots", () => {
@@ -55,20 +52,17 @@ describe("StatsCard", () => {
     expect(screen.getByRole("article", { name: "Revenue: $50k: vs previous period" })).toBeDefined();
   });
 
-  it("applies variant classes based on accent prop", () => {
-    const { container } = render(<StatsCard title="Test" value="0" accent="amber" />);
-    const card = container.firstChild as HTMLElement;
-    // Match the CSS module class name for accentAmber
-    expect(card.className).toMatch(/accentAmber/);
+  it("keeps the accessible card contract across accent variants", () => {
+    render(<StatsCard title="Cost" value="$4.20" accent="amber" description="Projected usage" />);
+    expect(screen.getByRole("article", { name: "Cost: $4.20: Projected usage" })).toBeDefined();
+    expect(screen.getByText("Projected usage")).toBeDefined();
   });
 
   it("stays stable without optional elements", () => {
-    const { container } = render(<StatsCard title="Minimal" value="100" />);
+    render(<StatsCard title="Minimal" value="100" />);
     
     expect(screen.queryByTestId("trend-chip")).toBeNull();
-    // The footer div should not be rendered if both trend and description are missing
-    const footer = container.querySelector('[class*="footer"]');
-    expect(footer).toBeNull();
+    expect(screen.getByRole("article", { name: "Minimal: 100" })).toBeDefined();
   });
 
   it("renders visual children directly in the card so backgrounds reach the edges", () => {

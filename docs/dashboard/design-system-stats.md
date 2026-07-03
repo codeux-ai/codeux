@@ -119,4 +119,5 @@ The Stats surface has six persistent layers:
 
 - Keep Stats visuals aligned with `dashboard/src/v2/pages/stats/styles/stats-theme.css` and the shared primitives re-exported by `StatsShared.tsx`.
 - Documentation and tests should describe the integrated behavior: hero command band, mode card taxonomy, studio header, trend chart workspace, secondary studios, ledgers, system workbench, and realtime/polling refresh states.
+- Stats tests should prefer user-visible labels, roles, ARIA state, keyboard behavior, and deterministic telemetry fixtures over CSS-module or utility-class assertions, especially for repeated labels in summary cards, charts, ledgers, and system filters.
 - Small visual fixes are acceptable only when needed to keep tests or docs truthful; redesign changes belong in dedicated UI tasks.
