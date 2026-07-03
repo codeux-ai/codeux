@@ -272,7 +272,7 @@ export class FeaturePrGateService {
 
     const completedAwaitingMerge = updatedSubtasks.filter((task) => {
       const info = taskCiInfoMap.get(task.id)!;
-      return isCompletedTaskAwaitingMerge(task, {
+      return Boolean(info.mergedPr) || isCompletedTaskAwaitingMerge(task, {
         githubMode: context.githubMode,
         hasPr: info.hasPr,
         isExecutionCompleted: info.isExecutionCompleted,
