@@ -54,7 +54,7 @@ The memory map uses a pointer-centered camera so users can inspect dense graphs 
 - Mouse wheel zoom keeps the world point under the cursor stable as closely as possible while clamping to the configured zoom range.
 - The zoom controls step through the same range as the wheel with the same short camera tween, and can reach a deep-readability zoom for dense maps.
 - Selecting a node from the canvas or list recenters the camera on that memory at a readable zoom level, and Reset returns to the default overview without leaving a stale selection behind.
-- Node and category labels are drawn in inverse-zoom screen space so the graph positions zoom while text remains readable instead of growing with the map.
+- Node points, category labels, and memory labels are drawn in clamped screen space so the graph positions zoom while dots and text remain readable instead of growing with the map or disappearing during deep inspection.
 - Hovering a node highlights it and updates the cursor only. At higher zoom levels the canvas renders the focused label bubble for the selected memory instead of creating hover-only overlays.
 - Dense maps are expected to remain navigable at 200+ memories without forcing every memory label to render at once.
 
@@ -122,9 +122,9 @@ The Memory settings panel also manages one project-scoped scheduler entry for lo
 - The Memory page model catalog is presented as a Warm Void panel with a state summary and responsive model cards. It distinguishes active, downloaded, downloading, stale, and unavailable models without using legacy violet action styling.
 - Model catalog primary actions use Signal Jade for download and activation, stale re-embedding warnings use Ember, and destructive/error states use status red. The downloaded-model delete action is icon-only with an accessible label and is disabled while the model is active.
 - The memory sidebar now starts collapsed by default and exposes a compact rail/tab so the graph canvas remains visible until the user explicitly expands it.
-- Expanding the sidebar opens directly to the current alive memory list for the selected tier, sprint, and agent filter set. Browsing all visible memories is the default path; search is not required before the list is useful.
-- Closing the sidebar clears the current search query and selected memory IDs so returning to the sidebar starts from the current visible memory list. `MemorySearch.tsx` remains available as a standalone accessible search control.
-- Added keyboard-accessible clear search functionality to `MemorySearch.tsx` (supports clearing via `Escape` and a dedicated clear button with an explicit `<kbd>Esc</kbd>` visual affordance).
+- Expanding the sidebar opens directly to the current alive memory list for the selected tier, sprint, and agent filter set, with an embedded search input above the list. Browsing all visible memories is still the default path; search is not required before the list is useful.
+- Closing the sidebar clears the current search query and selected memory IDs so returning to the sidebar starts from the current visible memory list.
+- `MemorySearch.tsx` provides debounced text filtering by memory text/category and keyboard-accessible clear behavior (supports clearing via `Escape` and a dedicated clear button with an explicit `<kbd>Esc</kbd>` visual affordance).
 - Enhanced `MemoryList.tsx` to prominently display visible memory counts directly in the UI instead of relying solely on `sr-only` live regions, while keeping the list layout `min-w-0` and overflow-safe on narrow screens.
 - Added per-memory selection toggles and a batch action bar to the sidebar list so users can select visible memories, clear the selection, or select all currently filtered results without touching hidden records.
 - Batch deletion requires an explicit confirmation dialog when more than one memory is selected. The delete flow is optimistic, restores any failed deletions, and reports partial failures through the memory feedback region with a retry action.

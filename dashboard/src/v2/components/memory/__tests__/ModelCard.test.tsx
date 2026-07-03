@@ -69,6 +69,25 @@ describe("ModelCard", () => {
     expect(props.onDownload).toHaveBeenCalledWith("bge-small-en-v1.5");
   });
 
+  it("uses compact Warm Void sizing and wrapped action labels", () => {
+    render(<ModelCard model={model()}
+      {...handlers()}
+      reembedding={false}
+      staleCount={0} />);
+
+    const card = screen.getByText("BGE Small EN").closest("article");
+    expect(card).toHaveClass("min-h-[17rem]");
+    expect(card).toHaveClass("rounded-[1.25rem]");
+    expect(card).toHaveClass("p-4");
+    expect(card?.className).not.toContain("min-h-[21rem]");
+
+    const button = screen.getByRole("button", { name: "Download" });
+    expect(button).toHaveClass("min-h-9");
+    expect(button).toHaveClass("rounded-lg");
+    expect(button).toHaveClass("px-3");
+    expect(button.querySelector("span")).toHaveClass("min-w-0", "text-center", "leading-4");
+  });
+
   it("shows download progress while a model is downloading", () => {
     render(<ModelCard model={model({ downloading: true, downloadProgress: 0.42 })}
       {...handlers()}
