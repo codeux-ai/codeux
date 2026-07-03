@@ -125,6 +125,14 @@ That tool resolves the DB task, sprint, and project and starts the existing task
 
 This keeps the current Docker/worktree/CI flow intact for worker-owned local execution instead of re-implementing provider workflows inside the worker loop.
 
+### Workspace Branch Discovery
+
+Worker workspace preparation uses targeted Git ref checks instead of branch enumeration. Before preparing an isolated Docker volume or host worktree, Code UX fetches only the known worker and sprint feature branch tips into exact `refs/remotes/origin/*` refs, then checks the small candidate set needed for that dispatch.
+
+Resolution prefers `refs/remotes/origin/<workerBranch>`, then local `refs/heads/<workerBranch>`, then the equivalent feature-branch refs. Snapshot workspaces use the requested checkout branch, fallback branch, and current repository branch as bounded hints. Each preparation memoizes exact `show-ref --verify --quiet` results so start-ref resolution, targeted bundle seeding, and checkout do not repeat the same ref probes.
+
+This keeps provider startup bounded in repositories that have accumulated thousands of sprint and worker branches while preserving the full-bundle retry path for recovered QA or follow-up workspaces that need refs outside the hints.
+
 ## Cancellation Path
 
 Workers now honor dashboard cancel end-to-end.
