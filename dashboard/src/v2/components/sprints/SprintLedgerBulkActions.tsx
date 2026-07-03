@@ -101,7 +101,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
             aria-disabled={isAnyPending}
             onClick={onBulkShowcaseEnable}
             disabled={isAnyPending}
-            className="inline-flex min-w-0 flex-1 sm:flex-none justify-center whitespace-nowrap h-9 items-center gap-1.5 rounded-xl border border-black/[0.06] bg-white/80 px-3 text-xs font-bold text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex min-h-9 min-w-0 flex-1 flex-wrap items-center justify-center gap-1.5 rounded-xl border border-black/[0.06] bg-white/80 px-3 py-1.5 text-xs font-bold leading-tight text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
           >
             {isPinPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Heart className="h-3 w-3" fill="currentColor" />}
             {isPinPending ? "Pinning..." : "Pin"}
@@ -113,7 +113,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
             aria-disabled={isAnyPending}
             onClick={onBulkShowcaseDisable}
             disabled={isAnyPending}
-            className="inline-flex min-w-0 flex-1 sm:flex-none justify-center whitespace-nowrap h-9 items-center gap-1.5 rounded-xl border border-black/[0.06] bg-white/80 px-3 text-xs font-bold text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex min-h-9 min-w-0 flex-1 flex-wrap items-center justify-center gap-1.5 rounded-xl border border-black/[0.06] bg-white/80 px-3 py-1.5 text-xs font-bold leading-tight text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
           >
             {isPinPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Heart className="h-3 w-3" />}
             {isPinPending ? "Unpinning..." : "Unpin"}
@@ -125,7 +125,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
             aria-disabled={isAnyPending}
             onClick={onBulkStart}
             disabled={isAnyPending}
-            className="inline-flex min-w-0 flex-1 sm:flex-none justify-center whitespace-nowrap h-9 items-center gap-1.5 rounded-xl border border-signal-500/25 bg-signal-500/10 px-3 text-xs font-bold text-signal-700 transition-colors hover:bg-signal-500/20 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-signal-300 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex min-h-9 min-w-0 flex-1 flex-wrap items-center justify-center gap-1.5 rounded-xl border border-signal-500/25 bg-signal-500/10 px-3 py-1.5 text-xs font-bold leading-tight text-signal-700 transition-colors hover:bg-signal-500/20 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-signal-300 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
           >
             {isStartPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" fill="currentColor" />}
             {isStartPending ? "Starting..." : "Start"}
@@ -137,7 +137,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
             aria-disabled={isAnyPending}
             onClick={onBulkDelete}
             disabled={isAnyPending}
-            className="inline-flex min-w-0 flex-1 sm:flex-none justify-center whitespace-nowrap h-9 items-center gap-1.5 rounded-xl border border-status-red/20 bg-status-red/10 px-3 text-xs font-bold text-status-red transition-colors hover:bg-status-red/20 focus-visible:ring-2 focus-visible:ring-status-red/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex min-h-9 min-w-0 flex-1 flex-wrap items-center justify-center gap-1.5 rounded-xl border border-status-red/20 bg-status-red/10 px-3 py-1.5 text-xs font-bold leading-tight text-status-red transition-colors hover:bg-status-red/20 focus-visible:ring-2 focus-visible:ring-status-red/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
           >
             {isDeletePending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
             {isDeletePending ? "Deleting..." : "Delete"}
@@ -149,7 +149,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
             aria-disabled={isAnyPending}
             onClick={onClearSelection}
             disabled={isAnyPending}
-            className="inline-flex min-w-0 flex-1 sm:flex-none justify-center whitespace-nowrap h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-bold text-slate-500 transition-colors hover:bg-black/[0.04] hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-slate-400 dark:hover:bg-white/[0.05] dark:hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex min-h-9 min-w-0 flex-1 flex-wrap items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold leading-tight text-slate-500 transition-colors hover:bg-black/[0.04] hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-slate-400 dark:hover:bg-white/[0.05] dark:hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
           >
             <X className="h-3.5 w-3.5" strokeWidth={2.2} />
             Clear

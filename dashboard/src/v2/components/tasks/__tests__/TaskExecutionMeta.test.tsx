@@ -60,6 +60,6 @@ describe("TaskExecutionMeta", () => {
 
     // The first div is the wrapper
     expect((container.firstChild as HTMLElement)?.className).toContain("my-custom-class");
-    expect((container.firstChild as HTMLElement)?.className).toContain("flex gap-2.5 items-center");
+    expect((container.firstChild as HTMLElement)?.className).toContain("flex flex-wrap gap-2.5 items-center");
   });
 });

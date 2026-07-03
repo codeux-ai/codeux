@@ -9,10 +9,10 @@ export const DependencyStatusIndicators: FunctionComponent<{
   if (!indicators || indicators.length === 0) return null;
 
   return (
-    <div className="relative z-10 mt-3 flex flex-wrap gap-1.5">
+    <div className="relative z-10 mt-3 flex flex-wrap gap-1.5" role="list" aria-label="Task dependencies">
       {indicators.map((dep) => {
         const isUnknown = dep.title.startsWith("Unknown Task");
-        const statusText = dep.status.replace('_', ' ');
+        const statusText = dep.status.replace(/_/g, ' ');
 
         let containerClass = "bg-slate-400/[0.08] border-slate-400/20 text-slate-500"; // default for pending
         if (isUnknown) {
@@ -28,10 +28,12 @@ export const DependencyStatusIndicators: FunctionComponent<{
         return (
           <div
             key={dep.recordId}
+            role="listitem"
             className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[9px] font-bold uppercase tracking-[0.14em] ${containerClass}`}
             title={`Depends on ${dep.title} (${statusText})`}
+            aria-label={`Depends on task ${dep.id}, status: ${statusText}. Title: ${dep.title}`}
           >
-            <span className="sr-only">Dependency {dep.id} ({dep.title}) is {statusText}</span>
+            <span className="sr-only">Depends on task {dep.id}, status: {statusText}. Title: {dep.title}</span>
             <ArrowRight className="w-2.5 h-2.5" strokeWidth={2.5} aria-hidden="true" />
             <span aria-hidden="true">{dep.id}</span>
           </div>
