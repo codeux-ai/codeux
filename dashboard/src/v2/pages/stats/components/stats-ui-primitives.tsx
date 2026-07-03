@@ -67,9 +67,14 @@ export interface ChartZoomRange {
 export const PANEL_CLASS = "relative overflow-hidden rounded-[var(--stats-panel-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-panel)] p-6 shadow-[var(--stats-panel-shadow)] backdrop-blur-xl transition-[background-color,border-color,box-shadow] duration-200 motion-reduce:transition-none";
 export const SUBPANEL_CLASS = "rounded-[var(--stats-subpanel-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-subpanel)] p-4 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-200 motion-reduce:transition-none";
 export const CHIP_CLASS = "rounded-[var(--stats-chip-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-chip)] shadow-[var(--stats-subpanel-shadow)] backdrop-blur-md transition-[background-color,border-color,color,box-shadow] duration-200 motion-reduce:transition-none";
-export const INPUT_CLASS = "h-11 rounded-[var(--stats-control-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-input)] px-4 text-sm text-slate-700 outline-none transition-[background-color,border-color,box-shadow,color] duration-200 placeholder:text-slate-400 focus:border-[color:var(--stats-focus-ring)] focus-visible:ring-2 focus-visible:ring-[color:var(--stats-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus-visible:ring-offset-void-900";
+export const CONTROL_FOCUS_CLASS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--stats-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--stats-focus-ring-offset)]";
+export const INPUT_CLASS = `h-11 rounded-[var(--stats-control-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-input)] px-4 text-sm text-[color:var(--stats-value-color)] outline-none transition-[background-color,border-color,box-shadow,color] duration-200 placeholder:text-[color:var(--stats-detail-color)] focus:border-[color:var(--stats-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`;
 export const LEDGER_ROW_CLASS = "group rounded-[var(--stats-subpanel-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-subpanel)] p-4 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-md transition-[transform,background-color,border-color,box-shadow] duration-200 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-subpanel-hover)] hover:shadow-[var(--stats-card-shadow-hover)] motion-safe:hover:-translate-y-0.5 motion-reduce:transition-none";
 export const LEDGER_ROW_MODERN_CLASS = "group relative overflow-hidden rounded-[var(--stats-panel-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-panel)] p-6 shadow-[var(--stats-panel-shadow)] backdrop-blur-xl transition-[transform,background-color,border-color,box-shadow] duration-200 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-panel-hover)] hover:shadow-[var(--stats-card-shadow-hover)] motion-safe:hover:-translate-y-0.5 motion-reduce:transition-none";
+const CONTROL_BASE_CLASS = `inline-flex items-center justify-center rounded-[var(--stats-chip-radius)] border px-3 text-[11px] font-bold uppercase tracking-[0.14em] transition-[background-color,border-color,box-shadow,color] duration-200 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`;
+const CONTROL_IDLE_CLASS = "border-transparent text-[color:var(--stats-control-text)] hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[color:var(--stats-control-text-hover)]";
+const CONTROL_ACTIVE_CLASS = "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-surface-control-active)] text-[color:var(--stats-control-text-active)] shadow-[var(--stats-control-shadow-active)]";
+const CONTROL_ACTIVE_STRONG_CLASS = "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-surface-control-active-strong)] text-[color:var(--stats-control-text-active-strong)] shadow-[var(--stats-control-shadow-active)]";
 
 export const CHART_SERIES: ChartSeriesDefinition[] = [
   {
@@ -116,16 +121,17 @@ export const RangeToggle: FunctionComponent<{
   onApplyCustom,
 }) => (
   <div className="flex flex-col gap-4">
-    <div className={`inline-flex flex-wrap p-1 ${CHIP_CLASS}`}>
+    <div className={`inline-flex flex-wrap gap-1 p-1 ${CHIP_CLASS}`}>
       {(["1h", "24h", "7d", "30d", "all"] as const).map((value) => (
         <button
           key={value}
           type="button"
           onClick={() => onSelectPreset(value)}
-          className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.2em] transition-all ${
+          aria-pressed={activeWindow === value}
+          className={`${CONTROL_BASE_CLASS} min-h-9 px-4 py-2 ${
             activeWindow === value
-              ? "bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300"
-              : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+              ? CONTROL_ACTIVE_STRONG_CLASS
+              : CONTROL_IDLE_CLASS
           }`}
         >
           {value === "all" ? "All time" : value}
@@ -134,10 +140,11 @@ export const RangeToggle: FunctionComponent<{
       <button
         type="button"
         onClick={onApplyCustom}
-        className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.2em] transition-all ${
+        aria-pressed={activeWindow === "custom"}
+        className={`${CONTROL_BASE_CLASS} min-h-9 px-4 py-2 ${
           activeWindow === "custom"
-            ? "bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300"
-            : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+            ? CONTROL_ACTIVE_STRONG_CLASS
+            : CONTROL_IDLE_CLASS
         }`}
       >
         Custom
@@ -159,7 +166,7 @@ export const RangeToggle: FunctionComponent<{
       <button
         type="button"
         onClick={onApplyCustom}
-        className="inline-flex h-11 items-center justify-center rounded-2xl bg-white/78 px-4 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-700 shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-transform hover:-translate-y-0.5 dark:bg-white dark:text-void-900"
+        className={`inline-flex h-11 items-center justify-center rounded-[var(--stats-control-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-control-active)] px-4 text-[11px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-control-text-active)] shadow-[var(--stats-control-shadow)] transition-[background-color,border-color,box-shadow,transform] duration-200 hover:border-[color:var(--stats-border-strong)] hover:shadow-[var(--stats-control-shadow-active)] motion-safe:hover:-translate-y-0.5 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`}
       >
         Apply
       </button>
@@ -173,7 +180,7 @@ export const ViewToggle: FunctionComponent<{
   ariaLabel?: string;
   className?: string;
 }> = ({ value, onChange, ariaLabel = "Analytics modes", className = "" }) => {
-  const modes: Array<{ id: StatsVisualMode; label: string; icon: any }> = [
+  const modes: Array<{ id: StatsVisualMode; label: string; icon: ComponentType<any> }> = [
     { id: "trend", label: "Trend", icon: BarChart3 },
     { id: "composition", label: "Composition", icon: PieChart },
     { id: "models", label: "Models", icon: Cpu },
@@ -183,26 +190,34 @@ export const ViewToggle: FunctionComponent<{
   ];
 
   return (
-    <div role="group" aria-label={ariaLabel} className={`inline-flex flex-wrap p-1 ${CHIP_CLASS} ${className}`.trim()}>
+    <div
+      role="group"
+      aria-label={ariaLabel}
+      className={`flex max-w-full flex-wrap gap-1 overflow-x-auto overscroll-x-contain scroll-px-1 p-1 ${CHIP_CLASS} ${className}`.trim()}
+    >
       {modes.map((mode) => {
         const Icon = mode.icon;
+        const selected = value === mode.id;
         return (
           <button
             key={mode.id}
             type="button"
             onClick={() => onChange(mode.id)}
-            aria-pressed={value === mode.id}
-            className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] ${
-              value === mode.id
-                ? "bg-amber-500 text-white shadow-[0_2px_8px_rgba(255,184,0,0.35)] dark:bg-amber-500 dark:text-white"
-                : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+            aria-pressed={selected}
+            aria-label={mode.label}
+            title={mode.label}
+            className={`${CONTROL_BASE_CLASS} h-10 min-w-10 shrink-0 gap-2 px-3 sm:min-w-[7.25rem] sm:px-4 ${
+              selected
+                ? CONTROL_ACTIVE_CLASS
+                : CONTROL_IDLE_CLASS
             }`}
           >
-            <Icon className="h-3.5 w-3.5" strokeWidth={2} />
-            {mode.label}
+            <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+            <span className="hidden min-w-0 truncate sm:inline">{mode.label}</span>
           </button>
         );
       })}
+      <span className="w-px shrink-0" aria-hidden="true" />
     </div>
   );
 };
@@ -220,7 +235,7 @@ export const SignalMetricCard: FunctionComponent<{
     title={label}
     value={value}
     trend={
-      <div className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400 ${CHIP_CLASS}`}>
+      <div className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)] ${CHIP_CLASS}`}>
         {signalLabel}
       </div>
     }
@@ -247,7 +262,7 @@ export const TokenChip: FunctionComponent<{
       <Icon className="h-3.5 w-3.5" strokeWidth={2.5} />
       <span className="truncate text-[10px] font-bold uppercase tracking-[0.14em]">{label}</span>
     </div>
-    <div className="relative shrink-0 text-[11px] font-black text-slate-900 dark:text-white">
+    <div className="relative shrink-0 text-[11px] font-black text-[color:var(--stats-value-color)]">
       {typeof value === "number" ? formatTokens(value) : value}
     </div>
   </div>
@@ -320,19 +335,20 @@ export const SeriesLegendButton: FunctionComponent<{
     type="button"
     onClick={onToggle}
     disabled={disabled}
-    className={`rounded-[1.25rem] border px-4 py-3 text-left transition-all ${
+    aria-pressed={active}
+    className={`rounded-[1.25rem] border px-4 py-3 text-left transition-[background-color,border-color,box-shadow,opacity] duration-200 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS} ${
       active
-        ? `${SUBPANEL_CLASS} border-signal-500/18`
-        : "rounded-[1.25rem] border border-black/[0.05] bg-white/60 px-4 py-3 text-left opacity-72 backdrop-blur-xl hover:opacity-100 dark:border-white/[0.05] dark:bg-void-900/30"
+        ? `${SUBPANEL_CLASS} border-[color:var(--stats-control-border-active)]`
+        : "border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-subpanel)] opacity-75 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-subpanel-hover)] hover:opacity-100"
     } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
   >
     <div className="flex items-center gap-3">
       <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: series.accentHex }} />
-      <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">{series.label}</span>
+      <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">{series.label}</span>
     </div>
     <div className="mt-3 flex items-end justify-between gap-4">
-      <div className="text-lg font-black text-slate-900 dark:text-white">{series.formatter(currentValue)}</div>
-      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{series.signalLabel}</div>
+      <div className="text-lg font-black text-[color:var(--stats-value-color)]">{series.formatter(currentValue)}</div>
+      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)]">{series.signalLabel}</div>
     </div>
   </button>
 );
@@ -592,10 +608,10 @@ export const SortButton: FunctionComponent<{
     type="button"
     onClick={onClick}
     aria-pressed={active}
-    className={`inline-flex items-center gap-1 rounded-full px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] transition-all ${
+    className={`${CONTROL_BASE_CLASS} gap-1 px-3 py-2 text-[10px] tracking-[0.16em] ${
       active
-        ? "bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400"
-        : `${CHIP_CLASS} text-slate-500 dark:text-slate-300`
+        ? CONTROL_ACTIVE_STRONG_CLASS
+        : `${CHIP_CLASS} ${CONTROL_IDLE_CLASS}`
     }`}
   >
     {label}

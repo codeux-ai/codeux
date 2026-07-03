@@ -59,9 +59,17 @@ export const StatsCard: FunctionComponent<StatsCardProps> = ({
   const accentClass = ACCENT_CLASS_MAP[accent];
   const densityClass = DENSITY_CLASS_MAP[density];
   const toneClass = TONE_CLASS_MAP[tone];
+  const accessibleParts = [title, String(value)];
+  if (typeof description === "string" && description.trim().length > 0) {
+    accessibleParts.push(description);
+  }
+  const accessibleLabel = accessibleParts.join(": ");
 
   return (
-    <div className={`${styles.card} ${accentClass} ${densityClass} ${toneClass} ${isActive ? styles.active : ""} ${className} group`}>
+    <article
+      aria-label={accessibleLabel}
+      className={`${styles.card} ${accentClass} ${densityClass} ${toneClass} ${isActive ? styles.active : ""} ${className} group`}
+    >
       {/* Background Tint */}
       <div className={styles.tint} aria-hidden="true" />
       
@@ -94,6 +102,6 @@ export const StatsCard: FunctionComponent<StatsCardProps> = ({
 
       {/* Extra Children (e.g. Action Buttons, extra footer elements, or Sparkline) */}
       {children}
-    </div>
+    </article>
   );
 };
