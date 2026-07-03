@@ -4,7 +4,7 @@ import gsap from "gsap";
 import {
   Edit2, FileUp, Trash2, RefreshCw, AlertTriangle,
   ChevronDown, ChevronUp, Cpu, Route, Plug, Server, FileText,
-  BrainCircuit, FolderGit2, Library,
+  BrainCircuit, FolderGit2, Library, DollarSign, BarChart3, CheckCircle2,
 } from "lucide-preact";
 import {
   fetchAgentKnowledgeSubscriptions,
@@ -26,6 +26,38 @@ import { renderMarkdown } from "../../../lib/markdown.js";
 
 const INSTRUCTION_EXCERPT_CHARS = 320;
 const INSTRUCTION_EXCERPT_LINES = 6;
+
+export interface AgentUsageSummary {
+  invocationCount: number;
+  completedCount: number;
+  failedCount: number;
+  runningCount: number;
+  totalTokens: number;
+  totalCostCents: number;
+}
+
+function formatCost(cents: number): string {
+  if (cents <= 0) return "$0";
+  const dollars = cents / 100;
+  if (dollars < 0.01) return "<$0.01";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: dollars >= 10 ? 2 : 3,
+    maximumFractionDigits: dollars >= 10 ? 2 : 3,
+  }).format(dollars);
+}
+
+function formatCount(value: number): string {
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
+}
+
+function formatSuccessRate(summary?: AgentUsageSummary | null): string {
+  if (!summary) return "No runs";
+  const finished = summary.completedCount + summary.failedCount;
+  if (finished === 0) return summary.runningCount > 0 ? "Running" : "No runs";
+  return `${Math.round((summary.completedCount / finished) * 100)}%`;
+}
 
 function makeExcerpt(raw: string): { excerpt: string; truncated: boolean } {
   if (!raw) return { excerpt: "", truncated: false };
@@ -149,12 +181,26 @@ export const AgentPresetDetailPanel: FunctionComponent<{
   routeTags: string[];
   providerOptions?: AgentProviderOption[];
   availableMcpServers?: CustomMcpServer[];
+  usageSummary?: AgentUsageSummary | null;
+  usageLoading?: boolean;
   onEdit: () => void;
   onDelete: (id: string) => void;
   onImport: (id: string) => void;
   deleting: boolean;
   importing: boolean;
-}> = ({ preset, routeTags, providerOptions = [], availableMcpServers = [], onEdit, onDelete, onImport, deleting, importing }) => {
+}> = ({
+  preset,
+  routeTags,
+  providerOptions = [],
+  availableMcpServers = [],
+  usageSummary,
+  usageLoading = false,
+  onEdit,
+  onDelete,
+  onImport,
+  deleting,
+  importing,
+}) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const [activeExpression, setActiveExpression] = useState<AgentAvatarExpression>("happy");
   const [instructionExpanded, setInstructionExpanded] = useState(false);
@@ -266,7 +312,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
             </div>
 
             {/* Quick facts */}
-            <div className="mt-auto grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="mt-auto grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <StatTile
                 label="Provider"
                 value={selectedProvider?.label || "Route default"}
@@ -290,6 +336,23 @@ export const AgentPresetDetailPanel: FunctionComponent<{
                 label="System Prompt"
                 value={preset.instructionMarkdown ? `~${formatTokenCount(instructionTokens)} tok` : "Empty"}
                 iconNode={<FileText className="h-4 w-4" strokeWidth={2.2} />}
+              />
+              <StatTile
+                label="Total Usage"
+                value={usageLoading ? "Loading" : formatCost(usageSummary?.totalCostCents ?? 0)}
+                iconNode={<DollarSign className="h-4 w-4" strokeWidth={2.2} />}
+                accent={(usageSummary?.totalCostCents ?? 0) > 0}
+              />
+              <StatTile
+                label="Tokens"
+                value={usageLoading ? "Loading" : formatTokenCount(usageSummary?.totalTokens ?? 0)}
+                iconNode={<BarChart3 className="h-4 w-4" strokeWidth={2.2} />}
+              />
+              <StatTile
+                label="Runs"
+                value={usageLoading ? "Loading" : `${formatCount(usageSummary?.invocationCount ?? 0)} · ${formatSuccessRate(usageSummary)}`}
+                iconNode={<CheckCircle2 className="h-4 w-4" strokeWidth={2.2} />}
+                accent={(usageSummary?.completedCount ?? 0) > 0}
               />
             </div>
           </div>

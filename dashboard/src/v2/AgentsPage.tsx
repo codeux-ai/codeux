@@ -17,11 +17,12 @@ import {
 } from "./lib/agent-preset-api.js";
 import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
 import { generateRandomAgentAvatar } from "./lib/agent-avatar.js";
+import { fetchProjectInvocationsQuery } from "./lib/invocation-api.js";
 import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { AgentsHero } from "./components/agents/AgentsHero.js";
 import { AgentPresetShowcaseCard } from "./components/agents/AgentPresetShowcaseCard.js";
-import { AgentPresetDetailPanel } from "./components/agents/AgentPresetDetailPanel.js";
+import { AgentPresetDetailPanel, type AgentUsageSummary } from "./components/agents/AgentPresetDetailPanel.js";
 import { AgentPresetEditorPanel } from "./components/agents/AgentPresetEditorPanel.js";
 import { InstructionFileCard } from "./components/agents/InstructionFileCard.js";
 import { InstructionFileEditorPanel } from "./components/agents/InstructionFileEditorPanel.js";
@@ -97,6 +98,8 @@ export const AgentsPage: FunctionComponent = () => {
   const [pushResult, setPushResult] = useState<PushAgentResult | null>(null);
   const [projectFileSavingEnabled, setProjectFileSavingEnabled] = useState(true);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+  const [selectedAgentUsage, setSelectedAgentUsage] = useState<AgentUsageSummary | null>(null);
+  const [selectedAgentUsageLoading, setSelectedAgentUsageLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [instructionFiles, setInstructionFiles] = useState<InstructionFileSummary[]>([]);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
@@ -423,6 +426,48 @@ export const AgentsPage: FunctionComponent = () => {
   const selectedPreset = presets.find((p) => p.id === selectedPresetId);
   const selectedFile = instructionFiles.find((f) => f.id === selectedFileId);
 
+  useEffect(() => {
+    if (!selectedProject || !selectedPreset || selectedFileId) {
+      setSelectedAgentUsage(null);
+      setSelectedAgentUsageLoading(false);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    setSelectedAgentUsageLoading(true);
+    fetchProjectInvocationsQuery(selectedProject.id, {
+      agentPresetId: selectedPreset.id,
+      limit: 8,
+      sortKey: "startedAt",
+      sortDir: "desc",
+    }, { signal: controller.signal })
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        setSelectedAgentUsage({
+          invocationCount: result.summary.totalInvocations,
+          completedCount: result.summary.completedCount,
+          failedCount: result.summary.failedCount,
+          runningCount: result.summary.runningCount,
+          totalTokens: result.summary.totalTokens,
+          totalCostCents: result.summary.totalCostCents,
+        });
+      })
+      .catch((usageError) => {
+        if (controller.signal.aborted) return;
+        setSelectedAgentUsage(null);
+        console.warn("Failed to load agent usage summary", usageError);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setSelectedAgentUsageLoading(false);
+        }
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [selectedProject?.id, selectedPreset?.id, selectedFileId]);
+
   const rosterStats = useMemo(() => {
     const synced = presets.filter((p) => p.syncStatus === "synced").length;
     const drift = presets.filter((p) => p.syncStatus === "out_of_sync" || p.syncStatus === "missing_source").length;
@@ -747,6 +792,8 @@ export const AgentsPage: FunctionComponent = () => {
                   routeTags={routeTagsByPresetId.get(selectedPreset.id) ?? []}
                   providerOptions={providerOptions}
                   availableMcpServers={availableMcpServers}
+                  usageSummary={selectedAgentUsage}
+                  usageLoading={selectedAgentUsageLoading}
                   onEdit={() => setIsEditing(true)}
                   onDelete={handleDelete}
                   onImport={handleImport}

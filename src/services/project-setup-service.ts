@@ -31,6 +31,7 @@ import { readDefaultContainerSetupScript } from "./code-ux-default-assets-servic
 import type { AgentPresetRecord } from "../contracts/agent-preset-types.js";
 import type { QuicksprintTemplateRecord } from "../contracts/quicksprint-types.js";
 import type { DashboardRealtimeMutationNotifier } from "./dashboard-realtime-service.js";
+import { resolveAgentAvatarConfig } from "../contracts/agent-avatar-style.js";
 
 export const PROJECT_SETUP_AGENT_NAME = "Project Setup Agent";
 
@@ -336,7 +337,17 @@ export class ProjectSetupService {
     const presets = await this.deps.agentPresetSyncService.listAgentPresets(projectId);
     const existing = presets.find((preset) => preset.name.trim().toLowerCase() === PROJECT_SETUP_AGENT_NAME.toLowerCase());
     if (existing) {
-      return existing;
+      if (existing.avatarConfig && Object.keys(existing.avatarConfig).length > 0) {
+        return existing;
+      }
+      return await this.deps.agentPresetSyncService.updateAgentPreset(existing.id, {
+        avatarConfig: resolveAgentAvatarConfig({
+          projectId,
+          id: existing.id,
+          name: existing.name,
+          labels: existing.labels,
+        }),
+      });
     }
     return await this.deps.agentPresetSyncService.createAgentPreset(projectId, {
       id: "5",
@@ -344,6 +355,12 @@ export class ProjectSetupService {
       description: "Initializes Code UX agents, routing, quicksprints, preview startup, and basic CI from repository evidence.",
       labels: ["planning", "setup"],
       instructionMarkdown: buildDefaultProjectSetupAgentInstructions(),
+      avatarConfig: resolveAgentAvatarConfig({
+        projectId,
+        id: "5",
+        name: PROJECT_SETUP_AGENT_NAME,
+        labels: ["planning", "setup"],
+      }),
     });
   }
 
@@ -489,11 +506,21 @@ export class ProjectSetupService {
   ): Promise<AgentPresetRecord> {
     const presets = await this.deps.agentPresetSyncService.listAgentPresets(projectId);
     const existing = presets.find((preset) => preset.name.trim().toLowerCase() === agent.name.trim().toLowerCase());
+    const labels = agent.labels?.map((label) => label.trim()).filter(Boolean) ?? [];
+    const avatarConfig = existing?.avatarConfig && Object.keys(existing.avatarConfig).length > 0
+      ? existing.avatarConfig
+      : resolveAgentAvatarConfig({
+        projectId,
+        id: existing?.id,
+        name: agent.name.trim(),
+        labels,
+      });
     const input = {
       name: agent.name.trim(),
       description: agent.description?.trim() || "",
-      labels: agent.labels?.map((label) => label.trim()).filter(Boolean),
+      labels,
       instructionMarkdown: agent.instructionMarkdown.trim(),
+      avatarConfig,
     };
     return existing
       ? await this.deps.agentPresetSyncService.updateAgentPreset(existing.id, input)

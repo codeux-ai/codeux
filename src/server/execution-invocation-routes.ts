@@ -28,6 +28,7 @@ export function registerExecutionInvocationRoutes(router: Express, deps: Dashboa
         status: req.query.status as any,
         purpose: req.query.purpose as any,
         provider: req.query.provider as string,
+        agentPresetId: req.query.agentPresetId as string,
         search: req.query.search as string,
         sortKey: req.query.sortKey as any,
         sortDir: req.query.sortDir as any,

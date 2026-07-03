@@ -71,7 +71,7 @@ That means:
 - `source_scope`
 - `source_updated_at`
 - `source_imported_at`
-- `avatar_config_json` (used for dashboard UI avatars: body, hair, face, shirt, bottom)
+- `avatar_config_json` (used for dashboard UI avatars: legacy body fields plus robot chassis, eyes, antenna, headphones, accent, base, and visor colors)
 - `memory_template_override_enabled`
 - `memory_template_markdown`
 
@@ -97,6 +97,8 @@ The API record also exposes derived sync state:
 - `synced`
 - `out_of_sync`
 - `missing_source`
+
+When markdown does not include `avatarConfig`, Code UX still persists a resolved avatar before writing sqlite. Built-in base roles use curated defaults, while generated or custom project agents receive a deterministic random look seeded from project, agent, and label metadata. Project Setup Agent output goes through the same resolver, so generated specialist agents get a stable avatar that is mirrored into project markdown instead of being recalculated on every dashboard load.
 
 ## Import Resolution
 
@@ -149,6 +151,8 @@ Behavior:
 7. The provider returns strict JSON containing selected artifacts.
 8. Code UX writes agents through `AgentPresetSyncService`, quicksprints through `QuicksprintService`, preview startup to `.code-ux/browser/start-preview.sh`, and CI files to the returned GitHub/GitLab paths.
 9. Agent routing preserves the existing Planning agent default and updates generated worker specialists into the task-coding orchestrator roster.
+
+Generated agents keep persisted avatar metadata. Existing generated agents that predate avatar persistence receive a stable avatar the next time Project Setup Agent updates them.
 
 The base-template handoff is fail-soft: if a user intentionally deleted a built-in default role, project setup continues with the remaining templates rather than recreating the deleted role implicitly. Template injection is conditional by artifact category, so disabling agents, quicksprints, or preview generation also omits that category's template context from the provider prompt.
 

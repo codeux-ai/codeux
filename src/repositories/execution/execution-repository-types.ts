@@ -176,6 +176,7 @@ export interface ExecutionInvocationRow {
   cached_input_tokens?: number | string | null;
   output_tokens?: number | string | null;
   total_tokens?: number | string | null;
+  cost_cents?: number | string | null;
   sprint_number?: number | string | null;
   sprint_name?: string | null;
   sprint_slug?: string | null;
@@ -206,6 +207,7 @@ export interface ExecutionInvocationsSummaryRow {
   totalInputTokens: number;
   totalOutputTokens: number;
   totalCachedTokens: number;
+  totalCostCents: number;
   avgDurationMs: number;
 }
 

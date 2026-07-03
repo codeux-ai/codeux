@@ -47,7 +47,7 @@ const TIER_TABS: { key: MemTier; label: string; scope: MemoryScope }[] = [
 ];
 
 const CATEGORIES: MemoryCategory[] = ["architecture", "codebase", "context", "preferences", "patterns", "decision", "error", "learning"];
-const AMBIENT_LABEL_MIN_ZOOM = 1.05;
+const AMBIENT_LABEL_MIN_ZOOM = 0.9;
 const DEEP_LABEL_MIN_ZOOM = 2.35;
 const SEARCH_FOCUS_ZOOM = 1.1;
 const CAMERA_ZOOM_TWEEN = {

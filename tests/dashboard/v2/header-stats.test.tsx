@@ -59,7 +59,7 @@ describe("HeaderStats", () => {
         // Instead of picking specific indices, we search within each card
         // Verify the layout container uses the responsive grid classes
         const grid = container.firstChild as Element;
-        expect(grid.className).toContain("grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))]");
+        expect(grid.className).toContain("grid-cols-[repeat(auto-fit,minmax(240px,1fr))]");
         expect(grid).toHaveAttribute("role", "region");
         expect(grid).toHaveAccessibleName("Overview metric cards");
 

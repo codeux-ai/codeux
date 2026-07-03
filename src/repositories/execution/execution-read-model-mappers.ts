@@ -203,6 +203,7 @@ export function mapExecutionInvocationRow(row: ExecutionInvocationRow): Executio
     cachedInputTokens: row.cached_input_tokens !== undefined && row.cached_input_tokens !== null ? toNumber(row.cached_input_tokens) : 0,
     outputTokens: row.output_tokens !== undefined && row.output_tokens !== null ? toNumber(row.output_tokens) : 0,
     totalTokens: row.total_tokens !== undefined && row.total_tokens !== null ? toNumber(row.total_tokens) : 0,
+    costCents: row.cost_cents !== undefined && row.cost_cents !== null ? toNumber(row.cost_cents) : null,
     sprintNumber: row.sprint_number !== undefined && row.sprint_number !== null ? toNumber(row.sprint_number) : null,
     sprintName: row.sprint_name ?? null,
     sprintSlug: row.sprint_slug ?? null,
