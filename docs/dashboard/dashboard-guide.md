@@ -577,9 +577,9 @@ Runtime scoping:
 
 From `dashboard/src/hooks/use-dashboard-runtime-data.ts`:
 - Live view now does one initial `/api/live` fetch, then subscribes only to `project.live.updated` for selected-project runtime state. The UI explicitly reflects websocket degradation states (`connecting`, `reconnecting`, etc.) without altering the stable Live snapshot payload.
-- There is no steady-state client poll for status, execution, or git on the Live page anymore.
+- There is no steady-state client poll for status or execution on the Live page. Git/CI state hydrates from `/api/git-status` and then streams on the dedicated `project:<projectId>:git` websocket sub-scope.
 - When the websocket reports `snapshot_required`, the browser re-fetches `/api/live` and replaces the whole live snapshot atomically.
-- Git status is refreshed server-side and folded into that same live snapshot stream, including a periodic background refresh owned by the server.
+- Git status is refreshed server-side on its own throttled `project.git.updated` stream so pages that only need the base `project:<projectId>` scope never parse large Git/CI payloads.
 - The sprint boat-race animation now resets cached vessel positions whenever the live sprint goes idle, and it keys each vessel by persisted task identity instead of raw task key so a new sprint starts from harbour rather than drifting backward from the previous finish line.
 - The boat race no longer caps the visible fleet at ten vessels, and the race canvas now renders at a fixed `800px` height instead of scaling per-boat.
 
@@ -591,6 +591,8 @@ From `dashboard/src/hooks/use-overview-telemetry.ts` and `dashboard/src/v2/hooks
   - `projects`
   - `overview`
   - `project:<projectId>`
+  - `project:<projectId>:live`
+  - `project:<projectId>:git`
   - `thread:<threadId>`
 
 Realtime consumers currently include:
@@ -612,7 +614,7 @@ Live view behavior:
 - `project.live.updated` replaces the entire selected-project live snapshot immediately
 - `project.execution.updated`, `project.runtime_status.updated`, and `project.structure.updated` still exist for other dashboard surfaces and also fan into a follow-up `project.live.updated` publish for Live-page consumers
 - attention queue changes now flow into the same live snapshot path, so merge-conflict escalation, worker claims, and resolution actions appear without waiting for a poll tick
-- git status changes also arrive through that same live snapshot path instead of a separate client poll
+- git status changes arrive through `project.git.updated` on `project:<projectId>:git`, which keeps heavy Git/CI payloads away from file browser, sprint, and scheduler subscribers
 - provider-backed runtime feeds still render the persisted agent/user message text from `provider_activity` events, but the Live page no longer tries to reconcile those events against independently fetched task structure
 
 The old legacy settings hook remains outside the active v2 flow; the live dashboard now uses the scoped settings API above.

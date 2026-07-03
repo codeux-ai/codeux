@@ -98,6 +98,8 @@ Current subscription scopes:
 - `projects`
 - `overview`
 - `project:<projectId>`
+- `project:<projectId>:live`
+- `project:<projectId>:git`
 - `thread:<threadId>`
 
 Reconnect behavior:
@@ -130,7 +132,7 @@ Behavior:
 - sprint and task pages now react to project-structure invalidation events
 - sprint and task hooks now treat realtime invalidation as silent background refresh, which avoids foreground loading flicker while the browser is already showing current data
 - execution snapshot consumers now diff snapshots semantically instead of treating every fetch-time `updatedAt` stamp as a meaningful change
-- git status is now folded into that same `/api/live` contract and refreshed server-side so the browser no longer polls git independently on the Live page
+- git status is now kept off the hot `/api/live` contract and streams only on the `project:<projectId>:git` sub-scope, so base project pages do not parse large Git/CI payloads they ignore
 - reconnect recovery for the Live page now means re-fetching `/api/live` on `snapshot_required`, not running parallel status/execution repair logic in the browser
 - polling remains a recovery tool for other websocket-backed dashboard surfaces, but the Live page no longer keeps its own steady-state poll loop
 
@@ -162,6 +164,7 @@ Production refinement shipped on March 15, 2026:
 
 - project execution, runtime-status, and structure refresh scheduling now also fan into `project.live.updated`, so the Live page always receives a fresh combined snapshot after any committed runtime mutation
 - the server now performs a periodic background live-snapshot refresh for the selected project so git status and other slower-changing runtime metadata continue to stream even when no new task event is being written
+- large live and git snapshot publishers check websocket subscription demand before running their loaders, so task churn does not assemble or serialize heavy frames when no tab is subscribed to `project:<projectId>:live` or `project:<projectId>:git`
 
 ## What This Improves
 

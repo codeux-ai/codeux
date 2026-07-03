@@ -8,9 +8,9 @@ import { useRealtimeResource } from "../../hooks/use-realtime-resource.js";
  *
  * Git status is slow to assemble (REMOTE mode shells out to `gh`) and can be several MB. It is only
  * shown on the Live page, so it is intentionally kept off the shared `project.live.updated` snapshot
- * that every page parses. The server publishes it on a throttled `project.git.updated` event (only
- * when it actually changes) and exposes `/api/git-status` for the initial fetch; this hook is the
- * single consumer.
+ * and off the base `project:<id>` scope used by other project pages. The server publishes it on a
+ * throttled `project.git.updated` event in the `project:<id>:git` sub-scope (only when it actually
+ * changes) and exposes `/api/git-status` for the initial fetch; this hook is the single consumer.
  */
 export function useProjectGitStatus(projectId: string | null, enabled = true): {
   data: GitTrackingStatus | null;
@@ -31,7 +31,7 @@ export function useProjectGitStatus(projectId: string | null, enabled = true): {
     initialData: null,
     fetchResource,
     realtime: active && projectId ? {
-      scopes: [`project:${projectId}`],
+      scopes: [`project:${projectId}:git`],
       eventType: "project.git.updated",
       updateDirectlyFromEvent: true,
     } : undefined,
