@@ -3,7 +3,9 @@ import type { ExecutionModelStatsSummary, ExecutionUsageTotals } from "../../../
 import {
   buildModelHighlights,
   buildModelSegments,
+  buildReasoningHighlight,
   buildTelemetrySourceSummary,
+  buildVelocityHighlight,
   computeUsageEfficiency,
   formatSuccessRate,
   getSuccessTone,
@@ -53,6 +55,7 @@ describe("computeUsageEfficiency", () => {
     expect(efficiency.cacheHitRate).toBeCloseTo(0.5);
     expect(efficiency.tokensPerCall).toBeCloseTo(260);
     expect(efficiency.outputTokensPerMinute).toBeCloseTo(50);
+    expect(efficiency.outputTokensPerSecond).toBeCloseTo(500 / 600);
     expect(efficiency.reasoningShare).toBeCloseTo(100 / 600);
   });
 
@@ -69,6 +72,7 @@ describe("computeUsageEfficiency", () => {
     expect(efficiency.cacheHitRate).toBeNull();
     expect(efficiency.tokensPerCall).toBeNull();
     expect(efficiency.outputTokensPerMinute).toBeNull();
+    expect(efficiency.outputTokensPerSecond).toBeNull();
     expect(efficiency.reasoningShare).toBeNull();
   });
 });
@@ -188,6 +192,30 @@ describe("buildModelHighlights velocity and reasoning", () => {
 
     expect(highlights.highestVelocity?.model.id).toBe(velocityLeader.id);
     expect(highlights.strongestReasoning?.model.id).toBe(reasoningLeader.id);
+  });
+
+  it("formats standalone velocity and reasoning highlights with sparse-safe fallbacks", () => {
+    const noVelocity = createModel({
+      id: "idle::model",
+      label: "idle-model",
+      usage: createUsage({ outputTokens: 0, activeTimeMs: 0, reasoningOutputTokens: 0 }),
+    });
+    const runner = createModel({
+      id: "runner::model",
+      label: "runner-model",
+      usage: createUsage({ outputTokens: 1200, activeTimeMs: 120000, reasoningOutputTokens: 300, totalTokens: 3200 }),
+    });
+
+    expect(buildVelocityHighlight([noVelocity])).toBeNull();
+    expect(buildReasoningHighlight([noVelocity])).toBeNull();
+
+    const velocity = buildVelocityHighlight([runner]);
+    const reasoning = buildReasoningHighlight([runner]);
+
+    expect(velocity?.model.id).toBe(runner.id);
+    expect(velocity?.value).toBe("10 tok/s");
+    expect(reasoning?.model.id).toBe(runner.id);
+    expect(reasoning?.value).toBe("20% reasoning");
   });
 
   it("handles zero-invocation models and missing duration samples without invalid rankings", () => {
