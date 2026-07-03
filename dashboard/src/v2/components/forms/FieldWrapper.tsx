@@ -96,10 +96,9 @@ export function FieldWrapper({ label, error, children, htmlFor, required, helper
       existingDescribedBy
     ].filter(Boolean).join(" ") || undefined;
 
-    const combinedErrorMessage = [
-      showError ? errorId : undefined,
-      existingErrorMessage
-    ].filter(Boolean).join(" ") || undefined;
+    const combinedErrorMessage = showError
+      ? [errorId, existingErrorMessage].filter(Boolean).join(" ") || undefined
+      : undefined;
 
     const childProps: any = {
       "aria-invalid": showError ? "true" : existingInvalid,

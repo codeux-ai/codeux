@@ -1,13 +1,10 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { X, ListChecks, Target, Bot, Plus, AlertCircle } from "lucide-preact";
 import type { Sprint, Task, TaskExecutorType, TaskPriority, TaskStatus } from "../../types.js";
-import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { useActionFeedback } from "../../hooks/use-action-feedback.js";
 import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
-import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
-import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 import { Button } from "./Button.js";
 import { Modal } from "./Modal.js";
 import { FieldWrapper } from "../forms/FieldWrapper.js";
@@ -41,6 +38,21 @@ const EXECUTOR_OPTIONS: Array<{ value: TaskExecutorType; label: string; descript
   { value: "jules", label: "Jules", description: "Force remote Jules execution." },
 ];
 
+function focusFirstInvalidField(formId: string, scrollContainerId: string): void {
+  const firstInvalid = document.getElementById(formId)?.querySelector('[aria-invalid="true"]');
+  if (!(firstInvalid instanceof HTMLElement)) return;
+
+  firstInvalid.focus({ preventScroll: true });
+  const container = document.getElementById(scrollContainerId);
+  if (!container) return;
+
+  const containerRect = container.getBoundingClientRect();
+  const elementRect = firstInvalid.getBoundingClientRect();
+  const targetTop = elementRect.top - containerRect.top + container.scrollTop - 20;
+  const maxTop = Math.max(0, container.scrollHeight - container.clientHeight);
+  container.scrollTo({ top: Math.min(Math.max(targetTop, 0), maxTop), behavior: "smooth" });
+}
+
 export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   sprints,
   availableTasks,
@@ -50,7 +62,6 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   onClose,
   onSubmit,
 }) => {
-  const cardRef = useRef<HTMLDivElement>(null);
   const fieldsRef = useRef<HTMLFormElement>(null);
   const [sprintId, setSprintId] = useState(initialTask?.sprintId || defaultSprintId || initialSprintId || sprints[0]?.id || "");
   const [title, setTitle] = useState(initialTask?.title || "");
@@ -62,9 +73,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   const [dependsOnTaskIds, setDependsOnTaskIds] = useState<string[]>(initialTask?.dependsOnTaskIds || []);
   const { feedback, setPending, setSuccess, setError, clearFeedback, clearError } = useActionFeedback();
 
-  const reducedMotion = useReducedMotion();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isClosing, setIsClosing] = useState(false);
   const [touched, setTouched] = useState({ sprintId: false, title: false });
   const [dependencySearchQuery, setDependencySearchQuery] = useState("");
 
@@ -102,19 +111,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
     event.preventDefault();
     if (Object.keys(validationErrors).length > 0) {
       setTouched({ sprintId: true, title: true });
-      setTimeout(() => {
-        const firstInvalid = document.getElementById('add-task-form')?.querySelector('[aria-invalid="true"]');
-        if (firstInvalid instanceof HTMLElement) {
-          firstInvalid.focus({ preventScroll: true });
-          const container = document.getElementById('add-task-form-body');
-          if (container) {
-            const containerRect = container.getBoundingClientRect();
-            const elementRect = firstInvalid.getBoundingClientRect();
-            const offset = elementRect.top - containerRect.top + container.scrollTop - 20;
-            container.scrollTo({ top: offset, behavior: 'smooth' });
-          }
-        }
-      }, 0);
+      setTimeout(() => focusFirstInvalidField('add-task-form', 'add-task-form-body'), 0);
       return;
     }
 
@@ -202,7 +199,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
           </div>
 
           <div className="flex-1 overflow-y-auto p-5 sm:p-7 lg:px-8 lg:py-6" id="add-task-form-body">
-            <form id="add-task-form" onSubmit={handleSubmit} className="flex flex-col gap-6">
+            <form ref={fieldsRef} id="add-task-form" onSubmit={handleSubmit} noValidate className="flex flex-col gap-6">
             <ActionFeedbackRegion status={feedback.status} message={feedback.message} onDismiss={clearFeedback} clearError={clearError} autoDismiss={feedback.autoDismiss} retryAction={feedback.retryAction} retryLabel={feedback.retryLabel} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <FieldWrapper label="Sprint" required error={validationErrors.sprintId} forceTouch={touched.sprintId}>
