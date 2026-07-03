@@ -277,9 +277,9 @@ describe("ReliabilityStudio", () => {
       />,
     );
 
-    const antigravity = screen.getByTitle("Antigravity");
-    const openCode = screen.getByTitle("OpenCode");
-    const qwen = screen.getByTitle("Qwen Code");
+    const antigravity = screen.getAllByTitle("Antigravity").at(-1)!;
+    const openCode = screen.getAllByTitle("OpenCode").at(-1)!;
+    const qwen = screen.getAllByTitle("Qwen Code").at(-1)!;
 
     expect(antigravity.compareDocumentPosition(openCode) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(openCode.compareDocumentPosition(qwen) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
