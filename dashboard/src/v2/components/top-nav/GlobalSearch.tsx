@@ -9,14 +9,17 @@ import type { SprintPreviewSession } from "../../../types.js";
 import type { Task, Source, Sprint, AgentPreset } from "../../types.js";
 import { fetchAgentPresets } from "../../lib/agent-preset-api.js";
 import { GSAP_INTERACTION_TOKENS, useGsapDurations } from "../../lib/motion/constants.js";
+import { formatSprintDisplay, formatSprintTitle } from "../../lib/format-sprint.js";
+import { formatSprintKey } from "../../lib/sprint-ledger-state.js";
 
 interface GlobalSearchProps {
     projectId: string | null;
     selectedProject: Source | null;
     sprints: Sprint[];
+    sprintKeyPrefix?: string;
 }
 
-export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, selectedProject, sprints }) => {
+export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, selectedProject, sprints, sprintKeyPrefix = "SPR" }) => {
     const searchBarRef = useRef<HTMLButtonElement>(null);
     const searchBarContainerRef = useRef<HTMLDivElement>(null);
 
@@ -96,14 +99,30 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
 
         const lowerQuery = debouncedQuery.toLowerCase();
 
-        const filteredSprints = sprints.filter(s =>
-            s.name.toLowerCase().includes(lowerQuery) ||
-            `spr-${s.number}`.includes(lowerQuery)
-        ).map(s => ({
-            id: s.id,
-            title: `SPR-${s.number}: ${s.name}`,
-            status: s.status
-        }));
+        const filteredSprints = sprints.filter((s) => {
+            const formattedKey = formatSprintKey(s, sprintKeyPrefix);
+            const haystack = [
+                s.name,
+                s.goal,
+                s.slug,
+                s.id,
+                s.number == null ? "" : String(s.number),
+                formattedKey,
+                formatSprintDisplay(s, sprintKeyPrefix),
+                s.status,
+            ].join(" ").toLowerCase();
+            return haystack.includes(lowerQuery);
+        }).map(s => {
+            const formattedKey = formatSprintKey(s, sprintKeyPrefix);
+            return {
+                id: s.id,
+                title: formatSprintTitle(s, sprintKeyPrefix),
+                displayKey: formattedKey,
+                sprintKey: formattedKey,
+                routeSprintId: s.id,
+                status: s.status
+            };
+        });
 
         const filteredTasks = (tasks || []).filter((t: Task) =>
             t.title.toLowerCase().includes(lowerQuery) ||
@@ -114,6 +133,8 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
             title: t.title,
             sprint: t.sprint,
             sprintId: t.sprintId,
+            routeTaskId: t.id,
+            routeSprintId: t.sprintId,
             status: t.status
         }));
 
@@ -125,6 +146,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
             return {
                 id: a.id || `${a.workerEndpointType}-${a.workerDisplayName}`,
                 name: a.workerDisplayName || a.workerEndpointType,
+                routeAgentId: a.id || `${a.workerEndpointType}-${a.workerDisplayName}`,
                 status: 'idle',
                 avatarConfig: preset?.avatarConfig
             };
@@ -136,6 +158,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
         ).map((s: SprintPreviewSession) => ({
             id: s.id,
             name: s.containerName || 'Unnamed Container',
+            routeContainerId: s.id,
             status: s.status
         }));
 
@@ -145,7 +168,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
             agents: filteredAgents,
             containers: filteredContainers
         };
-    }, [debouncedQuery, sprints, tasks, selectedProject, sessions]);
+    }, [debouncedQuery, sprints, sprintKeyPrefix, tasks, selectedProject, agentPresets, sessions]);
 
     return (
         <>

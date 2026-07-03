@@ -7,15 +7,56 @@ import { SearchResultRow } from "./SearchResultRow";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
+import type { AgentAvatarConfig } from "../../types.js";
 
 
-export type SearchItem = { id: string; title?: string; name?: string; status?: string; sprint?: string; sprintId?: string; avatarConfig?: any };
+export interface SprintSearchItem {
+    id: string;
+    title: string;
+    displayKey: string;
+    sprintKey: string;
+    routeSprintId: string;
+    status?: string;
+}
+
+export interface TaskSearchItem {
+    id: string;
+    title: string;
+    sprint?: string;
+    sprintId?: string;
+    routeTaskId: string;
+    routeSprintId?: string;
+    status?: string;
+}
+
+export interface AgentSearchItem {
+    id: string;
+    name: string;
+    routeAgentId: string;
+    status?: string;
+    avatarConfig?: AgentAvatarConfig | null;
+}
+
+export interface ContainerSearchItem {
+    id: string;
+    name: string;
+    routeContainerId: string;
+    status?: string;
+}
+
+export type SearchItem = SprintSearchItem | TaskSearchItem | AgentSearchItem | ContainerSearchItem;
+export type SearchCategoryId = "sprints" | "tasks" | "agents" | "containers";
+type CategorizedSearchItem =
+    | (SprintSearchItem & { category: "sprints" })
+    | (TaskSearchItem & { category: "tasks" })
+    | (AgentSearchItem & { category: "agents" })
+    | (ContainerSearchItem & { category: "containers" });
 
 export interface SearchResults {
-    sprints: SearchItem[];
-    tasks: SearchItem[];
-    agents: SearchItem[];
-    containers: SearchItem[];
+    sprints: SprintSearchItem[];
+    tasks: TaskSearchItem[];
+    agents: AgentSearchItem[];
+    containers: ContainerSearchItem[];
 }
 
 interface SearchOverlayProps {
@@ -41,28 +82,26 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
     const [focusedIndex, setFocusedIndex] = useState(-1);
             const navigate = useNavigate();
 
-    const handleSelect = (selectedItem: SearchItem & { category?: string }) => {
+    const handleSelect = (selectedItem: CategorizedSearchItem) => {
         if (selectedItem) {
             if (selectedItem.category === 'sprints') {
-                const match = selectedItem.title?.match(/^(SPR-\d+):/);
-                const sprintKey = match ? match[1] : undefined;
-                navigate({ to: '/sprints', search: { sprintId: selectedItem.id, sprintKey } as any });
+                navigate({ to: '/sprints', search: { sprintId: selectedItem.routeSprintId, sprintKey: selectedItem.sprintKey } as any });
             }
-            else if (selectedItem.category === 'tasks') navigate({ to: '/tasks', search: { taskId: selectedItem.id, sprintId: selectedItem.sprintId } as any });
-            else if (selectedItem.category === 'agents') navigate({ to: '/agents', search: { agentId: selectedItem.id } as any });
-            else if (selectedItem.category === 'containers') navigate({ to: '/browser', search: { containerId: selectedItem.id } as any });
+            else if (selectedItem.category === 'tasks') navigate({ to: '/tasks', search: { taskId: selectedItem.routeTaskId, sprintId: selectedItem.routeSprintId } as any });
+            else if (selectedItem.category === 'agents') navigate({ to: '/agents', search: { agentId: selectedItem.routeAgentId } as any });
+            else if (selectedItem.category === 'containers') navigate({ to: '/browser', search: { containerId: selectedItem.routeContainerId } as any });
         }
         onClose();
     };
 
-    const CATEGORIES: Array<{ id: string; title: string; icon: any; items: ReadonlyArray<SearchItem> }> = [
+    const CATEGORIES: Array<{ id: SearchCategoryId; title: string; icon: any; items: ReadonlyArray<SearchItem> }> = [
         { id: 'sprints', title: 'Sprints', icon: Layers, items: results?.sprints || [] },
         { id: 'tasks', title: 'Tasks', icon: Activity, items: results?.tasks || [] },
         { id: 'agents', title: 'Agents', icon: Cpu, items: results?.agents || [] },
         { id: 'containers', title: 'Preview Containers', icon: Box, items: results?.containers || [] }
     ];
 
-    const allItems = CATEGORIES.flatMap(c => c.items?.map(item => ({ ...item, category: c.id })));
+    const allItems: CategorizedSearchItem[] = CATEGORIES.flatMap(c => c.items?.map(item => ({ ...item, category: c.id } as CategorizedSearchItem)));
     const reducedMotion = useReducedMotion();
 
     const [modalStyle, setModalStyle] = useState({});
@@ -200,7 +239,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
     // Track active item ref to ensure it's in view
     const activeItemRef = useRef<HTMLButtonElement>(null);
     useEffect(() => {
-        if (activeItemRef.current) {
+        if (activeItemRef.current && typeof activeItemRef.current.closest === 'function') {
             const el = activeItemRef.current;
             const container = el.closest('.overflow-y-auto') as HTMLElement;
             if (container) {
@@ -348,7 +387,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                                                         isFocused={isFocused}
                                                         onFocus={() => setFocusedIndex(currentIndex)}
                                                         activeItemRef={isFocused ? activeItemRef : null}
-                                                        onClick={() => handleSelect({ ...item, category: category.id })}
+                                                        onClick={() => handleSelect({ ...item, category: category.id } as CategorizedSearchItem)}
                                                     />
                                                 );
                                             })}
