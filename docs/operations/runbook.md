@@ -202,7 +202,7 @@ Checks:
 - Did the merge settle on the feature branch, or was this a no-output task that should auto-promote to final `completed`?
 - Are CI / review gates still intentionally holding the task before final completion?
 - If QA requested changes and the provider completed a same-session follow-up, Code UX should treat that `cli_task_followup` as fresh work even when the task run itself did not get a newer `finished_at` timestamp.
-- If task QA exhausted its review budget and no same-session follow-up is waiting for verification, the configured exhaustion policy applies. With the default `ESCALATE_TO_HUMAN` policy, the task is parked in `QA_REVIEW_FAILED`.
+- If task QA exhausted its review budget and no same-session follow-up is waiting for verification, the configured exhaustion policy applies. For new or unset policies, the default `FINISH_TASK` policy marks the task completed despite no QA pass; projects can still opt into `FAIL_TASK` or `ESCALATE_TO_HUMAN` when they need stricter handling.
 - A task already parked in `QA_REVIEW_FAILED` should not start new automatic worker branches on later watch-loop cycles. If it does, inspect status derivation and task rerun/reset events; only explicit rerun/reset should move the task back to pending.
 - If QA still appears running but no QA container exists, the watch loop should reconcile the stale QA invocation and retry the review rather than leaving `merge_indicator = QA_PENDING`.
 - If the provider session actually ended `FAILED`, Code UX should now clear the stale session/PR runtime state and requeue the task instead of treating the task as completed just because a PR artifact exists.

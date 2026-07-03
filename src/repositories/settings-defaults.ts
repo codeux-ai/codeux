@@ -589,7 +589,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
       enabled: true,
       maxTaskReviewRuns: 5,
       maxSprintReviewRuns: 5,
-      exhaustionPolicy: "ESCALATE_TO_HUMAN",
+      exhaustionPolicy: "FINISH_TASK",
       taskCompletion: {
         enabled: true,
         agentPresetId: null,

@@ -77,6 +77,7 @@ describe("Settings Resolution Service", () => {
       expect(settings.ciIntelligence.resolveMainMergeConflicts).toBe(true);
       expect(settings.memory.enabled).toBe(true);
       expect(settings.agents.qualityAssurance.enabled).toBe(true);
+      expect(settings.agents.qualityAssurance.exhaustionPolicy).toBe("FINISH_TASK");
     });
   });
 
@@ -99,6 +100,7 @@ describe("Settings Resolution Service", () => {
       };
       const settings = sanitizeProjectSettings(input);
       expect(settings.agents.qualityAssurance.maxTaskReviewRuns).toBeGreaterThanOrEqual(0);
+      expect(settings.agents.qualityAssurance.exhaustionPolicy).toBe("FINISH_TASK");
     });
 
     it("should drop unknown extra keys", () => {

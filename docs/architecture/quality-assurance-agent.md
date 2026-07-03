@@ -136,6 +136,7 @@ Note: The run budget and retry limit rules are explicitly implemented in a dedic
 - `maxTaskReviewRuns = 2` means the initial task review plus one QA re-check after fixes
 - `maxTaskReviewRuns = N` means the initial task review plus up to `N - 1` QA re-checks for later fix iterations
 - `maxTaskReviewRuns = 5` is the default task QA budget
+- `FINISH_TASK` is the default task QA exhaustion policy for new or unset settings, so a task whose budget is spent without a pass is marked complete unless the project selects `FAIL_TASK` or `ESCALATE_TO_HUMAN`
 - if QA has failed at the cap without an explicit `changes_requested` verdict, Code UX treats the retry budget as exhausted
 - if the latest QA verdict is `changes_requested`, Code UX keeps the merge blocked at the retry cap unless a completed Code UX-applied QA continuation is waiting for verification
 - if the latest QA verdict is `changes_requested` and a same-session CLI QA follow-up completes after that verdict, Code UX schedules verification before applying `FINISH_TASK`, `FAIL_TASK`, or `ESCALATE_TO_HUMAN`

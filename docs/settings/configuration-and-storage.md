@@ -292,6 +292,7 @@ Dashboard behavior:
   - `enabled` (default `true`)
   - `maxTaskReviewRuns` (default `5`)
   - `maxSprintReviewRuns` (default `5`)
+  - `exhaustionPolicy` (default `FINISH_TASK` for new or unset settings)
   - `taskCompletion`
     - `enabled`
     - `agentPresetId`
@@ -311,6 +312,7 @@ QA merge-gate notes:
 - the initial task review always counts as run `1`; later runs are only used for QA-requested fix checks
 - `maxTaskReviewRuns = 5` is the default task QA budget: the initial task review plus up to four QA re-checks after fixes
 - `maxSprintReviewRuns = 5` is the default sprint QA budget: the initial sprint review plus up to four sprint-level follow-up reviews
+- `exhaustionPolicy = FINISH_TASK` is the default for new or unset settings when task QA spends its budget without a pass; stricter projects can choose `FAIL_TASK` or `ESCALATE_TO_HUMAN`
 - a passed task QA result is reused and does not restart by itself on the next orchestration cycle
 - sprint QA now runs before the final `feature -> default` merge gate
 - enabled sprint QA blocks main-branch merge until sprint QA passes
