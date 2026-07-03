@@ -51,6 +51,7 @@
 - [Instruction Template System](./instructions/markdown-template-system.md)
 - [Dashboard Guide](./dashboard/dashboard-guide.md)
 - [Dashboard Accessibility Patterns](./dashboard/dashboard-guide.md#accessibility-patterns)
+  - [Dashboard Accessibility Quality Audit](./dashboard/accessibility-quality-audit.md)
   - [Interaction Patterns](./dashboard/interaction-patterns.md)
 - [Stats & Analytics Design System](./dashboard/design-system-stats.md)
 - [Dashboard Onboarding](./dashboard/onboarding.md)
