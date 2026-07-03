@@ -60,6 +60,13 @@ const buildCommitIdentityEnv = (
   };
 };
 
+const GIT_PUSH_RETRY_ATTEMPTS = 3;
+
+function isRetryableGitPushError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /exit code 137|SIGKILL|no output captured|RPC failed|remote end hung up unexpectedly|early EOF/i.test(message);
+}
+
 export class WorkspaceArtifactService {
   constructor(private readonly workspaceManager: IWorkspaceManager) {}
 
@@ -221,12 +228,7 @@ export class WorkspaceArtifactService {
       await runCommandStrict("git", ["update-ref", `refs/heads/${args.workerBranch}`, commitSha], args.repoPath);
       if (args.githubMode !== "LOCAL") {
         const pushEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(args.repoPath, args.gitAuth ?? {});
-        await runCommandStrict(
-          "git",
-          ["push", "-u", "origin", `refs/heads/${args.workerBranch}:refs/heads/${args.workerBranch}`],
-          args.repoPath,
-          pushEnv ?? process.env,
-        );
+        await this.pushWorkerBranchWithRetry(args.repoPath, args.workerBranch, pushEnv ?? process.env);
       }
 
       const diffOutput = (await runCommandStrict(
@@ -303,6 +305,24 @@ export class WorkspaceArtifactService {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  private async pushWorkerBranchWithRetry(
+    repoPath: string,
+    workerBranch: string,
+    env: NodeJS.ProcessEnv,
+  ): Promise<void> {
+    const pushArgs = ["push", "-u", "origin", `refs/heads/${workerBranch}:refs/heads/${workerBranch}`];
+    for (let attempt = 1; attempt <= GIT_PUSH_RETRY_ATTEMPTS; attempt += 1) {
+      try {
+        await runCommandStrict("git", pushArgs, repoPath, env);
+        return;
+      } catch (error) {
+        if (attempt >= GIT_PUSH_RETRY_ATTEMPTS || !isRetryableGitPushError(error)) {
+          throw error;
+        }
+      }
     }
   }
 }
