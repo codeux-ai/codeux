@@ -9,6 +9,13 @@ import { forceCompleteTask } from "../domain/sprint/tasks/force-complete-task.js
 import type { JulesApiClient } from "../integrations/jules-api-client.js";
 import type { ActiveDispatchRegistry } from "./active-dispatch-registry.js";
 import type { Logger } from "../shared/logging/logger.js";
+import type { ProjectAttentionType } from "../contracts/project-attention-types.js";
+
+const RECOMPUTED_SPRINT_ATTENTION_TYPES: ProjectAttentionType[] = [
+  "manual_attention",
+  "human_escalation_required",
+  "dashboard_reply_required",
+];
 
 interface ExecutionControlServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
@@ -68,6 +75,7 @@ export class ExecutionControlService {
     }
 
     this.deps.sprintOrchestrator.setConsecutiveFailures(0);
+    this.reapRecomputedSprintAttention(projectId, sprintId);
 
     void this.deps.sprintOrchestrator.execute({
       action: "orchestrate",
@@ -175,6 +183,33 @@ export class ExecutionControlService {
       );
     } catch {
       // Best-effort cleanup — never block cancellation on attention housekeeping.
+    }
+  }
+
+  /**
+   * Sprint-level manual attention is a computed "no more actions" marker. When
+   * an operator resumes a sprint, close the prior computed marker (and any
+   * virtual-worker escalation derived from it) so the new run can publish the
+   * current blocker instead of leaving stale human rows pinned open.
+   */
+  private reapRecomputedSprintAttention(projectId: string, sprintId: string): void {
+    try {
+      this.deps.projectAttentionService.resolveItems([
+        {
+          filter: {
+            projectId,
+            sprintId,
+            taskId: null,
+            attentionTypes: RECOMPUTED_SPRINT_ATTENTION_TYPES,
+          },
+          resolution: {
+            status: "resolved",
+            reason: "sprint_orchestration_recomputed",
+          },
+        },
+      ]);
+    } catch {
+      // Best-effort cleanup — never block orchestration on attention housekeeping.
     }
   }
 

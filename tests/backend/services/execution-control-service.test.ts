@@ -183,6 +183,79 @@ describe("ExecutionControlService", () => {
     }));
   });
 
+  it("reaps stale sprint-level manual attention when orchestration is restarted", async () => {
+    const { projectRepository, executionRepository, projectAttentionRepository, service } = await createFixture();
+    const project = projectRepository.createProject({
+      name: "Stale Attention Project",
+      sourceType: "local",
+      sourceRef: "/workspace/stale-attention-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Stale Attention Sprint",
+      number: 1,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Specific QA blocker",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "paused",
+    });
+    projectAttentionRepository.openItems([
+      {
+        projectId: project.id,
+        sprintId: sprint.id,
+        sprintRunId: sprintRun.id,
+        attentionType: "manual_attention",
+        severity: "medium",
+        ownerType: "worker",
+        title: "Sprint needs manual attention",
+        summaryMarkdown: "No more automatic actions.",
+      },
+      {
+        projectId: project.id,
+        sprintId: sprint.id,
+        sprintRunId: sprintRun.id,
+        attentionType: "human_escalation_required",
+        severity: "medium",
+        ownerType: "human",
+        title: "Virtual worker escalation",
+        summaryMarkdown: "Escalated from sprint manual attention.",
+        payload: {
+          sourceAttentionType: "manual_attention",
+        },
+      },
+      {
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId: sprintRun.id,
+        attentionType: "human_escalation_required",
+        severity: "high",
+        ownerType: "human",
+        title: "QA could not verify task",
+        summaryMarkdown: "Task-specific blocker stays visible.",
+      },
+    ]);
+
+    await service.orchestrateSprint(project.id, sprint.id);
+
+    const open = projectAttentionRepository.listProjectAttentionItems(project.id, { statuses: ["open", "claimed"] });
+    expect(open).toHaveLength(1);
+    expect(open[0]).toMatchObject({
+      taskId: task.id,
+      attentionType: "human_escalation_required",
+      status: "open",
+    });
+    const closed = projectAttentionRepository.listProjectAttentionItems(project.id)
+      .filter((item) => item.taskId === null);
+    expect(closed).toHaveLength(2);
+    expect(closed.every((item) => item.status === "resolved")).toBe(true);
+    expect(closed.every((item) => item.payload?.resolutionReason === "sprint_orchestration_recomputed")).toBe(true);
+  });
+
   it("rejects orchestration while a sprint cancellation is still pending for active work", async () => {
     const { projectRepository, executionRepository, service, executeOrchestrator } = await createFixture();
     const project = projectRepository.createProject({

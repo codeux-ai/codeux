@@ -133,7 +133,9 @@ describe("settings-sanitizer", () => {
     expect(settings.agents.saveToProjectDirectory).toBe(true);
     expect(settings.agents.instructionTemplates.planningMissing).toContain("Sprint Planning Missing");
     expect(settings.agents.qualityAssurance.enabled).toBe(true);
-    expect(settings.agents.qualityAssurance.maxTaskReviewRuns).toBe(5);
+    expect(settings.agents.qualityAssurance.maxTaskReviewRuns).toBe(3);
+    expect(settings.agents.qualityAssurance.maxSprintReviewRuns).toBe(3);
+    expect(settings.agents.qualityAssurance.exhaustionPolicy).toBe("FINISH_TASK");
     expect(settings.agents.qualityAssurance.taskCompletion.enabled).toBe(true);
     expect(settings.agents.qualityAssurance.taskCompletion.agentPresetId).toBe(null);
     expect(settings.agents.qualityAssurance.sprintCompletion.enabled).toBe(true);

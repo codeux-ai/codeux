@@ -613,6 +613,37 @@ jobs:
     expect(result.reportText).toContain("Feature PR Merged");
   });
 
+  it("reconciles a QA-blocked task when its PR was merged manually", async () => {
+    subtasks[0].status = "QA_REVIEW_FAILED";
+    subtasks[0].is_merged = false;
+    subtasks[0].merge_indicator = undefined;
+    context.gitStatus.openPullRequests = [];
+    context.gitStatus.mergedPullRequests = [
+      {
+        number: 101,
+        title: "PR 101",
+        url: "https://github.com/repo/pull/101",
+        headRefName: "feat/T1",
+        baseRefName: "feature/sprint1",
+        mergedAt: "2026-03-15T08:00:00.000Z",
+        mergedBy: "octocat",
+      },
+    ] as any;
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0].status).toBe("COMPLETED");
+    expect(result.subtasks[0].is_merged).toBe(true);
+    expect(result.subtasks[0].merge_indicator).toBe("MERGED");
+    expect(context.persistMergedTask).toHaveBeenCalledWith(expect.objectContaining({
+      id: "T1",
+      status: "COMPLETED",
+      is_merged: true,
+      merge_indicator: "MERGED",
+    }));
+    expect(result.reportText).toContain("Feature PR Merged");
+  });
+
   it("merges worker branch locally in LOCAL mode", async () => {
     context.githubMode = "LOCAL";
     subtasks[0].status = "CODING_COMPLETED";
