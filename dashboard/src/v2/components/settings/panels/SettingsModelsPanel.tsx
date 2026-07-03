@@ -537,22 +537,24 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
               {expanded ? (
                 <div id={detailsId} className="grid gap-3">
                   <Row label="Eligible by default" description="Controls whether this instance participates before route-specific overrides are applied.">
-                    <Toggle aria-label="Toggle setting" value={provider.enabled} onChange={(value) => updateProviderSettings(providerConfigId, { enabled: value })} />
+                      <Toggle aria-label={`Enable ${provider.name}`} value={provider.enabled} onChange={(value) => updateProviderSettings(providerConfigId, { enabled: value })} />
                   </Row>
                   {providerSupportsModelSelection(provider.provider) ? (
                     <Row label="Base model" description="Inherited by routes unless a route-specific model override is set.">
-                      <SelectInput
-                        value={provider.model}
-                        onChange={(value) => updateProviderSettings(providerConfigId, { model: value })}
+                        <SelectInput
+                          value={provider.model}
+                          aria-label={`${provider.name} base model`}
+                          onChange={(value) => updateProviderSettings(providerConfigId, { model: value })}
                         options={getProviderInstanceModelOptions(providerConfigId, provider, systemSettings)}
                       />
                     </Row>
                   ) : null}
                   {providerSupportsThinkingMode(provider.provider) ? (
                     <Row label="Base thinking" description="Inherited reasoning depth for this provider instance.">
-                      <SelectInput
-                        value={provider.thinkingMode}
-                        onChange={(value) => updateProviderSettings(providerConfigId, { thinkingMode: value as ThinkingMode })}
+                        <SelectInput
+                          value={provider.thinkingMode}
+                          aria-label={`${provider.name} base thinking`}
+                          onChange={(value) => updateProviderSettings(providerConfigId, { thinkingMode: value as ThinkingMode })}
                         options={thinkingModeOptions}
                       />
                     </Row>
@@ -891,22 +893,24 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                     {expanded ? (
                       <div id={detailsId} className="grid gap-3">
                         <Row label="Enabled override" description="Override route participation for this one instance.">
-                          <Toggle aria-label="Toggle setting" value={override.enabled ?? provider.enabled} onChange={(value) => updateRouteProviderOverride(activeRouteDefinition.id, providerConfigId, { enabled: value })} />
+                            <Toggle aria-label={`Enable ${provider.name} for ${activeRouteDefinition.label}`} value={override.enabled ?? provider.enabled} onChange={(value) => updateRouteProviderOverride(activeRouteDefinition.id, providerConfigId, { enabled: value })} />
                         </Row>
                         {supportsModel ? (
                           <Row label="Model override" description={`Inherited: ${provider.model}`}>
-                            <SelectInput
-                              value={override.model || provider.model}
-                              onChange={(value) => updateRouteProviderOverride(activeRouteDefinition.id, providerConfigId, { model: value })}
+                              <SelectInput
+                                value={override.model || provider.model}
+                                aria-label={`${provider.name} model override for ${activeRouteDefinition.label}`}
+                                onChange={(value) => updateRouteProviderOverride(activeRouteDefinition.id, providerConfigId, { model: value })}
                               options={getProviderInstanceModelOptions(providerConfigId, provider, systemSettings)}
                             />
                           </Row>
                         ) : null}
                         {providerSupportsThinkingMode(provider.provider) ? (
                           <Row label="Thinking override" description={`Inherited: ${provider.thinkingMode}`}>
-                            <SelectInput
-                              value={(override.thinkingMode || provider.thinkingMode) as string}
-                              onChange={(value) => updateRouteProviderOverride(activeRouteDefinition.id, providerConfigId, { thinkingMode: value as ThinkingMode })}
+                              <SelectInput
+                                value={(override.thinkingMode || provider.thinkingMode) as string}
+                                aria-label={`${provider.name} thinking override for ${activeRouteDefinition.label}`}
+                                onChange={(value) => updateRouteProviderOverride(activeRouteDefinition.id, providerConfigId, { thinkingMode: value as ThinkingMode })}
                               options={thinkingModeOptions}
                             />
                           </Row>

@@ -565,7 +565,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               description={skill.isInternal ? "Built-in skill managed by Code UX." : "Project skill discovered from local configuration."}
               badge={getBadge("skills")}
             >
-              <Toggle aria-label="Toggle setting"                 value={skill.enabled}
+              <Toggle aria-label={`Enable ${skill.name}`}                 value={skill.enabled}
                 onChange={(value) => {
                   const nextSkills = settings.skills.map((entry, entryIndex) => (
                     entryIndex === index ? { ...entry, enabled: value } : entry
