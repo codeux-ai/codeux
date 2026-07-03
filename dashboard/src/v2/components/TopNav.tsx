@@ -359,7 +359,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
             <div className="flex items-center gap-2 sm:gap-4 md:gap-10 flex-1 min-w-0">
                 <BrandSection isMobile={isMobile} onMenuToggle={onMenuToggle} hideLogo={hideLogo} isMobileMenuOpen={isMobileMenuOpen} />
 
-                <GlobalSearch projectId={projectId} selectedProject={selectedProject} sprints={sprints} />
+                <GlobalSearch projectId={projectId} selectedProject={selectedProject} sprints={sprints} sprintKeyPrefix={sprintKeyPrefix} />
             </div>
 
             <div className="flex items-center gap-1 sm:gap-2 md:gap-3 shrink-0 min-w-0 flex-wrap justify-end">

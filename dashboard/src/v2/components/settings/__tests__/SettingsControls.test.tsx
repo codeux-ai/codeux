@@ -14,6 +14,7 @@ import { SettingsCategoryRail } from "../SettingsCategoryRail";
 import { ActionButton, NoticePanel } from "../SettingsSurface";
 import { OverrideBadge } from "../panels/SharedPanelComponents";
 import { SlidersHorizontal } from "lucide-preact";
+import type { SettingsSearchMatches } from "../../../lib/settings-search-index";
 import userEvent from "@testing-library/user-event";
 
   it("SettingsCategoryRail renders categories with proper aria-current semantics", () => {
@@ -25,11 +26,39 @@ import userEvent from "@testing-library/user-event";
         filteredCategories={mockCategories}
         activeCategory="general"
         settingsSearch=""
+        settingsSearchMatches={{}}
         onSwitchCategory={() => {}}
       />
     );
     const btn = screen.getByRole("button", { name: /General/ });
     expect(btn).toHaveAttribute("aria-current", "page");
+  });
+
+  it("SettingsCategoryRail explains provider search matches", () => {
+    const mockCategories = [
+      { id: "integrations" as const, num: "08", label: "Integrations", icon: SlidersHorizontal, description: "Connections" }
+    ];
+    const settingsSearchMatches: SettingsSearchMatches = {
+      integrations: {
+        categoryId: "integrations",
+        matchedLabels: ["Claude Code"],
+        matchedDescriptions: [],
+        matchedTerms: [],
+      },
+    };
+
+    render(
+      <SettingsCategoryRail
+        filteredCategories={mockCategories}
+        activeCategory="integrations"
+        settingsSearch="claude"
+        settingsSearchMatches={settingsSearchMatches}
+        onSwitchCategory={() => {}}
+      />
+    );
+
+    expect(screen.getByText("Showing 1 categories for \"claude\".")).toBeInTheDocument();
+    expect(screen.getByText("Claude Code")).toBeInTheDocument();
   });
 
   it("PillChoiceGroup exposes radio semantics for the selected option", () => {

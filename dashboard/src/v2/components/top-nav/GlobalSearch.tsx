@@ -9,14 +9,17 @@ import type { SprintPreviewSession } from "../../../types.js";
 import type { Task, Source, Sprint, AgentPreset } from "../../types.js";
 import { fetchAgentPresets } from "../../lib/agent-preset-api.js";
 import { GSAP_INTERACTION_TOKENS, useGsapDurations } from "../../lib/motion/constants.js";
+import { formatSprintDisplay, formatSprintTitle } from "../../lib/format-sprint.js";
+import { formatSprintKey } from "../../lib/sprint-ledger-state.js";
 
 interface GlobalSearchProps {
     projectId: string | null;
     selectedProject: Source | null;
     sprints: Sprint[];
+    sprintKeyPrefix?: string;
 }
 
-export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, selectedProject, sprints }) => {
+export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, selectedProject, sprints, sprintKeyPrefix = "SPR" }) => {
     const searchBarRef = useRef<HTMLButtonElement>(null);
     const searchBarContainerRef = useRef<HTMLDivElement>(null);
 
@@ -62,10 +65,10 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
     const handleSearchEnter = () => {
         if (!searchBarContainerRef.current) return;
         gsap.to(searchBarContainerRef.current, {
-            scaleX: 1.05,
+            scale: 1,
             duration: durations.base,
             ease: GSAP_INTERACTION_TOKENS.controlFeedback.ease,
-            boxShadow: "0 0 0 2px rgba(0,224,160,0.3)",
+            boxShadow: "0 10px 30px rgba(0,0,0,0.08), 0 0 0 2px rgba(0,224,160,0.24)",
             overwrite: "auto"
         });
     };
@@ -73,7 +76,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
     const handleSearchLeave = () => {
         if (!searchBarContainerRef.current || isSearchOpen) return;
         gsap.to(searchBarContainerRef.current, {
-            scaleX: 1,
+            scale: 1,
             duration: durations.base,
             ease: GSAP_INTERACTION_TOKENS.controlFeedback.ease,
             boxShadow: "0 0 0 0px rgba(0,224,160,0)",
@@ -96,14 +99,30 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
 
         const lowerQuery = debouncedQuery.toLowerCase();
 
-        const filteredSprints = sprints.filter(s =>
-            s.name.toLowerCase().includes(lowerQuery) ||
-            `spr-${s.number}`.includes(lowerQuery)
-        ).map(s => ({
-            id: s.id,
-            title: `SPR-${s.number}: ${s.name}`,
-            status: s.status
-        }));
+        const filteredSprints = sprints.filter((s) => {
+            const formattedKey = formatSprintKey(s, sprintKeyPrefix);
+            const haystack = [
+                s.name,
+                s.goal,
+                s.slug,
+                s.id,
+                s.number == null ? "" : String(s.number),
+                formattedKey,
+                formatSprintDisplay(s, sprintKeyPrefix),
+                s.status,
+            ].join(" ").toLowerCase();
+            return haystack.includes(lowerQuery);
+        }).map(s => {
+            const formattedKey = formatSprintKey(s, sprintKeyPrefix);
+            return {
+                id: s.id,
+                title: formatSprintTitle(s, sprintKeyPrefix),
+                displayKey: formattedKey,
+                sprintKey: formattedKey,
+                routeSprintId: s.id,
+                status: s.status
+            };
+        });
 
         const filteredTasks = (tasks || []).filter((t: Task) =>
             t.title.toLowerCase().includes(lowerQuery) ||
@@ -114,6 +133,8 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
             title: t.title,
             sprint: t.sprint,
             sprintId: t.sprintId,
+            routeTaskId: t.id,
+            routeSprintId: t.sprintId,
             status: t.status
         }));
 
@@ -125,6 +146,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
             return {
                 id: a.id || `${a.workerEndpointType}-${a.workerDisplayName}`,
                 name: a.workerDisplayName || a.workerEndpointType,
+                routeAgentId: a.id || `${a.workerEndpointType}-${a.workerDisplayName}`,
                 status: 'idle',
                 avatarConfig: preset?.avatarConfig
             };
@@ -136,6 +158,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
         ).map((s: SprintPreviewSession) => ({
             id: s.id,
             name: s.containerName || 'Unnamed Container',
+            routeContainerId: s.id,
             status: s.status
         }));
 
@@ -145,14 +168,14 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
             agents: filteredAgents,
             containers: filteredContainers
         };
-    }, [debouncedQuery, sprints, tasks, selectedProject, sessions]);
+    }, [debouncedQuery, sprints, sprintKeyPrefix, tasks, selectedProject, agentPresets, sessions]);
 
     return (
         <>
             {/* Search Bar */}
-            <div ref={searchBarContainerRef} role="search" className="relative group w-full max-w-[140px] sm:max-w-[220px] hidden md:block rounded-xl">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
-                    <Search aria-hidden="true" className="w-3.5 h-3.5 text-slate-400 group-focus-within:text-signal-500 transition-colors" strokeWidth={2} />
+            <div ref={searchBarContainerRef} role="search" className="group relative hidden w-full max-w-[168px] rounded-xl md:block lg:max-w-[260px]">
+                <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex items-center pl-3.5">
+                    <Search aria-hidden="true" className="h-3.5 w-3.5 text-slate-500 transition-colors group-focus-within:text-signal-500 dark:text-slate-400" strokeWidth={2} />
                 </div>
                 <button
                     ref={searchBarRef}
@@ -162,15 +185,15 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
                     onMouseLeave={handleSearchLeave}
                     onFocus={handleSearchEnter}
                     onBlur={handleSearchLeave}
-                    className="w-full h-9 pl-10 pr-4 sm:pr-12 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl text-sm text-left text-slate-400 focus:outline-none focus-visible:outline-none transition-all relative z-0"
+                    className="relative z-0 flex h-9 w-full items-center rounded-xl border border-black/[0.08] bg-white/65 pl-9 pr-12 text-left text-sm font-medium text-slate-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_1px_10px_rgba(15,23,42,0.04)] backdrop-blur-2xl transition-colors hover:border-black/[0.12] hover:bg-white/85 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-slate-300 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_8px_24px_rgba(0,0,0,0.18)] dark:hover:border-white/[0.14] dark:hover:bg-white/[0.075]"
                     aria-expanded={isSearchOpen}
                     aria-haspopup="dialog"
                 >
-                    Search...
+                    <span className="block min-w-0 truncate">Search workspace</span>
                 </button>
-                <div className="absolute inset-y-0 right-0 pr-3 hidden sm:flex items-center pointer-events-none z-10">
-                    <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-mono font-medium text-slate-400 border border-black/10 dark:border-white/10 rounded-md">
-                        <Command aria-hidden="true" className="w-2.5 h-2.5" /> K
+                <div className="pointer-events-none absolute inset-y-0 right-0 z-10 hidden items-center pr-2.5 lg:flex">
+                    <kbd className="inline-flex h-5 min-w-9 items-center justify-center gap-0.5 rounded-md border border-black/[0.08] bg-black/[0.035] px-1.5 font-mono text-[9px] font-semibold text-slate-500 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-400">
+                        <Command aria-hidden="true" className="h-2.5 w-2.5" /> K
                     </kbd>
                 </div>
             </div>
@@ -181,9 +204,9 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
                 aria-label="Open search"
                 aria-expanded={isSearchOpen}
                 aria-haspopup="dialog"
-                className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 md:hidden shrink-0"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-black/[0.06] bg-white/55 shadow-sm backdrop-blur-xl transition-colors hover:bg-white/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.08] dark:bg-white/[0.05] dark:hover:bg-white/[0.08] md:hidden"
             >
-                <Search aria-hidden="true" className="w-4 h-4 text-slate-600 dark:text-slate-300" strokeWidth={2} />
+                <Search aria-hidden="true" className="h-4 w-4 text-slate-600 dark:text-slate-300" strokeWidth={2} />
             </button>
 
             <SearchOverlay

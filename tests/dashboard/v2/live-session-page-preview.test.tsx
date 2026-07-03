@@ -93,7 +93,7 @@ describe("Reduced Motion Support", () => {
         const results = { sprints: [], tasks: [], agents: [], containers: [] };
         render(<SearchOverlay isOpen={true} onClose={() => {}} searchQuery="" onSearchChange={() => {}} results={results} />);
 
-        expect(screen.getByPlaceholderText(/Search sprints, tasks, agents/i)).toBeInTheDocument();
+        expect(screen.getByPlaceholderText(/Find sprints, tasks, agents/i)).toBeInTheDocument();
         expect(screen.getByText(/Quick navigation/i)).toBeInTheDocument();
     });
 
