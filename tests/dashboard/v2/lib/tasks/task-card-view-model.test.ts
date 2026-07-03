@@ -152,6 +152,25 @@ describe("task-card-view-model", () => {
 
       expect(vm.dependencyIndicators).toEqual([]);
     });
+
+    it("formats live execution metadata for readable task card announcements", () => {
+      const task = createMockTask();
+      const lookup = new Map<string, Task>();
+
+      const vm = buildTaskCardViewModel(task, lookup, {
+        sessionId: "session-123",
+        sessionState: "running",
+        prUrl: "https://example.test/pull/1",
+        liveStartedAt: "2023-10-01T11:58:00Z",
+        liveTotalSeconds: 125,
+      });
+
+      expect(vm.sessionId).toBe("session-123");
+      expect(vm.sessionState).toBe("running");
+      expect(vm.prUrl).toBe("https://example.test/pull/1");
+      expect(vm.liveStartedAt).toBe("2023-10-01T11:58:00Z");
+      expect(vm.liveRunningTime).toBe("2m 5s");
+    });
   });
 });
 
