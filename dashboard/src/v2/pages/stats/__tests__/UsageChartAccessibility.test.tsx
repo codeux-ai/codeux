@@ -130,6 +130,20 @@ describe("UsageChartAccessibility", () => {
     expect(screen.getAllByText('Jan 3').length).toBeGreaterThan(0);
   });
 
+  it("lets keyboard users zoom a focused chart bucket", async () => {
+    const { container } = render(<Wrapper />);
+
+    await vi.waitFor(() => {
+      expect(container.querySelectorAll('rect[tabIndex="0"]').length).toBe(3);
+    });
+
+    const rects = container.querySelectorAll('rect[tabIndex="0"]');
+    fireEvent.focus(rects[1]!);
+    fireEvent.keyDown(rects[1]!, { key: "Enter" });
+
+    expect(screen.getByRole("button", { name: /Reset zoom/i })).toBeInTheDocument();
+  });
+
   it("renders a textual summary of the chart", () => {
     render(<Wrapper />);
     expect(screen.getAllByText(/Data Visualization for/i)[0]).toBeInTheDocument();

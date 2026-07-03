@@ -413,6 +413,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                         <rect
                           key={`hover-${index}`}
                           tabIndex={0}
+                          role="button"
                           x={startX}
                           y={padding}
                           width={rectWidth}
@@ -426,6 +427,16 @@ export const InteractiveUsageChart: FunctionComponent<{
                           onMouseEnter={() => setHoveredIndex(index)}
                           onFocus={() => setHoveredIndex(index)}
                           onBlur={() => setHoveredIndex(null)}
+                          onKeyDown={(event) => {
+                            if (event.key !== "Enter" && event.key !== " ") {
+                              return;
+                            }
+
+                            event.preventDefault();
+                            setHoveredIndex(index);
+                            setZoomRange({ start: absoluteIndex, end: absoluteIndex });
+                          }}
+                          aria-describedby="usage-chart-instructions"
                           aria-label={buckets[absoluteIndex]
                             ? `${buckets[absoluteIndex].label} bucket: ${visibleSeries.map((series) => `${series.label} ${series.formatter(series.values[index] ?? 0)}`).join(", ")}`
                             : "Telemetry bucket"}

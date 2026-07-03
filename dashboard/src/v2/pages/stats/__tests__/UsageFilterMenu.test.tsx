@@ -39,8 +39,10 @@ describe('UsageFilterMenu', () => {
   };
 
   it('should render when open', () => {
-    const { getByText } = render(<UsageFilterMenu {...mockProps} />);
+    const { getByRole, getByText } = render(<UsageFilterMenu {...mockProps} />);
+    expect(getByRole('dialog', { name: 'Graph Filters' })).toBeTruthy();
     expect(getByText('Graph Filters')).toBeTruthy();
+    expect(getByText('Showing 2 filters')).toBeTruthy();
     expect(getByText('Metric Series')).toBeTruthy();
   });
 

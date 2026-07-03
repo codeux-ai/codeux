@@ -281,7 +281,7 @@ export const TelemetryLedger: FunctionComponent<{
               Search, sort, and compare {kindLabel} by recency, tokens, active time, and directional token flow.
             </div>
           </div>
-          <div className={`inline-flex items-center gap-2 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${CHIP_CLASS} ${TEXT_DETAIL_CLASS}`}>
+          <div aria-live="polite" aria-atomic="true" className={`inline-flex items-center gap-2 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${CHIP_CLASS} ${TEXT_DETAIL_CLASS}`}>
             <Hash className="h-3.5 w-3.5 text-[color:var(--stats-signal-text)]" strokeWidth={2.2} />
             {filteredItems.length.toLocaleString()} visible / {items.length.toLocaleString()} total
           </div>
@@ -449,7 +449,7 @@ export const TelemetryLedger: FunctionComponent<{
                             <span className="mt-0.5 text-xs">{index + 1}</span>
                           </div>
                           <div className="min-w-0">
-                            <div className="truncate text-base font-black tracking-tight text-[color:var(--stats-value-color)]">{item.label}</div>
+                            <div className="break-words text-base font-black tracking-tight text-[color:var(--stats-value-color)] [overflow-wrap:anywhere]">{item.label}</div>
                             <div className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">
                               {formatTokens(tokenPerCall)}/call · last {formatDateTime(item.lastActivityAt)}
                             </div>
@@ -458,9 +458,9 @@ export const TelemetryLedger: FunctionComponent<{
                                 const pIcon = getProviderIcon(item.provider as string);
                                 const ProviderIcon = pIcon.icon;
                                 return (
-                                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${pIcon.bg} ${pIcon.text} ${CHIP_CLASS}`}>
+                                  <span className={`inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${pIcon.bg} ${pIcon.text} ${CHIP_CLASS}`}>
                                     <ProviderIcon className="h-3 w-3" strokeWidth={2.5} />
-                                    {item.provider}
+                                    <span className="min-w-0 break-words [overflow-wrap:anywhere]">{item.provider}</span>
                                   </span>
                                 );
                               })() : null}
