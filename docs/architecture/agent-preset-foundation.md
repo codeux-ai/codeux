@@ -74,6 +74,17 @@ The dashboard editor now initializes that config from the preset, exposes it thr
 
 Agent labels are still stored in the data model for markdown sync and built-in preset conventions, but the dashboard no longer exposes custom label editing. The Agents page displays computed route-assignment tags from effective project settings instead, including tags for built-in fallback selections on Planning agent, Worker, Project manager, and Quality assurance agent.
 
+## Avatar Rendering Performance
+
+Agent preset avatars have two rendering tiers:
+
+- `AgentAvatarSvg` is the lightweight static renderer for preset cards, reduced-motion users, and loading fallbacks.
+- `AgentAvatarScene` is the high-fidelity Three.js renderer for large avatar stages after they are visible.
+
+`LazyAgentAvatarScene` is the required boundary for dashboard surfaces that want the 3D avatar. It renders the SVG fallback until an `IntersectionObserver` reports the stage visible, and it keeps reduced-motion users on the static SVG path so ordinary Agents page interactions do not import or initialize the heavy scene. Surfaces that need immediate rendering can opt in explicitly with the wrapper's `eager` prop.
+
+The 3D scene owns WebGL lifecycle cleanup. On unmount, fallback transition, WebGL failure, or reduced-motion changes, it cancels animation frames, removes event listeners, disposes avatar geometries, materials, textures, particle resources, and the renderer, and forces context loss when supported.
+
 Provider and model preferences are intentionally nullable. They only take effect when a provider invocation route uses the `AGENT` strategy; otherwise the agent inherits the configured route, worker, or global defaults.
 
 At runtime, the CLI workflow now reads `AgentMemoryConfig` from the resolved worker agent and post-filters injected memories by configured tier, categories, strength thresholds, and max counts before composing the prompt. When the config is absent, the workflow keeps the default unrestricted memory injection path.
