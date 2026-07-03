@@ -6,7 +6,7 @@ globalThis.React = { createElement: h };
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, act, waitFor, fireEvent } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { MemoryPage, getWheelZoomTarget, inverseZoomScreenSize } from "../../../dashboard/src/v2/MemoryPage.js";
+import { MemoryPage, clampScreenSpaceFontSize, getWheelZoomTarget, inverseZoomScreenSize } from "../../../dashboard/src/v2/MemoryPage.js";
 import { ProjectDataContext } from "../../../dashboard/src/v2/context/project-data.js";
 import * as api from "../../../dashboard/src/v2/lib/memory-api.js";
 import userEvent from "@testing-library/user-event";
@@ -60,6 +60,12 @@ describe("memory map canvas helpers", () => {
         expect(inverseZoomScreenSize(12, 1)).toBe(12);
         expect(inverseZoomScreenSize(12, 3)).toBe(4);
         expect(inverseZoomScreenSize(12, 0)).toBe(12 / MEMORY_CAMERA.minZoom);
+    });
+
+    it("clamps canvas label font sizes before applying inverse zoom", () => {
+        expect(clampScreenSpaceFontSize(8, 2, 10, 14)).toBe(5);
+        expect(clampScreenSpaceFontSize(16, 2, 10, 14)).toBe(7);
+        expect(clampScreenSpaceFontSize(12, 4, 10, 14)).toBe(3);
     });
 
     it("derives smooth proportional wheel zoom targets", () => {

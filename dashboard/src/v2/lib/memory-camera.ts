@@ -21,8 +21,8 @@ export const MEMORY_CAMERA = {
     deepReadableZoom: 4.8,
     maxZoom: 6.5,
     entryZoom: 0.55,
-    wheelStep: 0.22,
-    buttonStep: 0.55,
+    wheelStep: 0.16,
+    buttonStep: 0.72,
 } as const;
 
 export function clampCameraZoom(zoom: number): number {

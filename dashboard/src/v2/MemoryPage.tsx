@@ -47,7 +47,13 @@ const TIER_TABS: { key: MemTier; label: string; scope: MemoryScope }[] = [
 ];
 
 const CATEGORIES: MemoryCategory[] = ["architecture", "codebase", "context", "preferences", "patterns", "decision", "error", "learning"];
-const AMBIENT_LABEL_MIN_ZOOM = 1.05;
+const AMBIENT_LABEL_MIN_ZOOM = 0.9;
+const NODE_SCREEN_RADIUS = {
+    min: 4.5,
+    max: 11,
+    selectedBoost: 1.15,
+    hoverBoost: 1.08,
+} as const;
 const SEARCH_FOCUS_ZOOM = 1.1;
 const CAMERA_ZOOM_TWEEN = {
     duration: 0.2,
@@ -76,12 +82,34 @@ function quadAt(t: number, p0: number, cp: number, p1: number) {
     return (1 - t) * (1 - t) * p0 + 2 * (1 - t) * t * cp + t * t * p1;
 }
 
-function hitTest(wx: number, wy: number, nodes: MemNode[]): number {
+function clampNumber(value: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, value));
+}
+
+function getScreenSpaceSize(screenSize: number, camZoom: number, min: number, max: number): number {
+    return clampNumber(screenSize, min, max) / Math.max(camZoom, MEMORY_CAMERA.minZoom);
+}
+
+function getNodeScreenRadius(node: MemNode, isHov = false, isSel = false): number {
+    const baseRadius = clampNumber(node.radius, NODE_SCREEN_RADIUS.min, NODE_SCREEN_RADIUS.max);
+    const interactionBoost = isSel ? NODE_SCREEN_RADIUS.selectedBoost : isHov ? NODE_SCREEN_RADIUS.hoverBoost : 1;
+    return baseRadius * Math.max(node.scale, 0) * interactionBoost;
+}
+
+function getNodeWorldRadius(node: MemNode, camZoom: number, isHov = false, isSel = false): number {
+    return getScreenSpaceSize(getNodeScreenRadius(node, isHov, isSel), camZoom, 0, NODE_SCREEN_RADIUS.max * NODE_SCREEN_RADIUS.selectedBoost * 1.4);
+}
+
+function getLabelWorldFontSize(screenSize: number, camZoom: number, min = 10, max = 14): number {
+    return getScreenSpaceSize(screenSize, camZoom, min, max);
+}
+
+function hitTest(wx: number, wy: number, nodes: MemNode[], camZoom: number): number {
     for (let i = nodes.length - 1; i >= 0; i--) {
         const n = nodes[i];
         if (!n.alive || n.opacity < 0.1) continue;
         const dx = wx - n.x, dy = wy - n.y;
-        const hr = (n.radius * n.scale + 12);
+        const hr = getNodeWorldRadius(n, camZoom) + inverseZoomScreenSize(12, camZoom);
         if (dx * dx + dy * dy < hr * hr) return i;
     }
     return -1;
@@ -134,9 +162,13 @@ export function inverseZoomScreenSize(screenSize: number, camZoom: number): numb
     return screenSize / Math.max(camZoom, MEMORY_CAMERA.minZoom);
 }
 
+export function clampScreenSpaceFontSize(screenSize: number, camZoom: number, min = 10, max = 14): number {
+    return getLabelWorldFontSize(screenSize, camZoom, min, max);
+}
+
 export function getWheelZoomTarget(currentZoom: number, deltaY: number): number {
     const direction = deltaY > 0 ? -1 : 1;
-    const wheelUnits = Math.min(3, Math.max(0.5, Math.abs(deltaY) / 100));
+    const wheelUnits = Math.min(4, Math.max(0.5, Math.abs(deltaY) / 70));
     return currentZoom * Math.pow(1 + MEMORY_CAMERA.wheelStep, direction * wheelUnits);
 }
 
@@ -153,10 +185,10 @@ function drawFocusedLabel(
     const paddingX = inverseZoomScreenSize(12, camZoom);
     const paddingY = inverseZoomScreenSize(10, camZoom);
     const lineGap = inverseZoomScreenSize(4, camZoom);
-    const fontSize = inverseZoomScreenSize(camZoom >= MEMORY_CAMERA.deepReadableZoom ? 13 : 12, camZoom);
-    const titleSize = inverseZoomScreenSize(10, camZoom);
+    const fontSize = getLabelWorldFontSize(camZoom >= MEMORY_CAMERA.deepReadableZoom ? 13 : 12, camZoom, 11, 14);
+    const titleSize = getLabelWorldFontSize(10, camZoom, 10, 12);
     const maxWidth = inverseZoomScreenSize(camZoom >= MEMORY_CAMERA.deepReadableZoom ? 240 : 190, camZoom);
-    const r = node.radius * node.scale;
+    const r = getNodeWorldRadius(node, camZoom, false, true);
     const offsetX = (r + inverseZoomScreenSize(20, camZoom)) * anchorSide;
     const anchorX = node.x + offsetX;
     const anchorY = node.y - r - inverseZoomScreenSize(18, camZoom);
@@ -453,10 +485,10 @@ export const MemoryPage: FunctionComponent = () => {
                 for (const [cat, centroid] of Object.entries(catCentroids)) {
                     const c = CAT[cat];
                     if (!c || centroid.count === 0) continue;
-                    ctx.font = `700 ${inverseZoomScreenSize(11, cam.zoom)}px "Plus Jakarta Sans", sans-serif`;
+                    ctx.font = `700 ${getLabelWorldFontSize(11, cam.zoom, 10, 15)}px "Plus Jakarta Sans", sans-serif`;
                     ctx.fillStyle = lob
-                        ? `rgba(227,0,15,${dark ? 0.2 : 0.12})`
-                        : `rgba(${c.r},${c.g},${c.b},${dark ? 0.25 : 0.15})`;
+                        ? `rgba(227,0,15,${dark ? 0.28 : 0.18})`
+                        : `rgba(${c.r},${c.g},${c.b},${dark ? 0.34 : 0.22})`;
                     ctx.fillText(c.label.toUpperCase(), centroid.x, centroid.y);
                 }
             }
@@ -518,7 +550,7 @@ export const MemoryPage: FunctionComponent = () => {
                     const pColor = lob ? `rgba(227,0,15,${pAlpha})` : `rgba(${mr},${mg},${mb},${pAlpha})`;
                     ctx.shadowColor = lob ? "rgba(227,0,15,0.5)" : `rgba(${mr},${mg},${mb},0.5)`;
                     ctx.beginPath();
-                    ctx.arc(px, py, 1.5 + edge.similarity, 0, Math.PI * 2);
+                    ctx.arc(px, py, inverseZoomScreenSize(1.5 + edge.similarity, cam.zoom), 0, Math.PI * 2);
                     ctx.fillStyle = pColor;
                     ctx.fill();
                     p.progress += p.speed;
@@ -559,13 +591,13 @@ export const MemoryPage: FunctionComponent = () => {
                 const n = nodes[i];
                 if (!n.alive || n.opacity < 0.01) continue;
                 const cc = CAT[n.category] || CAT.context;
-                const r = n.radius * n.scale;
                 const isHov = i === hoveredIdx;
                 const isSel = i === selectedIdx;
+                const r = getNodeWorldRadius(n, cam.zoom, isHov, isSel);
                 const dimmed = s.searchMatch && !s.searchMatch.has(i);
                 const effOpacity = dimmed ? n.opacity * 0.12 : n.opacity;
 
-                const glR = r * (3 + n.glow * 2.5);
+                const glR = r * (2.6 + n.glow * 2.2);
                 const glAlpha = (n.glow * 0.12 + (isHov ? 0.18 : 0) + (isSel ? 0.15 : 0)) * effOpacity;
                 const gl = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, glR);
                 gl.addColorStop(0, lob ? `rgba(227,0,15,${glAlpha})` : `rgba(${cc.r},${cc.g},${cc.b},${glAlpha})`);
@@ -592,24 +624,26 @@ export const MemoryPage: FunctionComponent = () => {
 
                 if (isSel) {
                     ctx.beginPath();
-                    ctx.arc(n.x, n.y, r + 6, 0, Math.PI * 2);
+                    ctx.arc(n.x, n.y, r + inverseZoomScreenSize(6, cam.zoom), 0, Math.PI * 2);
                     ctx.strokeStyle = lob
                         ? "rgba(227,0,15,0.6)"
                         : `rgba(${cc.r},${cc.g},${cc.b},0.6)`;
-                    ctx.lineWidth = 2.0;
-                    ctx.setLineDash([4, 4]);
+                    ctx.lineWidth = inverseZoomScreenSize(2, cam.zoom);
+                    ctx.setLineDash([inverseZoomScreenSize(4, cam.zoom), inverseZoomScreenSize(4, cam.zoom)]);
                     ctx.stroke();
                     ctx.setLineDash([]);
                 }
 
-                if (cam.zoom >= AMBIENT_LABEL_MIN_ZOOM && cam.zoom < MEMORY_CAMERA.selectedNodeZoom && !dimmed) {
-                    const label = n.content.length > 28 ? n.content.slice(0, 28) + "…" : n.content;
-                    ctx.font = `600 ${inverseZoomScreenSize(10, cam.zoom)}px "Plus Jakarta Sans", sans-serif`;
+                if (cam.zoom >= AMBIENT_LABEL_MIN_ZOOM && !dimmed) {
+                    const maxChars = cam.zoom >= MEMORY_CAMERA.deepReadableZoom ? 46 : cam.zoom >= MEMORY_CAMERA.selectedNodeZoom ? 34 : 28;
+                    const label = n.content.length > maxChars ? n.content.slice(0, maxChars) + "…" : n.content;
+                    const labelScreenSize = cam.zoom >= MEMORY_CAMERA.deepReadableZoom ? 12 : cam.zoom >= MEMORY_CAMERA.selectedNodeZoom ? 11 : 10;
+                    ctx.font = `600 ${getLabelWorldFontSize(labelScreenSize, cam.zoom, 10, 13)}px "Plus Jakarta Sans", sans-serif`;
                     ctx.textAlign = "left";
                     ctx.textBaseline = "middle";
                     ctx.fillStyle = dark
-                        ? `rgba(255,255,255,${0.55 * effOpacity})`
-                        : `rgba(0,0,0,${0.45 * effOpacity})`;
+                        ? `rgba(255,255,255,${0.72 * effOpacity})`
+                        : `rgba(0,0,0,${0.62 * effOpacity})`;
                     ctx.fillText(label, n.x + r + inverseZoomScreenSize(10, cam.zoom), n.y);
                 }
 
@@ -668,7 +702,7 @@ export const MemoryPage: FunctionComponent = () => {
                 canvas.style.cursor = "grabbing";
                 return;
             }
-            const idx = hitTest(wx, wy, s.graph.nodes);
+            const idx = hitTest(wx, wy, s.graph.nodes, s.cam.zoom);
             s.hoveredIdx = idx;
             canvas.style.cursor = idx >= 0 ? "pointer" : "grab";
         };
@@ -682,7 +716,7 @@ export const MemoryPage: FunctionComponent = () => {
         const onUp = (e: MouseEvent) => {
             if (!s.dragMoved) {
                 const { wx, wy } = getWorld(e);
-                const idx = hitTest(wx, wy, s.graph.nodes);
+                const idx = hitTest(wx, wy, s.graph.nodes, s.cam.zoom);
                 if (idx >= 0) {
                     const node = s.graph.nodes[idx];
                     if (lobRef.current) {
