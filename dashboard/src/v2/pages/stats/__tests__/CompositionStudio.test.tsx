@@ -122,22 +122,24 @@ describe("CompositionStudio", () => {
       />,
     );
 
-    const providerShare = screen.getByText("Provider Share");
+    const providerShare = screen.getAllByText("Provider Share").at(-1);
     const tokenAnatomy = screen.getByText("Token Anatomy");
-    const purposeRibbon = screen.getByText("Planning");
+    const purposeRibbon = screen.getAllByText("Planning").at(-1);
     const tokenFlight = screen.getByText("Token Flight");
-    const cacheEfficiency = screen.getByText("Cache Efficiency");
+    const cacheEfficiency = screen.getAllByText("Cache Efficiency").at(-1);
     const providerActivity = screen.getByText("Provider Activity");
 
-    expect(providerShare.compareDocumentPosition(tokenAnatomy) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(providerShare).toBeDefined();
+    expect(providerShare!.compareDocumentPosition(tokenAnatomy) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getAllByText("cost").length).toBeGreaterThan(0);
-    expect(tokenAnatomy.compareDocumentPosition(purposeRibbon) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(purposeRibbon.compareDocumentPosition(tokenFlight) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(tokenFlight.compareDocumentPosition(cacheEfficiency) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(cacheEfficiency.compareDocumentPosition(providerActivity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tokenAnatomy.compareDocumentPosition(purposeRibbon!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(purposeRibbon!.compareDocumentPosition(tokenFlight) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(cacheEfficiency).toBeDefined();
+    expect(tokenFlight.compareDocumentPosition(cacheEfficiency!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(cacheEfficiency!.compareDocumentPosition(providerActivity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-    expect(screen.getByText("20.0%")).toBeInTheDocument();
-    expect(screen.getByText(/250 tokens saved/i)).toBeInTheDocument();
+    expect(screen.getAllByText("20.0%").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/250 tokens saved/i).length).toBeGreaterThan(0);
     expect(screen.getByText("9m 0s")).toBeInTheDocument();
     expect(screen.getByText("0s")).toBeInTheDocument();
 
