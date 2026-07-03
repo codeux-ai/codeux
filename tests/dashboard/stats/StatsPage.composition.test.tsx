@@ -12,15 +12,38 @@ vi.mock("../../../dashboard/src/v2/pages/stats/use-stats-page-data.js", () => ({
     stats: {
       range: { resolutionLabel: "hour" },
       buckets: [],
-      providers: [{ id: "codex", label: "Codex", usage: { totalTokens: 10000, invocationCount: 50 } }],
+      providers: [{
+        id: "codex",
+        provider: "codex",
+        label: "Codex",
+        secondaryLabel: "gpt-5",
+        usage: {
+          totalTokens: 10000,
+          inputTokens: 4000,
+          cachedInputTokens: 1000,
+          outputTokens: 4500,
+          reasoningOutputTokens: 500,
+          activeTimeMs: 1800000,
+          wallTimeMs: 3600000,
+          invocationCount: 50,
+          reportedInvocationCount: 50,
+          estimatedInvocationCount: 0,
+          unavailableInvocationCount: 0,
+          unsupportedInvocationCount: 0,
+          inputCostUsd: 0,
+          outputCostUsd: 0,
+          cachedInputCostUsd: 0,
+          totalCostUsd: 1.23,
+        },
+      }],
       purposes: [
-        { id: "task_coding", label: "Task Coding", usage: { totalTokens: 1000, activeTimeMs: 0 } },
-        { id: "ci_fix", label: "CI Fix", usage: { totalTokens: 2000, activeTimeMs: 0 } },
-        { id: "qa_review", label: "QA Review", usage: { totalTokens: 3000, activeTimeMs: 0 } },
-        { id: "planning", label: "Planning", usage: { totalTokens: 4000, activeTimeMs: 0 } },
+        { id: "task_coding", label: "Task Coding", usage: { totalTokens: 1000, inputTokens: 600, cachedInputTokens: 100, outputTokens: 300, reasoningOutputTokens: 0, activeTimeMs: 60000, wallTimeMs: 70000, invocationCount: 5 } },
+        { id: "ci_fix", label: "CI Fix", usage: { totalTokens: 2000, inputTokens: 1000, cachedInputTokens: 200, outputTokens: 700, reasoningOutputTokens: 100, activeTimeMs: 120000, wallTimeMs: 150000, invocationCount: 10 } },
+        { id: "qa_review", label: "QA Review", usage: { totalTokens: 3000, inputTokens: 1500, cachedInputTokens: 300, outputTokens: 1000, reasoningOutputTokens: 200, activeTimeMs: 180000, wallTimeMs: 210000, invocationCount: 15 } },
+        { id: "planning", label: "Planning", usage: { totalTokens: 4000, inputTokens: 2000, cachedInputTokens: 400, outputTokens: 1300, reasoningOutputTokens: 300, activeTimeMs: 240000, wallTimeMs: 260000, invocationCount: 20 } },
       ],
       chartSeries: [],
-      usage: { totalTokens: 10000, inputTokens: 5000, cachedInputTokens: 0, outputTokens: 5000, reasoningOutputTokens: 0, wallTimeMs: 3600000, totalTokens: 10000, activeTimeMs: 1800000, invocationCount: 50, reportedInvocationCount: 50, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0 },
+      usage: { totalTokens: 10000, inputTokens: 5000, cachedInputTokens: 0, outputTokens: 5000, reasoningOutputTokens: 0, wallTimeMs: 3600000, activeTimeMs: 1800000, invocationCount: 50, reportedInvocationCount: 50, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0, inputCostUsd: 0, outputCostUsd: 0, cachedInputCostUsd: 0, totalCostUsd: 1.23 },
       git: { totals: { filesChanged: 3, mergeConflictCount: 1 } },
       statusCounts: { completed: 50, failed: 0, cancelled: 0, running: 0, paused: 0 },
     },
@@ -29,7 +52,10 @@ vi.mock("../../../dashboard/src/v2/pages/stats/use-stats-page-data.js", () => ({
     usage: { wallTimeMs: 3600000, totalTokens: 10000, activeTimeMs: 1800000, invocationCount: 50, reportedInvocationCount: 50, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0 },
     activeQuery: { window: "7d" },
     providerSegments: [{ label: "Codex", value: 10000, color: "#D99A12", textClassName: "text-amber-600" }],
-    tokenSegments: [],
+    tokenSegments: [
+      { label: "Input", value: 5000, color: "#00E0A0", textClassName: "text-signal-600" },
+      { label: "Output", value: 5000, color: "#FFB800", textClassName: "text-amber-600" },
+    ],
     sourceSegments: [],
     chartState: { zoomRange: null, setZoomRange: () => {}, hoveredIndex: null, setHoveredIndex: () => {}, enabledSeries: {} },
     visualMode: "composition",
@@ -76,6 +102,10 @@ describe("StatsPage Composition", () => {
     expect(screen.getAllByText("Provider Share").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Token Anatomy").length).toBeGreaterThan(0);
     expect(screen.getByText("Purpose Activity")).not.toBeNull();
+    expect(screen.getByText("Token Flight")).not.toBeNull();
+    expect(screen.getByText("Purpose Lanes")).not.toBeNull();
+    expect(screen.getByText("Cached Input")).not.toBeNull();
+    expect(screen.getByText("Dominant")).not.toBeNull();
     expect(screen.getByText("Merge Conflicts")).not.toBeNull();
   });
 });
