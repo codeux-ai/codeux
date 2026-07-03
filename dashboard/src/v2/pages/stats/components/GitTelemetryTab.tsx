@@ -1,6 +1,6 @@
 import type { ComponentType, FunctionComponent } from "preact";
 import { useMemo, useState } from "preact/hooks";
-import { AlertTriangle, GitMerge, GitPullRequest, FileEdit, Flag, ListTodo, PlusSquare, MinusSquare, Search, X } from "lucide-preact";
+import { AlertTriangle, GitMerge, GitPullRequest, FileEdit, Flag, ListTodo, PlusSquare, MinusSquare, Search, X, Hash } from "lucide-preact";
 import { useProgressiveList } from "../../../../hooks/use-progressive-list.js";
 import type { ExecutionGitStatsEntitySummary, ExecutionGitStatsSummary } from "../../../types.js";
 import { formatPercent } from "../stats-utils.js";
@@ -117,11 +117,11 @@ export const GitTelemetryLedger: FunctionComponent<{
             </div>
           </div>
           <div className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
-            {filteredItems.length} {kindLabel}
+            {filteredItems.length.toLocaleString()} visible / {items.length.toLocaleString()} total
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-6">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center text-center !p-4`}>
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Insertions</div>
             <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">+{totalInsertions.toLocaleString()}</div>
@@ -240,10 +240,10 @@ export const GitTelemetryLedger: FunctionComponent<{
                             </div>
                           </div>
                         </div>
-                        <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-5 xl:w-auto xl:min-w-[40rem] xl:grid-cols-5 xl:text-right">
+                        <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-3 xl:w-auto xl:min-w-[46rem] xl:grid-cols-6 xl:text-right">
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Code Churn</div>
-                            <div className="mt-1 flex items-center justify-end gap-3 text-lg font-black tracking-tight text-slate-900 dark:text-white">
+                            <div className="mt-1 flex items-center gap-3 text-lg font-black tracking-tight text-slate-900 xl:justify-end dark:text-white">
                               {itemChurn.toLocaleString()}
                               <div className="w-16 h-1.5">
                                 <ChurnFlowBar insertions={item.metrics.insertions} deletions={item.metrics.deletions} />
@@ -265,6 +265,10 @@ export const GitTelemetryLedger: FunctionComponent<{
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Share</div>
                             <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatPercent(shareOfTotal)}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Leader</div>
+                            <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatPercent(shareOfLeader)}</div>
                           </div>
                         </div>
                       </div>
@@ -294,7 +298,7 @@ export const GitTelemetryLedger: FunctionComponent<{
                             <TokenChip icon={AlertTriangle} label="Conflicts" value={getMetricCount(item.metrics.mergeConflictCount).toLocaleString()} tone="border-orange-500/16 bg-orange-500/8 text-orange-600 dark:text-orange-400" />
                           </div>
                           <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                            {formatPercent(shareOfTotal)} of churn
+                            {formatPercent(shareOfTotal)} of visible churn · {formatPercent(shareOfLeader)} of leader
                           </div>
                         </div>
                       </div>
@@ -438,13 +442,54 @@ export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSum
   }
 
   const leaderboardTabs = [
-    { id: "tasks" as const, label: "Task Leaderboard", icon: ListTodo },
-    { id: "sprints" as const, label: "Sprint Leaderboard", icon: Flag },
+    { id: "tasks" as const, label: "Task Leaderboard", count: gitStats.tasks.length, icon: ListTodo },
+    { id: "sprints" as const, label: "Sprint Leaderboard", count: gitStats.sprints.length, icon: Flag },
   ];
+  const totalChurn = gitStats.totals.insertions + gitStats.totals.deletions;
+  const conflictCount = getMetricCount(gitStats.totals.mergeConflictCount);
+  const mergeRate = gitStats.totals.prCount > 0 ? (gitStats.totals.mergedCount / gitStats.totals.prCount) * 100 : 0;
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="grid grid-cols-2 gap-4 xl:grid-cols-3">
+      <section className={`${PANEL_CLASS} p-5 md:p-6`} aria-label="Git telemetry overview">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,0.55fr)] xl:items-center">
+          <div>
+            <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+              <GitPullRequest className="h-3.5 w-3.5 text-amber-500" strokeWidth={2.2} aria-hidden="true" />
+              Git Operational Ledger
+            </div>
+            <div className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+              Churn, pull requests, and merge pressure
+            </div>
+            <div className="mt-2 max-w-3xl text-sm text-slate-500 dark:text-slate-400">
+              Review task and sprint git output by code churn, changed files, PR throughput, merges, and conflict signals.
+            </div>
+          </div>
+          <div className={`${SUBPANEL_CLASS} p-4`}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Total Churn</div>
+                <div className="mt-1 text-2xl font-black tracking-tight text-slate-900 dark:text-white">{totalChurn.toLocaleString()}</div>
+              </div>
+              <div className={`inline-flex items-center gap-2 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+                <Hash className="h-3 w-3 text-cyan-500" strokeWidth={2.3} aria-hidden="true" />
+                {gitStats.tasks.length.toLocaleString()} tasks · {gitStats.sprints.length.toLocaleString()} sprints
+              </div>
+            </div>
+            <div className="mt-4">
+              <ChurnFlowBar insertions={gitStats.totals.insertions} deletions={gitStats.totals.deletions} />
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-600 dark:text-emerald-400 ${CHIP_CLASS}`}>+{gitStats.totals.insertions.toLocaleString()} insertions</span>
+              <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-rose-600 dark:text-rose-400 ${CHIP_CLASS}`}>-{gitStats.totals.deletions.toLocaleString()} deletions</span>
+              <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-orange-600 dark:text-orange-400 ${CHIP_CLASS}`}>{conflictCount.toLocaleString()} conflicts</span>
+              <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-indigo-600 dark:text-indigo-400 ${CHIP_CLASS}`}>{formatPercent(mergeRate)} merge rate</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-label="Git telemetry totals">
         <GitStatCard
           icon={PlusSquare}
           label="Insertions"
@@ -491,7 +536,26 @@ export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSum
 
       <GitRankingPanel buckets={gitStats.buckets} tasks={gitStats.tasks} sprints={gitStats.sprints} />
 
-      <div className="sticky top-3 z-20 flex max-w-full gap-1 overflow-x-auto rounded-2xl border border-black/[0.05] bg-white/82 p-1 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/75">
+      <div
+        role="tablist"
+        aria-label="Git telemetry leaderboards"
+        className="sticky top-3 z-20 grid max-w-full grid-cols-1 gap-1 rounded-[var(--stats-subpanel-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-subpanel)] p-1 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl sm:grid-cols-2"
+        onKeyDown={(event) => {
+          if (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "Home" && event.key !== "End") {
+            return;
+          }
+          event.preventDefault();
+          const currentIndex = leaderboardTabs.findIndex((tab) => tab.id === activeTab);
+          const nextIndex = event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? leaderboardTabs.length - 1
+              : event.key === "ArrowRight"
+                ? (currentIndex + 1) % leaderboardTabs.length
+                : (currentIndex - 1 + leaderboardTabs.length) % leaderboardTabs.length;
+          setActiveTab(leaderboardTabs[nextIndex]?.id ?? "tasks");
+        }}
+      >
         {leaderboardTabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -499,22 +563,29 @@ export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSum
             <button
               key={tab.id}
               type="button"
+              id={`git-tab-${tab.id}`}
+              role="tab"
+              aria-selected={isActive}
+              aria-controls={`git-panel-${tab.id}`}
+              tabIndex={isActive ? 0 : -1}
               onClick={() => setActiveTab(tab.id)}
-              aria-pressed={isActive}
-              className={`inline-flex min-w-max items-center gap-2 rounded-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-all motion-safe:duration-200 ${
+              className={`grid min-h-12 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[calc(var(--stats-subpanel-radius)-0.35rem)] px-3 py-2 text-left text-[11px] font-bold uppercase tracking-[0.18em] transition-all motion-safe:duration-200 ${
                 isActive
                   ? "bg-slate-900 text-white shadow-sm dark:bg-white dark:text-void-900"
                   : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
               }`}
             >
-              <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
-              {tab.label}
+              <Icon className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden="true" />
+              <span className="truncate">{tab.label}</span>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-black tabular-nums ${CHIP_CLASS}`}>
+                {tab.count.toLocaleString()}
+              </span>
             </button>
           );
         })}
       </div>
 
-      <div>
+      <div role="tabpanel" id={`git-panel-${activeTab}`} aria-labelledby={`git-tab-${activeTab}`}>
         {activeTab === "tasks" ? (
           <GitTelemetryLedger
             title="Task Git Telemetry"

@@ -62,7 +62,7 @@ describe("GitTelemetryTab", () => {
 
   it("switches to Sprint Leaderboard", () => {
     render(<GitTelemetryTab gitStats={mockGitStats as any} />);
-    const buttons = screen.getAllByRole("button", { name: "Sprint Leaderboard" });
+    const buttons = screen.getAllByRole("tab", { name: /Sprint Leaderboard/ });
     fireEvent.click(buttons[0] as HTMLElement);
     expect(screen.getByText("Sprint Git Ledger")).toBeInTheDocument();
     expect(screen.getAllByText("Sprint 1").length).toBeGreaterThan(0);

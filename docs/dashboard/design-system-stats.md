@@ -82,8 +82,8 @@ Providers mode is the reliability studio.
 Ledgers mode contains tabbed operational records.
 
 - Task Telemetry, Sprint Telemetry, and Git Telemetry use accessible tab semantics with stable tab labels and count badges.
-- Task and sprint rows should expose status, usage, cost, duration, recency, source quality, and top contributor context without requiring expansion for basic triage.
-- Git rows should keep churn visually separate from token flow. Use `ChurnFlowBar` for insertions and deletions instead of reusing token-flow metaphors.
+- Task and sprint rows should expose status, provider, purpose, calls, active time, cost, recency, share of visible total, share of the leading row, token-flow anatomy, and p50/p95 duration chips when those percentile fields are present.
+- Git rows should keep churn visually separate from token flow. Use `ChurnFlowBar` for insertions and deletions, and keep pull requests, merges, files, conflicts, visible share, and leader share readable in the row metrics.
 - Search, sort, and progressive rendering must preserve the `useProgressiveList` flow: visible items, scroll container, and sentinel stay wired together.
 - Sort controls use buttons with `aria-pressed` where they represent local ordering choices.
 
