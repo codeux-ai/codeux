@@ -1,0 +1,13 @@
+Implemented the Jira importer refactor.
+
+Changed:
+- [SprintJiraImportModal.tsx](/workspace/dashboard/src/v2/components/sprints/SprintJiraImportModal.tsx): now uses shared importer shell, summary rail, issue card, loading, empty, and error primitives plus view-model helpers. Preserved Jira defaults, guided search payloads, selection controls, conversation toggles, Escape close, abort-on-unmount, and linked issue normalization.
+- [SprintJiraImportModal.test.tsx](/workspace/tests/dashboard/v2/components/sprints/SprintJiraImportModal.test.tsx): expanded coverage for uppercase default project loading, visible selected count, clear selection, disabled import accessible name, conversation toggle off, and full Jira context payload shape.
+- [sprint-imports.md](/workspace/docs/dashboard/sprint-imports.md): updated docs for the shared Jira importer UI and Jira payload normalization.
+- [.task-learnings.md](/workspace/.task-learnings.md): added required task learnings.
+
+Verification:
+- `pnpm install` was needed because `node_modules` was missing.
+- `pnpm run test:dashboard -- tests/dashboard/v2/components/sprints/SprintJiraImportModal.test.tsx` passed.
+- `pnpm run typecheck:dashboard` passed.
+- `git diff --check -- ...` passed.

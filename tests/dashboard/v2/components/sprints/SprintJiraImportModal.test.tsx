@@ -47,7 +47,7 @@ const baseIssue = {
 describe("SprintJiraImportModal", () => {
   it("loads the default project key and uses guided Jira filters", async () => {
     vi.mocked(fetchProjectEffectiveSettings).mockResolvedValue({
-      settings: { jira: { defaultProject: "OPS" } },
+      settings: { jira: { defaultProject: "ops" } },
     } as never);
     vi.mocked(searchJiraIssues).mockResolvedValue([baseIssue]);
     vi.mocked(fetchProjectIssuePromptContexts).mockResolvedValue([] as never);
@@ -174,12 +174,13 @@ describe("SprintJiraImportModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /select all visible/i }));
     expect(screen.getByText(/2 selected issues will be imported/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 of 2 visible results selected/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText(/append conversation to all selected/i));
-    fireEvent.click(screen.getByRole("button", { name: /clear all/i }));
+    fireEvent.click(screen.getByRole("button", { name: /clear selection/i }));
 
-    expect(screen.getByText("No Jira issues selected.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /import issues/i })).toBeDisabled();
+    expect(screen.getByText("No issues selected.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /import issues disabled until jira issues are selected/i })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: /select all visible/i }));
     fireEvent.click(screen.getByLabelText(/append conversation to all selected/i));
@@ -187,8 +188,34 @@ describe("SprintJiraImportModal", () => {
 
     await waitFor(() => {
       expect(fetchProjectIssuePromptContexts).toHaveBeenCalledWith("project-1", [
-        expect.objectContaining({ issueKey: "OPS-42", includeConversation: false }),
-        expect.objectContaining({ issueKey: "OPS-99", includeConversation: false }),
+        {
+          provider: "jira",
+          hostDomain: "acme.atlassian.net",
+          projectKey: "OPS",
+          repository: "OPS",
+          issueNumber: 42,
+          issueKey: "OPS-42",
+          title: "Import Jira backlog",
+          url: "https://acme.atlassian.net/browse/OPS-42",
+          state: "In Progress",
+          labels: ["jira"],
+          assignees: ["Pierre"],
+          includeConversation: false,
+        },
+        {
+          provider: "jira",
+          hostDomain: "acme.atlassian.net",
+          projectKey: "OPS",
+          repository: "OPS",
+          issueNumber: 99,
+          issueKey: "OPS-99",
+          title: "Follow-up backlog cleanup",
+          url: "https://acme.atlassian.net/browse/OPS-99",
+          state: "In Progress",
+          labels: ["jira"],
+          assignees: ["Pierre"],
+          includeConversation: false,
+        },
       ]);
       expect(onImport).toHaveBeenCalledTimes(1);
     });
