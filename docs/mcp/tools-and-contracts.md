@@ -170,6 +170,7 @@ For sprint create/update calls:
 - `title` is accepted as a public MCP alias for `name`.
 - `goal` is the canonical repository field.
 - `goalMarkdown` is accepted as a public MCP alias for `goal`.
+- `linkedIssues` can include imported issue body and conversation markdown. Sprint create merges that context into the goal under `## Linked Issues`; sprint update does the same when a replacement goal is provided. Prompt-only issue body and conversation content are not stored in linked issue repository rows.
 - Missing or blank `projectId`, `sprintId`, `sprintRunId`, `name`, and `title` values are rejected before repository calls so MCP clients receive a validation error instead of a low-level `.trim()` failure.
 
 For task create/update calls:
