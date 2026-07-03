@@ -5,6 +5,15 @@ import type {
 } from "../../../types.js";
 import type { LedgerSortKey } from "./stats-ui-primitives.js";
 
+export interface LedgerDurationStats {
+  p50Ms?: number | null;
+  p95Ms?: number | null;
+}
+
+export interface ExecutionStatsEntityWithDuration extends ExecutionStatsEntitySummary {
+  duration?: LedgerDurationStats | null;
+}
+
 export const DAY_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
@@ -86,6 +95,8 @@ export function formatAxisLabel(bucket: ExecutionUsageBucketSummary, range: Proj
 }
 
 export function getLedgerSortValue(item: ExecutionStatsEntitySummary, key: LedgerSortKey): number | string {
+  const duration = (item as ExecutionStatsEntityWithDuration).duration;
+
   switch (key) {
     case "tokens":
       return item.usage.totalTokens;
@@ -98,9 +109,9 @@ export function getLedgerSortValue(item: ExecutionStatsEntitySummary, key: Ledge
     case "name":
       return item.label.toLowerCase();
     case "p50":
-      return (item as any).duration?.p50Ms ?? 0;
+      return duration?.p50Ms ?? 0;
     case "p95":
-      return (item as any).duration?.p95Ms ?? 0;
+      return duration?.p95Ms ?? 0;
     case "last":
     default:
       return toTimestamp(item.lastActivityAt);

@@ -14,7 +14,7 @@ import {
 } from "lucide-preact";
 import { useProgressiveList } from "../../../../hooks/use-progressive-list.js";
 import type { ExecutionStatsEntitySummary } from "../../../types.js";
-import { formatTokens, formatStatsDuration, formatDateTime, formatPercent } from "../stats-utils.js";
+import { formatTokens, formatStatsDuration, formatDateTime, formatPercent, formatCost } from "../stats-utils.js";
 import {
   CHIP_CLASS,
   INPUT_CLASS,
@@ -27,6 +27,7 @@ import {
   getProviderIcon,
   getLedgerSortValue,
   type LedgerSortKey,
+  type ExecutionStatsEntityWithDuration,
 } from "./StatsShared.js";
 
 export function getStatusChipTone(status: string): string {
@@ -194,6 +195,7 @@ export const TelemetryLedger: FunctionComponent<{
     let cachedTokens = 0;
     let outputTokens = 0;
     let reasoningTokens = 0;
+    let totalCostUsd = 0;
 
     for (const item of filteredItems) {
       totalTokens += item.usage.totalTokens;
@@ -204,15 +206,17 @@ export const TelemetryLedger: FunctionComponent<{
       cachedTokens += item.usage.cachedInputTokens;
       outputTokens += item.usage.outputTokens;
       reasoningTokens += item.usage.reasoningOutputTokens;
+      totalCostUsd += item.usage.totalCostUsd;
     }
 
-    return { totalTokens, totalActiveMs, calls, leaderTokens, inputTokens, cachedTokens, outputTokens, reasoningTokens };
+    return { totalTokens, totalActiveMs, calls, leaderTokens, inputTokens, cachedTokens, outputTokens, reasoningTokens, totalCostUsd };
   }, [filteredItems]);
 
   const overallTotals = useMemo(() => {
     let totalTokens = 0;
     let totalActiveTimeMs = 0;
     let invocationCount = 0;
+    let totalCostUsd = 0;
     let newestActivityMs = 0;
     let newestActivityAt: string | null = null;
 
@@ -220,6 +224,7 @@ export const TelemetryLedger: FunctionComponent<{
       totalTokens += item.usage.totalTokens;
       totalActiveTimeMs += item.usage.activeTimeMs;
       invocationCount += item.usage.invocationCount;
+      totalCostUsd += item.usage.totalCostUsd;
       const activityMs = item.lastActivityAt ? new Date(item.lastActivityAt).getTime() : 0;
       if (!Number.isNaN(activityMs) && activityMs > newestActivityMs) {
         newestActivityMs = activityMs;
@@ -227,7 +232,7 @@ export const TelemetryLedger: FunctionComponent<{
       }
     }
 
-    return { totalTokens, totalActiveTimeMs, invocationCount, newestActivityAt };
+    return { totalTokens, totalActiveTimeMs, invocationCount, totalCostUsd, newestActivityAt };
   }, [items]);
 
   const topItem = useMemo(() => {
@@ -289,7 +294,7 @@ export const TelemetryLedger: FunctionComponent<{
               icon={Database}
               label="Total Tokens"
               value={formatTokens(overallTotals.totalTokens)}
-              detail={`${overallTotals.invocationCount.toLocaleString()} calls`}
+              detail={`${overallTotals.invocationCount.toLocaleString()} calls · ${formatCost(overallTotals.totalCostUsd)}`}
               tone="text-cyan-500"
             />
             <LedgerSummaryTile
@@ -423,14 +428,20 @@ export const TelemetryLedger: FunctionComponent<{
                 const providerLabel = item.provider ? String(item.provider) : "No provider";
                 const purposeLabel = item.purpose ? item.purpose.replace(/_/g, " ") : "No purpose";
                 const statusLabel = item.status ? item.status.replace(/_/g, " ") : "No status";
+                const duration = (item as ExecutionStatsEntityWithDuration).duration ?? null;
+                const hasPercentiles = duration?.p50Ms != null || duration?.p95Ms != null;
+                const percentileSummary = hasPercentiles
+                  ? `p50 ${formatStatsDuration(duration?.p50Ms ?? 0)} · p95 ${formatStatsDuration(duration?.p95Ms ?? 0)}`
+                  : "No percentiles";
 
                 return (
                   <div key={item.id} role="article" className={`${LEDGER_ROW_MODERN_CLASS} !p-4`} aria-label={`${item.label} ${kindLabel} telemetry row`}>
                     <div className="flex flex-col gap-4">
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] text-xs font-black text-slate-900 shadow-sm backdrop-blur-xl dark:text-white">
-                            {index + 1}
+                          <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] text-[10px] font-black uppercase leading-none text-slate-900 shadow-sm backdrop-blur-xl dark:text-white">
+                            <span className="text-[8px] tracking-[0.12em] text-slate-400">Rank</span>
+                            <span className="mt-0.5 text-xs">{index + 1}</span>
                           </div>
                           <div className="min-w-0">
                             <div className="truncate text-base font-black tracking-tight text-slate-900 dark:text-white">{item.label}</div>
@@ -467,7 +478,7 @@ export const TelemetryLedger: FunctionComponent<{
                             </div>
                           </div>
                         </div>
-                        <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-4 xl:w-auto xl:min-w-[34rem] xl:grid-cols-4 xl:text-right">
+                        <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-3 xl:w-auto xl:min-w-[46rem] xl:grid-cols-6 xl:text-right">
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Tokens</div>
                             <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatTokens(item.usage.totalTokens)}</div>
@@ -483,6 +494,14 @@ export const TelemetryLedger: FunctionComponent<{
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Share</div>
                             <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatPercent(shareOfTotal)}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Leader</div>
+                            <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatPercent(shareOfLeader)}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Cost</div>
+                            <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatCost(item.usage.totalCostUsd)}</div>
                           </div>
                         </div>
                       </div>
@@ -512,9 +531,11 @@ export const TelemetryLedger: FunctionComponent<{
                             <TokenChip icon={Database} label="Cached" value={item.usage.cachedInputTokens} tone="border-cyan-500/16 bg-cyan-500/8 text-cyan-600 dark:text-cyan-400" />
                             <TokenChip icon={ArrowUpRight} label="Output" value={item.usage.outputTokens} tone="border-amber-500/16 bg-amber-500/8 text-amber-600 dark:text-amber-400" />
                             <TokenChip icon={Brain} label="Reasoning" value={item.usage.reasoningOutputTokens} tone="border-rose-500/16 bg-rose-500/8 text-rose-600 dark:text-rose-400" />
+                            <TokenChip icon={Clock3} label="p50" value={duration?.p50Ms != null ? formatStatsDuration(duration.p50Ms) : "—"} tone="border-indigo-500/16 bg-indigo-500/8 text-indigo-600 dark:text-indigo-400" />
+                            <TokenChip icon={Activity} label="p95" value={duration?.p95Ms != null ? formatStatsDuration(duration.p95Ms) : "—"} tone="border-orange-500/16 bg-orange-500/8 text-orange-600 dark:text-orange-400" />
                           </div>
                           <div className="max-w-full text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                            {providerLabel} · {purposeLabel} · {statusLabel}
+                            {providerLabel} · {purposeLabel} · {statusLabel} · {percentileSummary}
                           </div>
                         </div>
                       </div>

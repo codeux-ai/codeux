@@ -5,7 +5,7 @@ import { GitBranch, ListTodo, Rows3 } from "lucide-preact";
 import type { ProjectExecutionStatsSnapshot } from "../../../types.js";
 import { TelemetryLedger } from "./TelemetryLedger.js";
 import { GitTelemetryTab } from "./GitTelemetryTab.js";
-import { CHIP_CLASS } from "./StatsShared.js";
+import { CHIP_CLASS, CONTROL_FOCUS_CLASS } from "./StatsShared.js";
 import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
 
 export interface TelemetryLedgerTabsProps {
@@ -38,12 +38,13 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
   const tabs = useMemo(() => {
     const taskCount = stats.tasks.length;
     const sprintCount = stats.sprints.length;
-    const gitCount = stats.git ? stats.git.tasks.length + stats.git.sprints.length : 0;
+    const gitStats = stats.git ?? null;
+    const gitCount = gitStats ? gitStats.tasks.length + gitStats.sprints.length : 0;
 
     return [
-      { id: "tasks" as const, label: "Task Telemetry", icon: ListTodo, count: taskCount },
-      { id: "sprints" as const, label: "Sprint Telemetry", icon: Rows3, count: sprintCount },
-      ...(stats.git ? [{ id: "git" as const, label: "Git Telemetry", icon: GitBranch, count: gitCount }] : []),
+      { id: "tasks" as const, label: "Task Telemetry", detail: "Provider work lanes", icon: ListTodo, count: taskCount },
+      { id: "sprints" as const, label: "Sprint Telemetry", detail: "Sprint rollups", icon: Rows3, count: sprintCount },
+      ...(gitStats ? [{ id: "git" as const, label: "Git Telemetry", detail: "PR and churn lanes", icon: GitBranch, count: gitCount }] : []),
     ];
   }, [stats]);
 
@@ -77,13 +78,13 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
         role="tablist"
         aria-orientation="horizontal"
         aria-label="Telemetry ledgers"
-        className="sticky top-3 z-20 flex w-full max-w-full flex-wrap gap-1 overflow-visible rounded-2xl border border-black/[0.05] bg-white/82 p-1 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/75"
+        className="sticky top-3 z-20 grid w-full max-w-full min-w-0 grid-cols-1 gap-1 rounded-[var(--stats-subpanel-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-subpanel)] p-1 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl sm:grid-cols-2 xl:grid-cols-3"
         onKeyDown={(e) => {
           if (tabs.length === 0) {
             return;
           }
 
-          if (e.key === "ArrowRight" || e.key === "ArrowLeft" || e.key === "Home" || e.key === "End") {
+          if (e.key === "ArrowRight" || e.key === "ArrowLeft" || e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Home" || e.key === "End") {
             e.preventDefault();
             const currentIndex = tabs.findIndex(t => t.id === activeTab);
             let nextIndex = currentIndex;
@@ -91,7 +92,7 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
               nextIndex = 0;
             } else if (e.key === "End") {
               nextIndex = tabs.length - 1;
-            } else if (e.key === "ArrowRight") {
+            } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
               nextIndex = currentIndex + 1;
             } else {
               nextIndex = currentIndex - 1;
@@ -119,15 +120,22 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
               tabIndex={isActive ? 0 : -1}
               onClick={() => setActiveTab(tab.id)}
               aria-label={`${tab.label}, ${tab.count.toLocaleString()} ${tab.count === 1 ? "entry" : "entries"}`}
-              className={`inline-flex min-w-0 flex-1 basis-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-center text-[11px] font-bold uppercase tracking-[0.14em] transition-[background-color,box-shadow,color] motion-safe:duration-200 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 sm:basis-[calc(33.333%-0.25rem)] sm:px-4 dark:focus-visible:ring-offset-void-900 ${
+              className={`grid min-h-16 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[calc(var(--stats-subpanel-radius)-0.35rem)] px-3 py-2 text-left transition-[background-color,border-color,box-shadow,color] motion-safe:duration-200 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS} ${
                 isActive
                   ? "bg-slate-900 text-white shadow-sm dark:bg-white dark:text-void-900"
                   : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
               }`}
             >
-              <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
-              <span className="min-w-0 break-words leading-tight">{tab.label}</span>
-              <span className={`inline-flex min-w-8 justify-center px-2 py-0.5 text-[9px] font-black tabular-nums tracking-wider ${CHIP_CLASS} ${
+              <Icon className="h-4 w-4 shrink-0" strokeWidth={2.2} aria-hidden="true" />
+              <span className="min-w-0">
+                <span className="block truncate text-[11px] font-black uppercase tracking-[0.14em]">{tab.label}</span>
+                <span className={`mt-0.5 block truncate text-[10px] font-bold normal-case tracking-normal ${
+                  isActive ? "text-white/72 dark:text-void-900/65" : "text-slate-400 dark:text-slate-500"
+                }`}>
+                  {tab.detail}
+                </span>
+              </span>
+              <span className={`inline-flex min-w-10 justify-center rounded-full px-2 py-1 text-[10px] font-black tabular-nums tracking-wider ${CHIP_CLASS} ${
                   isActive
                     ? "bg-white/20 text-white dark:bg-void-900/15 dark:text-void-900"
                     : "text-slate-500 dark:text-slate-400"

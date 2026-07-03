@@ -250,7 +250,7 @@ The page focuses on:
 - composition mode emphasizes provider share, token anatomy, cache efficiency, purpose activity, and provider activity ledgers as grouped modules
 - models mode emphasizes ranked model cards with consistent metric grids, provider identity, throughput, success rate, latency, cache efficiency, and model highlights
 - reliability mode emphasizes provider health, telemetry confidence, reported/estimated/unavailable mix, and data-integrity notes before the provider breakdown
-- ledgers mode uses sticky tabbed task, sprint, and git ledgers with roving focus, stable badge counts, unified controls, and dense row cards
+- ledgers mode uses sticky tabbed task, sprint, and git ledgers with roving focus, stable badge counts, unified controls, conditional git availability, dense row cards, visible/leader share metrics, token-flow bars, and git churn bars
 - system mode uses a sprint-state overview, invocation-health snapshot, failure analysis, external API activity, and invocation records area so operational signals stay grouped by the action they support
 - the system record area keeps search, status, purpose, provider, error-category chips, active record tabs, result counts, and pagination in a responsive toolbar that wraps instead of clipping controls
 - the system invocation table preserves semantic column headers while using dense responsive rows, provider/model labels, token and duration columns, table-owned loading/error/empty states, and expandable transcript detail rows
