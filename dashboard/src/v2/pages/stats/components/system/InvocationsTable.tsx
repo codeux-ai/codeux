@@ -1,4 +1,4 @@
-import type { FunctionComponent } from "preact";
+import { Fragment, type FunctionComponent } from "preact";
 import { useState, useMemo } from "preact/hooks";
 import {
   ChevronRight,
@@ -31,6 +31,7 @@ export interface InvocationsTableProps {
   expandedId: string | null;
   onRowExpand: (id: string | null) => void;
   loading?: boolean;
+  error?: string | null;
 }
 
 export function useInvocationsWindow(
@@ -69,6 +70,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
   expandedId,
   onRowExpand,
   loading,
+  error,
   }) => {
   const expandedInvocation = expandedId === null
     ? null
@@ -144,6 +146,11 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
     }
   };
 
+  const formatLabel = (value: string | null | undefined): string => {
+    const label = (value || "unknown").replace(/[_-]/g, " ").trim();
+    return label.length > 0 ? label : "unknown";
+  };
+
   if (loading) {
     return (
       <div role="status" aria-label="Loading invocations" className="space-y-3">
@@ -151,6 +158,20 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
         {Array.from({ length: 6 }).map((_, i) => (
           <div key={i} className={`${LEDGER_ROW_MODERN_CLASS} h-20 motion-safe:animate-pulse bg-slate-100/50 dark:bg-white/5`} />
         ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div role="alert" className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-4 text-sm text-rose-700 dark:text-rose-300">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div className="min-w-0">
+            <div className="font-bold">Failed to load invocation records</div>
+            <div className="mt-1 break-words text-rose-600 dark:text-rose-300">{error}</div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -165,8 +186,8 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-separate border-spacing-y-2 block lg:table">
+    <div className="min-w-0 overflow-visible">
+      <table className="block w-full border-separate border-spacing-y-2 lg:table">
         <thead className="sticky top-0 z-10 bg-white/90 backdrop-blur-sm dark:bg-void-900/80 hidden lg:table-header-group">
           <tr className="text-left text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
             <th scope="col" className="pb-2 pl-6">
@@ -231,11 +252,11 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               : "running";
 
             return (
-              <>
+              <Fragment key={invocation.id}>
                 <tr key={invocation.id} className="block lg:table-row">
                   <td colSpan={11} className="p-0 block lg:table-cell">
-                    <div className={`${LEDGER_ROW_MODERN_CLASS} flex items-center p-4 lg:p-5 ${invocation.status === "running" ? "border-l-2 border-l-signal-500/60" : invocation.status === "failed" ? "border-l-2 border-l-rose-500/55" : ""}`}>
-                      <div className="flex flex-col gap-3 lg:grid lg:w-full lg:grid-cols-[1.2fr_1fr_1fr_1.4fr_0.6fr_0.6fr_0.6fr_0.8fr_0.8fr_1fr_0.4fr] lg:items-center lg:gap-2">
+                    <div className={`${LEDGER_ROW_MODERN_CLASS} flex items-center p-3.5 lg:p-4 ${invocation.status === "running" ? "border-l-2 border-l-signal-500/60" : invocation.status === "failed" ? "border-l-2 border-l-rose-500/55" : ""}`}>
+                      <div className="flex min-w-0 flex-col gap-3 lg:grid lg:w-full lg:grid-cols-[1.05fr_0.92fr_0.95fr_1.35fr_0.56fr_0.56fr_0.62fr_0.66fr_0.75fr_0.95fr_0.36fr] lg:items-center lg:gap-2">
                         {/* Header Row: Time and Expand */}
                         <div className="flex items-center justify-between lg:contents">
                           {/* Time */}
@@ -252,6 +273,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                             <button
                               type="button"
                               onClick={() => onRowExpand(isExpanded ? null : invocation.id)}
+                              aria-expanded={isExpanded}
                               aria-label={isExpanded ? `Collapse invocation ${invocation.id}` : `Expand invocation ${invocation.id}`}
                               className={`rounded-full p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 hover:bg-black/[0.04] dark:hover:bg-white/5 ${
                                 isExpanded ? "text-signal-500" : "text-slate-400"
@@ -271,10 +293,10 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                           </div>
 
                         {/* Type */}
-                          <div className="flex flex-col min-w-0">
+                          <div className="flex min-w-0 flex-col">
                             <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Type</div>
-                            <div className={`${CHIP_CLASS} w-max px-2 py-0.5 text-[10px] font-medium text-slate-500`}>
-                              {invocation.type?.replace(/_/g, " ") || "unknown"}
+                            <div className={`${CHIP_CLASS} max-w-full px-2 py-0.5 text-[10px] font-medium capitalize text-slate-500`}>
+                              <span className="block truncate">{formatLabel(invocation.type)}</span>
                             </div>
                           </div>
                         </div>
@@ -284,12 +306,16 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                           {/* Model */}
                           <div>
                             <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Model</div>
-                            <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300 min-w-0">
+                            <div className="flex min-w-0 items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
 
                             <div className={`rounded-lg p-1.5 ${providerBg} ${providerText}`}>
                               <ProviderIcon className="h-3 w-3" strokeWidth={2.5} />
                             </div>
-                            <span className="truncate min-w-0">{invocation.model || "—"}</span>
+                            <span className="min-w-0 truncate">
+                              <span className="font-bold capitalize text-slate-700 dark:text-slate-200">{formatLabel(invocation.provider)}</span>
+                              <span className="mx-1 text-slate-400">·</span>
+                              {invocation.model || "—"}
+                            </span>
                             </div>
                           </div>
 
@@ -369,6 +395,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                           <button
                             type="button"
                             onClick={() => onRowExpand(isExpanded ? null : invocation.id)}
+                            aria-expanded={isExpanded}
                             aria-label={isExpanded ? `Collapse invocation ${invocation.id}` : `Expand invocation ${invocation.id}`}
                             className={`rounded-full p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 hover:bg-black/[0.04] dark:hover:bg-white/5 ${
                               isExpanded ? "text-signal-500" : "text-slate-400"
@@ -383,9 +410,9 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                     {/* Error Sub-row inside main card if failed */}
                     {invocation.status === "failed" && (invocation.lastErrorMessage || invocation.errorMessage) && (
                       <div className="mt-[-8px] px-6 pb-4">
-                        <div className="flex items-center gap-1.5 text-[11px] text-rose-700 dark:text-rose-300">
+                        <div className="flex min-w-0 items-start gap-1.5 text-[11px] text-rose-700 dark:text-rose-300">
                           <AlertTriangle className="h-3 w-3 flex-shrink-0" />
-                          <span>{invocation.lastErrorMessage || invocation.errorMessage}</span>
+                          <span className="min-w-0 break-words">{invocation.lastErrorMessage || invocation.errorMessage}</span>
                         </div>
                       </div>
                     )}
@@ -400,7 +427,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                     </td>
                   </tr>
                 ) : null}
-              </>
+              </Fragment>
             );
           })}
         </tbody>

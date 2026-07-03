@@ -25,15 +25,17 @@ const SystemMetricCard: FunctionComponent<{
   circleClassName: string;
   valueClassName?: string;
 }> = ({ icon: Icon, label, value, detail, circleClassName, valueClassName }) => (
-  <div className={`${SUBPANEL_CLASS} p-4`}>
-    <div className={`mb-4 flex h-10 w-10 items-center justify-center rounded-2xl ${circleClassName}`}>
+  <div className={`${SUBPANEL_CLASS} flex min-h-[8rem] flex-col justify-between p-4`}>
+    <div className="flex items-start justify-between gap-3">
+      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${circleClassName}`}>
       <Icon className="h-4 w-4" strokeWidth={2.25} />
+      </div>
+      <div className="text-right text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+        {label}
+      </div>
     </div>
-    <div className={`text-3xl font-black tracking-tight ${valueClassName || "text-slate-900 dark:text-white"}`}>
+    <div className={`mt-4 break-words text-2xl font-black tracking-tight md:text-3xl ${valueClassName || "text-slate-900 dark:text-white"}`}>
       {value}
-    </div>
-    <div className="mt-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
-      {label}
     </div>
     <div className="mt-1 text-[11px] font-medium text-slate-400 dark:text-slate-500">
       {detail}
@@ -202,16 +204,16 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
         <StudioHeader
           icon={Terminal}
           eyebrow="System Telemetry"
-          title="Invocations & System Logs"
-          description="Project invocation workbench with status, latency, token flow, filters, and expandable message detail."
+          title="System Operations"
+          description="Project invocation workbench for sprint state, invocation health, external API activity, filters, pagination, and expandable message detail."
         />
       </section>
 
       <section className={`${PANEL_CLASS} p-5 md:p-6`}>
         <StudioSectionHeader
           eyebrow="Sprint Overview"
-          title="Operational Summary"
-          description="Sprint state and invocation health stay compact so the log remains the primary work area."
+          title="Sprint State"
+          description="Current sprint and task state stays separate from invocation metrics so active work, blocked work, and settled work can be scanned first."
         />
         <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-5">
           <SystemMetricCard
@@ -255,7 +257,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
       <section className={`${PANEL_CLASS} p-5 md:p-6`}>
         <StudioSectionHeader
           eyebrow="Invocation Health"
-          title="Invocation Health"
+          title="Health Snapshot"
           description="Current volume, success rate, latency, cache efficiency, and in-flight work are derived from the server-projected summary for the current filter set."
         />
         <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
@@ -312,8 +314,8 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
       <section className={`${PANEL_CLASS} p-5 md:p-6`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <StudioSectionHeader
-            eyebrow="Error Log"
-            title="Error Log"
+            eyebrow="Failure Analysis"
+            title="Failure Analysis"
             description="Error classes are grouped so operators can separate transient issues from provider, model, and cancellation problems at a glance."
           />
           {totalErrors > 0 ? (
@@ -353,7 +355,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
         <div className="flex flex-wrap items-start justify-between gap-4">
           <StudioSectionHeader
             eyebrow="External APIs"
-            title="External API Metrics"
+            title="External API Activity"
             description="Git, Jules, Jira, and other integrations are isolated from the main invocation table so external traffic stays easy to audit."
           />
           <div className="flex flex-wrap gap-2">
@@ -381,9 +383,9 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
       <section className={`${PANEL_CLASS} p-5 md:p-6`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <StudioSectionHeader
-            eyebrow="Invocation Filters"
-            title="Detailed Log"
-            description="Search and filter controls stay separate from the table so the result counts and page controls remain easy to scan."
+            eyebrow="Invocation Records"
+            title="Invocation Records"
+            description="Search, server filters, record tabs, result counts, pagination, and expandable transcript detail stay in one operational record area."
           />
           <div className="flex flex-wrap gap-2">
             <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ${CHIP_CLASS}`}>
@@ -399,7 +401,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
         </div>
 
         <div className="mt-6 space-y-4">
-          <div className="sticky top-3 z-30 flex max-w-full gap-1 self-start overflow-x-auto rounded-2xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-1 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl">
+          <div className="sticky top-3 z-30 flex max-w-full flex-wrap gap-1 self-start rounded-2xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-1 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl" role="group" aria-label="Invocation record views">
             {(["all", "errors", "system"] as SystemTab[]).map((tab) => {
               const tabCount = tab === "all" ? invocations.length : tab === "errors" ? errorCount : systemCount;
               return (
@@ -431,7 +433,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             availablePurposes={availablePurposes}
             availableProviders={availableProviders}
             totalCount={totalCount}
-            filteredCount={invocations.length}
+            filteredCount={tabbedInvocations.length}
             page={page}
             onPageChange={setPage}
             hasMore={hasMore}
@@ -450,6 +452,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             expandedId={expandedId}
             onRowExpand={(id) => setExpandedId((prev) => (prev === id ? null : id))}
             loading={loading}
+            error={error}
           />
         </div>
       </section>

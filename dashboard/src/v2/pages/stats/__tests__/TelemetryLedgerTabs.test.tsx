@@ -4,7 +4,7 @@
 /// <reference types="@testing-library/jest-dom" />
 import { h } from "preact";
 import { render, screen, cleanup, fireEvent, within } from "@testing-library/preact";
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { TelemetryLedgerTabs } from "../components/TelemetryLedgerTabs.js";
 import type { ExecutionStatsEntitySummary, ProjectExecutionStatsSnapshot } from "../../../types.js";
@@ -132,6 +132,16 @@ const mockStats: ProjectExecutionStatsSnapshot = {
 };
 
 describe("TelemetryLedgerTabs", () => {
+  beforeEach(() => {
+    if (typeof window !== "undefined") {
+      window.IntersectionObserver = class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      } as any;
+    }
+  });
+
   afterEach(() => {
     cleanup();
   });
@@ -178,7 +188,7 @@ describe("TelemetryLedgerTabs", () => {
     fireEvent.input(screen.getByPlaceholderText("Search tasks"), { target: { value: "missing" } });
     expect(screen.getByText("No tasks match “missing”.")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Clear search" })[0]);
     expect(screen.getByLabelText("Alpha migration tasks telemetry row")).toBeInTheDocument();
   });
 
@@ -210,7 +220,7 @@ describe("TelemetryLedgerTabs", () => {
     fireEvent.input(screen.getByPlaceholderText("Search tasks"), { target: { value: "nomatch" } });
     expect(screen.getByText("No tasks match “nomatch”.")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Clear search" })[0]);
     const gitLedger = screen.getByLabelText("Alpha migration git telemetry row");
     expect(within(gitLedger).getByText("Churn mix")).toBeInTheDocument();
   });

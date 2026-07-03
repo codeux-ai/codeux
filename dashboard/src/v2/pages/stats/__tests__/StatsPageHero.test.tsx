@@ -3,11 +3,82 @@ expect.extend(matchers);
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen, cleanup } from '@testing-library/preact';
 import { StatsPageHero, getRelativeTime } from '../components/StatsPageHero.js';
 
+function createStats(overrides: Record<string, unknown> = {}) {
+  const usage = {
+    invocationCount: 12,
+    activeTimeMs: 125000,
+    wallTimeMs: 180000,
+    inputTokens: 1000,
+    cachedInputTokens: 250,
+    outputTokens: 750,
+    reasoningOutputTokens: 100,
+    totalTokens: 2100,
+    inputCostUsd: 0,
+    outputCostUsd: 0,
+    cachedInputCostUsd: 0,
+    totalCostUsd: 0,
+    reportedInvocationCount: 10,
+    estimatedInvocationCount: 2,
+    unavailableInvocationCount: 0,
+    unsupportedInvocationCount: 0,
+  };
+
+  return {
+    projectId: 'proj-1',
+    projectName: 'Project 1',
+    window: '24h',
+    query: { window: '24h' },
+    generatedAt: '2026-06-01T12:00:00Z',
+    activeSprint: null,
+    range: {
+      window: '24h',
+      resolution: 'hour',
+      resolutionLabel: 'Hourly',
+      label: '24h',
+      from: '2026-06-01T00:00:00Z',
+      to: '2026-06-02T00:00:00Z',
+      bucketCount: 24,
+      isCustom: false,
+    },
+    usage,
+    git: {
+      totals: { insertions: 0, deletions: 0, filesChanged: 0, prCount: 0, mergedCount: 0, mergeConflictCount: 0 },
+      buckets: [],
+      tasks: [],
+      sprints: [],
+    },
+    buckets: [],
+    sprints: [],
+    tasks: [],
+    providers: [{ id: 'codex', label: 'Codex', secondaryLabel: null, status: null, purpose: null, provider: 'codex', usage, lastActivityAt: null }],
+    purposes: [],
+    models: [{
+      id: 'codex:gpt-5',
+      provider: 'codex',
+      model: 'gpt-5',
+      label: 'GPT-5',
+      usage,
+      statusCounts: { completed: 9, failed: 1, cancelled: 0, running: 1, paused: 0 },
+      successRate: 0.9,
+      duration: { sampleCount: 10, avgMs: 1000, p50Ms: 900, p95Ms: 2000, maxMs: 2400 },
+      lastActivityAt: '2026-06-01T12:00:00Z',
+    }],
+    statusCounts: { completed: 9, failed: 1, cancelled: 0, running: 1, paused: 0 },
+    duration: { sampleCount: 10, avgMs: 1000, p50Ms: 900, p95Ms: 2000, maxMs: 2400 },
+    tokenSources: [],
+    chartSeries: [],
+    ...overrides,
+  } as any;
+}
+
 describe('StatsPageHero', () => {
+  afterEach(() => {
+    cleanup();
+  });
   describe('getRelativeTime', () => {
     it('returns "just now" for differences under 60 seconds', () => {
       const now = Date.now();
@@ -42,11 +113,7 @@ describe('StatsPageHero', () => {
     const { container } = render(
       <StatsPageHero
         selectedProject={{ id: 'proj-1', name: 'Project 1' } as any}
-        stats={{
-          generatedAt: '2026-06-01T12:00:00Z',
-          activeSprint: null,
-          range: { resolutionLabel: 'Hourly', label: '24h' },
-        } as any}
+        stats={createStats()}
         activeQuery={{ window: 'custom' } as any}
         customFrom="2026-05-01"
         customTo="2026-05-02"
@@ -68,6 +135,7 @@ describe('StatsPageHero', () => {
     expect(ledgersButton.compareDocumentPosition(systemButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(container.querySelectorAll('input[type="date"]').length).toBe(2);
     expect(screen.getByRole('button', { name: 'Apply' })).toBeTruthy();
+    expect(screen.getByText('Token, invocation, and runtime movement across the selected range.')).toBeTruthy();
   });
 
   it('exposes grouped pressed-state controls for presets and analysis modes', () => {
@@ -94,7 +162,45 @@ describe('StatsPageHero', () => {
     expect(screen.getByRole('group', { name: 'Analytics modes' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Models' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Trend' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText('Model activity, latency, cache behavior, and reliability signals.')).toBeTruthy();
     expect(screen.getByLabelText('Executive summary')).toBeTruthy();
+  });
+
+  it('renders enriched KPI details from usage, statuses, models, sprint, and range', () => {
+    render(
+      <StatsPageHero
+        selectedProject={{ id: 'proj-1', name: 'Project 1' } as any}
+        stats={createStats({
+          activeSprint: { sprintId: 'sprint-1', sprintName: 'Launch', sprintNumber: 4 },
+          range: {
+            window: 'custom',
+            resolution: 'day',
+            resolutionLabel: 'Daily',
+            label: 'May 1 → May 7',
+            from: '2026-05-01T00:00:00Z',
+            to: '2026-05-07T00:00:00Z',
+            bucketCount: 7,
+            isCustom: true,
+          },
+        })}
+        activeQuery={{ window: 'custom', from: '2026-05-01', to: '2026-05-07' } as any}
+        customFrom="2026-05-01"
+        customTo="2026-05-07"
+        applyPresetWindow={vi.fn()}
+        setCustomFrom={vi.fn()}
+        setCustomTo={vi.fn()}
+        applyCustomRange={vi.fn()}
+        visualMode="reliability"
+        setVisualMode={vi.fn()}
+        completionConfidence="Mixed reported + fallback"
+      />,
+    );
+
+    expect(screen.getAllByText('Daily · 7 buckets').length).toBeGreaterThan(0);
+    expect(screen.getByText('9 completed · 1 failed · 0 cancelled')).toBeTruthy();
+    expect(screen.getByText('1 providers · GPT-5')).toBeTruthy();
+    expect(screen.getByText('Mixed reported + fallback · Sprint 4')).toBeTruthy();
+    expect(screen.getByText('Custom · Sprint 4')).toBeTruthy();
   });
 
   it('disables the Apply button when custom dates are missing', () => {
@@ -166,8 +272,38 @@ describe('StatsPageHero', () => {
 
     expect(screen.getByLabelText('Custom start date')).toBeTruthy();
     expect(screen.getByLabelText('Custom end date')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Custom' })).toHaveAttribute('aria-expanded', 'true');
     expect(applyCustomWindow).not.toHaveBeenCalled();
     expect(applyCustomRange).not.toHaveBeenCalled();
+  });
+
+  it('applies a valid custom range only from the Apply action', () => {
+    cleanup();
+    const applyPresetWindow = vi.fn();
+    const applyCustomRange = vi.fn();
+
+    render(
+      <StatsPageHero
+        selectedProject={{ id: 'proj-1', name: 'Project 1' } as any}
+        stats={null}
+        activeQuery={{ window: '24h' } as any}
+        customFrom="2026-05-01"
+        customTo="2026-05-02"
+        applyPresetWindow={applyPresetWindow}
+        setCustomFrom={vi.fn()}
+        setCustomTo={vi.fn()}
+        applyCustomRange={applyCustomRange}
+        visualMode="trend"
+        setVisualMode={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Custom' }));
+    expect(applyPresetWindow).not.toHaveBeenCalled();
+    expect(applyCustomRange).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(applyCustomRange).toHaveBeenCalledTimes(1);
   });
 
   it('blocks and announces custom ranges where the end date is before the start date', () => {
@@ -196,5 +332,29 @@ describe('StatsPageHero', () => {
     expect(screen.getByLabelText('Custom end date')).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getByLabelText('Custom start date')).toHaveAttribute('aria-errormessage', 'stats-custom-range-error');
     expect(screen.getByLabelText('Custom end date')).toHaveAttribute('aria-errormessage', 'stats-custom-range-error');
+  });
+
+  it('does not render clipping-prone horizontal overflow wrappers in the command controls', () => {
+    const { container } = render(
+      <StatsPageHero
+        selectedProject={{ id: 'proj-1', name: 'Project 1' } as any}
+        stats={createStats()}
+        activeQuery={{ window: '24h' } as any}
+        customFrom="2026-05-01"
+        customTo="2026-05-02"
+        applyPresetWindow={vi.fn()}
+        setCustomFrom={vi.fn()}
+        setCustomTo={vi.fn()}
+        applyCustomRange={vi.fn()}
+        visualMode="system"
+        setVisualMode={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector('.overflow-x-auto')).toBeNull();
+    expect(container.querySelector('.min-w-max')).toBeNull();
+    expect(container.querySelector('.\\!flex-nowrap')).toBeNull();
+    expect(screen.getByRole('group', { name: 'Time window presets' }).className).toContain('flex-wrap');
+    expect(screen.getByRole('group', { name: 'Analytics modes' }).className).toContain('flex-wrap');
   });
 });

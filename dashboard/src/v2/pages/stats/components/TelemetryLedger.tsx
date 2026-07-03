@@ -406,22 +406,7 @@ export const TelemetryLedger: FunctionComponent<{
                 />
               </div>
             </div>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-12 text-center text-sm text-slate-400 dark:border-white/[0.08]">
-              {queryIsActive ? (
-                <div className="space-y-3">
-                  <div>No {kindLabel} match “{query.trim()}”.</div>
-                  <button
-                    type="button"
-                    onClick={() => setQuery("")}
-                    className="inline-flex items-center rounded-full border border-black/[0.06] bg-white/72 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300 dark:hover:text-white"
-                  >
-                    Clear search
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          )
+          ) : null
         ) : null}
 
         {searchHasResults ? (
