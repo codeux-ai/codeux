@@ -3,9 +3,11 @@
 import { h } from "preact";
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, act, cleanup } from "@testing-library/preact";
+import userEvent from "@testing-library/user-event";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { PreviewSessionSlider } from "../../../dashboard/src/v2/components/browser/PreviewSessionSlider.js";
 import { PreviewWindowChrome } from "../../../dashboard/src/v2/components/browser/PreviewWindowChrome.js";
+import { LaunchContainerPanel } from "../../../dashboard/src/v2/components/browser/LaunchContainerPanel.js";
 
 expect.extend(matchers);
 
@@ -106,6 +108,45 @@ describe("PreviewSessionSlider", () => {
 
     fireEvent.click(screen.getByLabelText("Remove preview session Sprint Alpha"));
     expect(onRemoveSession).toHaveBeenCalledWith("slider-sess-1");
+  });
+
+  it("announces selected and removing session feedback", () => {
+    render(
+      <PreviewSessionSlider
+        sessions={[
+          {
+            id: "slider-sess-1",
+            projectId: "p1",
+            sprintId: "s1",
+            sprintName: "Sprint Alpha",
+            status: "running",
+            healthStatus: "healthy",
+            hostPort: 8080,
+            createdAt: "",
+            updatedAt: ""
+          } as any,
+          {
+            id: "slider-sess-2",
+            projectId: "p1",
+            sprintId: "s2",
+            sprintName: "Sprint Beta",
+            status: "starting",
+            healthStatus: "unknown",
+            createdAt: "",
+            updatedAt: ""
+          } as any,
+        ]}
+        selectedSessionId="slider-sess-1"
+        onSelectSession={vi.fn()}
+        onRemoveSession={vi.fn()}
+        removingSessionIds={["slider-sess-2"]}
+      />
+    );
+
+    expect(screen.getByText("Selected")).toBeInTheDocument();
+    expect(screen.getByText("removing session")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Selected preview session Sprint Alpha. Status Running.");
+    expect(screen.getByRole("button", { name: "Remove preview session Sprint Beta" })).toBeDisabled();
   });
 });
 
@@ -225,5 +266,98 @@ describe("PreviewWindowChrome", () => {
     });
 
     expect(childWrapper.classList.contains("hidden")).toBe(false);
+  });
+
+  it("describes disabled and pending navigation controls", () => {
+    render(
+      <PreviewWindowChrome {...defaultProps} navigationEnabled={false}>
+        <div data-testid="test-child-disabled" />
+      </PreviewWindowChrome>
+    );
+
+    const address = screen.getByLabelText("Preview address");
+    expect(address).toBeDisabled();
+    expect(address).toHaveAccessibleDescription("Preview navigation controls are disabled until the selected container is running and has a routed host port.");
+    expect(screen.getByRole("button", { name: "Go back in preview" })).toBeDisabled();
+  });
+
+  it("prevents duplicate navigation while a command is pending", () => {
+    const onReload = vi.fn();
+    render(
+      <PreviewWindowChrome {...defaultProps} navigationBusy={true} onReload={onReload}>
+        <div data-testid="test-child-pending" />
+      </PreviewWindowChrome>
+    );
+
+    const reload = screen.getByRole("button", { name: "Reload preview" });
+    expect(reload).toBeDisabled();
+    expect(reload).toHaveAttribute("aria-busy", "true");
+    expect(reload).toHaveAccessibleDescription("Preview navigation is sending the previous command. Wait for the control to become available before submitting another navigation command.");
+
+    fireEvent.click(reload);
+    expect(onReload).not.toHaveBeenCalled();
+  });
+
+  it("supports keyboard minimize, restore, fullscreen, and close actions", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <PreviewWindowChrome {...defaultProps}>
+        <div data-testid="test-child-keyboard" />
+      </PreviewWindowChrome>
+    );
+
+    await user.tab();
+    expect(screen.getByLabelText("Close preview window")).toHaveFocus();
+    await user.tab();
+    expect(screen.getByLabelText("Minimize preview window")).toHaveFocus();
+    await user.keyboard("[Enter]");
+    expect(screen.getByRole("button", { name: "Restore preview window" })).toBeInTheDocument();
+
+    screen.getByRole("button", { name: "Restore preview window" }).focus();
+    await user.keyboard("[Enter]");
+    expect(screen.queryByRole("button", { name: "Restore preview window" })).not.toBeInTheDocument();
+
+    screen.getByLabelText("Enter preview fullscreen").focus();
+    await user.keyboard("[Enter]");
+    expect(container.querySelector(".fixed.inset-0.z-50")).toBeInTheDocument();
+
+    screen.getByLabelText("Restore preview window").focus();
+    await user.keyboard("[Enter]");
+    expect(container.querySelector(".fixed.inset-0.z-50")).not.toBeInTheDocument();
+
+    screen.getByLabelText("Close preview window").focus();
+    await user.keyboard("[Enter]");
+    expect(screen.getByRole("button", { name: "Reopen preview window" })).toBeInTheDocument();
+  });
+});
+
+describe("LaunchContainerPanel", () => {
+  const sprints = [
+    { id: "s1", name: "Sprint 1" },
+    { id: "s2", name: "Sprint 2" },
+  ] as any;
+
+  it("shows launch pending state and disables duplicate launch actions", () => {
+    const onLaunch = vi.fn();
+    render(
+      <LaunchContainerPanel
+        sprints={sprints}
+        launchSprintId="s1"
+        onLaunchSprintChange={vi.fn()}
+        onLaunchContainer={onLaunch}
+        launchEnabled={true}
+        launchBusy={true}
+      />
+    );
+
+    expect(screen.getByText("Launching")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Launching preview container. Launch controls are temporarily unavailable.");
+    expect(screen.getByRole("combobox")).toBeDisabled();
+    const button = screen.getByRole("button", { name: "Launching preview container" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("aria-busy", "true");
+
+    fireEvent.click(button);
+    expect(onLaunch).not.toHaveBeenCalled();
   });
 });
