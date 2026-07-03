@@ -80,6 +80,7 @@ export const NotificationPanel: FunctionComponent<{
   return (
     <div
       ref={panelRef}
+      role="dialog"
       aria-label="Notifications Panel"
       tabIndex={-1}
       className="fixed inset-x-4 top-[72px] sm:inset-auto sm:absolute sm:top-full sm:right-0 mt-2 w-[23rem] max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-5rem)] overflow-hidden rounded-2xl border border-black/[0.08] dark:border-white/[0.08] bg-white/95 shadow-2xl backdrop-blur-2xl dark:bg-void-800/95 z-50 flex flex-col"
@@ -120,9 +121,9 @@ export const NotificationPanel: FunctionComponent<{
         </div>
       </div>
 
-      <ul className="dashboard-scrollbar flex-1 min-h-0 overflow-y-auto p-2 m-0 list-none">
+      <ul className="dashboard-scrollbar flex-1 min-h-0 overflow-y-auto p-2 m-0 list-none" aria-live="polite" aria-label="Notifications list">
         {notifications.length === 0 ? (
-          <li className="flex flex-col items-center justify-center px-5 py-10 text-center">
+          <li role="status" className="flex flex-col items-center justify-center px-5 py-10 text-center">
             <div className="rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-700 dark:text-signal-300">
               Clear
             </div>
@@ -151,14 +152,15 @@ export const NotificationPanel: FunctionComponent<{
               ) : null}
               <div className="flex items-start gap-3">
                 <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${classes.badge}`}>
-                  <Icon className={`h-4 w-4 ${iconClass}`} strokeWidth={2.3} />
+                  <Icon className={`h-4 w-4 ${iconClass}`} strokeWidth={2.3} aria-hidden="true" />
+                  <span className="sr-only">Notification severity: {notification.severity}</span>
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">{notification.title}</div>
+                      <div className="break-words text-sm font-bold text-slate-800 dark:text-slate-100">{notification.title}</div>
                       {details ? (
-                        <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{details}</div>
+                        <div className="mt-1 break-words text-xs leading-relaxed text-slate-500 dark:text-slate-400">{details}</div>
                       ) : null}
                     </div>
                     <div className="shrink-0 text-[10px] font-medium text-slate-400">{notification.time}</div>
@@ -184,6 +186,7 @@ export const NotificationPanel: FunctionComponent<{
                             notification.onAction?.();
                           }}
                           className="rounded-full border border-black/10 bg-black/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 hover:bg-black/10 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white transition-colors"
+                          aria-label={`${notification.actionLabel} for ${notification.title}`}
                         >
                           {notification.actionLabel}
                         </button>

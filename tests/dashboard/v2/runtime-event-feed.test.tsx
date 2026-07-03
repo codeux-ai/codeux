@@ -32,12 +32,14 @@ describe("RuntimeEventFeed", () => {
 
         expect(screen.getAllByText("test event").length).toBeGreaterThan(0);
         expect(document.querySelector('[role="log"][aria-label="Runtime feed"]')).toBeInTheDocument();
+        expect(screen.getByLabelText(/Runtime event: test event from System/i)).toBeInTheDocument();
         expect(gsap.fromTo).toHaveBeenCalled();
     });
 
     it("handles empty events", () => {
         render(<RuntimeEventFeed events={[]} />);
         expect(screen.getByText("No runtime events yet")).toBeInTheDocument();
+        expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
     });
 
     it("animates only new elements on same-length replacement", () => {

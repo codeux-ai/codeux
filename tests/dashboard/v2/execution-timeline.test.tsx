@@ -149,6 +149,7 @@ describe("ExecutionTimeline", () => {
 
     expect(screen.getByText("Runtime Timeline")).toBeInTheDocument();
     expect(screen.getByText("No runtime events yet")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
     expect(screen.queryByText("run completed")).not.toBeInTheDocument();
   });
 });

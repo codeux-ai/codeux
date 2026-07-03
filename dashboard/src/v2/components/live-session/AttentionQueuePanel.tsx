@@ -24,7 +24,7 @@ export const AttentionQueuePanel: FunctionComponent = memo(() => {
         return (
             <div role="status" className="rounded-[1.75rem] border border-black/[0.08] bg-white p-5 shadow-sm dark:border-white/[0.08] dark:bg-void-800">
                 <div className="flex items-start gap-3 rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] border-l-status-green bg-black/[0.015] p-3 dark:border-white/[0.04] dark:bg-white/[0.015]">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-status-green" strokeWidth={1.7} />
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-status-green" strokeWidth={1.7} aria-hidden="true" />
                     <div>
                         <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Queue clear</p>
                         <p className="mt-1 text-[11px] font-mono leading-relaxed text-slate-400 dark:text-slate-500">All tasks and workers are proceeding normally.</p>
@@ -36,7 +36,7 @@ export const AttentionQueuePanel: FunctionComponent = memo(() => {
 
     // Wrap the Ledger and potentially show summary stats
     return (
-        <div className="flex flex-col gap-3">
+        <div role="region" aria-label="Attention queue status" className="flex flex-col gap-3">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                  {[
                     { label: "Open", value: open, color: "text-status-amber" },
@@ -51,8 +51,8 @@ export const AttentionQueuePanel: FunctionComponent = memo(() => {
                  ))}
             </div>
             {open > 0 && (
-                <div className="flex items-center gap-2 rounded-r-xl rounded-l-sm border border-l-2 border-status-amber/20 border-l-status-amber bg-status-amber/[0.055] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-status-amber">
-                    <AlertTriangle className="h-3.5 w-3.5" strokeWidth={1.7} />
+                <div role="status" aria-live="polite" className="flex items-center gap-2 rounded-r-xl rounded-l-sm border border-l-2 border-status-amber/20 border-l-status-amber bg-status-amber/[0.055] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-status-amber">
+                    <AlertTriangle className="h-3.5 w-3.5" strokeWidth={1.7} aria-hidden="true" />
                     {open} item{open === 1 ? "" : "s"} need operator or worker attention
                 </div>
             )}

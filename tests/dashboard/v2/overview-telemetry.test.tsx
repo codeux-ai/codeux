@@ -54,6 +54,7 @@ describe("OverviewTelemetry Component", () => {
 
     const { container } = render(<OverviewTelemetry />);
     expect(screen.getByText("Telemetry.")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Loading overview telemetry" })).toHaveAttribute("aria-busy", "true");
   });
 
   it("renders Awaiting Runtime state when empty", () => {
@@ -72,6 +73,7 @@ describe("OverviewTelemetry Component", () => {
     render(<OverviewTelemetry />);
     expect(screen.getByText("Awaiting Runtime")).toBeInTheDocument();
     expect(screen.getByText("No active project telemetry yet")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Awaiting Runtime");
   });
 
   it("renders compact intervention cards", () => {
@@ -203,6 +205,7 @@ describe("OverviewTelemetry Component", () => {
     // Event style maps and formatted label
     expect(screen.getByText("run completed")).toHaveClass("text-status-green");
     expect(screen.getByText("dispatch failed")).toHaveClass("text-status-red");
+    expect(screen.getByRole("log", { name: "Overview runtime timeline" })).toHaveAttribute("aria-live", "polite");
   });
 });
 
