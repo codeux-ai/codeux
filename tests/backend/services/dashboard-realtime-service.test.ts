@@ -264,6 +264,29 @@ describe("DashboardRealtimeService", () => {
     expect(scopeByEventType.get("project.execution.updated")).toBe("project:project-1");
     expect(scopeByEventType.get("project.live.updated")).toBe("project:project-1:live");
   });
+
+  it("routes the large git payload to a dedicated `:git` scope", async () => {
+    const { service } = await createService();
+    const scopeByEventType = new Map<string, string>();
+
+    service.setSnapshotLoaders({
+      getProjectsSnapshot: () => ({ projects: [], selectedProjectId: "project-1" }),
+      getProjectExecutionSnapshot: () => ({} as any),
+      getProjectStatusSnapshot: () => ({} as any),
+      getProjectLiveSnapshot: () => ({} as any),
+      getProjectGitStatus: () => ({ mode: "REMOTE", branch: "feature/x", defaultBranch: "main" } as any),
+      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: "2026-03-30T09:00:00.000Z" }),
+    });
+
+    service.subscribe((event) => {
+      scopeByEventType.set(event.eventType, event.scope);
+    });
+
+    service.scheduleProjectGitRefresh("project-1");
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    expect(scopeByEventType.get("project.git.updated")).toBe("project:project-1:git");
+  });
 });
 
 describe("DashboardRealtimeService observability", () => {
@@ -592,6 +615,31 @@ describe("DashboardRealtimeService backpressure and metrics", () => {
     let metrics = service.getMetrics("project.live.updated");
     expect(metrics.failures).toBe(1);
     expect(metrics.published).toBe(0);
+  });
+
+  it("skips heavy live snapshot assembly when no websocket client is subscribed to the live scope", async () => {
+    const loggerMock = { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn(), child: vi.fn() };
+    const eventRepoMock = {
+      getLatestSequence: () => 1,
+      appendEvent: vi.fn().mockImplementation((event) => ({ sequence: 2, ...event })),
+    };
+    const getProjectLiveSnapshot = vi.fn(() => ({ selectedSprintId: "sprint-1" }));
+    const service = new DashboardRealtimeService(eventRepoMock as any, loggerMock as any);
+    service.setScopeInterestResolver((scope) => scope !== "project:proj-1:live");
+    service.setSnapshotLoaders({
+      getProjectLiveSnapshot: getProjectLiveSnapshot as any,
+      getProjectsSnapshot: () => ({} as any),
+      getProjectExecutionSnapshot: () => ({} as any),
+      getProjectStatusSnapshot: () => ({} as any),
+      getOverviewTelemetrySnapshot: () => ({} as any),
+    });
+
+    service.scheduleProjectLiveRefresh("proj-1");
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(getProjectLiveSnapshot).not.toHaveBeenCalled();
+    expect(eventRepoMock.appendEvent).not.toHaveBeenCalled();
+    expect(service.getMetrics("project.live.updated").skipped).toBe(1);
   });
 
   it("bounds redundant burst snapshot writes to one publish per coalesced event type", async () => {

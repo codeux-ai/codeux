@@ -76,7 +76,11 @@ class DashboardRealtimeClient {
       transportListener(this.transportState);
     }
     this.ensureConnected();
-    this.scheduleSubscriptionSync();
+    if (this.socket?.readyState === WebSocket.OPEN) {
+      this.syncSubscriptions();
+    } else {
+      this.scheduleSubscriptionSync();
+    }
 
     return () => {
       this.subscriptions.delete(subscriptionId);

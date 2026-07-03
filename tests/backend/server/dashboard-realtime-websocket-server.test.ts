@@ -38,6 +38,7 @@ describe("DashboardRealtimeWebSocketServer", () => {
     server = new EventEmitter() as any;
     realtimeService = {
       subscribe: vi.fn().mockReturnValue(vi.fn()),
+      setScopeInterestResolver: vi.fn(),
       getLatestSequenceForScopes: vi.fn(),
       getLatestSequence: vi.fn(),
       hasNonReplayableEventsSince: vi.fn(),
@@ -479,6 +480,67 @@ describe("DashboardRealtimeWebSocketServer", () => {
     );
     expect(socket.destroy).toHaveBeenCalled();
   });
+
+  it("registers websocket subscription interest with the realtime service", () => {
+    const { sendClientMessage } = setupClient();
+
+    sendClientMessage({
+      type: "set_subscriptions",
+      scopes: ["project:p1:live"],
+      lastSequence: 0,
+    });
+
+    const resolver = realtimeService.setScopeInterestResolver.mock.calls[0][0]!;
+    expect(resolver("project:p1:live")).toBe(true);
+    expect(resolver("project:p1:git")).toBe(false);
+  });
+
+  it("disconnects slow websocket clients before buffering unbounded realtime frames", () => {
+    const { sendClientMessage, socket } = setupClient();
+
+    Object.defineProperty(socket, "writable", { value: true, configurable: true });
+    Object.defineProperty(socket, "destroyed", { value: false, configurable: true });
+    Object.defineProperty(socket, "writableLength", { value: 20 * 1024 * 1024, configurable: true });
+
+    sendClientMessage({
+      type: "set_subscriptions",
+      scopes: ["project:p1:live"],
+      lastSequence: 0,
+    });
+
+    const subscribeCallback = realtimeService.subscribe.mock.calls[0][0];
+    subscribeCallback({
+      sequence: 12,
+      emittedAt: "2026-03-30T09:00:00.000Z",
+      scopeType: "project",
+      scopeId: "p1:live",
+      scope: "project:p1:live",
+      eventType: "project.live.updated",
+      entityType: "project_live",
+      entityId: "p1",
+      projectId: "p1",
+      sprintId: null,
+      threadId: null,
+      taskId: null,
+      dispatchId: null,
+      sprintRunId: null,
+      taskRunId: null,
+      connectionId: null,
+      correlationId: "corr-1",
+      payload: { selectedSprintId: "s1" },
+    });
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      "dashboard_realtime_websocket_backpressure_disconnect",
+      expect.objectContaining({
+        logPurpose: "realtime",
+        eventType: "project.live.updated",
+        scope: "project:p1:live",
+        projectId: "p1",
+      }),
+    );
+    expect(socket.destroy).toHaveBeenCalled();
+  });
 });
 
 describe("DashboardRealtimeWebSocketServer observability", () => {
@@ -487,6 +549,7 @@ describe("DashboardRealtimeWebSocketServer observability", () => {
     const loggerMock = { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn(), child: vi.fn() };
     const realtimeServiceMock = {
       subscribe: vi.fn().mockReturnValue(() => {}),
+      setScopeInterestResolver: vi.fn(),
       getLatestSequenceForScopes: vi.fn(),
       getLatestSequence: vi.fn(),
     };

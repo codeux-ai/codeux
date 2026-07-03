@@ -42,6 +42,7 @@ export interface DashboardRealtimeMetrics {
   throttled: number;
   unchanged: number;
   published: number;
+  skipped: number;
   failures: number;
 }
 
@@ -79,6 +80,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
         throttled: 0,
         unchanged: 0,
         published: 0,
+        skipped: 0,
         failures: 0,
       }
     );
@@ -87,7 +89,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
   private incrementMetric(eventType: string, metric: keyof DashboardRealtimeMetrics): void {
     let current = this.metrics.get(eventType);
     if (!current) {
-      current = { coalesced: 0, throttled: 0, unchanged: 0, published: 0, failures: 0 };
+      current = { coalesced: 0, throttled: 0, unchanged: 0, published: 0, skipped: 0, failures: 0 };
       this.metrics.set(eventType, current);
     }
     current[metric]++;
@@ -130,6 +132,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
   private overviewPublishedAt = 0;
   private snapshotLoaders: DashboardRealtimeSnapshotLoaders | null = null;
   private cacheInvalidator: DashboardSnapshotCacheInvalidator | null = null;
+  private scopeInterestResolver: ((scope: string) => boolean) | null = null;
 
   private executionRefreshDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private queuedExecutionRefreshProjectIds = new Set<string>();
@@ -147,6 +150,10 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
 
   setSnapshotLoaders(loaders: DashboardRealtimeSnapshotLoaders): void {
     this.snapshotLoaders = loaders;
+  }
+
+  setScopeInterestResolver(resolver: ((scope: string) => boolean) | null): void {
+    this.scopeInterestResolver = resolver;
   }
 
   subscribe(listener: DashboardRealtimeListener): () => void {
@@ -395,6 +402,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
     entityId: string;
     projectId?: string;
     loader: () => Promise<T> | T;
+    shouldPublish?: () => boolean;
     cacheKey?: string;
     skipDuplicate?: boolean;
     sprintIdExtractor?: (payload: T) => string | undefined;
@@ -407,7 +415,13 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
       this.incrementMetric(options.eventType, "throttled");
       return { task: null, waitMs };
     }
-const task = (async () => {
+
+    if (options.shouldPublish && !options.shouldPublish()) {
+      this.incrementMetric(options.eventType, "skipped");
+      return { task: null, waitMs: 0 };
+    }
+
+    const task = (async () => {
       try {
         const payload = await Promise.resolve(options.loader());
         let sprintId: string | undefined;
@@ -551,6 +565,7 @@ const task = (async () => {
         logType: "realtime_snapshot_published" as const,
         logPayloadSize: true,
         lastPublishedAt: (projectId: string) => this.projectLivePublishedAt.get(projectId) ?? 0,
+        shouldPublish: (projectId: string) => this.hasScopeInterest(`project:${projectId}:live`),
         onPublished: (projectId: string, publishedAt: number) => {
           this.projectLivePublishedAt.set(projectId, publishedAt);
         },
@@ -562,7 +577,10 @@ const task = (async () => {
         ids: loaders.getProjectGitStatus ? projectGitIds : [],
         minIntervalMs: PROJECT_GIT_MIN_INTERVAL_MS,
         scopeType: "project" as const,
-        scopeId: (projectId: string) => projectId,
+        // Dedicated sub-scope so the large Git/CI/PR payload is only delivered to
+        // the Live page hook. Base project subscribers, including the file browser,
+        // should not parse multi-megabyte git frames they will ignore.
+        scopeId: (projectId: string) => `${projectId}:git`,
         eventType: "project.git.updated",
         entityType: "project_git",
         entityId: (projectId: string) => projectId,
@@ -571,6 +589,7 @@ const task = (async () => {
         cacheKey: (projectId: string) => `project:${projectId}:project.git.updated`,
         skipDuplicate: true,
         lastPublishedAt: (projectId: string) => this.projectGitPublishedAt.get(projectId) ?? 0,
+        shouldPublish: (projectId: string) => this.hasScopeInterest(`project:${projectId}:git`),
         onPublished: (projectId: string, publishedAt: number) => {
           this.projectGitPublishedAt.set(projectId, publishedAt);
         },
@@ -652,6 +671,7 @@ const task = (async () => {
           entityId: scope.entityId(id),
           ...(scope.projectId ? { projectId: scope.projectId(id) } : {}),
           loader: () => scope.loader(id),
+          ...(scope.shouldPublish ? { shouldPublish: () => scope.shouldPublish(id) } : {}),
           ...(scope.cacheKey ? { cacheKey: scope.cacheKey(id) } : {}),
           skipDuplicate: scope.skipDuplicate,
           sprintIdExtractor: scope.sprintIdExtractor,
@@ -715,6 +735,22 @@ const task = (async () => {
       return candidateDelayMs;
     }
     return Math.min(currentDelayMs, candidateDelayMs);
+  }
+
+  private hasScopeInterest(scope: string): boolean {
+    if (!this.scopeInterestResolver) {
+      return true;
+    }
+    try {
+      return this.scopeInterestResolver(scope);
+    } catch (error) {
+      this.logger.warn("dashboard_realtime_scope_interest_check_failed", {
+        logPurpose: "realtime",
+        scope,
+        error,
+      });
+      return true;
+    }
   }
 
   private getFingerprint(payload: unknown): string {

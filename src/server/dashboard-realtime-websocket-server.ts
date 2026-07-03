@@ -58,6 +58,7 @@ function closeSocket(socket: Socket): void {
 
 const MAX_WS_BUFFER_SIZE = 1024 * 1024; // 1MB
 const MAX_WS_FRAME_SIZE = 512 * 1024; // 512KB
+const MAX_WS_PENDING_WRITE_BYTES = 16 * 1024 * 1024; // 16MB
 
 function parseClientFrames(buffer: Buffer): {
   messages: string[];
@@ -165,6 +166,15 @@ export function bootDashboardRealtimeWebSocketServer(args: {
 }): () => void {
   const clients = new Map<Socket, RealtimeClientState>();
 
+  args.realtimeService.setScopeInterestResolver((scope) => {
+    for (const client of clients.values()) {
+      if (client.subscriptions.has(scope)) {
+        return true;
+      }
+    }
+    return false;
+  });
+
   const unsubscribe = args.realtimeService.subscribe((event) => {
     // The serialized frame is identical for every subscriber of this scope, so encode it once
     // (lazily, only if at least one client is subscribed) and reuse the same Buffer for all of them.
@@ -180,6 +190,25 @@ export function bootDashboardRealtimeWebSocketServer(args: {
       }
       client.lastPushedSequence = event.sequence;
       try {
+        const pendingLimit = Math.max(MAX_WS_PENDING_WRITE_BYTES, frame.length * 2);
+        const writableLength = client.socket.writableLength ?? 0;
+        if (client.socket.destroyed || client.socket.writable === false || writableLength > pendingLimit) {
+          clients.delete(client.socket);
+          args.logger.warn("dashboard_realtime_websocket_backpressure_disconnect", {
+            logPurpose: "realtime",
+            eventType: event.eventType,
+            sequence: event.sequence,
+            scope: event.scope,
+            projectId: event.projectId,
+            correlationId: event.correlationId,
+            clientId: client.socket.remoteAddress || "unknown",
+            writableLength,
+            pendingLimit,
+          });
+          client.socket.destroy();
+          continue;
+        }
+
         client.socket.write(frame);
       } catch (error) {
         clients.delete(client.socket);
@@ -387,6 +416,7 @@ export function bootDashboardRealtimeWebSocketServer(args: {
 
   const cleanup = () => {
     unsubscribe();
+    args.realtimeService.setScopeInterestResolver(null);
     args.server.off("upgrade", upgradeHandler);
     args.server.off("close", serverCloseHandler);
     for (const client of clients.values()) {
