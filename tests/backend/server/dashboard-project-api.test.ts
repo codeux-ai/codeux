@@ -5,6 +5,7 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { configureDashboardApp } from "../../../src/server/dashboard-server.js";
+import { registerSprintRoutes } from "../../../src/server/sprint-routes.js";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { ProjectRuntimeRepository } from "../../../src/repositories/project-runtime-repository.js";
@@ -447,6 +448,78 @@ async function createServerHandle(): Promise<{
 }
 
 describe("dashboard project management API", () => {
+  it("normalizes issue importer query parameters before calling services", async () => {
+    const app = express();
+    const searchIssues = vi.fn(async () => []);
+    const searchJiraIssues = vi.fn(async () => []);
+    registerSprintRoutes(app, {
+      sprintIssueService: {
+        searchIssues,
+        getIssuePromptContexts: vi.fn(async () => []),
+      },
+      searchJiraIssues,
+    } as any);
+
+    const repositoryResponse = await request(app)
+      .get("/api/projects/project-1/issues")
+      .query({
+        provider: "github",
+        repository: " acme/widgets ",
+        hostDomain: " GitHub.com ",
+        state: " ",
+        labels: " ux, ,backend,ux ",
+        assignee: " alice ",
+        limit: "500",
+      });
+
+    expect(repositoryResponse.status).toBe(200);
+    expect(searchIssues).toHaveBeenCalledWith("project-1", expect.objectContaining({
+      provider: "github",
+      repository: "acme/widgets",
+      hostDomain: "GitHub.com",
+      state: undefined,
+      labels: ["ux", "backend"],
+      assignee: "alice",
+      limit: 100,
+    }));
+
+    const jiraResponse = await request(app)
+      .get("/api/projects/project-1/jira/search")
+      .query({
+        labels: [" integration,ops ", "ops"],
+        assigneeText: " bob@example.com ",
+        status: " ",
+        maxResults: "500",
+      });
+
+    expect(jiraResponse.status).toBe(200);
+    expect(searchJiraIssues).toHaveBeenCalledWith("project-1", expect.objectContaining({
+      labels: ["integration", "ops"],
+      assigneeText: "bob@example.com",
+      status: undefined,
+      maxResults: 100,
+    }));
+  });
+
+  it("rejects malformed issue importer limits before provider calls", async () => {
+    const app = express();
+    const searchIssues = vi.fn(async () => []);
+    registerSprintRoutes(app, {
+      sprintIssueService: {
+        searchIssues,
+        getIssuePromptContexts: vi.fn(async () => []),
+      },
+      searchJiraIssues: vi.fn(async () => []),
+    } as any);
+
+    const response = await request(app)
+      .get("/api/projects/project-1/issues")
+      .query({ provider: "github", limit: "abc" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain("Invalid value for limit. Must be a number.");
+    expect(searchIssues).not.toHaveBeenCalled();
+  });
 
   it("should default showcasePinned to true when creating a sprint if omitted, but honor explicit false", async () => {
     const { fetch, repository } = await createServerHandle();

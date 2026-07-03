@@ -4,6 +4,7 @@ import { asyncRoute, toErrorResponse, syncRoute } from "./route-utils.js";
 import { parseCreateSprintInput, parseTrimmedString, parseUpdateSprintInput, requireTrimmedString, parseSprintImportedTaskInput } from "./request-parsers.js";
 import type {
   IssuePromptContextInput,
+  JiraIssueSearchInput,
   SprintLinkedIssueInput,
   SprintMarkdownImportInput,
   RepositoryIssueSearchInput,
@@ -16,6 +17,7 @@ import type {
   RepositoryIssueSearchState,
 } from "../contracts/project-management-types.js";
 import type { SprintSettingsOverride } from "../contracts/settings-scope-types.js";
+import type { IssueSearchInput } from "../services/sprint-issue-service.js";
 
 export function registerSprintRoutes(router: Express, deps: DashboardDependencies): void {
   router.get("/api/projects/:projectId/sprints", syncRoute((req, res) => {
@@ -29,29 +31,7 @@ export function registerSprintRoutes(router: Express, deps: DashboardDependencie
   router.get("/api/projects/:projectId/jira/search", asyncRoute(async (req, res) => {
     try {
       const projectId = requireTrimmedString(req.params.projectId, "projectId");
-      const labels = typeof req.query.labels === "string"
-        ? req.query.labels.split(",").map((label) => label.trim()).filter(Boolean)
-        : [];
-      const status = parseJiraStatus(req.query.status);
-      const assignee = parseJiraAssignee(req.query.assignee);
-      res.json(await deps.searchJiraIssues(projectId, {
-        jql: parseTrimmedString(req.query.jql),
-        projectKey: parseTrimmedString(req.query.projectKey),
-        search: parseTrimmedString(req.query.search),
-        issueKey: parseTrimmedString(req.query.issueKey),
-        status,
-        assignee,
-        assigneeText: parseTrimmedString(req.query.assigneeText),
-        reporterText: parseTrimmedString(req.query.reporterText),
-        issueType: parseTrimmedString(req.query.issueType),
-        priority: parseTrimmedString(req.query.priority),
-        labels,
-        updatedAfter: parseDateLikeString(req.query.updatedAfter, "updatedAfter"),
-        updatedBefore: parseDateLikeString(req.query.updatedBefore, "updatedBefore"),
-        sortField: parseJiraSortField(req.query.sortField),
-        sortDirection: parseJiraSortDirection(req.query.sortDirection),
-        limit: parseClampedLimit(req.query.limit, 1, 100, "limit"),
-      }));
+      res.json(await deps.searchJiraIssues(projectId, parseJiraIssueSearchQuery(req.query)));
     } catch (error) {
       res.status(400).json(toErrorResponse(error, "Failed to search Jira issues"));
     }
@@ -117,31 +97,9 @@ export function registerSprintRoutes(router: Express, deps: DashboardDependencie
       return;
     }
     try {
-      const labels = typeof req.query.labels === "string"
-        ? req.query.labels.split(",").map((label) => label.trim()).filter(Boolean)
-        : [];
       res.json(await deps.sprintIssueService.searchIssues(
         requireTrimmedString(req.params.projectId, "projectId"),
-        {
-          provider: parseRepositoryProvider(req.query.provider),
-          repository: parseTrimmedString(req.query.repository),
-          hostDomain: parseTrimmedString(req.query.hostDomain),
-          search: parseTrimmedString(req.query.search),
-          state: parseRepositoryIssueState(req.query.state),
-          labels,
-          assignee: parseTrimmedString(req.query.assignee),
-          author: parseTrimmedString(req.query.author),
-          reporter: parseTrimmedString(req.query.reporter),
-          milestone: parseTrimmedString(req.query.milestone),
-          issueText: parseTrimmedString(req.query.issueText),
-          createdAfter: parseDateLikeString(req.query.createdAfter, "createdAfter"),
-          createdBefore: parseDateLikeString(req.query.createdBefore, "createdBefore"),
-          updatedAfter: parseDateLikeString(req.query.updatedAfter, "updatedAfter"),
-          updatedBefore: parseDateLikeString(req.query.updatedBefore, "updatedBefore"),
-          sortField: parseRepositorySortField(req.query.sortField),
-          sortDirection: parseRepositorySortDirection(req.query.sortDirection),
-          limit: parseClampedLimit(req.query.limit, 1, 100, "limit"),
-        }
+        parseRepositoryIssueSearchQuery(req.query)
       ));
     } catch (error) {
       res.status(400).json(toErrorResponse(error, "Failed to search repository issues"));
@@ -299,88 +257,164 @@ export function registerSprintRoutes(router: Express, deps: DashboardDependencie
   }));
 }
 
-function parseRepositoryProvider(value: unknown): RepositoryIssueSearchInput["provider"] | undefined {
-  if (value === undefined || value === null || value === "") {
+function parseRepositoryIssueSearchQuery(query: Record<string, unknown>): IssueSearchInput {
+  return {
+    provider: parseRepositoryProvider(query.provider),
+    repository: parseTrimmedQueryString(query.repository, "repository"),
+    hostDomain: parseTrimmedQueryString(query.hostDomain, "hostDomain"),
+    search: parseTrimmedQueryString(query.search, "search"),
+    state: parseRepositoryIssueState(query.state),
+    labels: parseIssueLabels(query.labels),
+    assignee: parseTrimmedQueryString(query.assignee, "assignee"),
+    author: parseTrimmedQueryString(query.author, "author"),
+    reporter: parseTrimmedQueryString(query.reporter, "reporter"),
+    milestone: parseTrimmedQueryString(query.milestone, "milestone"),
+    issueText: parseTrimmedQueryString(query.issueText, "issueText"),
+    createdAfter: parseDateLikeString(query.createdAfter, "createdAfter"),
+    createdBefore: parseDateLikeString(query.createdBefore, "createdBefore"),
+    updatedAfter: parseDateLikeString(query.updatedAfter, "updatedAfter"),
+    updatedBefore: parseDateLikeString(query.updatedBefore, "updatedBefore"),
+    sortField: parseRepositorySortField(query.sortField),
+    sortDirection: parseRepositorySortDirection(query.sortDirection),
+    limit: parseClampedLimit(query.limit, 1, 100, "limit"),
+  };
+}
+
+function parseJiraIssueSearchQuery(query: Record<string, unknown>): JiraIssueSearchInput {
+  return {
+    jql: parseTrimmedQueryString(query.jql, "jql"),
+    projectKey: parseTrimmedQueryString(query.projectKey, "projectKey"),
+    search: parseTrimmedQueryString(query.search, "search"),
+    issueKey: parseTrimmedQueryString(query.issueKey, "issueKey"),
+    status: parseJiraStatus(query.status),
+    assignee: parseJiraAssignee(query.assignee),
+    assigneeText: parseTrimmedQueryString(query.assigneeText, "assigneeText"),
+    reporterText: parseTrimmedQueryString(query.reporterText, "reporterText"),
+    issueType: parseTrimmedQueryString(query.issueType, "issueType"),
+    priority: parseTrimmedQueryString(query.priority, "priority"),
+    labels: parseIssueLabels(query.labels),
+    updatedAfter: parseDateLikeString(query.updatedAfter, "updatedAfter"),
+    updatedBefore: parseDateLikeString(query.updatedBefore, "updatedBefore"),
+    sortField: parseJiraSortField(query.sortField),
+    sortDirection: parseJiraSortDirection(query.sortDirection),
+    limit: parseClampedLimit(query.limit, 1, 100, "limit"),
+    maxResults: parseClampedLimit(query.maxResults, 1, 100, "maxResults"),
+  };
+}
+
+function parseIssueLabels(value: unknown): string[] {
+  const rawValues = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
+  return Array.from(new Set(rawValues
+    .flatMap((entry) => {
+      if (typeof entry !== "string") {
+        throw new Error("Invalid value for labels. Must be a comma-separated string.");
+      }
+      return entry.split(",");
+    })
+    .map((label) => label.trim())
+    .filter(Boolean))).slice(0, 12);
+}
+
+function parseTrimmedQueryString(value: unknown, fieldName: string): string | undefined {
+  if (value === undefined || value === null) {
     return undefined;
   }
-  if (value !== "github" && value !== "gitlab") {
+  if (typeof value !== "string") {
+    throw new Error(`Invalid value for ${fieldName}. Must be a string.`);
+  }
+  return parseTrimmedString(value);
+}
+
+function parseRepositoryProvider(value: unknown): RepositoryIssueSearchInput["provider"] | undefined {
+  const trimmed = parseTrimmedQueryString(value, "provider");
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed !== "github" && trimmed !== "gitlab") {
     throw new Error("Invalid value for provider. Must be one of: github, gitlab");
   }
-  return value;
+  return trimmed;
 }
 
 function parseRepositoryIssueState(value: unknown): RepositoryIssueSearchState | undefined {
-  if (value === undefined || value === null || value === "") {
+  const trimmed = parseTrimmedQueryString(value, "state");
+  if (!trimmed) {
     return undefined;
   }
-  if (value !== "open" && value !== "closed" && value !== "all") {
+  if (trimmed !== "open" && trimmed !== "closed" && trimmed !== "all") {
     throw new Error("Invalid value for state. Must be one of: open, closed, all");
   }
-  return value;
+  return trimmed;
 }
 
 function parseRepositorySortField(value: unknown): RepositoryIssueSearchSortField | undefined {
-  if (value === undefined || value === null || value === "") {
+  const trimmed = parseTrimmedQueryString(value, "sortField");
+  if (!trimmed) {
     return undefined;
   }
-  if (value !== "updated" && value !== "created" && value !== "comments") {
+  if (trimmed !== "updated" && trimmed !== "created" && trimmed !== "comments") {
     throw new Error("Invalid value for sortField. Must be one of: updated, created, comments");
   }
-  return value;
+  return trimmed;
 }
 
 function parseRepositorySortDirection(value: unknown): RepositoryIssueSearchSortDirection | undefined {
-  if (value === undefined || value === null || value === "") {
+  const trimmed = parseTrimmedQueryString(value, "sortDirection");
+  if (!trimmed) {
     return undefined;
   }
-  if (value !== "asc" && value !== "desc") {
+  if (trimmed !== "asc" && trimmed !== "desc") {
     throw new Error("Invalid value for sortDirection. Must be one of: asc, desc");
   }
-  return value;
+  return trimmed;
 }
 
 function parseJiraStatus(value: unknown): JiraIssueSearchStatus | undefined {
-  if (value === undefined || value === null || value === "") {
+  const trimmed = parseTrimmedQueryString(value, "status");
+  if (!trimmed) {
     return undefined;
   }
-  if (value !== "all" && value !== "done" && value !== "in_progress" && value !== "open") {
+  if (trimmed !== "all" && trimmed !== "done" && trimmed !== "in_progress" && trimmed !== "open") {
     throw new Error("Invalid value for status. Must be one of: open, in_progress, done, all");
   }
-  return value;
+  return trimmed;
 }
 
 function parseJiraAssignee(value: unknown): JiraIssueSearchAssignee | undefined {
-  if (value === undefined || value === null || value === "") {
+  const trimmed = parseTrimmedQueryString(value, "assignee");
+  if (!trimmed) {
     return undefined;
   }
-  if (value !== "me" && value !== "unassigned" && value !== "any") {
+  if (trimmed !== "me" && trimmed !== "unassigned" && trimmed !== "any") {
     throw new Error("Invalid value for assignee. Must be one of: any, me, unassigned");
   }
-  return value;
+  return trimmed;
 }
 
 function parseJiraSortField(value: unknown): JiraIssueSearchSortField | undefined {
-  if (value === undefined || value === null || value === "") {
+  const trimmed = parseTrimmedQueryString(value, "sortField");
+  if (!trimmed) {
     return undefined;
   }
-  if (value !== "updated" && value !== "created" && value !== "priority" && value !== "status" && value !== "assignee" && value !== "reporter") {
+  if (trimmed !== "updated" && trimmed !== "created" && trimmed !== "priority" && trimmed !== "status" && trimmed !== "assignee" && trimmed !== "reporter") {
     throw new Error("Invalid value for sortField. Must be one of: updated, created, priority, status, assignee, reporter");
   }
-  return value;
+  return trimmed;
 }
 
 function parseJiraSortDirection(value: unknown): JiraIssueSearchSortDirection | undefined {
-  if (value === undefined || value === null || value === "") {
+  const trimmed = parseTrimmedQueryString(value, "sortDirection");
+  if (!trimmed) {
     return undefined;
   }
-  if (value !== "asc" && value !== "desc") {
+  if (trimmed !== "asc" && trimmed !== "desc") {
     throw new Error("Invalid value for sortDirection. Must be one of: asc, desc");
   }
-  return value;
+  return trimmed;
 }
 
 function parseDateLikeString(value: unknown, fieldName: string): string | undefined {
-  const trimmed = parseTrimmedString(value);
+  const trimmed = parseTrimmedQueryString(value, fieldName);
   if (!trimmed) {
     return undefined;
   }
@@ -391,14 +425,18 @@ function parseDateLikeString(value: unknown, fieldName: string): string | undefi
 }
 
 function parseClampedLimit(value: unknown, min: number, max: number, fieldName: string): number | undefined {
-  if (value === undefined || value === null || value === "") {
+  if (value === undefined || value === null) {
     return undefined;
   }
   let numeric: number;
   if (typeof value === "number") {
     numeric = value;
   } else if (typeof value === "string") {
-    numeric = Number(value);
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+    numeric = Number(trimmed);
   } else {
     throw new Error(`Invalid value for ${fieldName}. Must be a number.`);
   }
