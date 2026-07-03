@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import gsap from "gsap";
-import { Search, X, Layers, Activity, Cpu, Box, ArrowRight, Inbox, Loader2, FileX } from "lucide-preact";
+import { Search, X, Layers, Activity, Cpu, Box, Inbox, Loader2, FileX, ArrowDownUp, CornerDownLeft, Sparkles } from "lucide-preact";
 import { useNavigate, Link } from "@tanstack/react-router";
 import { SearchResultRow } from "./SearchResultRow";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
@@ -117,11 +117,11 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
             }
 
             setIsMobileFallback(false);
-            const top = rect.bottom + 8;
+            const top = rect.bottom + 10;
             let left = rect.left;
 
             // max width is around 800px or full viewport
-            const modalWidth = Math.min(800, window.innerWidth - 32);
+            const modalWidth = Math.min(760, window.innerWidth - 32);
             if (left + modalWidth > window.innerWidth - 16) {
                 left = window.innerWidth - modalWidth - 16;
             }
@@ -237,7 +237,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
     }, [isOpen, focusedIndex, allItems?.length || 0, onClose]);
 
     // Track active item ref to ensure it's in view
-    const activeItemRef = useRef<HTMLButtonElement>(null);
+    const activeItemRef = useRef<HTMLAnchorElement>(null);
     useEffect(() => {
         if (activeItemRef.current && typeof activeItemRef.current.closest === 'function') {
             const el = activeItemRef.current;
@@ -262,11 +262,11 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
     return (
         <div
             ref={overlayRef}
-            className={anchorRef && !isMobileFallback ? "fixed inset-0 z-[100] hidden items-start justify-center px-4 sm:px-6 sm:pt-16" : "fixed inset-0 z-[100] hidden items-start justify-center pt-16 px-4 sm:px-6"}
+            className={anchorRef && !isMobileFallback ? "fixed inset-0 z-[100] hidden items-start justify-center px-3 sm:px-6 sm:pt-16" : "fixed inset-0 z-[100] hidden items-start justify-center px-3 pt-14 sm:px-6 sm:pt-16"}
             style={{ display: 'none' }}
         >
             <div
-                className="absolute inset-0 cursor-pointer bg-void-900/80 dark:bg-void-900/90 backdrop-blur-3xl"
+                className="absolute inset-0 cursor-pointer bg-void-900/72 backdrop-blur-3xl dark:bg-void-900/88"
                 onClick={onClose}
             />
 
@@ -275,33 +275,41 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                 aria-label="Search"
                 aria-modal="true"
                 ref={containerRef}
-                className={anchorRef && !isMobileFallback ? "flex flex-col bg-white dark:bg-void-800 rounded-2xl shadow-2xl overflow-hidden border border-black/5 dark:border-white/10 max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)]" : "relative w-full max-w-4xl mx-auto flex flex-col bg-white dark:bg-void-800 rounded-2xl shadow-2xl overflow-hidden border border-black/5 dark:border-white/10 max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)]"}
+                className={anchorRef && !isMobileFallback ? "flex flex-col overflow-hidden rounded-[1.5rem] border border-black/[0.08] bg-white/92 shadow-[0_24px_80px_rgba(15,23,42,0.22)] backdrop-blur-2xl dark:border-white/[0.1] dark:bg-void-800/94 dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)] max-w-[calc(100vw-1.5rem)] max-h-[calc(100dvh-1.5rem)]" : "relative mx-auto flex w-full max-w-4xl flex-col overflow-hidden rounded-[1.5rem] border border-black/[0.08] bg-white/92 shadow-[0_24px_80px_rgba(15,23,42,0.22)] backdrop-blur-2xl dark:border-white/[0.1] dark:bg-void-800/94 dark:shadow-[0_24px_80px_rgba(0,0,0,0.45)] max-w-[calc(100vw-1.5rem)] max-h-[calc(100dvh-1.5rem)]"}
                 style={anchorRef && !isMobileFallback ? modalStyle : {}}
             >
                 {/* Search Header */}
-                <div className="flex items-center px-4 py-4 border-b border-black/5 dark:border-white/5">
-                    <Search className="w-5 h-5 text-slate-400 mr-3" />
-                    <input
-                        ref={inputRef}
-                        type="text"
-                        role="combobox"
-                        aria-autocomplete="list"
-                        aria-expanded={isOpen}
-                        aria-controls="search-results-list"
-                        aria-activedescendant={!isLoading && focusedIndex >= 0 ? `search-result-${allItems[focusedIndex]?.id}` : undefined}
-                        aria-label="Global search"
-                        placeholder="Search sprints, tasks, agents..."
-                        value={searchQuery}
-                        onInput={(e) => onSearchChange(e.currentTarget.value)}
-                        className="flex-1 min-w-0 bg-transparent border-none outline-none text-lg text-slate-900 dark:text-white placeholder-slate-400"
-                    />
-                    {isLoading && <Loader2 className="w-5 h-5 animate-spin text-slate-400 mr-2" />}
+                <div className="flex min-h-[72px] items-center gap-3 border-b border-black/[0.06] bg-[#F9F8F4]/72 px-4 py-3 dark:border-white/[0.06] dark:bg-void-900/32 sm:px-5">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-black/[0.06] bg-white/70 text-slate-500 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300">
+                        <Search className="h-[18px] w-[18px]" aria-hidden="true" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <label htmlFor="global-search-input" className="mb-0.5 block text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500">
+                            Global search
+                        </label>
+                        <input
+                            id="global-search-input"
+                            ref={inputRef}
+                            type="text"
+                            role="combobox"
+                            aria-autocomplete="list"
+                            aria-expanded={isOpen}
+                            aria-controls="search-results-list"
+                            aria-activedescendant={!isLoading && focusedIndex >= 0 ? `search-result-${allItems[focusedIndex]?.id}` : undefined}
+                            aria-label="Global search"
+                            placeholder="Find sprints, tasks, agents, previews..."
+                            value={searchQuery}
+                            onInput={(e) => onSearchChange(e.currentTarget.value)}
+                            className="w-full min-w-0 border-none bg-transparent text-base font-semibold text-slate-900 outline-none placeholder:font-medium placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-500 sm:text-lg"
+                        />
+                    </div>
+                    {isLoading && <Loader2 className="mr-1 h-5 w-5 shrink-0 animate-spin text-slate-400" aria-label="Searching" />}
                     <button
                         onClick={onClose}
                         aria-label="Close search"
-                        className="p-2 ml-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 transition-colors cursor-pointer"
+                        className="ml-0 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:hover:bg-white/[0.06] dark:hover:text-slate-100"
                     >
-                        <X className="w-5 h-5" />
+                        <X className="h-[18px] w-[18px]" aria-hidden="true" />
                     </button>
                 </div>
 
@@ -310,69 +318,83 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                 </div>
 
                 {/* Results Area */}
-                <div className="flex-1 max-h-[60vh] overflow-y-auto dashboard-scrollbar p-2">
+                <div className="dashboard-scrollbar min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
                     {searchQuery.length === 0 ? (
-                        <div className="flex flex-col">
-                            <h3 className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 px-3 py-2">
-                                Quick navigation
-                            </h3>
-                            <div className="flex flex-wrap gap-2 px-3 pb-4">
+                        <div className="flex flex-col gap-4">
+                            <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.035]">
+                                <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500">
+                                    <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                                    Quick navigation
+                                </div>
+                                <p className="max-w-xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+                                    Search by sprint key, task ID, provider name, agent name, preview container, or status.
+                                </p>
+                            </div>
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                                 <Link
                                     to="/sprints"
                                     onClick={onClose}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-black/[0.06] dark:border-white/[0.06] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-signal-500/30 transition-colors"
+                                    className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-black/[0.06] bg-white/58 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-white/86 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-slate-300 dark:hover:bg-white/[0.06]"
                                 >
-                                    <Layers className="w-4 h-4" />
-                                    Sprints
+                                    <Layers className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                    <span className="truncate">Sprints</span>
                                 </Link>
                                 <Link
                                     to="/tasks"
                                     onClick={onClose}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-black/[0.06] dark:border-white/[0.06] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-signal-500/30 transition-colors"
+                                    className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-black/[0.06] bg-white/58 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-white/86 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-slate-300 dark:hover:bg-white/[0.06]"
                                 >
-                                    <Activity className="w-4 h-4" />
-                                    Tasks
+                                    <Activity className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                    <span className="truncate">Tasks</span>
                                 </Link>
                                 <Link
                                     to="/agents"
                                     onClick={onClose}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-black/[0.06] dark:border-white/[0.06] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-signal-500/30 transition-colors"
+                                    className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-black/[0.06] bg-white/58 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-white/86 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-slate-300 dark:hover:bg-white/[0.06]"
                                 >
-                                    <Cpu className="w-4 h-4" />
-                                    Agents
+                                    <Cpu className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                    <span className="truncate">Agents</span>
                                 </Link>
                             </div>
                         </div>
+                    ) : isLoading && allItems.length === 0 ? (
+                        <div className="flex min-h-52 flex-col items-center justify-center rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] px-6 py-12 text-center text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-slate-400" aria-live="polite" role="status">
+                            <Loader2 className="mb-4 h-8 w-8 animate-spin text-slate-400" aria-hidden="true" />
+                            <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Searching workspace</span>
+                            <span className="mt-1 max-w-sm text-xs leading-5 text-slate-500 dark:text-slate-400">Checking sprints, tasks, agents, and preview containers.</span>
+                        </div>
                     ) : allItems.length === 0 && !isLoading ? (
                         !hasProjectData ? (
-                            <div className="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400" aria-live="polite" role="status">
-                                <FileX className="w-8 h-8 mb-4 opacity-50 text-status-red" />
-                                <span className="text-sm font-medium text-slate-900 dark:text-slate-100">Project data unavailable</span>
-                                <span className="text-xs mt-1 text-slate-500 dark:text-slate-400">Unable to load project search results.</span>
+                            <div className="flex min-h-52 flex-col items-center justify-center rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] px-6 py-12 text-center text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-slate-400" aria-live="polite" role="status">
+                                <FileX className="mb-4 h-8 w-8 text-status-red opacity-70" aria-hidden="true" />
+                                <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Project data unavailable</span>
+                                <span className="mt-1 max-w-sm text-xs leading-5 text-slate-500 dark:text-slate-400">Unable to load project search results.</span>
                             </div>
                         ) : (
-                            <div className="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400" aria-live="polite" role="status">
-                                <Inbox className="w-8 h-8 mb-4 opacity-50" />
-                                <span className="text-sm font-medium text-slate-900 dark:text-slate-100">No results found for '{searchQuery}'</span>
-                                <span className="text-xs mt-1 text-slate-500 dark:text-slate-400">Try adjusting your search terms or checking for typos.</span>
+                            <div className="flex min-h-52 flex-col items-center justify-center rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] px-6 py-12 text-center text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-slate-400" aria-live="polite" role="status">
+                                <Inbox className="mb-4 h-8 w-8 opacity-55" aria-hidden="true" />
+                                <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">No results found for '{searchQuery}'</span>
+                                <span className="mt-1 max-w-sm text-xs leading-5 text-slate-500 dark:text-slate-400">Try a sprint key, task ID, provider, agent, or status.</span>
                             </div>
                         )
                     ) : (
-                        <div id="search-results-list" role="listbox" className={`grid grid-cols-1 lg:grid-cols-2 gap-4 p-2 transition-opacity duration-200 ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}>
+                        <div id="search-results-list" role="listbox" className={`grid grid-cols-1 gap-3 transition-opacity duration-200 lg:grid-cols-2 ${isLoading ? 'opacity-55 pointer-events-none' : ''}`}>
                             {CATEGORIES.map((category) => {
                                 if (category.items?.length === 0) return null;
                                 return (
-                                    <div key={category.id} className="flex flex-col">
-                                        <div className="flex items-center justify-between px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                                            <div className="flex items-center gap-2">
-                                                <category.icon className="w-4 h-4" />
+                                    <div key={category.id} className="flex min-w-0 flex-col gap-1.5">
+                                        <div className="flex items-center justify-between gap-3 px-1.5 py-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
+                                            <div className="flex min-w-0 items-center gap-2">
+                                                <category.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                                <span className="truncate">
                                                 {category.title}
+                                                </span>
                                             </div>
-                                            <span className="text-[10px] font-mono opacity-60 bg-black/5 dark:bg-white/5 px-1.5 py-0.5 rounded-md">
+                                            <span className="shrink-0 rounded-md border border-black/[0.05] bg-black/[0.04] px-1.5 py-0.5 font-mono text-[10px] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.05] dark:text-slate-400">
                                                 {category.items.length}
                                             </span>
                                         </div>
-                                        <div className="flex flex-col gap-1">
+                                        <div className="flex min-w-0 flex-col gap-1.5">
                                             {category.items.map((item) => {
                                                 const isFocused = focusedIndex === globalItemIndex;
                                                 const currentIndex = globalItemIndex++;
@@ -400,21 +422,21 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                 </div>
 
                 {/* Footer hints */}
-                <div className="px-4 py-3 bg-slate-50 dark:bg-white/5 border-t border-black/5 dark:border-white/5 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
-                    <div className="flex flex-wrap items-center gap-4">
-                        <span className="flex items-center gap-1">
-                            <kbd className="px-1.5 py-0.5 rounded-md bg-white dark:bg-void-800 border border-black/10 dark:border-white/10 shadow-sm font-mono text-[10px]">↑</kbd>
-                            <kbd className="px-1.5 py-0.5 rounded-md bg-white dark:bg-void-800 border border-black/10 dark:border-white/10 shadow-sm font-mono text-[10px]">↓</kbd>
-                            <span>to navigate</span>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-black/[0.06] bg-[#F9F8F4]/72 px-4 py-3 text-xs text-slate-500 dark:border-white/[0.06] dark:bg-void-900/32 sm:px-5">
+                    <div className="flex flex-wrap items-center gap-3">
+                        <span className="flex items-center gap-1.5">
+                            <ArrowDownUp className="h-3.5 w-3.5" aria-hidden="true" />
+                            <span>Navigate</span>
                         </span>
-                        <span className="flex items-center gap-1">
-                            <kbd className="px-1.5 py-0.5 rounded-md bg-white dark:bg-void-800 border border-black/10 dark:border-white/10 shadow-sm font-mono text-[10px]">↵</kbd>
-                            <span>to select</span>
+                        <span className="flex items-center gap-1.5">
+                            <kbd className="rounded-md border border-black/[0.08] bg-white px-1.5 py-0.5 font-mono text-[10px] shadow-sm dark:border-white/[0.1] dark:bg-void-800">Enter</kbd>
+                            <span>Select</span>
                         </span>
                     </div>
-                    <span className="flex items-center gap-1">
-                        <kbd className="px-1.5 py-0.5 rounded-md bg-white dark:bg-void-800 border border-black/10 dark:border-white/10 shadow-sm font-mono text-[10px]">esc</kbd>
-                        <span>to close</span>
+                    <span className="flex items-center gap-1.5">
+                        <CornerDownLeft className="h-3.5 w-3.5" aria-hidden="true" />
+                        <kbd className="rounded-md border border-black/[0.08] bg-white px-1.5 py-0.5 font-mono text-[10px] shadow-sm dark:border-white/[0.1] dark:bg-void-800">Esc</kbd>
+                        <span>Close</span>
                     </span>
                 </div>
             </div>
