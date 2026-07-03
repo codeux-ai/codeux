@@ -166,8 +166,15 @@ export const MemoryList: FunctionComponent<{
         const message = isEmpty ? "No memories exist" : "No memories match your search or filters";
         return (
             <div className="flex min-h-0 min-w-0 flex-col items-center justify-center p-8 text-center text-slate-400">
-                <div className="sr-only" aria-live="polite" aria-atomic="true">{message}</div>
+                <div className="sr-only" aria-live="polite" aria-atomic="true">
+                    {isEmpty ? message : `${message}. 0 memories found`}
+                </div>
                 <p className="max-w-full break-words text-sm font-medium">{message}</p>
+                {!isEmpty && (
+                    <p className="mt-2 max-w-full break-words text-xs text-slate-500">
+                        Showing 0 of {totalAliveCount} memories
+                    </p>
+                )}
             </div>
         );
     }

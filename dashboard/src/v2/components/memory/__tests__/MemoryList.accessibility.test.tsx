@@ -100,6 +100,23 @@ describe("MemoryList", () => {
         expect(getByText("Showing 1 of 2 memories")).toBeInTheDocument();
     });
 
+    test("shows count feedback when search has no matches", () => {
+        searchQuerySignal.value = "gamma";
+        const { getAllByText, getByText } = render(
+            <MemoryList
+                nodes={[
+                    buildNode({ id: "memory-1", content: "Alpha project memory" }),
+                    buildNode({ id: "memory-2", content: "Beta note" }),
+                ]}
+                onSelectNode={vi.fn()}
+            />
+        );
+
+        const announcement = getAllByText("No memories match your search or filters. 0 memories found").find((element) => element.classList.contains("sr-only"));
+        expect(announcement).toBeInTheDocument();
+        expect(getByText("Showing 0 of 2 memories")).toBeInTheDocument();
+    });
+
     test("select all visible only targets currently filtered nodes", () => {
         searchQuerySignal.value = "alpha";
         const { getByRole } = render(

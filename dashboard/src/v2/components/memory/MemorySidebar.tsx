@@ -3,6 +3,7 @@ import { useEffect, useRef } from "preact/hooks";
 import { ChevronDown, ChevronRight } from "lucide-preact";
 import { clearSelectedMemoryIds, memorySidebarExpandedSignal, searchQuerySignal } from "./memoryState.js";
 import { MemoryList } from "./MemoryList.js";
+import { MemorySearch } from "./MemorySearch.js";
 import type { MemNode } from "../../lib/memory-graph.js";
 
 interface MemorySidebarProps {
@@ -84,6 +85,9 @@ const MemorySidebar = ({ nodes, onSelectNode }: MemorySidebarProps) => {
                 }`}
             >
                 <div className="flex h-full min-h-0 min-w-0 flex-col">
+                    <div className="border-b border-void-700 p-3">
+                        <MemorySearch />
+                    </div>
                     <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
                         <MemoryList nodes={nodes} onSelectNode={onSelectNode} />
                     </div>
