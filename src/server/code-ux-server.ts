@@ -2,6 +2,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import axios from "axios";
 import type { AxiosError } from "axios";
 import express from "express";
+import type { Server as HttpServer } from "node:http";
 import type { AppConfig } from "../config/app-config.js";
 import { JulesApiClient } from "../integrations/jules-api-client.js";
 import type {
@@ -122,6 +123,7 @@ export class CodeUxServer {
   private static readonly STARTUP_CONTAINER_CLEANUP_DELAY_MS = 5_000;
   private static readonly STARTUP_MAINTENANCE_DELAY_MS = 30_000;
   private static readonly SHUTDOWN_CLOSE_TIMEOUT_MS = 5_000;
+  private static readonly SHUTDOWN_SIGNAL_TIMEOUT_MS = 30_000;
   private static readonly shutdownSignals: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
   private static readonly activeSignalHandlers = new Map<NodeJS.Signals, () => void>();
   private readonly projectRoot: string;
@@ -292,7 +294,7 @@ export class CodeUxServer {
   }
 
   private async handleShutdownSignal(): Promise<void> {
-    await this.withShutdownTimeout(this.close(), "server shutdown");
+    await this.withShutdownTimeout(this.close(), "server shutdown", CodeUxServer.SHUTDOWN_SIGNAL_TIMEOUT_MS);
     process.exit(0);
   }
 
@@ -340,15 +342,13 @@ export class CodeUxServer {
       this.mcpHttpHandle = null;
     }
     if (this.dashboardHandle) {
-      await this.withShutdownTimeout(new Promise<void>((resolve, reject) => {
-        this.dashboardHandle?.server.close((error) => {
-          if (error && error.message !== "Server is not running.") {
-            reject(error);
-            return;
-          }
-          resolve();
-        });
-      }).catch(() => undefined), "dashboard server close");
+      await this.withShutdownTimeout(
+        (this.dashboardHandle.close
+          ? this.dashboardHandle.close()
+          : this.closeHttpServer(this.dashboardHandle.server)
+        ).catch(() => undefined),
+        "dashboard server close",
+      );
       this.dashboardHandle = null;
       this.runtimeContext.dashboardRuntimePort = null;
     }
@@ -362,7 +362,27 @@ export class CodeUxServer {
     }
   }
 
-  private async withShutdownTimeout<T>(promise: Promise<T>, label: string): Promise<T | undefined> {
+  private async closeHttpServer(server: HttpServer): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error && error.message !== "Server is not running.") {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+      server.closeIdleConnections?.();
+      setImmediate(() => {
+        server.closeAllConnections?.();
+      });
+    });
+  }
+
+  private async withShutdownTimeout<T>(
+    promise: Promise<T>,
+    label: string,
+    timeoutMs = CodeUxServer.SHUTDOWN_CLOSE_TIMEOUT_MS
+  ): Promise<T | undefined> {
     let timeout: ReturnType<typeof setTimeout> | null = null;
     try {
       return await Promise.race([
@@ -371,10 +391,10 @@ export class CodeUxServer {
           timeout = setTimeout(() => {
             this.logger.warn("Timed out while closing runtime component during shutdown", {
               component: label,
-              timeoutMs: CodeUxServer.SHUTDOWN_CLOSE_TIMEOUT_MS,
+              timeoutMs,
             });
             resolve(undefined);
-          }, CodeUxServer.SHUTDOWN_CLOSE_TIMEOUT_MS);
+          }, timeoutMs);
         }),
       ]);
     } finally {
