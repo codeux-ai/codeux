@@ -38,6 +38,7 @@ export interface ResolvePullRequestResult {
   created: boolean;
   prNumber: number | null;
   prUrl: string | null;
+  errorMessage?: string;
 }
 
 interface RepoPlumbing {
@@ -61,6 +62,24 @@ function detectMergeConflictMessage(message: string | null | undefined): boolean
     || normalized.includes("not mergeable")
     || normalized.includes("cannot be cleanly created")
     || normalized.includes("dirty");
+}
+
+function normalizeBranchRef(value: string | null | undefined): string | null {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) {
+    return null;
+  }
+  const withoutRefPrefix = trimmed.startsWith("refs/heads/")
+    ? trimmed.slice("refs/heads/".length)
+    : trimmed;
+  const ownerSeparatorIndex = withoutRefPrefix.indexOf(":");
+  return ownerSeparatorIndex >= 0
+    ? withoutRefPrefix.slice(ownerSeparatorIndex + 1)
+    : withoutRefPrefix;
+}
+
+function branchRefsMatch(candidate: string | null | undefined, expected: string): boolean {
+  return normalizeBranchRef(candidate) === normalizeBranchRef(expected);
 }
 
 export class GitStatusService {
@@ -538,7 +557,19 @@ export class GitStatusService {
           prUrl: fallbackExisting.url,
         };
       }
-      return null;
+      const errorMessage = [
+        createResult.stderr,
+        createResult.stdout,
+      ]
+        .map((line) => line?.trim())
+        .filter((line): line is string => Boolean(line))
+        .join("\n") || "gh pr create failed without an error message.";
+      return {
+        created: false,
+        prNumber: null,
+        prUrl: null,
+        errorMessage,
+      };
     }
 
     GitStatusService.invalidateCache(this.repoPath);
@@ -580,19 +611,29 @@ export class GitStatusService {
 
   private async findMatchingOpenPr(baseBranch: string, headBranch: string, ghToken?: string): Promise<{ number: number | null; url: string | null } | null> {
     const result = await this.queryClient.ghPrListOpenMatching(baseBranch, headBranch, ghToken);
-    if (!result.ok) {
-      return null;
+    if (result.ok) {
+      const parsed = parseJson<Array<Record<string, unknown>>>(result.stdout);
+      const first = Array.isArray(parsed) ? parsed[0] : null;
+      if (first && typeof first === "object") {
+        return {
+          number: toInt(first.number),
+          url: toStr(first.url),
+        };
+      }
     }
 
-    const parsed = parseJson<Array<Record<string, unknown>>>(result.stdout);
-    const first = Array.isArray(parsed) ? parsed[0] : null;
-    if (!first || typeof first !== "object") {
+    const openPrs = await this.fetchOpenPrs(ghToken);
+    const fallbackMatch = openPrs.data.find((pr) => (
+      branchRefsMatch(pr.baseRefName, baseBranch)
+      && branchRefsMatch(pr.headRefName, headBranch)
+    ));
+    if (!fallbackMatch) {
       return null;
     }
 
     return {
-      number: toInt(first.number),
-      url: toStr(first.url),
+      number: fallbackMatch.number,
+      url: fallbackMatch.url,
     };
   }
 }

@@ -1,7 +1,7 @@
 import { evaluateMergeReadiness } from "./feature-pr/merge-readiness-policy.js";
 import { deriveChecksFromCiRuns } from "../../../sprint/ci-status-utils.js";
 import type { GuardrailService } from "../../../services/guardrail-service.js";
-import { deleteBranchLocally, findRecoverableWorkerBranch, getCheckedOutRef, mergeBranchLocally, restoreCheckedOutRef } from "../../../infrastructure/git/local-merge.js";
+import { deleteBranchLocally, findRecoverableWorkerBranch, getCheckedOutRef, mergeBranchLocally, restoreCheckedOutRef, workerBranchHasMergeWork } from "../../../infrastructure/git/local-merge.js";
 import { buildWorkerBranchPrefix } from "../../../services/cli-workflow-utils.js";
 import { matchMergedPrForTask, matchPrForTask } from "./feature-pr/pr-matcher.js";
 import { attemptAutoMerge } from "./feature-pr/automerge-policy.js";
@@ -391,6 +391,29 @@ export class FeaturePrGateService {
               prUrl: null,
             } });
             reportText += buildQaBlockedText(task.id, qaGate);
+            return { reportText, events, attentionItem };
+          }
+
+          const hasMergeWork = workerBranch
+            ? await workerBranchHasMergeWork({
+              repoPath: context.repoPath,
+              featureBranch: context.featureBranch,
+              workerBranch,
+            })
+            : false;
+          if (!hasMergeWork) {
+            task.status = "COMPLETED";
+            task.merge_indicator = undefined;
+            task.worker_branch = undefined;
+            if (taskRun?.id && context.executionRepository) {
+              context.executionRepository.updateTaskRun(taskRun.id, { workerBranch: null });
+            }
+            await this.persistMergedTask(task, context);
+            events.push({ state: "no_merge_work", payload: {
+              featureBranch: context.featureBranch,
+              workerBranch,
+            } });
+            reportText += `- ✅ **No merge work:** Task \`${task.id}\` completed without a PR because no worker branch with unmerged commits exists.\n`;
             return { reportText, events, attentionItem };
           }
 

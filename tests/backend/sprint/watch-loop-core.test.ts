@@ -1317,6 +1317,12 @@ describe("WatchLoopRunner", () => {
     });
 
     expect(cycleRunner.run).toHaveBeenCalledTimes(2);
+    expect(deps.updateLastStatus).toHaveBeenCalledWith(expect.objectContaining({
+      reportText: expect.stringContaining("MAIN_WAITING"),
+    }));
+    expect(deps.updateLastStatus).toHaveBeenCalledWith(expect.objectContaining({
+      reportText: expect.stringContaining("Sprint Still Active"),
+    }));
     expect(result).toContain("Sprint Still Active");
     expect(result).toContain("Sprint Execution Finished");
     expect(deps.executionRepository.appendSprintRunEvent).toHaveBeenCalledWith(

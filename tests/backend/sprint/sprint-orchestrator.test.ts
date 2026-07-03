@@ -172,4 +172,158 @@ describe("sprint-orchestrator", () => {
         expect(feedback.state).toBe("automerge_succeeded");
         expect(feedback.text).toContain("Main PR Created");
     });
+
+    it("surfaces main PR creation failures in merge gate feedback", async () => {
+        const ciIntelligence: CiIntelligenceSettings = {
+            ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
+            enabled: true,
+            enableLivePrMonitoring: true,
+            mainBranchAutoMergeMode: "WHEN_GREEN",
+        };
+        const getCiStatusForScope = vi.fn().mockResolvedValue({
+            available: true,
+            openPullRequests: [],
+            mergedPullRequests: [],
+        });
+        const resolveOrCreateMainBranchPr = vi.fn().mockResolvedValue({
+            created: false,
+            prNumber: null,
+            prUrl: null,
+            errorMessage: "bad credentials",
+        });
+
+        const deps = {
+            logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+            settings: { dashboardPort: 3000 },
+            completedSprints: new Set(),
+            renderInstruction: vi.fn().mockResolvedValue(""),
+            sprintExecutionStateService: {
+                resolveContext: vi.fn(),
+                hasPlannedTasks: vi.fn(),
+                loadSubtasks: vi.fn(),
+            },
+            getDashboardSettings: vi.fn().mockReturnValue(DEFAULT_DASHBOARD_SETTINGS),
+            getCiStatusForScope,
+            resolveOrCreateMainBranchPr,
+            autoMergeFeaturePr: vi.fn(),
+            projectManagementRepository: {
+                getSprint: vi.fn().mockReturnValue({
+                    id: "sprint-1",
+                    projectId: "project-1",
+                    number: 1,
+                    name: "Sprint 1",
+                    originalPrompt: null,
+                    goal: "Awesome sprint description",
+                    latestReview: undefined,
+                }),
+            },
+            executionRepository: {
+                getSprintRun: vi.fn().mockReturnValue(null),
+                getSprintUsageGroups: vi.fn().mockReturnValue([]),
+                listProviderInvocationsForSprint: vi.fn().mockReturnValue([]),
+            },
+        };
+        const orch = new SprintOrchestrator(deps as any);
+
+        const feedback = await (orch as any).renderMainMergeCiFeedback({
+            repoPath: "/tmp/repo",
+            projectId: "project-1",
+            sprintId: "sprint-1",
+            sprintRunId: "run-1",
+            featureBranch: "feature/sprint1-implementation",
+            defaultBranch: "main",
+            featureBranchPrefix: "feature/",
+            sprintNumber: 1,
+            sprintName: "Sprint 1",
+            sprintDescription: "Awesome sprint description",
+            ciIntelligence,
+            githubMode: "REMOTE",
+        });
+
+        expect(resolveOrCreateMainBranchPr).toHaveBeenCalled();
+        expect(feedback.state).toBe("missing_pr");
+        expect(feedback.text).toContain("Main PR Creation Failed");
+        expect(feedback.text).toContain("bad credentials");
+    });
+
+    it("waits for PR status refresh after creating a main PR that is not immediately listed", async () => {
+        const ciIntelligence: CiIntelligenceSettings = {
+            ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
+            enabled: true,
+            enableLivePrMonitoring: true,
+            mainBranchAutoMergeMode: "WHEN_GREEN",
+        };
+        const getCiStatusForScope = vi.fn()
+            .mockResolvedValueOnce({
+                available: true,
+                openPullRequests: [],
+                mergedPullRequests: [],
+            })
+            .mockResolvedValueOnce({
+                available: true,
+                openPullRequests: [],
+                mergedPullRequests: [],
+            });
+        const resolveOrCreateMainBranchPr = vi.fn().mockResolvedValue({
+            created: true,
+            prNumber: 322,
+            prUrl: "https://github.com/example/repo/pull/322",
+        });
+        const autoMergeFeaturePr = vi.fn();
+
+        const deps = {
+            logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+            settings: { dashboardPort: 3000 },
+            completedSprints: new Set(),
+            renderInstruction: vi.fn().mockResolvedValue(""),
+            sprintExecutionStateService: {
+                resolveContext: vi.fn(),
+                hasPlannedTasks: vi.fn(),
+                loadSubtasks: vi.fn(),
+            },
+            getDashboardSettings: vi.fn().mockReturnValue(DEFAULT_DASHBOARD_SETTINGS),
+            getCiStatusForScope,
+            resolveOrCreateMainBranchPr,
+            autoMergeFeaturePr,
+            projectManagementRepository: {
+                getSprint: vi.fn().mockReturnValue({
+                    id: "sprint-1",
+                    projectId: "project-1",
+                    number: 1,
+                    name: "Sprint 1",
+                    originalPrompt: null,
+                    goal: "Awesome sprint description",
+                    latestReview: undefined,
+                }),
+            },
+            executionRepository: {
+                getSprintRun: vi.fn().mockReturnValue(null),
+                getSprintUsageGroups: vi.fn().mockReturnValue([]),
+                listProviderInvocationsForSprint: vi.fn().mockReturnValue([]),
+            },
+        };
+        const orch = new SprintOrchestrator(deps as any);
+
+        const feedback = await (orch as any).renderMainMergeCiFeedback({
+            repoPath: "/tmp/repo",
+            projectId: "project-1",
+            sprintId: "sprint-1",
+            sprintRunId: "run-1",
+            featureBranch: "feature/sprint1-implementation",
+            defaultBranch: "main",
+            featureBranchPrefix: "feature/",
+            sprintNumber: 1,
+            sprintName: "Sprint 1",
+            sprintDescription: "Awesome sprint description",
+            ciIntelligence,
+            githubMode: "REMOTE",
+        });
+
+        expect(feedback.state).toBe("pending_checks");
+        expect(feedback.prNumber).toBe(322);
+        expect(feedback.text).toContain("Main PR Created");
+        expect(feedback.text).toContain("Waiting for GitHub");
+        expect(feedback.text).not.toContain("No open PR");
+        expect(autoMergeFeaturePr).not.toHaveBeenCalled();
+    });
 });

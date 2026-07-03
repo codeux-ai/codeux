@@ -745,6 +745,31 @@ describe("CodeUxServer", () => {
         getEffectiveGithubTokenSpy.mockRestore();
         vi.restoreAllMocks();
       });
+
+      it("should return PR creation errors instead of swallowing them", async () => {
+        const { GitStatusService } = await import("../../../src/services/git-status-service.js");
+        vi.spyOn(GitStatusService.prototype, "resolveOrCreatePullRequest").mockRejectedValue(new Error("bad credentials"));
+
+        const getEffectiveGithubTokenSpy = vi.spyOn(server as any, "getEffectiveGitHostTokens").mockReturnValue({ githubToken: "token", gitlabToken: "" });
+
+        const result = await (server as any).resolveOrCreateMainBranchPr({
+          repoPath: "/repo",
+          featureBranch: "feature/sprint1",
+          defaultBranch: "main",
+          title: "Sprint 1",
+          body: "body",
+        });
+
+        expect(result).toEqual({
+          created: false,
+          prNumber: null,
+          prUrl: null,
+          errorMessage: "bad credentials",
+        });
+
+        getEffectiveGithubTokenSpy.mockRestore();
+        vi.restoreAllMocks();
+      });
     });
   });
 

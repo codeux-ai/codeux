@@ -334,6 +334,21 @@ export class SprintOrchestrator {
           gitStatus,
           autoMergeMainBranchPr: this.deps.autoMergeFeaturePr,
         });
+        if (feedback.state === "missing_pr") {
+          feedback = {
+            ...feedback,
+            text: `\n### Main Merge CI Gate\n- PR: ${formatMainPrReference(pr, args.featureBranch, args.defaultBranch)}\n- Check Status: \`PENDING\`\n- Waiting for GitHub to return the new main PR and its checks before finalizing the sprint.\n`,
+            state: "pending_checks",
+            prNumber: pr.prNumber,
+            prUrl: pr.prUrl,
+            hasPendingChecks: true,
+          };
+        }
+      } else if (pr?.errorMessage) {
+        feedback = {
+          ...feedback,
+          text: `${feedback.text}\n⚠️ **Main PR Creation Failed:** ${pr.errorMessage}\n`,
+        };
       }
     }
     const result = await MainMergeGateService.attemptMainAutoMerge(feedback, {
