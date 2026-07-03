@@ -10,7 +10,8 @@ import type { MemNode } from "../../../lib/memory-graph.js";
 expect.extend(matchers);
 
 vi.mock("../../../hooks/use-reduced-motion.js", () => ({
-    useReducedMotion: () => false
+    useReducedMotion: () => false,
+    useResolvedMotionDuration: (duration: number) => duration,
 }));
 
 const buildNode = (overrides: Partial<MemNode> = {}): MemNode => ({
@@ -52,7 +53,7 @@ describe("MemorySidebar", () => {
         expect(container.querySelector("[data-sidebar-toggle-icon]")).toHaveClass("rotate-180");
     });
 
-    test("expands, collapses, and clears the search query when closing", () => {
+    test("expands without embedded search, collapses, and clears the search query when closing", () => {
         memorySidebarExpandedSignal.value = true;
         searchQuerySignal.value = "alpha";
         selectedMemoryIdsSignal.value = ["memory-1"];
@@ -62,7 +63,7 @@ describe("MemorySidebar", () => {
         );
 
         expect(getByRole("button", { name: "Close memory sidebar" })).toHaveAttribute("aria-expanded", "true");
-        expect(getByRole("textbox", { name: "Search memories" })).toHaveValue("alpha");
+        expect(queryByRole("textbox", { name: "Search memories" })).toBeNull();
         expect(container.querySelector("[data-sidebar-toggle-icon]")).toHaveClass("rotate-0");
 
         fireEvent.click(getByRole("button", { name: "Close memory sidebar" }));

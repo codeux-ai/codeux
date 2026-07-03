@@ -10,7 +10,8 @@ import type { MemNode } from "../../../lib/memory-graph.js";
 expect.extend(matchers);
 
 vi.mock("../../../hooks/use-reduced-motion.js", () => ({
-    useReducedMotion: () => false
+    useReducedMotion: () => false,
+    useResolvedMotionDuration: (duration: number) => duration,
 }));
 
 const buildNode = (overrides: Partial<MemNode> = {}): MemNode => ({
@@ -49,10 +50,40 @@ describe("MemoryList", () => {
 
     test("renders empty state polite announcement", () => {
         searchQuerySignal.value = "nonexistent query";
-        const { getByText } = render(
+        const { getAllByText } = render(
             <MemoryList nodes={[]} onSelectNode={vi.fn()} />
         );
-        const announcement = getByText("No memories exist");
+        const announcement = getAllByText("No memories exist").find((element) => element.classList.contains("sr-only"));
+        expect(announcement).toBeInTheDocument();
+        expect(announcement).toHaveClass("sr-only");
+    });
+
+    test("renders all alive memories by default", () => {
+        const { getByRole, getByText, queryByText } = render(
+            <MemoryList
+                nodes={[
+                    buildNode({ id: "memory-1", content: "Alpha project memory" }),
+                    buildNode({ id: "memory-2", content: "Beta note" }),
+                    buildNode({ id: "memory-3", content: "Archived note", alive: false }),
+                ]}
+                onSelectNode={vi.fn()}
+            />
+        );
+
+        expect(getByRole("listbox", { name: "Memory List" })).toBeInTheDocument();
+        expect(getByText("Alpha project memory")).toBeInTheDocument();
+        expect(getByText("Beta note")).toBeInTheDocument();
+        expect(queryByText("Archived note")).toBeNull();
+        expect(getByText("Showing 2 of 2 memories")).toBeInTheDocument();
+        expect(getByText("2 memories found")).toHaveClass("sr-only");
+    });
+
+    test("renders true empty state when no alive memories exist", () => {
+        const { getAllByText } = render(
+            <MemoryList nodes={[buildNode({ alive: false })]} onSelectNode={vi.fn()} />
+        );
+
+        const announcement = getAllByText("No memories exist").find((element) => element.classList.contains("sr-only"));
         expect(announcement).toBeInTheDocument();
         expect(announcement).toHaveClass("sr-only");
     });
