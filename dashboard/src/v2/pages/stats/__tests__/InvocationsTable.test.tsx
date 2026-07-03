@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { useState } from "preact/hooks";
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { fetchInvocationMessages } from "../../../lib/invocation-api.js";
@@ -138,14 +138,22 @@ describe("InvocationsTable", () => {
       />
     );
 
-    const inHeader = getByRole("button", { name: "In sortable" });
+    const inHeader = getByRole("button", { name: "Sort invocations by input tokens" });
     fireEvent.click(inHeader);
     expect(onSortChange).toHaveBeenCalledWith({ key: "inputTokens", dir: "desc" });
 
     // Click again to toggle direction
-    const timeHeader = getByRole("button", { name: "Time sorted descending" });
+    const timeHeader = getByRole("button", { name: "Sort invocations by time, currently sorted descending" });
     fireEvent.click(timeHeader);
     expect(onSortChange).toHaveBeenCalledWith({ key: "startedAt", dir: "asc" });
+  });
+
+  it("provides a caption and active aria-sort state", () => {
+    render(<Harness />);
+
+    expect(screen.getByText(/Invocation ledger with sortable time/i)).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: /Time/i })).toHaveAttribute("aria-sort", "descending");
+    expect(screen.getByRole("columnheader", { name: /In/i })).not.toHaveAttribute("aria-sort");
   });
 
   it("handles row expansion and renders transcript details", async () => {

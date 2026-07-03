@@ -106,6 +106,7 @@ describe("InvocationFeedPanel", () => {
     expect(screen.getByText("Task Coding")).toBeInTheDocument();
     expect(screen.getByText("QA Review")).toBeInTheDocument();
     expect(screen.getByText("Provider timed out")).toBeInTheDocument();
+    expect(screen.getByText("Invocation status: running.")).toBeInTheDocument();
 
     const feed = screen.getByRole("log", { name: "Live invocation feed" });
     expect(feed).toHaveAttribute("aria-live", "polite");
@@ -122,6 +123,7 @@ describe("InvocationFeedPanel", () => {
     render(<InvocationFeedPanel />);
 
     expect(screen.getByText("No invocation records yet.")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
   });
 
   it("renders explicitly scoped invocations instead of the full snapshot list", () => {

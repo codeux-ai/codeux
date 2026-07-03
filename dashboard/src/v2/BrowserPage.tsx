@@ -109,6 +109,27 @@ export const BrowserPage: FunctionComponent = () => {
     ? selectedSession
     : null;
   const navigationEnabled = Boolean(visibleSelectedSession && visibleSelectedSession.status === "running" && visibleSelectedSession.hostPort);
+  const sessionCards = sessions.filter((session) =>
+    (!selectedProject || session.projectId === selectedProject.id) && !removingSessionIdSet.has(session.id)
+  );
+  const previewStatusMessage = visibleSelectedSession
+    ? visibleSelectedSession.status === "running"
+      ? "Preview container is running."
+      : visibleSelectedSession.status === "starting"
+        ? "Preview container is starting."
+        : visibleSelectedSession.status === "error"
+          ? `Preview container has an error${visibleSelectedSession.lastError ? `: ${visibleSelectedSession.lastError}` : "."}`
+          : "Preview container is stopped."
+    : sessionCards.length === 0
+      ? "No preview sessions are available. Launch a container to begin."
+      : "No preview session is selected.";
+  const logsStatusMessage = visibleSelectedSession
+    ? logs === "Loading logs..."
+      ? "Loading preview logs."
+      : logs
+        ? "Preview logs loaded. Logs refresh automatically and may be slightly stale."
+        : "No preview logs are available yet."
+    : "No preview session selected for logs.";
 
   const scriptTargetSprint = useMemo(() => {
     if (visibleSelectedSession) {
@@ -330,7 +351,7 @@ export const BrowserPage: FunctionComponent = () => {
       await removePreviewSession(sessionId);
       await refreshSessions(true);
     } catch (actionError) {
-      browserFeedback.setError(`Failed to save script: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
+      browserFeedback.setError(`Failed to remove session: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
     } finally {
       setRemovingSessionIds((current) => current.filter((id) => id !== sessionId));
     }
@@ -346,7 +367,7 @@ export const BrowserPage: FunctionComponent = () => {
       setShowScriptEditor(false);
       browserFeedback.setSuccess("Script saved successfully");
     } catch (actionError) {
-      setActionFeedback({status: 'error', message: `Failed to launch container: ${actionError instanceof Error ? actionError.message : String(actionError)}`});
+      browserFeedback.setError(`Failed to save script: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
     } finally {
       setSavingScript(false);
     }
@@ -363,10 +384,6 @@ export const BrowserPage: FunctionComponent = () => {
 
     }
   };
-
-  const sessionCards = sessions.filter((session) =>
-    (!selectedProject || session.projectId === selectedProject.id) && !removingSessionIdSet.has(session.id)
-  );
 
   if (!selectedProject) {
     return (
@@ -391,6 +408,7 @@ export const BrowserPage: FunctionComponent = () => {
           <button
             type="button"
             onClick={() => void refreshSessions()}
+          aria-label="Refresh preview sessions"
           className="inline-flex min-h-[44px] items-center gap-2.5 rounded-full border border-black/[0.06] bg-white/75 px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-all hover:-translate-y-px hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/40 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:text-white"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} strokeWidth={2} />
@@ -400,13 +418,13 @@ export const BrowserPage: FunctionComponent = () => {
       />
 
       {error && (
-        <div className="mb-5 rounded-2xl border border-status-red/20 bg-status-red/10 px-4 py-3 text-sm text-status-red">
+        <div className="mb-5 rounded-2xl border border-status-red/20 bg-status-red/10 px-4 py-3 text-sm text-status-red" role="alert">
           {error}
         </div>
       )}
 
       {actionFeedback.status !== "idle" && actionFeedback.message && (
-        <div className="mb-5 flex items-start gap-3 p-3 rounded-xl border bg-black/[0.02] dark:bg-white/[0.03] border-black/[0.06] dark:border-white/[0.06]">
+        <div className="mb-5 flex items-start gap-3 p-3 rounded-xl border bg-black/[0.02] dark:bg-white/[0.03] border-black/[0.06] dark:border-white/[0.06]" role={actionFeedback.status === "error" ? "alert" : "status"} aria-live="polite">
           <div className={`flex-1 text-sm font-medium mt-0.5 ${actionFeedback.status === 'error' ? 'text-status-red' : actionFeedback.status === 'success' ? 'text-status-green' : 'text-signal-700 dark:text-signal-400'}`}>
             {actionFeedback.status === 'pending' && <span className="mr-2 inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />}
             {actionFeedback.message}
@@ -414,6 +432,7 @@ export const BrowserPage: FunctionComponent = () => {
           <button
             type="button"
             onClick={() => setActionFeedback({status: 'idle', message: null})}
+            aria-label="Dismiss action message"
             className="shrink-0 p-1 rounded-md opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
           >
             <span className="sr-only">Dismiss</span>
@@ -484,8 +503,11 @@ export const BrowserPage: FunctionComponent = () => {
           navigationEnabled={navigationEnabled}
         >
           <div aria-live="polite" role="status" className="sr-only">
-            {visibleSelectedSession ? `Container ${visibleSelectedSession.status}` : "No active session"}
+            {previewStatusMessage}
             {sessionActionPending ? " Action pending." : ""}
+            {savingScript ? " Saving preview script." : ""}
+            {launching ? " Launching preview container." : ""}
+            {!navigationEnabled && visibleSelectedSession ? " Navigation controls are disabled until the container is running." : ""}
           </div>
           {visibleSelectedSession && frameSrc ? (
             <div className="relative h-full w-full">
@@ -493,7 +515,7 @@ export const BrowserPage: FunctionComponent = () => {
                 <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-center p-4">
                   <div className="flex items-center gap-3 rounded-full border border-black/[0.08] bg-white/90 px-4 py-2.5 shadow-[0_8px_32px_rgba(0,0,0,0.08)] backdrop-blur-md dark:border-white/[0.08] dark:bg-void-900/90 dark:shadow-[0_8px_32px_rgba(0,0,0,0.24)]">
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-signal-500 border-t-transparent" />
-                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300" aria-hidden="true">
+                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                       {visibleSelectedSession.status === "starting" ? "Container starting..." : visibleSelectedSession.status === "error" ? "Container failed" : "Waiting for connection..."}
                     </span>
                   </div>
@@ -524,12 +546,15 @@ export const BrowserPage: FunctionComponent = () => {
               <div>
                 <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Selected Sprint</div>
                 <div className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">
-                  {scriptTargetSprint?.name || "All sprints"}
+                  <span className="break-words">{scriptTargetSprint?.name || "All sprints"}</span>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowScriptEditor((value) => !value)}
+                aria-expanded={showScriptEditor}
+                aria-controls="preview-script-editor"
+                aria-label={showScriptEditor ? "Hide startup script editor" : "Show startup script editor"}
                 className="inline-flex h-10 items-center gap-2 rounded-2xl border border-black/[0.08] px-3 text-xs font-semibold text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
               >
                 <FileCode2 className="h-4 w-4" strokeWidth={2} />
@@ -579,6 +604,7 @@ export const BrowserPage: FunctionComponent = () => {
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-disabled={!visibleSelectedSession}
+                  aria-label="Open selected preview in a new tab"
                   title={visibleSelectedSession ? "Open preview in new tab" : "Start container to open"}
                   className={`inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white ${!visibleSelectedSession ? "pointer-events-none opacity-50 cursor-not-allowed" : ""}`}
                 >
@@ -598,7 +624,7 @@ export const BrowserPage: FunctionComponent = () => {
           </div>
 
           {showScriptEditor && (
-            <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+            <div id="preview-script-editor" className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Startup script</div>
@@ -612,6 +638,7 @@ export const BrowserPage: FunctionComponent = () => {
                   disabled={savingScript || !scriptTargetSprint}
                   aria-disabled={savingScript || !scriptTargetSprint}
                   aria-busy={savingScript}
+                  aria-label={savingScript ? "Saving startup script" : "Save startup script"}
                   className="inline-flex h-10 items-center gap-2 rounded-2xl bg-slate-900 px-4 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
                 >
                   <Save className="h-4 w-4" strokeWidth={2} />
@@ -619,6 +646,7 @@ export const BrowserPage: FunctionComponent = () => {
                 </button>
               </div>
               <textarea
+                aria-label="Startup script contents"
                 value={scriptDraft}
                 onInput={(event) => setScriptDraft((event.currentTarget as HTMLTextAreaElement).value)}
                 className="min-h-[12rem] md:min-h-[18rem] w-full rounded-[1.5rem] whitespace-pre-wrap break-words border border-black/[0.08] bg-slate-100/80 p-4 font-mono text-[12px] leading-6 text-slate-800 outline-none transition focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-void-950 dark:text-slate-100"
@@ -628,7 +656,8 @@ export const BrowserPage: FunctionComponent = () => {
 
           <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
             <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Container logs</div>
-            <pre className="min-h-[12rem] md:min-h-[18rem] max-h-[360px] overflow-auto rounded-[1.5rem] whitespace-pre-wrap break-words bg-slate-100/80 p-4 font-mono text-[11px] leading-6 text-slate-700 dark:bg-void-950 dark:text-slate-300">
+            <div className="sr-only" role="status" aria-live="polite">{logsStatusMessage}</div>
+            <pre aria-label="Preview container logs" className="min-h-[12rem] md:min-h-[18rem] max-h-[360px] overflow-auto rounded-[1.5rem] whitespace-pre-wrap break-words bg-slate-100/80 p-4 font-mono text-[11px] leading-6 text-slate-700 dark:bg-void-950 dark:text-slate-300">
               {logs || "No logs yet."}
             </pre>
           </div>

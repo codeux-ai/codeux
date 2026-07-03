@@ -143,25 +143,26 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
         )}
         <aside
             id="primary-navigation"
-            aria-label="Primary navigation"
+            aria-label={isMobile ? "Mobile primary navigation" : "Primary navigation"}
             role={isMobile && isOpen ? "dialog" : undefined}
             aria-modal={isMobile && isOpen ? "true" : undefined}
             tabIndex={-1}
             ref={(el) => { (sidebarRef as any).current = el; (trapRef as any).current = el; }}
-            className={`${isMobile ? 'h-dvh' : 'h-full'} shrink-0 border-r border-black/[0.06] dark:border-white/[0.06] bg-[#F9F8F4]/80 dark:bg-void-900/80 backdrop-blur-xl flex flex-col justify-between pt-8 pb-[max(2rem,env(safe-area-inset-bottom))] z-50 transition-all duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${
+            className={`${isMobile ? 'h-dvh' : 'h-full'} shrink-0 border-r border-black/[0.06] dark:border-white/[0.06] bg-[#F9F8F4]/80 dark:bg-void-900/80 backdrop-blur-xl flex flex-col justify-between pt-8 pb-[max(2rem,env(safe-area-inset-bottom))] z-50 transition-all motion-reduce:transition-none duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${
                 isMobile 
-                    ? `fixed left-0 top-0 w-[260px] shadow-2xl bg-[#F9F8F4] dark:bg-void-900 overflow-y-auto overflow-x-hidden transition-transform duration-300 ease-out ${isOpen ? 'translate-x-0' : '-translate-x-full'}`
+                    ? `fixed left-0 top-0 w-[260px] shadow-2xl bg-[#F9F8F4] dark:bg-void-900 overflow-y-auto overflow-x-hidden transition-transform motion-reduce:transition-none duration-300 ease-out ${isOpen ? 'translate-x-0' : '-translate-x-full'}`
                     : (isMinimized ? 'relative w-[88px]' : 'relative w-[260px]')
             }`}
         >
             {/* Logo */}
             <a
                 href="/"
+                aria-label="Code UX home"
                 onMouseEnter={() => setBrandActive(true)}
                 onMouseLeave={() => setBrandActive(false)}
                 onFocus={() => setBrandActive(true)}
                 onBlur={() => setBrandActive(false)}
-                className={`mb-10 flex items-center group cursor-pointer relative z-10 w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 rounded-xl transition-all duration-500 ${isMinimized && !isMobile ? 'px-0 w-full justify-center' : 'px-7 gap-3'}`}
+                className={`mb-10 flex items-center group cursor-pointer relative z-10 w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 rounded-xl transition-all motion-reduce:transition-none duration-500 ${isMinimized && !isMobile ? 'px-0 w-full justify-center' : 'px-7 gap-3'}`}
             >
                 <div aria-hidden="true" className="relative w-10 h-10 rounded-2xl overflow-hidden ring-1 ring-inset ring-white/[0.06] dark:ring-white/[0.08] shadow-[0_0_22px_rgba(0,224,160,0.22)] group-hover:shadow-[0_0_34px_rgba(0,224,160,0.42)] transition-shadow duration-500 shrink-0">
                     <RobotLogo size={40} rounded={false} active={brandActive} className="transition-transform duration-500 ease-out group-hover:scale-[1.06]" />
@@ -174,7 +175,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
             </a>
 
             {/* Navigation */}
-            <nav ref={navRef} aria-label="Main navigation" className="flex-1 flex flex-col relative z-10 overflow-y-auto scrollbar-hide pb-4">
+            <nav ref={navRef} aria-label={isMobile ? "Mobile workspace navigation" : "Workspace navigation"} className="flex-1 flex flex-col relative z-10 overflow-y-auto scrollbar-hide pb-4">
                 <h2 className={`px-8 text-[9px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-[0.16em] mb-3 transition-all duration-500 overflow-hidden ${isMinimized && !isMobile ? 'w-0 h-0 opacity-0 m-0' : 'opacity-100'}`}>
                     Workspace
                 </h2>
@@ -214,10 +215,11 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                     onPointerDown={() => prefetchRoute("/config")}
                     onFocus={() => prefetchRoute("/config")}
                     aria-label="Settings"
+                    aria-current={currentPath === "/config" ? "page" : undefined}
                     data-tour-id="nav-config" 
-                    className={`relative flex items-center ${isMinimized && !isMobile ? 'justify-center mx-4' : 'gap-3.5 px-5 mx-4'} py-2 min-h-[40px] rounded-2xl transition-all duration-300 group mb-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-2xl focus-visible:z-10 decoration-none`}
+                    className={`relative flex items-center ${isMinimized && !isMobile ? 'justify-center mx-4' : 'gap-3.5 px-5 mx-4'} py-2 min-h-[40px] rounded-2xl transition-all motion-reduce:transition-none duration-300 group mb-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-2xl focus-visible:z-10 decoration-none`}
                 >
-                    <div className="absolute inset-0 rounded-2xl bg-black/[0.05] dark:bg-white/[0.05] transition-all duration-300 pointer-events-none origin-left opacity-0 -translate-x-full group-hover:translate-x-0 group-hover:opacity-100" />
+                    <div className="absolute inset-0 rounded-2xl bg-black/[0.05] dark:bg-white/[0.05] transition-all motion-reduce:transition-none duration-300 pointer-events-none origin-left opacity-0 -translate-x-full group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100" />
                     <Settings aria-hidden="true" className="relative z-10 w-4 h-4 shrink-0 text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 group-hover:rotate-90 transition-all duration-700 ease-in-out" strokeWidth={1.5} />
                     <div className={`relative z-10 overflow-hidden transition-all duration-500 ${isMinimized && !isMobile ? 'w-0 opacity-0' : 'opacity-100'}`}>
                         <span className="font-medium text-sm tracking-wide text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors duration-300 whitespace-nowrap">
@@ -229,10 +231,12 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                 {!isMobile && (
                     <button
                         onClick={toggleMinimize}
-                        className={`mt-2 relative flex items-center ${isMinimized ? 'justify-center mx-4' : 'gap-3.5 px-5 mx-4'} py-2 min-h-[40px] rounded-2xl transition-all duration-300 group focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-2xl focus-visible:z-10 bg-transparent border-0 cursor-pointer`}
+                        className={`mt-2 relative flex items-center ${isMinimized ? 'justify-center mx-4' : 'gap-3.5 px-5 mx-4'} py-2 min-h-[40px] rounded-2xl transition-all motion-reduce:transition-none duration-300 group focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-2xl focus-visible:z-10 bg-transparent border-0 cursor-pointer`}
                         aria-label={isMinimized ? "Expand sidebar" : "Collapse sidebar"}
+                        aria-expanded={!isMinimized}
+                        aria-controls="primary-navigation"
                     >
-                        <div className="absolute inset-0 rounded-2xl bg-black/[0.05] dark:bg-white/[0.05] transition-all duration-300 pointer-events-none origin-left opacity-0 -translate-x-full group-hover:translate-x-0 group-hover:opacity-100" />
+                        <div className="absolute inset-0 rounded-2xl bg-black/[0.05] dark:bg-white/[0.05] transition-all motion-reduce:transition-none duration-300 pointer-events-none origin-left opacity-0 -translate-x-full group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100" />
                         {isMinimized ? (
                             <ChevronRight aria-hidden="true" className="relative z-10 w-4 h-4 shrink-0 text-slate-400 dark:text-slate-500 group-hover:text-signal-500 transition-colors duration-300" strokeWidth={1.5} />
                         ) : (

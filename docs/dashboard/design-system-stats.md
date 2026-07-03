@@ -160,12 +160,13 @@ See [Mobile Responsiveness](./mobile-responsiveness.md) for dashboard-wide const
 ## Accessibility
 
 - The page root is a named statistics region and marks itself busy during first-load telemetry.
-- Mode navigation, time presets, filter chips, sort buttons, and invocation view controls expose selected state through ARIA attributes.
+- Mode navigation, time presets, filter chips, sort buttons, and invocation view controls expose selected state through ARIA attributes. Compact mode and invocation-view controls keep stable accessible names, visible focus rings, and arrow/Home/End keyboard navigation.
 - Ledger navigation uses actual tab semantics. Keyboard focus should move from the active tab into the tabpanel controls and rows in DOM order.
-- Charts expose a region name, readable summary, keyboard-reachable bucket targets, and a screen-reader-only table for exact values.
+- Charts expose a region name, readable summary, keyboard-reachable bucket targets, minimap bucket text, and a screen-reader-only table for exact values.
 - Chart refresh indicators use semantic status text in addition to animation.
 - Microvisuals such as sparklines, donuts, ribbons, token flow bars, churn bars, and status bars either expose a concise `role="img"` label or are paired with nearby text that communicates the same data.
 - Date inputs have visible labels, programmatic labels, validation state, and inline alert text for invalid custom ranges.
+- Invocation tables provide captions, active `aria-sort` only on the sorted column, explicit sort button labels, mobile cell labels, and wrapping-safe cells for long provider, model, error, and transcript text.
 - Focus rings use `--stats-focus-ring` or shared dashboard focus tokens and remain visible in light and dark themes.
 - Repeated visible labels are acceptable when they reflect real UI structure. Tests should disambiguate by role, group name, region, or scoped queries.
 

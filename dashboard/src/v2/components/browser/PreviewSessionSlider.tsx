@@ -65,12 +65,13 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
   };
 
   return (
-    <div className="relative w-full group">
+    <section className="relative w-full min-w-0 group" aria-label="Preview sessions">
       {cardCount > 5 && (
         <>
           <button
             type="button"
             onClick={scrollLeft}
+            aria-label="Scroll preview sessions left"
             className="absolute -left-4 top-1/2 z-10 -translate-y-1/2 rounded-full border border-black/[0.08] bg-white/90 p-2 text-slate-600 opacity-0 shadow-sm backdrop-blur-sm transition-all hover:bg-white hover:text-slate-900 group-hover:opacity-100 dark:border-white/[0.08] dark:bg-[#05080d]/90 dark:text-slate-400 dark:hover:bg-[#05080d] dark:hover:text-white lg:flex lg:group-focus-within:flex focus-within:opacity-100 focus:opacity-100 group-focus-within:opacity-100 hidden"
             title="Scroll left"
           >
@@ -79,6 +80,7 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
           <button
             type="button"
             onClick={scrollRight}
+            aria-label="Scroll preview sessions right"
             className="absolute -right-4 top-1/2 z-10 -translate-y-1/2 rounded-full border border-black/[0.08] bg-white/90 p-2 text-slate-600 opacity-0 shadow-sm backdrop-blur-sm transition-all hover:bg-white hover:text-slate-900 group-hover:opacity-100 dark:border-white/[0.08] dark:bg-[#05080d]/90 dark:text-slate-400 dark:hover:bg-[#05080d] dark:hover:text-white lg:flex lg:group-focus-within:flex focus-within:opacity-100 focus:opacity-100 group-focus-within:opacity-100 hidden"
             title="Scroll right"
           >
@@ -88,7 +90,9 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
       )}
       <div
         ref={scrollContainerRef}
-        className="flex w-full snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 pt-1 scrollbar-hide"
+        role="list"
+        aria-label={cardCount > 0 ? `${cardCount} preview sessions` : "No preview sessions"}
+        className="flex w-full max-w-full snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-1 pb-2 pt-1 scrollbar-hide"
       >
         {sessions.map((session) => {
           const active = selectedSessionId === session.id;
@@ -99,6 +103,7 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
           return (
             <div
               key={session.id}
+              role="listitem"
               className={`relative w-[280px] flex-none snap-start rounded-[1.25rem] border p-4 transition-all lg:w-[calc(20%-0.6rem)] ${
                 active
                   ? "border-signal-500/35 bg-signal-500/[0.08] shadow-[0_10px_28px_rgba(0,224,160,0.1)] ring-1 ring-signal-500/25 dark:bg-signal-500/[0.1]"
@@ -113,10 +118,13 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
               <button
                 type="button"
                 onClick={() => onSelectSession(session.id)}
+                aria-label={`Select preview session ${session.sprintName}`}
+                aria-pressed={active}
+                aria-current={active ? "true" : undefined}
                 className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-lg"
               >
                 <div className="flex items-center justify-between gap-3 mb-3">
-                  <span className="truncate text-sm font-semibold text-slate-900 dark:text-white">
+                  <span className="min-w-0 break-words text-sm font-semibold leading-5 text-slate-900 dark:text-white">
                     {session.sprintName}
                   </span>
                   <span
@@ -134,10 +142,10 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
                     className={`h-3.5 w-3.5 ${healthTone[session.healthStatus]}`}
                     strokeWidth={2}
                   />
-                  <span>{formatPortMapping(session)}</span>
+                  <span className="break-words">{formatPortMapping(session)}</span>
                 </div>
 
-                <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-500">
+                <div className="mt-1 break-words text-[11px] text-slate-500 dark:text-slate-500">
                   {session.hostPort ? `127.0.0.1:${session.hostPort}` : "waiting for routed port"}
                 </div>
               </button>
@@ -158,7 +166,7 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
                   }`}
                   title="Remove preview container"
 
-                  aria-label="Remove preview container"
+                  aria-label={`Remove preview session ${session.sprintName}`}
                   disabled={removing}
                   aria-disabled={removing}
                   aria-busy={removing}
@@ -173,6 +181,7 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
                   className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border border-black/[0.08] px-3 text-[11px] font-semibold text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/50 ${!canOpen ? "pointer-events-none opacity-50" : ""}`}
                   title="Open isolated preview in a new tab"
                   onClick={(e) => e.stopPropagation()}
+                  aria-label={`Open preview session ${session.sprintName} in a new tab`}
                   aria-disabled={!canOpen}
                 >
                   <ExternalLink className="h-3 w-3" strokeWidth={2.5} />
@@ -184,6 +193,6 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
         })}
 
       </div>
-    </div>
+    </section>
   );
 };

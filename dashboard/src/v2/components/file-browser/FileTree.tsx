@@ -40,7 +40,12 @@ const TreeNodeRow: FunctionComponent<NodeRendererProps<FileBrowserTreeNode>> = (
   return (
     <div
       ref={dragHandle}
+      id={`file-tree-node-${node.data.id}`}
       style={style}
+      role="treeitem"
+      aria-selected={isSelected}
+      aria-expanded={isDirectory ? node.isOpen : undefined}
+      aria-label={`${isDirectory ? "Folder" : "File"} ${node.data.path}`}
       onClick={() => {
         if (isDirectory) {
           node.toggle();
@@ -77,7 +82,7 @@ const TreeNodeRow: FunctionComponent<NodeRendererProps<FileBrowserTreeNode>> = (
           <FileIcon class="h-3.5 w-3.5" strokeWidth={1.8} />
         )}
       </span>
-      <span class="truncate font-medium"><HighlightMatch text={node.data.name} term={searchTerm} /></span>
+      <span class="min-w-0 break-words font-medium leading-5"><HighlightMatch text={node.data.name} term={searchTerm} /></span>
     </div>
   );
 };
@@ -104,7 +109,12 @@ export const FileTree: FunctionComponent<FileTreeProps> = ({ nodes, selectedPath
   }, []);
 
   return (
-    <div ref={containerRef} class="h-full w-full overflow-hidden">
+    <div
+      ref={containerRef}
+      role="tree"
+      aria-label="Sprint file tree"
+      class="h-full w-full overflow-hidden"
+    >
       <Tree<FileBrowserTreeNode>
         data={nodes}
         idAccessor="id"

@@ -1,7 +1,7 @@
 import type { FunctionComponent, ComponentProps } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
-import { useGsapDurations, GSAP_INTERACTION_TOKENS, useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
@@ -14,7 +14,6 @@ export type ToggleProps = Omit<ComponentProps<"button">, "value" | "onChange" | 
 export const Toggle: FunctionComponent<ToggleProps> = ({ value, onChange, danger, disabled, className = "", ...props }) => {
   const thumbRef = useRef<HTMLSpanElement>(null);
   const gsapTokens = useGsapInteractionTokens();
-  const durations = useGsapDurations();
   const reducedMotion = useReducedMotion();
   const tokens = useInteractionTokens();
   const isInitialMount = useRef(true);
@@ -34,7 +33,7 @@ export const Toggle: FunctionComponent<ToggleProps> = ({ value, onChange, danger
       ease: reducedMotion ? 'none' : gsapTokens.controlFeedback.ease,
       overwrite: true
     });
-  }, [value, reducedMotion, durations.base]);
+  }, [value, reducedMotion, gsapTokens.controlFeedback.duration, gsapTokens.controlFeedback.ease]);
 
   return (
     <button
@@ -44,11 +43,11 @@ export const Toggle: FunctionComponent<ToggleProps> = ({ value, onChange, danger
       role="switch"
       onClick={() => onChange(!value)}
       disabled={disabled}
-      className={`group relative h-7 w-12 shrink-0 overflow-hidden rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus-visible:ring-[var(--color-accent-primary)] disabled:cursor-not-allowed disabled:opacity-50 motion-safe:enabled:active:scale-[0.98] enabled:active:brightness-95 dark:enabled:active:brightness-110 ${
+      className={`group relative h-7 w-12 shrink-0 overflow-hidden rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${danger ? "focus-visible:ring-[var(--focus-ring-danger)]" : "focus-visible:ring-[var(--focus-ring-signal)]"} disabled:cursor-not-allowed disabled:opacity-50 motion-safe:enabled:active:scale-[0.98] enabled:active:brightness-95 dark:enabled:active:brightness-110 ${
         value
           ? danger
-            ? "border-status-red/40 bg-status-red shadow-[0_0_16px_rgba(227,0,15,0.24)] enabled:hover:bg-status-red/90"
-            : "border-signal-500/40 bg-signal-500 shadow-[0_0_16px_rgba(0,224,160,0.22)] enabled:hover:bg-signal-500/90"
+            ? "border-status-red/40 bg-status-red shadow-[0_0_16px_var(--status-static-failed-aura)] enabled:hover:bg-status-red/90"
+            : "border-signal-500/40 bg-signal-500 shadow-[0_0_16px_var(--status-static-running-aura)] enabled:hover:bg-signal-500/90"
           : "border-black/[0.12] bg-black/[0.08] enabled:hover:bg-black/[0.12] enabled:hover:border-black/[0.16] dark:border-white/[0.12] dark:bg-white/[0.08] dark:enabled:hover:bg-white/[0.12] dark:enabled:hover:border-white/[0.16]"
       } ${className}`}
       aria-checked={value}
@@ -56,13 +55,15 @@ export const Toggle: FunctionComponent<ToggleProps> = ({ value, onChange, danger
     >
       <span
         aria-hidden
-        className={`absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.28),rgba(255,255,255,0))] transition-opacity ${value ? "opacity-100" : "opacity-40"}`}
+        className={`absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.28),rgba(255,255,255,0))] transition-opacity motion-reduce:transition-none ${value ? "opacity-100" : "opacity-40"}`}
+        style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
       />
       <span
         ref={thumbRef}
-        className={`absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-[0_2px_7px_rgba(0,0,0,0.18)] ${!disabled ? "group-enabled:group-active:w-6" : ""} ${
+        className={`absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-[0_2px_7px_rgba(0,0,0,0.18)] motion-safe:transition-[width] motion-reduce:transition-none ${!disabled ? "group-enabled:group-active:w-6" : ""} ${
           value ? "group-enabled:group-active:translate-x-4" : ""
         }`}
+        style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
       >
         <svg
           style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}

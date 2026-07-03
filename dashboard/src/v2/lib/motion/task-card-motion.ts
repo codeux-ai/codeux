@@ -1,10 +1,14 @@
 import { useLayoutEffect, useEffect, useRef } from "preact/hooks";
 import type { RefObject } from "preact";
 import gsap from "gsap";
-import { MOTION_TOKENS, INTERACTION_TOKENS } from "./tokens.js";
+import { useGsapInteractionTokens } from "./constants.js";
+
+const STATUS_FEEDBACK_SHADOW = "0 0 0 2px var(--status-static-running-ring)";
+const DRAG_SHADOW = "var(--shadow-drag-active)";
 
 export function useTaskCardMotion(ref: RefObject<HTMLElement>, status: string, isReducedMotion: boolean, index: number = 0) {
   const isMounted = useRef(false);
+  const tokens = useGsapInteractionTokens();
 
   useLayoutEffect(() => {
     if (!ref.current) return;
@@ -16,9 +20,9 @@ export function useTaskCardMotion(ref: RefObject<HTMLElement>, status: string, i
 
     gsap.fromTo(ref.current,
       { opacity: 0, y: 15 },
-      { opacity: 1, y: 0, duration: parseFloat(INTERACTION_TOKENS.enterExit.duration) / 1000, ease: INTERACTION_TOKENS.enterExit.ease, delay: index * (parseFloat(INTERACTION_TOKENS.listReorder.duration) / 1000) * 0.2, clearProps: "transform,opacity", overwrite: "auto" }
+      { opacity: 1, y: 0, duration: tokens.enterExit.duration, ease: tokens.enterExit.ease, delay: index * tokens.listReorder.duration * 0.2, clearProps: "transform,opacity", overwrite: "auto" }
     );
-  }, [isReducedMotion, index]);
+  }, [isReducedMotion, index, tokens.enterExit.duration, tokens.enterExit.ease, tokens.listReorder.duration]);
 
   useEffect(() => {
     if (!isMounted.current) {
@@ -28,27 +32,29 @@ export function useTaskCardMotion(ref: RefObject<HTMLElement>, status: string, i
     if (!ref.current) return;
 
     if (isReducedMotion) {
-      gsap.set(ref.current, { boxShadow: '0 0 0 2px rgba(0, 224, 160, 0.4)' });
+      gsap.set(ref.current, { boxShadow: STATUS_FEEDBACK_SHADOW });
       setTimeout(() => {
         if (ref.current) gsap.set(ref.current, { clearProps: "boxShadow" });
-      }, parseFloat(INTERACTION_TOKENS.controlFeedback.duration));
+      }, Math.max(tokens.controlFeedback.duration * 1000, 1));
       return;
     }
 
     gsap.fromTo(ref.current,
-      { scale: 1.02, boxShadow: '0 0 0 2px rgba(0, 224, 160, 0.4)' },
-      { scale: 1, boxShadow: 'none', duration: parseFloat(INTERACTION_TOKENS.controlFeedback.duration) / 1000, ease: INTERACTION_TOKENS.controlFeedback.ease, clearProps: "boxShadow,transform", overwrite: "auto" }
+      { scale: 1.02, boxShadow: STATUS_FEEDBACK_SHADOW },
+      { scale: 1, boxShadow: "none", duration: tokens.controlFeedback.duration, ease: tokens.controlFeedback.ease, clearProps: "boxShadow,transform", overwrite: "auto" }
     );
-  }, [status, isReducedMotion]);
+  }, [status, isReducedMotion, tokens.controlFeedback.duration, tokens.controlFeedback.ease]);
 }
 
 export function useTaskCardDragMotion(ref: RefObject<HTMLElement>, isDragging: boolean, isReducedMotion: boolean) {
+  const tokens = useGsapInteractionTokens();
+
   useEffect(() => {
     if (!ref.current) return;
 
     if (isReducedMotion) {
       if (isDragging) {
-        gsap.set(ref.current, { opacity: 0.6, boxShadow: '0 20px 40px rgba(0,0,0,0.2)' });
+        gsap.set(ref.current, { opacity: 0.72, boxShadow: DRAG_SHADOW });
       } else {
         gsap.set(ref.current, { clearProps: 'boxShadow,opacity' });
       }
@@ -60,9 +66,9 @@ export function useTaskCardDragMotion(ref: RefObject<HTMLElement>, isDragging: b
       gsap.to(ref.current, {
         scale: 1.05,
         opacity: 0.6,
-        boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
-        duration: parseFloat(INTERACTION_TOKENS.selectionMovement.duration) / 1000,
-        ease: INTERACTION_TOKENS.selectionMovement.ease,
+        boxShadow: DRAG_SHADOW,
+        duration: tokens.selectionMovement.duration,
+        ease: tokens.selectionMovement.ease,
         overwrite: "auto",
       });
     } else {
@@ -71,11 +77,11 @@ export function useTaskCardDragMotion(ref: RefObject<HTMLElement>, isDragging: b
         scale: 1,
         opacity: 1,
         boxShadow: 'none',
-        duration: parseFloat(INTERACTION_TOKENS.selectionMovement.duration) / 1000,
-        ease: MOTION_TOKENS.easing.bounce,
+        duration: tokens.selectionMovement.duration,
+        ease: tokens.inlineValidation.ease,
         clearProps: 'boxShadow,transform,opacity',
         overwrite: "auto",
       });
     }
-  }, [isDragging, isReducedMotion]);
+  }, [isDragging, isReducedMotion, tokens.selectionMovement.duration, tokens.selectionMovement.ease, tokens.inlineValidation.ease]);
 }

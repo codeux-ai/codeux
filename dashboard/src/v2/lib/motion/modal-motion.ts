@@ -1,6 +1,8 @@
+import { GSAP_INTERACTION_TOKENS } from "./constants.js";
+
 export const MODAL_MOTION = {
   entry: {
-    duration: 0.45,
+    duration: GSAP_INTERACTION_TOKENS.enterExit.duration,
     ease: "power4.out",
     yStart: 20,
     yEnd: 0,
@@ -12,7 +14,7 @@ export const MODAL_MOTION = {
     filterEnd: "blur(0px)"
   },
   exit: {
-    duration: 0.3,
+    duration: GSAP_INTERACTION_TOKENS.enterExit.duration,
     ease: "power3.in",
     yEnd: 10,
     opacityEnd: 0,
@@ -20,32 +22,32 @@ export const MODAL_MOTION = {
     filterEnd: "blur(14px)"
   },
   backdrop: {
-    duration: 0.3,
-    ease: "power2.out"
+    duration: GSAP_INTERACTION_TOKENS.enterExit.duration,
+    ease: GSAP_INTERACTION_TOKENS.enterExit.ease
   },
   collapse: {
-    duration: 0.4,
-    ease: "power4.inOut"
+    duration: GSAP_INTERACTION_TOKENS.expansionCollapse.duration,
+    ease: GSAP_INTERACTION_TOKENS.expansionCollapse.ease
   },
   overlay: {
-    entry: 0.3,
-    entryEase: "power2.out",
-    exit: 0.2,
-    exitEase: "power2.in",
-    cardEntry: 0.6,
+    entry: GSAP_INTERACTION_TOKENS.enterExit.duration,
+    entryEase: GSAP_INTERACTION_TOKENS.enterExit.ease,
+    exit: GSAP_INTERACTION_TOKENS.controlFeedback.duration,
+    exitEase: GSAP_INTERACTION_TOKENS.controlFeedback.ease,
+    cardEntry: GSAP_INTERACTION_TOKENS.listReveal.duration,
     cardEntryEase: "power4.out"
   },
   feedback: {
-    duration: 0.4,
-    ease: "power3.out",
+    duration: GSAP_INTERACTION_TOKENS.asyncFeedback.duration,
+    ease: GSAP_INTERACTION_TOKENS.asyncFeedback.ease,
     yStart: -10,
     yEnd: 0,
     scaleStart: 0.98,
     scaleEnd: 1
   },
   dropdown: {
-    duration: 0.3,
-    ease: "power2.out",
+    duration: GSAP_INTERACTION_TOKENS.expansionCollapse.duration,
+    ease: GSAP_INTERACTION_TOKENS.expansionCollapse.ease,
     yStart: -8,
     yEnd: 0,
     opacityStart: 0,
@@ -54,7 +56,7 @@ export const MODAL_MOTION = {
     scaleEnd: 1
   },
   panel: {
-    duration: 0.4,
+    duration: GSAP_INTERACTION_TOKENS.enterExit.duration,
     ease: "power4.out",
     xStart: 20,
     xEnd: 0,
@@ -63,9 +65,9 @@ export const MODAL_MOTION = {
   },
   fieldStagger: {
     stagger: 0.07,
-    delay: 0.25,
-    duration: 0.45,
-    ease: "power3.out",
+    delay: GSAP_INTERACTION_TOKENS.controlFeedback.duration,
+    duration: GSAP_INTERACTION_TOKENS.listReveal.duration,
+    ease: GSAP_INTERACTION_TOKENS.listReveal.ease,
     yStart: 18
   }
 };

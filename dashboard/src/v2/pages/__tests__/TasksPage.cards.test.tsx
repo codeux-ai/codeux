@@ -1,8 +1,9 @@
 /** @vitest-environment jsdom */
 /// <reference types="@testing-library/jest-dom" />
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, cleanup } from "@testing-library/preact";
+import { render, cleanup, screen } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
+import userEvent from "@testing-library/user-event";
 import { createContext } from "preact";
 import { TasksPage } from "../../TasksPage.js";
 import { useProjectData, ProjectDataContext } from "../../context/project-data.js";
@@ -72,16 +73,17 @@ describe("TasksPage.cards Integration", () => {
   });
 
   it("renders task cards with dependencies driven from project hooks correctly mapped to board state", () => {
+    const selectSprint = vi.fn();
         (useProjectData as unknown as any).mockReturnValue({
       projects: [{ id: "proj_1", name: "Project Alpha" }],
       selectedProject: { id: "proj_1", name: "Project Alpha" },
     });
 
         (useSprints as unknown as any).mockReturnValue({
-      data: [{ id: "sprint_1", number: 1, active: true }],
+      data: [{ id: "sprint_1", number: 1, name: "Sprint One", status: "running", date: "Jan 1", tasksCount: 2, completion: 50, active: true }],
       loading: false,
       selectedSprintId: "sprint_1",
-      selectSprint: vi.fn(),
+      selectSprint,
       refetch: vi.fn(),
     });
 
@@ -137,6 +139,54 @@ describe("TasksPage.cards Integration", () => {
 
     // Additional dependency text verification
     expect(getByText("Foundation Setup")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: /in progress/i })).toHaveAccessibleDescription(/In Progress lane contains 1 task/i);
+    expect(screen.getByRole("region", { name: /completed/i })).toHaveAccessibleDescription(/Completed lane contains 1 task/i);
+    expect(screen.getByRole("button", { name: /Task sprint scope: SPR-1: Sprint One/i })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("supports keyboard operation in the sprint scope selector", async () => {
+    const user = userEvent.setup();
+    const selectSprint = vi.fn();
+    (useProjectData as unknown as any).mockReturnValue({
+      projects: [{ id: "proj_1", name: "Project Alpha" }],
+      selectedProject: { id: "proj_1", name: "Project Alpha" },
+    });
+    (useSprints as unknown as any).mockReturnValue({
+      data: [
+        { id: "sprint_1", number: 1, name: "Sprint One", status: "running", date: "Jan 1", tasksCount: 1, completion: 50, active: true },
+        { id: "sprint_2", number: 2, name: "Sprint Two", status: "idle", date: "Jan 2", tasksCount: 0, completion: 0, active: false },
+      ],
+      loading: false,
+      selectedSprintId: "sprint_1",
+      selectSprint,
+      refetch: vi.fn(),
+    });
+    (useProjectTasks as any).mockReturnValue({
+      tasks: [],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "proj_1", name: "Project Alpha" } as any], selectedProject: { id: "proj_1", name: "Project Alpha" } as any } as any}>
+        <TasksPage />
+      </ProjectDataContext.Provider>
+    );
+
+    const trigger = screen.getByRole("button", { name: /Task sprint scope: SPR-1: Sprint One/i });
+    trigger.focus();
+    await user.keyboard("{ArrowDown}");
+
+    const listbox = screen.getByRole("listbox", { name: "Task sprint scope" });
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(listbox).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /All Sprints/i })).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByRole("option", { name: /SPR-1: Sprint One/i })).toHaveAttribute("aria-selected", "true");
+
+    await user.keyboard("{End}{Enter}");
+    expect(selectSprint).toHaveBeenCalledWith("sprint_2");
+    expect(trigger).toHaveFocus();
   });
 
   it("verifies optimistic task rendering and layout stability", () => {

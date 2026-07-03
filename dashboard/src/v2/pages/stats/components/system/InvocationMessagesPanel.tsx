@@ -189,6 +189,9 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
   return (
     <div
       id={`invocation-messages-${invocation.id}`}
+      role="region"
+      aria-label={`Invocation ${invocation.id} message transcript`}
+      aria-busy={loading ? "true" : undefined}
       className={`${SUBPANEL_CLASS} mt-2 max-h-[560px] w-full min-w-0 max-w-full space-y-4 overflow-y-auto p-3 text-[color:var(--stats-detail-color)] sm:p-4`}
     >
       {invocation.lastErrorMessage ? (
@@ -254,16 +257,16 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
       </div>
 
       {loading ? (
-        <div className={`${SUBPANEL_CLASS} flex items-center gap-2 px-3 py-3 text-sm text-[color:var(--stats-label-color)]`}>
-          <Loader2 className="h-4 w-4 motion-safe:animate-spin" />
+        <div role="status" aria-live="polite" aria-busy="true" className={`${SUBPANEL_CLASS} flex items-center gap-2 px-3 py-3 text-sm text-[color:var(--stats-label-color)]`}>
+          <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden="true" />
           Loading messages
         </div>
       ) : error ? (
-        <div className={`rounded-xl px-3 py-3 text-sm ${STATUS_TONE_CLASS.negative}`}>
+        <div role="alert" className={`rounded-xl px-3 py-3 text-sm ${STATUS_TONE_CLASS.negative}`}>
           Failed to load invocation messages — {error}
         </div>
       ) : messages.length === 0 ? (
-        <div className={`${SUBPANEL_CLASS} px-3 py-4 text-sm text-[color:var(--stats-label-color)]`}>
+        <div role="status" aria-live="polite" className={`${SUBPANEL_CLASS} px-3 py-4 text-sm text-[color:var(--stats-label-color)]`}>
           No messages recorded for this invocation
         </div>
       ) : (
@@ -287,11 +290,11 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
               <article
                 key={message.id}
                 aria-label={`${message.role} message ${index + 1}`}
-                className={`${ROLE_CARD_CLASS[message.role]} min-w-0 ${isErrorMessage ? "border-l-2 border-l-[color:var(--stats-negative-text)] text-[color:var(--stats-negative-text)]" : ""}`}
+                className={`${ROLE_CARD_CLASS[message.role]} min-w-0 break-words [overflow-wrap:anywhere] ${isErrorMessage ? "border-l-2 border-l-[color:var(--stats-negative-text)] text-[color:var(--stats-negative-text)]" : ""}`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-2">
-                    <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full ${ROLE_ICON_CLASS[message.role]}`}>
+                    <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full ${ROLE_ICON_CLASS[message.role]}`} aria-hidden="true">
                       {message.role === "system" ? <Settings className="h-3.5 w-3.5" /> : null}
                       {message.role === "user" ? <User className="h-3.5 w-3.5" /> : null}
                       {message.role === "assistant" ? <Bot className="h-3.5 w-3.5" /> : null}
@@ -325,6 +328,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
                     type="button"
                     onClick={() => toggleSystemMessage(message.id)}
                     aria-expanded={isExpanded}
+                    aria-label={`${isExpanded ? "Collapse" : "Expand"} system message ${index + 1}`}
                     className={`mt-2 inline-flex items-center gap-1.5 rounded px-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)] transition-colors hover:text-[color:var(--stats-value-color)] ${CONTROL_FOCUS_CLASS}`}
                   >
                     {isExpanded ? "Show less" : "Show more"}

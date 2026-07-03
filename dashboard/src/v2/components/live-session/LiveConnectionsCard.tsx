@@ -77,7 +77,7 @@ const ConnectionRow: FunctionComponent<{ connection: ExecutionDashboardSnapshot[
       <div className="flex items-start justify-between gap-2.5">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">{connection.displayName}</span>
+            <span className="min-w-0 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">{connection.displayName}</span>
             <span className="rounded-full border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
               {CONNECTION_ROLE_LABELS[connection.role] || connection.role}
             </span>
@@ -89,17 +89,17 @@ const ConnectionRow: FunctionComponent<{ connection: ExecutionDashboardSnapshot[
           </div>
 
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
-            <span>{connection.transport}</span>
-            {connection.model ? <span>· {connection.model}</span> : null}
-            <span className="truncate break-all">· {connection.connectionKey}</span>
+            <span className="break-words">{connection.transport}</span>
+            {connection.model ? <span className="break-words">· {connection.model}</span> : null}
+            <span className="break-all">· {connection.connectionKey}</span>
           </div>
 
           {(connection.machineName || connection.platform || connection.arch || connection.localExecutionRuntime) && (
             <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
-              {connection.machineName ? <span>{connection.machineName}</span> : null}
-              {connection.platform ? <span>· {connection.platform}</span> : null}
-              {connection.arch ? <span>· {connection.arch}</span> : null}
-              {connection.localExecutionRuntime ? <span>· {connection.localExecutionRuntime}</span> : null}
+              {connection.machineName ? <span className="break-all">{connection.machineName}</span> : null}
+              {connection.platform ? <span className="break-words">· {connection.platform}</span> : null}
+              {connection.arch ? <span className="break-words">· {connection.arch}</span> : null}
+              {connection.localExecutionRuntime ? <span className="break-words">· {connection.localExecutionRuntime}</span> : null}
             </div>
           )}
         </div>
@@ -145,7 +145,7 @@ const ConnectionRow: FunctionComponent<{ connection: ExecutionDashboardSnapshot[
           )}
 
           {connection.instruction && (
-            <p className="line-clamp-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+            <p className="line-clamp-2 break-words text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
               {connection.instruction}
             </p>
           )}
@@ -169,14 +169,14 @@ export const LiveConnectionsCard: FunctionComponent<{
   }, [snapshot.connections, snapshot.connections.length]);
 
   return (
-    <aside className="group relative overflow-hidden rounded-[1.4rem] border border-black/[0.06] bg-white/75 p-4 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/65 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+    <aside role="region" aria-label="Live connections" className="group relative overflow-hidden rounded-[1.4rem] border border-black/[0.06] bg-white/75 p-4 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/65 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
       <WaveFluid accentHex="#00E0A0" isActive={activeConnections.length > 0} />
       <BorderTrace accentHex="#00E0A0" />
 
       <div className="relative z-10">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <Radio className="h-4 w-4 text-signal-500" strokeWidth={1.5} />
+            <Radio className="h-4 w-4 text-signal-500" strokeWidth={1.5} aria-hidden="true" />
             <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400">Live Connections</span>
           </div>
           <span className="rounded-full border border-black/[0.06] bg-black/[0.02] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.02] dark:text-slate-400">
@@ -186,10 +186,10 @@ export const LiveConnectionsCard: FunctionComponent<{
 
         <div className="mb-4 grid grid-cols-2 gap-2">
           {[
-            { icon: <Wifi className="h-3 w-3" strokeWidth={2} />, label: "Active", value: activeConnections.length, tone: "text-signal-500" },
-            { icon: <Radio className="h-3 w-3" strokeWidth={2} />, label: "Listening", value: listeningConnections.length, tone: "text-status-green" },
-            { icon: <Bot className="h-3 w-3" strokeWidth={2} />, label: "Workers", value: workerConnections.length, tone: "text-slate-700 dark:text-slate-200" },
-            { icon: <Server className="h-3 w-3" strokeWidth={2} />, label: "Inbox", value: pendingInboxTotal, tone: "text-status-amber" },
+            { icon: <Wifi className="h-3 w-3" strokeWidth={2} aria-hidden="true" />, label: "Active", value: activeConnections.length, tone: "text-signal-500" },
+            { icon: <Radio className="h-3 w-3" strokeWidth={2} aria-hidden="true" />, label: "Listening", value: listeningConnections.length, tone: "text-status-green" },
+            { icon: <Bot className="h-3 w-3" strokeWidth={2} aria-hidden="true" />, label: "Workers", value: workerConnections.length, tone: "text-slate-700 dark:text-slate-200" },
+            { icon: <Server className="h-3 w-3" strokeWidth={2} aria-hidden="true" />, label: "Inbox", value: pendingInboxTotal, tone: "text-status-amber" },
           ].map((tile) => (
             <div key={tile.label} className="rounded-lg border border-black/[0.04] bg-black/[0.02] px-2.5 py-2 dark:border-white/[0.05] dark:bg-white/[0.02]">
               <div className="flex items-center justify-between">
@@ -202,11 +202,11 @@ export const LiveConnectionsCard: FunctionComponent<{
         </div>
 
         {snapshot.connections.length === 0 ? (
-          <p className="rounded-lg border border-black/[0.04] bg-black/[0.015] px-3 py-2.5 text-[11px] font-mono text-slate-400 dark:border-white/[0.05] dark:bg-white/[0.015] dark:text-slate-600">
+          <p role="status" aria-live="polite" className="rounded-lg border border-black/[0.04] bg-black/[0.015] px-3 py-2.5 text-[11px] font-mono text-slate-400 dark:border-white/[0.05] dark:bg-white/[0.015] dark:text-slate-600">
             No listeners or workers are connected to the selected project yet.
           </p>
         ) : (
-          <div className="dashboard-scrollbar max-h-[50dvh] sm:max-h-[30rem] space-y-2 overflow-y-auto pr-1" aria-live="polite" aria-label="Live connections feed">
+          <div className="dashboard-scrollbar max-h-[50dvh] sm:max-h-[30rem] space-y-2 overflow-y-auto pr-1" role="log" aria-live="polite" aria-label="Live connections feed">
             {snapshot.connections.map((connection) => (
               <ConnectionRow key={connection.id} connection={connection} />
             ))}

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { h, Fragment } from "preact";
+import { useState } from "preact/hooks";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";
 import { useFocusTrap } from "../use-focus-trap.js";
 import { expect, test, describe, afterEach, vi } from "vitest";
@@ -179,5 +180,29 @@ describe("useFocusTrap", () => {
       expect(document.activeElement).toBe(trigger);
     });
     expect(focusSpy).toHaveBeenLastCalledWith({ preventScroll: true });
+  });
+
+  test("keeps focus trapped when the focused element is removed dynamically", async () => {
+    const DynamicTrap = () => {
+      const [showFirst, setShowFirst] = useState(true);
+      const trapRef = useFocusTrap(true, {});
+      return (
+        <div ref={trapRef as any} data-testid="trap">
+          {showFirst && <button id="dynamic-first" onClick={() => setShowFirst(false)}>Remove me</button>}
+          <button id="dynamic-second">Second</button>
+        </div>
+      );
+    };
+
+    render(<DynamicTrap />);
+
+    await waitFor(() => {
+      expect(document.activeElement?.id).toBe("dynamic-first");
+    });
+
+    fireEvent.click(document.getElementById("dynamic-first") as HTMLElement);
+    fireEvent.keyDown(document, { key: "Tab" });
+
+    expect(document.activeElement?.id).toBe("dynamic-second");
   });
 });

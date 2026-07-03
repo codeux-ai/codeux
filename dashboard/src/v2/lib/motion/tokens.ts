@@ -1,5 +1,25 @@
 import { useResolvedMotionDuration } from "../../hooks/use-reduced-motion.js";
 
+export const INTERACTION_CONTRACT_NAMES = [
+  "controlFeedback",
+  "enterExit",
+  "expansionCollapse",
+  "selectionMovement",
+  "listReveal",
+  "listReorder",
+  "inlineValidation",
+  "asyncFeedback"
+] as const;
+
+export type InteractionContractName = typeof INTERACTION_CONTRACT_NAMES[number];
+
+export interface CssInteractionToken {
+  duration: string;
+  ease: string;
+}
+
+export type CssInteractionTokenMap = Record<InteractionContractName, CssInteractionToken>;
+
 export const MOTION_TOKENS = {
   timing: {
     fast: "150ms",
@@ -14,7 +34,7 @@ export const MOTION_TOKENS = {
   }
 } as const;
 
-export const INTERACTION_TOKENS = {
+export const INTERACTION_TOKENS: CssInteractionTokenMap = {
   controlFeedback: {
     duration: MOTION_TOKENS.timing.fast,
     ease: MOTION_TOKENS.easing.standard
@@ -49,11 +69,51 @@ export const INTERACTION_TOKENS = {
   }
 } as const;
 
+export const INTERACTION_CSS_VARIABLES: CssInteractionTokenMap = {
+  controlFeedback: {
+    duration: "var(--interaction-control-feedback-duration)",
+    ease: "var(--interaction-control-feedback-ease)"
+  },
+  enterExit: {
+    duration: "var(--interaction-enter-exit-duration)",
+    ease: "var(--interaction-enter-exit-ease)"
+  },
+  expansionCollapse: {
+    duration: "var(--interaction-expansion-collapse-duration)",
+    ease: "var(--interaction-expansion-collapse-ease)"
+  },
+  selectionMovement: {
+    duration: "var(--interaction-selection-movement-duration)",
+    ease: "var(--interaction-selection-movement-ease)"
+  },
+  listReveal: {
+    duration: "var(--interaction-list-reveal-duration)",
+    ease: "var(--interaction-list-reveal-ease)"
+  },
+  listReorder: {
+    duration: "var(--interaction-list-reorder-duration)",
+    ease: "var(--interaction-list-reorder-ease)"
+  },
+  inlineValidation: {
+    duration: "var(--interaction-inline-validation-duration)",
+    ease: "var(--interaction-inline-validation-ease)"
+  },
+  asyncFeedback: {
+    duration: "var(--interaction-async-feedback-duration)",
+    ease: "var(--interaction-async-feedback-ease)"
+  }
+} as const;
+
+export function buildInteractionTransition(contract: InteractionContractName, properties = "all"): string {
+  const token = INTERACTION_CSS_VARIABLES[contract];
+  return `${properties} ${token.duration} ${token.ease}`;
+}
+
 /**
  * Hook to get interaction tokens with CSS string durations safely resolved for reduced motion.
  * Returns durations as "0ms" when reduced motion is preferred.
  */
-export function useInteractionTokens() {
+export function useInteractionTokens(): CssInteractionTokenMap {
   const controlFeedbackDuration = useResolvedMotionDuration(INTERACTION_TOKENS.controlFeedback.duration);
   const enterExitDuration = useResolvedMotionDuration(INTERACTION_TOKENS.enterExit.duration);
   const expansionCollapseDuration = useResolvedMotionDuration(INTERACTION_TOKENS.expansionCollapse.duration);
@@ -64,37 +124,13 @@ export function useInteractionTokens() {
   const asyncFeedbackDuration = useResolvedMotionDuration(INTERACTION_TOKENS.asyncFeedback.duration);
 
   return {
-    controlFeedback: {
-      ...INTERACTION_TOKENS.controlFeedback,
-      duration: controlFeedbackDuration
-    },
-    enterExit: {
-      ...INTERACTION_TOKENS.enterExit,
-      duration: enterExitDuration
-    },
-    expansionCollapse: {
-      ...INTERACTION_TOKENS.expansionCollapse,
-      duration: expansionCollapseDuration
-    },
-    selectionMovement: {
-      ...INTERACTION_TOKENS.selectionMovement,
-      duration: selectionMovementDuration
-    },
-    listReveal: {
-      ...INTERACTION_TOKENS.listReveal,
-      duration: listRevealDuration
-    },
-    listReorder: {
-      ...INTERACTION_TOKENS.listReorder,
-      duration: listReorderDuration
-    },
-    inlineValidation: {
-      ...INTERACTION_TOKENS.inlineValidation,
-      duration: inlineValidationDuration
-    },
-    asyncFeedback: {
-      ...INTERACTION_TOKENS.asyncFeedback,
-      duration: asyncFeedbackDuration
-    }
+    controlFeedback: { ...INTERACTION_TOKENS.controlFeedback, duration: controlFeedbackDuration },
+    enterExit: { ...INTERACTION_TOKENS.enterExit, duration: enterExitDuration },
+    expansionCollapse: { ...INTERACTION_TOKENS.expansionCollapse, duration: expansionCollapseDuration },
+    selectionMovement: { ...INTERACTION_TOKENS.selectionMovement, duration: selectionMovementDuration },
+    listReveal: { ...INTERACTION_TOKENS.listReveal, duration: listRevealDuration },
+    listReorder: { ...INTERACTION_TOKENS.listReorder, duration: listReorderDuration },
+    inlineValidation: { ...INTERACTION_TOKENS.inlineValidation, duration: inlineValidationDuration },
+    asyncFeedback: { ...INTERACTION_TOKENS.asyncFeedback, duration: asyncFeedbackDuration }
   };
 }

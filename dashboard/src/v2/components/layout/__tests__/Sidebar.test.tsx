@@ -54,5 +54,16 @@ describe("Sidebar", () => {
     expect(expandButton).toBeInTheDocument();
     expect(within(settingsLink).queryByText("Settings", { selector: "[aria-hidden='true']" })).not.toBeInTheDocument();
     expect(within(expandButton).queryByText("Expand", { selector: "[aria-hidden='true']" })).not.toBeInTheDocument();
+    expect(expandButton).toHaveAttribute("aria-expanded", "false");
+    expect(expandButton).toHaveAttribute("aria-controls", "primary-navigation");
+  });
+
+  it("names mobile sidebar landmarks distinctly", () => {
+    localStorage.setItem("codeux:sidebar:minimized", "false");
+
+    render(<Sidebar isMobile isOpen onClose={vi.fn()} />);
+
+    expect(screen.getByRole("dialog", { name: "Mobile primary navigation" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Mobile workspace navigation" })).toBeInTheDocument();
   });
 });

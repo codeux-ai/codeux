@@ -25,6 +25,7 @@ function DestructiveConfirmButton({
   const [isHolding, setIsHolding] = useState(false);
   const [progress, setProgress] = useState(0);
   const reducedMotion = useReducedMotion();
+  const progressId = "destructive-confirm-progress";
 
   const holdDuration = 1000;
   const holdTimerRef = useRef<number | null>(null);
@@ -159,10 +160,10 @@ function DestructiveConfirmButton({
       onContextMenu={(e) => e.preventDefault()}
       className={`relative overflow-hidden ${className}`}
       style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
-      aria-busy={isLoading}
+      aria-busy={isLoading ? "true" : undefined}
       disabled={isLoading}
-      aria-live="polite"
-      aria-label={isHolding ? `Holding — ${Math.floor(progress / 10) * 10}% complete, release to cancel` : `Hold to ${label}`}
+      aria-label={`Hold to ${label}`}
+      aria-describedby={progressId}
     >
       {isHolding && (
         <div
@@ -175,6 +176,9 @@ function DestructiveConfirmButton({
       <span className="relative z-10 flex items-center justify-center gap-2">
         {isLoading && <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /><span className="sr-only">Processing, please wait</span></>}
         {isHolding ? `Hold to ${label}` : isLoading ? "Processing..." : label}
+      </span>
+      <span id={progressId} className="sr-only">
+        {isHolding ? `Hold progress ${Math.round(progress)} percent. Release to cancel.` : "Hold until complete. Release before completion to cancel."}
       </span>
     </button>
   );
@@ -317,9 +321,10 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
         aria-describedby={body ? "confirm-dialog-body" : undefined}
-        className="my-auto w-full max-w-[28rem] overflow-hidden rounded-[1.5rem] border border-black/[0.08] bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)] outline-none dark:border-white/[0.08] dark:bg-void-800 dark:shadow-[0_28px_90px_rgba(0,0,0,0.56)]"
+        tabIndex={-1}
+        className="my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-[1.5rem] border border-black/[0.08] bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)] outline-none dark:border-white/[0.08] dark:bg-void-800 dark:shadow-[0_28px_90px_rgba(0,0,0,0.56)] sm:max-w-[28rem]"
       >
-        <div className={`border-b p-5 ${toneStyles.panel}`}>
+        <div className={`shrink-0 border-b p-5 ${toneStyles.panel}`}>
           <div className="flex items-start gap-4">
             <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${toneStyles.ring}`}>
               <ToneIcon className="h-5 w-5" strokeWidth={1.8} />
@@ -332,7 +337,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
             </div>
           </div>
         </div>
-        <div className="p-5 pt-4">
+        <div className="min-h-0 flex-1 overflow-y-auto p-5 pt-4">
           {body && (
             <p id="confirm-dialog-body" className="text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-200">
               {body}
@@ -346,7 +351,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
             </div>
           )}
         </div>
-        <div className="flex flex-col-reverse gap-2 border-t border-black/[0.06] bg-void-50/80 p-4 dark:border-white/[0.08] dark:bg-white/[0.04] sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+        <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-black/[0.06] bg-void-50/80 p-4 dark:border-white/[0.08] dark:bg-white/[0.04] sm:flex-row sm:items-center sm:justify-end sm:gap-3">
           <button
             type="button"
             onClick={() => handleClose(onCancel)}

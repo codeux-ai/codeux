@@ -36,6 +36,28 @@ test('handles disabled controls', () => {
     expect(toggle).toBeDisabled();
 });
 
+test('uses signal focus unless danger is requested', () => {
+    render(
+        <div>
+            <Toggle value={false} onChange={vi.fn()} aria-label="Standard toggle" />
+            <Toggle value={true} onChange={vi.fn()} aria-label="Danger toggle" danger />
+        </div>
+    );
+
+    expect(screen.getByRole('switch', { name: 'Standard toggle' })).toHaveClass('focus-visible:ring-[var(--focus-ring-signal)]');
+    expect(screen.getByRole('switch', { name: 'Danger toggle' })).toHaveClass('focus-visible:ring-[var(--focus-ring-danger)]');
+});
+
+test('uses tokenized transition duration', () => {
+    render(<Toggle value={false} onChange={vi.fn()} aria-label="Token toggle" />);
+
+    const toggle = screen.getByRole('switch', { name: 'Token toggle' });
+    expect(toggle).toHaveStyle({
+        transitionDuration: '150ms',
+        transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)'
+    });
+});
+
 test('respects reduced motion', () => {
     // We already mock ResizeObserver globally, to test useReducedMotion we can mock matchMedia
     const originalMatchMedia = window.matchMedia;

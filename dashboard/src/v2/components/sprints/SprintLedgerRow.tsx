@@ -255,8 +255,8 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
         </button>
       </TableCell>
       <TableCell className={`lg:w-[120px] lg:min-w-[120px] ${desktopCellTone}`} mobileLabel="Sprint ID">
-        <div className="font-mono text-sm font-bold text-[var(--text-primary)] truncate">{formatSprintKey(sprint, sprintKeyPrefix)}</div>
-        <div className="mt-1 text-[10px] font-bold text-slate-400 truncate">
+        <div className="font-mono text-sm font-bold text-[var(--text-primary)] break-all">{formatSprintKey(sprint, sprintKeyPrefix)}</div>
+        <div className="mt-1 text-[10px] font-bold text-slate-400 break-all">
           {shortenId(sprint.id)}
         </div>
       </TableCell>
@@ -364,7 +364,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
         </div>
       </TableCell>
       <TableCell align="right" isLast className={`lg:w-[140px] lg:min-w-[140px] ${desktopCellTone}`} mobileLabel="Controls">
-        <div className="flex flex-wrap items-center gap-2 lg:justify-end lg:whitespace-nowrap">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
           <SprintControls
             isActive={Boolean(activeRun)}
             isPaused={sprint.status === "paused"}
@@ -377,7 +377,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           <a
             href={`/tasks?sprintId=${encodeURIComponent(sprint.id)}`}
             aria-label={`Open sprint ${sprint.name}`}
-            className="inline-flex h-10 min-w-[5rem] flex-1 items-center justify-center gap-2 rounded-xl border border-black/[0.06] bg-white/80 px-4 text-xs font-bold text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white sm:flex-none"
+            className="inline-flex min-h-10 min-w-[5rem] flex-1 flex-wrap items-center justify-center gap-2 rounded-xl border border-black/[0.06] bg-white/80 px-4 py-1.5 text-xs font-bold leading-tight text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white sm:flex-none"
           >
             Open
             <Maximize2 className="h-3.5 w-3.5" />

@@ -408,7 +408,7 @@ describe("SettingsIntegrationsPanel", () => {
         expect(container.textContent).toContain("Gemini Primary");
       });
 
-      const localCopyBtn = screen.getByRole("button", { name: /Local Copy/i });
+      const localCopyBtn = screen.getByRole("radio", { name: /Local Copy/i });
       fireEvent.click(localCopyBtn);
 
       expect(state.updateSystem).toHaveBeenCalled();
@@ -438,7 +438,7 @@ describe("SettingsIntegrationsPanel", () => {
         expect(container.textContent).toContain("Codex Primary");
       });
 
-      const localCopyBtn = screen.getByRole("button", { name: /Local Copy/i });
+      const localCopyBtn = screen.getByRole("radio", { name: /Local Copy/i });
       fireEvent.click(localCopyBtn);
 
       expect(state.updateSystem).toHaveBeenCalled();
@@ -486,7 +486,7 @@ describe("SettingsIntegrationsPanel", () => {
         expect(container.textContent).toContain("Claude Primary");
       });
 
-      const localCopyBtn = screen.getByRole("button", { name: /Local Copy/i });
+      const localCopyBtn = screen.getByRole("radio", { name: /Local Copy/i });
       fireEvent.click(localCopyBtn);
 
       expect(state.updateSystem).toHaveBeenCalled();
@@ -518,7 +518,7 @@ describe("SettingsIntegrationsPanel", () => {
         expect(container.textContent).toContain("Qwen Primary");
       });
 
-      const localCopyBtn = screen.getByRole("button", { name: /Local Copy/i });
+      const localCopyBtn = screen.getByRole("radio", { name: /Local Copy/i });
       fireEvent.click(localCopyBtn);
 
       expect(state.updateSystem).toHaveBeenCalled();
@@ -549,7 +549,7 @@ describe("SettingsIntegrationsPanel", () => {
         expect(container.textContent).toContain("OpenCode Primary");
       });
 
-      const localCopyBtn = screen.getByRole("button", { name: /Local Copy/i });
+      const localCopyBtn = screen.getByRole("radio", { name: /Local Copy/i });
       fireEvent.click(localCopyBtn);
 
       expect(state.updateSystem).toHaveBeenCalled();

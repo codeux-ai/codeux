@@ -9,9 +9,12 @@ interface MetricCardProps {
 }
 
 export const MetricCard: FunctionComponent<MetricCardProps> = ({ children, hoverTint, accentHex }) => (
-    <div className="relative overflow-hidden bg-white/80 dark:bg-void-800/75 backdrop-blur-sm border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] flex flex-col justify-between group stat-card-premium">
+    <div className="relative flex min-w-0 flex-col justify-between overflow-hidden rounded-[1.75rem] border border-[color:var(--border-hairline)] bg-[var(--surface-metric-card)] p-7 shadow-[var(--elevation-base)] backdrop-blur-sm dark:bg-[var(--surface-metric-card-dark)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] group stat-card-premium">
         {/* Hover tint */}
-        <div className={`absolute inset-0 bg-transparent ${hoverTint} transition-colors duration-500 pointer-events-none`} />
+        <div
+            className={`absolute inset-0 bg-transparent ${hoverTint} pointer-events-none motion-safe:transition-colors motion-reduce:transition-none`}
+            style={{ transitionDuration: "var(--interaction-async-feedback-duration)", transitionTimingFunction: "var(--interaction-async-feedback-ease)" }}
+        />
         <WaveFluid accentHex={accentHex} />
         <BorderTrace accentHex={accentHex} />
         {children}

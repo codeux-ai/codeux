@@ -128,6 +128,27 @@ describe("FieldWrapper", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Forced error");
   });
 
+  it("removes aria-errormessage when the error is no longer exposed", () => {
+    const { rerender } = render(
+      <FieldWrapper label="Email" htmlFor="email-input" error="Required" forceTouch={true}>
+        <Input id="email-input" />
+      </FieldWrapper>
+    );
+
+    const input = screen.getByRole("textbox");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAttribute("aria-errormessage", "email-input-error");
+
+    rerender(
+      <FieldWrapper label="Email" htmlFor="email-input">
+        <Input id="email-input" />
+      </FieldWrapper>
+    );
+
+    expect(input).not.toHaveAttribute("aria-invalid", "true");
+    expect(input).not.toHaveAttribute("aria-errormessage");
+  });
+
   it("renders helperText and wires aria-describedby correctly", () => {
     render(
       <FieldWrapper label="Test Label" htmlFor="test-input" helperText="This is a helper">

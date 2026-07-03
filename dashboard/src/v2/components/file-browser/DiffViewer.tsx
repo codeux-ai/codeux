@@ -50,7 +50,7 @@ export const DiffViewer: FunctionComponent<DiffViewerProps> = ({ diff, loading, 
   if (!diff) {
     return (
       <ViewerShell>
-        <span class="flex flex-col gap-2 items-center text-slate-500 text-balance break-words">
+        <span class="flex flex-col gap-2 items-center text-slate-500 text-balance break-words" role="status">
           <span class="font-medium text-slate-700 dark:text-slate-300">No change selected</span>
           <span>Select a changed file to see what changed versus the default branch.</span>
         </span>
@@ -73,7 +73,7 @@ export const DiffViewer: FunctionComponent<DiffViewerProps> = ({ diff, loading, 
   }
 
   return (
-    <div class="min-w-0 flex-1 h-full w-full">
+    <section class="min-w-0 flex-1 h-full w-full" aria-label={`Diff for ${diff.path}`}>
       <DiffEditor
         height="100%"
         theme={isDark ? MONACO_DARK_THEME : MONACO_LIGHT_THEME}
@@ -92,6 +92,7 @@ export const DiffViewer: FunctionComponent<DiffViewerProps> = ({ diff, loading, 
           readOnly: true,
           domReadOnly: true,
           renderSideBySide: sideBySide,
+          ariaLabel: `Diff for ${diff.path}`,
           fontSize: 13,
           fontFamily: "'JetBrains Mono', ui-monospace, monospace",
           smoothScrolling: true,
@@ -101,6 +102,6 @@ export const DiffViewer: FunctionComponent<DiffViewerProps> = ({ diff, loading, 
           scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
         }}
       />
-    </div>
+    </section>
   );
 };

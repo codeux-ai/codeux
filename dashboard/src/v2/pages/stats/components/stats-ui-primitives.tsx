@@ -1,5 +1,5 @@
 import { buildDonutSlices } from "./stats-geometry.js";
-import type { FunctionComponent, ComponentType } from "preact";
+import type { FunctionComponent, ComponentType, JSX } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import "../styles/stats-theme.css";
@@ -199,6 +199,7 @@ export const ViewToggle: FunctionComponent<{
   ariaLabel?: string;
   className?: string;
 }> = ({ value, onChange, ariaLabel = "Analytics modes", className = "" }) => {
+  const buttonRefs = useRef<Partial<Record<StatsVisualMode, HTMLButtonElement | null>>>({});
   const modes: Array<{ id: StatsVisualMode; label: string; accessibleLabel: string; icon: LucideIcon }> = [
     { id: "trend", label: "Trend", accessibleLabel: "Trend", icon: BarChart3 },
     { id: "composition", label: "Composition", accessibleLabel: "Composition", icon: PieChart },
@@ -207,11 +208,43 @@ export const ViewToggle: FunctionComponent<{
     { id: "ledgers", label: "Ledgers", accessibleLabel: "Ledgers", icon: Layers3 },
     { id: "system", label: "System", accessibleLabel: "System", icon: Terminal },
   ];
+  const focusMode = (index: number) => {
+    const nextMode = modes[index];
+    if (!nextMode) {
+      return;
+    }
+
+    onChange(nextMode.id);
+    buttonRefs.current[nextMode.id]?.focus();
+  };
+
+  const handleKeyDown = (event: JSX.TargetedKeyboardEvent<HTMLDivElement>) => {
+    if (!["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Home", "End"].includes(event.key)) {
+      return;
+    }
+
+    event.preventDefault();
+    const activeElement = document.activeElement;
+    const focusedIndex = modes.findIndex((mode) => buttonRefs.current[mode.id] === activeElement);
+    const currentIndex = focusedIndex >= 0 ? focusedIndex : modes.findIndex((mode) => mode.id === value);
+    if (event.key === "Home") {
+      focusMode(0);
+      return;
+    }
+    if (event.key === "End") {
+      focusMode(modes.length - 1);
+      return;
+    }
+
+    const delta = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
+    focusMode((currentIndex + delta + modes.length) % modes.length);
+  };
 
   return (
     <div
       role="group"
       aria-label={ariaLabel}
+      onKeyDown={handleKeyDown}
       className={`flex w-full max-w-full min-w-0 flex-wrap gap-1 p-1 ${CHIP_CLASS} ${className}`.trim()}
     >
       {modes.map((mode) => {
@@ -221,6 +254,9 @@ export const ViewToggle: FunctionComponent<{
           <button
             key={mode.id}
             type="button"
+            ref={(node) => {
+              buttonRefs.current[mode.id] = node;
+            }}
             onClick={() => onChange(mode.id)}
             aria-pressed={selected}
             aria-label={mode.accessibleLabel}

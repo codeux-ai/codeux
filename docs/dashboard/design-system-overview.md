@@ -20,3 +20,13 @@ The overview page acts as a centralized "Polished Operational Command Surface." 
 
 - Use the standardized `EmptyState` component for unified typography and iconography placement when a primary list or grid is empty (e.g. "No Active Streams"). Avoid custom dashed borders and ad-hoc layouts.
 - For structural sidebar panels (like Telemetry) that lack data, ensure padding remains consistent (`p-8`) with other surfaces and maintain the unified height and styling of the component as if it were full.
+
+## Accessibility And Runtime State Contracts
+
+- Overview pages must preserve a named route landmark and named operational regions for metric cards, primary work sections, and live telemetry. `HeaderStats` and `OverviewTelemetry` are the reference source areas for overview metric and telemetry semantics.
+- Loading metric decks use polite `role="status"` with `aria-busy`; loaded metric groups use named `region` containers. Avoid announcing decorative counters or background animation as separate content.
+- Overview telemetry distinguishes urgency: loading, empty, pending, running, and timeline updates are polite, while project/transport failures that block trust in the telemetry rail are alerts. Timeline feeds use a named `role="log"` so updates are discoverable without replacing the whole page context.
+- Dense runtime labels such as project names, sprint keys, provider/model labels, branch names, workflow names, and event snippets must wrap inside their cards or rails. Do not rely on hover-only truncation for operational values.
+- The Warm Void visual language remains restrained: neutral glass surfaces for structure, Signal Jade for primary active/focus/running signals, and Ember/status tones only for intervention, warning, error, and destructive states.
+
+For repeatable page-level checks, use the [Dashboard Accessibility Quality Audit](./accessibility-quality-audit.md).
