@@ -27,6 +27,7 @@ While Code UX trusts the developer and any connected systems, several specific p
 
 ### Preview & File Capabilities
 - **File-Browser Path Constraints:** The file-browser strictly enforces directory containment. Path traversal attempts (using `..` or null-byte injections) are validated out; the service prevents any reading or exploration of directories outside the target workspace.
+- **Validated Filesystem Sinks:** Directory browsing, in-repository knowledge ingestion, and repository initialization resolve candidate paths through shared containment helpers before calling filesystem APIs. Symlink targets are checked after canonicalization, and the validated path value is the only value passed to the filesystem sink.
 - **Upload/Path Ingestion Limits:** Data ingestion points and upload facilities restrict excessive file sizes and deeply-nested paths. This maintains stability and limits arbitrary disk exhaustion or path-length manipulation.
 - **Markdown URL Sanitization:** Markdown and generated HTML correctly sanitize embedded links and image sources, mitigating JavaScript URI injections (`javascript:`) in rendered output.
 - **Preview Proxy Hardening:** The local preview proxy enforces clear boundaries on the local ports and destination hosts it will forward traffic towards, reducing blind SSRF proxy abuse.
@@ -35,6 +36,10 @@ While Code UX trusts the developer and any connected systems, several specific p
 
 ### Redaction
 - **Log and Output Filtering:** Internal API keys, credentials, and sensitive configurations are actively scrubbed and redacted from application logs, debug outputs, and exported execution traces.
+
+### Subprocess & Settings Mutation Safety
+- **Shell-Free Command Execution:** Shared subprocess execution validates command names, argument null bytes, and stdin file paths immediately before spawning, then runs with `shell: false` so arguments are not reinterpreted by a shell.
+- **Prototype Pollution Guards:** Dotted settings paths are parsed through a safe-key validator before clone-on-write mutation. `__proto__`, `constructor`, `prototype`, and empty path segments are rejected before any assignment.
 
 ## Trust Model & Limitations
 Code UX is built as a single-user system.

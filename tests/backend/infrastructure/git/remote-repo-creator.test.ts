@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const validateSafeRepoName = vi.fn();
 const validateSafeClonePath = vi.fn((dir: string) => dir);
-const validateNonEmptyDir = vi.fn();
+const validateNonEmptyDir = vi.fn((dir: string) => dir);
 const runCommandStrict = vi.fn(async () => ({ stdout: "", stderr: "", code: 0 }));
 const buildGitHttpAuthEnvWithFallbacks = vi.fn(async () => ({ GIT_TOKEN: "x" }));
 const mkdirSync = vi.fn();
@@ -34,6 +34,7 @@ afterEach(() => {
 beforeEach(() => {
   vi.clearAllMocks();
   validateSafeClonePath.mockImplementation((dir: string) => dir);
+  validateNonEmptyDir.mockImplementation((dir: string) => dir);
   buildGitHttpAuthEnvWithFallbacks.mockResolvedValue({ GIT_TOKEN: "x" });
 });
 
