@@ -303,12 +303,11 @@ describe("StatsPage accessibility", () => {
       />
     );
 
-    expect(screen.getByText("Total tokens")).toBeInTheDocument();
-    expect(screen.getByText("Total cost")).toBeInTheDocument();
+    expect(screen.getByText("Tokens")).toBeInTheDocument();
     expect(screen.getByText("Active time")).toBeInTheDocument();
+    expect(screen.getByText("Invocations")).toBeInTheDocument();
     expect(screen.getByText("Success rate")).toBeInTheDocument();
-    expect(screen.getByText("Active models / providers")).toBeInTheDocument();
-    expect(screen.getByText("Telemetry confidence")).toBeInTheDocument();
+    expect(screen.getAllByText("Models").length).toBeGreaterThan(1);
 
     const modeGroup = screen.getByRole("group", { name: "Analytics modes" });
     expect(modeGroup).toBeInTheDocument();

@@ -1,7 +1,15 @@
 export const STATS_COLORS = {
-  taskCoding: "#3B82F6", // Blue
-  ciFix: "#F59E0B",      // Amber
-  qaReview: "#8B5CF6",   // Purple
-  planning: "#14B8A6",   // Teal
-  wallRuntime: "#64748B",// Slate/Gray
+  signal: "#00E0A0",
+  amber: "#FFB800",
+  ember: "#D99A12",
+  clay: "#B7794B",
+  moss: "#7A9A52",
+  slate: "#64748B",
+  rose: "#B85C5C",
+  cyanMuted: "#4FA3A5",
+  taskCoding: "#4FA3A5",
+  ciFix: "#D99A12",
+  qaReview: "#B7794B",
+  planning: "#7A9A52",
+  wallRuntime: "#64748B",
 } as const;

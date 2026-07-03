@@ -1,18 +1,18 @@
 import { useMemoryPageData } from "./hooks/use-memory-page-data.js";
 import { useEmbeddingModelStatus } from "./hooks/use-embedding-model-status.js";
-import { ModelCard } from "./components/memory/ModelCard.js";
+import { EmbeddingModelCatalog } from "./components/memory/EmbeddingModelCatalog.js";
 import { effect } from "@preact/signals";
 import { Inspector } from "./components/memory/Inspector.js";
 import { MemoryFilters, MemoryDetails, MemoryCard } from "./components/memory/index.js";
 import MemorySidebar from "./components/memory/MemorySidebar.js";
-import { memorySidebarExpandedSignal, searchQuerySignal, activeMemoryIdSignal, hoveredMemoryIdSignal, activeTierSignal, selectedSprintIdSignal, selectedAgentPresetIdSignal } from "./components/memory/memoryState.js";
+import { memorySidebarExpandedSignal, searchQuerySignal, activeMemoryIdSignal, hoveredMemoryIdSignal, activeTierSignal, selectedSprintIdSignal, selectedAgentPresetIdSignal, lobotomizeModeSignal } from "./components/memory/memoryState.js";
 
 import { AddMemoryModal } from "./components/memory/AddMemoryModal.js";
 import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef, useState, useCallback, useEffect } from "preact/hooks";
 import gsap from "gsap";
-import { Brain, Search, X, AlertTriangle, Save, Check, RotateCcw, ZoomIn, ZoomOut, Maximize2, Plus, Download, Trash2, Power, Loader2, HardDrive, RefreshCw } from "lucide-preact";
-import { listMemories, createMemory, deleteMemory as apiDeleteMemory, searchMemories, listEmbeddingModels, downloadEmbeddingModel, selectEmbeddingModel, deleteEmbeddingModel, getMemoryStats, startReembed, getReembedProgress, getEmbeddingMap, type EmbeddingModelWithStatus, type ReembedProgress, type EmbeddingMapResult } from "./lib/memory-api.js";
+import { Brain, Search, X, AlertTriangle, ZoomIn, ZoomOut, Maximize2, Plus, Loader2 } from "lucide-preact";
+import { listMemories, createMemory, deleteMemory as apiDeleteMemory, searchMemories, listEmbeddingModels, downloadEmbeddingModel, selectEmbeddingModel, deleteEmbeddingModel, getMemoryStats, startReembed, getReembedProgress, getEmbeddingMap, type ReembedProgress, type EmbeddingMapResult } from "./lib/memory-api.js";
 import type { MemoryRecord, MemoryScope, MemoryCategory } from "./memory-types.js";
 import { useProjectData } from "./context/project-data.js";
 import { useSprints } from "../hooks/useSprints.js";
@@ -49,6 +49,16 @@ const TIER_TABS: { key: MemTier; label: string; scope: MemoryScope }[] = [
 const CATEGORIES: MemoryCategory[] = ["architecture", "codebase", "context", "preferences", "patterns", "decision", "error", "learning"];
 const AMBIENT_LABEL_MIN_ZOOM = 1.05;
 const SEARCH_FOCUS_ZOOM = 1.1;
+const CAMERA_ZOOM_TWEEN = {
+    duration: 0.2,
+    ease: "power2.out",
+    overwrite: true,
+} as const;
+const CAMERA_FOCUS_TWEEN = {
+    duration: 0.42,
+    ease: "power3.out",
+    overwrite: true,
+} as const;
 
 /* ─── Build nodes + edges from API data ─────────────────────────────────── */
 
@@ -120,6 +130,16 @@ function wrapCanvasText(ctx: CanvasRenderingContext2D, text: string, maxWidth: n
     return lines;
 }
 
+export function inverseZoomScreenSize(screenSize: number, camZoom: number): number {
+    return screenSize / Math.max(camZoom, MEMORY_CAMERA.minZoom);
+}
+
+export function getWheelZoomTarget(currentZoom: number, deltaY: number): number {
+    const direction = deltaY > 0 ? -1 : 1;
+    const wheelUnits = Math.min(3, Math.max(0.5, Math.abs(deltaY) / 100));
+    return currentZoom * Math.pow(1 + MEMORY_CAMERA.wheelStep, direction * wheelUnits);
+}
+
 function drawFocusedLabel(
     ctx: CanvasRenderingContext2D,
     node: MemNode,
@@ -130,25 +150,25 @@ function drawFocusedLabel(
     anchorSide: -1 | 1,
     maxLines: number,
 ): void {
-    const paddingX = 12 / camZoom;
-    const paddingY = 10 / camZoom;
-    const lineGap = 4 / camZoom;
-    const fontSize = (camZoom >= MEMORY_CAMERA.deepReadableZoom ? 13 : 12) / camZoom;
-    const titleSize = 10 / camZoom;
-    const maxWidth = (camZoom >= MEMORY_CAMERA.deepReadableZoom ? 240 : 190) / camZoom;
+    const paddingX = inverseZoomScreenSize(12, camZoom);
+    const paddingY = inverseZoomScreenSize(10, camZoom);
+    const lineGap = inverseZoomScreenSize(4, camZoom);
+    const fontSize = inverseZoomScreenSize(camZoom >= MEMORY_CAMERA.deepReadableZoom ? 13 : 12, camZoom);
+    const titleSize = inverseZoomScreenSize(10, camZoom);
+    const maxWidth = inverseZoomScreenSize(camZoom >= MEMORY_CAMERA.deepReadableZoom ? 240 : 190, camZoom);
     const r = node.radius * node.scale;
-    const offsetX = (r + 20 / camZoom) * anchorSide;
+    const offsetX = (r + inverseZoomScreenSize(20, camZoom)) * anchorSide;
     const anchorX = node.x + offsetX;
-    const anchorY = node.y - r - 18 / camZoom;
+    const anchorY = node.y - r - inverseZoomScreenSize(18, camZoom);
     const boxWidth = maxWidth + paddingX * 2;
     const title = `${label.toUpperCase()} · ${Math.round(node.strength * 100)}%`;
     const lineHeight = fontSize + lineGap;
     const bodyFont = `600 ${fontSize}px "Plus Jakarta Sans", sans-serif`;
     ctx.font = bodyFont;
     const lines = wrapCanvasText(ctx, node.content, maxWidth, maxLines);
-    const boxHeight = paddingY * 2 + titleSize + 6 / camZoom + (lines.length * lineHeight);
+    const boxHeight = paddingY * 2 + titleSize + inverseZoomScreenSize(6, camZoom) + (lines.length * lineHeight);
     const boxLeft = anchorSide < 0 ? anchorX - boxWidth : anchorX;
-    const boxTop = anchorY - 2 / camZoom;
+    const boxTop = anchorY - inverseZoomScreenSize(2, camZoom);
 
     ctx.save();
     ctx.shadowBlur = 0;
@@ -159,9 +179,9 @@ function drawFocusedLabel(
     ctx.strokeStyle = lob
         ? "rgba(227,0,15,0.55)"
         : "rgba(0,224,160,0.22)";
-    ctx.lineWidth = 1 / camZoom;
+    ctx.lineWidth = inverseZoomScreenSize(1, camZoom);
     ctx.beginPath();
-    ctx.roundRect(boxLeft, boxTop, boxWidth, boxHeight, 10 / camZoom);
+    ctx.roundRect(boxLeft, boxTop, boxWidth, boxHeight, inverseZoomScreenSize(10, camZoom));
     ctx.fill();
     ctx.stroke();
 
@@ -179,7 +199,7 @@ function drawFocusedLabel(
 
     ctx.font = bodyFont;
     ctx.fillStyle = bodyColor;
-    const bodyTop = boxTop + paddingY + titleSize + 6 / camZoom;
+    const bodyTop = boxTop + paddingY + titleSize + inverseZoomScreenSize(6, camZoom);
     for (let i = 0; i < lines.length; i++) {
         ctx.fillText(lines[i] || "", textX, bodyTop + i * lineHeight);
     }
@@ -273,6 +293,12 @@ export const MemoryPage: FunctionComponent = () => {
 
     const lobRef = useRef(lobotomize);
     lobRef.current = lobotomize;
+    useEffect(() => {
+        lobotomizeModeSignal.value = lobotomize;
+        return () => {
+            lobotomizeModeSignal.value = false;
+        };
+    }, [lobotomize]);
     const inspectorOpen = activeMemoryIdSignal.value !== null;
 
     /* ── Fetch agent presets on project change ─────────────── */
@@ -335,6 +361,34 @@ export const MemoryPage: FunctionComponent = () => {
             };
         }
     }, [graphData]);
+
+    /* ── Delete ────────────────────────────────────────────────────────── */
+    const handleDelete = useCallback(async (id: string) => {
+        const s = S.current;
+        const idx = s.graph.nodes.findIndex(n => n.id === id);
+        if (idx < 0) return;
+        const node = s.graph.nodes[idx];
+
+        // API delete
+        try { await apiDeleteMemory(id); } catch { /* ignore */ }
+
+        gsap.timeline({
+            onComplete: () => {
+                node.alive = false;
+                if (s.selectedIdx === idx) { s.selectedIdx = -1; activeMemoryIdSignal.value = null; }
+                setMemoryCount(s.graph.nodes.filter(n => n.alive).length);
+                setDeletedCount(c => c + 1);
+            },
+        })
+            .to(node, { x: node.x + 8, duration: 0.04, ease: "power4.out" })
+            .to(node, { x: node.x - 8, duration: 0.04 })
+            .to(node, { x: node.x + 5, duration: 0.04 })
+            .to(node, { x: node.x, duration: 0.03 })
+            .to(node, { glow: 2, duration: 0.1 })
+            .to(node, { scale: 0, opacity: 0, x: 0, y: 0, duration: 0.4, ease: "power4.in" });
+    }, [setMemoryCount]);
+    const handleDeleteRef = useRef(handleDelete);
+    handleDeleteRef.current = handleDelete;
 
 /* ── Canvas setup & render loop ───────────────────────────────────── */
     useLayoutEffect(() => {
@@ -399,7 +453,7 @@ export const MemoryPage: FunctionComponent = () => {
                 for (const [cat, centroid] of Object.entries(catCentroids)) {
                     const c = CAT[cat];
                     if (!c || centroid.count === 0) continue;
-                    ctx.font = `700 ${11}px "Plus Jakarta Sans", sans-serif`;
+                    ctx.font = `700 ${inverseZoomScreenSize(11, cam.zoom)}px "Plus Jakarta Sans", sans-serif`;
                     ctx.fillStyle = lob
                         ? `rgba(227,0,15,${dark ? 0.2 : 0.12})`
                         : `rgba(${c.r},${c.g},${c.b},${dark ? 0.25 : 0.15})`;
@@ -550,16 +604,16 @@ export const MemoryPage: FunctionComponent = () => {
 
                 if (cam.zoom >= AMBIENT_LABEL_MIN_ZOOM && cam.zoom < MEMORY_CAMERA.selectedNodeZoom && !dimmed) {
                     const label = n.content.length > 28 ? n.content.slice(0, 28) + "…" : n.content;
-                    ctx.font = `600 ${10}px "Plus Jakarta Sans", sans-serif`;
+                    ctx.font = `600 ${inverseZoomScreenSize(10, cam.zoom)}px "Plus Jakarta Sans", sans-serif`;
                     ctx.textAlign = "left";
                     ctx.textBaseline = "middle";
                     ctx.fillStyle = dark
                         ? `rgba(255,255,255,${0.55 * effOpacity})`
                         : `rgba(0,0,0,${0.45 * effOpacity})`;
-                    ctx.fillText(label, n.x + r + 10, n.y);
+                    ctx.fillText(label, n.x + r + inverseZoomScreenSize(10, cam.zoom), n.y);
                 }
 
-                if ((isHov || isSel) && cam.zoom >= MEMORY_CAMERA.selectedNodeZoom && !dimmed) {
+                if (isSel && cam.zoom >= MEMORY_CAMERA.selectedNodeZoom && !dimmed) {
                     const anchorSide: -1 | 1 = n.x >= cam.x ? -1 : 1;
                     drawFocusedLabel(
                         ctx,
@@ -630,11 +684,18 @@ export const MemoryPage: FunctionComponent = () => {
                 const { wx, wy } = getWorld(e);
                 const idx = hitTest(wx, wy, s.graph.nodes);
                 if (idx >= 0) {
-                    s.selectedIdx = idx;
                     const node = s.graph.nodes[idx];
+                    if (lobRef.current) {
+                        void handleDeleteRef.current(node.id);
+                        s.mouseDown = false;
+                        s.dragMoved = false;
+                        canvas.style.cursor = "pointer";
+                        return;
+                    }
+                    s.selectedIdx = idx;
                     activeMemoryIdSignal.value = node.id;
                     const target = focusCameraOnPoint(node, Math.max(s.cam.zoom, MEMORY_CAMERA.selectedNodeZoom));
-                    gsap.to(s.cam, { ...target, duration: 1, ease: "power3.out", overwrite: true });
+                    gsap.to(s.cam, { ...target, ...CAMERA_FOCUS_TWEEN });
                 } else {
                     s.selectedIdx = -1;
                     activeMemoryIdSignal.value = null;
@@ -652,14 +713,13 @@ export const MemoryPage: FunctionComponent = () => {
                 x: e.clientX - rect.left,
                 y: e.clientY - rect.top,
             };
-            const delta = e.deltaY > 0 ? -MEMORY_CAMERA.wheelStep : MEMORY_CAMERA.wheelStep;
             const target = zoomCameraTowardPoint(
                 s.cam,
                 { width: rect.width, height: rect.height },
                 focus,
-                s.cam.zoom + delta,
+                getWheelZoomTarget(s.cam.zoom, e.deltaY),
             );
-            gsap.to(s.cam, { ...target, duration: 0.35, ease: "power2.out", overwrite: true });
+            gsap.to(s.cam, { ...target, ...CAMERA_ZOOM_TWEEN });
         };
 
         canvas.addEventListener("mousemove", onMove);
@@ -752,32 +812,6 @@ export const MemoryPage: FunctionComponent = () => {
         });
     }, []);
 
-    /* ── Delete ────────────────────────────────────────────────────────── */
-    const handleDelete = useCallback(async (id: string) => {
-        const s = S.current;
-        const idx = s.graph.nodes.findIndex(n => n.id === id);
-        if (idx < 0) return;
-        const node = s.graph.nodes[idx];
-
-        // API delete
-        try { await apiDeleteMemory(id); } catch { /* ignore */ }
-
-        gsap.timeline({
-            onComplete: () => {
-                node.alive = false;
-                if (s.selectedIdx === idx) { s.selectedIdx = -1; activeMemoryIdSignal.value = null; }
-                setMemoryCount(s.graph.nodes.filter(n => n.alive).length);
-                setDeletedCount(c => c + 1);
-            },
-        })
-            .to(node, { x: node.x + 8, duration: 0.04, ease: "power4.out" })
-            .to(node, { x: node.x - 8, duration: 0.04 })
-            .to(node, { x: node.x + 5, duration: 0.04 })
-            .to(node, { x: node.x, duration: 0.03 })
-            .to(node, { glow: 2, duration: 0.1 })
-            .to(node, { scale: 0, opacity: 0, x: 0, y: 0, duration: 0.4, ease: "power4.in" });
-    }, []);
-
     /* ── Camera controls ──────────────────────────────────────────────── */
     const zoomIn = useCallback(() => {
         const canvas = canvasRef.current;
@@ -789,7 +823,7 @@ export const MemoryPage: FunctionComponent = () => {
             { x: rect.width / 2, y: rect.height / 2 },
             S.current.cam.zoom + MEMORY_CAMERA.buttonStep,
         );
-        gsap.to(S.current.cam, { ...target, duration: 0.5, ease: "power2.out", overwrite: true });
+        gsap.to(S.current.cam, { ...target, ...CAMERA_ZOOM_TWEEN });
     }, []);
     const zoomOut = useCallback(() => {
         const canvas = canvasRef.current;
@@ -801,10 +835,10 @@ export const MemoryPage: FunctionComponent = () => {
             { x: rect.width / 2, y: rect.height / 2 },
             S.current.cam.zoom - MEMORY_CAMERA.buttonStep,
         );
-        gsap.to(S.current.cam, { ...target, duration: 0.5, ease: "power2.out", overwrite: true });
+        gsap.to(S.current.cam, { ...target, ...CAMERA_ZOOM_TWEEN });
     }, []);
     const zoomReset = useCallback(() => {
-        gsap.to(S.current.cam, { x: 0, y: 0, zoom: MEMORY_CAMERA.defaultZoom, duration: 0.8, ease: "power3.out", overwrite: true });
+        gsap.to(S.current.cam, { x: 0, y: 0, zoom: MEMORY_CAMERA.defaultZoom, ...CAMERA_ZOOM_TWEEN });
         S.current.selectedIdx = -1;
         activeMemoryIdSignal.value = null;
     }, []);
@@ -863,7 +897,7 @@ export const MemoryPage: FunctionComponent = () => {
             const node = s.graph.nodes[idx];
             activeMemoryIdSignal.value = node.id;
             const target = focusCameraOnPoint(node, Math.max(s.cam.zoom, MEMORY_CAMERA.selectedNodeZoom));
-            gsap.to(s.cam, { ...target, duration: 1, ease: "power3.out", overwrite: true });
+            gsap.to(s.cam, { ...target, ...CAMERA_FOCUS_TWEEN });
         } else {
             S.current.selectedIdx = -1;
             activeMemoryIdSignal.value = null;
@@ -902,95 +936,15 @@ export const MemoryPage: FunctionComponent = () => {
 
             {/* ── Model Management ────────────────────────────────────── */}
             {showModels && (
-                <section aria-labelledby="embedding-model-catalog-title" className="space-y-3">
-                    <div className="flex flex-wrap items-end justify-between gap-2">
-                        <div>
-                            <h2 id="embedding-model-catalog-title" className="text-sm font-bold text-slate-800 dark:text-white">
-                                Embedding model catalog
-                            </h2>
-                            <p className="text-[11px] text-slate-500">
-                                Download compatible ONNX models for local memory search.
-                            </p>
-                        </div>
-                        {models.length > 0 && (
-                            <span className="text-[10px] font-mono text-slate-400">
-                                {models.length} available
-                            </span>
-                        )}
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {models.map((model: EmbeddingModelWithStatus) => (
-                            <ModelCard key={model.id} model={model}
-                                onDownload={handleDownloadModel}
-                                onSelect={handleSelectModelWithStats}
-                                onDelete={handleDeleteModel}
-                                onReembed={handleReembed}
-                                reembedding={!!reembed?.active}
-                                staleCount={stats.staleEmbeddings} />
-                        ))}
-                        {models.length === 0 && (
-                            <p className="text-sm text-slate-400 font-medium col-span-2 text-center py-8">
-                                Loading embedding models…
-                            </p>
-                        )}
-                    </div>
-                </section>
-            )}
-
-            {/* ── Re-embed banner ─────────────────────────────────────── */}
-            {showModels && stats.staleEmbeddings > 0 && !reembed?.active && (
-                <div className="flex items-center gap-4 px-5 py-4 rounded-2xl
-                               bg-amber-500/[0.06] border border-amber-500/20
-                               dark:bg-amber-500/[0.04] dark:border-amber-400/15">
-                    <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" strokeWidth={2.5} />
-                    <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-amber-600 dark:text-amber-400">
-                            {stats.staleEmbeddings} {stats.staleEmbeddings === 1 ? "memory needs" : "memories need"} re-embedding
-                        </p>
-                        <p className="text-[10px] text-amber-600/70 dark:text-amber-400/60 mt-0.5">
-                            These memories were embedded with a different model and won't appear in semantic search until re-embedded.
-                        </p>
-                    </div>
-                    <button onClick={handleReembed}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[11px] font-bold shrink-0
-                                   bg-amber-500 text-white hover:bg-amber-600
-                                   transition-colors duration-200 shadow-[0_2px_8px_rgba(245,158,11,0.25)]">
-                        <RefreshCw className="w-3 h-3" strokeWidth={2.5} />
-                        Re-embed All
-                    </button>
-                </div>
-            )}
-
-            {/* ── Re-embed progress ───────────────────────────────────── */}
-            {showModels && reembed?.active && (
-                <div className="flex flex-col gap-3 px-5 py-4 rounded-2xl
-                               bg-signal-500/[0.06] border border-signal-500/20
-                               dark:bg-signal-500/[0.04] dark:border-signal-500/15">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <RefreshCw className="w-3.5 h-3.5 text-signal-500 animate-spin" strokeWidth={2.5} />
-                            <span className="text-xs font-bold text-signal-600 dark:text-signal-400">Re-embedding memories…</span>
-                        </div>
-                        <span className="text-[10px] font-mono text-signal-500">
-                            {reembed.completed}/{reembed.total}
-                        </span>
-                    </div>
-                    <div className="h-2 w-full bg-black/[0.06] dark:bg-white/[0.06] rounded-full overflow-hidden">
-                        <div className="h-full rounded-full bg-signal-500 transition-all duration-500 ease-out"
-                            style={{ width: `${reembed.total > 0 ? Math.round((reembed.completed / reembed.total) * 100) : 0}%` }} />
-                    </div>
-                </div>
-            )}
-
-            {/* ── Re-embed complete ───────────────────────────────────── */}
-            {showModels && reembed && !reembed.active && reembed.completed > 0 && stats.staleEmbeddings === 0 && (
-                <div className="flex items-center gap-3 px-5 py-3 rounded-2xl
-                               bg-signal-500/[0.06] border border-signal-500/20">
-                    <Check className="w-4 h-4 text-signal-500" strokeWidth={2.5} />
-                    <p className="text-xs font-bold text-signal-600 dark:text-signal-400">
-                        Re-embedding complete — {reembed.completed} {reembed.completed === 1 ? "memory" : "memories"} updated.
-                    </p>
-                </div>
+                <EmbeddingModelCatalog
+                    models={models}
+                    stats={stats}
+                    reembed={reembed}
+                    onDownload={handleDownloadModel}
+                    onSelect={handleSelectModelWithStats}
+                    onDelete={handleDeleteModel}
+                    onReembed={handleReembed}
+                />
             )}
 
             {/* ── Lobotomize warning ──────────────────────────────────── */}
@@ -1001,7 +955,7 @@ export const MemoryPage: FunctionComponent = () => {
                     <AlertTriangle className="w-4 h-4 shrink-0" strokeWidth={2.5} />
                     <p className="text-xs font-bold">
                         <span className="uppercase tracking-[0.14em]">Warning — Lobotomize mode active.</span>
-                        {" "}Click any node then use the inspector to excise memories permanently.
+                        {" "}Single-click a graph node to delete it immediately. Inspector and sidebar delete buttons also skip confirmation.
                     </p>
                 </div>
             )}

@@ -142,17 +142,17 @@ const TrendKpiTile: FunctionComponent<{
   const deltaLabel = delta ? formatDeltaPercent(delta) : null;
   const showDelta = delta && deltaLabel && deltaLabel !== "—";
   const deltaTone = !delta || delta.direction === "flat"
-    ? "text-slate-400 dark:text-slate-500"
+    ? "text-[var(--stats-detail-color)]"
     : delta.direction === "up"
-      ? "text-status-green"
-      : "text-rose-500 dark:text-rose-400";
+      ? "text-emerald-700 dark:text-emerald-300"
+      : "text-rose-700 dark:text-rose-300";
 
   return (
-    <div className={`${SUBPANEL_CLASS} p-4`}>
+    <div className={`${SUBPANEL_CLASS} flex min-h-[7rem] flex-col justify-between p-3.5`}>
       <div className="flex items-center justify-between gap-2">
-        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">{label}</div>
+        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">{label}</div>
         {showDelta ? (
-          <div className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.12em] ${deltaTone}`}>
+          <div className={`inline-flex items-center gap-1 rounded-full border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] ${deltaTone}`}>
             {delta!.direction === "up" ? (
               <ArrowUpRight className="h-3 w-3" strokeWidth={2.6} />
             ) : delta!.direction === "down" ? (
@@ -162,8 +162,10 @@ const TrendKpiTile: FunctionComponent<{
           </div>
         ) : null}
       </div>
-      <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{value}</div>
-      {detail ? <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">{detail}</div> : null}
+      <div>
+        <div className="mt-3 break-words text-xl font-black leading-tight text-[var(--stats-value-color)]">{value}</div>
+        {detail ? <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--stats-detail-color)]">{detail}</div> : null}
+      </div>
     </div>
   );
 };
@@ -211,9 +213,13 @@ export const TrendStudio: FunctionComponent<{
     ? statusCounts.completed + statusCounts.failed + statusCounts.cancelled
     : 0;
 
+  const outputVelocity = stats.usage.activeTimeMs > 0
+    ? `${Math.round(stats.usage.outputTokens / Math.max(1, stats.usage.activeTimeMs / 1000))} tok/s`
+    : "0 tok/s";
+
   return (
-  <section className="space-y-6">
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-8">
+  <section className="space-y-5">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 2xl:grid-cols-8">
       <TrendKpiTile
         label="Total Cost"
         value={stats.usage.totalCostUsd > 0 ? formatCost(stats.usage.totalCostUsd) : (stats.usage.totalTokens > 0 ? "No pricing configured" : "$0.00")}
@@ -223,17 +229,7 @@ export const TrendStudio: FunctionComponent<{
       <TrendKpiTile
         label="Cost per Invocation"
         value={stats.usage.totalCostUsd > 0 && stats.usage.invocationCount > 0 ? formatCost(stats.usage.totalCostUsd / stats.usage.invocationCount) : "—"}
-      />
-      <TrendKpiTile
-        label="Cost per Active Hour"
-        value={stats.usage.totalCostUsd > 0 && stats.usage.activeTimeMs > 0 ? formatCost(stats.usage.totalCostUsd / (stats.usage.activeTimeMs / 3600000)) : "—"}
-      />
-      <TrendKpiTile
-        label="Peak Bucket Cost"
-        value={chartMetrics && chartMetrics.peakCostUsd > 0 ? formatCost(chartMetrics.peakCostUsd) : "—"}
-        detail={chartMetrics && typeof chartMetrics.invocationDensity === "number"
-          ? `${chartMetrics.invocationDensity.toFixed(1)} invocations / bucket`
-          : "selected window"}
+        detail="per call"
       />
       <TrendKpiTile
         label="Total Tokens"
@@ -272,12 +268,8 @@ export const TrendStudio: FunctionComponent<{
       />
       <TrendKpiTile
         label="Output Velocity"
-        value={stats.usage.activeTimeMs > 0 ? `${Math.round(stats.usage.outputTokens / Math.max(1, stats.usage.activeTimeMs / 1000))} tok/s` : "0 tok/s"}
-      />
-      <TrendKpiTile
-        label="Reasoning Share"
-        value={stats.usage.reasoningOutputTokens > 0 ? formatPercent((stats.usage.reasoningOutputTokens / stats.usage.outputTokens) * 100) : "—"}
-        detail="of output tokens"
+        value={outputVelocity}
+        detail={chartMetrics && chartMetrics.peakCostUsd > 0 ? `${formatCost(chartMetrics.peakCostUsd)} peak bucket` : "active output rate"}
       />
     </div>
     <div className="flex flex-wrap gap-3">

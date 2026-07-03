@@ -1,10 +1,8 @@
-import { FunctionComponent, type Ref } from "preact";
+import { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { X } from "lucide-react";
 import gsap from "gsap";
 import type { MemNode, Edge } from "../../lib/memory-graph.js";
-import { ConfirmDialog } from "../ui/ConfirmDialog.js";
-import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 const CAT: Record<string, { label: string; hex: string; r: number; g: number; b: number }> = {
@@ -26,7 +24,6 @@ export const Inspector: FunctionComponent<{
     onClose: () => void;
     onDelete: (id: string) => void;
 }> = ({ node, allNodes, edges, lobotomize, onClose, onDelete }) => {
-    const { isOpen, options, requestConfirm, handleConfirm, handleCancel, triggerRef } = useConfirmDialog();
     const contentRef = useRef<HTMLDivElement>(null);
     const reducedMotion = useReducedMotion();
 
@@ -49,17 +46,9 @@ export const Inspector: FunctionComponent<{
         });
     }, [node?.id, reducedMotion]);
 
-    const handleDeleteClick = async () => {
+    const handleDeleteClick = () => {
         if (!node) return;
-        const confirmed = await requestConfirm({
-            title: "Excise Memory",
-            body: "Are you sure you want to delete this memory? This action cannot be undone.",
-            confirmLabel: "Excise",
-            destructive: true
-        });
-        if (confirmed) {
-            onDelete(node.id);
-        }
+        onDelete(node.id);
     };
 
     const cat = node ? (CAT[node.category] || CAT.context) : CAT.architecture;
@@ -157,25 +146,16 @@ export const Inspector: FunctionComponent<{
                         </div>
                     )}
                     {lobotomize && (
-                        <>
-                            <button
-                                type="button"
-                                onClick={handleDeleteClick}
-                                ref={triggerRef as Ref<HTMLButtonElement>}
-                                className="mt-auto flex w-full items-center justify-center gap-2 rounded-xl py-3
-                                           bg-status-red text-white font-bold text-xs cursor-pointer
-                                           shadow-[0_0_20px_rgba(227,0,15,0.3)] hover:bg-status-red/90 hover:shadow-[0_0_30px_rgba(227,0,15,0.5)]
-                                           transition-[background-color,box-shadow,color] duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900">
-                                <X className="w-3.5 h-3.5" strokeWidth={2.5} />
-                                Excise Memory
-                            </button>
-                            <ConfirmDialog
-                                isOpen={isOpen}
-                                options={options}
-                                onConfirm={handleConfirm}
-                                onCancel={handleCancel}
-                            />
-                        </>
+                        <button
+                            type="button"
+                            onClick={handleDeleteClick}
+                            className="mt-auto flex w-full items-center justify-center gap-2 rounded-xl py-3
+                                       bg-status-red text-white font-bold text-xs cursor-pointer
+                                       shadow-[0_0_20px_rgba(227,0,15,0.3)] hover:bg-status-red/90 hover:shadow-[0_0_30px_rgba(227,0,15,0.5)]
+                                       transition-[background-color,box-shadow,color] duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900">
+                            <X className="w-3.5 h-3.5" strokeWidth={2.5} />
+                            Delete Immediately
+                        </button>
                     )}
                 </div>
             )}

@@ -133,11 +133,11 @@ export const MemoryList: FunctionComponent<{
 
     const resultCount = renderedNodes.length;
     const totalAliveCount = nodes.filter((node) => node.alive).length;
-    const hasSearchQuery = searchQuerySignal.value.trim().length > 0;
     const visibleIds = filteredNodes.value.map(({ node }) => node.id);
     const selectedIds = selectedMemoryIdsSignal.value;
     const selectedCount = selectedIds.length;
     const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+    const activeTier = useComputed(() => activeTierSignal.value);
 
     const handleVisibleSelect = () => {
         selectVisibleMemoryIds(visibleIds);
@@ -162,7 +162,7 @@ export const MemoryList: FunctionComponent<{
     };
 
     if (renderedNodes.length === 0) {
-        const isEmpty = nodes.length === 0;
+        const isEmpty = totalAliveCount === 0;
         const message = isEmpty ? "No memories exist" : "No memories match your search or filters";
         return (
             <div className="flex min-h-0 min-w-0 flex-col items-center justify-center p-8 text-center text-slate-400">
@@ -171,8 +171,6 @@ export const MemoryList: FunctionComponent<{
             </div>
         );
     }
-
-    const activeTier = useComputed(() => activeTierSignal.value);
 
     return (
         <div
@@ -186,13 +184,11 @@ export const MemoryList: FunctionComponent<{
                 {resultCount} {resultCount === 1 ? "memory" : "memories"} found
             </div>
             <div className="sticky top-0 z-10 flex min-w-0 flex-col gap-2">
-                {hasSearchQuery && (
-                    <div className="inline-flex max-w-full items-center gap-1.5 self-start rounded-lg border border-black/[0.04] bg-black/[0.02] px-2 py-1 text-xs font-medium text-slate-500 dark:border-white/[0.04] dark:bg-white/[0.02] dark:text-slate-400">
-                        <span className="truncate">
-                            Showing {resultCount} of {totalAliveCount} memories
-                        </span>
-                    </div>
-                )}
+                <div className="inline-flex max-w-full items-center gap-1.5 self-start rounded-lg border border-black/[0.04] bg-black/[0.02] px-2 py-1 text-xs font-medium text-slate-500 dark:border-white/[0.04] dark:bg-white/[0.02] dark:text-slate-400">
+                    <span className="truncate">
+                        Showing {resultCount} of {totalAliveCount} memories
+                    </span>
+                </div>
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <button
                         type="button"

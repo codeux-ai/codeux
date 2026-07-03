@@ -12,7 +12,8 @@ vi.mock("../../../dashboard/src/v2/pages/stats/use-stats-page-data.js", () => ({
     stats: {
       range: { resolutionLabel: "hour" },
       buckets: [],
-      providers: [], purposes: [
+      providers: [{ id: "codex", label: "Codex", usage: { totalTokens: 10000, invocationCount: 50 } }],
+      purposes: [
         { id: "task_coding", label: "Task Coding", usage: { totalTokens: 1000, activeTimeMs: 0 } },
         { id: "ci_fix", label: "CI Fix", usage: { totalTokens: 2000, activeTimeMs: 0 } },
         { id: "qa_review", label: "QA Review", usage: { totalTokens: 3000, activeTimeMs: 0 } },
@@ -20,12 +21,17 @@ vi.mock("../../../dashboard/src/v2/pages/stats/use-stats-page-data.js", () => ({
       ],
       chartSeries: [],
       usage: { totalTokens: 10000, inputTokens: 5000, cachedInputTokens: 0, outputTokens: 5000, reasoningOutputTokens: 0, wallTimeMs: 3600000, totalTokens: 10000, activeTimeMs: 1800000, invocationCount: 50, reportedInvocationCount: 50, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0 },
+      git: { totals: { filesChanged: 3, mergeConflictCount: 1 } },
+      statusCounts: { completed: 50, failed: 0, cancelled: 0, running: 0, paused: 0 },
     },
     loading: false,
     error: null,
     usage: { wallTimeMs: 3600000, totalTokens: 10000, activeTimeMs: 1800000, invocationCount: 50, reportedInvocationCount: 50, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0 },
     activeQuery: { window: "7d" },
-    providerSegments: [], tokenSegments: [], sourceSegments: [], chartState: { zoomRange: null, setZoomRange: () => {}, hoveredIndex: null, setHoveredIndex: () => {}, enabledSeries: {} },
+    providerSegments: [{ label: "Codex", value: 10000, color: "#D99A12", textClassName: "text-amber-600" }],
+    tokenSegments: [],
+    sourceSegments: [],
+    chartState: { zoomRange: null, setZoomRange: () => {}, hoveredIndex: null, setHoveredIndex: () => {}, enabledSeries: {} },
     visualMode: "composition",
   }),
 }));
@@ -67,9 +73,9 @@ describe("StatsPage Composition", () => {
     );
 
     // Assert that the composition cards exist
-    expect(screen.getByText("Active Providers")).not.toBeNull();
-    expect(screen.getByText("Top Provider")).not.toBeNull();
-    expect(screen.getByText("Input Tokens")).not.toBeNull();
-    expect(screen.getByText("Output Tokens")).not.toBeNull();
+    expect(screen.getAllByText("Provider Share").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Token Anatomy").length).toBeGreaterThan(0);
+    expect(screen.getByText("Purpose Activity")).not.toBeNull();
+    expect(screen.getByText("Merge Conflicts")).not.toBeNull();
   });
 });

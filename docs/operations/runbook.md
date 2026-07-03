@@ -141,7 +141,7 @@ Checks:
 - Relative local project paths are resolved against the user home directory, not the Code UX process working directory. A local project created with `myproject` now stores `baseDir` as `<homedir>/myproject`, and a relative Git `cloneDir` is normalized the same way before the repo name is appended.
 - GitHub credential sync still copies mount contents into a fixed dir (`~/.config/gh`); Gemini sync is now auth-only to avoid concurrent Docker sessions racing on shared `.gemini/tmp/tool-outputs`.
 - If provider output says "No file changes produced", runtime now still checks for unpushed worker-branch commits and will push/create (or reuse) the feature PR when commits exist.
-- CI autofix and merge-conflict virtual-worker runs now perform the same unpublished-commit check before they mark the attention item resolved, so provider-created local commits are pushed to GitHub even when the workspace diff is empty by the end of the run.
+- CI autofix and merge-conflict virtual-worker runs now perform the same unpublished-commit check before they mark the attention item resolved, so provider-created local commits are pushed to GitHub even when the workspace diff is empty by the end of the run. Merge-conflict publish also retries killed no-output `git push` attempts after the resolved commit has been materialized locally, preventing a transient helper/container termination from turning a valid resolution into a human handoff.
 - Workspace patch export includes newly created untracked files by marking them in a temporary Git index before diffing. In Docker mode, Git-specific environment variables are forwarded into the helper container so the temporary index and HTTP auth config are applied inside the isolated workspace volume. Provider HOME lives in the paired runtime volume at `/code-ux-runtime-home`, outside `/workspace`; patch export still excludes the transient `.task-learnings.md`, legacy `.code-ux-home/`, and the entire `logs/openai/` directory (including nested logs) so memory capture, provider config, provider cache state, and transient OpenAI request/response logs cannot be committed.
 - For Docker-in-Docker or remote daemon path mismatches, configure:
     - `JULES_DOCKER_HOST_WORKSPACE_ROOT=<host-visible-repo-root>`
@@ -168,7 +168,8 @@ Checks:
 Checks:
 - Open Chat -> Invocations, select the failed planning invocation, then choose one of the header actions.
 - **Restart** marks the original failed transcript as preserved, creates a replacement invocation row, resumes the failed provider session, and sends the full planning prompt again.
-- **Continue** marks the original failed transcript as preserved, creates a replacement invocation row, resumes the failed provider session, and sends a compact continuation prompt asking for the complete JSON plan.
+- **Continue** marks the original failed transcript as preserved, creates a replacement invocation row, resumes the failed provider session, and sends a continuation prompt that also embeds the original planning instructions so the run can still complete if the provider has lost the native conversation.
+- Docker-backed planning runs use a stable project/sprint planning workspace and preserve the paired runtime volume while the run is failed/incomplete. Restart and Continue reuse that workspace so provider-local session files, caches, and runtime state remain available across quota/auth failures. Successful planning cleans up the workspace and paired runtime volume.
 - Preserved sprint-scoped invocation rows block sprint deletion so the quota/error transcript is not removed by a cascade.
 - If the restart or continuation fails, retry from the original failed row or inspect the new failed row depending on which invocation produced the latest error.
 
@@ -233,7 +234,7 @@ Checks:
 ### Transient Provider Failures
 Transient provider failures are classified and managed in `src/shared/providers/provider-error-classifier.ts`. These shared helpers encapsulate the operational meaning of failures such as:
 - **Codex transport errors**: Disconnections or channel closures (e.g., "stream disconnected before completion", "channel closed").
-- **Claude missing conversations**: Attempts to resume a non-existent session resulting in "no conversation found".
+- **Claude missing conversations**: Attempts to resume a non-existent session resulting in "no conversation found". Code UX retries once with a fresh Claude session; planning continuations are self-contained so that fallback still has the original schema, sprint goal, and task-generation instructions.
 - **OpenCode missing sessions**: Attempts to resume a removed native session resulting in "Session not found"; Code UX retries once as a fresh OpenCode session in the same workspace.
 - **Silent quota signals**: Provider tools (like Antigravity) failing due to capacity limits without explicit failure output.
 
