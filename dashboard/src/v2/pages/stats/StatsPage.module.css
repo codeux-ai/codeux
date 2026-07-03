@@ -17,6 +17,309 @@
   isolation: isolate;
 }
 
+.heroPanel {
+  overflow: visible;
+  border-radius: 2rem;
+  padding: 1.25rem;
+}
+
+.heroGrid {
+  display: grid;
+  min-width: 0;
+  gap: 1.25rem;
+  grid-template-areas:
+    "intro"
+    "controls"
+    "kpis";
+}
+
+.heroIntro {
+  grid-area: intro;
+  min-width: 0;
+}
+
+.heroTitleBlock {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.heroControls {
+  grid-area: controls;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.heroControlSection {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.heroModeSection {
+  border-top: 1px solid var(--stats-border-hairline);
+  padding-top: 1rem;
+}
+
+.heroControlHeader {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.heroControlHeaderText {
+  min-width: 0;
+}
+
+.heroControlEyebrow,
+.customRangeLabel,
+.heroKpiLabel {
+  color: var(--stats-label-color);
+  font-size: 0.625rem;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+
+.heroControlDescription {
+  max-width: 100%;
+  margin-top: 0.25rem;
+  color: var(--stats-detail-color);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.heroControlIcon,
+.heroContextBadgeIcon {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  color: var(--stats-accent-amber);
+}
+
+.heroModeIcon {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  color: var(--color-signal-600, var(--stats-accent-signal));
+}
+
+.heroContextGrid {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.heroContextBadge {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  color: var(--stats-label-color);
+  font-size: 0.625rem;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.heroContextBadgeLabel {
+  flex: 0 0 auto;
+}
+
+.heroContextBadgeDivider {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--stats-label-color) 35%, transparent);
+}
+
+.heroContextBadgeValue {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--stats-value-color);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.heroPresetGroup {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0.25rem;
+}
+
+.heroPresetButton {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 2.25rem;
+  flex: 1 1 calc(33.333% - 0.25rem);
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--stats-chip-radius);
+  padding: 0.5rem 0.75rem;
+  color: var(--stats-control-text);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.heroPresetButton:hover {
+  background: var(--stats-surface-chip-hover);
+  color: var(--stats-control-text-hover);
+}
+
+.heroPresetButton:focus-visible,
+.customRangeApply:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--stats-focus-ring);
+}
+
+.heroPresetButtonActive {
+  border-color: var(--stats-control-border-active);
+  background: var(--stats-surface-control-active);
+  color: var(--stats-control-text-active);
+  box-shadow: var(--stats-control-shadow-active);
+}
+
+.customRangeControls {
+  display: grid;
+  min-width: 0;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.customRangeField {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.customRangeApply {
+  display: inline-flex;
+  height: 2.5rem;
+  min-width: 7rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--stats-border-strong);
+  border-radius: var(--stats-control-radius);
+  background: #0f172a;
+  padding: 0 1rem;
+  color: #ffffff;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  box-shadow: var(--stats-control-shadow-active);
+  transition: opacity 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+:global(.dark) .customRangeApply {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.customRangeApply:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.customRangeApply:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+}
+
+.customRangeHelp {
+  min-width: 0;
+  min-height: 1.25rem;
+  color: var(--stats-detail-color);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.customRangeError {
+  color: var(--color-red-500, #ef4444);
+  font-weight: 600;
+}
+
+.heroViewToggle {
+  width: 100%;
+}
+
+.heroKpiGrid {
+  grid-area: kpis;
+  display: grid;
+  min-width: 0;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.heroKpi {
+  display: flex;
+  min-width: 0;
+  min-height: 6.75rem;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem;
+}
+
+.heroKpiHeader {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.heroKpiIcon {
+  display: flex;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  background: var(--stats-accent-amber-fill);
+  color: var(--stats-accent-amber);
+}
+
+.heroKpiValue {
+  color: var(--stats-value-color);
+  font-size: 1.125rem;
+  font-weight: 900;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.heroKpiDetail {
+  margin-top: 0.25rem;
+  color: var(--stats-detail-color);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .contextStrip {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -267,6 +570,22 @@
 }
 
 @media (min-width: 640px) {
+  .heroPresetButton {
+    flex-basis: auto;
+  }
+
+  .customRangeControls {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  }
+
+  .customRangeHelp {
+    grid-column: 1 / -1;
+  }
+
+  .heroKpiGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .contextFacts,
   .stateMetaGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -284,6 +603,14 @@
 }
 
 @media (min-width: 1024px) {
+  .heroPanel {
+    padding: 1.5rem;
+  }
+
+  .heroKpiGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .contextStrip {
     grid-template-columns: minmax(18rem, 0.8fr) minmax(0, 1.2fr);
     gap: 1.25rem;
@@ -318,7 +645,38 @@
 }
 
 @media (min-width: 1440px) {
+  .heroPanel {
+    padding: 1.75rem;
+  }
+
+  .heroGrid {
+    grid-template-columns: minmax(0, 1fr) minmax(24rem, 34rem);
+    grid-template-areas:
+      "intro controls"
+      "kpis kpis";
+    align-items: start;
+  }
+
+  .heroControls {
+    align-self: start;
+  }
+
+  .heroKpiGrid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
   .purposeCards {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heroPresetButton,
+  .customRangeApply {
+    transition: none;
+  }
+
+  .customRangeApply:hover:not(:disabled) {
+    transform: none;
   }
 }

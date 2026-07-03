@@ -29,6 +29,7 @@ import {
   ViewToggle,
   type StatsVisualMode,
 } from "./StatsShared.js";
+import styles from "../StatsPage.module.css";
 
 export const WINDOW_PRESETS = ["1h", "24h", "7d", "30d", "all", "custom"] as const;
 
@@ -52,21 +53,17 @@ export const HeroKpi: FunctionComponent<{
 }> = ({ icon: Icon, label, value, detail, valueClassName = "text-slate-900 dark:text-white" }) => (
   <article
     aria-label={`${label}: ${value}. ${detail}`}
-    className={`${SUBPANEL_CLASS} flex min-h-[6.75rem] min-w-0 flex-col justify-between gap-3 !p-3.5 md:!p-4`}
+    className={`${SUBPANEL_CLASS} ${styles.heroKpi}`}
   >
-    <div className="flex min-w-0 items-center gap-2.5">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[color:var(--stats-accent-amber-fill)] text-amber-700 dark:text-amber-300">
+    <div className={styles.heroKpiHeader}>
+      <div className={styles.heroKpiIcon}>
         <Icon className="h-4 w-4" strokeWidth={2.15} aria-hidden="true" />
       </div>
-      <div className="min-w-0 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
-        {label}
-      </div>
+      <div className={styles.heroKpiLabel}>{label}</div>
     </div>
     <div>
-      <div className={`break-words text-lg font-black leading-tight md:text-xl ${valueClassName}`}>{value}</div>
-      <div className="mt-1 text-[11px] font-medium leading-relaxed text-[color:var(--stats-detail-color)]">
-        {detail}
-      </div>
+      <div className={`${styles.heroKpiValue} ${valueClassName}`}>{value}</div>
+      <div className={styles.heroKpiDetail}>{detail}</div>
     </div>
   </article>
 );
@@ -76,11 +73,11 @@ const ContextBadge: FunctionComponent<{
   label: string;
   value: string;
 }> = ({ icon: Icon, label, value }) => (
-  <div className={`inline-flex min-w-0 items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
-    <Icon className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-300" strokeWidth={2.2} aria-hidden="true" />
-    <span className="shrink-0">{label}</span>
-    <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">/</span>
-    <span className="truncate text-slate-700 dark:text-slate-100">{value}</span>
+  <div className={`${CHIP_CLASS} ${styles.heroContextBadge}`}>
+    <Icon className={styles.heroContextBadgeIcon} strokeWidth={2.2} aria-hidden="true" />
+    <span className={styles.heroContextBadgeLabel}>{label}</span>
+    <span aria-hidden="true" className={styles.heroContextBadgeDivider}>/</span>
+    <span className={styles.heroContextBadgeValue}>{value}</span>
   </div>
 );
 
@@ -235,6 +232,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
   const customRangeMessage = customControlsOpen ? getCustomRangeMessage(customFrom, customTo) : "";
   const rangeMessage = customRangeError || customRangeMessage;
   const rangeHasError = Boolean(rangeMessage);
+  const canApplyCustomRange = isValidCustomRange(customFrom, customTo);
   const selectedProjectLabel = selectedProject?.name || "No project selected";
   const generatedAtLabel = stats?.generatedAt ? formatDateTime(stats.generatedAt) : "No snapshot yet";
   const freshnessLabel = stats?.generatedAt ? getRelativeTime(stats.generatedAt) || "unknown" : "Awaiting first snapshot";
@@ -258,7 +256,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
   }, [activeQuery.window]);
 
   const handleApplyCustom = () => {
-    if (rangeHasError) {
+    if (!canApplyCustomRange) {
       setCustomRangeError(rangeMessage);
       return;
     }
@@ -280,19 +278,19 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
   };
 
   return (
-    <section className={`${HERO_PANEL_CLASS} rounded-[2rem] !p-5 md:!p-6 xl:!p-7`} aria-labelledby="stats-hero-title">
-      <div className="flex flex-col gap-5">
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,34rem)] xl:items-start">
-          <div className="flex min-w-0 flex-col gap-4">
+    <section className={`${HERO_PANEL_CLASS} ${styles.heroPanel}`} aria-labelledby="stats-hero-title">
+      <div className={styles.heroGrid}>
+        <div className={styles.heroIntro}>
+          <div className={styles.heroTitleBlock}>
             <PageHeader
               icon={BarChart3}
               eyebrow="Telemetry Command"
-              title="Stats control room"
-              subtitle="Project telemetry, freshness, range, and analysis mode stay visible before the workspace changes."
+              title="Statistics."
+              subtitle="A project-scoped analytics command header for telemetry range, freshness, sprint state, and visual mode."
             />
             <h2 id="stats-hero-title" className="sr-only">Stats command header</h2>
 
-            <div className="flex flex-wrap gap-2">
+            <div className={styles.heroContextGrid} aria-label="Stats project context">
               <ContextBadge icon={Layers3} label="Project" value={selectedProjectLabel} />
               <ContextBadge
                 icon={CalendarDays}
@@ -305,51 +303,45 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
               <ContextBadge icon={Gauge} label="Resolution" value={rangeResolutionLabel} />
             </div>
           </div>
+        </div>
 
-          <div className={`${SUBPANEL_CLASS} flex min-w-0 flex-col gap-4 !p-4 md:!p-5`} aria-label="Stats command controls">
-            <div className="flex min-w-0 flex-col gap-3">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">
-                    Time window
-                  </div>
-                  <div className="mt-1 max-w-full break-words text-sm font-medium text-[color:var(--stats-detail-color)]">
-                    Current · {rangeScopeLabel}
-                  </div>
+        <div className={`${SUBPANEL_CLASS} ${styles.heroControls}`} aria-label="Stats command controls">
+          <div className={styles.heroControlSection}>
+            <div className={styles.heroControlHeader}>
+              <div className={styles.heroControlHeaderText}>
+                <div className={styles.heroControlEyebrow}>
+                  Time window
                 </div>
-                <CalendarDays className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300" strokeWidth={2.2} aria-hidden="true" />
+                <div className={styles.heroControlDescription}>
+                  Current · {rangeScopeLabel}
+                </div>
               </div>
+              <CalendarDays className={styles.heroControlIcon} strokeWidth={2.2} aria-hidden="true" />
+            </div>
 
-              <div role="group" aria-label="Time window presets" className={`flex w-full flex-wrap gap-1 p-1 ${CHIP_CLASS}`}>
-                {WINDOW_PRESETS.map((window) => {
-                  const isActive = window === "custom" ? customControlsOpen : activeQuery.window === window;
-                  return (
-                    <button
-                      key={window}
-                      type="button"
-                      onClick={() => handlePresetClick(window)}
-                      aria-pressed={isActive}
-                      aria-expanded={window === "custom" ? customControlsOpen : undefined}
-                      aria-controls={window === "custom" ? "stats-custom-range-controls" : undefined}
-                      className={`inline-flex min-h-9 min-w-0 flex-1 shrink-0 basis-[calc(33.333%-0.25rem)] items-center justify-center rounded-full border px-3 py-2 text-center text-[11px] font-bold uppercase tracking-[0.14em] transition-[background-color,border-color,box-shadow,color,transform] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-white sm:basis-auto dark:focus-visible:ring-offset-void-900 ${
-                        isActive
-                          ? "border-amber-500/30 bg-[color:var(--stats-accent-amber-fill)] text-amber-700 dark:text-amber-300"
-                          : "border-transparent text-slate-500 hover:bg-[color:var(--fill-muted-hover)] hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-                      }`}
-                    >
-                      {window === "all" ? "All time" : window === "custom" ? "Custom" : window}
-                    </button>
-                  );
-                })}
-              </div>
+            <div role="group" aria-label="Time window presets" className={`${CHIP_CLASS} flex-wrap ${styles.heroPresetGroup}`}>
+              {WINDOW_PRESETS.map((window) => {
+                const isActive = window === "custom" ? customControlsOpen : activeQuery.window === window;
+                return (
+                  <button
+                    key={window}
+                    type="button"
+                    onClick={() => handlePresetClick(window)}
+                    aria-pressed={isActive}
+                    aria-expanded={window === "custom" ? customControlsOpen : undefined}
+                    aria-controls={window === "custom" ? "stats-custom-range-controls" : undefined}
+                    className={`${styles.heroPresetButton} ${isActive ? styles.heroPresetButtonActive : ""}`}
+                  >
+                    {window === "all" ? "All time" : window === "custom" ? "Custom" : window}
+                  </button>
+                );
+              })}
             </div>
 
             {customControlsOpen ? (
-              <div id="stats-custom-range-controls" className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-                <label className="min-w-0">
-                  <span className="mb-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
-                    Start
-                  </span>
+              <div id="stats-custom-range-controls" className={styles.customRangeControls}>
+                <label className={styles.customRangeField}>
+                  <span className={styles.customRangeLabel}>Start</span>
                   <input
                     id="stats-custom-start"
                     type="date"
@@ -365,10 +357,8 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                     aria-describedby="stats-custom-range-help"
                   />
                 </label>
-                <label className="min-w-0">
-                  <span className="mb-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
-                    End
-                  </span>
+                <label className={styles.customRangeField}>
+                  <span className={styles.customRangeLabel}>End</span>
                   <input
                     id="stats-custom-end"
                     type="date"
@@ -387,15 +377,15 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                 <button
                   type="button"
                   onClick={handleApplyCustom}
-                  disabled={!isValidCustomRange(customFrom, customTo)}
-                  aria-disabled={!isValidCustomRange(customFrom, customTo) ? "true" : undefined}
-                  className="inline-flex h-10 items-center justify-center self-end rounded-[var(--stats-control-radius)] bg-slate-900 px-4 text-[11px] font-bold uppercase tracking-[0.16em] text-white shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-transform motion-safe:hover:-translate-y-0.5 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--stats-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:bg-white dark:text-void-900 dark:focus-visible:ring-offset-void-900 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={!canApplyCustomRange}
+                  aria-disabled={!canApplyCustomRange ? "true" : undefined}
+                  className={styles.customRangeApply}
                 >
                   Apply
                 </button>
-                <div id="stats-custom-range-help" className="sm:col-span-3 min-h-5 text-xs text-[color:var(--stats-detail-color)]">
+                <div id="stats-custom-range-help" className={styles.customRangeHelp}>
                   {rangeHasError ? (
-                    <span id="stats-custom-range-error" role="alert" className="font-medium text-red-500 dark:text-red-400">
+                    <span id="stats-custom-range-error" role="alert" className={styles.customRangeError}>
                       {rangeMessage}
                     </span>
                   ) : (
@@ -404,29 +394,30 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                 </div>
               </div>
             ) : null}
+          </div>
 
-            <div className="flex min-w-0 flex-col gap-3 border-t border-[color:var(--stats-border-hairline)] pt-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">
-                    Analysis mode
-                  </div>
-                  <div className="mt-1 max-w-full text-sm font-medium leading-relaxed text-[color:var(--stats-detail-color)]">
-                    {activeModeDescription}
-                  </div>
+          <div className={`${styles.heroControlSection} ${styles.heroModeSection}`}>
+            <div className={styles.heroControlHeader}>
+              <div className={styles.heroControlHeaderText}>
+                <div className={styles.heroControlEyebrow}>
+                  Analysis mode
                 </div>
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-signal-600 dark:text-signal-400" strokeWidth={2.2} aria-hidden="true" />
+                <div className={styles.heroControlDescription}>
+                  {activeModeDescription}
+                </div>
               </div>
-              <ViewToggle
-                value={visualMode}
-                onChange={setVisualMode}
-                ariaLabel="Analytics modes"
-              />
+              <CheckCircle2 className={styles.heroModeIcon} strokeWidth={2.2} aria-hidden="true" />
             </div>
+            <ViewToggle
+              value={visualMode}
+              onChange={setVisualMode}
+              ariaLabel="Analytics modes"
+              className={styles.heroViewToggle}
+            />
           </div>
         </div>
 
-        <div aria-label="Executive summary" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+        <div aria-label="Executive summary" className={styles.heroKpiGrid}>
           <HeroKpi
             icon={Zap}
             label="Tokens"
