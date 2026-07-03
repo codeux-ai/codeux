@@ -935,6 +935,149 @@ describe("ConnectionChatRepository", () => {
       expect(allMessages[1].bodyMarkdown).toBe("Hidden 2");
     });
 
+    it("returns empty thread pages for projects with no conversations", async () => {
+      const { projectRepository, connectionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Empty Chat Project",
+        sourceType: "local",
+        sourceRef: "/tmp/empty-chat",
+      });
+
+      expect(connectionRepository.listThreads(project.id)).toEqual([]);
+      expect(connectionRepository.listThreads(project.id, { limit: 10, offset: 100 })).toEqual([]);
+    });
+
+    it("applies stable pagination boundaries to thread and message lists", async () => {
+      const { projectRepository, connectionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Pagination Project",
+        sourceType: "local",
+        sourceRef: "/tmp/pagination",
+      });
+
+      for (let index = 1; index <= 4; index += 1) {
+        vi.setSystemTime(new Date(`2026-03-10T00:00:0${index}.000Z`));
+        const thread = connectionRepository.createThread(project.id, { title: `Thread ${index}` });
+        connectionRepository.postDashboardMessage(project.id, {
+          threadId: thread.id,
+          bodyMarkdown: `Message ${index}`,
+        });
+      }
+
+      expect(connectionRepository.listThreads(project.id, { limit: 2 }).map((thread) => thread.title)).toEqual([
+        "Thread 4",
+        "Thread 3",
+      ]);
+      expect(connectionRepository.listThreads(project.id, { limit: 2, offset: 2 }).map((thread) => thread.title)).toEqual([
+        "Thread 2",
+        "Thread 1",
+      ]);
+      expect(connectionRepository.listThreads(project.id, { limit: 0 }).map((thread) => thread.title)).toEqual([
+        "Thread 4",
+      ]);
+
+      const messageThread = connectionRepository.createThread(project.id, { title: "Message Pagination" });
+      for (let index = 1; index <= 5; index += 1) {
+        vi.setSystemTime(new Date(`2026-03-10T00:01:0${index}.000Z`));
+        connectionRepository.postSystemMessage(project.id, {
+          threadId: messageThread.id,
+          bodyMarkdown: `Paged message ${index}`,
+        });
+      }
+
+      expect(connectionRepository.listMessages(messageThread.id, { limit: 2, offset: 2 }).map((message) => message.bodyMarkdown)).toEqual([
+        "Paged message 3",
+        "Paged message 4",
+      ]);
+      expect(connectionRepository.listMessages(messageThread.id, { limit: -5 }).map((message) => message.bodyMarkdown)).toEqual([
+        "Paged message 1",
+      ]);
+      expect(connectionRepository.listMessages(messageThread.id, { limit: 2, offset: 99 })).toEqual([]);
+    });
+
+    it("orders newest threads by visible activity with deterministic empty-thread fallback", async () => {
+      const { projectRepository, connectionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Thread Ordering Project",
+        sourceType: "local",
+        sourceRef: "/tmp/thread-ordering",
+      });
+
+      vi.setSystemTime(new Date("2026-03-10T00:00:01.000Z"));
+      const oldVisible = connectionRepository.createThread(project.id, { title: "Old visible activity" });
+      connectionRepository.postDashboardMessage(project.id, {
+        threadId: oldVisible.id,
+        bodyMarkdown: "Old visible message",
+      });
+
+      vi.setSystemTime(new Date("2026-03-10T00:00:02.000Z"));
+      const empty = connectionRepository.createThread(project.id, { title: "Empty middle thread" });
+
+      vi.setSystemTime(new Date("2026-03-10T00:00:03.000Z"));
+      const newestVisible = connectionRepository.createThread(project.id, { title: "Newest visible activity" });
+      connectionRepository.postDashboardMessage(project.id, {
+        threadId: newestVisible.id,
+        bodyMarkdown: "Newest visible message",
+      });
+
+      expect(connectionRepository.listThreads(project.id).map((thread) => thread.id)).toEqual([
+        newestVisible.id,
+        empty.id,
+        oldVisible.id,
+      ]);
+    });
+
+    it("orders thread messages chronologically after dashboard messages are processed", async () => {
+      const { projectRepository, connectionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Processed Ordering Project",
+        sourceType: "local",
+        sourceRef: "/tmp/processed-ordering",
+      });
+      connectionRepository.startListen({
+        connectionKey: "processed-ordering-worker",
+        displayName: "Processed Ordering Worker",
+        role: "worker",
+        projectId: project.id,
+      });
+
+      const dashboardMessage = connectionRepository.postDashboardMessage(project.id, {
+        title: "Processed ordering",
+        bodyMarkdown: "First dashboard message",
+      });
+      const thread = connectionRepository.listThreads(project.id)[0];
+      connectionRepository.pullInbox({
+        connectionKey: "processed-ordering-worker",
+        projectId: project.id,
+      });
+
+      vi.setSystemTime(new Date("2026-03-10T00:00:05.000Z"));
+      const reply = connectionRepository.postListenReply({
+        connectionKey: "processed-ordering-worker",
+        threadId: thread.id,
+        bodyMarkdown: "Second worker reply",
+        replyToMessageId: dashboardMessage.id,
+      });
+
+      expect(connectionRepository.listMessages(thread.id).map((message) => ({
+        id: message.id,
+        bodyMarkdown: message.bodyMarkdown,
+        deliveryStatus: message.deliveryStatus,
+      }))).toEqual([
+        {
+          id: dashboardMessage.id,
+          bodyMarkdown: "First dashboard message",
+          deliveryStatus: "processed",
+        },
+        {
+          id: reply.id,
+          bodyMarkdown: "Second worker reply",
+          deliveryStatus: "processed",
+        },
+      ]);
+      expect(connectionRepository.getThread(thread.id).pendingMessageCount).toBe(0);
+    });
+
     it("returns the first reply after a specific message id", async () => {
       const { projectRepository, connectionRepository } = await createRepositories();
       const project = projectRepository.createProject({

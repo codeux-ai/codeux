@@ -1,20 +1,37 @@
 import type { DatabaseAdapter } from "../db/database-adapter.js";
 import type { ConversationMessageRecord } from "../../contracts/connection-chat-types.js";
-import { visibleConversationMessageFilter, mapMessageRow, type MessageRow } from "./conversation-query-utils.js";
+import {
+  DEFAULT_CONVERSATION_MESSAGE_LIST_LIMIT,
+  MAX_CONVERSATION_MESSAGE_LIST_LIMIT,
+  visibleConversationMessageFilter,
+  mapMessageRow,
+  normalizeQueryLimit,
+  normalizeQueryOffset,
+  type ConversationQueryPaginationOptions,
+  type MessageRow,
+} from "./conversation-query-utils.js";
 
 export function listConversationMessagesQuery(
   db: DatabaseAdapter,
   threadId: string,
-  options?: { includeHidden?: boolean }
+  options?: ConversationQueryPaginationOptions & { includeHidden?: boolean }
 ): ConversationMessageRecord[] {
   const includeHidden = options?.includeHidden === true;
+  const limit = normalizeQueryLimit(
+    options?.limit,
+    DEFAULT_CONVERSATION_MESSAGE_LIST_LIMIT,
+    MAX_CONVERSATION_MESSAGE_LIST_LIMIT,
+  );
+  const offset = normalizeQueryOffset(options?.offset);
   const rows = db.prepare(`
     SELECT *
     FROM conversation_messages
     WHERE thread_id = ?
       ${includeHidden ? "" : `AND ${visibleConversationMessageFilter("conversation_messages")}`}
     ORDER BY created_at ASC, id ASC
-  `).all(threadId) as unknown as MessageRow[];
+    LIMIT ?
+    OFFSET ?
+  `).all(threadId, limit, offset) as unknown as MessageRow[];
 
   return rows.map((row) => mapMessageRow(row));
 }
