@@ -194,6 +194,55 @@ export function getSelectedFilteredSprints(selectedIds: Set<string>, filteredSpr
   return filteredSprints.filter((s) => selectedIds.has(s.id));
 }
 
+export interface LedgerSelectionSummary {
+  selectedCount: number;
+  totalCount: number;
+  allSelected: boolean;
+  noneSelected: boolean;
+}
+
+export function getLedgerSelectionSummary(selectedIds: Set<string>, filteredSprints: Sprint[]): LedgerSelectionSummary {
+  const selectedCount = filteredSprints.reduce((count, sprint) => count + (selectedIds.has(sprint.id) ? 1 : 0), 0);
+  const totalCount = filteredSprints.length;
+  return {
+    selectedCount,
+    totalCount,
+    allSelected: totalCount > 0 && selectedCount === totalCount,
+    noneSelected: selectedCount === 0,
+  };
+}
+
+export function getLedgerViewStateKey(filters: LedgerFilters, sort: LedgerSort, listWindow: string | number): string {
+  const status = filters.status === "all" ? "all" : [...filters.status].sort().join(",");
+  return [
+    filters.query.trim(),
+    status,
+    filters.showcase,
+    filters.qa,
+    sort.key,
+    sort.direction,
+    String(listWindow),
+  ].join("|");
+}
+
+export type BulkLedgerAction = "start" | "pin" | "unpin" | "delete" | null;
+
+export function getBulkActionMessage(action: BulkLedgerAction, selectedCount: number, pending: boolean): string {
+  if (selectedCount === 0) {
+    return "No sprints selected.";
+  }
+  const suffix = `${selectedCount} selected sprint${selectedCount === 1 ? "" : "s"}`;
+  if (!action) {
+    return `Bulk controls apply to ${suffix}.`;
+  }
+  if (pending) {
+    const verb = action === "delete" ? "Deleting" : action === "start" ? "Starting" : action === "pin" ? "Pinning" : "Unpinning";
+    return `${verb} ${suffix}.`;
+  }
+  const verb = action === "delete" ? "Delete" : action === "start" ? "Start" : action === "pin" ? "Pin" : "Unpin";
+  return `${verb} will apply to ${suffix}.`;
+}
+
 /**
  * Cycle sort direction or set default for a new column.
  */

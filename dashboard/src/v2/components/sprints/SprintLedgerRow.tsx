@@ -2,6 +2,7 @@ import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import gsap from "gsap";
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
+import type { JSX } from "preact";
 import {
   AlertTriangle,
   Calendar,
@@ -27,6 +28,7 @@ import { formatSprintKey, STATUS_LABELS } from "../../lib/sprint-ledger-state.js
 import { SprintControls } from "./SprintControls.js";
 import { INTERACTION_TOKENS } from "../../lib/motion/tokens.js";
 import { useResolvedMotionDuration } from "../../hooks/use-reduced-motion.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { TableRow, TableCell } from "../ui/Table.js";
 import { getSprintStatusPresentation } from "../../lib/sprint-status-presentation.js";
 import { computeSprintActionMenuPosition } from "../../lib/sprint-menu-positioning.js";
@@ -97,6 +99,7 @@ export interface SprintLedgerRowProps {
   sprintKeyPrefix?: string;
   pendingActionIds: Set<string>;
   isAnyBulkPending?: boolean;
+  transitionStyle?: JSX.CSSProperties;
   onToggleRow: (id: string) => void;
   onToggleShowcase: (sprint: Sprint) => void;
   onSprintToggle: (sprintId: string) => void;
@@ -119,6 +122,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   sprintKeyPrefix = "SPR",
   pendingActionIds,
   isAnyBulkPending,
+  transitionStyle,
   onToggleRow,
   onToggleShowcase,
   onSprintToggle,
@@ -128,6 +132,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   const [menuOpen, setMenuOpen] = useState(false);
   const checkIconRef = useRef<HTMLSpanElement>(null);
   const isReducedMotion = useReducedMotion();
+  const gsapTokens = useGsapInteractionTokens();
   const prevSelected = useRef(isSelected);
 
   useEffect(() => {
@@ -141,11 +146,11 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
       gsap.fromTo(
         checkIconRef.current,
         { scale: 0 },
-        { scale: 1, duration: 0.15, ease: 'back.out(2)' }
+        { scale: 1, duration: gsapTokens.selectionMovement.duration, ease: gsapTokens.selectionMovement.ease }
       );
     }
     prevSelected.current = isSelected;
-  }, [isSelected, isReducedMotion]);
+  }, [isSelected, isReducedMotion, gsapTokens.selectionMovement.duration, gsapTokens.selectionMovement.ease]);
 
   const pendingToggleActionId = activeRun ? `sprint-stop:${activeRun.id}` : `sprint-start:${sprint.id}`;
   const pendingPauseResumeActionId = sprint.status === "paused"
@@ -207,27 +212,46 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   }
 
   const pendingRowClass = isDeletePending
-    ? "bg-status-red/5 grayscale opacity-50"
+    ? "bg-status-red/5 opacity-70 ring-2 ring-inset ring-status-red/20"
     : isPinPending || isTogglePending || isPauseResumePending
-      ? "bg-signal-500/5 opacity-80"
+      ? "bg-signal-500/5 opacity-90 ring-2 ring-inset ring-signal-500/20"
       : isAnyBulkPending
         ? "opacity-60 grayscale-[0.2]"
         : "";
+  const rowBusy = isRowPending || isTogglePending || isPauseResumePending;
+  const selectionDisabledTitle = isDeletePending
+    ? "Selection is disabled while this sprint is deleting"
+    : isAnyBulkPending
+      ? "Selection is disabled while a bulk action is in progress"
+      : isSelected
+        ? "Deselect sprint"
+        : "Select sprint";
+  const pinDisabledTitle = isDeletePending
+    ? "Pinning is disabled while this sprint is deleting"
+    : isPinPending
+      ? "Pin update in progress"
+      : sprint.showcasePinned
+        ? "Remove from showcase"
+        : "Pin to showcase";
 
   return (
     <TableRow
-      aria-busy={isRowPending || isTogglePending || isPauseResumePending}
-      className={`group transition-all focus-within:ring-2 focus-within:ring-signal-500/20 ${rowTone} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""} ${pendingRowClass} hover:bg-[var(--bg-hover-subtle)] transition-[box-shadow,transform] duration-150 [@media(hover:hover)]:hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)] [@media(hover:hover)]:hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:transform-none`}
-      style={{ transitionDuration: typeof duration === 'number' ? `${duration}s` : duration, transitionTimingFunction: ease }}
+      selected={isSelected}
+      aria-busy={rowBusy}
+      className={`group transition-all focus-within:ring-2 focus-within:ring-signal-500/20 ${rowTone} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""} ${pendingRowClass} hover:bg-[var(--bg-hover-subtle)] transition-[box-shadow,transform] [@media(hover:hover)]:hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)] [@media(hover:hover)]:hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:transform-none`}
+      style={{ ...transitionStyle, transitionDuration: typeof duration === 'number' ? `${duration}s` : duration, transitionTimingFunction: ease }}
     >
       <TableCell isFirst className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`} mobileLabel="Select">
         <button
           type="button"
           onClick={() => onToggleRow(sprint.id)}
           disabled={isDeletePending || isAnyBulkPending}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-black/[0.06] bg-white/72 text-slate-400 transition-colors hover:border-signal-500/25 hover:text-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.07] dark:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
-          title={isDeletePending ? "Wait for the current action to finish" : isSelected ? "Deselect sprint" : "Select sprint"}
-          aria-label={isDeletePending ? `Cannot select sprint ${sprint.name} while deleting` : isSelected ? `Deselect sprint ${sprint.name}` : `Select sprint ${sprint.name}`}
+          className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border text-slate-400 transition-colors hover:border-signal-500/25 hover:text-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.07] dark:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-50 ${
+            isSelected ? "border-signal-500/35 bg-signal-500/10 ring-2 ring-inset ring-signal-500/20" : "border-black/[0.06] bg-white/72"
+          }`}
+          title={selectionDisabledTitle}
+          aria-label={isDeletePending ? `Cannot select sprint ${sprint.name} while deleting` : isAnyBulkPending ? `Cannot select sprint ${sprint.name} while a bulk action is in progress` : isSelected ? `Deselect sprint ${sprint.name}` : `Select sprint ${sprint.name}`}
+          aria-pressed={isSelected}
         >
           {isSelected
             ? <span ref={checkIconRef} className="flex"><CheckSquare className="h-4 w-4 text-signal-500" strokeWidth={2.2} /></span>
@@ -244,11 +268,12 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
               ? "border-status-red/20 bg-status-red/10 text-status-red shadow-[0_8px_20px_rgba(239,68,68,0.10)]"
               : "border-black/[0.06] bg-white/70 text-slate-400 hover:border-status-red/20 hover:text-status-red dark:border-white/[0.07] dark:bg-white/[0.04]"
           } disabled:cursor-not-allowed disabled:opacity-50`}
-          title={sprint.showcasePinned ? "Remove from showcase" : "Pin to showcase"}
+          title={pinDisabledTitle}
           aria-label={sprint.showcasePinned ? `Remove sprint ${sprint.name} from showcase` : `Pin sprint ${sprint.name} to showcase`}
+          aria-busy={isPinPending}
         >
           {isPinPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.1} />
+            <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" strokeWidth={2.1} />
           ) : (
             <Heart className="h-3.5 w-3.5" fill={sprint.showcasePinned ? "currentColor" : "none"} strokeWidth={2.1} />
           )}
@@ -298,19 +323,19 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
         <div className="flex flex-wrap items-center gap-2 lg:flex-col lg:items-start">
           {isDeletePending ? (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-status-red/25 bg-status-red/10 px-3 py-1.5 text-[11px] font-bold text-status-red">
-              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.2} /> Deleting
+              <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" strokeWidth={2.2} /> Deleting
             </span>
           ) : isPinPending ? (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/25 bg-signal-500/10 px-3 py-1.5 text-[11px] font-bold text-signal-700 dark:text-signal-300">
-              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.2} /> Pinning
+              <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" strokeWidth={2.2} /> Pinning
             </span>
           ) : isTogglePending ? (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/25 bg-signal-500/10 px-3 py-1.5 text-[11px] font-bold text-signal-700 dark:text-signal-300">
-              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.2} /> {activeRun ? "Stopping" : "Starting"}
+              <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" strokeWidth={2.2} /> {activeRun ? "Stopping" : "Starting"}
             </span>
           ) : isPauseResumePending ? (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/25 bg-signal-500/10 px-3 py-1.5 text-[11px] font-bold text-signal-700 dark:text-signal-300">
-              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.2} /> {sprint.status === "paused" ? "Resuming" : "Pausing"}
+              <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" strokeWidth={2.2} /> {sprint.status === "paused" ? "Resuming" : "Pausing"}
             </span>
           ) : (
             <span className={`inline-flex rounded-full border px-4 py-1.5 text-[11px] font-bold ${badgeTone}`}>
@@ -350,8 +375,8 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
         <div className="mt-1.5 inline-flex items-center gap-1">
           {sprint.latestReview?.status === 'running' ? (
             <>
-              <Loader2 className="h-3.5 w-3.5 text-signal-500 animate-spin" strokeWidth={2.2} />
-              <span className="text-[11px] font-bold text-signal-500 animate-pulse">Reviewing</span>
+              <Loader2 className="h-3.5 w-3.5 text-signal-500 animate-spin motion-reduce:animate-none" strokeWidth={2.2} />
+              <span className="text-[11px] font-bold text-signal-500 animate-pulse motion-reduce:animate-none">Reviewing</span>
             </>
           ) : sprint.latestReview?.status === 'completed' || sprint.latestReview?.status === 'reviewed' ? (
             <>
@@ -387,11 +412,12 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
               type="button"
               disabled={isDeletePending}
               onClick={(e) => onOpenRowMenu(e, sprint.id)}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-black/[0.06] bg-white/80 text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-              title="Open sprint actions" aria-label={`Open actions menu for sprint ${sprint.name}`}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-black/[0.06] bg-white/80 text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+              title={isDeletePending ? "Actions are disabled while this sprint is deleting" : "Open sprint actions"}
+              aria-label={`Open actions menu for sprint ${sprint.name}`}
             >
               {isDeletePending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-signal-500" strokeWidth={2.2} />
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-signal-500 motion-reduce:animate-none" strokeWidth={2.2} />
               ) : (
                 <MoreVertical className="h-3.5 w-3.5" />
               )}
@@ -428,11 +454,12 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
                 disabled={isDeletePending}
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-black/[0.06] bg-white/80 text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-                title="Open sprint actions" aria-label={`Open actions menu for sprint ${sprint.name}`}
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-black/[0.06] bg-white/80 text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                title={isDeletePending ? "Actions are disabled while this sprint is deleting" : "Open sprint actions"}
+                aria-label={`Open actions menu for sprint ${sprint.name}`}
               >
                 {isDeletePending ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-signal-500" strokeWidth={2.2} />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-signal-500 motion-reduce:animate-none" strokeWidth={2.2} />
                 ) : (
                   <MoreVertical className="h-3.5 w-3.5" />
                 )}
