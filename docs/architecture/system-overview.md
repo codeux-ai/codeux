@@ -48,6 +48,7 @@ This project is a Model Context Protocol (MCP) server with an integrated dashboa
 ### 5. Dashboard server and frontend
 - API host: `src/server/dashboard-server.ts`
 - Frontend app: `dashboard/src/*`
+- Settings view-models: `dashboard/src/v2/lib/settings-view-models.ts` is a compatibility barrel over focused helpers in `dashboard/src/v2/lib/settings/`. Provider instance/auth helpers, model option catalogs, model pricing refs, project override/source helpers, display metadata, and branch naming helpers are kept in separate typed modules so dashboard components can share behavior without changing settings API contracts or saved settings shapes.
 
 ### 6. Data and settings repositories
 - Subtasks: `src/repositories/subtask-repository.ts`
