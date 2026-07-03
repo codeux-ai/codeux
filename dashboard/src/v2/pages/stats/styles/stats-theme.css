@@ -1,40 +1,75 @@
 @layer base {
   :root {
     /* Layout Tokens */
-    --stats-card-radius: 1.85rem;
-    --stats-card-padding: 1.75rem;
+    --stats-card-radius: var(--radius-ui);
+    --stats-panel-radius: var(--radius-ui);
+    --stats-subpanel-radius: var(--radius-ui);
+    --stats-control-radius: var(--radius-ui);
+    --stats-chip-radius: 9999px;
+    --stats-card-padding: 1.5rem;
+    --stats-card-padding-compact: 1rem;
+    --stats-card-min-height: 10rem;
     
     /* Surface Tokens (Light Mode) */
-    --stats-card-bg: #FFFFFF;
-    --stats-card-border: rgba(0, 0, 0, 0.08);
-    --stats-card-shadow: 0 2px 20px rgba(0, 0, 0, 0.04);
+    --stats-surface-panel: var(--surface-glass);
+    --stats-surface-panel-hover: var(--surface-glass-hover);
+    --stats-surface-subpanel: var(--fill-muted);
+    --stats-surface-subpanel-hover: var(--fill-muted-hover);
+    --stats-surface-chip: var(--fill-muted);
+    --stats-surface-input: var(--fill-muted);
+    --stats-card-bg: var(--stats-surface-panel);
+    --stats-card-border: var(--border-hairline);
+    --stats-card-shadow: var(--elevation-base);
+    --stats-card-shadow-hover: var(--elevation-raised);
+    --stats-card-shadow-focus: var(--elevation-raised);
+    --stats-panel-shadow: var(--elevation-base);
+    --stats-subpanel-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+    --stats-border-hairline: var(--border-hairline);
+    --stats-border-strong: rgba(15, 23, 42, 0.12);
     
     /* Accent Tokens */
-    --stats-accent-signal: #00E0A0;
-    --stats-accent-amber: #FFB800;
-    --stats-accent-cyan: #0EA5E9;
-    --stats-accent-rose: #F43F5E;
-    --stats-accent-emerald: #10B981;
+    --stats-accent-signal: var(--signal-600);
+    --stats-accent-amber: var(--ember-600);
+    --stats-accent-cyan: #0369a1;
+    --stats-accent-rose: var(--status-red);
+    --stats-accent-emerald: var(--status-green);
+    --stats-accent-signal-fill: rgba(0, 122, 94, 0.08);
+    --stats-accent-amber-fill: rgba(153, 90, 0, 0.08);
+    --stats-accent-cyan-fill: rgba(3, 105, 161, 0.08);
+    --stats-accent-rose-fill: rgba(211, 47, 47, 0.07);
+    --stats-accent-emerald-fill: rgba(0, 122, 94, 0.07);
+    --stats-accent-muted-fill: rgba(15, 23, 42, 0.045);
+    --stats-focus-ring: var(--accent-focus-ring);
     
     /* Typography Tokens */
-    --stats-label-color: #94A3B8; /* slate-400 */
-    --stats-value-color: #0F172A; /* slate-900 */
-    --stats-detail-color: #64748B; /* slate-500 */
+    --stats-label-color: var(--text-metadata);
+    --stats-value-color: var(--text-primary);
+    --stats-detail-color: var(--text-metadata);
     
     /* Motion Tokens */
-    --stats-motion-standard: 300ms cubic-bezier(0.4, 0, 0.2, 1);
-    --stats-motion-dramatic: 500ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    --stats-motion-fast: var(--motion-fast) var(--motion-ease-standard);
+    --stats-motion-standard: var(--motion-standard) var(--motion-ease-standard);
+    --stats-motion-dramatic: var(--motion-slow) var(--motion-ease-dramatic);
   }
 
   .dark {
     /* Surface Tokens (Dark Mode) */
-    --stats-card-bg: #181411; /* void-800 */
-    --stats-card-border: rgba(255, 255, 255, 0.08);
-    --stats-card-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+    --stats-card-bg: var(--stats-surface-panel);
+    --stats-card-border: var(--border-hairline);
+    --stats-card-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+    --stats-card-shadow-hover: 0 10px 24px rgba(0, 0, 0, 0.24);
+    --stats-card-shadow-focus: 0 10px 24px rgba(0, 0, 0, 0.24);
+    --stats-panel-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+    --stats-subpanel-shadow: 0 1px 2px rgba(0, 0, 0, 0.16);
+    --stats-border-strong: rgba(250, 244, 237, 0.14);
     
-    /* Typography Tokens (Dark Mode) */
-    --stats-label-color: #94A3B8; /* slate-400 */
-    --stats-value-color: #FFFFFF;
-    --stats-detail-color: #94A3B8; /* slate-400 */
+    /* Accent Tokens (Dark Mode) */
+    --stats-accent-cyan: #38bdf8;
+    --stats-accent-signal-fill: rgba(0, 224, 160, 0.08);
+    --stats-accent-amber-fill: rgba(224, 160, 0, 0.08);
+    --stats-accent-cyan-fill: rgba(56, 189, 248, 0.08);
+    --stats-accent-rose-fill: rgba(255, 77, 77, 0.075);
+    --stats-accent-emerald-fill: rgba(0, 163, 126, 0.075);
+    --stats-accent-muted-fill: rgba(250, 244, 237, 0.045);
   }
 }
