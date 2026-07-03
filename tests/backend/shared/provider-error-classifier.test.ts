@@ -260,13 +260,14 @@ describe("classifyProviderError", () => {
         "",
         "ERROR: You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 3:54 AM.",
       );
-      const classification = classifyProviderError("codex", result);
+      const now = new Date(2026, 5, 2, 1, 0, 0, 0).getTime();
+      const classification = classifyProviderError("codex", result, now);
       expect(classification.category).toBe("QUOTA_EXHAUSTED");
       expect(classification.userMessage).toContain("Codex quota exhausted");
       // "try again at 3:54 AM" resolves to a future reset timestamp.
       expect(classification.resetAfter).toMatch(/^\d+h\d+m\d+s$/);
       expect(classification.resetAtIso).toBeTruthy();
-      expect(new Date(classification.resetAtIso!).getTime()).toBeGreaterThan(Date.now());
+      expect(new Date(classification.resetAtIso!).getTime()).toBeGreaterThan(now);
     });
 
     it("detects usage-limit exhaustion even without a parseable reset time", () => {
@@ -365,7 +366,8 @@ describe("classifyProviderError", () => {
 
       it("classifies a JSONL-wrapped usage-limit event and extracts the clock-time reset", () => {
         const stdout = '{"type":"error","message":"You\'ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 3:54 AM."}';
-        const classification = classifyProviderError("codex", makeResult(stdout, ""));
+        const now = new Date(2026, 5, 2, 1, 0, 0, 0).getTime();
+        const classification = classifyProviderError("codex", makeResult(stdout, ""), now);
         expect(classification.category).toBe("QUOTA_EXHAUSTED");
         expect(classification.resetAfter).toMatch(/^\d+h\d+m\d+s$/);
         expect(classification.resetAtIso).toBeTruthy();
@@ -444,7 +446,8 @@ describe("classifyProviderError", () => {
         "",
         "ERROR: You've hit your usage limit. Upgrade to Pro to purchase more credits or try again at 3:54 AM.",
       );
-      const classification = classifyProviderError("qwen-code", result);
+      const now = new Date(2026, 5, 2, 1, 0, 0, 0).getTime();
+      const classification = classifyProviderError("qwen-code", result, now);
       expect(classification.category).toBe("QUOTA_EXHAUSTED");
       expect(classification.resetAfter).toMatch(/^\d+h\d+m\d+s$/);
       expect(classification.resetAtIso).toBeTruthy();

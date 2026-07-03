@@ -88,7 +88,7 @@ export interface ProviderErrorClassification {
 interface ErrorPattern {
   category: ProviderErrorCategory;
   patterns: RegExp[];
-  resetTimeExtractor?: (text: string) => string | null;
+  resetTimeExtractor?: (text: string, nowMs?: number) => string | null;
 }
 
 type ResetTimeExtractor = NonNullable<ErrorPattern["resetTimeExtractor"]>;
@@ -489,13 +489,13 @@ export function computeResetAfterFromClockTime(text: string, nowMs: number = Dat
   return `${hours}h${minutes}m${seconds}s`;
 }
 
-function computeResetAtIso(resetAfter: string): string | null {
+function computeResetAtIso(resetAfter: string, nowMs: number = Date.now()): string | null {
   const hours = parseInt(resetAfter.match(/(\d+)h/)?.[1] ?? "0", 10);
   const minutes = parseInt(resetAfter.match(/(\d+)m/)?.[1] ?? "0", 10);
   const seconds = parseInt(resetAfter.match(/(\d+)s/)?.[1] ?? "0", 10);
   const totalMs = (hours * 3600 + minutes * 60 + seconds) * 1000;
   if (totalMs <= 0) return null;
-  return new Date(Date.now() + totalMs).toISOString();
+  return new Date(nowMs + totalMs).toISOString();
 }
 
 function buildUserMessage(
@@ -641,6 +641,7 @@ function buildUnknownClassification(
 export function classifyProviderError(
   provider: Exclude<ProviderId, "jules">,
   result: CommandResult,
+  nowMs: number = Date.now(),
 ): ProviderErrorClassification {
   const combined = `${result.stdout}\n${result.stderr}`;
   const providerPatterns = PROVIDER_PATTERNS[provider] ?? [];
@@ -664,8 +665,8 @@ export function classifyProviderError(
 
   for (const entry of providerPatterns) {
     if (entry.patterns.some((pattern) => pattern.test(combined))) {
-      const resetAfter = entry.resetTimeExtractor?.(combined) ?? null;
-      const resetAtIso = resetAfter ? computeResetAtIso(resetAfter) : null;
+      const resetAfter = entry.resetTimeExtractor?.(combined, nowMs) ?? null;
+      const resetAtIso = resetAfter ? computeResetAtIso(resetAfter, nowMs) : null;
       return {
         category: entry.category,
         provider,
