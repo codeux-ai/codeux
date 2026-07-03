@@ -595,8 +595,11 @@ export class PlanningAgentService {
         }
         : null,
     });
-    const providerConfigId = args.overrides?.virtualProvider
-      ? Object.entries(route.providers).find(([, candidate]) => candidate.provider === args.overrides?.virtualProvider)?.[0] || route.providerConfigId
+    const virtualProviderOverride = args.overrides?.virtualProvider;
+    const providerConfigId = virtualProviderOverride
+      ? Object.entries(route.providers).find(([candidateConfigId, candidate]) => (
+        candidateConfigId === virtualProviderOverride || candidate.provider === virtualProviderOverride
+      ))?.[0] || route.providerConfigId
       : route.providerConfigId;
     const baseProviderSettings = route.providers[providerConfigId];
     if (!baseProviderSettings) {

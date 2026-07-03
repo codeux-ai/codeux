@@ -1,7 +1,13 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
 import { renderHook, act } from "@testing-library/preact";
-import { getAvailableModes, toPlanningOverrides, resolveSubmitOriginalPrompt, useSprintComposerState } from "../../../dashboard/src/v2/lib/sprint-composer-state.js";
+import {
+  getAvailableModes,
+  toPlanningOverrides,
+  resolveSubmitOriginalPrompt,
+  toVirtualPlanningRouteOption,
+  useSprintComposerState,
+} from "../../../dashboard/src/v2/lib/sprint-composer-state.js";
 
 describe("Sprint Composer State Helpers", () => {
   describe("useSprintComposerState", () => {
@@ -61,6 +67,29 @@ describe("Sprint Composer State Helpers", () => {
     it("returns virtualProvider and virtualModel for virtual route", () => {
       expect(toPlanningOverrides({ type: "virtual", id: "gemini", label: "Gemini", provider: "gemini" }, "pro", null))
         .toEqual({ virtualProvider: "gemini", virtualModel: "pro" });
+    });
+
+    it("keeps provider instance ids separate from virtual provider types", () => {
+      const route = toVirtualPlanningRouteOption({
+        providerConfigId: "claude-live",
+        provider: "claude-code",
+        displayLabel: "Claude Live",
+        iconProviderId: "claude-code",
+        effectiveModel: "fable-5",
+      });
+
+      expect(route).toMatchObject({
+        type: "virtual",
+        id: "claude-live",
+        provider: "claude-code",
+        label: "Claude Live",
+        iconProviderId: "claude-code",
+        effectiveModel: "fable-5",
+      });
+      expect(toPlanningOverrides(route, "fable-5", null)).toEqual({
+        virtualProvider: "claude-code",
+        virtualModel: "fable-5",
+      });
     });
 
     it("returns virtualModel if only model override provided", () => {

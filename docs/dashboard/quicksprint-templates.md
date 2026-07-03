@@ -2,7 +2,7 @@
 
 Quicksprint turns a reusable template into a sprint goal prompt, then sends that prompt through the normal sprint planning flow.
 
-The route and model controls share Sprint Composer routing metadata. Their default option reflects the effective `planning` route mapping, including a pinned provider instance and route-specific model override, instead of blindly showing the worker default.
+The route and model controls share Sprint Composer routing metadata. Their default option reflects the effective `planning` route mapping, including a pinned provider instance and route-specific model override, instead of blindly showing the worker default. When an operator selects a provider instance and model explicitly, the dashboard preserves the instance id for the select control but sends the underlying CLI provider type plus the selected model to planning, so the model is invoked through the intended provider runtime.
 
 This page documents the built-in template catalog, how the dashboard organizes it, and the authoring rules for high-quality templates.
 

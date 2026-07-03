@@ -966,6 +966,23 @@ describe("PlanningAgentService", () => {
       goal: "Goal",
     });
 
+    const systemSettings = settingsRepository.getSystemSettings();
+    settingsRepository.saveSystemSettings({
+      ...systemSettings,
+      integrations: {
+        ...systemSettings.integrations,
+        providers: {
+          ...systemSettings.integrations.providers,
+          "claude-live": {
+            ...systemSettings.integrations.providers["claude-code"],
+            provider: "claude-code",
+            name: "Claude Live",
+            apiKey: "claude-key",
+          },
+        },
+      },
+    });
+
     settingsRepository.saveProjectSettings(project.id, {
       workers: {
         executionMode: "VIRTUAL",
@@ -981,6 +998,13 @@ describe("PlanningAgentService", () => {
           codex: {
             apiKey: "codex-key",
             model: "codex-model",
+            thinkingMode: "disabled",
+          },
+          "claude-live": {
+            provider: "claude-code",
+            name: "Claude Live",
+            apiKey: "claude-key",
+            model: "claude-model",
             thinkingMode: "disabled",
           },
         },
@@ -999,6 +1023,19 @@ describe("PlanningAgentService", () => {
     expect(providerRunner.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
       provider: "codex",
       model: "custom-model",
+    }));
+
+    await service.improveSprintPrompt(project.id, {
+      name: "Sprint",
+      goal: "Prompt",
+      overrides: {
+        virtualProvider: "claude-live" as any,
+        virtualModel: "fable-5",
+      },
+    });
+    expect(providerRunner.runProviderForText).toHaveBeenLastCalledWith(expect.objectContaining({
+      provider: "claude-code",
+      model: "fable-5",
     }));
 
     // Test replanning

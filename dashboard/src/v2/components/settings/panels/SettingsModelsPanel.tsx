@@ -21,6 +21,7 @@ import {
   getProviderTypeLabel,
   providerSupportsModelSelection,
   providerSupportsThinkingMode,
+  resolveRouteDisplayProviderPool,
   sortProviderConfigEntries,
 } from "../../../lib/settings-view-models.js";
 
@@ -301,11 +302,11 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
   // An empty pool no longer fans out to every instance: weighted/agent routes fail closed
   // to the route's primary (see getEnabledProviders in provider-routing.ts), so an empty
   // selection resolves to the same single instance as a manual route.
-  const routePool = activeRoute.allowedProviders.length > 0
-    ? activeRoute.allowedProviders.filter((providerConfigId) => editableSettings.aiProvider.providers[providerConfigId])
-    : routeResolvedDefaultId
-      ? [routeResolvedDefaultId]
-      : [];
+  const routePool = resolveRouteDisplayProviderPool(
+    activeRoute,
+    routeResolvedDefaultId,
+    editableSettings.aiProvider.providers,
+  );
   const allowedPoolEntries = isManualStrategy
     ? providerEntries.filter(([providerConfigId]) => providerConfigId === routeResolvedDefaultId)
     : providerEntries;
@@ -597,7 +598,16 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                   : route.profile === "WORKER"
                     ? workerProviderSettings
                     : globalProviderSettings;
-                const poolCount = route.allowedProviders.length || 1;
+                const routePrimaryProviderId = route.provider
+                  || (route.profile === "WORKER"
+                    ? editableSettings.workers.virtualWorkerProvider
+                    : editableSettings.aiProvider.provider)
+                  || null;
+                const poolCount = resolveRouteDisplayProviderPool(
+                  route,
+                  routePrimaryProviderId,
+                  editableSettings.aiProvider.providers,
+                ).length;
                 const overridesCount = Object.keys(route.providers).length;
                 return (
                   <button

@@ -61,6 +61,14 @@ vi.mock("../../../dashboard/src/v2/lib/sprint-composer-state.js", () => ({
     isEditing: false,
     hasTasks: false,
   })),
+  toVirtualPlanningRouteOption: vi.fn((provider: any) => ({
+    type: "virtual",
+    id: provider.providerConfigId || provider.id || provider.provider || "",
+    label: provider.displayLabel || provider.label || provider.providerConfigId || provider.id || provider.provider || "Provider",
+    provider: provider.provider || provider.iconProviderId || provider.id,
+    iconProviderId: provider.iconProviderId || provider.provider || provider.id,
+    effectiveModel: provider.effectiveModel,
+  })),
   toPlanningOverrides: vi.fn(),
   resolveSubmitOriginalPrompt: vi.fn(),
 }));
