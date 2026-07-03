@@ -49,6 +49,21 @@ export interface TelemetrySourceSummary {
   mix: TelemetrySourceMix;
 }
 
+export interface TelemetryQualityIndicator {
+  id: TokenUsageSource;
+  label: string;
+  count: number;
+  share: number | null;
+  status: "direct" | "fallback" | "missing";
+  summary: string;
+}
+
+export interface ProviderConfidenceSummary {
+  label: "Direct" | "Partial" | "Fallback" | "Unknown";
+  score: number | null;
+  detail: string;
+}
+
 export function computeUsageEfficiency(usage: ExecutionUsageTotals): ModelEfficiencyMetrics {
   const cacheDenominator = usage.inputTokens + usage.cachedInputTokens;
   const activeMinutes = usage.activeTimeMs / 60000;
@@ -61,6 +76,13 @@ export function computeUsageEfficiency(usage: ExecutionUsageTotals): ModelEffici
       : null,
     outputInputRatio: cacheDenominator > 0 ? usage.outputTokens / cacheDenominator : null,
   };
+}
+
+export function formatShare(value: number | null): string {
+  if (value === null) {
+    return "—";
+  }
+  return `${Math.round(value * 100)}%`;
 }
 
 export function buildTelemetrySourceMix(usage: Pick<ExecutionUsageTotals, "reportedInvocationCount" | "estimatedInvocationCount" | "unavailableInvocationCount" | "unsupportedInvocationCount">): TelemetrySourceMix {
@@ -96,6 +118,60 @@ export function buildTelemetrySourceMix(usage: Pick<ExecutionUsageTotals, "repor
     unsupportedShare,
     dominant,
   };
+}
+
+export function buildTelemetryQualityIndicators(usage: Pick<ExecutionUsageTotals, "reportedInvocationCount" | "estimatedInvocationCount" | "unavailableInvocationCount" | "unsupportedInvocationCount">): TelemetryQualityIndicator[] {
+  const mix = buildTelemetrySourceMix(usage);
+  return [
+    {
+      id: "reported",
+      label: "Reported",
+      count: mix.reported,
+      share: mix.reportedShare,
+      status: "direct",
+      summary: mix.reported > 0 ? `${formatShare(mix.reportedShare)} directly reported` : "No reported calls",
+    },
+    {
+      id: "estimated",
+      label: "Estimated",
+      count: mix.estimated,
+      share: mix.estimatedShare,
+      status: "fallback",
+      summary: mix.estimated > 0 ? `${formatShare(mix.estimatedShare)} estimated from fallback records` : "No estimated calls",
+    },
+    {
+      id: "unavailable",
+      label: "Unavailable",
+      count: mix.unavailable,
+      share: mix.unavailableShare,
+      status: "missing",
+      summary: mix.unavailable > 0 ? `${formatShare(mix.unavailableShare)} missing usage details` : "No unavailable calls",
+    },
+    {
+      id: "unsupported",
+      label: "Unsupported",
+      count: mix.unsupported,
+      share: mix.unsupportedShare,
+      status: "missing",
+      summary: mix.unsupported > 0 ? `${formatShare(mix.unsupportedShare)} unsupported by provider telemetry` : "No unsupported calls",
+    },
+  ];
+}
+
+export function buildProviderConfidenceSummary(usage: Pick<ExecutionUsageTotals, "reportedInvocationCount" | "estimatedInvocationCount" | "unavailableInvocationCount" | "unsupportedInvocationCount">): ProviderConfidenceSummary {
+  const mix = buildTelemetrySourceMix(usage);
+  if (mix.total === 0) {
+    return { label: "Unknown", score: null, detail: "No provider-level source counts." };
+  }
+
+  const score = mix.reported / mix.total;
+  if (score >= 0.8 && mix.unavailable === 0 && mix.unsupported === 0) {
+    return { label: "Direct", score, detail: `${formatShare(score)} reported source coverage.` };
+  }
+  if (score > 0) {
+    return { label: "Partial", score, detail: `${formatShare(score)} reported with fallback sources present.` };
+  }
+  return { label: "Fallback", score, detail: "No calls were directly reported by this provider." };
 }
 
 export function buildTelemetrySourceSummary(usage: Pick<ExecutionUsageTotals, "reportedInvocationCount" | "estimatedInvocationCount" | "unavailableInvocationCount" | "unsupportedInvocationCount">): TelemetrySourceSummary {

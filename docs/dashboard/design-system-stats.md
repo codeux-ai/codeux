@@ -23,7 +23,7 @@ The Stats surface has six persistent layers:
    - The header keeps operators oriented when switching between dense workspaces.
 5. Mode workspace
    - Trend renders the KPI band, chart workspace, active bucket rail, graph filters, minimap, and purpose activity ledger.
-   - Composition, Models, and Reliability render secondary studio panels for mix, performance, telemetry confidence, and provider health.
+   - Composition, Models, and Reliability render secondary studio panels for mix, performance, telemetry confidence, and provider health. These studios should expose comparable insight bands before detailed rows so operators can compare provider/source concentration, model efficiency, and telemetry quality without relying on the chart workspace.
    - Ledgers renders tabbed Task Telemetry, Sprint Telemetry, and Git Telemetry.
    - System renders the invocation workbench with summaries, controlled filters, and the invocation table.
 6. Feedback states
@@ -114,5 +114,8 @@ The Stats surface has six persistent layers:
 ## Implementation Notes
 
 - Keep Stats visuals aligned with `dashboard/src/v2/pages/stats/styles/stats-theme.css` and the shared primitives re-exported by `StatsShared.tsx`.
+- Composition should make token anatomy, provider lanes, source confidence, purpose distribution, and low-data fallbacks visible in one flow. Donut and ribbon visuals must have a single coherent accessible label that summarizes the data instead of fragmenting SVG or decorative segment output.
+- Models should compare the same dimensions across aggregate highlights and each ranked model card: latency, success rate, token volume, cache efficiency, output velocity, and reasoning share.
+- Reliability should lead with an actionable source-quality status, then show reported/estimated/unavailable/unsupported coverage, provider confidence, duration sample coverage, and provider-level reliability notes.
 - Documentation and tests should describe the integrated behavior: hero command band, mode card taxonomy, studio header, trend chart workspace, secondary studios, ledgers, system workbench, and realtime/polling refresh states.
 - Small visual fixes are acceptable only when needed to keep tests or docs truthful; redesign changes belong in dedicated UI tasks.

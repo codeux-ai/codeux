@@ -367,6 +367,9 @@ export const DonutCard: FunctionComponent<{
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const slices = useMemo(() => buildDonutSlices(segments), [segments]);
   const activeSegment = hoveredIndex === null ? null : slices[hoveredIndex] || null;
+  const visualSummary = segments.length > 0
+    ? `${description} ${segments.map((segment) => `${segment.label}: ${formatTokens(segment.value)}`).join("; ")}.`
+    : `${description} No telemetry landed in this composition yet.`;
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
@@ -429,10 +432,7 @@ export const DonutCard: FunctionComponent<{
         </div>
         <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-center">
           <div className="flex items-center justify-center">
-            <div className="relative h-60 w-60">
-              <div className="sr-only" role="region" aria-label={title}>
-                {description}. {segments.map(s => `${s.label}: ${s.value}`).join(", ")}
-              </div>
+            <div className="relative h-60 w-60" role="img" aria-label={`${title}. ${visualSummary}`}>
               <svg
                 ref={wheelRef}
                 viewBox="0 0 240 240"
@@ -538,7 +538,12 @@ export const DonutCard: FunctionComponent<{
 export const PurposeRibbon: FunctionComponent<{
   purposes: ExecutionStatsEntitySummary[];
 }> = ({ purposes }) => (
-  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+  <div role="list" aria-label="Purpose distribution by token volume and active time" className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+    {purposes.length === 0 ? (
+      <div role="status" className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-8 text-center text-sm text-slate-400 dark:border-white/[0.08] md:col-span-2 xl:col-span-4">
+        No purpose distribution available for this window.
+      </div>
+    ) : null}
     {purposes.slice(0, 4).map((purpose) => {
       const config = getPurposeConfig(purpose.id);
       const Icon = config.icon;
@@ -551,7 +556,12 @@ export const PurposeRibbon: FunctionComponent<{
         emerald: "text-emerald-600 dark:text-emerald-400",
       };
       return (
-        <div key={purpose.id} className={`${SUBPANEL_CLASS} flex min-h-[9rem] flex-col justify-between p-4`}>
+        <div
+          key={purpose.id}
+          role="listitem"
+          aria-label={`${purpose.label.replace(/_/g, " ")}: ${formatTokens(purpose.usage.totalTokens)} tokens, ${formatStatsDuration(purpose.usage.activeTimeMs)} active time.`}
+          className={`${SUBPANEL_CLASS} flex min-h-[9rem] flex-col justify-between p-4`}
+        >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="truncate text-sm font-black capitalize text-slate-900 dark:text-white">
@@ -579,7 +589,7 @@ export const PurposeRibbon: FunctionComponent<{
 );
 
 export const StudioHeader: FunctionComponent<{
-  icon: typeof Activity | typeof PieChart | typeof ShieldCheck | typeof Layers3;
+  icon: ComponentType<any>;
   eyebrow: string;
   title: string;
   description: string;
