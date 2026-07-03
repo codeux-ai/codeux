@@ -55,6 +55,12 @@ When announcing asynchronous feedback (e.g., via Toasts, ActionFeedbackRegion, o
 - Use polite announcements for loading, empty, success, pending, background refresh, reconnect attempts that do not block the current view, and stale-data notices. Use assertive announcements only for blocking errors, failed saves, unavailable preview containers, disconnected live transport, and destructive confirmations that require immediate operator attention.
 - `aria-busy` belongs on the control or region affected by async work. Keep stale content visible during background refresh whenever the source area already owns cached data, such as Stats, Tasks, Sprints, Overview telemetry, and Live runtime panels.
 
+## Shared Control States
+
+Shared dashboard controls use `SHARED_INTERACTION_CLASSES`, `useInteractionTokens`, and the dashboard focus ring variables for hover, focus-visible, active, disabled, pending, and selected feedback. Button-like controls suppress click handlers whenever native `disabled`, `aria-disabled`, or pending state is active, while loading controls expose `aria-busy` and keep static icons or colors visible when motion is reduced. Select triggers expose stable expanded, selected, disabled, and listbox relationship state through ARIA attributes.
+
+Pending and success feedback must not resize controls. Shared buttons and icon buttons keep fixed feedback slots for spinners and status icons, and select triggers preserve their trigger dimensions while overlays animate independently with interaction tokens.
+
 ## Reduced Motion
 
 All interaction timings automatically respect the user's system preferences or dashboard settings for reduced motion (`prefers-reduced-motion: reduce`).
