@@ -3,7 +3,7 @@ import type { ErrorObject, ValidateFunction } from "ajv";
 import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { TOOL_DEFINITIONS } from "../../../contracts/mcp-tool-definitions.js";
 
-const ajv = new Ajv({ allErrors: true });
+const ajv = new Ajv({ allErrors: true, allowUnionTypes: true });
 
 // Compile schemas for all tools
 const validators = new Map<string, ValidateFunction>();

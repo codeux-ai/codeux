@@ -185,7 +185,9 @@ export class VirtualWorkerService {
     }
 
     this.cleanupOrphanedVirtualWorkers();
-    void this.reconcile();
+    void this.reconcile().catch((error) => {
+      this.deps.logger?.error("Virtual worker reconcile failed", { error });
+    });
     this.reconcileTimer = setInterval(() => {
       void this.reconcile().catch((error) => {
         this.deps.logger?.error("Virtual worker reconcile failed", { error });

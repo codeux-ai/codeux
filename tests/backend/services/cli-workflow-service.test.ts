@@ -5,6 +5,7 @@ import { executeProviderStage } from "../../../src/services/cli-workflow/pipelin
 import { executeGitFinalizeStage } from "../../../src/services/cli-workflow/pipeline/git-finalize-stage.js";
 import { executePrFinalizeStage } from "../../../src/services/cli-workflow/pipeline/pr-finalize-stage.js";
 import { executeCleanupStage } from "../../../src/services/cli-workflow/pipeline/cleanup-stage.js";
+import { ActiveDispatchRegistry, SERVER_SHUTDOWN_STOP_REASON } from "../../../src/services/active-dispatch-registry.js";
 
 vi.mock("../../../src/services/cli-workflow/pipeline/prepare-stage.js");
 vi.mock("../../../src/services/cli-workflow/pipeline/execute-provider-stage.js");
@@ -95,6 +96,83 @@ describe("CliWorkflowService unpushed commit detection", () => {
       expect.objectContaining({ status: "failed", errorMessage: "Stage failed" }),
     );
     expect(deps.logger.error).toHaveBeenCalled();
+  });
+
+  it("preserves running task state and workspace when server shutdown aborts workflow", async () => {
+    const executionRepository = {
+      getTaskRun: vi.fn().mockReturnValue({
+        id: "run-1",
+        dispatchId: "dispatch-1",
+        startedAt: "2026-03-10T00:00:00.000Z",
+        prUrl: null,
+        workerBranch: null,
+      }),
+      getLatestTaskRunBySessionId: vi.fn(),
+      appendTaskRunEvent: vi.fn(),
+      updateTaskRun: vi.fn(),
+      updateTaskDispatch: vi.fn(),
+      getSprintRun: vi.fn().mockReturnValue(null),
+    };
+    const activeDispatchRegistry = new ActiveDispatchRegistry();
+    const deps = {
+      sessionTracking: {
+        findLatestFailedCliSessionForTask: vi.fn().mockReturnValue(null),
+        createSession: vi.fn().mockImplementation((input) => ({ ...input, name: `sessions/${input.id}`, outputs: [] })),
+        appendActivity: vi.fn(),
+        updateSession: vi.fn(),
+      },
+      getDashboardSettings: vi.fn().mockReturnValue({
+        cliWorkflow: {
+          containerImage: "node:24-bookworm-slim",
+          executionMode: "DOCKER",
+          cleanupWorktreeOnFailure: true,
+        },
+      }),
+      agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue({ instructionMarkdown: "guide" }) },
+      getGithubToken: vi.fn().mockReturnValue("token"),
+      executionRepository,
+      activeDispatchRegistry,
+      logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
+    };
+    const service = new CliWorkflowService(deps as any);
+
+    vi.mocked(executePrepareStage).mockImplementation(async () => {
+      await activeDispatchRegistry.requestStop("dispatch-1", SERVER_SHUTDOWN_STOP_REASON);
+      throw new Error("Command aborted");
+    });
+    vi.mocked(executeCleanupStage).mockResolvedValue({ cleanedUp: true });
+
+    await (service as any).runTaskWorkflow({
+      provider: "gemini",
+      task: { id: "T1", prompt: "prompt", title: "title" },
+      repoPath: "/repo",
+      featureBranch: "main",
+      sprintNumber: 1,
+      sessionId: "sess-1",
+      dispatchId: "dispatch-1",
+      taskRunId: "run-1",
+      workerBranch: "worker-1",
+      title: "Title",
+    });
+
+    expect(deps.sessionTracking.updateSession).not.toHaveBeenCalledWith("sess-1", { state: "CANCELLED" });
+    expect(executionRepository.updateTaskRun).not.toHaveBeenCalled();
+    expect(executionRepository.updateTaskDispatch).not.toHaveBeenCalled();
+    expect(executeCleanupStage).not.toHaveBeenCalled();
+    expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "cli_workflow_shutdown_interrupted",
+      "system",
+      expect.objectContaining({ workspaceSessionId: "sess-1" }),
+      expect.objectContaining({ sourceEventKey: "cli:shutdown-interrupted:sess-1" }),
+    );
+    expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "cli_worktree_preserved",
+      "system",
+      expect.objectContaining({ worktreePath: expect.any(String) }),
+      expect.any(Object),
+    );
   });
 
   it("blocks unrecoverable git credential failures instead of leaving the task retryable", async () => {

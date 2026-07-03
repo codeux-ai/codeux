@@ -35,19 +35,19 @@ export class InvocationRecoveryService {
     const reconciledInvocationIds: string[] = [];
 
     for (const invocation of invocations) {
-      const failureReason = this.resolveInterruptedStructuredInvocationReason(invocation, activeContainerSessionIds);
-      if (!failureReason) {
+      const resolution = this.resolveInterruptedStructuredInvocation(invocation, activeContainerSessionIds);
+      if (!resolution) {
         continue;
       }
 
       this.deps.executionRepository.updateExecutionInvocation(invocation.id, {
-        status: "failed",
+        status: resolution.status,
         finishedAt: reconciledAt,
-        errorMessage: failureReason,
+        errorMessage: resolution.status === "failed" ? resolution.message : null,
       });
       this.deps.executionRepository.appendExecutionInvocationMessage(invocation.id, {
         role: "system",
-        contentMarkdown: failureReason,
+        contentMarkdown: resolution.message,
         metadata: {
           recovery: "startup_structured_invocation_reconcile",
           provider: invocation.provider,
@@ -60,7 +60,7 @@ export class InvocationRecoveryService {
         : null;
       if (providerInvocation?.status === "running") {
         this.deps.executionRepository.updateProviderInvocationUsage(providerInvocation.id, {
-          status: "failed",
+          status: resolution.status,
           finishedAt: reconciledAt,
           durationMs: calculateInvocationDurationMs(providerInvocation, reconciledAt),
         });
@@ -122,7 +122,7 @@ export class InvocationRecoveryService {
       }
       if (providerInvocation?.sessionId) {
         this.deps.sessionTracking.updateSession(providerInvocation.sessionId, {
-          state: resolution.status === "completed" ? "COMPLETED" : "FAILED",
+          state: this.mapInvocationStatusToSessionState(resolution.status),
         });
         this.deps.sessionTracking.appendActivity(providerInvocation.sessionId, {
           originator: "system",
@@ -139,7 +139,7 @@ export class InvocationRecoveryService {
   private resolveInterruptedTaskCodingInvocation(
     invocation: ExecutionInvocationRecord,
     activeContainerSessionIds: ReadonlySet<string>,
-  ): { status: "completed" | "failed"; message: string } | null {
+  ): { status: "completed" | "failed" | "cancelled"; message: string } | null {
     const taskRun = invocation.taskRunId ? this.deps.executionRepository.getTaskRun(invocation.taskRunId) : null;
     if (taskRun && isTerminalTaskRunState(taskRun)) {
       return {
@@ -182,7 +182,9 @@ export class InvocationRecoveryService {
 
     if (providerInvocation.status !== "running") {
       return {
-        status: providerInvocation.status === "completed" ? "completed" : "failed",
+        status: providerInvocation.status === "completed"
+          ? "completed"
+          : providerInvocation.status === "cancelled" ? "cancelled" : "failed",
         message: `Recovered stale task coding invocation after the backing provider invocation ${providerInvocation.status}.`,
       };
     }
@@ -197,7 +199,7 @@ export class InvocationRecoveryService {
       && !activeContainerSessionIds.has(providerInvocation.sessionId)
     ) {
       return {
-        status: "failed",
+        status: "cancelled",
         message: `Recovered stale task coding invocation after its Docker container disappeared for session ${providerInvocation.sessionId}.`,
       };
     }
@@ -261,7 +263,7 @@ export class InvocationRecoveryService {
 
   private resolveOrphanedTaskCodingProviderInvocation(
     providerInvocation: ProviderInvocationUsageRecord,
-  ): { status: "completed" | "failed"; message: string } | null {
+  ): { status: "completed" | "failed" | "cancelled"; message: string } | null {
     if (providerInvocation.purpose !== "task_coding" || providerInvocation.status !== "running") {
       return null;
     }
@@ -305,7 +307,7 @@ export class InvocationRecoveryService {
       : null;
     if (sprintRun && ["completed", "failed", "cancelled"].includes(sprintRun.status)) {
       return {
-        status: "failed",
+        status: sprintRun.status === "cancelled" ? "cancelled" : "failed",
         message: `Recovered stale task coding provider invocation after the linked sprint run was already ${sprintRun.status}.`,
       };
     }
@@ -333,10 +335,10 @@ export class InvocationRecoveryService {
     return null;
   }
 
-  private resolveInterruptedStructuredInvocationReason(
+  private resolveInterruptedStructuredInvocation(
     invocation: ExecutionInvocationRecord,
     activeContainerSessionIds: ReadonlySet<string>,
-  ): string | null {
+  ): { status: "failed" | "cancelled"; message: string } | null {
     const referenceAt = Date.parse(invocation.lastMessageAt || invocation.startedAt);
     const ageMs = Number.isFinite(referenceAt) ? Date.now() - referenceAt : 0;
     const purpose = invocation.type === "qa_review" ? "QA review" : "planning";
@@ -345,7 +347,10 @@ export class InvocationRecoveryService {
       if (ageMs < QA_RUN_START_TIMEOUT_MS) {
         return null;
       }
-      return `Recovered stale ${purpose} invocation after the backing invocation stayed running without provider runtime linkage.`;
+      return {
+        status: "failed",
+        message: `Recovered stale ${purpose} invocation after the backing invocation stayed running without provider runtime linkage.`,
+      };
     }
 
     const providerInvocation = this.deps.executionRepository.getProviderInvocationUsage(invocation.providerInvocationId);
@@ -353,20 +358,39 @@ export class InvocationRecoveryService {
       if (ageMs < QA_RUN_START_TIMEOUT_MS) {
         return null;
       }
-      return `Recovered stale ${purpose} invocation after the backing provider invocation disappeared.`;
+      return {
+        status: "failed",
+        message: `Recovered stale ${purpose} invocation after the backing provider invocation disappeared.`,
+      };
     }
 
     if (providerInvocation.status !== "running") {
-      return `Recovered stale ${purpose} invocation after the backing provider invocation ${providerInvocation.status}.`;
+      return {
+        status: providerInvocation.status === "cancelled" ? "cancelled" : "failed",
+        message: `Recovered stale ${purpose} invocation after the backing provider invocation ${providerInvocation.status}.`,
+      };
     }
 
     if (
       providerInvocation.executionMode === "DOCKER"
       && !activeContainerSessionIds.has(providerInvocation.sessionId)
     ) {
-      return `Recovered stale ${purpose} invocation after its Docker container disappeared for session ${providerInvocation.sessionId}.`;
+      return {
+        status: "cancelled",
+        message: `Recovered stale ${purpose} invocation after its Docker container disappeared for session ${providerInvocation.sessionId}.`,
+      };
     }
 
     return null;
+  }
+
+  private mapInvocationStatusToSessionState(status: "completed" | "failed" | "cancelled"): string {
+    if (status === "completed") {
+      return "COMPLETED";
+    }
+    if (status === "cancelled") {
+      return "CANCELLED";
+    }
+    return "FAILED";
   }
 }

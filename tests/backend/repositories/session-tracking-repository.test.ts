@@ -71,15 +71,15 @@ describe("SessionTrackingRepository", () => {
     expect(recovery.recoveredCount).toBe(2);
     expect(recovery.sessionIds).toContain("cli-gemini-running");
     expect(recovery.sessionIds).toContain("cli-opencode-running");
-    expect(repo.getSession("cli-gemini-running")?.state).toBe("FAILED");
-    expect(repo.getSession("cli-opencode-running")?.state).toBe("FAILED");
+    expect(repo.getSession("cli-gemini-running")?.state).toBe("CANCELLED");
+    expect(repo.getSession("cli-opencode-running")?.state).toBe("CANCELLED");
     expect(repo.getSession("cli-codex-completed")?.state).toBe("COMPLETED");
     expect(repo.getSession("jules-running")?.state).toBe("RUNNING");
 
     const activities = repo.listAllActivities("cli-gemini-running");
     expect(
       activities.some((activity) =>
-        String(activity.description).includes("Recovered interrupted MCP process")
+        String(activity.description).includes("Recovered interrupted Code UX process")
       )
     ).toBe(true);
   });
@@ -99,7 +99,7 @@ describe("SessionTrackingRepository", () => {
 
     expect(first.recoveredCount).toBe(1);
     expect(second.recoveredCount).toBe(0);
-    expect(repo.getSession("cli-codex-running")?.state).toBe("FAILED");
+    expect(repo.getSession("cli-codex-running")?.state).toBe("CANCELLED");
   });
 
   it("finds latest failed cli session for task resume target", async () => {
@@ -153,6 +153,34 @@ describe("SessionTrackingRepository", () => {
     expect(target).toEqual({
       sessionId: "cli-gemini-new",
       workerBranch: "task/feature-sprint1-task-1-gemini-new",
+    });
+  });
+
+  it("finds latest cancelled cli session for task resume target", async () => {
+    const repo = await createRepo();
+
+    repo.createSession({
+      id: "cli-gemini-cancelled",
+      provider: "gemini",
+      state: "CANCELLED",
+      prompt: "prompt",
+      title: "Sprint 1: [task-1] test",
+      taskId: "task-1",
+      featureBranch: "feature/sprint1",
+      workerBranch: "task/feature-sprint1-task-1-gemini-cancelled",
+      repoPath: "/tmp/repo-a",
+    });
+
+    const target = repo.findLatestResumableCliSessionForTask({
+      provider: "gemini",
+      taskId: "task-1",
+      featureBranch: "feature/sprint1",
+      repoPath: "/tmp/repo-a",
+    });
+
+    expect(target).toEqual({
+      sessionId: "cli-gemini-cancelled",
+      workerBranch: "task/feature-sprint1-task-1-gemini-cancelled",
     });
   });
 

@@ -40,9 +40,13 @@ export class SchedulerService {
     if (this.timer) {
       return;
     }
-    void this.runDueEntries();
+    void this.runDueEntries().catch((error) => {
+      this.deps.logger.error("Scheduler run-due tick failed", { error });
+    });
     this.timer = setInterval(() => {
-      void this.runDueEntries();
+      void this.runDueEntries().catch((error) => {
+        this.deps.logger.error("Scheduler run-due tick failed", { error });
+      });
     }, this.tickIntervalMs);
   }
 

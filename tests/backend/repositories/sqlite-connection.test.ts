@@ -26,6 +26,7 @@ describe("openSqliteDatabase", () => {
       enableForeignKeyConstraints: true,
     });
     expect(exec).toHaveBeenCalledWith(expect.stringContaining("PRAGMA journal_mode = WAL;"));
+    expect(exec).toHaveBeenCalledWith(expect.stringContaining("PRAGMA wal_autocheckpoint = 0;"));
     expect(db).toEqual({ exec });
   });
 

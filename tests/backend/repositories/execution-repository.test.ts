@@ -176,6 +176,61 @@ describe("ExecutionRepository", () => {
     expect(wallTimeSprintRunSpy).not.toHaveBeenCalled();
   });
 
+  it("only treats queued dispatches as pending virtual-worker candidates", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Pending Dispatch Project",
+      sourceType: "local",
+      sourceRef: "/workspace/pending-dispatch",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Dispatch Sprint",
+      goal: "Exercise dispatch candidate filtering.",
+    });
+    const runningTask = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T01",
+      title: "Running task",
+      promptMarkdown: "Already running.",
+      status: "in_progress",
+    });
+    const queuedTask = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T02",
+      title: "Queued task",
+      promptMarkdown: "Ready to claim.",
+      status: "pending",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      executorMode: "mixed",
+    });
+
+    executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: runningTask.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "running",
+    });
+
+    expect(executionRepository.listProjectIdsWithPendingDispatches()).toEqual([]);
+
+    executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: queuedTask.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "queued",
+    });
+
+    expect(executionRepository.listProjectIdsWithPendingDispatches()).toEqual([project.id]);
+  });
+
   it("keeps every active sprint run expanded for live invocation feeds", async () => {
     const { projectRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({

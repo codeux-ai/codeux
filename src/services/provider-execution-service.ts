@@ -21,6 +21,8 @@ import type { CreateProviderInvocationUsageInput } from "../contracts/execution-
 import { sanitizeInvocationOutputText } from "./invocation-output-sanitizer.js";
 import { conversationTurnToMessage } from "./provider-conversation-message-mapper.js";
 import { ActivityWriteCoalescer } from "./activity-write-coalescer.js";
+import { SERVER_SHUTDOWN_STOP_REASON } from "./active-dispatch-registry.js";
+import { isRuntimeShutdownInProgress } from "./shutdown-state.js";
 
 /** Counts tool-call turns in a parsed provider conversation, for tool-call stats. */
 function countConversationToolCalls(conversation: ParsedConversationTurn[] | undefined | null): number {
@@ -79,6 +81,10 @@ function isRestartInterruptedDockerInvocation(error: unknown, args: ExecutionPro
     /Command spawner host exited/i.test(message)
     && /(signal=SIGINT|signal=SIGTERM|signal=SIGHUP)/i.test(message)
   );
+}
+
+function isServerShutdownAbort(signal: AbortSignal | undefined): boolean {
+  return isRuntimeShutdownInProgress() || Boolean(signal?.aborted && signal.reason === SERVER_SHUTDOWN_STOP_REASON);
 }
 
 export interface ProviderExecutionServiceDeps {
@@ -404,8 +410,9 @@ export class ProviderExecutionService {
             ? await this.deps.providerRunner.runProviderForText(runnerOpts)
             : await this.deps.providerRunner.runProvider(runnerOpts);
         } catch (error) {
-          const wasCancelled = Boolean(args.signal?.aborted);
-          const preserveForStartupRecovery = isRestartInterruptedDockerInvocation(error, args);
+          const wasCancelled = isRuntimeShutdownInProgress() || Boolean(args.signal?.aborted);
+          const preserveForStartupRecovery = isServerShutdownAbort(args.signal)
+            || isRestartInterruptedDockerInvocation(error, args);
           if (invocation && this.deps.executionRepository && !preserveForStartupRecovery) {
             const finishedAt = new Date().toISOString();
             const durationMs = Date.now() - startedMs;
@@ -444,9 +451,9 @@ export class ProviderExecutionService {
       if (invocation && this.deps.executionRepository) {
         const finishedAt = new Date().toISOString();
         const durationMs = Date.now() - startedMs;
-        if (this.isProviderInvocationStillRunning(invocation.id)) {
+        if (this.isProviderInvocationStillRunning(invocation.id) && !isServerShutdownAbort(args.signal)) {
           this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
-            status: args.signal?.aborted ? "cancelled" : (result.ok ? "completed" : "failed"),
+            status: (args.signal?.aborted || isRuntimeShutdownInProgress()) ? "cancelled" : (result.ok ? "completed" : "failed"),
             model: effectiveModel,
             nativeSessionId: result.nativeSessionId,
             finishedAt,
@@ -536,7 +543,7 @@ export class ProviderExecutionService {
       }
 
       if (providerResult.ok) {
-        if (execInvocationId && this.isExecutionInvocationStillRunning(execInvocationId)) {
+        if (execInvocationId && this.isExecutionInvocationStillRunning(execInvocationId) && !isRuntimeShutdownInProgress()) {
           if (args.finalizeExecutionInvocation !== false) {
             this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
               status: "completed",
@@ -662,12 +669,14 @@ export class ProviderExecutionService {
       // If no retry policy handles the failure, propagate it to the caller if not OK
       if (execInvocationId) {
         if (this.isExecutionInvocationStillRunning(execInvocationId)) {
-          this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
-            status: args.signal?.aborted ? "cancelled" : "failed",
-            provider: args.provider,
-            model: args.model,
-            finishedAt: new Date().toISOString(),
-          });
+          if (!isRuntimeShutdownInProgress()) {
+            this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
+              status: args.signal?.aborted ? "cancelled" : "failed",
+              provider: args.provider,
+              model: args.model,
+              finishedAt: new Date().toISOString(),
+            });
+          }
           // Include both streams so the real failure detail is never hidden: some
           // providers (notably codex) print only a benign "Reading additional input
           // from stdin..." to stderr while the actionable error events go to stdout.

@@ -740,6 +740,49 @@ describe("VirtualWorkerService", () => {
     virtualWorkerService.stop();
   });
 
+  it("logs initial reconcile failures during start", async () => {
+    const {
+      settingsRepository,
+      sessionTracking,
+      projectManagementRepository,
+      executionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionService,
+      workerTaskDispatchService,
+    } = await createFixture();
+    const logger = { error: vi.fn() };
+
+    const virtualWorkerService = new VirtualWorkerService({
+      settingsRepository,
+      sessionTracking,
+      executionRepository,
+      projectManagementRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectWorkerAssignmentService: new ProjectWorkerAssignmentService(
+        projectWorkerAssignmentRepository,
+        workerEndpointRepository,
+      ),
+      projectAttentionService,
+      workerTaskDispatchService,
+      cliWorkflowService: { startTask: vi.fn() } as any,
+      providerConcurrencyService: {
+        hasAvailableCapacity: vi.fn().mockResolvedValue(true),
+      } as any,
+      logger: logger as any,
+    });
+    const error = new Error("initial reconcile failed");
+    vi.spyOn(virtualWorkerService, "reconcile").mockRejectedValueOnce(error);
+
+    virtualWorkerService.start();
+    await Promise.resolve();
+    await Promise.resolve();
+    virtualWorkerService.stop();
+
+    expect(logger.error).toHaveBeenCalledWith("Virtual worker reconcile failed", { error });
+  });
+
   it("getProviderLabel returns correct labels", async () => {
     const {
       settingsRepository,

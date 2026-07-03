@@ -574,7 +574,7 @@ export class ExecutionRepository {
     const rows = this.db.prepare(`
       SELECT DISTINCT project_id
       FROM task_dispatches
-      WHERE status IN ('queued', 'claimed', 'running', 'cancel_requested')
+      WHERE status = 'queued'
     `).all() as { project_id: string }[];
     return rows.map(r => r.project_id);
   }
