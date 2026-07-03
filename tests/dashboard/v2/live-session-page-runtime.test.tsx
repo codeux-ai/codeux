@@ -13,7 +13,7 @@ vi.mock("gsap", () => ({
   }
 }));
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/preact";
+import { fireEvent, render, screen, cleanup } from "@testing-library/preact";
 import { within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 
@@ -210,7 +210,10 @@ describe("LiveSessionPage Runtime Status", () => {
 
     render(<LiveSessionPage />);
     expect(screen.getByText("Paused")).toBeInTheDocument();
-    expect(screen.getAllByText("Approve dependency and resume the sprint.").length).toBeGreaterThan(0);
+    const runLog = screen.getByRole("log", { name: "Sprint run status rows" });
+    expect(within(runLog).queryByText("Approve dependency and resume the sprint.")).not.toBeInTheDocument();
+    fireEvent.click(within(runLog).getByRole("button", { name: /instructions/i }));
+    expect(within(runLog).getByText("Approve dependency and resume the sprint.")).toBeInTheDocument();
     expect(screen.getAllByText("Needs you")).toHaveLength(1);
   });
 
@@ -262,7 +265,10 @@ describe("LiveSessionPage Runtime Status", () => {
     render(<LiveSessionPage />);
     expect(screen.getByText("Stopped")).toBeInTheDocument();
     expect(screen.getByText("Sprint Stopped By System")).toBeInTheDocument();
-    expect(screen.getAllByText("Resolve the stop condition and restart when ready.").length).toBeGreaterThan(0);
+    const runLog = screen.getByRole("log", { name: "Sprint run status rows" });
+    expect(within(runLog).queryByText("Resolve the stop condition and restart when ready.")).not.toBeInTheDocument();
+    fireEvent.click(within(runLog).getByRole("button", { name: /instructions/i }));
+    expect(within(runLog).getByText("Resolve the stop condition and restart when ready.")).toBeInTheDocument();
     expect(screen.queryByText("Needs you")).not.toBeInTheDocument();
   });
 
