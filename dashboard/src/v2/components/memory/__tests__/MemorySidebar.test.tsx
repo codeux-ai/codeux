@@ -53,7 +53,7 @@ describe("MemorySidebar", () => {
         expect(container.querySelector("[data-sidebar-toggle-icon]")).toHaveClass("rotate-180");
     });
 
-    test("expands without embedded search, collapses, and clears the search query when closing", () => {
+    test("expands with embedded search, collapses, and clears the search query when closing", () => {
         memorySidebarExpandedSignal.value = true;
         searchQuerySignal.value = "alpha";
         selectedMemoryIdsSignal.value = ["memory-1"];
@@ -63,7 +63,7 @@ describe("MemorySidebar", () => {
         );
 
         expect(getByRole("button", { name: "Close memory sidebar" })).toHaveAttribute("aria-expanded", "true");
-        expect(queryByRole("textbox", { name: "Search memories" })).toBeNull();
+        expect(getByRole("textbox", { name: "Search memories" })).toBeInTheDocument();
         expect(container.querySelector("[data-sidebar-toggle-icon]")).toHaveClass("rotate-0");
 
         fireEvent.click(getByRole("button", { name: "Close memory sidebar" }));
