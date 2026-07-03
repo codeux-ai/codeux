@@ -14,6 +14,7 @@ This document defines the visual patterns and rules for the Settings workspace. 
 2.  **Buttons and Controls**:
     *   Primary actions (e.g., `Save Changes`) and explicit tonal buttons (e.g., `success`, `danger`) use `--elevation-raised` rather than arbitrary soft shadows.
     *   Segment controls (`System` / `Project`) utilize consistent heights (e.g., `h-8`) and precise `disabled` states (`opacity-50 pointer-events-none`). Active segments mimic the primary or signal accents.
+    *   Mutually exclusive Settings choices use `radiogroup` / `radio` semantics (or explicit pressed-state semantics for non-radio tool controls) so assistive technology reports the current selection. Provider-instance controls should include the provider instance name or config id in accessible names when the same action appears more than once.
 
 3.  **High-Risk Actions**:
     *   Destructive actions in the Danger Zone (`Wipe Project`, `Wipe Database`) use the `danger` tone, yielding clear semantic `bg-status-red text-white` presentation. Panels themselves hint at danger via red-tinted borders and backgrounds.
@@ -35,6 +36,7 @@ This document defines the visual patterns and rules for the Settings workspace. 
 6.  **Responsive Behavior**:
     *   Form fields, inputs, and components should expand to `w-full` on narrow mobile screens (e.g., removing static `min-w-[320px]` in favor of `min-w-0 w-full`).
     *   Dense layout grids (e.g., multi-column setting grids) must collapse to a single column stack on mobile (`grid-cols-1 sm:grid-cols-2` or similar) to prevent horizontal scrolling or squashed content. When defining responsive auto-fill grids in Tailwind, use `minmax(min(100%, <size>), 1fr)` (e.g., `minmax(min(100%, 320px), 1fr)`) instead of `minmax(<size>, 1fr)` to prevent layout overflow on screens narrower than the minimum size.
+    *   Generated JSON/config previews and long provider/model/auth values must wrap or scroll inside their own component boundary with `max-w-full` and internal overflow handling rather than forcing page-level horizontal overflow.
     *   Action areas within Modals should adjust their layout to safely stack buttons (`flex-col-reverse` with `w-full`) on viewports where horizontal space is constrained. The modal body content should have internal scrolling (`overflow-y-auto`) to keep the primary action buttons visible.
 
 7. **Cloning Settings**: Never use `JSON.parse(JSON.stringify(...))` to deep clone settings. Instead, rely on the typed clone helpers (like `cloneSystemSettings` and `cloneProjectSettings`) provided in `settings-view-models.ts` to ensure type safety and mutation isolation.

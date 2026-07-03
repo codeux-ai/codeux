@@ -76,6 +76,62 @@ describe("ProviderInstanceCard", () => {
     expect(screen.queryByText("Token pricing")).toBeNull();
   });
 
+  it("names provider card controls and exposes auth choices as radios", () => {
+    const provider: SystemProviderConfig = {
+      provider: "opencode",
+      name: "Very Long OpenCode Provider",
+      apiKey: "test",
+      mountAuth: false,
+      authPath: "",
+      authType: "apiKey",
+    };
+
+    render(
+      <ProviderInstanceCard
+        providerConfigId="opencode-long"
+        provider={provider}
+        providerModel="test-model"
+        dockerExecutionEnabled={false}
+        onUpdate={vi.fn()}
+        onRemove={vi.fn()}
+        enabled
+        onToggleEnabled={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("region", { name: "Very Long OpenCode Provider" })).toBeDefined();
+    expect(screen.getByRole("switch", { name: "Enable Very Long OpenCode Provider" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("button", { name: "Remove Very Long OpenCode Provider" })).toBeDefined();
+    expect(screen.getByRole("radiogroup", { name: "Very Long OpenCode Provider authentication mode" })).toBeDefined();
+    expect(screen.getByRole("radio", { name: /API Key/i }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByLabelText("Very Long OpenCode Provider API key")).toBeDefined();
+  });
+
+  it("names generated config previews by provider instance", () => {
+    const provider: SystemProviderConfig = {
+      provider: "opencode",
+      name: "OpenCode Preview",
+      apiKey: "test-key",
+      mountAuth: false,
+      authPath: "",
+      authType: "apiKey",
+      openCodeAuthMode: "CUSTOM_PROVIDER",
+      openCodeProviderId: "ollama",
+    };
+
+    render(
+      <ProviderInstanceCard
+        providerConfigId="opencode-preview"
+        provider={provider}
+        providerModel="ollama/glm-4.7-flash"
+        dockerExecutionEnabled={false}
+        onUpdate={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("region", { name: "OpenCode Preview generated OpenCode config preview" })).toBeDefined();
+  });
+
   it("lets the user type a custom model slug into the models.dev-backed combobox for a gateway model field", async () => {
     const provider: SystemProviderConfig = {
       provider: "codex",

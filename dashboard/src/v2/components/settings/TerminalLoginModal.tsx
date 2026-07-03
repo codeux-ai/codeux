@@ -63,6 +63,8 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
   const terminalEndRef = useRef<HTMLDivElement>(null);
   const hiddenInputRef = useRef<HTMLTextAreaElement>(null);
   const hasOpenedUrlRef = useRef<string | null>(null);
+  const dialogTitleId = `terminal-login-title-${providerConfigId.replace(/\W/g, "-")}`;
+  const terminalRegionLabel = `${providerName} terminal login output for ${providerConfigId}`;
 
   // Close context menu on any global click
   useEffect(() => {
@@ -389,7 +391,13 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
 
   const modalContent = (
     <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
-      <div className="relative flex h-[600px] w-[800px] max-w-full flex-col overflow-hidden rounded-[1.75rem] border border-black/[0.08] dark:border-white/[0.08] bg-white dark:bg-void-800 shadow-[var(--elevation-floating)]">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={dialogTitleId}
+        aria-describedby="terminal-login-status"
+        className="relative flex h-[600px] w-[800px] max-w-full flex-col overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-[var(--elevation-floating)] dark:border-white/[0.08] dark:bg-void-800"
+      >
         {/* Glow Effects */}
         <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-signal-500/30 to-transparent" />
 
@@ -400,26 +408,26 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
               <Terminal className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-white">Login to {providerName}</h3>
+              <h3 id={dialogTitleId} className="text-sm font-semibold text-white">Login to {providerName}</h3>
               <p className="text-[11px] text-slate-400 font-mono">Instance: {providerConfigId}</p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
             {status === "connecting" && (
-              <div className="flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/5 px-2.5 py-1 text-[10px] font-semibold text-amber-300">
+              <div id="terminal-login-status" role="status" aria-live="polite" className="flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/5 px-2.5 py-1 text-[10px] font-semibold text-amber-300">
                 <RefreshCw className="h-3 w-3 animate-spin" />
                 BOOTING CONTAINER
               </div>
             )}
             {status === "active" && (
-              <div className="flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-2.5 py-1 text-[10px] font-semibold text-signal-300">
+              <div id="terminal-login-status" role="status" aria-live="polite" className="flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-2.5 py-1 text-[10px] font-semibold text-signal-300">
                 <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-signal-400" />
                 ACTIVE SESSION
               </div>
             )}
             {status === "exited" && (
-              <div className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold border ${
+              <div id="terminal-login-status" role={exitCode === 0 ? "status" : "alert"} aria-live={exitCode === 0 ? "polite" : "assertive"} className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold border ${
                 exitCode === 0 
                   ? "border-status-green/20 bg-status-green/10 text-status-green" 
                   : "border-status-red/20 bg-status-red/10 text-status-red"
@@ -429,14 +437,16 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
               </div>
             )}
             {status === "error" && (
-              <div className="flex items-center gap-1.5 rounded-full border border-status-red/20 bg-status-red/10 px-2.5 py-1 text-[10px] font-semibold text-status-red">
+              <div id="terminal-login-status" role="alert" aria-live="assertive" className="flex items-center gap-1.5 rounded-full border border-status-red/20 bg-status-red/10 px-2.5 py-1 text-[10px] font-semibold text-status-red">
                 <AlertCircle className="h-3 w-3" />
                 CONNECTION ERROR
               </div>
             )}
 
             <button
+              type="button"
               onClick={onClose}
+              aria-label={`Close ${providerName} terminal login`}
               className="rounded-full p-1.5 text-slate-400 hover:bg-white/5 hover:text-white transition-colors"
             >
               <X className="h-4 w-4" />
@@ -447,7 +457,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
         {/* Modal Content - The Terminal Screen */}
         <div className="relative flex flex-1 flex-col overflow-hidden bg-void-950 p-6 font-mono text-sm leading-relaxed text-slate-300">
           {status === "connecting" && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-void-950/80">
+            <div role="status" aria-live="polite" className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-void-950/80">
               <RefreshCw className="h-8 w-8 animate-spin text-signal-400" />
               <div className="text-center">
                 <p className="text-sm font-semibold text-white">Starting Docker Environment</p>
@@ -457,7 +467,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
           )}
 
           {status === "error" && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-void-950/80 p-8">
+            <div role="alert" aria-live="assertive" className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-void-950/80 p-8">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-status-red/10 text-status-red">
                 <AlertCircle className="h-6 w-6" />
               </div>
@@ -466,6 +476,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
                 <p className="mt-2 rounded-lg bg-white/5 px-4 py-2 text-xs text-slate-400 max-w-md break-words font-mono border border-white/5">{errorMessage}</p>
               </div>
               <button 
+                type="button"
                 onClick={onClose}
                 className="mt-4 rounded-xl bg-white/10 px-4 py-2 text-xs font-semibold text-white shadow-[var(--elevation-raised)] hover:bg-white/20 transition-colors"
               >
@@ -476,6 +487,9 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
 
           {/* Terminal output console */}
           <div 
+            role="log"
+            aria-label={terminalRegionLabel}
+            aria-live="polite"
             onClick={focusTerminal}
             onContextMenu={handleContextMenu}
             className="flex-1 overflow-y-auto rounded-xl border border-white/5 bg-black/40 p-4 scrollbar-thin scrollbar-thumb-white/10 cursor-text select-text focus-within:border-signal-500/50"
@@ -483,6 +497,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
             {/* Hidden textarea to capture keystrokes and paste operations */}
             <textarea
               ref={hiddenInputRef}
+              aria-label={`${providerName} terminal input for ${providerConfigId}`}
               onKeyDown={handleKeyDown}
               onInput={handleTextAreaInput}
               className="absolute h-0 w-0 opacity-0 pointer-events-none"
@@ -505,7 +520,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
           </div>
 
           {detectedLoginUrl && status === "active" && (
-            <div className="mt-4 shrink-0 rounded-2xl border border-signal-500/30 bg-signal-500/5 p-4 backdrop-blur-sm transition-all duration-300">
+            <div role="status" aria-live="polite" className="mt-4 shrink-0 rounded-2xl border border-signal-500/30 bg-signal-500/5 p-4 backdrop-blur-sm transition-all duration-300">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-start gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-signal-500/10 text-signal-400">
@@ -539,7 +554,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
           )}
 
           {status === "exited" && (
-            <div className="mt-4 shrink-0 rounded-xl border border-white/5 bg-white/[0.02] p-4 text-center">
+            <div role={exitCode === 0 ? "status" : "alert"} aria-live={exitCode === 0 ? "polite" : "assertive"} className="mt-4 shrink-0 rounded-xl border border-white/5 bg-white/[0.02] p-4 text-center">
               <p className="text-xs text-slate-400 font-semibold">
                 {exitCode === 0 
                   ? "🎉 Login process finished successfully! Credentials saved directly to your ~/.code-ux/credentials folder." 
@@ -547,6 +562,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
                 }
               </p>
               <button
+                type="button"
                 onClick={onClose}
                 className="mt-3 inline-flex items-center justify-center rounded-xl bg-signal-500 px-4 py-2 text-xs font-bold text-void-950 hover:bg-signal-400 transition-colors"
               >

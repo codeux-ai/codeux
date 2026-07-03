@@ -7,7 +7,7 @@ import { render, screen, cleanup } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
 import { BranchNameSchemeEditor } from "../BranchNameSchemeEditor";
 import { SprintKeyEditor } from "../SprintKeyEditor";
-import { TextInput, NumberInput, TextAreaInput } from "../SettingsFormFields";
+import { TextInput, NumberInput, TextAreaInput, PillChoiceGroup } from "../SettingsFormFields";
 
 
 import { SettingsCategoryRail } from "../SettingsCategoryRail";
@@ -30,6 +30,24 @@ import userEvent from "@testing-library/user-event";
     );
     const btn = screen.getByRole("button", { name: /General/ });
     expect(btn).toHaveAttribute("aria-current", "page");
+  });
+
+  it("PillChoiceGroup exposes radio semantics for the selected option", () => {
+    render(
+      <PillChoiceGroup
+        value="system"
+        onChange={() => {}}
+        aria-label="Scope choice"
+        options={[
+          { value: "system", label: "System" },
+          { value: "project", label: "Project" },
+        ]}
+      />
+    );
+
+    expect(screen.getByRole("radiogroup", { name: "Scope choice" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "System" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "Project" })).toHaveAttribute("aria-checked", "false");
   });
 
   it("ActionButton provides busy state feedback", () => {

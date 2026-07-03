@@ -70,7 +70,7 @@ export const ProviderCombobox: FunctionComponent<{
   }, [providers, value]);
 
   return (
-    <div className="min-w-[220px]">
+    <div className="min-w-0 w-full sm:min-w-[220px]">
       <AvantgardeSelect
         value={value}
         onChange={(nextValue) => {

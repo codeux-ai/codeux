@@ -494,7 +494,7 @@ const CustomServerDetail: FunctionComponent<{
         </div>
       </Row>
       <Row label="Effective config preview" description="How this server is injected into a Claude Code container." last>
-        <pre className="max-h-72 min-w-[280px] overflow-auto rounded-[1rem] border border-black/[0.06] bg-black/[0.04] p-3 text-left font-mono text-[11px] leading-relaxed text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+        <pre role="region" aria-label={`${server.id} generated MCP configuration preview`} className="max-h-72 max-w-full overflow-auto whitespace-pre-wrap break-words rounded-[1rem] border border-black/[0.06] bg-black/[0.04] p-3 text-left font-mono text-[11px] leading-relaxed text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
           {JSON.stringify(previewConfig, null, 2)}
         </pre>
       </Row>

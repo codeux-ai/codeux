@@ -302,7 +302,7 @@ describe("OnboardingExperience integration", () => {
     expect(screen.getByText("GitLab token")).not.toBeNull();
     expect(screen.queryByText("Local mode does not support automatic CI or pull requests. Remote mode is recommended for full feature access.")).toBeNull();
 
-    await userEvent.click(screen.getByRole("button", { name: /^Local\b/i }));
+    await userEvent.click(screen.getByRole("radio", { name: /^Local\b/i }));
 
     expect(screen.queryByText("GitHub token")).toBeNull();
     expect(screen.queryByText("GitLab token")).toBeNull();

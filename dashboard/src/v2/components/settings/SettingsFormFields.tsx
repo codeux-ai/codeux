@@ -1,4 +1,5 @@
 import type { ComponentChildren, FunctionComponent } from "preact";
+import { useRef } from "preact/hooks";
 import { SHARED_INTERACTION_CLASSES } from "../ui/Button.js";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
@@ -17,7 +18,7 @@ export const SelectInput: FunctionComponent<{
   "aria-label"?: string;
   "aria-labelledby"?: string;
 }> = ({ value, onChange, options, disabled, "aria-label": ariaLabel, "aria-labelledby": ariaLabelledby }) => (
-  <div className="min-w-[220px]">
+  <div className="min-w-0 w-full sm:min-w-[220px]">
     <AvantgardeSelect value={value} onChange={onChange} options={options} disabled={disabled} aria-label={ariaLabel} aria-labelledby={ariaLabelledby} />
   </div>
 );
@@ -28,41 +29,73 @@ export const PillChoiceGroup: FunctionComponent<{
   options: Array<{ value: string; label: string; hint?: string }>;
   disabled?: boolean;
   invalid?: boolean;
-}> = ({ value, onChange, options, disabled, invalid }) => (
-  <div className="flex flex-wrap gap-2">
-    {options.map((option) => {
-      const active = option.value === value;
-      return (
-        <button
-          key={option.value}
-          type="button"
-          disabled={disabled}
-          aria-invalid={invalid}
-          onClick={() => onChange(option.value)}
-          className={`group relative min-w-[104px] overflow-hidden rounded-[1rem] border px-4 py-2 text-left transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-signal-500 disabled:cursor-not-allowed disabled:opacity-50 motion-safe:active:scale-[0.98] ${
-            invalid
-              ? "border-status-red/60 bg-status-red/[0.04] text-status-red hover:bg-status-red/[0.08]"
-              : active
-                ? "border-signal-500/30 bg-signal-500/[0.11] text-signal-700 shadow-[0_10px_20px_rgba(0,224,160,0.08)] hover:bg-signal-500/[0.15] dark:border-signal-400/30 dark:bg-signal-400/[0.12] dark:text-signal-200 dark:hover:bg-signal-400/[0.16]"
-                : "border-black/[0.06] bg-white/70 text-slate-600 hover:-translate-y-px hover:border-black/[0.12] hover:bg-black/[0.02] hover:text-slate-800 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-white/[0.12] dark:hover:bg-white/[0.08] dark:hover:text-white"
-          }`}
-        >
-          <div
-            className={`absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-signal-500 dark:bg-signal-400 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-              active ? "opacity-100 transform-none" : "opacity-0 -translate-x-full"
+  "aria-label"?: string;
+  "aria-labelledby"?: string;
+}> = ({ value, onChange, options, disabled, invalid, "aria-label": ariaLabel = "Setting choices", "aria-labelledby": ariaLabelledby }) => {
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  const moveSelection = (currentIndex: number, offset: number): void => {
+    if (!options.length || disabled) {
+      return;
+    }
+    const nextIndex = (currentIndex + offset + options.length) % options.length;
+    optionRefs.current[nextIndex]?.focus();
+    onChange(options[nextIndex].value);
+  };
+
+  return (
+    <div
+      role="radiogroup"
+      aria-label={ariaLabelledby ? undefined : ariaLabel}
+      aria-labelledby={ariaLabelledby}
+      className="flex min-w-0 flex-wrap gap-2"
+    >
+      {options.map((option, index) => {
+        const active = option.value === value;
+        return (
+          <button
+            key={option.value}
+            ref={(element) => { optionRefs.current[index] = element; }}
+            type="button"
+            role="radio"
+            disabled={disabled}
+            aria-checked={active}
+            aria-invalid={invalid}
+            onClick={() => onChange(option.value)}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+                event.preventDefault();
+                moveSelection(index, 1);
+              } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+                event.preventDefault();
+                moveSelection(index, -1);
+              }
+            }}
+            className={`group relative min-w-[104px] max-w-full overflow-hidden rounded-[1rem] border px-4 py-2 text-left transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-signal-500 disabled:cursor-not-allowed disabled:opacity-50 motion-safe:active:scale-[0.98] ${
+              invalid
+                ? "border-status-red/60 bg-status-red/[0.04] text-status-red hover:bg-status-red/[0.08]"
+                : active
+                  ? "border-signal-500/30 bg-signal-500/[0.11] text-signal-700 shadow-[0_10px_20px_rgba(0,224,160,0.08)] hover:bg-signal-500/[0.15] dark:border-signal-400/30 dark:bg-signal-400/[0.12] dark:text-signal-200 dark:hover:bg-signal-400/[0.16]"
+                  : "border-black/[0.06] bg-white/70 text-slate-600 hover:-translate-y-px hover:border-black/[0.12] hover:bg-black/[0.02] hover:text-slate-800 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-white/[0.12] dark:hover:bg-white/[0.08] dark:hover:text-white"
             }`}
-          />
-          <div className="text-[11px] font-bold uppercase tracking-[0.14em]">{option.label}</div>
-          {option.hint ? (
-            <div className={`mt-1 text-[11px] leading-relaxed transition-colors duration-200 ${active ? "text-signal-600/80 dark:text-signal-300/80" : "text-slate-400 dark:text-slate-500"}`}>
-              {option.hint}
-            </div>
-          ) : null}
-        </button>
-      );
-    })}
-  </div>
-);
+          >
+            <div
+              className={`absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-signal-500 dark:bg-signal-400 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+                active ? "opacity-100 transform-none" : "opacity-0 -translate-x-full"
+              }`}
+            />
+            <div className="break-words text-[11px] font-bold uppercase tracking-[0.14em]">{option.label}</div>
+            {option.hint ? (
+              <div className={`mt-1 break-words text-[11px] leading-relaxed transition-colors duration-200 ${active ? "text-signal-600/80 dark:text-signal-300/80" : "text-slate-400 dark:text-slate-500"}`}>
+                {option.hint}
+              </div>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+};
 
 export const ProviderLogo: FunctionComponent<{
   providerId: ProviderId | string;
@@ -207,7 +240,7 @@ export const Row: FunctionComponent<{
         <div className="mt-0.5 text-xs font-medium leading-relaxed text-slate-400 group-hover:text-slate-500 dark:text-slate-500 dark:group-hover:text-slate-400 transition-colors duration-200">{description}</div>
       ) : null}
     </div>
-    <div className="w-full shrink-0 md:w-auto md:max-w-[34rem] lg:max-w-none">
+    <div className="min-w-0 w-full shrink-0 md:w-auto md:max-w-[34rem] lg:max-w-none">
       {children}
     </div>
   </div>
