@@ -110,8 +110,11 @@ describe("SystemStudio", () => {
     expect(container.textContent).toContain("Sprint Overview");
     expect(container.textContent).toContain("Status Distribution");
     expect(container.textContent).toContain("Success Rate");
-    expect(container.textContent).toContain("Failure Analysis");
+    expect(container.textContent).toContain("External API Activity");
+    expect(container.textContent).toContain("Error Categories");
+    expect(container.textContent).toContain("Filters");
     expect(container.textContent).toContain("Invocation Records");
+    expect(container.textContent).toContain("Invocation Ledger");
 
     fireEvent.click(screen.getByRole("button", { name: /^Errors/ }));
 

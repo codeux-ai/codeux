@@ -65,9 +65,11 @@ const mockInvocations: ExecutionInvocationRecord[] = [
 function Harness({
   invocations = mockInvocations,
   loading = false,
+  error = null,
 }: {
   invocations?: ExecutionInvocationRecord[];
   loading?: boolean;
+  error?: string | null;
 }) {
   const [sort, setSort] = useState<SystemSort>({ key: "startedAt", dir: "desc" });
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -80,6 +82,7 @@ function Harness({
       expandedId={expandedId}
       onRowExpand={setExpandedId}
       loading={loading}
+      error={error}
     />
   );
 }
@@ -206,5 +209,12 @@ describe("InvocationsTable", () => {
   it("renders empty state", () => {
     const { getByText } = render(<Harness invocations={[]} />);
     expect(getByText("No invocations match the current filters")).toBeTruthy();
+  });
+
+  it("renders error state", () => {
+    const { getByRole, getByText } = render(<Harness error="network offline" />);
+    expect(getByRole("alert")).toBeTruthy();
+    expect(getByText("Failed to load invocation records")).toBeTruthy();
+    expect(getByText("network offline")).toBeTruthy();
   });
 });
