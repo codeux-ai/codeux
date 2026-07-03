@@ -13,8 +13,9 @@ The Stats surface has five persistent layers:
    - The hero owns all time-window decisions. Downstream charts and tables respond to the selected range; they do not duplicate range controls.
 2. Mode summary cards
    - Each mode renders a compact top-card deck tuned to the active analysis question.
-   - Trend focuses on throughput, runtime, cost, invocations, and cache rate.
-   - Composition, Models, Reliability, Ledgers, and System use their own mode-specific card taxonomy while preserving the same card density.
+   - Metric cards show a primary value, supporting detail, signal badge, optional sparkline, and a compact quality hint so each deck reads as an executive summary instead of a raw KPI list.
+   - Trend focuses on throughput, runtime, cost, invocations, cache rate, and token velocity.
+   - Composition, Models, Reliability, Ledgers, and System use their own mode-specific card taxonomy while preserving the same card density and explicit low-data fallbacks.
 3. Analysis studio header
    - Every mode starts with a warm-void header band containing the mode icon, mode name, short description, and loading state.
    - The header keeps operators oriented when switching between dense workspaces.
@@ -38,7 +39,7 @@ The Stats surface has five persistent layers:
 ### Spacing And Density
 
 - Keep vertical rhythm tight: hero, top cards, studio header, and workspace sections use consistent `gap-5` to `gap-8` spacing depending on viewport.
-- Metric cards are compact and stable. Values, badges, sparklines, and loading content must not resize the card footprint unexpectedly.
+- Metric cards are compact and stable. Values, badges, secondary detail, sparklines, quality hints, and loading content must not resize the card footprint unexpectedly.
 - Summary rows should wrap cleanly instead of overflowing horizontally. Use `min-w-0`, truncation, and responsive grid tracks for long project names, model names, and custom date labels.
 - Sticky controls in ledgers and system workbench should use warm-void subpanel styling with backdrop blur and semantic borders.
 
