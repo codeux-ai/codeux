@@ -250,8 +250,10 @@ The page focuses on:
 - models mode emphasizes ranked model cards with consistent metric grids, provider identity, throughput, success rate, latency, cache efficiency, and model highlights
 - reliability mode emphasizes provider health, telemetry confidence, reported/estimated/unavailable mix, and data-integrity notes before the provider breakdown
 - ledgers mode uses sticky tabbed task, sprint, and git ledgers with roving focus, stable badge counts, unified controls, and dense row cards
-- system mode uses a controlled sticky filter bar, explicit result counts, calm status indicators, and a sortable invocation table with expandable rows for transcript detail
-- the system ledger keeps status, purpose, provider, and search outside the table so the operator can reason about the filtered set before reading rows
+- system mode uses a sprint-state overview, invocation-health snapshot, failure analysis, external API activity, and invocation records area so operational signals stay grouped by the action they support
+- the system record area keeps search, status, purpose, provider, error-category chips, active record tabs, result counts, and pagination in a responsive toolbar that wraps instead of clipping controls
+- the system invocation table preserves semantic column headers while using dense responsive rows, provider/model labels, token and duration columns, table-owned loading/error/empty states, and expandable transcript detail rows
+- invocation transcripts render long prompts, system messages, and error text with copy-safe wrapping so details remain readable without horizontal scrolling
 - loading, error, and empty states use semantic feedback regions and preserve the surrounding layout instead of collapsing the workspace
 - the page uses the same stats snapshot contract as before; the sprint refactor only changed presentation and local client state, not the backend route shape or payload fields
 - each visual mode opens with a balanced summary deck of compact executive cards. Trend emphasizes tokens, active time, cost, invocation health, cache rate, and token velocity; composition emphasizes provider, token, source, purpose, and git-blocker mix; models emphasizes active models, top model, latency, success, cache, and velocity highlights; reliability emphasizes provider health, telemetry confidence, failures, retry signals, and fallback quality; ledgers emphasizes task, sprint, pull request, diff, and conflict scope; system emphasizes invocation, provider, model, source, and outcome health.

@@ -43,9 +43,9 @@ const HighlightTile: FunctionComponent<{
   highlight: ModelHighlight | null;
   tone: string;
 }> = ({ icon: Icon, label, highlight, tone }) => (
-  <div className={`${SUBPANEL_CLASS} p-4`} aria-label={`${label}: ${highlight ? `${highlight.model.label}, ${highlight.value}` : "not enough telemetry yet"}`}>
+  <div className={`${SUBPANEL_CLASS} p-4`}>
     <div className={`inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] ${tone}`}>
-      <Icon className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden="true" />
+      <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
       {label}
     </div>
     <div className="mt-3 break-words text-lg font-black text-slate-900 dark:text-white">
@@ -62,11 +62,10 @@ const ModelMetric: FunctionComponent<{
   label: string;
   value: string;
   detail?: string;
-  tone?: string;
-}> = ({ label, value, detail, tone = "text-slate-400" }) => (
-  <div className={`${SUBPANEL_CLASS} p-4`} aria-label={`${label}: ${value}${detail ? `. ${detail}` : ""}`}>
+}> = ({ label, value, detail }) => (
+  <div className={`${SUBPANEL_CLASS} p-4`}>
     <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{label}</div>
-    <div className={`mt-2 text-lg font-black text-slate-900 dark:text-white ${tone}`}>{value}</div>
+    <div className="mt-2 text-lg font-black text-slate-900 dark:text-white">{value}</div>
     {detail ? <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{detail}</div> : null}
   </div>
 );
@@ -79,24 +78,14 @@ const ModelCard: FunctionComponent<{
   const { icon: Icon, bg, text } = getProviderIcon(model.provider);
   const efficiency = computeUsageEfficiency(model.usage);
   const successTone = getSuccessTone(model.successRate);
-  const successToneText = successTone === "strong"
-    ? "text-status-green dark:text-status-green"
-    : successTone === "warn"
-      ? "text-amber-600 dark:text-amber-400"
-      : successTone === "critical"
-        ? "text-rose-600 dark:text-rose-400"
-        : "text-slate-500 dark:text-slate-400";
   const statusSummary = `${model.statusCounts.completed} completed · ${model.statusCounts.failed} failed · ${model.statusCounts.running} running · ${model.statusCounts.cancelled} cancelled`;
-  const outputVelocity = model.usage.outputTokens > 0 && model.usage.activeTimeMs > 0
-    ? Math.round(model.usage.outputTokens / (model.usage.activeTimeMs / 1000))
-    : null;
 
   return (
-    <article className={`${PANEL_CLASS} p-4 md:p-5`} aria-label={`${model.label} model comparison. ${formatTokens(model.usage.totalTokens)} tokens, ${formatSuccessRate(model.successRate)} success.`}>
+    <div className={`${PANEL_CLASS} p-4 md:p-5`}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 flex-1 items-start gap-3">
           <div className={`rounded-xl p-2 ${bg} ${text}`}>
-            <Icon className="h-4 w-4" strokeWidth={2.1} aria-hidden="true" />
+            <Icon className="h-4 w-4" strokeWidth={2.1} />
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -135,25 +124,11 @@ const ModelCard: FunctionComponent<{
           label="Median Latency"
           value={model.duration.sampleCount > 0 ? formatStatsDuration(model.duration.p50Ms) : "—"}
           detail={model.duration.sampleCount > 0 ? `p95 ${formatStatsDuration(model.duration.p95Ms)}` : "no samples"}
-          tone={model.duration.sampleCount > 0 ? "text-cyan-600 dark:text-cyan-400" : "text-slate-500 dark:text-slate-400"}
-        />
-        <ModelMetric
-          label="Success Rate"
-          value={formatSuccessRate(model.successRate)}
-          detail={statusSummary}
-          tone={successToneText}
         />
         <ModelMetric
           label="Cache Hit Rate"
           value={efficiency.cacheHitRate !== null ? `${Math.round(efficiency.cacheHitRate * 100)}%` : "—"}
           detail={`${formatTokens(model.usage.cachedInputTokens)} cached`}
-          tone="text-amber-600 dark:text-amber-400"
-        />
-        <ModelMetric
-          label="Token Volume"
-          value={formatTokens(model.usage.totalTokens)}
-          detail={shareOfTotal > 0 ? `${shareOfTotal.toFixed(1)}% of window` : "no token volume"}
-          tone="text-signal-600 dark:text-signal-400"
         />
         <ModelMetric
           label="Tokens / Call"
@@ -162,15 +137,13 @@ const ModelCard: FunctionComponent<{
         />
         <ModelMetric
           label="Output Velocity"
-          value={outputVelocity !== null ? `${formatTokens(outputVelocity)} tok/s` : "—"}
+          value={model.usage.outputTokens > 0 && model.usage.activeTimeMs > 0 ? `${formatTokens(Math.round(model.usage.outputTokens / (model.usage.activeTimeMs / 1000)))} tok/s` : "—"}
           detail="tok/s output"
-          tone="text-cyan-600 dark:text-cyan-400"
         />
         <ModelMetric
           label="Reasoning Share"
           value={model.usage.reasoningOutputTokens > 0 && model.usage.outputTokens > 0 ? formatPercent((model.usage.reasoningOutputTokens / model.usage.outputTokens) * 100) : "—"}
           detail="of output"
-          tone="text-rose-600 dark:text-rose-400"
         />
       </div>
 
@@ -225,7 +198,7 @@ const ModelCard: FunctionComponent<{
           Last active {formatDateTime(model.lastActivityAt)}
         </div>
       </div>
-    </article>
+    </div>
   );
 };
 
@@ -236,16 +209,6 @@ export const ModelsStudio: FunctionComponent<{
   const segments = buildModelSegments(models);
   const highlights = buildModelHighlights(models);
   const totalTokens = models.reduce((sum, model) => sum + model.usage.totalTokens, 0);
-  const totalInvocations = models.reduce((sum, model) => sum + model.usage.invocationCount, 0);
-  const durationSamples = models.reduce((sum, model) => sum + model.duration.sampleCount, 0);
-  const weightedLatencyMs = durationSamples > 0
-    ? models.reduce((sum, model) => sum + model.duration.p50Ms * model.duration.sampleCount, 0) / durationSamples
-    : null;
-  const completed = models.reduce((sum, model) => sum + model.statusCounts.completed, 0);
-  const failed = models.reduce((sum, model) => sum + model.statusCounts.failed, 0);
-  const cancelled = models.reduce((sum, model) => sum + model.statusCounts.cancelled, 0);
-  const finished = completed + failed + cancelled;
-  const aggregateSuccess = finished > 0 ? completed / finished : null;
   const sorted = [...models].sort((left, right) => {
     const delta = right.usage.totalTokens - left.usage.totalTokens;
     return delta !== 0 ? delta : left.label.localeCompare(right.label);
@@ -268,13 +231,6 @@ export const ModelsStudio: FunctionComponent<{
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <ModelMetric label="Model Count" value={models.length.toLocaleString()} detail={`${totalInvocations.toLocaleString()} invocations`} tone="text-signal-600 dark:text-signal-400" />
-            <ModelMetric label="Window Success" value={formatSuccessRate(aggregateSuccess)} detail={finished > 0 ? `${failed.toLocaleString()} failed of ${finished.toLocaleString()}` : "nothing finished"} tone={aggregateSuccess !== null ? "text-emerald-600 dark:text-emerald-400" : "text-slate-500 dark:text-slate-400"} />
-            <ModelMetric label="Median Latency" value={weightedLatencyMs !== null ? formatStatsDuration(weightedLatencyMs) : "—"} detail={durationSamples > 0 ? `${durationSamples.toLocaleString()} duration samples` : "no duration samples"} tone="text-cyan-600 dark:text-cyan-400" />
-            <ModelMetric label="Token Volume" value={formatTokens(totalTokens)} detail="across ranked models" tone="text-amber-600 dark:text-amber-400" />
-          </div>
-
           <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1.05fr_0.95fr]">
             <DonutCard
               title="Model Share"

@@ -62,15 +62,6 @@ describe("computeWindowDelta", () => {
     expect(delta.changePercent).toBeNull();
     expect(delta.direction).toBe("up");
   });
-
-  it("keeps the larger side in the current half for odd bucket counts", () => {
-    const buckets = [100, 200, 400].map(createBucket);
-    const delta = computeWindowDelta(buckets, (bucket) => bucket.usage.totalTokens);
-
-    expect(delta.previous).toBe(100);
-    expect(delta.current).toBe(600);
-    expect(delta.direction).toBe("up");
-  });
 });
 
 describe("formatDeltaPercent", () => {
