@@ -12,7 +12,7 @@ import {
 import { SkeletonRow } from "../layout/SkeletonLoader.js";
 import { INTERACTION_TOKENS } from "../../lib/motion/tokens.js";
 import { useResolvedMotionDuration } from "../../hooks/use-reduced-motion.js";
-import { resolveListWindow, type ListWindowOption } from "../../lib/list-window.js";
+import { sliceListWindow, type ListWindowOption } from "../../lib/list-window.js";
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
 import type { Sprint } from "../../types.js";
@@ -20,7 +20,6 @@ import type { ExecutionHumanInterventionSummary } from "../../../../../src/contr
 import {
   filterSprints,
   sortSprints,
-  sliceLedgerSprints,
   toggleSelection,
   deselectAll,
   pruneSelection,
@@ -114,8 +113,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
   );
 
   const windowedSprints = useMemo(() => {
-    const limit = resolveListWindow(listWindow, ledgerSprints.length);
-    return sliceLedgerSprints(ledgerSprints, limit);
+    return sliceListWindow(ledgerSprints, listWindow);
   }, [ledgerSprints, listWindow]);
 
   const ledgerSummary = useMemo(() => ({

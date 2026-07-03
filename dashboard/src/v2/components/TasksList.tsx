@@ -9,6 +9,8 @@ import { EmptyState } from "./ui/EmptyState.js";
 import { deriveActiveSprintIds, filterTasksToActiveSprints } from "../lib/overview-streams.js";
 import { useOverviewStreamActions } from "../hooks/use-overview-stream-actions.js";
 import { useListReorder } from "../lib/motion/use-list-reorder.js";
+import { useProgressiveList } from "../hooks/use-progressive-list.js";
+import { DEFAULT_LIST_WINDOW } from "../lib/list-window.js";
 
 type TaskFilter = "All Tasks" | "Running" | "Queued" | "Completed";
 
@@ -41,12 +43,26 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
         if (activeFilter === "Completed") return task.status === "completed";
         return true;
     }), [activeTasks, activeFilter]);
+    const visibleTasks = useProgressiveList(filteredTasks, {
+        initialCount: DEFAULT_LIST_WINDOW,
+        incrementCount: DEFAULT_LIST_WINDOW,
+        delay: 100,
+        resetKey: activeFilter,
+    });
+
+    const sprintTaskCounts = useMemo(() => {
+        const counts = new Map<string, number>();
+        for (const task of filteredTasks) {
+            counts.set(task.sprintId, (counts.get(task.sprintId) ?? 0) + 1);
+        }
+        return counts;
+    }, [filteredTasks]);
 
     // Group the active-sprint tasks under their sprint so each task visibly belongs to a
     // sprint. Most recent sprint first; only sprints with matching tasks appear.
     const sprintGroups = useMemo(() => {
-        const grouped = new Map<string, typeof filteredTasks>();
-        for (const task of filteredTasks) {
+        const grouped = new Map<string, typeof visibleTasks>();
+        for (const task of visibleTasks) {
             const list = grouped.get(task.sprintId) ?? [];
             list.push(task);
             grouped.set(task.sprintId, list);
@@ -56,11 +72,12 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                 sprintId,
                 sprint: sprintById.get(sprintId) ?? null,
                 tasks: groupedTasks,
+                totalTasks: sprintTaskCounts.get(sprintId) ?? groupedTasks.length,
             }))
             .sort((a, b) => (b.sprint?.number ?? 0) - (a.sprint?.number ?? 0));
-    }, [filteredTasks, sprintById]);
+    }, [visibleTasks, sprintById, sprintTaskCounts]);
 
-    useListReorder(listRef, [activeFilter, filteredTasks], {
+    useListReorder(listRef, [activeFilter, visibleTasks], {
         flipIdSelector: '[data-flip-id]',
         stagger: 0.03
     });
@@ -102,7 +119,7 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                             <div key={`sprint-${group.sprintId}`} data-flip-id={`sprint-${group.sprintId}`}>
                                 <SprintStreamRow
                                     sprint={group.sprint}
-                                    taskCount={group.tasks.length}
+                                    taskCount={group.totalTasks}
                                     state={streamActions.getSprintState(group.sprintId)}
                                     onStartStop={() => streamActions.startStopSprint(group.sprintId)}
                                     onPauseResume={() => streamActions.pauseResumeSprint(group.sprintId)}
