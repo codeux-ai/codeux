@@ -1,7 +1,7 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import type { ParsedConversationTurn } from "./provider-conversation-types.js";
-import { parseUsageObject } from "./usage-parse-utils.js";
+import { extractJsonContainer, parseUsageObject } from "./usage-parse-utils.js";
 
 export interface QwenUsageTotals {
   inputTokens: number;
@@ -300,10 +300,9 @@ export async function readQwenOpenAiLogRecords(
       const stat = await fs.stat(filePath).catch(() => null);
       if (stat && stat.mtimeMs >= startTimeMs - 2000) {
         const content = await fs.readFile(filePath, "utf8").catch(() => "");
-        try {
-          records.push(JSON.parse(content));
-        } catch {
-          // ignore unparseable log files
+        const parsed = extractJsonContainer<Record<string, unknown>>(content, "object");
+        if (parsed.ok) {
+          records.push(parsed.value);
         }
       }
     }

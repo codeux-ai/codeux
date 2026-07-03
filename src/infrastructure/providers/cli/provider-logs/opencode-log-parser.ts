@@ -1,5 +1,5 @@
 import type { ParsedConversationTurn } from "./provider-conversation-types.js";
-import { parseJsonObject, toNumber } from "./usage-parse-utils.js";
+import { extractJsonContainer, parseJsonObject, toNumber } from "./usage-parse-utils.js";
 
 export interface OpenCodeLogResult {
   transcriptText: string;
@@ -99,36 +99,6 @@ export interface OpenCodeExportUsage {
   rawUsageJson: Record<string, unknown> | null;
 }
 
-/** Extracts the first balanced, string-aware JSON object from a blob of text,
- *  so the export JSON survives any incidental wrapper output on the stream. */
-function extractFirstJsonObject(text: string): string | null {
-  const start = text.indexOf("{");
-  if (start < 0) {
-    return null;
-  }
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  for (let i = start; i < text.length; i += 1) {
-    const ch = text[i];
-    if (inString) {
-      if (escaped) escaped = false;
-      else if (ch === "\\") escaped = true;
-      else if (ch === "\"") inString = false;
-      continue;
-    }
-    if (ch === "\"") inString = true;
-    else if (ch === "{") depth += 1;
-    else if (ch === "}") {
-      depth -= 1;
-      if (depth === 0) {
-        return text.slice(start, i + 1);
-      }
-    }
-  }
-  return null;
-}
-
 /**
  * Parses the JSON emitted by `opencode export <sessionID>`. OpenCode does not
  * report token usage on the `run --format json` stdout stream — usage lives in
@@ -140,11 +110,9 @@ export function parseOpenCodeExport(exportStdout: string): OpenCodeExportUsage |
   // happens to contain braces can't be mistaken for the payload.
   const infoIndex = exportStdout.search(/\{\s*"info"\s*:/);
   const searchText = infoIndex >= 0 ? exportStdout.slice(infoIndex) : exportStdout;
-  const objectText = extractFirstJsonObject(searchText);
-  if (!objectText) {
-    return null;
-  }
-  const root = parseJsonObject(objectText);
+  const extracted = extractJsonContainer<Record<string, unknown>>(searchText, "object");
+  if (!extracted.ok) return null;
+  const root = extracted.value;
   const info = asRecord(root?.info);
   const tokens = asRecord(info?.tokens);
   if (!tokens) {

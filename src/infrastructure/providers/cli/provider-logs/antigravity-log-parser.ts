@@ -1,5 +1,6 @@
 import type { ParsedConversationTurn } from "./provider-conversation-types.js";
 import { DatabaseSync } from "node:sqlite";
+import { parseJsonObject } from "./usage-parse-utils.js";
 
 export interface AntigravityUsageTotals {
   inputTokens: number;
@@ -283,77 +284,74 @@ export function parseAntigravityTranscript(
     const trimmed = rawLine.trim();
     if (!trimmed.startsWith("{")) continue;
 
-    try {
-      const entry = JSON.parse(trimmed);
-      if (!entry) continue;
+    const entry = parseJsonObject(trimmed);
+    if (!entry) continue;
 
-      const timestampMs = entry.created_at ? Date.parse(entry.created_at) : null;
-      if (minMs !== null && timestampMs !== null && timestampMs < minMs) {
-        continue;
+    const timestampMs = typeof entry.created_at === "string" ? Date.parse(entry.created_at) : null;
+    if (minMs !== null && timestampMs !== null && timestampMs < minMs) {
+      continue;
+    }
+
+    if (entry.type === "USER_INPUT") {
+      let text = typeof entry.content === "string" ? entry.content : "";
+      const requestMatch = text.match(/<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/);
+      if (requestMatch) {
+        text = requestMatch[1].trim();
       }
-
-      if (entry.type === "USER_INPUT") {
-        let text = entry.content || "";
-        const requestMatch = text.match(/<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/);
-        if (requestMatch) {
-          text = requestMatch[1].trim();
+      conversation.push({ kind: "user", text, timestampMs });
+    } else if (entry.type === "PLANNER_RESPONSE") {
+      const reasoningText = extractVisibleTranscriptText(entry.reasoning ?? entry.planner_reasoning ?? entry.summary ?? entry.thinking);
+      if (reasoningText) {
+        conversation.push({ kind: "reasoning", text: reasoningText, timestampMs });
+      }
+      if (entry.content) {
+        const text = extractVisibleTranscriptText(entry.content);
+        if (text) {
+          conversation.push({ kind: "assistant", text, timestampMs });
         }
-        conversation.push({ kind: "user", text, timestampMs });
-      } else if (entry.type === "PLANNER_RESPONSE") {
-        const reasoningText = extractVisibleTranscriptText(entry.reasoning ?? entry.planner_reasoning ?? entry.summary ?? entry.thinking);
-        if (reasoningText) {
-          conversation.push({ kind: "reasoning", text: reasoningText, timestampMs });
-        }
-        if (entry.content) {
-          const text = extractVisibleTranscriptText(entry.content);
-          if (text) {
-            conversation.push({ kind: "assistant", text, timestampMs });
-          }
-        }
-        if (Array.isArray(entry.tool_calls)) {
-          for (const tc of entry.tool_calls) {
-            const toolName = extractToolName(tc);
-            const toolCall: ParsedConversationTurn = {
-              kind: "tool_call",
-              text: toolName ? `Calling tool ${toolName}` : "Calling tool",
-              toolName,
-              toolArguments: typeof tc.args === "object" ? JSON.stringify(tc.args) : String(tc.args || ""),
-              timestampMs,
-            };
-            const toolCallId = extractToolCallId(tc);
-            if (toolCallId) {
-              toolCall.toolCallId = toolCallId;
-            }
-            conversation.push(toolCall);
-          }
-        }
-      } else if (entry.type === "RUN_COMMAND" || entry.type === "TOOL_RESPONSE" || (entry.source === "SYSTEM" && entry.content)) {
-        const text = entry.content || "";
-        if (entry.type === "RUN_COMMAND" || entry.type === "TOOL_RESPONSE") {
-          const toolResult: ParsedConversationTurn = {
-            kind: "tool_result",
-            text,
+      }
+      if (Array.isArray(entry.tool_calls)) {
+        for (const tc of entry.tool_calls) {
+          const tcRecord = asRecord(tc);
+          const toolName = extractToolName(tcRecord);
+          const toolCall: ParsedConversationTurn = {
+            kind: "tool_call",
+            text: toolName ? `Calling tool ${toolName}` : "Calling tool",
+            toolName,
+            toolArguments: typeof tcRecord?.args === "object" ? JSON.stringify(tcRecord.args) : String(tcRecord?.args || ""),
             timestampMs,
           };
-          const toolCallId = extractToolCallId(entry);
+          const toolCallId = extractToolCallId(tcRecord);
           if (toolCallId) {
-            toolResult.toolCallId = toolCallId;
+            toolCall.toolCallId = toolCallId;
           }
-          const toolName = extractToolName(entry);
-          if (toolName) {
-            toolResult.toolName = toolName;
-          }
-          conversation.push(toolResult);
-        } else if (text) {
-          conversation.push({
-            kind: "reasoning",
-            text,
-            timestampMs,
-          });
+          conversation.push(toolCall);
         }
       }
-    } catch {
-      // Ignore parse errors for malformed entries
+    } else if (entry.type === "RUN_COMMAND" || entry.type === "TOOL_RESPONSE" || (entry.source === "SYSTEM" && entry.content)) {
+      const text = typeof entry.content === "string" ? entry.content : "";
+      if (entry.type === "RUN_COMMAND" || entry.type === "TOOL_RESPONSE") {
+        const toolResult: ParsedConversationTurn = {
+          kind: "tool_result",
+          text,
+          timestampMs,
+        };
+        const toolCallId = extractToolCallId(entry);
+        if (toolCallId) {
+          toolResult.toolCallId = toolCallId;
+        }
+        const toolName = extractToolName(entry);
+        if (toolName) {
+          toolResult.toolName = toolName;
+        }
+        conversation.push(toolResult);
+      } else if (text) {
+        conversation.push({
+          kind: "reasoning",
+          text,
+          timestampMs,
+        });
+      }
     }
   }
 
