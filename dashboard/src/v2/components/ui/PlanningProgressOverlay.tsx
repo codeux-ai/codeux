@@ -92,6 +92,7 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
   };
 
   const theme = accentColors[themeAccent];
+  const displayedShipProgress = reducedMotion ? 0.5 : feedback.shipProgress;
 
   const getBadgeText = () => {
     if (actionType === "quicksprint") return "Quicksprint in motion";
@@ -123,6 +124,9 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
       onClick={(e) => {
         if (e.target === e.currentTarget) onDismiss();
       }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={getBadgeText()}
     >
       <div className="flex flex-col items-center justify-center bg-white dark:bg-void-800 rounded-2xl shadow-2xl border border-black/[0.08] dark:border-white/[0.08] max-w-2xl w-full p-6 sm:p-8 relative cursor-default max-h-[calc(100dvh-2rem)] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
       <button
@@ -138,21 +142,25 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
         className="relative mb-12 flex h-32 w-full max-w-md items-center justify-center overflow-hidden pointer-events-none"
         role="progressbar"
         aria-live="polite"
-        aria-valuenow={Math.round(feedback.shipProgress * 100)}
+        aria-valuenow={Math.round(displayedShipProgress * 100)}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-label={feedback.text}
       >
         <div className="absolute inset-x-0 bottom-8 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent dark:via-white/10" />
         <div
-          className="absolute transition-[left] duration-200 ease-linear"
-          style={{ left: `${feedback.shipProgress * 100}%`, transform: "translateX(-50%)" }}
+          className="absolute transition-[left] ease-linear motion-reduce:transition-none"
+          style={{
+            left: `${displayedShipProgress * 100}%`,
+            transform: "translateX(-50%)",
+            transitionDuration: `${MODAL_MOTION.overlay.exit}s`,
+          }}
         >
           <svg width="120" height="60" viewBox="-60 -30 120 60">
             {feedback.shipType === "container" ? (
-              <ContainerShip accentColor={theme.shipContainer} isMoving={true} isDark={isDark} />
+              <ContainerShip accentColor={theme.shipContainer} isMoving={!reducedMotion} isDark={isDark} />
             ) : (
-              <WoodenShip accentColor={theme.shipWooden} isMoving={true} isDark={isDark} />
+              <WoodenShip accentColor={theme.shipWooden} isMoving={!reducedMotion} isDark={isDark} />
             )}
           </svg>
         </div>

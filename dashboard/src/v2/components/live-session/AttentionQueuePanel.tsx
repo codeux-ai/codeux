@@ -19,10 +19,18 @@ export const AttentionQueuePanel: FunctionComponent = memo(() => {
         };
     }, [execution?.attentionItems]);
 
+    if (!execution) {
+        return (
+            <div role="status" aria-live="polite" aria-busy="true" className="rounded-[1.75rem] border border-black/[0.08] bg-white p-5 text-[11px] font-mono text-slate-400 shadow-sm dark:border-white/[0.08] dark:bg-void-800 dark:text-slate-500">
+                Loading attention queue.
+            </div>
+        );
+    }
+
     // When there are no attention items ever
     if (total === 0) {
         return (
-            <div role="status" className="rounded-[1.75rem] border border-black/[0.08] bg-white p-5 shadow-sm dark:border-white/[0.08] dark:bg-void-800">
+            <div role="status" aria-live="polite" aria-atomic="true" className="rounded-[1.75rem] border border-black/[0.08] bg-white p-5 shadow-sm dark:border-white/[0.08] dark:bg-void-800">
                 <div className="flex items-start gap-3 rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] border-l-status-green bg-black/[0.015] p-3 dark:border-white/[0.04] dark:bg-white/[0.015]">
                     <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-status-green" strokeWidth={1.7} aria-hidden="true" />
                     <div>
@@ -36,7 +44,7 @@ export const AttentionQueuePanel: FunctionComponent = memo(() => {
 
     // Wrap the Ledger and potentially show summary stats
     return (
-        <div role="region" aria-label="Attention queue status" className="flex flex-col gap-3">
+        <div role="region" aria-label="Attention queue status" aria-busy={claimed > 0 ? "true" : undefined} className="flex flex-col gap-3">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                  {[
                     { label: "Open", value: open, color: "text-status-amber" },

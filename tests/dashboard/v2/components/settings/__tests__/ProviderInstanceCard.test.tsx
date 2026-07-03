@@ -101,10 +101,76 @@ describe("ProviderInstanceCard", () => {
 
     expect(screen.getByRole("region", { name: "Very Long OpenCode Provider" })).toBeDefined();
     expect(screen.getByRole("switch", { name: "Enable Very Long OpenCode Provider" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("switch", { name: "Enable Very Long OpenCode Provider" }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByRole("button", { name: "Remove Very Long OpenCode Provider" })).toBeDefined();
     expect(screen.getByRole("radiogroup", { name: "Very Long OpenCode Provider authentication mode" })).toBeDefined();
     expect(screen.getByRole("radio", { name: /API Key/i }).getAttribute("aria-checked")).toBe("true");
     expect(screen.getByLabelText("Very Long OpenCode Provider API key")).toBeDefined();
+  });
+
+  it("requires confirmation before removing a provider instance and announces the local state", () => {
+    const provider: SystemProviderConfig = {
+      provider: "codex",
+      name: "Codex Removable",
+      apiKey: "",
+      mountAuth: false,
+      authPath: "",
+      authType: "apiKey",
+    };
+    const onRemove = vi.fn();
+
+    render(
+      <ProviderInstanceCard
+        providerConfigId="codex-removable"
+        provider={provider}
+        providerModel="gpt-5.5"
+        dockerExecutionEnabled={false}
+        onUpdate={vi.fn()}
+        onRemove={onRemove}
+      />
+    );
+
+    const removeButton = screen.getByRole("button", { name: "Remove Codex Removable" });
+    fireEvent.click(removeButton);
+
+    expect(onRemove).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Confirm remove Codex Removable" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("status").textContent).toContain("Confirm removal of Codex Removable");
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm remove Codex Removable" }));
+    expect(onRemove).toHaveBeenCalledTimes(1);
+  });
+
+  it("announces auth mode changes as local unsaved settings feedback", () => {
+    const provider: SystemProviderConfig = {
+      provider: "opencode",
+      name: "OpenCode Auth",
+      apiKey: "test",
+      mountAuth: false,
+      authPath: "",
+      authType: "apiKey",
+    };
+    const onUpdate = vi.fn();
+
+    render(
+      <ProviderInstanceCard
+        providerConfigId="opencode-auth"
+        provider={provider}
+        providerModel="ollama/test"
+        dockerExecutionEnabled={false}
+        onUpdate={onUpdate}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: /Local Copy/i }));
+
+    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      authType: "localAuth",
+      mountAuth: true,
+      apiKey: "",
+      openCodeAuthMode: "LOCAL_AUTH",
+    }));
+    expect(screen.getByRole("status").textContent).toContain("OpenCode Auth authentication mode changed locally");
   });
 
   it("names generated config previews by provider instance", () => {

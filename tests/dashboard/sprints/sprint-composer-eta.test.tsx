@@ -146,4 +146,28 @@ describe("Sprint composer ETA wiring", () => {
       expect(screen.getByTestId("eta-ms")).toHaveTextContent("180000");
     });
   });
+
+  it("refreshes ETA only after the planning invocation settles", async () => {
+    let resolvePlan: (value: unknown) => void;
+    planSprintMock.mockImplementationOnce(() => new Promise((resolve) => {
+      resolvePlan = resolve;
+    }));
+
+    render(<HookHarness />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("eta-ms")).toHaveTextContent("91000");
+      expect(createSprintMock).toHaveBeenCalled();
+      expect(planSprintMock).toHaveBeenCalled();
+    });
+
+    expect(fetchSprintComposerEtaMock).toHaveBeenCalledTimes(1);
+
+    resolvePlan!({ ok: true });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("eta-ms")).toHaveTextContent("45000");
+    });
+    expect(fetchSprintComposerEtaMock).toHaveBeenCalledTimes(2);
+  });
 });

@@ -104,7 +104,7 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
             </div>
 
             {/* Task rows */}
-            <div ref={listRef} className="flex flex-col w-full space-y-3">
+            <div ref={listRef} className="flex flex-col w-full space-y-3" role="region" aria-label="Active stream tasks">
                 {isLoading ? (
                     <>
                         <SkeletonRow />

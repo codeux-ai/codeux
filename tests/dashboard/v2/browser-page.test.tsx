@@ -7,7 +7,7 @@ import userEvent from "@testing-library/user-event";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { BrowserPage } from "../../../dashboard/src/v2/BrowserPage.js";
 import { usePreviewSessions } from "../../../dashboard/src/v2/hooks/use-preview-sessions.js";
-import { fetchPreviewScript } from "../../../dashboard/src/v2/lib/browser-api.js";
+import { fetchPreviewLogs, fetchPreviewScript, savePreviewScript } from "../../../dashboard/src/v2/lib/browser-api.js";
 
 expect.extend(matchers);
 
@@ -261,7 +261,12 @@ describe("BrowserPage", () => {
     mockStartPreviewSession.mockClear();
     mockRemovePreviewSession.mockClear();
     mockRefreshSessions.mockClear();
-    vi.mocked(fetchPreviewScript).mockClear();
+    vi.mocked(fetchPreviewLogs).mockReset();
+    vi.mocked(fetchPreviewLogs).mockResolvedValue({ logs: "mock logs" });
+    vi.mocked(fetchPreviewScript).mockReset();
+    vi.mocked(fetchPreviewScript).mockResolvedValue({ content: "mock script", mode: "script", path: "/script.sh" });
+    vi.mocked(savePreviewScript).mockReset();
+    vi.mocked(savePreviewScript).mockResolvedValue({ content: "new mock script", mode: "script", path: "/script.sh" });
   });
 
   it("renders correctly with new slider and chrome components", async () => {
@@ -307,6 +312,91 @@ describe("BrowserPage", () => {
     });
 
     expect(vi.mocked(fetchPreviewScript)).toHaveBeenCalledWith("p1", "s1");
+  });
+
+  it("shows log loading feedback without hiding stale preview content", async () => {
+    vi.useFakeTimers();
+    try {
+      render(<BrowserPage />);
+
+      expect(screen.getByText("Loading logs...")).toBeInTheDocument();
+      expect(screen.getAllByText("Loading preview logs.").length).toBeGreaterThan(0);
+      expect(screen.getByTitle("Preview: Project 1 - Sprint 1")).toBeInTheDocument();
+
+      await act(async () => {
+        vi.advanceTimersByTime(250);
+        await Promise.resolve();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByLabelText("Preview container logs")).toHaveTextContent("mock logs");
+      });
+      expect(vi.mocked(fetchPreviewLogs)).toHaveBeenCalledWith("sess-1", 160);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows script save success feedback and prevents duplicate save submissions", async () => {
+    const user = userEvent.setup();
+    let resolveSave: ((value: { content: string; mode: "script"; path: string }) => void) | null = null;
+    vi.mocked(savePreviewScript).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveSave = resolve;
+        })
+    );
+
+    render(<BrowserPage />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Show startup script editor" }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Startup script contents")).toHaveValue("mock script");
+    });
+
+    const saveButton = screen.getByRole("button", { name: "Save startup script" });
+    await user.click(saveButton);
+    await user.click(saveButton);
+
+    expect(vi.mocked(savePreviewScript)).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Saving startup script" })).toBeDisabled();
+    expect(screen.getByText("Saving startup script. Editing is paused until the save completes.")).toBeInTheDocument();
+
+    await act(async () => {
+      resolveSave?.({ content: "new mock script", mode: "script", path: "/script.sh" });
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("Script saved successfully")).toBeInTheDocument();
+  });
+
+  it("shows script save error feedback and keeps the editor available for recovery", async () => {
+    const user = userEvent.setup();
+    vi.mocked(savePreviewScript).mockRejectedValueOnce(new Error("disk full"));
+
+    render(<BrowserPage />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Show startup script editor" }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Startup script contents")).toHaveValue("mock script");
+    });
+
+    await user.click(screen.getByRole("button", { name: "Save startup script" }));
+
+    await waitFor(() => {
+      expect(vi.mocked(savePreviewScript)).toHaveBeenCalledTimes(1);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Failed to save script: disk full")).toBeInTheDocument();
+    });
+    expect(screen.getByLabelText("Startup script contents")).toBeEnabled();
   });
 
   it("does not hard-rebind the iframe src on in-app navigation updates", async () => {

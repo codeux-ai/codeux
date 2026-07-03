@@ -137,7 +137,13 @@ export const ConnectionRuntimePanel: FunctionComponent<{
         [snapshot?.connections, snapshot?.connections?.length],
     );
 
-    if (!snapshot) return null;
+    if (!snapshot) {
+        return (
+            <div role="status" aria-live="polite" aria-busy="true" className="rounded-[1.75rem] border border-black/[0.08] bg-white p-5 text-[11px] font-mono text-slate-400 shadow-sm dark:border-white/[0.08] dark:bg-void-800 dark:text-slate-500">
+                Loading live connections.
+            </div>
+        );
+    }
 
     const header = (
         <div className="flex flex-wrap items-center gap-2.5">
@@ -171,11 +177,11 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                     aria-expanded={open}
                     aria-controls={contentId}
                     onClick={() => setOpen((current) => !current)}
-                    className="relative z-10 flex w-full items-center justify-between gap-4 p-5 text-left transition-colors duration-200 hover:bg-black/[0.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:hover:bg-white/[0.01] dark:focus-visible:ring-offset-void-800"
+                    className="relative z-10 flex w-full items-center justify-between gap-4 p-5 text-left transition-colors duration-[var(--interaction-control-feedback-duration)] hover:bg-black/[0.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:hover:bg-white/[0.01] dark:focus-visible:ring-offset-void-800"
                 >
                     {header}
                     <ChevronDown
-                        className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-300 ${open ? "rotate-0" : "-rotate-90"}`}
+                        className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-[var(--interaction-enter-exit-duration)] ${open ? "rotate-0" : "-rotate-90"}`}
                         strokeWidth={2}
                         aria-hidden="true"
                     />
@@ -354,7 +360,13 @@ export const ExecutionRuntimePanel: FunctionComponent<{
         }
     }, [open, isReducedMotion, enterDuration, collapsible]);
 
-    if (!snapshot) return null;
+    if (!snapshot) {
+        return (
+            <div role="status" aria-live="polite" aria-busy="true" className="rounded-[1.75rem] border border-black/[0.08] bg-white p-5 text-[11px] font-mono text-slate-400 shadow-sm dark:border-white/[0.08] dark:bg-void-800 dark:text-slate-500">
+                Loading execution runtime.
+            </div>
+        );
+    }
     const activeSprintRuns = useMemo(() => snapshot.sprintRuns.filter((run) => run.status === "running" || run.status === "queued"), [snapshot.sprintRuns, snapshot.sprintRuns.length]);
     const activeDispatches = useMemo(() => snapshot.taskDispatches.filter((dispatch) => (
         dispatch.status === "queued" || dispatch.status === "claimed" || dispatch.status === "running"
@@ -385,7 +397,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
     );
 
     return (
-        <div role="region" aria-label="Execution runtime" className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800">
+        <div role="region" aria-label="Execution runtime" aria-busy={activeSprintRuns.length > 0 || activeDispatches.length > 0 ? "true" : undefined} className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800">
 
 
 
@@ -395,7 +407,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                     aria-expanded={open}
                     aria-controls={contentId}
                     onClick={() => setOpen((current) => !current)}
-                    className="relative z-10 flex w-full items-center justify-between gap-4 p-5 text-left transition-colors duration-200 hover:bg-black/[0.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:hover:bg-white/[0.01] dark:focus-visible:ring-offset-void-800"
+                    className="relative z-10 flex w-full items-center justify-between gap-4 p-5 text-left transition-colors duration-[var(--interaction-control-feedback-duration)] hover:bg-black/[0.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:hover:bg-white/[0.01] dark:focus-visible:ring-offset-void-800"
                 >
                     <div className="flex min-w-0 flex-wrap items-center gap-2.5">
                         <Workflow className="h-4 w-4 text-signal-500" strokeWidth={1.5} aria-hidden="true" />
@@ -419,7 +431,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                         </div>
                     </div>
                     <ChevronDown
-                        className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-300 ${open ? "rotate-0" : "-rotate-90"}`}
+                        className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-[var(--interaction-enter-exit-duration)] ${open ? "rotate-0" : "-rotate-90"}`}
                         strokeWidth={2}
                         aria-hidden="true"
                     />

@@ -52,6 +52,8 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   const isPending = pending || isLoading || feedback.status === "pending";
   const isSuccess = success || feedback.status === "success";
   const isError = feedback.status === "error";
+  const isFeedbackActive = isPending || isSuccess || isError;
+  const isAriaDisabled = props["aria-disabled"] === true || props["aria-disabled"] === "true";
   const gsapTokens = useGsapInteractionTokens();
   const reducedMotion = useReducedMotion();
   const tokens = useInteractionTokens();
@@ -66,14 +68,14 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   useMagnetic(buttonRef, contentRef, { enabled: variant === "primary" || variant === "signal" });
 
   useLayoutEffect(() => {
-    if (isPending && buttonRef.current && fixedWidthRef.current === null) {
+    if (isFeedbackActive && buttonRef.current && fixedWidthRef.current === null) {
       fixedWidthRef.current = buttonRef.current.offsetWidth;
       buttonRef.current.style.width = `${fixedWidthRef.current}px`;
-    } else if (!isPending && buttonRef.current) {
+    } else if (!isFeedbackActive && buttonRef.current) {
       fixedWidthRef.current = null;
       buttonRef.current.style.width = "";
     }
-  }, [isPending]);
+  }, [isFeedbackActive]);
 
   const previousState = useRef({ isPending, isSuccess, isError });
   useLayoutEffect(() => {
@@ -139,7 +141,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
           gsap.to(buttonRef.current, {
             keyframes: [{ x: -5 }, { x: 4 }, { x: -3 }, { x: 2 }, { x: 0 }],
             duration: gsapTokens.inlineValidation.duration,
-            ease: "none",
+            ease: gsapTokens.inlineValidation.ease,
           });
         }
       }
@@ -165,7 +167,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
 
   const handleClick = useCallback(
     (e: any) => {
-      if (disabled || isPending || props["aria-disabled"] === true || props["aria-disabled"] === "true") {
+      if (disabled || isPending || isAriaDisabled) {
         e?.preventDefault();
         e?.stopPropagation();
         return;
@@ -184,7 +186,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
       }
       return result;
     },
-    [onClick, isPending, setPending, setSuccess, setError]
+    [disabled, isPending, isAriaDisabled, onClick, setPending, setSuccess, setError]
   );
 
   const baseClasses = `group/btn inline-flex min-w-0 max-w-full items-center justify-center gap-2 font-bold ${SHARED_INTERACTION_CLASSES}`;
@@ -204,7 +206,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
       ref={buttonRef}
       onClick={handleClick}
       disabled={disabled && !isPending}
-      aria-disabled={disabled || isPending || props["aria-disabled"] === true || props["aria-disabled"] === "true"}
+      aria-disabled={disabled || isPending || isAriaDisabled}
       aria-busy={isPending}
       className={`${baseClasses} ${variantClasses} ${sizeClasses} ${overrideClasses} relative overflow-hidden ${className}`}
     >

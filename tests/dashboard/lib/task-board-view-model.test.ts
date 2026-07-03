@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import { buildTaskBoardViewModel } from "../../../dashboard/src/v2/lib/tasks/task-board-view-model.js";
 import type { Task } from "../../../dashboard/src/v2/types.js";
+import type { ExecutionTaskDispatchSummary, Subtask } from "../../../dashboard/src/types.js";
 
 function createMockTask(id: string, overrides: Partial<Task> = {}): Task {
   return {
@@ -138,4 +139,78 @@ test("buildTaskBoardViewModel handles empty states", () => {
   expect(vm.boardState.stats.total).toBe(0);
   expect(vm.taskViewModels.size).toBe(0);
   expect(vm.boardState.columns).toHaveLength(3); // BOARD_LANES
+});
+
+test("buildTaskBoardViewModel carries dependency blockers and live duration into card view models", () => {
+  const dependency = createMockTask("dep-1", { status: "pending", title: "Prepare contract" });
+  const task = createMockTask("task-1", {
+    status: "in_progress",
+    dependsOnTaskIds: ["dep-1"],
+  });
+  const dispatch: ExecutionTaskDispatchSummary = {
+    id: "dispatch-1",
+    projectId: "project-1",
+    sprintId: "sprint-1",
+    sprintRunId: "run-1",
+    sprintName: "Sprint 1",
+    sprintNumber: 1,
+    taskId: "task-1",
+    taskKey: "TASK-1",
+    taskTitle: "Task task-1",
+    status: "running",
+    executorType: "docker_cli",
+    priority: 0,
+    connectionId: null,
+    connectionDisplayName: null,
+    connectionRole: null,
+    taskRunId: "task-run-1",
+    taskRunState: "running",
+    provider: null,
+    sessionId: "sessions/session-1",
+    sessionName: null,
+    workerBranch: null,
+    prUrl: null,
+    queuedAt: "2026-07-03T10:00:00.000Z",
+    claimedAt: "2026-07-03T10:00:00.000Z",
+    startedAt: "2026-07-03T10:00:00.000Z",
+    finishedAt: "2026-07-03T10:02:05.000Z",
+    lastHeartbeatAt: null,
+    errorMessage: null,
+    activeLeaseOwnerKey: null,
+    activeLeaseExpiresAt: null,
+  };
+  const subtask: Subtask = {
+    record_id: "task-1",
+    id: "TASK-1",
+    title: "Task task-1",
+    prompt: "",
+    depends_on: [],
+    status: "in_progress",
+    session_id: "sessions/session-1",
+    is_independent: true,
+  };
+
+  const vm = buildTaskBoardViewModel({
+    tasks: [dependency, task],
+    optimisticTasks: [],
+    statusFilter: "all",
+    priorityFilter: "all",
+    listWindow: 50,
+    taskScopeSprintId: "sprint-1",
+    taskDispatches: [dispatch],
+    recentEvents: [],
+    subtasks: [subtask],
+  });
+
+  const taskVm = vm.taskViewModels.get("task-1");
+  expect(taskVm?.dependencyIndicators).toEqual([
+    {
+      recordId: "dep-1",
+      id: "dep-1",
+      title: "Prepare contract",
+      status: "pending",
+    },
+  ]);
+  expect(taskVm?.liveRunningTime).toBe("2m 5s");
+  expect(taskVm?.liveStartedAt).toBe("2026-07-03T10:00:00.000Z");
 });

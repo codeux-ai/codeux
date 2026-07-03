@@ -57,6 +57,32 @@ export const PLANNING_ACTION_LABELS: Record<PlanningActionType, string> = {
   append_tasks: "Appending tasks...",
 };
 
+export const PLANNING_PENDING_MESSAGES: Record<PlanningActionType, string> = {
+  improve: "Prompt improvement started. Your current draft stays visible while the Planning agent refines it.",
+  plan_only: "Planning request started. The sprint will stay pending for review after subtasks are generated.",
+  plan_and_start: "Plan & Start request started. The sprint will launch only after planning completes successfully.",
+  replan: "Replan request started. Existing tasks stay visible until the updated plan is ready.",
+  draft: "Saving draft. The sprint will remain editable after the save completes.",
+  append_tasks: "Opening task append flow. Existing sprint tasks stay unchanged.",
+};
+
+export const PLANNING_CANCELLED_MESSAGES: Record<PlanningActionType, string> = {
+  improve: "Prompt improvement cancelled. Your draft is still available, and you can retry when ready.",
+  plan_only: "Planning request cancelled. The sprint was not started, and you can adjust or retry the request.",
+  plan_and_start: "Plan & Start request cancelled. No launch was confirmed, and you can adjust or retry the request.",
+  replan: "Replan request cancelled. Existing tasks were left unchanged, and you can retry when ready.",
+  draft: "Draft save cancelled. Review the sprint details and save again when ready.",
+  append_tasks: "Append flow cancelled. Existing tasks were left unchanged.",
+};
+
+export function getPlanningPendingMessage(actionType: PlanningActionType): string {
+  return PLANNING_PENDING_MESSAGES[actionType];
+}
+
+export function getPlanningCancelledMessage(actionType: PlanningActionType): string {
+  return PLANNING_CANCELLED_MESSAGES[actionType];
+}
+
 export function getPlanningFeedback(actionType: PlanningActionType, elapsedMs: number): PlanningFeedback {
   // Use a Zeno-like curve for progress so it never actually reaches 1 until it's done
   // progress = 1 - e^(-elapsed / halfLife)

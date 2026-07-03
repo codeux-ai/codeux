@@ -30,7 +30,12 @@ vi.mock("../../../../src/v2/hooks/use-reduced-motion.js", () => ({
 
 vi.mock("../../../../src/v2/lib/motion/constants.js", () => ({
   GSAP_DURATIONS: { base: 0 },
-  GSAP_EASINGS: { smooth: "power2.inOut" }
+  GSAP_EASINGS: { smooth: "power2.inOut" },
+  useGsapInteractionTokens: () => ({
+    asyncFeedback: { duration: 0, ease: "linear" },
+    enterExit: { duration: 0, ease: "power2.out" },
+    listReorder: { duration: 0, ease: "power2.out" },
+  })
 }));
 
 const TestComponent = ({ type }: { type: "success" | "error" }) => {

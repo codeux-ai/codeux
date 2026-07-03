@@ -31,6 +31,7 @@ The redesigned Stats page uses a stable top-to-bottom shell:
    - The mode rail is a responsive segmented grid with icon-first buttons and stable accessible labels: `Trend`, `Composition`, `Models`, `Providers`, `Ledgers`, and `System`.
    - The visible `Providers` label maps to the internal reliability mode. Keep user-facing copy and tests aligned if this mapping changes.
    - The rail uses `role="group"` and `aria-pressed`; it is not a tablist because mode changes replace the whole analysis workspace.
+   - The active mode also has a screen-reader-only polite status so compact controls communicate selected-state changes without changing their pressed-button semantics.
 3. Metric deck
    - The hero remains a command header only: page title, selected project, sprint lens, time-window controls, and mode navigation.
    - Mode-specific top cards are the single primary metric deck for the selected analysis surface. They use `StatsCard` and should put the most actionable metric first for the selected mode.
@@ -41,6 +42,7 @@ The redesigned Stats page uses a stable top-to-bottom shell:
 5. Feedback states
    - No-project, first-load loading, first-load error, empty, refresh, and reduced-data states preserve the shell rhythm.
    - Loading states use polite status semantics. Error states use alert semantics and expose retry when recovery is available.
+   - Refresh states keep existing analytics visible where cached data exists. Mark the affected chart, table, transcript, or page region with `aria-busy` and add visible/polite status text instead of using animation alone.
 
 ## Visual Modes
 
@@ -104,6 +106,7 @@ Ledgers contains operational records for tasks, sprints, and Git.
 - Git rows keep churn separate from token flow. Use `ChurnFlowBar` for insertions and deletions, and keep pull requests, merges, files, conflicts, visible share, and leader share readable.
 - Search, sort, and progressive rendering preserve the `useProgressiveList` flow: visible items, scroll container, and sentinel stay wired together.
 - Sort controls use buttons with `aria-pressed` when they represent local ordering choices.
+- Ledger tab indicators and selected records use `selectionMovement`; progressive rendering, sorting, and visible-row changes use `listReveal` or `listReorder` depending on whether rows are entering or moving. Reduced motion snaps these changes while leaving count badges, selected states, and row labels visible.
 
 ### System
 
@@ -116,6 +119,7 @@ System is the invocation workbench.
 - Invocation tables preserve semantic headers with `scope="col"` and per-cell header relationships while allowing mobile rows to expose dense labels.
 - Expand controls name the target invocation, point at the transcript panel, and remain keyboard-accessible.
 - Transcript detail surfaces role, created time, token totals, optional message metadata, errors, and long content with safe wrapping.
+- Transcript loading uses `aria-busy` on the transcript region and polite loading status. Transcript errors use alert semantics and keep the expand control keyboard-accessible for recovery.
 
 ## Telemetry Semantics
 
@@ -141,7 +145,7 @@ Use page-scoped Stats primitives instead of one-off analytics chrome:
 - Typed view-model helpers should own reusable derivations for trend, chart, model, provider, and ledger projections. Avoid recalculating meaningful bucket or efficiency summaries directly in JSX.
 - New or touched Stats surfaces should use semantic Stats variables for backgrounds, borders, text, status tones, focus rings, chart tracks, selection fills, and scrims instead of raw slate/white/black light-dark utility pairs.
 - Do not fix design drift with broad page-root `:global()` color or spacing overrides. Tokenize the owning component or extend the shared primitive vocabulary so Trend, Composition, Models, Providers, Ledgers, and System stay consistent without hidden CSS bridges.
-- Metric cards with sparkline micrographs use the standard card surface, not a separate muted graph background. The sparkline must fit its own stable slot so hover glow and line geometry are not cut off by card overflow.
+- Metric cards with sparkline micrographs use the standard card surface, not a separate muted graph background. The sparkline must fit its own stable slot so hover glow and line geometry are not cut off by card overflow. Populated sparklines expose a concise `role="img"` summary with point count and high/low values; empty sparkline slots show a static `No sparkline data` label and an explicit no-data `role="img"` description.
 
 Dense analytics layouts should stay calm: restrained contrast, low-opacity fills, semantic color, stable grids, and short labels. Avoid nested decorative cards; repeated cards, ledger rows, modals, and tool panels may be framed, while page sections should read as workspaces.
 
@@ -169,24 +173,33 @@ See [Mobile Responsiveness](./mobile-responsiveness.md) for dashboard-wide const
 - Invocation tables provide captions, active `aria-sort` only on the sorted column, explicit sort button labels, mobile cell labels, and wrapping-safe cells for long provider, model, error, and transcript text.
 - Focus rings use `--stats-focus-ring` or shared dashboard focus tokens and remain visible in light and dark themes.
 - Repeated visible labels are acceptable when they reflect real UI structure. Tests should disambiguate by role, group name, region, or scoped queries.
+- Custom date range validation uses visible labels, `aria-invalid`, `aria-errormessage`, and inline alert text. Invalid or incomplete ranges keep the controls visible and focusable until corrected.
+- Stats loading, empty, low-data, reduced-data, and background-refresh states use polite live-region copy. Blocking API failures and unrecoverable transcript errors use alert semantics. Numeric metric values remain static text; surrounding detail or micrograph containers may animate but must never obscure exact values from assistive technology.
 
 ## Motion
 
-Motion is for orientation only: shell entrance, mode transitions, chart updates, hover feedback, and tab changes should be subtle. Respect `prefers-reduced-motion` by disabling nonessential GSAP, Tailwind entrance, chart, and tab animation. Never rely on motion to reveal validation errors, filter state, table content, or chart values.
+Motion is for orientation only: shell entrance, mode transitions, card detail refreshes, chart updates, hover feedback, and tab changes should be subtle. Respect `prefers-reduced-motion` by disabling nonessential GSAP, Tailwind entrance, card, chart, and tab animation. Never rely on motion to reveal validation errors, filter state, table content, or chart values, and never animate numeric text in a way that obscures exact values for assistive technology.
+
+- Use `controlFeedback` for time presets, filters, sort buttons, series switches, pagination buttons, and expand controls.
+- Use `selectionMovement` for mode detail movement, active tab indicators, selected ledger views, metric-card detail refreshes, and small micrograph emphasis.
+- Use `listReveal` for progressive ledger and invocation row entrance.
+- Use `listReorder` when sorting or filtering repositions existing rows.
+- Use `inlineValidation` for custom date range errors.
+- Use `asyncFeedback` for chart refresh overlays and `ActionFeedbackRegion` states in usage graph loading/error/empty surfaces.
 
 ## Verification Guidance
 
-For documentation-only Stats changes, run dashboard typecheck when requested by the task and manually verify markdown links:
+For documentation-only Stats changes without TypeScript or TSX examples, run repository lint/typecheck and verify discoverability:
 
 ```bash
-pnpm run typecheck:dashboard
-rg -n "design-system-stats|dashboard-guide|mobile-responsiveness|usage-telemetry-and-stats" docs/index.md docs/SUMMARY.md docs/dashboard/*.md docs/architecture/usage-telemetry-and-stats.md
+pnpm run lint
+rg "interaction|reduced motion|aria-busy|asyncFeedback" docs/dashboard docs/index.md docs/SUMMARY.md
 ```
 
 For Stats UI changes, run focused tests first. `pnpm run test:dashboard` covers `tests/dashboard`; source-adjacent Stats tests under `dashboard/src/v2/pages/stats/__tests__/` should be run directly when those components change:
 
 ```bash
-pnpm exec vitest run dashboard/src/v2/pages/stats/__tests__ dashboard/tests/dashboard/stats
+pnpm exec vitest run dashboard/src/v2/pages/stats/__tests__ tests/dashboard/stats
 pnpm run test:dashboard
 pnpm run typecheck:dashboard
 ```

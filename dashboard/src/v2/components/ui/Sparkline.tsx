@@ -9,10 +9,11 @@ import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
  * Draws on mount via GSAP stroke-dashoffset animation.
  * On hover (detected via closest `.group`): replays from the start and adds a glow.
  */
-export const Sparkline: FunctionComponent<{ points: number[]; color: string; className?: string }> = ({
+export const Sparkline: FunctionComponent<{ points: number[]; color: string; className?: string; ariaLabel?: string }> = ({
     points,
     color,
     className = "absolute bottom-0 left-0 h-20 w-full pointer-events-none",
+    ariaLabel,
 }) => {
     const isReducedMotion = useReducedMotion();
     const tokens = useGsapInteractionTokens();
@@ -112,7 +113,10 @@ export const Sparkline: FunctionComponent<{ points: number[]; color: string; cla
             style={{ opacity: isReducedMotion ? 0.32 : 0.2 }}
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
-            aria-hidden="true"
+            role={ariaLabel ? "img" : undefined}
+            aria-label={ariaLabel}
+            aria-hidden={ariaLabel ? undefined : "true"}
+            data-reduced-motion={isReducedMotion ? "true" : "false"}
         >
             <defs>
                 <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
