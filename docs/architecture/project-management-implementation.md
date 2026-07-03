@@ -110,6 +110,29 @@ Legacy runtime endpoints still exist for the old live runtime/status surfaces:
 
 Those endpoints are now selected-project scoped through sqlite-backed runtime projection rather than directly reading `runtimeContext.lastStatus`.
 
+## Summary Query Boundary
+
+Project-management list and detail reads keep base entity selection separate from summary aggregation.
+
+Current summary-query helpers:
+- `src/repositories/project-management/project-summary-query.ts` selects base project rows and batches project summary aggregation into maps keyed by project id.
+- `src/repositories/project-management/sprint-summary-query.ts` selects base sprint rows and batches sprint summary aggregation into maps keyed by sprint id.
+- `ProjectManagementRepository` hydrates DTOs by joining base rows with those maps, project settings, worker assignments, and sprint linked issues.
+
+The batched project aggregation currently covers:
+- sprint count per project
+- completed and open task counts per project
+- active project state derived from each sprint's latest run status, falling back to the stored sprint status
+- latest project run activity across `sprint_runs` and `task_runs`
+
+The batched sprint aggregation currently covers:
+- task count per sprint
+- completed task count per sprint, used to compute completion percentage
+- latest sprint run status, used for effective sprint status classification
+- latest sprint-completion QA review summary
+
+Sprint linked issues are loaded with the same chunked `IN` pattern during sprint hydration so sprint lists do not issue one linked-issue query per sprint. Execution snapshots and live runtime projection remain outside these project-management summary helpers.
+
 ## Dashboard Behavior
 
 The v2 dashboard now uses the selected project as the scope driver.
