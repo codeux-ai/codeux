@@ -109,6 +109,8 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
   return (
     <div
       ref={menuRef}
+      role="dialog"
+      aria-label="Graph filters"
       className={styles.menu}
       style={{ display: isOpen || (menuRef.current && gsap.getProperty(menuRef.current, 'opacity') as number > 0) ? 'block' : 'none' }}
     >
@@ -123,7 +125,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
               <button
                 type="button"
                 onClick={handleResetFilters}
-                className="text-xs text-slate-400 transition-colors hover:text-amber-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 rounded"
+                className="rounded text-xs text-[var(--stats-detail-color)] transition-colors hover:text-[var(--stats-value-color)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--stats-card-bg)] motion-reduce:transition-none"
               >
                 Reset filters
               </button>
@@ -134,7 +136,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Close graph filters"
-            className="rounded-full p-1 text-slate-400 hover:bg-black/[0.05] hover:text-slate-600 dark:hover:bg-white/[0.05] dark:hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900"
+            className="rounded-full p-1 text-[var(--stats-detail-color)] transition-colors hover:bg-[color:var(--fill-muted-hover)] hover:text-[var(--stats-value-color)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--stats-card-bg)] motion-reduce:transition-none"
           >
             <X className="h-4 w-4" />
           </button>
@@ -142,7 +144,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
 
         {stats && (
           <div className={styles.section}>
-            <label className={styles.label}>Metric Series</label>
+            <div className={styles.label}>Metric Series</div>
             <div className="flex max-h-[320px] flex-col gap-4 overflow-y-auto pr-1">
               <UsageGraphLegend
                 seriesGroups={orderedSeriesGroups}

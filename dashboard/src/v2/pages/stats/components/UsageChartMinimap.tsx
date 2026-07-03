@@ -135,16 +135,16 @@ export const UsageChartMinimap: FunctionComponent<{
 
   return (
     <div className="mt-3">
-      <div className="mb-1.5 flex items-center justify-between">
-        <div className="text-[9px] font-bold uppercase tracking-[0.22em] text-[var(--stats-label-color,theme(colors.slate.400))]">
-          Overview · drag to zoom, arrow keys to pan, escape to reset
+      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+        <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color,theme(colors.slate.400))]">
+          Overview - drag to zoom, arrow keys to pan, escape to reset
         </div>
         {zoomRange ? (
-          <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-signal-500">
+          <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-400">
             {zoomRange.end - zoomRange.start + 1} of {buckets.length} buckets
           </div>
         ) : !hasZoomableRange ? (
-          <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--stats-detail-color)]">
+          <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
             Single-bucket view
           </div>
         ) : null}
@@ -156,7 +156,7 @@ export const UsageChartMinimap: FunctionComponent<{
         aria-label="Chart minimap zoom region"
         aria-disabled={!hasZoomableRange ? "true" : undefined}
         tabIndex={0}
-        className={`relative h-[4.5rem] w-full select-none overflow-hidden rounded-2xl border border-black/[0.05] bg-black/[0.02] dark:border-white/[0.06] dark:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 ${hasZoomableRange ? 'cursor-crosshair touch-none' : 'cursor-default opacity-75'}`}
+        className={`relative h-16 w-full select-none overflow-hidden rounded-[1rem] border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/72 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--stats-card-bg)] ${hasZoomableRange ? 'cursor-crosshair touch-none' : 'cursor-default opacity-75'}`}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -177,12 +177,12 @@ export const UsageChartMinimap: FunctionComponent<{
         >
           <defs>
             <linearGradient id="stats-minimap-fill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stop-color={accentHex} stop-opacity="0.3" />
-              <stop offset="100%" stop-color={accentHex} stop-opacity="0.02" />
+              <stop offset="0%" stop-color={accentHex} stop-opacity="0.14" />
+              <stop offset="100%" stop-color={accentHex} stop-opacity="0.015" />
             </linearGradient>
           </defs>
           <path d={geometry.areaPath} fill="url(#stats-minimap-fill)" />
-          <path d={geometry.path} fill="none" stroke={accentHex} stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
+          <path d={geometry.path} fill="none" stroke={accentHex} stroke-opacity="0.82" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
           {windowBounds && hasZoomableRange ? (
             <g>
               <rect
@@ -190,33 +190,33 @@ export const UsageChartMinimap: FunctionComponent<{
                 y="0"
                 width={Math.max(0, indexToX(windowBounds.start))}
                 height={MINIMAP_HEIGHT}
-                fill="rgba(15,23,42,0.18)"
+                fill="rgba(15,23,42,0.1)"
               />
               <rect
                 x={indexToX(windowBounds.end)}
                 y="0"
                 width={Math.max(0, MINIMAP_WIDTH - indexToX(windowBounds.end))}
                 height={MINIMAP_HEIGHT}
-                fill="rgba(15,23,42,0.18)"
+                fill="rgba(15,23,42,0.1)"
               />
               <rect
                 x={indexToX(windowBounds.start)}
                 y="1"
                 width={Math.max(4, indexToX(windowBounds.end) - indexToX(windowBounds.start))}
                 height={MINIMAP_HEIGHT - 2}
-                fill="rgba(255, 184, 0, 0.12)"
-                stroke="rgba(255, 184, 0, 0.5)"
+                fill="rgba(255, 184, 0, 0.08)"
+                stroke="rgba(255, 184, 0, 0.32)"
                 stroke-width="1.5"
                 rx="6"
                 vector-effect="non-scaling-stroke"
               />
-              <rect x={indexToX(windowBounds.start) - 2} y={MINIMAP_HEIGHT / 2 - 10} width="4" height="20" rx="2" fill={accentHex} />
-              <rect x={indexToX(windowBounds.end) - 2} y={MINIMAP_HEIGHT / 2 - 10} width="4" height="20" rx="2" fill={accentHex} />
+              <rect x={indexToX(windowBounds.start) - 1.5} y={MINIMAP_HEIGHT / 2 - 9} width="3" height="18" rx="1.5" fill={accentHex} fill-opacity="0.86" />
+              <rect x={indexToX(windowBounds.end) - 1.5} y={MINIMAP_HEIGHT / 2 - 9} width="3" height="18" rx="1.5" fill={accentHex} fill-opacity="0.86" />
             </g>
           ) : null}
         </svg>
         {!hasZoomableRange ? (
-          <div className="absolute inset-0 flex items-center justify-center px-4 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-detail-color)]">
+          <div className="absolute inset-0 flex items-center justify-center px-4 text-center text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
             Zoom becomes available after the next bucket lands.
           </div>
         ) : null}
