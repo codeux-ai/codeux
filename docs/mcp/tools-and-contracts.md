@@ -175,6 +175,7 @@ For sprint create/update calls:
 - `import_issues` routes through `SprintIssueService` and supports saved-token issue lookup for GitHub, GitLab, and Jira. GitHub/GitLab imports use saved `git.githubToken` or `git.gitlabToken`; Jira imports use the configured Jira host/email/API token.
 - `import_issues` accepts repository search fields plus explicit issue references. `issueKeys` and Jira-style refs such as `OPS-123` resolve through Jira, while `issueNumbers` and refs such as `#42` or `!42` resolve through GitHub/GitLab when `repository` and `hostDomain` are provided or inferable from the project.
 - When explicit refs are supplied without `sprintId`, `import_issues` returns full `IssuePromptContext` records for prompt use. When `sprintId` is supplied, only linked-issue metadata is persisted; issue bodies and conversations remain prompt context only.
+- Successful `import_issues` calls return a structured result with `mode`, `provider`, `searchedIssues`, `importedContexts`, `linkedIssues`, `sprint`, and `planning`. Search mode populates `searchedIssues`; explicit-reference mode populates `importedContexts`. When `sprintId` is supplied and `attachToSprint` is not `false`, the linked issue rows are replaced and explicit full contexts are merged into the sprint goal before optional planning runs.
 
 For sprint issue imports:
 - `manage_sprints` action `import_issues` is the MCP contract for issue importer access.
