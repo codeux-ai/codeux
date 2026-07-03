@@ -49,6 +49,12 @@ const CONNECTION_ROLE_LABELS: Record<string, string> = {
     project_manager: "Manager",
 };
 
+function getInterventionHeading(intervention: { attentionType: string | null; ownerType: string | null }): string {
+    if (intervention.attentionType === "merge_conflict") return "Merge conflict";
+    if (intervention.ownerType === "system" || intervention.ownerType === "worker") return "Stopped automatically";
+    return "Human intervention needed";
+}
+
 export const ATTENTION_SEVERITY_TONE: Record<string, string> = {
     critical: "border-status-red/20 bg-status-red/10 text-status-red",
     high: "border-status-red/20 bg-status-red/10 text-status-red",
@@ -323,6 +329,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
     } = useExecutionTimeline();
 
     const [open, setOpen] = useState(defaultOpen);
+    const [expandedInterventionIds, setExpandedInterventionIds] = useState<Set<string>>(() => new Set());
     const contentId = useId();
 
     const contentRef = useRef<HTMLDivElement>(null);
@@ -556,23 +563,47 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                                     ? "text-slate-500 dark:text-slate-400"
                                                                     : "text-status-amber"
                                                             }`}>
-                                                                {run.humanIntervention.ownerType === "system" || run.humanIntervention.ownerType === "worker"
-                                                                    ? "Stopped automatically"
-                                                                    : "Human intervention needed"}
+                                                                {getInterventionHeading(run.humanIntervention)}
                                                             </div>
                                                             <div className="mt-1 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
                                                                 {run.humanIntervention.title}
                                                             </div>
                                                         </div>
-                                                        <HumanInterventionBadge summary={run.humanIntervention} label="Details" compact align="right" />
+                                                        <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                                                            <HumanInterventionBadge summary={run.humanIntervention} label="Details" compact align="right" />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setExpandedInterventionIds((current) => {
+                                                                    const next = new Set(current);
+                                                                    if (next.has(run.id)) {
+                                                                        next.delete(run.id);
+                                                                    } else {
+                                                                        next.add(run.id);
+                                                                    }
+                                                                    return next;
+                                                                })}
+                                                                aria-expanded={expandedInterventionIds.has(run.id)}
+                                                                aria-controls={`${contentId}-intervention-${run.id}`}
+                                                                className="inline-flex items-center gap-1 rounded-md border border-black/[0.06] bg-white/60 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:border-signal-500/25 hover:text-slate-700 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:text-slate-200"
+                                                            >
+                                                                Instructions
+                                                                <ChevronDown
+                                                                    className={`h-3 w-3 transition-transform ${expandedInterventionIds.has(run.id) ? "rotate-180" : ""}`}
+                                                                    strokeWidth={2}
+                                                                    aria-hidden="true"
+                                                                />
+                                                            </button>
+                                                        </div>
                                                     </div>
-                                                    <p className="mt-2 break-words text-[12px] leading-relaxed text-slate-600 dark:text-slate-300">
-                                                        {run.humanIntervention.reason}
-                                                    </p>
-                                                    {!(run.humanIntervention.ownerType === "system" || run.humanIntervention.ownerType === "worker") && (
-                                                        <p className="mt-2 break-words text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
+                                                    {expandedInterventionIds.has(run.id) && (
+                                                        <div id={`${contentId}-intervention-${run.id}`} className="mt-3 rounded-lg border border-black/[0.04] bg-white/45 p-3 dark:border-white/[0.05] dark:bg-white/[0.025]">
+                                                            <p className="break-words text-[12px] leading-relaxed text-slate-600 dark:text-slate-300">
+                                                                {run.humanIntervention.reason}
+                                                            </p>
+                                                            <p className="mt-2 break-words text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
                                                             {run.humanIntervention.instructions}
-                                                        </p>
+                                                            </p>
+                                                        </div>
                                                     )}
                                                 </div>
                                             )}

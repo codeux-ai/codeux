@@ -82,6 +82,7 @@ import { ActiveDispatchRegistry } from "../services/active-dispatch-registry.js"
 import { ShutdownContainerService } from "../services/shutdown-container-service.js";
 import { beginRuntimeShutdown } from "../services/shutdown-state.js";
 import { workspaceVolumeHelperPool } from "../infrastructure/providers/cli/workspace-volume-helper.js";
+import { shutdownGitHelperPool } from "../shared/subprocess/command-runner.js";
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
   const normalized = String(message || "").trim().toLowerCase();
@@ -338,6 +339,11 @@ export class CodeUxServer {
     this.startupTaskTimers.clear();
     this.virtualWorkerService.stop();
     this.schedulerService.stop();
+    await shutdownGitHelperPool().catch((error) => {
+      this.logger.warn("Failed to stop Docker git helper containers during shutdown", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
     await workspaceVolumeHelperPool.shutdown().catch((error) => {
       this.logger.warn("Failed to stop Docker workspace helper containers during shutdown", {
         error: error instanceof Error ? error.message : String(error),

@@ -11,6 +11,12 @@ An *agent preset* is a reusable persona consisting of:
 
 Agent presets show up wherever a chat thread or planning request needs to choose an agent.
 
+## Project name privacy
+
+Agent instructions and examples should not publish real user/customer/live project names. Use generic
+labels such as `live project`, `customer project`, `non-test project`, or `approved local test
+project` when writing reusable instructions, screenshots, docs, or review notes.
+
 ## The showcase grid
 
 Each preset is a card with avatar, name, label tags, and a one-line description. Click a card to open the **detail panel**.

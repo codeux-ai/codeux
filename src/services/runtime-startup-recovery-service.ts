@@ -26,6 +26,15 @@ const CLI_PROVIDERS = new Set<ProviderId>(["gemini", "codex", "claude-code", "qw
 const DURABLE_REMOTE_PROVIDERS = new Set(["jules"]);
 const QA_RUN_START_TIMEOUT_MS = 60_000;
 
+function parseSprintOrchestratorOwnerPid(ownerKey: string): number | null {
+  const match = /^sprint_orchestrator:(\d+)$/.exec(ownerKey);
+  if (!match) {
+    return null;
+  }
+  const pid = Number(match[1]);
+  return Number.isSafeInteger(pid) && pid > 0 ? pid : null;
+}
+
 export interface RuntimeStartupRecoveryResult {
   recoveredCliSessionIds: string[];
   reconciledLocalDispatchIds: string[];
@@ -56,6 +65,7 @@ interface RuntimeStartupRecoveryServiceDeps {
   sprintOrchestrator: SprintOrchestrator;
   dockerService?: Pick<{ listContainers: () => Promise<DockerContainer[]> }, "listContainers">;
   getDashboardSettings?: (scope?: DashboardSettingsScope) => DashboardSettings;
+  isProcessAlive?: (pid: number) => boolean;
   logger?: Logger;
 }
 
@@ -951,6 +961,11 @@ export class RuntimeStartupRecoveryService {
         continue;
       }
 
+      if (this.isHeldByLiveSprintLease(sprintRun.sprintId, recoveredAt)) {
+        recoveredSprintIds.add(sprintRun.sprintId);
+        continue;
+      }
+
       recoveredSprintIds.add(sprintRun.sprintId);
       this.deps.executionRepository.releaseLease("sprint", sprintRun.sprintId);
       resumedSprintRunIds.push(sprintRun.id);
@@ -966,6 +981,31 @@ export class RuntimeStartupRecoveryService {
     }
 
     return { resumedSprintRunIds, supersededSprintRunIds };
+  }
+
+  private isHeldByLiveSprintLease(sprintId: string, nowIso: string): boolean {
+    const lease = this.deps.executionRepository.getLease("sprint", sprintId);
+    if (!lease || lease.expiresAt <= nowIso) {
+      return false;
+    }
+
+    const ownerPid = parseSprintOrchestratorOwnerPid(lease.ownerKey);
+    if (ownerPid === null) {
+      return false;
+    }
+    return this.isProcessAlive(ownerPid);
+  }
+
+  private isProcessAlive(pid: number): boolean {
+    if (this.deps.isProcessAlive) {
+      return this.deps.isProcessAlive(pid);
+    }
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async listActiveContainerSessionIds(): Promise<Set<string>> {

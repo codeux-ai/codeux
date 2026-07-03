@@ -17,6 +17,14 @@ const RECOMPUTED_SPRINT_ATTENTION_TYPES: ProjectAttentionType[] = [
   "dashboard_reply_required",
 ];
 
+const ACTIVE_DISPATCH_STATUSES = new Set<TaskDispatchRecord["status"]>([
+  "queued",
+  "claimed",
+  "running",
+  "cancel_requested",
+  "paused",
+]);
+
 interface ExecutionControlServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
   executionRepository: ExecutionRepository;
@@ -171,6 +179,7 @@ export class ExecutionControlService {
       finishedAt: now,
       lastHeartbeatAt: now,
     });
+    this.closeActiveTaskRuntimeRowsForSprintRun(sprintRun, now, "Sprint run was cancelled from the dashboard.");
     this.reapTransientMergeAttention(sprintRun.projectId, sprintRunId, "sprint_cancelled");
     this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_cancelled", "user", {
       requestedBy: "dashboard",
@@ -250,6 +259,7 @@ export class ExecutionControlService {
       finishedAt: now,
       lastHeartbeatAt: now,
     });
+    this.closeActiveTaskRuntimeRowsForSprintRun(sprintRun, now, "Sprint run was force-cancelled from the dashboard.");
     this.reapTransientMergeAttention(sprintRun.projectId, sprintRunId, "sprint_force_cancelled");
     this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_cancelled", "user", {
       requestedBy: "dashboard",
@@ -259,6 +269,47 @@ export class ExecutionControlService {
     });
 
     return updated;
+  }
+
+  private closeActiveTaskRuntimeRowsForSprintRun(sprintRun: SprintRunRecord, now: string, message: string): void {
+    for (const dispatch of this.deps.executionRepository.listTaskDispatches({
+      projectId: sprintRun.projectId,
+      sprintRunId: sprintRun.id,
+    })) {
+      if (!ACTIVE_DISPATCH_STATUSES.has(dispatch.status)) {
+        continue;
+      }
+
+      this.deps.executionRepository.releaseLease("task_dispatch", dispatch.id);
+      this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
+        connectionId: null,
+        status: "cancelled",
+        finishedAt: now,
+        lastHeartbeatAt: now,
+        errorMessage: message,
+      });
+
+      const taskRun = this.deps.executionRepository.getLatestTaskRun(dispatch.taskId, sprintRun.id);
+      if (taskRun?.dispatchId === dispatch.id) {
+        this.deps.executionRepository.updateTaskRun(taskRun.id, {
+          connectionId: null,
+          state: "BLOCKED",
+          finishedAt: now,
+          durationMs: this.calculateDurationMs(taskRun, now),
+        });
+        this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "dispatch_cancelled", "user", {
+          dispatchId: dispatch.id,
+          requestedBy: "dashboard",
+          reason: message,
+        }, {
+          sourceEventKey: `dashboard-sprint-cancel-sweep:${dispatch.id}`,
+        });
+      }
+
+      this.deps.projectManagementRepository.updateTask(dispatch.taskId, {
+        status: "pending",
+      });
+    }
   }
 
   async cancelTaskDispatch(dispatchId: string): Promise<TaskDispatchRecord> {

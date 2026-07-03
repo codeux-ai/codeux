@@ -130,6 +130,30 @@ describe("HeartbeatService", () => {
     service.stopAll();
   });
 
+  it("does not refresh the sprint run heartbeat after losing the lease", () => {
+    const { executionRepository, logger } = createDeps("running");
+    executionRepository.renewLease.mockImplementation(() => {
+      throw new Error("Lease token mismatch for sprint:sprint-1");
+    });
+    const service = new HeartbeatService({ executionRepository, logger: logger as never, intervalMs: 1000 });
+
+    service.startHeartbeat("run-1", "sprint-1", "old-token");
+
+    expect(executionRepository.renewLease).toHaveBeenCalledTimes(1);
+    expect(executionRepository.updateSprintRun).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(
+      "Failed to execute initial sprint run heartbeat",
+      expect.objectContaining({
+        sprintRunId: "run-1",
+        error: "Lease token mismatch for sprint:sprint-1",
+      }),
+    );
+
+    vi.advanceTimersByTime(5000);
+    expect(executionRepository.renewLease).toHaveBeenCalledTimes(1);
+    expect(executionRepository.updateSprintRun).not.toHaveBeenCalled();
+  });
+
   it("stopHeartbeat is a no-op for unknown runs and stopAll clears every timer", () => {
     const { executionRepository, logger } = createDeps("running");
     const service = new HeartbeatService({ executionRepository, logger: logger as never, intervalMs: 1000 });

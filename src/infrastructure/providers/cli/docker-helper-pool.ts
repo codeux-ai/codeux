@@ -34,6 +34,7 @@ export class DockerHelperContainerPool {
   private reaper: NodeJS.Timeout | null = null;
   private readonly idleTtlMs: number;
   private readonly reapIntervalMs: number;
+  private shuttingDown = false;
 
   constructor(
     private readonly spec: HelperPoolSpec,
@@ -45,6 +46,9 @@ export class DockerHelperContainerPool {
 
   /** Returns the id of the live helper container for `key`, creating it if necessary. */
   async ensure(key: string): Promise<string> {
+    if (this.shuttingDown) {
+      throw new Error("Helper container pool is shutting down.");
+    }
     const existing = this.helpers.get(key);
     if (existing?.creating) {
       return existing.creating;
@@ -58,6 +62,11 @@ export class DockerHelperContainerPool {
     this.helpers.set(key, { id: "", lastUsed: Date.now(), creating });
     try {
       const id = await creating;
+      const current = this.helpers.get(key);
+      if (this.shuttingDown || current?.creating !== creating) {
+        await this.removeContainerWithVolumes(id || this.spec.nameFor(key));
+        throw new Error("Helper container was released before startup completed.");
+      }
       this.helpers.set(key, { id, lastUsed: Date.now() });
       this.startReaper();
       return id;
@@ -93,15 +102,26 @@ export class DockerHelperContainerPool {
 
   /** Removes every helper container this pool is tracking (call on graceful shutdown). */
   async shutdown(): Promise<void> {
-    const entries = [...this.helpers.values()];
+    this.shuttingDown = true;
+    const entries = [...this.helpers.entries()];
     this.helpers.clear();
     if (this.reaper) {
       clearInterval(this.reaper);
       this.reaper = null;
     }
-    await Promise.all(entries.map((entry) => (
-      entry.id ? this.removeContainerWithVolumes(entry.id) : Promise.resolve(undefined)
-    )));
+    await Promise.all(entries.map(async ([key, entry]) => {
+      const refs = new Set<string>([this.spec.nameFor(key)]);
+      if (entry.id) {
+        refs.add(entry.id);
+      }
+      if (entry.creating) {
+        const createdId = await entry.creating.catch(() => "");
+        if (createdId) {
+          refs.add(createdId);
+        }
+      }
+      await Promise.all([...refs].map((ref) => this.removeContainerWithVolumes(ref)));
+    }));
   }
 
   isContainerGone(result: CommandResult): boolean {

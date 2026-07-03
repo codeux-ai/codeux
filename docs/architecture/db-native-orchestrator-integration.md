@@ -167,8 +167,12 @@ When all sprint tasks are settled, the same completion path now also handles the
 - `scope_id = sprint_id`
 
 The lease is acquired before the sprint run starts, renewed while the watch loop is active, and released when the orchestrator call exits.
+Only the orchestrator heartbeat that holds the original lease token renews the sprint lease. Long-running QA review keepalives update the sprint-run heartbeat but do not renew whichever lease is currently stored, so they cannot accidentally extend a dead or stolen lease.
 
 If another orchestrator already owns the sprint lease, Code UX returns an active-run message instead of starting a duplicate loop.
+Startup recovery also respects live ownership: an unexpired `sprint_orchestrator:<pid>` lease is not released when that PID is still alive, which prevents a second dashboard process from stealing a sprint already being watched by the first process.
+
+Sprint cancellation owns final runtime reconciliation. When a sprint run is cancelled, active task dispatches and task runs are force-closed as cancelled/blocked and the tasks are returned to a retryable pending state. Provider startup and terminal callbacks re-check the current sprint run and dispatch state before writing back, so a late callback from a stopped container cannot revive cancelled rows as `running`.
 
 Additional start guard:
 

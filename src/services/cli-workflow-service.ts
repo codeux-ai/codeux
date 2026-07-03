@@ -11,7 +11,7 @@ import type {
   Subtask,
   ThinkingMode,
 } from "../contracts/app-types.js";
-import type { UpdateTaskDispatchInput, UpdateTaskRunInput } from "../contracts/execution-types.js";
+import type { TaskRunRecord, UpdateTaskDispatchInput, UpdateTaskRunInput } from "../contracts/execution-types.js";
 import { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
@@ -648,6 +648,11 @@ export class CliWorkflowService {
       return;
     }
 
+    if (this.isSprintRunCancelled(taskRun.sprintRunId)) {
+      this.markTaskRunCancelledBySprintStop(taskRun, input.finishedAt, input.errorMessage ?? "Sprint run was cancelled.");
+      return;
+    }
+
     const taskRunUpdate: UpdateTaskRunInput = {
       state: input.state,
       finishedAt: input.finishedAt,
@@ -672,6 +677,43 @@ export class CliWorkflowService {
         finishedAt: input.finishedAt,
         lastHeartbeatAt: input.finishedAt,
         errorMessage: input.errorMessage ?? null,
+      });
+    }
+  }
+
+  private isSprintRunCancelled(sprintRunId?: string | null): boolean {
+    if (!sprintRunId || !this.deps.executionRepository) {
+      return false;
+    }
+    const sprintRun = this.deps.executionRepository.getSprintRun(sprintRunId);
+    return sprintRun?.status === "cancelled" || sprintRun?.status === "cancel_requested";
+  }
+
+  private markTaskRunCancelledBySprintStop(taskRun: TaskRunRecord, finishedAt: string, message: string): void {
+    if (!this.deps.executionRepository) {
+      return;
+    }
+
+    this.deps.executionRepository.updateTaskRun(taskRun.id, {
+      connectionId: null,
+      state: "BLOCKED",
+      finishedAt,
+      durationMs: taskRun.startedAt
+        ? Math.max(0, new Date(finishedAt).getTime() - new Date(taskRun.startedAt).getTime())
+        : null,
+    });
+    this.deps.projectManagementRepository?.updateTask(taskRun.taskId, {
+      status: "pending",
+    });
+
+    if (taskRun.dispatchId) {
+      this.deps.executionRepository.releaseLease("task_dispatch", taskRun.dispatchId);
+      this.deps.executionRepository.updateTaskDispatch(taskRun.dispatchId, {
+        connectionId: null,
+        status: "cancelled",
+        finishedAt,
+        lastHeartbeatAt: finishedAt,
+        errorMessage: message,
       });
     }
   }

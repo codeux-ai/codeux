@@ -249,6 +249,14 @@ export class SprintTaskDispatchService {
         }
       }
 
+      if (!this.canRecordStartedSession(args.sprintRunId, dispatch.id)) {
+        return {
+          id: session.id,
+          name: session.name,
+          provider: nextProvider || undefined,
+        };
+      }
+
       this.executionRepository.updateTaskRun(taskRun.id, {
         provider: nextProvider,
         sessionId,
@@ -328,6 +336,16 @@ export class SprintTaskDispatchService {
       });
       throw error;
     }
+  }
+
+  private canRecordStartedSession(sprintRunId: string, dispatchId: string): boolean {
+    const sprintRun = this.executionRepository.getSprintRun(sprintRunId);
+    if (sprintRun?.status === "cancelled" || sprintRun?.status === "failed" || sprintRun?.status === "completed" || sprintRun?.status === "cancel_requested") {
+      return false;
+    }
+
+    const dispatch = this.executionRepository.getTaskDispatch(dispatchId);
+    return dispatch?.status === "running";
   }
 
   /**

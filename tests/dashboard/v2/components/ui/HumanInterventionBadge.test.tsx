@@ -30,6 +30,15 @@ describe("HumanInterventionBadge", () => {
     ownerType: "system"
   };
 
+  const mergeConflictSummary: ExecutionHumanInterventionSummary = {
+    title: "Merge conflict for T01",
+    reason: "The worker is resolving a merge conflict.",
+    instructions: "Wait for the worker to finish.",
+    attentionType: "merge_conflict",
+    severity: "high",
+    ownerType: "worker"
+  };
+
   it("renders the default 'Needs you' badge for human owners", () => {
     render(<HumanInterventionBadge summary={humanSummary} />);
     
@@ -53,19 +62,20 @@ describe("HumanInterventionBadge", () => {
     expect(screen.queryByText("Details")).not.toBeInTheDocument();
   });
 
-  it("shows 'Human Intervention' header in tooltip for human owners", () => {
-    render(<HumanInterventionBadge summary={humanSummary} />);
-    
-    expect(screen.getByText("Human Intervention")).toBeInTheDocument();
-    expect(screen.getByText("What to do")).toBeInTheDocument();
-    expect(screen.getByText(humanSummary.instructions)).toBeInTheDocument();
+  it("renders merge conflicts directly instead of system stop copy", () => {
+    render(<HumanInterventionBadge summary={mergeConflictSummary} label="Details" />);
+
+    expect(screen.getByText("Merge conflict")).toBeInTheDocument();
+    expect(screen.queryByText("System stopped")).not.toBeInTheDocument();
+    const badge = screen.getByText("Merge conflict").parentElement;
+    expect(badge?.className).toContain("border-status-red");
   });
 
-  it("shows 'Stopped automatically' header and hides instructions for system owners", () => {
-    render(<HumanInterventionBadge summary={systemSummary} />);
-    
-    expect(screen.getByText("Stopped automatically")).toBeInTheDocument();
+  it("does not render the hover text overlay", () => {
+    render(<HumanInterventionBadge summary={humanSummary} />);
+
     expect(screen.queryByText("What to do")).not.toBeInTheDocument();
-    expect(screen.queryByText(systemSummary.instructions)).not.toBeInTheDocument();
+    expect(screen.queryByText("Human Intervention")).not.toBeInTheDocument();
+    expect(screen.queryByText(humanSummary.instructions)).not.toBeInTheDocument();
   });
 });

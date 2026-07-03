@@ -97,6 +97,9 @@ describe("sprint stop control", () => {
       state: "BLOCKED",
       connectionId: null,
     });
+    expect(projectRepository.getTask(task.id)).toMatchObject({
+      status: "pending",
+    });
   });
 
   it("keeps stop idempotent once the sprint run is already cancelled", async () => {

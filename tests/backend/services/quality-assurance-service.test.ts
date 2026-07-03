@@ -3233,7 +3233,7 @@ describe("QualityAssuranceService", () => {
     }));
   });
 
-  it("keeps the sprint heartbeat and lease alive during long sprint QA reviews", async () => {
+  it("keeps the sprint run heartbeat alive without extending the sprint lease during long sprint QA reviews", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-10T12:00:00.000Z"));
 
@@ -3376,7 +3376,7 @@ describe("QualityAssuranceService", () => {
       });
       expect(structuredAgentRequestService.executeRequest).toHaveBeenCalledTimes(1);
       expect(executionRepository.getSprintRun(sprintRun.id)?.lastHeartbeatAt).toBe("2026-04-10T12:01:05.000Z");
-      expect(executionRepository.getLease("sprint", sprint.id)?.expiresAt).toBe("2026-04-10T12:06:05.000Z");
+      expect(executionRepository.getLease("sprint", sprint.id)?.expiresAt).toBe("2026-04-10T12:05:00.000Z");
     } finally {
       vi.useRealTimers();
     }
