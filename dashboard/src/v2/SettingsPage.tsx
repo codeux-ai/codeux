@@ -5,19 +5,20 @@ import { Check, Compass, RefreshCw, Search, Settings, Zap } from "lucide-preact"
 import { ActionButton, NoticePanel } from "./components/settings/SettingsSurface.js";
 import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 import { useSettingsPageState } from "./hooks/use-settings-page-state.js";
-import { SettingsCategoryRail, CATEGORIES, CATEGORY_SEARCH_HINTS } from "./components/settings/SettingsCategoryRail.js";
+import { SettingsCategoryRail, CATEGORIES } from "./components/settings/SettingsCategoryRail.js";
 import { SettingsContentPanels } from "./components/settings/SettingsContentPanels.js";
 import { useReducedMotion } from "./hooks/use-reduced-motion.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
 import { PageHeader } from "./components/layout/PageHeader.js";
 import { UnsavedChangesModal } from "./components/ui/UnsavedChangesModal.js";
+import { getSettingsSearchMatchPreview } from "./lib/settings-search-index.js";
 
 export const SettingsPage: FunctionComponent = () => {
   const headerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
 
-  const state = useSettingsPageState(CATEGORIES, CATEGORY_SEARCH_HINTS);
+  const state = useSettingsPageState(CATEGORIES);
   const {
     clearFeedback,
     activeCategory,
@@ -27,6 +28,7 @@ export const SettingsPage: FunctionComponent = () => {
     setSettingsSearch,
     activeCategoryConfig,
     filteredCategories,
+    settingsSearchMatches,
     error,
     selectedProject,
     activeDirty,
@@ -41,6 +43,11 @@ export const SettingsPage: FunctionComponent = () => {
     cancelDiscard,
     saveAndLeave,
   } = state;
+
+  const smartFindPreview = filteredCategories
+    .flatMap((category) => getSettingsSearchMatchPreview(settingsSearchMatches[category.id], 2))
+    .filter((match, index, matches) => matches.indexOf(match) === index)
+    .slice(0, 3);
 
   useLayoutEffect(() => {
     const ctx = gsap.context(() => {
@@ -191,7 +198,7 @@ export const SettingsPage: FunctionComponent = () => {
             className="mt-2 text-xs font-semibold text-slate-500 dark:text-slate-400"
           >
             {settingsSearch.trim()
-              ? `${filteredCategories.length} matching categor${filteredCategories.length === 1 ? "y" : "ies"} for ${settingsSearch.trim()}.`
+              ? `${filteredCategories.length} matching categor${filteredCategories.length === 1 ? "y" : "ies"} for ${settingsSearch.trim()}${smartFindPreview.length ? `: ${smartFindPreview.join(", ")}.` : "."}`
               : `${filteredCategories.length} settings categories available.`}
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -261,6 +268,7 @@ export const SettingsPage: FunctionComponent = () => {
           activeCategory={activeCategory}
           filteredCategories={filteredCategories}
           settingsSearch={settingsSearch}
+          settingsSearchMatches={settingsSearchMatches}
           onSwitchCategory={switchCategory}
         />
 
