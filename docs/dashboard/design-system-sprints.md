@@ -23,6 +23,8 @@ This document outlines the design system for the Sprints page and related planni
 *   **Metadata Hierarchy:** Prioritize sprint names and status. Secondary metadata (dates, task counts) should be styled as supporting information (e.g., smaller text, muted colors).
 *   **Interactive Elements:** Row action menus and bulk actions should have clear active/hover states, unified menu padding, and consistent icon scaling.
 *   **Badges & Indicators:** Status badges, linked issue tags, and progress indicators should use consistent border radii, padding, and semantic color schemes.
+*   **Selection, Sorting, And Bulk Actions:** Row selection uses visible check controls plus polite live-region summaries for selected counts. Select-all applies to the full filtered ledger result, not only the rendered window. Selected rows use `selectionMovement`; sort/filter/window changes use `listReorder`; the bulk action bar uses expansion/collapse motion and stays usable under reduced motion by retaining static selected-count and pending-action copy.
+*   **Pending Actions:** Bulk start, pin, unpin, and delete controls disable duplicate submissions, keep their accessible names specific to the active operation, expose disabled reasons through visible status text/title, and keep row action triggers discoverable even when disabled by pending delete or row-level work.
 
 ### Sprint Action State Management
 
@@ -43,6 +45,16 @@ This document outlines the design system for the Sprints page and related planni
 *   Visual alignment with the rest of the sprints workspace.
 *   Consistent treatment for async feedback states, planning ETA indicators, and linked issue chips.
 *   The expanded task append flows should transition smoothly and maintain context.
+*   Planning, replan, append, and prompt-improvement requests use client request IDs and `ActionFeedbackRegion`. The composer form sets `aria-busy` while a request is active, disables duplicate controls, preserves current field values, and exposes a `PlanningProgressOverlay` with cancel and "New Sprint" recovery actions when available.
+*   Pending planning uses polite live-region feedback and `asyncFeedback`; blocking request failures use persistent assertive errors with retry actions; operator cancellation uses a non-auto-dismissing warning. On validation failure, custom validation runs because native validation is disabled, and focus moves to the first missing required field.
+*   Composer entry and field stagger use modal/list reveal timing and resolve to instant state changes under reduced motion. Reduced motion must not remove required progress, cancel, warning, or error copy.
+
+### Task Cards And Active Streams
+
+*   Kanban task cards use `controlFeedback` for hover/focus/action controls and `listReorder` for card drag/reorder movement. Status and drag GSAP feedback stays in the task-card motion helper.
+*   Cards expose task ID, title, status, priority, dependency blockers, QA review state, session metadata, PR links, and live duration without hover-only disclosure. Status changes and live duration updates use polite announcements; exact text remains visible/static for reduced-motion users.
+*   Pointer drag is pointer-only. In reduced motion, draggable reordering is disabled and the card exposes static "drag disabled" copy instead of relying on movement.
+*   Destructive task deletion opens `ConfirmDialog` before invoking delete callbacks and restores focus through the shared confirmation flow.
 
 ### Action Menus & Import Surfaces
 
@@ -56,3 +68,13 @@ All asynchronous sprint actions (such as starting, pausing, toggling showcase st
 *   **Preventing Duplicate Submissions:** Automatically filters out actions that are already pending using `pendingActionIds`.
 *   **Optimistic UI:** Safely applies and reverts optimistic visual statuses.
 *   **Error Handling and Cleanup:** Centralizes `try/catch/finally` blocks, ensuring data grids refresh (via `refresh()` and `refreshExecution()`) before surfaces display errors via `setError`, keeping the system state perfectly aligned with backend truth.
+
+## Verification Notes
+
+For documentation-only updates, run `pnpm run lint` and confirm discoverability with:
+
+```bash
+rg "interaction|reduced motion|aria-busy|asyncFeedback" docs/dashboard docs/index.md docs/SUMMARY.md
+```
+
+For Sprints UI changes, the focused dashboard coverage currently includes `dashboard/src/v2/components/ui/__tests__/SprintComposer.test.tsx`, `dashboard/src/v2/components/sprints/__tests__/SprintLedger.accessibility.test.tsx`, and `dashboard/src/v2/components/tasks/__tests__/KanbanTaskCard.integration.test.tsx`. Run those directly with `pnpm exec vitest run <files>` when changing those components, because `pnpm run test:dashboard -- <files>` runs the full `tests/dashboard` tree first.

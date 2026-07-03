@@ -29,6 +29,18 @@ The dashboard's Live page and runtime components follow a distinct visual system
 
 By adhering to these rules, the Live page remains a focused, professional workspace.
 
+## Interaction And Notification Contracts
+
+- Use `controlFeedback` for runtime action buttons, attention queue controls, connection controls, compact filter buttons, and local status icon/message changes.
+- Use `enterExit` for transport banners, confirmation dialogs, popovers, dropdowns, and runtime notification panels entering or leaving the view.
+- Use `selectionMovement` for active runtime row emphasis, selected feed rows, and small status/detail refreshes that orient the operator without changing the reading order.
+- Use `listReveal` when invocation, dispatch, attention, or event-feed rows first appear.
+- Use `listReorder` when queue/feed rows move after resolve, dismiss, filtering, sorting, or removal.
+- Use `inlineValidation` for destructive-hold cancellation or validation-style nudges in runtime controls.
+- Use `asyncFeedback` for non-blocking runtime notifications, reconnect progress, stale-snapshot messaging, and long-running operation results.
+- `LiveTransportBanner` derives disconnected/recovering/error state from the live transport view model and adds UI-only stale-snapshot messaging from `snapshotUpdatedAt`. Refreshing and stale banners are polite and keep cached runtime panels visible. Disconnected transport and blocking connection errors are urgent and assertive.
+- Runtime panels should not use animation as the only notification. Loading, running, stale, empty, reconnecting, and error states need visible text or badges plus live-region semantics.
+
 ## Accessibility Rules
 
 - Event feeds and timelines should use `role="log"` or `role="region"` with clear `aria-label`s.
@@ -41,6 +53,8 @@ By adhering to these rules, the Live page remains a focused, professional worksp
 - Popover triggers should let the shared `Popover` own open/close toggling; child trigger handlers must not toggle the same state a second time.
 - Dropdown menu content may wrap menu items in layout containers; nested `role="menuitem"` descendants are still enhanced for keyboard behavior and staggered entrance animation.
 - Animations for spinners must be `motion-safe`.
+- Error toasts and blocking runtime errors persist until dismissed, resolved, or superseded by a successful recovery. Non-blocking refresh/reconnect/stale notices remain polite so they do not interrupt the operator's current focus.
+- Under reduced motion, transport banners, feed updates, duration flashes, row emphasis, and spinner states must snap to their final visual state while retaining static rails, badges, labels, `aria-busy`, and live-region text.
 
 ## Sidebar Row Rails
 - The left rail is the primary distinction marker for dense sidebar feeds. Use `border-l-2` on compact rows rather than large icons, tall cards, or heavy colored backgrounds.
@@ -56,3 +70,13 @@ By adhering to these rules, the Live page remains a focused, professional worksp
 ## Performance Constraints
 
 - **Execution History Indexing**: To maintain linear performance over large execution sets (i.e. sprints with numerous tasks, dispatches, and runtime events), you must build a scoped index (keyed by task ID, dispatch ID, or run ID) of dispatches and runtime events *before* constructing per-task live timing summaries. Using simple `Array.prototype.filter` or scanning repeatedly for every task introduces $O(T \times (D + E))$ complexity, while leveraging indexed lookups ensures $O(T + D + E)$. When constructing sprint or batch-level dashboard summaries, always compute or pass down an `IndexedExecutionHistory`.
+
+## Verification Notes
+
+For documentation-only updates, run `pnpm run lint` and:
+
+```bash
+rg "interaction|reduced motion|aria-busy|asyncFeedback" docs/dashboard docs/index.md docs/SUMMARY.md
+```
+
+For Live Runtime UI changes, include focused tests for the touched panel or transport component where they exist, plus `pnpm run test:dashboard` when the change affects shared runtime feedback, toasts, or motion tokens.
