@@ -5,12 +5,13 @@ import { h } from "preact";
 globalThis.React = { createElement: h };
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, act, waitFor } from "@testing-library/preact";
-import { MemoryPage } from "../../../dashboard/src/v2/MemoryPage.js";
+import { MemoryPage, getWheelZoomTarget, inverseZoomScreenSize } from "../../../dashboard/src/v2/MemoryPage.js";
 import { ProjectDataContext } from "../../../dashboard/src/v2/context/project-data.js";
 import * as api from "../../../dashboard/src/v2/lib/memory-api.js";
 import userEvent from "@testing-library/user-event";
 import { useEmbeddingModelStatus } from "../../../dashboard/src/v2/hooks/use-embedding-model-status.js";
 import { useMemoryPageData } from "../../../dashboard/src/v2/hooks/use-memory-page-data.js";
+import { MEMORY_CAMERA } from "../../../dashboard/src/v2/lib/memory-camera.js";
 // we cannot use renderHook because of dependency conflict. So we create a wrapper.
 
 // Mock API
@@ -22,6 +23,25 @@ vi.mock("../../../dashboard/src/v2/lib/project-api.js", () => ({
 vi.mock("../../../dashboard/src/v2/lib/api/fetch-json.js", () => ({
     fetchJson: vi.fn()
 }));
+
+describe("memory map canvas helpers", () => {
+    it("keeps label sizing in screen space as camera zoom changes", () => {
+        expect(inverseZoomScreenSize(12, 1)).toBe(12);
+        expect(inverseZoomScreenSize(12, 3)).toBe(4);
+        expect(inverseZoomScreenSize(12, 0)).toBe(12 / MEMORY_CAMERA.minZoom);
+    });
+
+    it("derives smooth proportional wheel zoom targets", () => {
+        const zoomedIn = getWheelZoomTarget(2, -100);
+        const zoomedOut = getWheelZoomTarget(2, 100);
+        const smallDeltaZoom = getWheelZoomTarget(2, -20);
+
+        expect(zoomedIn).toBeGreaterThan(2);
+        expect(zoomedOut).toBeLessThan(2);
+        expect(smallDeltaZoom).toBeGreaterThan(2);
+        expect(smallDeltaZoom).toBeLessThan(zoomedIn);
+    });
+});
 
 const renderMemoryPage = () => {
     return render(

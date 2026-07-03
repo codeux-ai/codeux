@@ -24,7 +24,8 @@ The Memory UI relies on specific hex colors that match existing app accents:
 - **Selection Zoom:** Clicking a node or choosing it from the list recenters the map on that node at a readable focus zoom, while preserving the current zoom if the user has already zoomed in further.
 - **Deep Readability:** The zoom buttons and wheel can reach a much deeper zoom than the old `2.5` cap so an individual memory can be read on dense 200+ node maps.
 - **Pointer Zoom:** Wheel zoom should preserve the world point under the cursor instead of always scaling around the viewport center.
-- **Focused Labels:** High-zoom canvas labels should prefer a single focused, wrapped label for the hovered or selected node instead of rendering full text for every node at once.
+- **Screen-Space Labels:** Canvas node and category labels should use inverse-zoom sizing so graph geometry scales while text remains visually stable.
+- **Focused Labels:** High-zoom canvas labels should prefer a single focused, wrapped label for the selected node instead of rendering full text for every node at once. Hover should only highlight nodes and update cursor state, not create card-like overlays.
 
 ## Responsive Layout Guidelines
 - **Main Canvas:** Uses dynamic viewport height `h-[calc(100dvh-12rem)] min-h-[500px]` to keep the graph stable without clipping the page chrome.
