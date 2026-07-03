@@ -22,7 +22,6 @@ import type { CycleRunner } from "./cycle-runner.js";
 import type { SprintExecutionContext } from "../../../services/sprint-execution-state-service.js";
 import type { MergeFeedbackResult } from "../ci/main-merge-gate.js";
 import type { ProjectAttentionItemRecord } from "../../../contracts/project-attention-types.js";
-import { isCompletedTaskSettled } from "../task-merge-state.js";
 import { transitionSprintRun } from "./sprint-run-transitions.js";
 import { buildTaskAttentionPayload } from "./attention-payload-builder.js";
 import { decideMainMergeWaitOrPause, decideTerminalCompletion, isHumanEscalatedAttentionItem } from "./watch-loop-policies.js";
@@ -30,6 +29,7 @@ import { decideFinalizationTransition } from "./watch-loop-finalization-policy.j
 import { buildConflictSummaryMarkdown, selectMergedTaskContexts } from "./conflict-summary-utils.js";
 import { WorkspaceManager } from "../../../infrastructure/providers/cli/workspace-manager.js";
 import { evaluateSprintRunState, isMainMergeAttentionItem } from "./sprint-state-evaluator.js";
+import { evaluateSprintTransitionState } from "../task-transition-state.js";
 import type { HeartbeatService } from "../../../services/heartbeat-service.js";
 import type { SprintIssueService } from "../../../services/sprint-issue-service.js";
 
@@ -231,6 +231,7 @@ export class WatchLoopRunner {
         runningTasks,
         readyTasks,
         activeMainMergeAttentionItems,
+        settledTasks,
         allTerminal,
         noMoreActionPossible,
         needsManualMerge,
@@ -272,6 +273,7 @@ export class WatchLoopRunner {
             readyTasks,
             manualMergeTasks,
             needsManualMerge,
+            allTasksSettled: subtasks.length > 0 && settledTasks.length === subtasks.length,
             allTerminal,
             noMoreActionPossible,
             activeMainMergeAttentionItems,
@@ -462,6 +464,7 @@ export class WatchLoopRunner {
     readyTasks: Subtask[];
     manualMergeTasks: Subtask[];
     needsManualMerge: boolean;
+    allTasksSettled?: boolean;
     allTerminal: boolean;
     noMoreActionPossible: boolean;
     activeMainMergeAttentionItems: Array<{ id: string; sprintRunId: string | null; attentionType: string; ownerType?: string; status?: string; summaryMarkdown: string; payload: Record<string, unknown> | null }>;
@@ -469,10 +472,21 @@ export class WatchLoopRunner {
     const {
       scopedExecutionContext, sprintRunId, repoPath, defaultFeatureBranch, defaultBranch,
       featureBranchPrefix, githubMode, ciIntelligence, subtasks, runningTasks, readyTasks,
-      manualMergeTasks, needsManualMerge, allTerminal, noMoreActionPossible, activeMainMergeAttentionItems
+      manualMergeTasks, needsManualMerge, allTasksSettled, allTerminal, noMoreActionPossible, activeMainMergeAttentionItems
     } = params;
 
     let report = "";
+    const allTasksSettledForFinalization = allTasksSettled ?? (
+      subtasks.length > 0
+      && evaluateSprintTransitionState({
+        subtasks,
+        manualMergeTasks,
+        workerEscalatedMergeConflictTasks: [],
+        activeProjectAttentionItems: [],
+        sprintRunId,
+        githubMode,
+      }).settledTasks.length === subtasks.length
+    );
 
     this.deps.projectAttentionService.resolveItemsForSprintRun(
       scopedExecutionContext.project.id,
@@ -500,7 +514,7 @@ export class WatchLoopRunner {
       report += await this.deps.renderInstruction("watchNoMoreActions", {}, repoPath);
     }
 
-    if (subtasks.length > 0 && subtasks.every((task) => isCompletedTaskSettled(task, { githubMode }))) {
+    if (allTasksSettledForFinalization) {
       try {
         if (this.deps.qualityAssuranceService) {
           const qaOutcome = await this.deps.qualityAssuranceService.reviewSprintCompletion({
@@ -671,7 +685,7 @@ export class WatchLoopRunner {
           sprintNumber: scopedExecutionContext.sprintNumber,
         });
 
-        if (decision && !(githubMode === "LOCAL" && subtasks.every(task => isCompletedTaskSettled(task, { githubMode }) && task.is_merged))) {
+        if (decision && !(githubMode === "LOCAL" && allTasksSettledForFinalization && subtasks.every(task => task.is_merged))) {
           report += completionGuidance;
           report += mergeFeedback.text;
 
