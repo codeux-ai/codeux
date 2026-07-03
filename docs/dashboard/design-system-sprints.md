@@ -31,6 +31,10 @@ This document outlines the design system for the Sprints page and related planni
 ### Quicksprint Panel
 
 *   The panel should present templates clearly with a balanced layout.
+*   Large template catalogs must use horizontally scrollable template rails grouped by purpose or source. Rails should preserve a three-row card layout by default and continue horizontally for additional templates instead of expanding into unbounded vertical lists.
+*   Template cards should use stable dimensions across hover, focus, selected, and loading states. Icon, title, description, tag, and metadata content must wrap or truncate within the card without resizing neighboring cards.
+*   Left and right rail controls should be icon buttons with accessible names, visible focus states, disabled states when no further scrolling is available, and hit targets appropriate for touch and pointer input.
+*   Rails must not clip cards, focus rings, or scroll controls on desktop, tablet, or mobile. Overflow should be owned by the rail, not the page, so the rest of the Sprints layout remains fixed to the viewport width.
 *   Icons and template tags should adhere to the shared color palette and scale.
 *   Focus and hover states should align with the global interaction patterns.
 
