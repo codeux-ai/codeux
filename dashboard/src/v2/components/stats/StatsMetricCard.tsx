@@ -1,8 +1,12 @@
 import { STATS_COLORS } from "../../lib/stats/color-tokens.js";
 import type { FunctionComponent } from "preact";
+import { useLayoutEffect, useRef } from "preact/hooks";
+import gsap from "gsap";
 import { StatsCard, type StatsCardAccent } from "../../pages/stats/components/StatsCard.js";
 import { Sparkline } from "../../components/ui/Sparkline.js";
 import { CHIP_CLASS } from "../../pages/stats/components/stats-ui-primitives.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 
 export interface StatsMetricCardProps {
   label: string;
@@ -34,8 +38,45 @@ export const StatsMetricCard: FunctionComponent<StatsMetricCardProps> = ({
   sparkline = [],
   signalLabel,
 }) => {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const previousStateKey = useRef(`${label}:${value}:${detail}:${sparkline.join(",")}`);
+  const reducedMotion = useReducedMotion();
+  const motionTokens = useGsapInteractionTokens();
   const accent = resolveAccent(accentHex);
   const hasSparkline = sparkline.some((point) => point > 0);
+  const sparklineSummary = hasSparkline
+    ? `${label} ${signalLabel.toLowerCase()} sparkline across the selected window. ${sparkline.length.toLocaleString()} points; high ${Math.max(...sparkline).toLocaleString()}; low ${Math.min(...sparkline).toLocaleString()}.`
+    : `${label} has no ${signalLabel.toLowerCase()} sparkline data for the selected window.`;
+
+  useLayoutEffect(() => {
+    const stateKey = `${label}:${value}:${detail}:${sparkline.join(",")}`;
+    if (!contentRef.current || previousStateKey.current === stateKey) {
+      previousStateKey.current = stateKey;
+      return;
+    }
+
+    gsap.killTweensOf(contentRef.current);
+    if (!reducedMotion) {
+      gsap.fromTo(
+        contentRef.current,
+        { opacity: 0.72, y: 4 },
+        {
+          opacity: 1,
+          y: 0,
+          duration: motionTokens.selectionMovement.duration,
+          ease: motionTokens.selectionMovement.ease,
+          clearProps: "opacity,transform",
+        },
+      );
+    }
+    previousStateKey.current = stateKey;
+
+    return () => {
+      if (contentRef.current) {
+        gsap.killTweensOf(contentRef.current);
+      }
+    };
+  }, [detail, label, motionTokens.selectionMovement.duration, motionTokens.selectionMovement.ease, reducedMotion, sparkline, value]);
 
   return (
     <StatsCard
@@ -52,35 +93,37 @@ export const StatsMetricCard: FunctionComponent<StatsMetricCardProps> = ({
       tone="warm"
       className="min-h-[11.5rem] min-w-0"
     >
-      <div
-        className="relative z-10 mt-3 h-14 min-h-14 rounded-[var(--stats-control-radius)]"
-        role="img"
-        aria-label={
-          hasSparkline
-            ? `${label} ${signalLabel.toLowerCase()} sparkline across the selected window.`
-            : `${label} has no ${signalLabel.toLowerCase()} sparkline data for the selected window.`
-        }
-      >
-        {hasSparkline ? (
-          <Sparkline points={sparkline} color={accentHex} className="absolute inset-0 h-full w-full pointer-events-none" />
-        ) : (
-          <div
-            className="pointer-events-none h-10 rounded-[var(--stats-control-radius)] border border-dashed border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-subpanel)]"
-            aria-hidden="true"
-          />
-        )}
-      </div>
-      <div className="relative z-10 mt-3 grid min-h-[2.25rem] min-w-0 content-end gap-2 border-t border-[color:var(--stats-card-border)] pt-2.5">
-        {(secondaryDetail || qualityHint) && (
-          <div className="flex min-w-0 flex-wrap items-center gap-2 text-[10px] font-medium leading-snug text-[color:var(--stats-detail-color)]">
-            {secondaryDetail && <span className="min-w-0 max-w-full flex-1 basis-32 break-words">{secondaryDetail}</span>}
-            {qualityHint && (
-              <span className="min-w-0 max-w-full rounded-full border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-chip)] px-2 py-0.5 text-[9px] font-bold uppercase leading-tight tracking-[0.1em] text-[color:var(--stats-detail-color)]">
-                {qualityHint}
-              </span>
-            )}
-          </div>
-        )}
+      <div ref={contentRef} className="relative z-10">
+        <div className="relative mt-3 h-14 min-h-14 rounded-[var(--stats-control-radius)]">
+          {hasSparkline ? (
+            <Sparkline
+              points={sparkline}
+              color={accentHex}
+              className="absolute inset-0 h-full w-full pointer-events-none"
+              ariaLabel={sparklineSummary}
+            />
+          ) : (
+            <div
+              className="pointer-events-none grid h-10 place-items-center rounded-[var(--stats-control-radius)] border border-dashed border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-subpanel)] px-3 text-center text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--stats-detail-color)]"
+              role="img"
+              aria-label={sparklineSummary}
+            >
+              No sparkline data
+            </div>
+          )}
+        </div>
+        <div className="mt-3 grid min-h-[2.25rem] min-w-0 content-end gap-2 border-t border-[color:var(--stats-card-border)] pt-2.5">
+          {(secondaryDetail || qualityHint) && (
+            <div className="flex min-w-0 flex-wrap items-center gap-2 text-[10px] font-medium leading-snug text-[color:var(--stats-detail-color)]">
+              {secondaryDetail && <span className="min-w-0 max-w-full flex-1 basis-32 break-words">{secondaryDetail}</span>}
+              {qualityHint && (
+                <span className="min-w-0 max-w-full rounded-full border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-chip)] px-2 py-0.5 text-[9px] font-bold uppercase leading-tight tracking-[0.1em] text-[color:var(--stats-detail-color)]">
+                  {qualityHint}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </StatsCard>
   );

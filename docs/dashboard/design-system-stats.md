@@ -31,6 +31,7 @@ The redesigned Stats page uses a stable top-to-bottom shell:
    - The mode rail is a responsive segmented grid with icon-first buttons and stable accessible labels: `Trend`, `Composition`, `Models`, `Providers`, `Ledgers`, and `System`.
    - The visible `Providers` label maps to the internal reliability mode. Keep user-facing copy and tests aligned if this mapping changes.
    - The rail uses `role="group"` and `aria-pressed`; it is not a tablist because mode changes replace the whole analysis workspace.
+   - The active mode also has a screen-reader-only polite status so compact controls communicate selected-state changes without changing their pressed-button semantics.
 3. Metric deck
    - The hero remains a command header only: page title, selected project, sprint lens, time-window controls, and mode navigation.
    - Mode-specific top cards are the single primary metric deck for the selected analysis surface. They use `StatsCard` and should put the most actionable metric first for the selected mode.
@@ -141,7 +142,7 @@ Use page-scoped Stats primitives instead of one-off analytics chrome:
 - Typed view-model helpers should own reusable derivations for trend, chart, model, provider, and ledger projections. Avoid recalculating meaningful bucket or efficiency summaries directly in JSX.
 - New or touched Stats surfaces should use semantic Stats variables for backgrounds, borders, text, status tones, focus rings, chart tracks, selection fills, and scrims instead of raw slate/white/black light-dark utility pairs.
 - Do not fix design drift with broad page-root `:global()` color or spacing overrides. Tokenize the owning component or extend the shared primitive vocabulary so Trend, Composition, Models, Providers, Ledgers, and System stay consistent without hidden CSS bridges.
-- Metric cards with sparkline micrographs use the standard card surface, not a separate muted graph background. The sparkline must fit its own stable slot so hover glow and line geometry are not cut off by card overflow.
+- Metric cards with sparkline micrographs use the standard card surface, not a separate muted graph background. The sparkline must fit its own stable slot so hover glow and line geometry are not cut off by card overflow. Populated sparklines expose a concise `role="img"` summary with point count and high/low values; empty sparkline slots show a static `No sparkline data` label and an explicit no-data `role="img"` description.
 
 Dense analytics layouts should stay calm: restrained contrast, low-opacity fills, semantic color, stable grids, and short labels. Avoid nested decorative cards; repeated cards, ledger rows, modals, and tool panels may be framed, while page sections should read as workspaces.
 
@@ -172,7 +173,7 @@ See [Mobile Responsiveness](./mobile-responsiveness.md) for dashboard-wide const
 
 ## Motion
 
-Motion is for orientation only: shell entrance, mode transitions, chart updates, hover feedback, and tab changes should be subtle. Respect `prefers-reduced-motion` by disabling nonessential GSAP, Tailwind entrance, chart, and tab animation. Never rely on motion to reveal validation errors, filter state, table content, or chart values.
+Motion is for orientation only: shell entrance, mode transitions, card detail refreshes, chart updates, hover feedback, and tab changes should be subtle. Respect `prefers-reduced-motion` by disabling nonessential GSAP, Tailwind entrance, card, chart, and tab animation. Never rely on motion to reveal validation errors, filter state, table content, or chart values, and never animate numeric text in a way that obscures exact values for assistive technology.
 
 ## Verification Guidance
 
