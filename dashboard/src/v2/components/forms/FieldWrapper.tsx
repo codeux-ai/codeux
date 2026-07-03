@@ -1,5 +1,14 @@
 import { h, ComponentChildren, VNode, cloneElement, isValidElement, toChildArray } from "preact";
-import { useEffect, useState, useId } from "preact/hooks";
+import { useEffect, useState, useId, useRef } from "preact/hooks";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
+
+const getDurationMs = (duration: string): number => {
+  const value = Number.parseFloat(duration);
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return duration.trim().endsWith("ms") ? value : value * 1000;
+};
 
 export interface FieldWrapperProps {
   helperTextId?: string;
@@ -14,8 +23,10 @@ export interface FieldWrapperProps {
 }
 
 export function FieldWrapper({ label, error, children, htmlFor, required, helperTextId, helperText, forceTouch, valid }: FieldWrapperProps) {
+  const tokens = useInteractionTokens();
   const [shake, setShake] = useState(false);
   const [touched, setTouched] = useState(false);
+  const controlRef = useRef<HTMLElement | null>(null);
 
   let explicitChildId: string | undefined;
   const childArray = toChildArray(children);
@@ -29,6 +40,7 @@ export function FieldWrapper({ label, error, children, htmlFor, required, helper
   const generatedId = useId();
   const inputId = htmlFor ?? explicitChildId ?? generatedId;
   const showError = (touched || !!forceTouch) && !!error;
+  const inlineValidationDurationMs = getDurationMs(tokens.inlineValidation.duration);
   const errorId = `${inputId}-error`;
   const actualHelperId = helperText ? (helperTextId || `${inputId}-helper`) : helperTextId;
 
@@ -41,16 +53,19 @@ export function FieldWrapper({ label, error, children, htmlFor, required, helper
   const [displayedError, setDisplayedError] = useState<string | undefined>(undefined);
 
   useEffect(() => {
-    let timer: any;
+    let timer: number | undefined;
 
     if (showError && (error !== previousError || !previousShowError)) {
-      setShake(true);
-      timer = setTimeout(() => {
-        setShake(false);
-      }, 400); // Must be slightly longer than animation duration
+      if (inlineValidationDurationMs > 0) {
+        setShake(true);
+        timer = window.setTimeout(() => {
+          setShake(false);
+        }, inlineValidationDurationMs);
+      }
       setPreviousError(error);
       setPreviousShowError(true);
     } else if (!showError) {
+      setShake(false);
       if (previousError !== undefined) setPreviousError(undefined);
       if (previousShowError) setPreviousShowError(false);
     }
@@ -58,7 +73,25 @@ export function FieldWrapper({ label, error, children, htmlFor, required, helper
     return () => {
         if (timer) clearTimeout(timer);
     }
-  }, [showError, error]); // ONLY depend on the current values to avoid re-triggering from state setter delays
+  }, [showError, error, inlineValidationDurationMs]); // ONLY depend on the current values to avoid re-triggering from state setter delays
+
+  useEffect(() => {
+    if (!forceTouch || !showError || !controlRef.current) {
+      return;
+    }
+    const frameId = window.requestAnimationFrame(() => {
+      const control = controlRef.current;
+      if (!control) {
+        return;
+      }
+      const owner = control.closest("form") ?? document;
+      const firstInvalid = owner.querySelector<HTMLElement>("[aria-invalid='true']");
+      if (firstInvalid === control && typeof control.focus === "function") {
+        control.focus();
+      }
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [forceTouch, showError, error]);
 
   useEffect(() => {
     if (showError && error) {
@@ -114,6 +147,15 @@ export function FieldWrapper({ label, error, children, htmlFor, required, helper
 
     if (!idAssigned) {
       childProps.id = inputId;
+      childProps.ref = (element: HTMLElement | null) => {
+        controlRef.current = element;
+        const existingRef = (child as any).ref;
+        if (typeof existingRef === "function") {
+          existingRef(element);
+        } else if (existingRef && typeof existingRef === "object") {
+          existingRef.current = element;
+        }
+      };
       idAssigned = true;
     }
 
@@ -131,14 +173,17 @@ export function FieldWrapper({ label, error, children, htmlFor, required, helper
         class={`
           relative rounded-md
           ${shake && showError ? 'motion-safe:animate-form-shake' : ''}
-          ${showError ? 'ring-1 ring-status-red transition-shadow duration-200 ease-in-out' : 'transition-shadow duration-200 ease-in-out'}
+          ${showError ? 'ring-1 ring-status-red transition-shadow' : 'transition-shadow'}
         `}
+        style={{ transitionDuration: tokens.inlineValidation.duration, transitionTimingFunction: tokens.inlineValidation.ease, animationDuration: tokens.inlineValidation.duration }}
       >
         <div class={`
-          [&_input]:transition-colors [&_input]:duration-200 [&_input]:ease-in-out
-          [&_textarea]:transition-colors [&_textarea]:duration-200 [&_textarea]:ease-in-out
+          [&_input]:transition-colors
+          [&_textarea]:transition-colors
           ${showError ? '[&_input]:border-status-red [&_textarea]:border-status-red [&_input]:ring-status-red [&_textarea]:ring-status-red' : ''}
-        `}>
+        `}
+        style={{ transitionDuration: tokens.inlineValidation.duration, transitionTimingFunction: tokens.inlineValidation.ease }}
+        >
           {child}
         </div>
       </div>
@@ -165,9 +210,15 @@ export function FieldWrapper({ label, error, children, htmlFor, required, helper
           class={`col-start-1 row-start-1 text-xs font-medium text-status-red ${
             isAnimatingIn ? 'motion-safe:animate-form-slide-down' : ''
           } ${
-            isFadingOut ? 'fading transition-opacity duration-150 opacity-0' : 'opacity-100'
+            isFadingOut ? 'fading transition-opacity opacity-0' : 'opacity-100'
           } ${!isVisible && !isFadingOut ? 'invisible' : 'visible'}`}
-          style={isAnimatingIn ? { animationDelay: '50ms', animationFillMode: 'both' } : undefined}
+          style={{
+            transitionDuration: tokens.inlineValidation.duration,
+            transitionTimingFunction: tokens.inlineValidation.ease,
+            animationDelay: isAnimatingIn ? tokens.controlFeedback.duration : undefined,
+            animationDuration: tokens.inlineValidation.duration,
+            animationFillMode: isAnimatingIn ? 'both' : undefined,
+          }}
           onAnimationEnd={() => setIsAnimatingIn(false)}
           onTransitionEnd={() => {
             if (isFadingOut) {

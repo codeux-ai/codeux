@@ -2,13 +2,18 @@
 /** @jsx h */
 /** @jsxFrag Fragment */
 import { h, Fragment } from "preact";
-import { describe, expect, it, vi } from "vitest";
-import { render } from "@testing-library/preact";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
 import { BranchNameSchemeEditor } from "../../../dashboard/src/v2/components/settings/BranchNameSchemeEditor.js";
+import { TextInput } from "../../../dashboard/src/v2/components/settings/SettingsFormFields.js";
 import { getBranchSchemeOptions, getCanonicalBranchNameToken, BRANCH_NAME_TOKEN_LABELS } from "../../../dashboard/src/v2/lib/settings-view-models.js";
 import { BRANCH_NAME_TOKENS } from "../../../src/domain/settings/branch-name-tokens.js";
 
 describe("BranchNameSchemeEditor", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it("renders the canonical options in deterministic order", () => {
     const { container } = render(
       <BranchNameSchemeEditor
@@ -61,5 +66,31 @@ describe("BranchNameSchemeEditor", () => {
     );
     expect(container.firstElementChild?.className).toContain("min-w-0");
     expect(container.firstElementChild?.className).toContain("w-full");
+  });
+
+  it("uses the shared text input character counter thresholds for branch scheme-like values", () => {
+    render(
+      <TextInput
+        value=""
+        onChange={vi.fn()}
+        maxLength={10}
+        aria-label="Sprint branch scheme"
+      />
+    );
+
+    const input = screen.getByLabelText("Sprint branch scheme");
+    fireEvent.input(input, { target: { value: "1234567" } });
+    expect(screen.queryByText("7 / 10")).toBeNull();
+
+    fireEvent.input(input, { target: { value: "12345678" } });
+    expect(screen.getByText("8 / 10").className).toContain("text-slate-400");
+
+    fireEvent.input(input, { target: { value: "123456789" } });
+    expect(screen.getByText("9 / 10").className).toContain("text-amber-500");
+
+    fireEvent.input(input, { target: { value: "1234567890" } });
+    const limitCounter = screen.getByText("10 / 10");
+    expect(limitCounter.className).toContain("text-red-500");
+    expect(limitCounter.className).toContain("motion-safe:animate-form-shake");
   });
 });
