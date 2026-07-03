@@ -104,7 +104,7 @@ describe("PreviewSessionSlider", () => {
       />
     );
 
-    fireEvent.click(screen.getByLabelText("Remove preview container"));
+    fireEvent.click(screen.getByLabelText("Remove preview session Sprint Alpha"));
     expect(onRemoveSession).toHaveBeenCalledWith("slider-sess-1");
   });
 });
@@ -143,6 +143,13 @@ describe("PreviewWindowChrome", () => {
     expect(container.innerHTML).not.toContain("#f7f3ea");
     expect(container.querySelector(".dark\\:bg-void-900\\/55")).toBeInTheDocument();
     expect(container.querySelector(".bg-slate-100\\/70")).toBeInTheDocument();
+    expect(screen.getByLabelText("Close preview window")).toBeInTheDocument();
+    expect(screen.getByLabelText("Minimize preview window")).toBeInTheDocument();
+    expect(screen.getByLabelText("Enter preview fullscreen")).toBeInTheDocument();
+    expect(screen.getByLabelText("Go back in preview")).toBeInTheDocument();
+    expect(screen.getByLabelText("Go forward in preview")).toBeInTheDocument();
+    expect(screen.getByLabelText("Reload preview")).toBeInTheDocument();
+    expect(screen.getByLabelText("Preview address")).toBeInTheDocument();
   });
 
   it("toggles fullscreen mode", async () => {

@@ -39,7 +39,7 @@ export const ChangesList: FunctionComponent<ChangesListProps> = ({ files, select
   }
 
   return (
-    <div class="flex min-w-0 h-full flex-col overflow-y-auto dashboard-scrollbar p-2">
+    <div class="flex min-w-0 h-full flex-col overflow-y-auto dashboard-scrollbar p-2" role="listbox" aria-label="Changed files">
       {files.map((change) => {
         const meta = STATUS_META[change.status];
         const { dir, name } = splitPath(change.path);
@@ -48,6 +48,9 @@ export const ChangesList: FunctionComponent<ChangesListProps> = ({ files, select
           <button
             key={change.path}
             type="button"
+            role="option"
+            aria-selected={isSelected}
+            aria-label={`${meta.label} file ${change.path}, ${change.additions} additions, ${change.deletions} deletions`}
             onClick={() => onSelect(change.path)}
             class={`group flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 ${
               isSelected
@@ -58,14 +61,15 @@ export const ChangesList: FunctionComponent<ChangesListProps> = ({ files, select
             <span
               class={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border text-[11px] font-black ${meta.class}`}
               title={meta.label}
+              aria-label={meta.label}
             >
               {meta.glyph}
             </span>
             <span class="min-w-0 flex-1">
               <span class="min-w-0 flex items-center gap-1.5">
-                <span class="truncate text-[13px] font-semibold text-slate-800 dark:text-slate-100">{name}</span>
+                <span class="break-words text-[13px] font-semibold leading-5 text-slate-800 dark:text-slate-100">{name}</span>
               </span>
-              {dir && <span class="block truncate font-mono text-[11px] text-slate-400 dark:text-slate-500">{dir}</span>}
+              {dir && <span class="block break-words font-mono text-[11px] leading-4 text-slate-400 dark:text-slate-500">{dir}</span>}
             </span>
             <span class="flex shrink-0 items-center gap-2 font-mono text-[11px] tabular-nums">
               {change.additions > 0 && <span class="text-status-green">+{change.additions}</span>}

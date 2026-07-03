@@ -180,7 +180,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                     </div>
                     <div className="flex-1 min-h-0 overflow-y-auto pb-1 flex flex-col" onKeyDown={handleMenuKeyDown as any}>
                         {loading ? (
-                            <div className="px-4 py-8 text-center flex flex-col items-center justify-center gap-3" aria-busy={loading}>
+                            <div className="px-4 py-8 text-center flex flex-col items-center justify-center gap-3" role="status" aria-live="polite" aria-busy={loading}>
                                 <Loader2 className="w-5 h-5 text-signal-500 animate-spin" />
                                 <p className="text-xs text-slate-500 font-medium">Discovering active sessions...</p>
                             </div>
@@ -192,6 +192,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     role="menuitem"
+                                    aria-label={`Open preview session ${session.sprintName || "Unknown Sprint"} in a new tab`}
                                     tabIndex={index === 0 ? 0 : -1}
                                     className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex flex-col gap-1.5 px-3 py-3 text-left transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.04] group border-b border-black/[0.04] dark:border-white/[0.04] last:border-0"
                                 >
@@ -202,21 +203,21 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                                 {session.status === 'starting' ? <Loader2 className="w-3 h-3 animate-spin text-ember-500" /> : session.status === 'running' ? <Play className="w-3 h-3 text-signal-500" fill="currentColor" /> : session.status === 'error' ? <AlertCircle className="w-3 h-3 text-status-red" /> : <Square className="w-3 h-3 text-slate-500" fill="currentColor" />}
                                                 <span className="text-[9px] font-bold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">{session.status}</span>
                                             </div>
-                                            <span className="text-sm font-semibold truncate text-slate-700 dark:text-slate-200 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">
+                                            <span className="min-w-0 break-words text-sm font-semibold text-slate-700 dark:text-slate-200 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">
                                                 {session.sprintName || "Unknown Sprint"}
                                             </span>
                                         </div>
                                         <ExternalLink aria-hidden="true" className="w-3.5 h-3.5 shrink-0 text-slate-400 group-hover:text-signal-500 transition-colors" />
                                     </div>
                                     <div className="flex items-center pl-1 min-w-0">
-                                        <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 truncate">
+                                        <span className="break-words text-[10px] font-mono text-slate-500 dark:text-slate-400">
                                             {formatPort(session)}
                                         </span>
                                     </div>
                                 </a>
                             ))
                         ) : !selectedProject ? (
-                            <div className="px-4 py-8 text-center flex flex-col items-center justify-center gap-3">
+                            <div className="px-4 py-8 text-center flex flex-col items-center justify-center gap-3" role="status" aria-live="polite">
                                 <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-void-700 flex items-center justify-center text-slate-400">
                                     <FolderArchive className="w-5 h-5" />
                                 </div>
@@ -226,7 +227,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                 </div>
                             </div>
                         ) : (
-                            <div className="px-4 py-8 text-center flex flex-col items-center justify-center gap-3">
+                            <div className="px-4 py-8 text-center flex flex-col items-center justify-center gap-3" role="status" aria-live="polite">
                                 <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-void-700 flex items-center justify-center text-slate-400">
                                     <ServerOff className="w-5 h-5" />
                                 </div>

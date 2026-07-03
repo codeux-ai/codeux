@@ -49,12 +49,20 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
   children,
 }) => {
   const [windowState, setWindowState] = useState<WindowState>("normal");
+  const [navigationAnnouncement, setNavigationAnnouncement] = useState("");
+
+  const containerDescriptionId = "preview-address-disabled-description";
+  const addressLabelId = "preview-address-label";
+
+  const announceNavigation = (message: string) => {
+    setNavigationAnnouncement(message);
+  };
 
   if (!session) {
     return (
       <div className="overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/72 shadow-[0_24px_72px_rgba(15,23,42,0.08)] dark:border-white/[0.06] dark:bg-void-900/55 dark:shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
         <div className="relative h-[calc(100vh-23rem)] min-h-[540px] bg-slate-100/70 dark:bg-void-950">
-          <div className="flex h-full flex-col items-center justify-center px-8 text-center">
+          <div className="flex h-full flex-col items-center justify-center px-8 text-center" role="status" aria-live="polite">
             <Compass className="h-12 w-12 text-slate-300 dark:text-slate-600" strokeWidth={1.5} />
             <h2 className="mt-4 text-xl font-semibold text-slate-800 dark:text-slate-100">No preview active</h2>
             <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500 dark:text-slate-400">
@@ -74,14 +82,14 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
     <div className={isFullscreen ? "fixed inset-0 z-50 flex flex-col bg-white dark:bg-[#04070b]" : ""}>
       {/* Minimized state presentation */}
       {isMinimized && !isFullscreen && !isClosed && (
-        <div className="mb-5 flex items-center justify-between rounded-2xl border border-black/[0.06] bg-white/72 p-4 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
-          <div className="flex items-center gap-4">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-black/[0.06] bg-white/72 p-4 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]" role="status" aria-live="polite">
+          <div className="flex min-w-0 flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
               <div className="h-2.5 w-2.5 rounded-full bg-status-red/80" />
               <div className="h-2.5 w-2.5 rounded-full bg-amber-400/80" />
               <div className="h-2.5 w-2.5 rounded-full bg-signal-500/90" />
             </div>
-            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+            <span className="min-w-0 max-w-full break-words text-sm font-semibold text-slate-700 dark:text-slate-300">
               {session.sprintName}
             </span>
             <div className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] flex items-center gap-1.5 ${statusTone[session.status]}`}>
@@ -92,6 +100,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
           <button
             type="button"
             onClick={() => setWindowState("normal")}
+            aria-label="Restore preview window"
             className="inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border border-black/[0.08] px-3 text-[11px] font-semibold text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
           >
             <Maximize2 className="h-3 w-3" strokeWidth={2.5} />
@@ -113,6 +122,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             </p>
             <button
               type="button"
+              aria-label="Reopen preview window"
               onClick={() => setWindowState("normal")}
               className="mt-6 inline-flex h-10 items-center justify-center rounded-2xl border border-black/[0.08] px-4 text-sm font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
             >
@@ -138,6 +148,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
               <button
                 type="button"
                 title="Close window"
+                aria-label="Close preview window"
                 onClick={() => setWindowState("closed")}
               className="group flex h-3 w-3 items-center justify-center rounded-full bg-status-red/80 transition hover:bg-status-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red/50"
             >
@@ -146,6 +157,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             <button
               type="button"
               title="Minimize window"
+              aria-label="Minimize preview window"
               onClick={() => setWindowState("minimized")}
               className="group flex h-3 w-3 items-center justify-center rounded-full bg-amber-400/80 transition hover:bg-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50"
             >
@@ -154,6 +166,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             <button
               type="button"
               title={isFullscreen ? "Restore window" : "Maximize window"}
+              aria-label={isFullscreen ? "Restore preview window" : "Enter preview fullscreen"}
               onClick={() => setWindowState(isFullscreen ? "normal" : "fullscreen")}
               className="group flex h-3 w-3 items-center justify-center rounded-full bg-signal-500/90 transition hover:bg-signal-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
             >
@@ -169,13 +182,24 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             {session.status}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="sr-only" role="status" aria-live="polite">
+          {navigationAnnouncement}
+        </div>
+        <p id={containerDescriptionId} className="sr-only">
+          Preview navigation controls are disabled until the selected container is running and has a routed host port.
+        </p>
+        <div className="flex flex-wrap items-center gap-2" aria-describedby={!navigationEnabled ? containerDescriptionId : undefined}>
           <button
             type="button"
-            onClick={onNavigateBack}
+            onClick={() => {
+              announceNavigation(navigationEnabled ? "Going back in the preview." : "Back navigation is disabled until the preview container is running.");
+              onNavigateBack();
+            }}
             disabled={!navigationEnabled}
             aria-disabled={!navigationEnabled}
             aria-busy={!navigationEnabled && session?.status === 'starting'}
+            aria-label="Go back in preview"
+            aria-describedby={!navigationEnabled ? containerDescriptionId : undefined}
             title={navigationEnabled ? "Go back" : "Back navigation requires a running container"}
             className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
           >
@@ -183,10 +207,15 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
           </button>
           <button
             type="button"
-            onClick={onNavigateForward}
+            onClick={() => {
+              announceNavigation(navigationEnabled ? "Going forward in the preview." : "Forward navigation is disabled until the preview container is running.");
+              onNavigateForward();
+            }}
             disabled={!navigationEnabled}
             aria-disabled={!navigationEnabled}
             aria-busy={!navigationEnabled && session?.status === 'starting'}
+            aria-label="Go forward in preview"
+            aria-describedby={!navigationEnabled ? containerDescriptionId : undefined}
             title={navigationEnabled ? "Go forward" : "Forward navigation requires a running container"}
             className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
           >
@@ -194,10 +223,15 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
           </button>
           <button
             type="button"
-            onClick={onReload}
+            onClick={() => {
+              announceNavigation(navigationEnabled ? "Reloading the preview." : "Reload is disabled until the preview container is running.");
+              onReload();
+            }}
             disabled={!navigationEnabled}
             aria-disabled={!navigationEnabled}
             aria-busy={!navigationEnabled && session?.status === 'starting'}
+            aria-label="Reload preview"
+            aria-describedby={!navigationEnabled ? containerDescriptionId : undefined}
             title={navigationEnabled ? "Reload preview" : "Reload requires a running container"}
             className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
           >
@@ -207,15 +241,21 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             className="flex min-w-0 flex-1 items-center"
             onSubmit={(event) => {
               event.preventDefault();
+              announceNavigation(navigationEnabled ? `Navigating preview to ${addressValue}.` : "Address navigation queued for the preview origin while the container is unavailable.");
               onAddressSubmit(addressValue);
             }}
           >
+            <label id={addressLabelId} className="sr-only" htmlFor="preview-address-input">
+              Preview address
+            </label>
             <input
+              id="preview-address-input"
               value={addressValue}
               onInput={(event) => onAddressChange((event.currentTarget as HTMLInputElement).value)}
               disabled={!navigationEnabled}
-            aria-disabled={!navigationEnabled}
-            aria-busy={!navigationEnabled && session?.status === 'starting'}
+              aria-disabled={!navigationEnabled}
+              aria-busy={!navigationEnabled && session?.status === 'starting'}
+              aria-describedby={!navigationEnabled ? containerDescriptionId : undefined}
               title={navigationEnabled ? "Preview address" : "Address entry requires a running container"}
               placeholder={navigationEnabled ? "Enter path..." : "Container not running..."}
               className="h-10 w-full rounded-2xl border border-black/[0.08] bg-white/80 px-4 font-mono text-sm text-slate-800 outline-none transition focus:border-signal-500/40 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-100"

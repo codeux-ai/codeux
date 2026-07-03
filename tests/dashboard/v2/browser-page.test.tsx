@@ -2,7 +2,7 @@
 /** @jsx h */
 import { h, type ComponentChildren } from "preact";
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, act, cleanup } from "@testing-library/preact";
+import { render, screen, fireEvent, act, cleanup, waitFor } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { BrowserPage } from "../../../dashboard/src/v2/BrowserPage.js";
@@ -95,13 +95,15 @@ vi.mock("../../../dashboard/src/v2/components/browser/PreviewSessionSlider.js", 
     sessions,
     onSelectSession,
     onRemoveSession,
+    removingSessionIds = [],
   }: {
     sessions: Array<{ id: string; sprintName: string; hostPort?: number | null }>;
     onSelectSession: (id: string) => void;
     onRemoveSession: (id: string) => void;
+    removingSessionIds?: string[];
   }) => (
     <div>
-      {sessions.map((session) => (
+      {sessions.filter((session) => !removingSessionIds.includes(session.id)).map((session) => (
         <div key={session.id}>
           <button type="button" onClick={() => onSelectSession(session.id)}>{session.sprintName}</button>
           <button type="button" onClick={() => onRemoveSession(session.id)}>Remove</button>
@@ -301,7 +303,7 @@ describe("BrowserPage", () => {
     expect(vi.mocked(fetchPreviewScript)).not.toHaveBeenCalled();
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Script" }));
+      fireEvent.click(screen.getByRole("button", { name: "Show startup script editor" }));
     });
 
     expect(vi.mocked(fetchPreviewScript)).toHaveBeenCalledWith("p1", "s1");
@@ -412,7 +414,9 @@ describe("BrowserPage", () => {
       fireEvent.click(screen.getAllByRole("button", { name: "Remove" })[0]!);
     });
 
-    expect(screen.getAllByRole("button", { name: "Remove" })).toHaveLength(1);
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: "Remove" })).toHaveLength(1);
+    });
 
     await act(async () => {
       resolveRemoval?.();
