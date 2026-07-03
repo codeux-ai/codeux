@@ -43,6 +43,7 @@ describe("SprintActions", () => {
 
     sprintIssueService = {
       searchIssues: vi.fn(),
+      getIssuePromptContextsForReferences: vi.fn(),
       replaceLinkedIssues: vi.fn(),
     } as unknown as SprintIssueService;
 
@@ -194,29 +195,385 @@ describe("SprintActions", () => {
     expect(result.result).toEqual({ sprint: mockSprint, runs: [mockRun] });
   });
 
-  it("imports issues into a sprint", async () => {
-    const mockIssues = [{ issueNumber: 123, title: "Test Issue" }];
-    const mockLinkedRecords = [{ id: "link-1", issueNumber: 123 }];
+  it("searches GitHub issues without requiring a sprint", async () => {
+    const mockIssues = [{
+      provider: "github",
+      hostDomain: "github.com",
+      repository: "acme/widgets",
+      issueNumber: 123,
+      issueKey: "#123",
+      title: "Test Issue",
+      url: "https://github.com/acme/widgets/issues/123",
+      state: "open",
+      labels: ["bug"],
+      assignees: ["alice"],
+      bodyPreview: "preview",
+      createdAt: null,
+      updatedAt: null,
+      issueAuthor: null,
+      issueReporter: null,
+      issueMilestone: null,
+      issueType: null,
+      issuePriority: null,
+      issueCommentCount: null,
+      sourceProvider: "github",
+    }];
     vi.mocked(sprintIssueService.searchIssues).mockResolvedValue(mockIssues as any);
+
+    const result = await sprintActions.handleSprintAction(makeArgs("import_issues", {
+      projectId: "p1",
+      search: " query ",
+      provider: "github",
+      labels: [" bug ", ""],
+      assignee: " alice ",
+      limit: 500,
+    }));
+
+    expect(sprintIssueService.searchIssues).toHaveBeenCalledWith("p1", expect.objectContaining({
+      search: "query",
+      provider: "github",
+      labels: ["bug"],
+      assignee: "alice",
+      limit: 100,
+    }));
+    expect(projectRepo.replaceSprintLinkedIssues).not.toHaveBeenCalled();
+    expect(result.result).toEqual({
+      mode: "search",
+      provider: "github",
+      searchedIssues: mockIssues,
+      importedContexts: [],
+      linkedIssues: [],
+      sprint: null,
+      planning: null,
+    });
+  });
+
+  it("searches GitLab issues with repository filters and attaches legacy sprint search imports", async () => {
+    const mockIssues = [{
+      provider: "gitlab",
+      hostDomain: "gitlab.example.com",
+      repository: "acme/widgets",
+      issueNumber: 7,
+      issueKey: "!7",
+      title: "GitLab Issue",
+      url: "https://gitlab.example.com/acme/widgets/-/issues/7",
+      state: "opened",
+    }];
+    const mockLinkedRecords = [{ id: "link-1", issueNumber: 7 }];
+    vi.mocked(sprintIssueService.searchIssues).mockResolvedValue(mockIssues as any);
+    vi.mocked(projectRepo.getSprint).mockReturnValue({ id: "s1", projectId: "p1", goal: "Existing goal" } as any);
     vi.mocked(projectRepo.replaceSprintLinkedIssues).mockReturnValue(mockLinkedRecords as any);
 
-    const payload = {
+    const result = await sprintActions.handleSprintAction(makeArgs("import_issues", {
       projectId: "p1",
       sprintId: "s1",
       search: "query",
-      provider: "github",
-      limit: 10
-    };
+      provider: "gitlab",
+      repository: " acme/widgets ",
+      hostDomain: " gitlab.example.com ",
+      limit: 10,
+    }));
 
-    const result = await sprintActions.handleSprintAction(makeArgs("import_issues", payload));
-
-    expect(sprintIssueService.searchIssues).toHaveBeenCalledWith("p1", {
+    expect(sprintIssueService.searchIssues).toHaveBeenCalledWith("p1", expect.objectContaining({
       search: "query",
-      provider: "github",
-      limit: 10
+      provider: "gitlab",
+      repository: "acme/widgets",
+      hostDomain: "gitlab.example.com",
+      limit: 10,
+    }));
+    expect(projectRepo.replaceSprintLinkedIssues).toHaveBeenCalledWith("p1", "s1", [expect.objectContaining({
+      provider: "gitlab",
+      issueNumber: 7,
+      title: "GitLab Issue",
+    })]);
+    expect(result.result).toMatchObject({
+      mode: "search",
+      provider: "gitlab",
+      searchedIssues: mockIssues,
+      linkedIssues: mockLinkedRecords,
+      planning: null,
     });
-    expect(projectRepo.replaceSprintLinkedIssues).toHaveBeenCalledWith("p1", "s1", mockIssues);
-    expect(result.result).toEqual(mockLinkedRecords);
+  });
+
+  it("searches Jira issues with Jira-specific filters", async () => {
+    vi.mocked(sprintIssueService.searchIssues).mockResolvedValue([{ provider: "jira", issueKey: "OPS-42" }] as any);
+
+    const result = await sprintActions.handleSprintAction(makeArgs("import_issues", {
+      projectId: "p1",
+      provider: "jira",
+      projectKey: " OPS ",
+      search: "login failure",
+      status: "in_progress",
+      assigneeText: " me ",
+      limit: 0,
+    }));
+
+    expect(sprintIssueService.searchIssues).toHaveBeenCalledWith("p1", expect.objectContaining({
+      provider: "jira",
+      projectKey: "OPS",
+      search: "login failure",
+      status: "in_progress",
+      assigneeText: "me",
+      limit: 1,
+    }));
+    expect(result.result).toMatchObject({
+      mode: "search",
+      provider: "jira",
+      linkedIssues: [],
+    });
+  });
+
+  it("imports explicit Jira issue keys into a sprint", async () => {
+    const contexts = [{
+      provider: "jira",
+      hostDomain: "acme.atlassian.net",
+      repository: "OPS",
+      projectKey: "OPS",
+      issueNumber: 42,
+      issueKey: "OPS-42",
+      title: "Ship Jira import",
+      url: "https://acme.atlassian.net/browse/OPS-42",
+      state: "In Progress",
+      labels: ["backend"],
+      assignees: ["alice"],
+      issueBodyMarkdown: "Full Jira body",
+      issueConversationMarkdown: "Jira comments",
+      includeConversation: true,
+      issueAuthor: "bob",
+      issueCreatedAt: "2026-05-01T00:00:00.000Z",
+      issueUpdatedAt: "2026-05-02T00:00:00.000Z",
+    }];
+    const linkedRecords = [{ id: "link-1", issueKey: "OPS-42" }];
+    vi.mocked(sprintIssueService.getIssuePromptContextsForReferences).mockResolvedValue(contexts as any);
+    vi.mocked(projectRepo.getSprint).mockReturnValue({ id: "s1", projectId: "p1", goal: "Existing goal" } as any);
+    vi.mocked(projectRepo.replaceSprintLinkedIssues).mockReturnValue(linkedRecords as any);
+    vi.mocked(projectRepo.updateSprint).mockReturnValue({ id: "s1", projectId: "p1", goal: "updated" } as any);
+
+    const result = await sprintActions.handleSprintAction(makeArgs("import_issues", {
+      projectId: "p1",
+      sprintId: "s1",
+      provider: "jira",
+      issueKeys: [" OPS-42 "],
+    }));
+
+    expect(sprintIssueService.getIssuePromptContextsForReferences).toHaveBeenCalledWith("p1", expect.objectContaining({
+      provider: "jira",
+      issueKeys: ["OPS-42"],
+    }));
+    expect(projectRepo.replaceSprintLinkedIssues).toHaveBeenCalledWith("p1", "s1", [expect.not.objectContaining({
+      issueBodyMarkdown: expect.any(String),
+      issueConversationMarkdown: expect.any(String),
+    })]);
+    expect(projectRepo.updateSprint).toHaveBeenCalledWith("s1", {
+      goal: expect.stringContaining("Full Jira body"),
+    });
+    expect(result.result).toMatchObject({
+      mode: "explicit",
+      provider: "jira",
+      searchedIssues: [],
+      importedContexts: contexts,
+      linkedIssues: linkedRecords,
+    });
+  });
+
+  it("imports explicit GitHub and GitLab issue numbers", async () => {
+    const contexts = [
+      {
+        provider: "github",
+        hostDomain: "github.com",
+        repository: "acme/widgets",
+        issueNumber: 42,
+        issueKey: "#42",
+        title: "GitHub issue",
+        url: "https://github.com/acme/widgets/issues/42",
+        state: "open",
+        labels: [],
+        assignees: [],
+        issueBodyMarkdown: "GitHub body",
+        issueConversationMarkdown: "",
+        includeConversation: true,
+        issueAuthor: null,
+        issueCreatedAt: null,
+        issueUpdatedAt: null,
+      },
+      {
+        provider: "gitlab",
+        hostDomain: "gitlab.example.com",
+        repository: "acme/widgets",
+        issueNumber: 7,
+        issueKey: "!7",
+        title: "GitLab issue",
+        url: "https://gitlab.example.com/acme/widgets/-/issues/7",
+        state: "opened",
+        labels: [],
+        assignees: [],
+        issueBodyMarkdown: "GitLab body",
+        issueConversationMarkdown: "",
+        includeConversation: true,
+        issueAuthor: null,
+        issueCreatedAt: null,
+        issueUpdatedAt: null,
+      },
+    ];
+    vi.mocked(sprintIssueService.getIssuePromptContextsForReferences).mockResolvedValue(contexts as any);
+    vi.mocked(projectRepo.getSprint).mockReturnValue({ id: "s1", projectId: "p1", goal: "Existing goal" } as any);
+    vi.mocked(projectRepo.replaceSprintLinkedIssues).mockReturnValue([{ id: "link-1" }, { id: "link-2" }] as any);
+    vi.mocked(projectRepo.updateSprint).mockReturnValue({ id: "s1", projectId: "p1", goal: "updated" } as any);
+
+    await sprintActions.handleSprintAction(makeArgs("import_issues", {
+      projectId: "p1",
+      sprintId: "s1",
+      provider: "github",
+      issueNumbers: [42, "7"],
+      issueRefs: ["#42", "!7"],
+    }));
+
+    expect(sprintIssueService.getIssuePromptContextsForReferences).toHaveBeenCalledWith("p1", expect.objectContaining({
+      provider: "github",
+      issueNumbers: [42, 7],
+      issueRefs: ["#42", "!7"],
+    }));
+    expect(projectRepo.replaceSprintLinkedIssues).toHaveBeenCalledWith("p1", "s1", [
+      expect.objectContaining({ provider: "github", issueNumber: 42 }),
+      expect.objectContaining({ provider: "gitlab", issueNumber: 7 }),
+    ]);
+  });
+
+  it("passes includeConversation false for explicit imports", async () => {
+    vi.mocked(sprintIssueService.getIssuePromptContextsForReferences).mockResolvedValue([] as any);
+
+    await sprintActions.handleSprintAction(makeArgs("import_issues", {
+      projectId: "p1",
+      provider: "github",
+      issueRefs: ["#42"],
+      includeConversation: false,
+    }));
+
+    expect(sprintIssueService.getIssuePromptContextsForReferences).toHaveBeenCalledWith("p1", expect.objectContaining({
+      includeConversation: false,
+    }));
+    expect(projectRepo.replaceSprintLinkedIssues).not.toHaveBeenCalled();
+  });
+
+  it("does not attach imported issues when attachToSprint is false", async () => {
+    const contexts = [{
+      provider: "github",
+      hostDomain: "github.com",
+      repository: "acme/widgets",
+      issueNumber: 42,
+      title: "GitHub issue",
+      url: "https://github.com/acme/widgets/issues/42",
+      issueBodyMarkdown: "Body",
+      issueConversationMarkdown: "",
+      includeConversation: true,
+      issueAuthor: null,
+      issueCreatedAt: null,
+      issueUpdatedAt: null,
+    }];
+    vi.mocked(sprintIssueService.getIssuePromptContextsForReferences).mockResolvedValue(contexts as any);
+
+    const result = await sprintActions.handleSprintAction(makeArgs("import_issues", {
+      projectId: "p1",
+      sprintId: "s1",
+      provider: "github",
+      issueRefs: ["#42"],
+      attachToSprint: false,
+    }));
+
+    expect(projectRepo.getSprint).not.toHaveBeenCalled();
+    expect(projectRepo.replaceSprintLinkedIssues).not.toHaveBeenCalled();
+    expect(projectRepo.updateSprint).not.toHaveBeenCalled();
+    expect(result.result).toMatchObject({
+      mode: "explicit",
+      linkedIssues: [],
+      sprint: null,
+      planning: null,
+    });
+  });
+
+  it("enriches the sprint goal with imported issue body and conversation", async () => {
+    const contexts = [{
+      provider: "github",
+      hostDomain: "github.com",
+      repository: "acme/widgets",
+      issueNumber: 42,
+      issueKey: "#42",
+      title: "Improve import UX",
+      url: "https://github.com/acme/widgets/issues/42",
+      state: "open",
+      labels: ["ux"],
+      assignees: ["alice"],
+      issueBodyMarkdown: "Acceptance criteria",
+      issueConversationMarkdown: "##### Comment 1 - @bob\n\nNeeds care",
+      includeConversation: true,
+      issueAuthor: "alice",
+      issueCreatedAt: null,
+      issueUpdatedAt: null,
+    }];
+    vi.mocked(sprintIssueService.getIssuePromptContextsForReferences).mockResolvedValue(contexts as any);
+    vi.mocked(projectRepo.getSprint).mockReturnValue({ id: "s1", projectId: "p1", goal: "Existing goal" } as any);
+    vi.mocked(projectRepo.replaceSprintLinkedIssues).mockReturnValue([{ id: "link-1" }] as any);
+    vi.mocked(projectRepo.updateSprint).mockReturnValue({ id: "s1", projectId: "p1", goal: "updated goal" } as any);
+
+    await sprintActions.handleSprintAction(makeArgs("import_issues", {
+      projectId: "p1",
+      sprintId: "s1",
+      provider: "github",
+      issueRefs: ["#42"],
+    }));
+
+    expect(projectRepo.updateSprint).toHaveBeenCalledWith("s1", {
+      goal: expect.stringContaining("Acceptance criteria"),
+    });
+    expect(vi.mocked(projectRepo.updateSprint).mock.calls[0]?.[1].goal).toContain("Needs care");
+    expect(vi.mocked(projectRepo.updateSprint).mock.calls[0]?.[1]).not.toHaveProperty("name");
+  });
+
+  it("plans after import only when requested", async () => {
+    const contexts = [{
+      provider: "github",
+      hostDomain: "github.com",
+      repository: "acme/widgets",
+      issueNumber: 42,
+      title: "GitHub issue",
+      url: "https://github.com/acme/widgets/issues/42",
+      issueBodyMarkdown: "Body",
+      issueConversationMarkdown: "",
+      includeConversation: true,
+      issueAuthor: null,
+      issueCreatedAt: null,
+      issueUpdatedAt: null,
+    }];
+    const planResult = { createdTasksCount: 2 };
+    vi.mocked(sprintIssueService.getIssuePromptContextsForReferences).mockResolvedValue(contexts as any);
+    vi.mocked(projectRepo.getSprint).mockReturnValue({ id: "s1", projectId: "p1", goal: "Existing goal" } as any);
+    vi.mocked(projectRepo.replaceSprintLinkedIssues).mockReturnValue([{ id: "link-1" }] as any);
+    vi.mocked(projectRepo.updateSprint).mockReturnValue({ id: "s1", projectId: "p1", goal: "updated goal" } as any);
+    vi.mocked(planningAgentService.planSprint).mockResolvedValue(planResult as any);
+
+    const result = await sprintActions.handleSprintAction(makeArgs("import_issues", {
+      projectId: "p1",
+      sprintId: "s1",
+      provider: "github",
+      issueRefs: ["#42"],
+      planAfterImport: true,
+      autoStart: true,
+      replan: true,
+      planningAgentPresetId: "agent-1",
+      overrides: { workerId: "w1" },
+    }));
+
+    expect(projectRepo.replaceSprintLinkedIssues).toHaveBeenCalledBefore(planningAgentService.planSprint as any);
+    expect(projectRepo.updateSprint).toHaveBeenCalledBefore(planningAgentService.planSprint as any);
+    expect(planningAgentService.planSprint).toHaveBeenCalledWith("p1", "s1", {
+      autoStart: true,
+      replan: true,
+      planningAgentPresetId: "agent-1",
+      overrides: { workerId: "w1" },
+    });
+    expect(result.result).toMatchObject({
+      planning: planResult,
+    });
   });
 
   it("validates the expanded import_issues MCP payload contract", () => {

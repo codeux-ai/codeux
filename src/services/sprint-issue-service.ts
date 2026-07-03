@@ -39,6 +39,7 @@ export interface IssueSearchInput {
   issueKeys?: string[];
   issueNumbers?: number[];
   issueRefs?: string[];
+  includeConversation?: boolean;
   createdAfter?: string;
   createdBefore?: string;
   updatedAfter?: string;
@@ -768,9 +769,7 @@ function buildExplicitIssuePromptInputs(
       issueKey,
       title: issueKey,
       url: `${normalizeJiraHost(settings.jira.host)}/browse/${issueKey}`,
-      includeConversation: input.issueRefs !== undefined || input.issueKeys !== undefined || input.issueNumbers !== undefined
-        ? true
-        : undefined,
+      includeConversation: input.includeConversation !== false,
     });
   }
 
@@ -793,7 +792,7 @@ function buildExplicitIssuePromptInputs(
       issueKey: `${target.provider === "github" ? "#" : "!"}${issueNumber}`,
       title: `${target.repository}#${issueNumber}`,
       url: repositoryIssueUrl(target, issueNumber),
-      includeConversation: true,
+      includeConversation: input.includeConversation !== false,
     });
   }
 
