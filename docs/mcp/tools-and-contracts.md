@@ -170,10 +170,18 @@ For sprint create/update calls:
 - `title` is accepted as a public MCP alias for `name`.
 - `goal` is the canonical repository field.
 - `goalMarkdown` is accepted as a public MCP alias for `goal`.
+- `linkedIssues` can include imported issue body and conversation markdown. Sprint create merges that context into the goal under `## Linked Issues`; sprint update does the same when a replacement goal is provided. Prompt-only issue body and conversation content are not stored in linked issue repository rows.
 - Missing or blank `projectId`, `sprintId`, `sprintRunId`, `name`, and `title` values are rejected before repository calls so MCP clients receive a validation error instead of a low-level `.trim()` failure.
 - `import_issues` routes through `SprintIssueService` and supports saved-token issue lookup for GitHub, GitLab, and Jira. GitHub/GitLab imports use saved `git.githubToken` or `git.gitlabToken`; Jira imports use the configured Jira host/email/API token.
 - `import_issues` accepts repository search fields plus explicit issue references. `issueKeys` and Jira-style refs such as `OPS-123` resolve through Jira, while `issueNumbers` and refs such as `#42` or `!42` resolve through GitHub/GitLab when `repository` and `hostDomain` are provided or inferable from the project.
 - When explicit refs are supplied without `sprintId`, `import_issues` returns full `IssuePromptContext` records for prompt use. When `sprintId` is supplied, only linked-issue metadata is persisted; issue bodies and conversations remain prompt context only.
+
+For sprint issue imports:
+- `manage_sprints` action `import_issues` is the MCP contract for issue importer access.
+- Search/import callers can provide `provider` (`github`, `gitlab`, or `jira`), `repository`, `hostDomain`, `projectKey`, `search`, `state`, `status`, `labels`, `assignee`, `assigneeText`, `issueKeys`, `issueNumbers`, `issueRefs`, `includeConversation`, `limit`, and optional sprint attachment fields.
+- `sprintId` and `attachToSprint` represent sprint attachment intent; `planAfterImport`, `autoStart`, `planningAgentPresetId`, `replan`, and `overrides` represent optional planning intent after import.
+- Existing `search`, `provider`, `limit`, `sprintId`, `planningAgentPresetId`, `replan`, and `overrides` payloads remain valid.
+- Issue search and import are not destructive actions. Sprint deletion remains approval-gated.
 
 For task create/update calls:
 - `title` is canonical; `name` is accepted as an alias.

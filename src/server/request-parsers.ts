@@ -25,6 +25,7 @@ import type {
   UpdateQuicksprintTemplateInput,
   QuicksprintExecutionInput,
 } from "../contracts/quicksprint-types.js";
+import { mergePromptWithLinkedIssues } from "../services/linked-issue-prompt-markdown.js";
 
 // Validation Helpers
 
@@ -122,12 +123,14 @@ export function parseCreateSprintInput(body: unknown): CreateSprintInput {
 
   const name = typeof input.name === "string" ? input.name.trim() : "";
   if (!name) throw new Error("Missing or empty required field: name");
+  const linkedIssues = input.linkedIssues as SprintLinkedIssueInput[] | undefined;
+  const goal = parseOptionalString(input.goal);
 
   return {
     name,
     originalPrompt: parseOptionalString(input.originalPrompt) ?? (input.originalPrompt === null ? null : undefined),
-    goal: parseOptionalString(input.goal),
-    linkedIssues: input.linkedIssues as SprintLinkedIssueInput[] | undefined,
+    goal: Array.isArray(linkedIssues) ? mergePromptWithLinkedIssues(goal || "", linkedIssues) : goal,
+    linkedIssues,
     importedTasks: Array.isArray(input.importedTasks)
       ? input.importedTasks.map((task, index) => parseSprintImportedTaskInput(task, index))
       : undefined,
@@ -197,12 +200,14 @@ export function parseSprintImportedTaskInput(body: unknown, index: number): Spri
 export function parseUpdateSprintInput(body: unknown): UpdateSprintInput {
   if (!body || typeof body !== "object") throw new Error("Invalid input: body must be an object");
   const input = body as Record<string, unknown>;
+  const linkedIssues = input.linkedIssues as SprintLinkedIssueInput[] | undefined;
+  const goal = parseOptionalString(input.goal);
 
   return {
     name: parseOptionalString(input.name),
     originalPrompt: parseOptionalString(input.originalPrompt) ?? (input.originalPrompt === null ? null : undefined),
-    goal: parseOptionalString(input.goal),
-    linkedIssues: input.linkedIssues as SprintLinkedIssueInput[] | undefined,
+    goal: Array.isArray(linkedIssues) && goal !== undefined ? mergePromptWithLinkedIssues(goal, linkedIssues) : goal,
+    linkedIssues,
     number: parseOptionalInteger(input.number, -1000000, 1000000, "number") ?? (input.number === null ? null : undefined),
     slug: parseOptionalString(input.slug),
     status: parseEnum(input.status, ["running", "paused", "completed", "failed", "cancelled", "idle"], "status"),

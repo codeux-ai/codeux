@@ -5,6 +5,7 @@ import type { ManagementResponseEnvelope, ManagementApproval, ManageCodeUxArgs }
 import type { CreateSprintInput, UpdateSprintInput, PlanSprintOptions, PlanningOverrides, SprintLinkedIssueInput } from "../../contracts/project-management-types.js";
 import type { PlanningAgentService } from "../../services/planning-agent-service.js";
 import type { IssueSearchInput, SprintIssueService } from "../../services/sprint-issue-service.js";
+import { mergePromptWithLinkedIssues } from "../../services/linked-issue-prompt-markdown.js";
 
 const VALID_SPRINT_STATUSES = ["running", "paused", "completed", "failed", "cancelled", "idle"] as const;
 
@@ -111,7 +112,7 @@ function normalizeCreateSprintInput(payload: Record<string, unknown>): CreateSpr
   const linkedIssues = normalizeLinkedIssues(payload.linkedIssues);
 
   if (originalPrompt !== undefined) input.originalPrompt = originalPrompt;
-  if (goal !== undefined) input.goal = goal;
+  if (goal !== undefined || linkedIssues) input.goal = mergePromptWithLinkedIssues(goal || "", linkedIssues || []);
   if (typeof payload.number === "number") input.number = payload.number;
   if (slug) input.slug = slug;
   if (status) input.status = status;
@@ -137,7 +138,7 @@ function normalizeUpdateSprintInput(payload: Record<string, unknown>): UpdateSpr
   const linkedIssues = normalizeLinkedIssues(payload.linkedIssues);
 
   if (originalPrompt !== undefined) input.originalPrompt = originalPrompt;
-  if (goal !== undefined) input.goal = goal;
+  if (goal !== undefined) input.goal = mergePromptWithLinkedIssues(goal, linkedIssues || []);
   if ("number" in payload && (typeof payload.number === "number" || payload.number === null)) input.number = payload.number;
   if ("slug" in payload) input.slug = slug || undefined;
   if (status) input.status = status;
