@@ -84,7 +84,7 @@ Successful responses return:
 }
 ```
 
-Errors return:
+Core and agent tool errors return:
 
 ```json
 {
@@ -96,6 +96,29 @@ Errors return:
 ```
 
 Unknown tool names raise MCP `MethodNotFound`.
+
+Management tool runtime and validation failures return a stringified JSON envelope in the same text content block and set `isError: true` on the MCP tool response:
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"result\": {\n    \"status\": \"error\",\n    \"domain\": \"tasks\",\n    \"action\": \"create\",\n    \"message\": \"projectId is required\",\n    \"errorType\": \"validation\",\n    \"field\": \"projectId\"\n  }\n}"
+    }
+  ],
+  "isError": true
+}
+```
+
+The parsed management envelope has:
+- `result.status: "error"` for every management failure.
+- `result.domain` and `result.action` copied from the failed management call.
+- `result.message` as the developer-facing failure reason.
+- `result.errorType: "validation"` for payload parser failures and `"runtime"` for dependency or execution failures.
+- `result.field` when a validation helper can identify the invalid field.
+
+Approval responses are not errors. Calls that need human confirmation still return `approvalRequired: true` and do not set `isError`.
 
 ### Destructive Action Approvals
 
@@ -157,10 +180,13 @@ Dashboard calls can add `background: true` to the HTTP setup request. In that mo
 
 For payload normalization in management tools, Code UX centralizes parsing behavior:
 - **Required Strings**: Extracted via `parseRequiredString`. Must be present and non-blank (e.g. `"  "` is rejected). Returns trimmed string.
+- **Required String Aliases**: Extracted via `parseRequiredStringAlias`. This preserves public aliases such as sprint `title` for `name` while failing with one shared validation error when both are blank or missing.
 - **Optional Strings**: Extracted via `parseOptionalString`. Returns trimmed string, or `undefined` if blank.
 - **Optional String Arrays**: Extracted via `parseOptionalStringArray`. Filters out non-string items and trims, returning `undefined` if the resulting array is empty.
 - **Optional Numbers**: Extracted via `parseOptionalNumber`. Validates finiteness and optional min/max constraints.
 - **Optional Enums**: Extracted via `parseOptionalEnum`. Normalizes case and whitespace to match allowed literal types.
+- **Strict Optional Integers and Enums**: Extracted via `parseOptionalIntegerStrict` and `parseOptionalEnumStrict` when a supplied invalid value should be rejected instead of silently ignored. Omitted values still allow action-level defaults.
+- **Validation Errors**: Parser failures throw `ManagementValidationError`, which the management tool handler serializes as the standardized `result.status: "error"` envelope with `errorType: "validation"` and `isError: true`.
 
 
 The dedicated management tools (`manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_settings`) and the legacy `manage_code_ux` dispatcher share the same action handlers.
@@ -224,7 +250,7 @@ Assigned-to-me Jira example:
   "provider": "jira",
   "projectKey": "OPS",
   "assigneeText": "me",
-  "status": "In Progress",
+  "status": "in_progress",
   "limit": 20
 }
 ```

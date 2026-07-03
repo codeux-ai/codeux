@@ -199,10 +199,20 @@ describe("QuicksprintActions", () => {
     });
   });
 
-  it("falls back to the default task count when the value is unparseable", async () => {
+  it("rejects invalid numeric string task counts", async () => {
     vi.mocked(quicksprintService.executeQuicksprint).mockResolvedValue({ id: "s1" } as any);
-    await actions.handleQuicksprintAction(makeArgs("execute", { projectId: "p1", templateId: "t1", taskCount: "not-a-number" }));
-    expect(quicksprintService.executeQuicksprint).toHaveBeenCalledWith("p1", expect.objectContaining({ taskCount: 5, noTaskLimit: false }));
+    await expect(actions.handleQuicksprintAction(makeArgs("execute", { projectId: "p1", templateId: "t1", taskCount: "not-a-number" })))
+      .rejects.toThrow("Invalid value for taskCount. Must be a valid integer.");
+    expect(quicksprintService.executeQuicksprint).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid submit mode enum values", async () => {
+    await expect(actions.handleQuicksprintAction(makeArgs("execute", {
+      projectId: "p1",
+      templateId: "t1",
+      submitMode: "start_now",
+    }))).rejects.toThrow("Invalid value for submitMode. Must be one of: plan_only, plan_and_start");
+    expect(quicksprintService.executeQuicksprint).not.toHaveBeenCalled();
   });
 
   it("allows noTaskLimit to skip the fixed task count prompt", async () => {
