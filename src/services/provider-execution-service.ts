@@ -206,7 +206,9 @@ export class ProviderExecutionService {
       // sprints don't saturate the single thread with one INSERT per output line. Only used when
       // the caller didn't supply its own onActivity (i.e. when we'd otherwise write per line).
       const activityCoalescer = (!args.onActivity && this.deps.sessionTracking)
-        ? new ActivityWriteCoalescer(this.deps.sessionTracking, args.sessionId)
+        ? new ActivityWriteCoalescer(this.deps.sessionTracking, args.sessionId, {
+            logger: this.deps.logger,
+          })
         : null;
 
       // The telemetry watcher fires every ~1.5s while a run is live, and the handler below mirrors
