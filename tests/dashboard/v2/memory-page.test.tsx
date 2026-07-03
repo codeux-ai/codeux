@@ -6,7 +6,7 @@ globalThis.React = { createElement: h };
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, act, waitFor, fireEvent } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { MemoryPage, getWheelZoomTarget, inverseZoomScreenSize } from "../../../dashboard/src/v2/MemoryPage.js";
+import { MemoryPage, getNodeScreenRadius, getWheelZoomTarget, inverseZoomScreenSize } from "../../../dashboard/src/v2/MemoryPage.js";
 import { ProjectDataContext } from "../../../dashboard/src/v2/context/project-data.js";
 import * as api from "../../../dashboard/src/v2/lib/memory-api.js";
 import userEvent from "@testing-library/user-event";
@@ -60,17 +60,33 @@ describe("memory map canvas helpers", () => {
         expect(inverseZoomScreenSize(12, 1)).toBe(12);
         expect(inverseZoomScreenSize(12, 3)).toBe(4);
         expect(inverseZoomScreenSize(12, 0)).toBe(12 / MEMORY_CAMERA.minZoom);
+        expect(inverseZoomScreenSize(8, 2, 10, 14)).toBe(5);
+        expect(inverseZoomScreenSize(18, 2, 10, 14)).toBe(7);
+    });
+
+    it("keeps node base radius independent of camera zoom while preserving animation scale", () => {
+        const node = { radius: 11, scale: 1 };
+        const screenRadius = getNodeScreenRadius(node);
+
+        expect(screenRadius).toBe(9.5);
+        expect(inverseZoomScreenSize(screenRadius, 1)).toBe(9.5);
+        expect(inverseZoomScreenSize(screenRadius, 5) * 5).toBe(9.5);
+        expect(getNodeScreenRadius({ radius: 11, scale: 1.35 })).toBeCloseTo(11.4);
+        expect(getNodeScreenRadius({ radius: 11, scale: 0 })).toBe(0);
     });
 
     it("derives smooth proportional wheel zoom targets", () => {
         const zoomedIn = getWheelZoomTarget(2, -100);
         const zoomedOut = getWheelZoomTarget(2, 100);
         const smallDeltaZoom = getWheelZoomTarget(2, -20);
+        const tinyDeltaZoom = getWheelZoomTarget(2, -1);
 
         expect(zoomedIn).toBeGreaterThan(2);
         expect(zoomedOut).toBeLessThan(2);
         expect(smallDeltaZoom).toBeGreaterThan(2);
         expect(smallDeltaZoom).toBeLessThan(zoomedIn);
+        expect(tinyDeltaZoom).toBeGreaterThan(2);
+        expect(tinyDeltaZoom).toBeLessThan(smallDeltaZoom);
     });
 });
 
