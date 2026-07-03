@@ -46,6 +46,7 @@ import { SchedulerActions } from "./management/scheduler-actions.js";
 import { SettingsActions } from "./management/settings-actions.js";
 import { AgentActions } from "./management/agent-actions.js";
 import { MemoryActions } from "./management/memory-actions.js";
+import { formatManagementErrorEnvelope } from "./management/payload-parsers.js";
 
 export interface ManagementToolHandlerDeps {
   sprintPreviewService: SprintPreviewService;
@@ -142,16 +143,9 @@ export class ManagementToolHandler {
     });
   }
 
-  private formatError(domain: string, action: string, error: unknown): { content: Array<{ type: string; text: string }> } {
-    const envelope: ManagementResponseEnvelope = {
-      result: {
-        status: "error",
-        domain,
-        action,
-        message: error instanceof Error ? error.message : String(error),
-      },
-    };
-    return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
+  private formatError(domain: string, action: string, error: unknown): { content: Array<{ type: string; text: string }>; isError: true } {
+    const envelope = formatManagementErrorEnvelope(domain, action, error);
+    return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }], isError: true };
   }
 
   async handleManageCodeUx(args: ManageCodeUxArgs): Promise<{ content: Array<{ type: string; text: string }> }> {

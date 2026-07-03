@@ -1,10 +1,64 @@
+import type { ManagementResponseEnvelope } from "../../contracts/internal-management-types.js";
+
+export type ManagementErrorKind = "validation" | "runtime";
+
+export class ManagementValidationError extends Error {
+  readonly kind = "validation" as const;
+
+  constructor(message: string, readonly field?: string) {
+    super(message);
+    this.name = "ManagementValidationError";
+  }
+}
+
+export function isManagementValidationError(error: unknown): error is ManagementValidationError {
+  return error instanceof ManagementValidationError;
+}
+
+export function managementValidationError(message: string, field?: string): ManagementValidationError {
+  return new ManagementValidationError(message, field);
+}
+
+export function formatManagementErrorEnvelope(
+  domain: string,
+  action: string,
+  error: unknown,
+): ManagementResponseEnvelope {
+  const message = error instanceof Error ? error.message : String(error);
+  const kind: ManagementErrorKind = isManagementValidationError(error) ? "validation" : "runtime";
+  const result: Record<string, unknown> = {
+    status: "error",
+    domain,
+    action,
+    message,
+    errorType: kind,
+  };
+  if (isManagementValidationError(error) && error.field) {
+    result.field = error.field;
+  }
+  return { result };
+}
+
 export function parseRequiredString(payload: Record<string, unknown>, key: string, customError?: string): string {
   const val = payload[key];
   if (typeof val === "string") {
     const trimmed = val.trim();
     if (trimmed.length > 0) return trimmed;
   }
-  throw new Error(customError || `${key} is required`);
+  throw managementValidationError(customError || `${key} is required`, key);
+}
+
+export function parseRequiredStringAlias(
+  payload: Record<string, unknown>,
+  primaryKey: string,
+  aliasKey: string,
+  customError?: string,
+): string {
+  const primary = parseOptionalString(payload, primaryKey);
+  const alias = parseOptionalString(payload, aliasKey);
+  if (primary) return primary;
+  if (alias) return alias;
+  throw managementValidationError(customError || `${primaryKey} or ${aliasKey} is required`, primaryKey);
 }
 
 export function parseOptionalString(payload: Record<string, unknown>, key: string): string | undefined {
@@ -14,6 +68,24 @@ export function parseOptionalString(payload: Record<string, unknown>, key: strin
     return trimmed.length > 0 ? trimmed : undefined;
   }
   return undefined;
+}
+
+export function parseOptionalNullableString(payload: Record<string, unknown>, key: string): string | null | undefined {
+  if (!(key in payload)) {
+    return undefined;
+  }
+  if (payload[key] === null) {
+    return null;
+  }
+  return parseOptionalString(payload, key);
+}
+
+export function parseOptionalStringAlias(
+  payload: Record<string, unknown>,
+  primaryKey: string,
+  aliasKey: string,
+): string | undefined {
+  return parseOptionalString(payload, primaryKey) || parseOptionalString(payload, aliasKey);
 }
 
 export function parseOptionalStringArray(payload: Record<string, unknown>, key: string): string[] | undefined {
@@ -58,4 +130,57 @@ export function parseOptionalEnum<T extends string>(payload: Record<string, unkn
     }
   }
   return undefined;
+}
+
+export function parseOptionalEnumStrict<T extends string>(
+  payload: Record<string, unknown>,
+  key: string,
+  validValues: readonly T[],
+): T | undefined {
+  if (!(key in payload) || payload[key] === undefined || payload[key] === null) {
+    return undefined;
+  }
+  const value = parseOptionalEnum(payload, key, validValues);
+  if (value !== undefined) {
+    return value;
+  }
+  throw managementValidationError(`Invalid value for ${key}. Must be one of: ${validValues.join(", ")}`, key);
+}
+
+export function parseOptionalIntegerStrict(
+  payload: Record<string, unknown>,
+  key: string,
+  options: { min?: number; max?: number } = {},
+): number | undefined {
+  if (!(key in payload) || payload[key] === undefined || payload[key] === null) {
+    return undefined;
+  }
+
+  const value = payload[key];
+  let parsed: number;
+  if (typeof value === "number") {
+    parsed = value;
+  } else if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      throw managementValidationError(`Invalid value for ${key}. Must be a valid integer.`, key);
+    }
+    parsed = Number(trimmed);
+  } else {
+    throw managementValidationError(`Invalid value for ${key}. Must be a valid integer.`, key);
+  }
+
+  if (!Number.isFinite(parsed)) {
+    throw managementValidationError(`Invalid value for ${key}. Must be a valid integer.`, key);
+  }
+
+  const integer = Math.floor(parsed);
+  if (options.min !== undefined && integer < options.min) {
+    throw managementValidationError(`Invalid value for ${key}. Must be at least ${options.min}.`, key);
+  }
+  if (options.max !== undefined && integer > options.max) {
+    throw managementValidationError(`Invalid value for ${key}. Must be at most ${options.max}.`, key);
+  }
+
+  return integer;
 }

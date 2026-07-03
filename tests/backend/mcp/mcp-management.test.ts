@@ -40,6 +40,8 @@ describe("ManagementToolHandler", () => {
         updateProject: vi.fn(),
         setSelectedProjectId: vi.fn(),
         deleteProject: vi.fn(),
+        listSprints: vi.fn(),
+        createTask: vi.fn(),
       },
       sprintPreviewService: {
         listSessions: vi.fn(),
@@ -86,6 +88,7 @@ describe("ManagementToolHandler", () => {
       },
       quicksprintService: {
         listTemplates: vi.fn(),
+        executeQuicksprint: vi.fn(),
       },
       schedulerService: {
         listProjectSchedule: vi.fn(),
@@ -106,9 +109,11 @@ describe("ManagementToolHandler", () => {
         status: "error",
         domain: "projects",
         action: "list",
-        message: "Simulated dependency error"
+        message: "Simulated dependency error",
+        errorType: "runtime",
       }
     });
+    expect(response.isError).toBe(true);
   });
 
   it("should format string errors correctly", async () => {
@@ -123,8 +128,90 @@ describe("ManagementToolHandler", () => {
         status: "error",
         domain: "projects",
         action: "list",
-        message: "String error"
+        message: "String error",
+        errorType: "runtime",
       }
+    });
+    expect(response.isError).toBe(true);
+  });
+
+  it("returns standardized validation envelopes for blank required strings", async () => {
+    const response = await handler.handleManageSprints({ action: "list", projectId: "   " });
+    const parsed = JSON.parse(response.content[0].text);
+
+    expect(response.isError).toBe(true);
+    expect(parsed).toEqual({
+      result: {
+        status: "error",
+        domain: "sprints",
+        action: "list",
+        message: "projectId is required",
+        errorType: "validation",
+        field: "projectId",
+      },
+    });
+    expect(deps.projectManagementRepository.listSprints).not.toHaveBeenCalled();
+  });
+
+  it("returns standardized validation envelopes for invalid enums", async () => {
+    const response = await handler.handleManageTasks({
+      action: "create",
+      projectId: "p1",
+      sprintId: "s1",
+      title: "Task",
+      priority: "urgent",
+    });
+    const parsed = JSON.parse(response.content[0].text);
+
+    expect(response.isError).toBe(true);
+    expect(parsed.result).toMatchObject({
+      status: "error",
+      domain: "tasks",
+      action: "create",
+      message: "Invalid value for priority. Must be one of: critical, high, medium, low",
+      errorType: "validation",
+      field: "priority",
+    });
+    expect(deps.projectManagementRepository.createTask).not.toHaveBeenCalled();
+  });
+
+  it("returns standardized validation envelopes for invalid numeric strings", async () => {
+    const response = await handler.handleManageQuicksprints({
+      action: "execute",
+      projectId: "p1",
+      templateId: "template-1",
+      taskCount: "many",
+    });
+    const parsed = JSON.parse(response.content[0].text);
+
+    expect(response.isError).toBe(true);
+    expect(parsed.result).toMatchObject({
+      status: "error",
+      domain: "quicksprints",
+      action: "execute",
+      message: "Invalid value for taskCount. Must be a valid integer.",
+      errorType: "validation",
+      field: "taskCount",
+    });
+    expect(deps.quicksprintService.executeQuicksprint).not.toHaveBeenCalled();
+  });
+
+  it("returns standardized validation envelopes for settings confirmation input errors", async () => {
+    const response = await handler.handleManageSettings({
+      action: "patch_system_setting",
+      path: "defaults.automationLevel",
+      approval: { confirmed: true },
+    });
+    const parsed = JSON.parse(response.content[0].text);
+
+    expect(response.isError).toBe(true);
+    expect(parsed.result).toMatchObject({
+      status: "error",
+      domain: "settings",
+      action: "patch_system_setting",
+      message: "value is required",
+      errorType: "validation",
+      field: "value",
     });
   });
 
