@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import {
   classifyProviderError,
   computeResetAfterFromClockTime,
@@ -19,6 +19,15 @@ const makeResult = (stdout: string, stderr: string): CommandResult => ({
 });
 
 describe("classifyProviderError", () => {
+  beforeAll(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 5, 2, 1, 0, 0, 0));
+  });
+
+  afterAll(() => {
+    vi.useRealTimers();
+  });
+
   describe("gemini", () => {
     it("detects quota exhaustion with reset time", () => {
       const result = makeResult(
