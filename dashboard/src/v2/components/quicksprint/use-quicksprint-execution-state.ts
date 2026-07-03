@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo, useCallback } from "preact/hooks";
-import type { PlanningRouteOption } from "../../lib/sprint-composer-state.js";
+import { toVirtualPlanningRouteOption, type PlanningRouteOption } from "../../lib/sprint-composer-state.js";
 import { getProviderModelOptions } from "../../lib/settings-view-models.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
 import type { ProviderId, AgentPreset } from "../../types.js";
@@ -62,16 +62,7 @@ export function useQuicksprintExecutionState({
         opts.push({ type: "connected", id: conn.id, label: conn.displayName || conn.connectionKey });
       }
     }
-    for (const vp of virtualProviders) {
-      opts.push({
-        type: "virtual",
-        id: vp.providerConfigId || vp.id || vp.provider || "",
-        label: vp.displayLabel || vp.label || vp.providerConfigId || vp.id || vp.provider || "Provider",
-        provider: vp.providerConfigId || vp.id || vp.provider,
-        iconProviderId: vp.iconProviderId || (vp.provider as ProviderId | undefined) || (vp.id as ProviderId | undefined),
-        effectiveModel: vp.effectiveModel,
-      });
-    }
+    opts.push(...virtualProviders.map(toVirtualPlanningRouteOption));
     return opts;
   }, [connections, virtualProviders]);
 

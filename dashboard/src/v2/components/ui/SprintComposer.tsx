@@ -15,6 +15,7 @@ import {
   useSprintComposerState, 
   type SprintSubmitMode,
   type PlanningRouteOption,
+  toVirtualPlanningRouteOption,
   toPlanningOverrides,
   resolveSubmitOriginalPrompt,
 } from "../../lib/sprint-composer-state.js";
@@ -502,14 +503,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
       id: c.id,
       label: c.displayName,
     })),
-    ...virtualProviders.map(v => ({
-      type: 'virtual' as const,
-      id: v.providerConfigId || v.id || v.provider || "",
-      label: v.displayLabel || v.label || v.providerConfigId || v.id || v.provider || "Provider",
-      provider: v.providerConfigId || v.id || v.provider,
-      iconProviderId: v.iconProviderId || (v.provider as ProviderId | undefined) || (v.id as ProviderId | undefined),
-      effectiveModel: v.effectiveModel,
-    }))
+    ...virtualProviders.map(toVirtualPlanningRouteOption)
   ];
 
   const currentRoute = state.routeOverride || null;
