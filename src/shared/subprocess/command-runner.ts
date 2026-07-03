@@ -22,14 +22,6 @@ type SpawnCommand = string & { readonly [spawnCommandBrand]: true };
 type SpawnArgument = string & { readonly [spawnArgumentBrand]: true };
 type SpawnPath = string & { readonly [spawnPathBrand]: true };
 
-declare const spawnCommandBrand: unique symbol;
-declare const spawnArgumentBrand: unique symbol;
-declare const spawnPathBrand: unique symbol;
-
-type SpawnCommand = string & { readonly [spawnCommandBrand]: true };
-type SpawnArgument = string & { readonly [spawnArgumentBrand]: true };
-type SpawnPath = string & { readonly [spawnPathBrand]: true };
-
 export interface CommandResult {
   ok: boolean;
   code: number | null;
