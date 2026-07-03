@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { getPlanningFeedback } from "../../../dashboard/src/v2/lib/sprint-planning-feedback.js";
+import {
+  getPlanningCancelledMessage,
+  getPlanningFeedback,
+  getPlanningPendingMessage,
+} from "../../../dashboard/src/v2/lib/sprint-planning-feedback.js";
 
 describe("getPlanningFeedback", () => {
   it("should return progressive feedback for improve action", () => {
@@ -70,5 +74,12 @@ describe("getPlanningFeedback", () => {
     expect(late.progress).toBeGreaterThan(0.95);
     // shipProgress loops: 100000 % 12000 = 4000, 4000/12000 ≈ 0.333
     expect(late.shipProgress).toBeCloseTo(4000 / 12000, 1);
+  });
+
+  it("returns state-specific pending and cancellation copy", () => {
+    expect(getPlanningPendingMessage("improve")).toContain("Prompt improvement started");
+    expect(getPlanningPendingMessage("plan_and_start")).toContain("will launch only after planning completes");
+    expect(getPlanningCancelledMessage("plan_only")).toContain("was not started");
+    expect(getPlanningCancelledMessage("replan")).toContain("Existing tasks were left unchanged");
   });
 });
