@@ -86,6 +86,7 @@ export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
     return (
       <div className="relative inline-flex animate-pulse">
         <div
+          role="status"
           aria-label="QA review running"
           className={`inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/8 text-signal-600 shadow-[0_10px_24px_rgba(0,224,160,0.12)] ${
             compact ? "px-2.5 py-1 text-[10px]" : "px-3 py-1.5 text-[10px]"
@@ -110,6 +111,7 @@ export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
       <div
         ref={triggerRef}
         aria-label="QA review details"
+        aria-expanded={isOpen}
         tabIndex={0}
         className={`inline-flex items-center gap-1.5 rounded-full border border-signal-500/30 bg-gradient-to-r from-signal-500/15 via-signal-400/10 to-signal-500/15 backdrop-blur-md shadow-[inset_0_1px_0_rgba(255,255,255,0.25),0_0_12px_rgba(0,224,160,0.15)] text-signal-600 ${
           compact ? "px-2.5 py-1 text-[10px]" : "px-3 py-1.5 text-[10px]"
@@ -117,6 +119,9 @@ export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
       >
         <CheckCircle2 className={`${compact ? "h-3 w-3" : "h-3.5 w-3.5"} transition-transform duration-300 group-hover/review:scale-110`} strokeWidth={2.5} />
         {(!compact || showCompactLabel) && <span>{compact ? "QA" : "QA Reviewed"}</span>}
+        <span className="sr-only">
+          {summary.outcome ? ` Review outcome ${summary.outcome}.` : ""}{summary.summary ? ` ${summary.summary}` : ""}
+        </span>
       </div>
 
       {isOpen && createPortal(

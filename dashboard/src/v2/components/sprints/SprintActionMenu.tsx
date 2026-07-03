@@ -70,7 +70,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
   onClose,
   markCompletedIcon = "circle",
   role,
-  buttonClassName = "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2",
+  buttonClassName = "flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-medium leading-snug text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 [&>span]:min-w-0 [&>span]:break-words",
 }) => {
   const handleDeleteClassName = buttonClassName.replace(
     /text-slate-600 transition-colors hover:bg-black\/\[0\.04\] hover:text-slate-900/,

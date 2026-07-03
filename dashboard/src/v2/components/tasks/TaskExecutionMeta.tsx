@@ -38,26 +38,26 @@ export const TaskExecutionMeta: FunctionComponent<TaskExecutionMetaProps> = memo
   };
 
   return (
-    <div className={`flex gap-2.5 items-center text-xs font-medium text-slate-500 dark:text-slate-400 ${className}`}>
+    <div className={`flex flex-wrap gap-2.5 items-center text-xs font-medium text-slate-500 dark:text-slate-400 ${className}`} aria-label="Task execution metadata">
       {/* Time Chip */}
-      <div className="flex items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 rounded-full border border-black/[0.06] dark:border-white/[0.08]">
+      <div className="flex min-w-0 items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 rounded-full border border-black/[0.06] dark:border-white/[0.08]">
         <Clock className="w-3 h-3" strokeWidth={2} aria-hidden="true" />
         <span className="sr-only">Duration: </span>
-        <span>{time || "Not started"}</span>
+        <span className="break-words">{time || "Not started"}</span>
       </div>
 
       {/* Executor Chip */}
-      <div className="flex items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 rounded-full border border-black/[0.06] dark:border-white/[0.08]">
+      <div className="flex min-w-0 items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 rounded-full border border-black/[0.06] dark:border-white/[0.08]">
         {getExecutorIcon()}
         <span className="sr-only">Executor: </span>
-        <span>{getExecutorLabel()}</span>
+        <span className="break-words">{getExecutorLabel()}</span>
       </div>
 
       {/* Execution Mode Chip */}
-      <div className="flex items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 rounded-full border border-black/[0.06] dark:border-white/[0.08]">
+      <div className="flex min-w-0 items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 rounded-full border border-black/[0.06] dark:border-white/[0.08]">
         <Settings className="w-3 h-3" strokeWidth={2} aria-hidden="true" />
         <span className="sr-only">Mode: </span>
-        <span className="capitalize">{executionMode || "Standard"}</span>
+        <span className="break-words capitalize">{executionMode || "Standard"}</span>
       </div>
     </div>
   );

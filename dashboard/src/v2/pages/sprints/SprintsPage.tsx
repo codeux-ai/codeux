@@ -630,7 +630,7 @@ export const SprintsPage: FunctionComponent = () => {
             clearError={clearError}
           />
           {selectedProject && (
-            <div className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${
+            <div className={`inline-flex w-fit max-w-full flex-wrap items-center gap-2 break-words rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${
               planningRoute.available
                 ? "border-signal-500/20 bg-signal-500/[0.08] text-signal-600 dark:text-signal-300"
                 : "border-status-red/20 bg-status-red/10 text-status-red"
@@ -1010,7 +1010,7 @@ export const SprintsPage: FunctionComponent = () => {
               }}
               onClose={() => setRowMenu(null)}
               markCompletedIcon="square"
-              buttonClassName="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white focus:outline-none"
+              buttonClassName="flex w-full min-w-0 items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium leading-snug text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white focus:outline-none"
             />
           </div>
         </div>,
