@@ -43,7 +43,7 @@ function toggleValue<T extends string>(values: T[], value: T): T[] {
 function buildChipClass(active: boolean, activeClass: string): string {
   return [
     CHIP_CLASS,
-    "inline-flex min-h-9 max-w-full items-center gap-2 whitespace-normal px-3 py-1.5 text-left text-[10px] font-bold uppercase leading-tight tracking-[0.14em] transition-all motion-safe:active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900",
+    "inline-flex min-h-9 max-w-full items-center justify-center gap-2 whitespace-normal px-3 py-1.5 text-center text-[10px] font-bold uppercase leading-tight tracking-[0.14em] transition-all motion-safe:active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900",
     active ? activeClass : "text-slate-500 hover:bg-black/[0.05] hover:border-black/[0.1] hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/[0.05] dark:hover:text-white",
   ].join(" ");
 }
@@ -54,15 +54,17 @@ const FilterGroup: FunctionComponent<{
   icon?: boolean;
 }> = ({ label, children, icon }) => (
   <div
-    className="min-w-0 rounded-2xl border border-black/[0.04] bg-white/42 p-2.5 dark:border-white/[0.04] dark:bg-white/[0.025]"
+    className="min-w-0 rounded-2xl border border-black/[0.04] bg-white/42 p-3 dark:border-white/[0.04] dark:bg-white/[0.025]"
     role="group"
     aria-label={`${label} filters`}
   >
-    <div className="mb-2 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
-      {icon ? <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={2.2} /> : null}
-      {label}
+    <div className="mb-2 flex min-w-0 items-center justify-between gap-2">
+      <div className="inline-flex min-w-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+        {icon ? <SlidersHorizontal className="h-3.5 w-3.5 shrink-0" strokeWidth={2.2} /> : null}
+        <span className="truncate">{label}</span>
+      </div>
     </div>
-    <div className="flex min-w-0 flex-wrap items-center gap-2">{children}</div>
+    <div className="grid min-w-0 grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">{children}</div>
   </div>
 );
 
@@ -82,10 +84,11 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
   const hasActiveFilters = filters.status.length > 0 || filters.purpose.length > 0 || filters.provider.length > 0 || (filters.errorCategories && filters.errorCategories.length > 0) || search !== "";
   const shownCount = filteredCount.toLocaleString();
   const totalShown = totalCount.toLocaleString();
+  const activeFilterCount = filters.status.length + filters.purpose.length + filters.provider.length + (filters.errorCategories?.length ?? 0) + (search !== "" ? 1 : 0);
 
   return (
     <div className={`${SUBPANEL_CLASS} sticky top-3 z-20 flex min-w-0 max-w-full flex-col gap-4 p-4 md:p-5`}>
-      <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,32rem)] xl:items-start">
+      <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(18rem,1.2fr)_minmax(0,1fr)] xl:items-start">
         <div className="relative min-w-0">
           <label htmlFor="system-filter-search" className="sr-only">Search system stats</label>
           <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" strokeWidth={2} />
@@ -127,7 +130,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
         </FilterGroup>
       </div>
 
-      <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="grid min-w-0 gap-3 lg:grid-cols-2 2xl:grid-cols-3">
         {availablePurposes.length > 0 ? (
           <FilterGroup label="Purposes">
             {availablePurposes.map((purpose) => {
@@ -184,8 +187,8 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
         </FilterGroup>
       </div>
 
-      <div className="flex flex-col gap-3 border-t border-black/[0.06] pt-3 dark:border-white/[0.06] lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="grid gap-3 border-t border-black/[0.06] pt-3 dark:border-white/[0.06] lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
           {hasActiveFilters ? (
             <button
               type="button"
@@ -201,6 +204,9 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
           <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
             Showing {shownCount} of {totalShown}
           </div>
+          <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
+            {activeFilterCount.toLocaleString()} active filters
+          </div>
           {page !== undefined ? (
             <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
               Page {page + 1}{hasMore ? " · more available" : ""}
@@ -209,7 +215,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
         </div>
 
         {page !== undefined && onPageChange ? (
-          <div className="flex flex-wrap items-center gap-2 lg:justify-end" role="group" aria-label="Invocation pagination">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center lg:justify-end" role="group" aria-label="Invocation pagination">
             <button
               type="button"
               disabled={page === 0}

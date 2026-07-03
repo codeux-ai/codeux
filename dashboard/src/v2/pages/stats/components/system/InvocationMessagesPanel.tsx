@@ -12,7 +12,7 @@ import {
 } from "lucide-preact";
 import type { ExecutionInvocationMessageRecord, ExecutionInvocationRecord } from "../../../../types.js";
 import { fetchInvocationMessages } from "../../../../lib/invocation-api.js";
-import { formatDateTime, formatStatsDuration, formatTokens } from "../../stats-utils.js";
+import { formatCost, formatDateTime, formatStatsDuration, formatTokens } from "../../stats-utils.js";
 
 interface InvocationMessagesPanelProps {
   invocation: ExecutionInvocationRecord;
@@ -63,6 +63,73 @@ function renderStatusChip(status: ExecutionInvocationRecord["status"]): JSX.Elem
     default:
       return <span className={`${baseClass} bg-white/10 text-slate-300`}>{status}</span>;
   }
+}
+
+function getNumberMetadata(metadata: Record<string, unknown> | null | undefined, keys: string[]): number | null {
+  if (!metadata) {
+    return null;
+  }
+
+  for (const key of keys) {
+    const value = metadata[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === "string") {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+
+  return null;
+}
+
+function getStringMetadata(metadata: Record<string, unknown> | null | undefined, keys: string[]): string | null {
+  if (!metadata) {
+    return null;
+  }
+
+  for (const key of keys) {
+    const value = metadata[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+function buildMessageMetadata(message: ExecutionInvocationMessageRecord): string[] {
+  const metadata = message.metadata;
+  const tokens = getNumberMetadata(metadata, ["totalTokens", "tokens", "tokenCount"]);
+  const inputTokens = getNumberMetadata(metadata, ["inputTokens", "promptTokens"]);
+  const outputTokens = getNumberMetadata(metadata, ["outputTokens", "completionTokens"]);
+  const costUsd = getNumberMetadata(metadata, ["costUsd", "cost"]);
+  const costCents = getNumberMetadata(metadata, ["costCents"]);
+  const kind = getStringMetadata(metadata, ["kind", "type"]);
+  const toolName = getStringMetadata(metadata, ["toolName", "tool"]);
+  const labels: string[] = [];
+
+  if (kind) {
+    labels.push(kind);
+  }
+  if (toolName) {
+    labels.push(toolName);
+  }
+  if (tokens !== null) {
+    labels.push(`${formatTokens(tokens)} tokens`);
+  } else if (inputTokens !== null || outputTokens !== null) {
+    labels.push(`${formatTokens(inputTokens ?? 0)} in / ${formatTokens(outputTokens ?? 0)} out`);
+  }
+  if (costUsd !== null) {
+    labels.push(formatCost(costUsd));
+  } else if (costCents !== null) {
+    labels.push(formatCost(costCents / 100));
+  }
+
+  return labels;
 }
 
 export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelProps> = ({ invocation }) => {
@@ -119,7 +186,10 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
   };
 
   return (
-    <div className="mt-2 max-h-[560px] w-full min-w-0 max-w-full space-y-3 overflow-y-auto rounded-2xl border border-white/[0.05] bg-slate-950/70 p-3 text-slate-200 sm:p-4">
+    <div
+      id={`invocation-messages-${invocation.id}`}
+      className="mt-2 max-h-[560px] w-full min-w-0 max-w-full space-y-4 overflow-y-auto rounded-2xl border border-white/[0.05] bg-slate-950/70 p-3 text-slate-200 sm:p-4"
+    >
       {invocation.lastErrorMessage ? (
         <details className="mb-4 group">
           <summary className="cursor-pointer list-none rounded px-1 text-sm font-bold uppercase tracking-[0.16em] text-red-400 transition-colors hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500">
@@ -163,6 +233,14 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
             {formatTokens(invocation.totalTokens ?? 0)} total tokens
           </div>
           <div className="rounded-full border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 text-slate-300">
+            {formatTokens(invocation.inputTokens ?? 0)} in / {formatTokens(invocation.outputTokens ?? 0)} out
+          </div>
+          {invocation.cachedInputTokens && invocation.cachedInputTokens > 0 ? (
+            <div className="rounded-full border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 text-slate-300">
+              {formatTokens(invocation.cachedInputTokens)} cached
+            </div>
+          ) : null}
+          <div className="rounded-full border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 text-slate-300">
             {messageCount.toLocaleString()} messages
           </div>
         </div>
@@ -192,6 +270,8 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
           {visibleMessages.map((message, index) => {
             const isSystem = message.role === "system";
             const isExpanded = Boolean(expandedSystemMessages[message.id]);
+            const metadataLabels = buildMessageMetadata(message);
+            const isErrorMessage = /\berror\b|\bfailed\b|\bexception\b/i.test(message.contentMarkdown);
             const contentStyle = isSystem && !isExpanded
               ? ({
                 display: "-webkit-box",
@@ -203,8 +283,12 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
               : undefined;
 
             return (
-              <div key={message.id} className={`${ROLE_CARD_CLASS[message.role]} min-w-0 ${index % 2 === 1 ? "bg-transparent" : "bg-black/[0.015] dark:bg-white/[0.015]"} ${message.contentMarkdown?.includes("Error") ? "border-l-2 border-red-400 text-red-300" : ""}`}>
-                <div className="flex items-center justify-between gap-3">
+              <article
+                key={message.id}
+                aria-label={`${message.role} message ${index + 1}`}
+                className={`${ROLE_CARD_CLASS[message.role]} min-w-0 ${index % 2 === 1 ? "bg-transparent" : "bg-black/[0.015] dark:bg-white/[0.015]"} ${isErrorMessage ? "border-l-2 border-red-400 text-red-300" : ""}`}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-2">
                     <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full ${ROLE_ICON_CLASS[message.role]}`}>
                       {message.role === "system" ? <Settings className="h-3.5 w-3.5" /> : null}
@@ -212,17 +296,26 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
                       {message.role === "assistant" ? <Bot className="h-3.5 w-3.5" /> : null}
                       {message.role === "tool" ? <Code2 className="h-3.5 w-3.5" /> : null}
                     </span>
-                    <div className="min-w-0 truncate text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                      {message.role === "assistant" ? (invocation.model || "ASSISTANT") : message.role.toUpperCase()}
+                    <div className="min-w-0">
+                      <div className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                        {message.role === "assistant" ? (invocation.model || "ASSISTANT") : message.role.toUpperCase()}
+                      </div>
+                      <div className="mt-1 text-[10px] text-slate-500">{formatDateTime(message.createdAt)}</div>
                     </div>
                   </div>
 
-                  <div className="shrink-0 text-[10px] text-slate-500">
-                    {formatDateTime(message.createdAt)}
-                  </div>
+                  {metadataLabels.length > 0 ? (
+                    <div className="flex min-w-0 flex-wrap justify-end gap-1.5">
+                      {metadataLabels.map((label) => (
+                        <span key={label} className="max-w-full rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-0.5 text-[10px] text-slate-400">
+                          <span className="block truncate">{label}</span>
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
 
-                <pre className="mt-2 max-w-full whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-slate-300 [overflow-wrap:anywhere]" style={contentStyle}>
+                <pre className={`mt-3 max-w-full whitespace-pre-wrap break-words font-mono text-xs leading-relaxed [overflow-wrap:anywhere] ${isErrorMessage ? "text-red-200" : "text-slate-300"}`} style={contentStyle}>
                   {message.contentMarkdown}
                 </pre>
 
@@ -236,7 +329,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
                     {isExpanded ? "Show less" : "Show more"}
                   </button>
                 ) : null}
-              </div>
+              </article>
             );
           })}
 

@@ -314,46 +314,6 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
       <section className={`${PANEL_CLASS} p-5 md:p-6`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <StudioSectionHeader
-            eyebrow="Failure Analysis"
-            title="Failure Analysis"
-            description="Error classes are grouped so operators can separate transient issues from provider, model, and cancellation problems at a glance."
-          />
-          {totalErrors > 0 ? (
-            <div className="flex h-8 items-center justify-center rounded-full border-2 border-amber-500/30 bg-amber-500/10 px-3 text-[11px] font-bold text-amber-600 dark:text-amber-400">
-              {totalErrors} total failures
-            </div>
-          ) : null}
-        </div>
-        <div className="mt-6">
-        {errorEntries.length === 0 ? (
-          <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center py-12 text-center`}>
-            <ShieldCheck className="mb-3 h-8 w-8 text-emerald-500/50" />
-            <div className="text-sm font-bold text-slate-900 dark:text-white">No Errors Recorded</div>
-            <div className="mt-1 text-sm text-slate-500">All invocations completed successfully.</div>
-          </div>
-        ) : (
-          <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
-            {errorEntries.map(([category, count]) => {
-              const label = category === "rateLimit" ? "Rate Limit" : category === "apiError" ? "API Error" : category === "modelError" ? "Model Error" : category.charAt(0).toUpperCase() + category.slice(1);
-              const tone = category === "timeout" ? "bg-amber-500/70" : category === "rateLimit" ? "bg-orange-500/65" : category === "cancelled" ? "bg-slate-400" : "bg-rose-500/60";
-              return (
-                <div key={category} className={`${SUBPANEL_CLASS} flex items-center justify-between p-4 hover:bg-[color:var(--fill-muted-hover)] transition-colors`}>
-                  <div className="flex items-center gap-3">
-                    <div className={`h-2.5 w-2.5 rounded-full ${tone}`} />
-                    <div className="text-sm font-bold text-slate-900 dark:text-white">{label}</div>
-                  </div>
-                  <div className="text-lg font-black tracking-tight text-slate-900 dark:text-white">{count}</div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-        </div>
-      </section>
-
-      <section className={`${PANEL_CLASS} p-5 md:p-6`}>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <StudioSectionHeader
             eyebrow="External APIs"
             title="External API Activity"
             description="Git, Jules, Jira, and other integrations are isolated from the main invocation table so external traffic stays easy to audit."
@@ -377,6 +337,46 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
               circleClassName="bg-slate-500/10 text-slate-500 dark:text-slate-400"
             />
           ))}
+        </div>
+      </section>
+
+      <section className={`${PANEL_CLASS} p-5 md:p-6`}>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <StudioSectionHeader
+            eyebrow="Error Categories"
+            title="Error Categories"
+            description="Error classes are grouped so operators can separate transient issues from provider, model, and cancellation problems at a glance."
+          />
+          {totalErrors > 0 ? (
+            <div className="flex h-8 items-center justify-center rounded-full border-2 border-amber-500/30 bg-amber-500/10 px-3 text-[11px] font-bold text-amber-600 dark:text-amber-400">
+              {totalErrors} total failures
+            </div>
+          ) : null}
+        </div>
+        <div className="mt-6">
+          {errorEntries.length === 0 ? (
+            <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center py-12 text-center`}>
+              <ShieldCheck className="mb-3 h-8 w-8 text-emerald-500/50" />
+              <div className="text-sm font-bold text-slate-900 dark:text-white">No Errors Recorded</div>
+              <div className="mt-1 text-sm text-slate-500">All invocations completed successfully.</div>
+            </div>
+          ) : (
+            <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+              {errorEntries.map(([category, count]) => {
+                const label = category === "rateLimit" ? "Rate Limit" : category === "apiError" ? "API Error" : category === "modelError" ? "Model Error" : category.charAt(0).toUpperCase() + category.slice(1);
+                const tone = category === "timeout" ? "bg-amber-500/70" : category === "rateLimit" ? "bg-orange-500/65" : category === "cancelled" ? "bg-slate-400" : "bg-rose-500/60";
+                return (
+                  <div key={category} className={`${SUBPANEL_CLASS} flex items-center justify-between p-4 transition-colors hover:bg-[color:var(--fill-muted-hover)]`}>
+                    <div className="flex items-center gap-3">
+                      <div className={`h-2.5 w-2.5 rounded-full ${tone}`} />
+                      <div className="text-sm font-bold text-slate-900 dark:text-white">{label}</div>
+                    </div>
+                    <div className="text-lg font-black tracking-tight text-slate-900 dark:text-white">{count}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </section>
 
@@ -425,19 +425,22 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             })}
           </div>
 
-          <SystemFilterBar
-            filters={filters}
-            onFiltersChange={setFilters}
-            search={search}
-            onSearchChange={setSearch}
-            availablePurposes={availablePurposes}
-            availableProviders={availableProviders}
-            totalCount={totalCount}
-            filteredCount={tabbedInvocations.length}
-            page={page}
-            onPageChange={setPage}
-            hasMore={hasMore}
-          />
+          <div className="space-y-3">
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Filters</div>
+            <SystemFilterBar
+              filters={filters}
+              onFiltersChange={setFilters}
+              search={search}
+              onSearchChange={setSearch}
+              availablePurposes={availablePurposes}
+              availableProviders={availableProviders}
+              totalCount={totalCount}
+              filteredCount={tabbedInvocations.length}
+              page={page}
+              onPageChange={setPage}
+              hasMore={hasMore}
+            />
+          </div>
 
           {error ? (
             <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">
@@ -445,15 +448,18 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             </div>
           ) : null}
 
-          <InvocationsTable
-            invocations={tabbedInvocations}
-            sort={sort}
-            onSortChange={setSort}
-            expandedId={expandedId}
-            onRowExpand={(id) => setExpandedId((prev) => (prev === id ? null : id))}
-            loading={loading}
-            error={error}
-          />
+          <div className="space-y-3">
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Invocation Ledger</div>
+            <InvocationsTable
+              invocations={tabbedInvocations}
+              sort={sort}
+              onSortChange={setSort}
+              expandedId={expandedId}
+              onRowExpand={(id) => setExpandedId((prev) => (prev === id ? null : id))}
+              loading={loading}
+              error={error}
+            />
+          </div>
         </div>
       </section>
     </div>

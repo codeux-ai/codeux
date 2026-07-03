@@ -82,11 +82,12 @@ Ledgers mode contains tabbed operational records.
 System mode is the invocation workbench.
 
 - `useSystemViewData(projectId)` owns server-projected pagination, filters, sort state, summaries, and the legacy array fallback used by older mocks.
-- Summary panels cover invocation totals, status counts, purpose and provider mix, latency, duration, token and cost totals, and error categories where present.
+- Summary panels are organized as sprint state, invocation health, external API activity, and error categories so operational status is separated from ledger triage.
 - The record view control is a wrapped button group for `All`, `Errors`, and `System Msgs`.
-- `SystemFilterBar` groups search, status, purpose, provider, error-category, clear, count, and pagination controls into responsive panels.
-- Invocation tables preserve table headers with `scope="col"` while allowing mobile row content to become dense, labeled, and non-clipping.
-- Expand controls must name the target invocation and remain keyboard-accessible.
+- `SystemFilterBar` groups search, status, purpose, provider, error-category, clear, active-filter count, result count, and pagination controls into responsive wrapping panels.
+- Invocation tables preserve table headers with `scope="col"` and per-cell header relationships while allowing mobile row content to become dense, labeled, and non-clipping.
+- Expand controls must name the target invocation, point at the transcript panel, and remain keyboard-accessible.
+- Invocation transcript detail should surface role, created time, invocation token totals, message metadata when present, errors, and long content with safe wrapping.
 
 ## Stats Primitives
 
