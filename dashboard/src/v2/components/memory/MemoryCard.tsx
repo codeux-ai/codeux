@@ -2,7 +2,7 @@ import { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
 import { activeMemoryIdSignal, hoveredMemoryIdSignal, lobotomizeModeSignal, memoryMutationsSignal, selectedMemoryIdsSignal, toggleSelectedMemoryId } from "./memoryState.js";
 import { useComputed } from "@preact/signals";
-import { Check, X } from "lucide-preact";
+import { ArrowUpRight, Check, X } from "lucide-preact";
 import { useInteractionTokens } from "../../lib/motion/index.js";
 import type { MemoryScope } from "../../memory-types.js";
 
@@ -38,10 +38,17 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
     const isSelected = useComputed(() => activeMemoryIdSignal.value === id);
     const isBatchSelected = useComputed(() => selectedMemoryIdsSignal.value.includes(id));
     const interactionTokens = useInteractionTokens();
+    const strengthPercent = Math.round(strength * 100);
+    const scopeLabel = scope || "unknown";
 
     const handleDelete = (e: Event) => {
         e.stopPropagation();
         memoryMutationsSignal.value.removeMemory(id);
+    };
+
+    const handleOpen = (e: Event) => {
+        e.stopPropagation();
+        onClick();
     };
 
     return (
@@ -49,7 +56,7 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
             role="option"
             tabIndex={0}
             aria-selected={isSelected.value}
-            aria-label={`${cat.label} memory, scope ${scope || 'unknown'}, strength ${Math.round(strength * 100)}%. ${content}`}
+            aria-label={`${cat.label} memory, scope ${scopeLabel}, strength ${strengthPercent}%. ${content}`}
             onClick={onClick}
             onMouseEnter={() => { hoveredMemoryIdSignal.value = id; }}
             onMouseLeave={() => { hoveredMemoryIdSignal.value = null; }}
@@ -65,18 +72,44 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
                 transitionTimingFunction: interactionTokens.enterExit.ease,
             }}
             className={`
-                group relative cursor-pointer p-4 rounded-[1.25rem] border text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
+                group relative w-full cursor-pointer overflow-hidden rounded-2xl border p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-reduce:transition-none dark:focus-visible:ring-offset-void-900
                 ${isSelected.value
-                    ? "bg-signal-500/5 dark:bg-signal-500/10 border-signal-500 ring-1 ring-signal-500 shadow-[0_4px_24px_rgba(0,224,160,0.15)] z-10"
+                    ? "z-10 border-signal-500/55 bg-white/86 shadow-[inset_3px_0_0_rgba(0,224,160,0.86),0_10px_30px_rgba(0,224,160,0.12)] dark:bg-void-800/82 dark:shadow-[inset_3px_0_0_rgba(0,224,160,0.9),0_12px_28px_rgba(0,0,0,0.28)]"
                     : isBatchSelected.value
-                        ? "bg-signal-500/[0.06] dark:bg-signal-500/[0.08] border-signal-500/40 ring-1 ring-signal-500/30 shadow-[0_4px_20px_rgba(0,224,160,0.08)]"
-                        : "bg-white/60 dark:bg-void-800/50 border-black/[0.06] dark:border-white/[0.06] hover:bg-white dark:hover:bg-void-800 hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)] dark:hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] scale-100"
+                        ? "border-signal-500/32 bg-signal-500/[0.055] shadow-[inset_3px_0_0_rgba(0,224,160,0.45)] dark:bg-signal-500/[0.075]"
+                        : "border-black/[0.06] bg-white/68 shadow-[0_2px_14px_rgba(15,23,42,0.035)] hover:border-black/[0.1] hover:bg-white/88 hover:shadow-[0_8px_24px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-void-800/52 dark:hover:border-white/[0.11] dark:hover:bg-void-800/78 dark:hover:shadow-[0_10px_28px_rgba(0,0,0,0.24)]"
                 }
-                ${lobotomizeModeSignal.value ? "ring-1 ring-status-red/50 hover:bg-status-red/10 hover:border-status-red hover:ring-status-red hover:shadow-[0_4px_24px_rgba(227,0,15,0.15)]" : ""}
+                ${lobotomizeModeSignal.value ? "border-status-red/36 bg-status-red/[0.045] hover:border-status-red/70 hover:bg-status-red/[0.075] dark:bg-status-red/[0.055]" : ""}
             `}
         >
-            <div className="mb-2 flex items-center justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-2">
+            <div className="flex min-w-0 flex-col gap-2.5">
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-2">
+                            <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: cat.hex, boxShadow: `0 0 8px ${cat.hex}` }} />
+                            <span className="truncate font-mono text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: cat.hex }}>
+                                {cat.label}
+                            </span>
+                        </div>
+                        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-medium text-slate-400 dark:text-slate-500">
+                            <span className="max-w-full truncate rounded-full border border-black/[0.05] bg-black/[0.025] px-2 py-0.5 font-mono uppercase tracking-[0.12em] dark:border-white/[0.06] dark:bg-white/[0.035]">
+                                {scopeLabel}
+                            </span>
+                            <span className="font-mono">{strengthPercent}% strength</span>
+                        </div>
+                    </div>
+                    {isSelected.value && (
+                        <span className="shrink-0 rounded-full border border-signal-500/24 bg-signal-500/[0.08] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em] text-signal-600 dark:text-signal-400">
+                            Open
+                        </span>
+                    )}
+                </div>
+
+                <p className="min-w-0 break-words text-[13px] font-medium leading-relaxed text-slate-700 line-clamp-3 dark:text-slate-300">
+                    {content}
+                </p>
+
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-t border-black/[0.05] pt-2 dark:border-white/[0.06]">
                     <button
                         type="button"
                         aria-pressed={isBatchSelected.value}
@@ -85,38 +118,38 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
                             e.stopPropagation();
                             toggleSelectedMemoryId(id);
                         }}
-                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
+                        className={`inline-flex min-w-0 items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-reduce:transition-none dark:focus-visible:ring-offset-void-900
                             ${isBatchSelected.value
-                                ? "border-signal-500 bg-signal-500 text-white shadow-[0_4px_14px_rgba(0,224,160,0.25)]"
-                                : "border-black/[0.08] bg-white/80 text-slate-500 hover:border-signal-500/40 hover:text-signal-500 dark:border-white/[0.08] dark:bg-void-800/80 dark:text-slate-300"
+                                ? "border-signal-500 bg-signal-500 text-void-900 shadow-[0_4px_14px_rgba(0,224,160,0.18)]"
+                                : "border-black/[0.06] bg-black/[0.025] text-slate-500 hover:border-signal-500/36 hover:bg-signal-500/[0.06] hover:text-signal-600 dark:border-white/[0.07] dark:bg-white/[0.035] dark:text-slate-300 dark:hover:text-signal-400"
                             }`}
                     >
-                        <Check size={13} strokeWidth={3} aria-hidden="true" className={isBatchSelected.value ? "opacity-100" : "opacity-0"} />
+                        <Check size={12} strokeWidth={3} aria-hidden="true" className={isBatchSelected.value ? "opacity-100" : "opacity-45"} />
+                        <span className="truncate">{isBatchSelected.value ? "Selected" : "Select"}</span>
                     </button>
-                    <div className="flex min-w-0 items-center gap-2">
-                        <div className="w-2 h-2 rounded-full shrink-0" style={{ background: cat.hex, boxShadow: `0 0 8px ${cat.hex}` }} />
-                        <span className="truncate text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: cat.hex }}>
-                            {cat.label}
-                        </span>
+
+                    <div className="ml-auto flex min-w-0 items-center gap-1.5">
+                        <button
+                            type="button"
+                            aria-label={`Open ${cat.label} memory details`}
+                            onClick={handleOpen}
+                            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-black/[0.06] bg-black/[0.025] text-slate-500 transition-colors duration-150 hover:border-signal-500/36 hover:bg-signal-500/[0.06] hover:text-signal-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-reduce:transition-none dark:border-white/[0.07] dark:bg-white/[0.035] dark:text-slate-300 dark:hover:text-signal-400 dark:focus-visible:ring-offset-void-900"
+                        >
+                            <ArrowUpRight size={13} strokeWidth={2.25} aria-hidden="true" />
+                        </button>
+                        {lobotomizeModeSignal.value && (
+                            <button
+                                type="button"
+                                aria-label={`Delete ${cat.label} memory: ${content.substring(0, 30)}...`}
+                                onClick={handleDelete}
+                                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-status-red/28 bg-status-red/[0.08] text-status-red transition-colors duration-150 hover:border-status-red hover:bg-status-red hover:text-white active:bg-status-red/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 motion-reduce:transition-none dark:focus-visible:ring-offset-void-900"
+                            >
+                                <X size={13} strokeWidth={2.5} aria-hidden="true" />
+                            </button>
+                        )}
                     </div>
                 </div>
-                <span className="text-[10px] font-mono text-slate-400">{Math.round(strength * 100)}%</span>
             </div>
-            {lobotomizeModeSignal.value && (
-                <button
-                    type="button"
-                    aria-label={`Delete ${cat.label} memory: ${content.substring(0, 30)}...`}
-                    onClick={handleDelete}
-                    className={`absolute top-2 right-2 z-10 p-1.5 rounded-full transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
-                                bg-white/80 dark:bg-void-800/80 backdrop-blur border border-status-red/20 text-status-red shadow-sm hover:bg-status-red hover:text-white hover:border-status-red active:bg-status-red/90 active:scale-95
-                                ${isSelected.value ? "" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"}`}
-                >
-                    <X size={14} strokeWidth={2.5} />
-                </button>
-            )}
-            <p className="text-[13px] text-slate-700 dark:text-slate-300 font-medium leading-relaxed line-clamp-3">
-                {content}
-            </p>
             <span className="sr-only">Press Enter to open details.</span>
         </div>
     );
@@ -124,5 +157,6 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
     return prevProps.id === nextProps.id &&
            prevProps.content === nextProps.content &&
            prevProps.category === nextProps.category &&
-           prevProps.strength === nextProps.strength
+           prevProps.strength === nextProps.strength &&
+           prevProps.scope === nextProps.scope
 });
