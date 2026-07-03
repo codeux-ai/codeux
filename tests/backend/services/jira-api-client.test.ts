@@ -25,6 +25,7 @@ describe("jira-api-client", () => {
 
   it("keeps text assignee shortcuts for current user and unassigned issues", () => {
     expect(buildJiraSearchJql({ assigneeText: "me" })).toBe("statusCategory != Done AND assignee = currentUser() ORDER BY updated DESC");
+    expect(buildJiraSearchJql({ assigneeText: "currentUser()" })).toBe("statusCategory != Done AND assignee = currentUser() ORDER BY updated DESC");
     expect(buildJiraSearchJql({ assigneeText: "unassigned" })).toBe("statusCategory != Done AND assignee is EMPTY ORDER BY updated DESC");
   });
 
@@ -34,7 +35,7 @@ describe("jira-api-client", () => {
       expect(init?.method).toBe("POST");
       expect(JSON.parse(String(init?.body))).toEqual(expect.objectContaining({
         jql: "project = OPS AND statusCategory != Done ORDER BY updated DESC",
-        maxResults: 25,
+        maxResults: 100,
         fields: ["summary", "status", "assignee", "labels", "project", "description", "issuetype", "priority", "updated", "created", "reporter", "fixVersions", "comment"],
       }));
       return new Response(JSON.stringify({
@@ -67,7 +68,7 @@ describe("jira-api-client", () => {
 
     await expect(searchIssues("https://acme.atlassian.net/", "dev@example.com", "token", {
       projectKey: "OPS",
-      limit: 25,
+      limit: 250,
     })).resolves.toEqual([
       expect.objectContaining({
         key: "OPS-42",

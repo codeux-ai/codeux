@@ -58,23 +58,29 @@ export type JiraIssueSearchSortField = "updated" | "created" | "priority" | "sta
 export type JiraIssueSearchSortDirection = "asc" | "desc";
 
 export interface RepositoryIssueSearchInput {
-  provider?: Exclude<LinkedIssueProvider, "jira">;
+  provider?: LinkedIssueProvider;
   repository?: string;
   hostDomain?: string;
+  projectKey?: string;
   search?: string;
   state?: RepositoryIssueSearchState;
+  status?: JiraIssueSearchStatus;
   labels?: string[];
   assignee?: string;
+  assigneeText?: string;
   author?: string;
   reporter?: string;
   milestone?: string;
   issueText?: string;
+  issueKeys?: string[];
+  issueNumbers?: number[];
+  issueRefs?: string[];
   createdAfter?: string;
   createdBefore?: string;
   updatedAfter?: string;
   updatedBefore?: string;
-  sortField?: RepositoryIssueSearchSortField;
-  sortDirection?: RepositoryIssueSearchSortDirection;
+  sortField?: RepositoryIssueSearchSortField | JiraIssueSearchSortField;
+  sortDirection?: RepositoryIssueSearchSortDirection | JiraIssueSearchSortDirection;
   limit?: number;
 }
 
@@ -88,8 +94,10 @@ export interface RepositoryIssueSearchResult extends SprintLinkedIssueInput {
   issueType: string | null;
   issuePriority: string | null;
   issueCommentCount: number | null;
-  sourceProvider: Exclude<LinkedIssueProvider, "jira">;
+  sourceProvider: LinkedIssueProvider;
 }
+
+export type RemoteIssueSummary = RepositoryIssueSearchResult;
 
 export interface SprintLinkedIssueRecord {
   id: string;

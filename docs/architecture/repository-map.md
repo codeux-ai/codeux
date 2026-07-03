@@ -63,6 +63,9 @@ This map explains where major responsibilities live.
 - `services/`
   - `task-service.ts`
   - `git-status-service.ts`
+  - `sprint-issue-service.ts`
+  - `jira-api-client.ts`
+  - Linked issue search and prompt-context loading for GitHub, GitLab, and Jira using saved integration settings.
   - `cli-workflow-service.ts`
   - `cli-process-runner.ts`
   - `cli-docker-utils.ts`
