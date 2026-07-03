@@ -451,6 +451,256 @@ describe("SprintIssueService", () => {
     }));
   });
 
+  it("searches Jira issues through the generic issue service and clamps limits", async () => {
+    const jiraApiClient = {
+      searchIssues: vi.fn(async () => [{
+        key: "OPS-42",
+        title: "Import Jira backlog",
+        url: "https://acme.atlassian.net/browse/OPS-42",
+        state: "In Progress",
+        labels: ["integration"],
+        assignees: ["Pierre"],
+        projectKey: "OPS",
+        issueType: "Story",
+        priority: "High",
+        bodyPreview: "Build a reusable issue lookup.",
+        createdAt: "2026-05-19T10:00:00.000+0000",
+        updatedAt: "2026-05-20T10:00:00.000+0000",
+        issueAuthor: "Alice",
+        issueReporter: "Alice",
+        issueMilestone: "v1",
+        issueCommentCount: 4,
+        sourceProvider: "jira",
+      }]),
+    };
+
+    const service = new SprintIssueService({
+      projectManagementRepository: {
+        getProject: () => project,
+      } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        jira: {
+          ...DEFAULT_DASHBOARD_SETTINGS.jira,
+          host: "https://acme.atlassian.net/",
+          email: "ops@acme.test",
+          apiToken: "jira-token",
+          defaultProject: "OPS",
+        },
+      }),
+      jiraApiClient: jiraApiClient as any,
+    });
+
+    const issues = await service.searchIssues(project.id, {
+      provider: "jira",
+      search: "OPS-42",
+      assigneeText: "me",
+      labels: ["backend"],
+      limit: 500,
+    });
+
+    expect(jiraApiClient.searchIssues).toHaveBeenCalledWith(
+      "https://acme.atlassian.net/",
+      "ops@acme.test",
+      "jira-token",
+      expect.objectContaining({
+        projectKey: "OPS",
+        search: "OPS-42",
+        assigneeText: "me",
+        labels: ["backend"],
+        limit: 100,
+      }),
+      100,
+    );
+    expect(issues).toEqual([
+      expect.objectContaining({
+        provider: "jira",
+        sourceProvider: "jira",
+        hostDomain: "acme.atlassian.net",
+        repository: "OPS",
+        projectKey: "OPS",
+        issueNumber: 42,
+        issueKey: "OPS-42",
+        issuePriority: "High",
+        bodyPreview: "Build a reusable issue lookup.",
+        updatedAt: "2026-05-20T10:00:00.000+0000",
+      }),
+    ]);
+  });
+
+  it("resolves explicit Jira keys into full prompt contexts with deduplication", async () => {
+    const jiraApiClient = {
+      getIssue: vi.fn(async () => ({
+        key: "OPS-123",
+        title: "Ship Jira import",
+        url: "https://acme.atlassian.net/browse/OPS-123",
+        state: "In Progress",
+        labels: ["integration"],
+        assignees: ["Pierre"],
+        projectKey: "OPS",
+        descriptionMarkdown: "Full Jira description",
+        commentsMarkdown: "Jira comment",
+        createdAt: "2026-05-19T10:00:00.000+0000",
+        updatedAt: "2026-05-20T10:00:00.000+0000",
+        issueAuthor: "Alice",
+      })),
+    };
+
+    const service = new SprintIssueService({
+      projectManagementRepository: {
+        getProject: () => project,
+      } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        jira: {
+          ...DEFAULT_DASHBOARD_SETTINGS.jira,
+          host: "https://acme.atlassian.net",
+          email: "ops@acme.test",
+          apiToken: "jira-token",
+        },
+      }),
+      jiraApiClient: jiraApiClient as any,
+    });
+
+    const contexts = await service.getIssuePromptContextsForReferences(project.id, {
+      provider: "jira",
+      issueRefs: ["OPS-123", "ops-123", "not-an-issue"],
+    });
+
+    expect(jiraApiClient.getIssue).toHaveBeenCalledTimes(1);
+    expect(jiraApiClient.getIssue).toHaveBeenCalledWith(
+      "https://acme.atlassian.net",
+      "ops@acme.test",
+      "jira-token",
+      "OPS-123",
+    );
+    expect(contexts).toEqual([
+      expect.objectContaining({
+        provider: "jira",
+        repository: "OPS",
+        projectKey: "OPS",
+        issueNumber: 123,
+        issueKey: "OPS-123",
+        issueBodyMarkdown: "Full Jira description",
+        issueConversationMarkdown: "Jira comment",
+        issueAuthor: "Alice",
+        issueUpdatedAt: "2026-05-20T10:00:00.000+0000",
+      }),
+    ]);
+  });
+
+  it("resolves explicit GitHub and GitLab IDs into full prompt contexts", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith("/repos/acme/widgets/issues/42")) {
+        return new Response(JSON.stringify({
+          number: 42,
+          title: "Improve import UX",
+          html_url: "https://github.com/acme/widgets/issues/42",
+          state: "open",
+          body: "GitHub body",
+          user: { login: "alice" },
+          labels: [{ name: "ux" }],
+          assignees: [{ login: "pierre" }],
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (url.endsWith("/repos/acme/widgets/issues/42/comments?per_page=100")) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (url.endsWith("/api/v4/projects/acme%2Fwidgets/issues/7")) {
+        return new Response(JSON.stringify({
+          iid: 7,
+          title: "Fix importer",
+          web_url: "https://gitlab.example.com/acme/widgets/-/issues/7",
+          state: "opened",
+          description: "GitLab body",
+          author: { username: "carol" },
+          labels: ["backend"],
+          assignees: [{ username: "alice" }],
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (url.endsWith("/api/v4/projects/acme%2Fwidgets/issues/7/notes?per_page=100&sort=asc&order_by=created_at")) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new SprintIssueService({
+      projectManagementRepository: {
+        getProject: () => project,
+      } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        git: {
+          ...DEFAULT_DASHBOARD_SETTINGS.git,
+          githubToken: "ghp_test",
+          gitlabToken: "glpat_test",
+        },
+      }),
+    });
+
+    const githubContexts = await service.getIssuePromptContextsForReferences(project.id, {
+      provider: "github",
+      issueNumbers: [42],
+      issueRefs: ["#42", "bad"],
+    });
+    const gitlabContexts = await service.getIssuePromptContextsForReferences(project.id, {
+      provider: "gitlab",
+      repository: "acme/widgets",
+      hostDomain: "gitlab.example.com",
+      issueRefs: ["!7", "7", "OPS-7"],
+    });
+
+    expect(githubContexts).toEqual([
+      expect.objectContaining({
+        provider: "github",
+        repository: "acme/widgets",
+        issueNumber: 42,
+        issueBodyMarkdown: "GitHub body",
+      }),
+    ]);
+    expect(gitlabContexts).toEqual([
+      expect.objectContaining({
+        provider: "gitlab",
+        hostDomain: "gitlab.example.com",
+        repository: "acme/widgets",
+        issueNumber: 7,
+        issueBodyMarkdown: "GitLab body",
+      }),
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("filters invalid explicit issue references without remote calls", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const jiraApiClient = {
+      getIssue: vi.fn(),
+    };
+
+    const service = new SprintIssueService({
+      projectManagementRepository: {
+        getProject: () => project,
+      } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        jira: {
+          ...DEFAULT_DASHBOARD_SETTINGS.jira,
+          host: "https://acme.atlassian.net",
+          apiToken: "jira-token",
+        },
+      }),
+      jiraApiClient: jiraApiClient as any,
+    });
+
+    await expect(service.getIssuePromptContextsForReferences(project.id, {
+      provider: "jira",
+      issueRefs: ["not-an-issue", "#not-a-number"],
+    })).resolves.toEqual([]);
+    expect(jiraApiClient.getIssue).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("records an error instead of using local gh when auto-closing GitHub issues without a token", async () => {
     const linkedIssue: SprintLinkedIssueRecord = {
       id: "issue-1",

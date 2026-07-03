@@ -70,12 +70,13 @@ Use this page as the main entrypoint.
 ### Path 3: MCP integrator (tool contracts and runtime expectations)
 1. [Quickstart](./getting-started/quickstart.md)
 2. [MCP Tools and Contracts](./mcp/tools-and-contracts.md)
-3. [MCP Runtime and Dispatch](./mcp/runtime-and-dispatch.md)
-4. [Operations Runbook](./operations/runbook.md)
-5. [Security Hardening](./operations/security-hardening.md)
-6. [Logging and Correlation IDs](./operations/logging-and-correlation.md)
-7. [CLI Commands Reference](./reference/cli-commands.md) - `codeux` management syntax, aliases, prompting, JSON payloads, and approvals
-8. [CLI Management Surface](./operations/management-cli.md)
+3. [MCP Issue Importer Contract](./mcp/tools-and-contracts.md#manage_sprints-import_issues)
+4. [MCP Runtime and Dispatch](./mcp/runtime-and-dispatch.md)
+5. [Operations Runbook](./operations/runbook.md)
+6. [Security Hardening](./operations/security-hardening.md)
+7. [Logging and Correlation IDs](./operations/logging-and-correlation.md)
+8. [CLI Commands Reference](./reference/cli-commands.md) - `codeux` management syntax, aliases, prompting, JSON payloads, and approvals
+9. [CLI Management Surface](./operations/management-cli.md)
 
 ## Full Table of Contents
 

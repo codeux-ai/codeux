@@ -6,6 +6,7 @@ vi.mock("../../../src/services/project-git-clone-service.js", () => ({
 
 import { ManagementToolHandler } from "../../../src/mcp/management-tool-handler.js";
 import { prepareGitProjectCreateInput } from "../../../src/services/project-git-clone-service.js";
+import { TOOL_DEFINITIONS } from "../../../src/contracts/mcp-tool-definitions.js";
 import type { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import type { SprintPreviewService } from "../../../src/services/sprint-preview-service.js";
 import type { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
@@ -18,6 +19,12 @@ import type { MemoryPromotionService } from "../../../src/services/memory-promot
 import type { EmbeddingModelManager } from "../../../src/services/embedding-model-manager.js";
 import type { PlanningAgentService } from "../../../src/services/planning-agent-service.js";
 import type { SprintIssueService } from "../../../src/services/sprint-issue-service.js";
+
+interface JsonSchemaProperty {
+  type?: unknown;
+  enum?: readonly unknown[];
+  items?: JsonSchemaProperty;
+}
 
 describe("ManagementToolHandler", () => {
   let handler: ManagementToolHandler;
@@ -171,6 +178,43 @@ describe("ManagementToolHandler", () => {
 
     expect(deps.schedulerService.listProjectSchedule).toHaveBeenCalledWith("p1", "from", "to");
     expect(parsed.result).toEqual({ entries: [], occurrences: [], from: "from", to: "to" });
+  });
+
+  it("exposes the expanded import_issues MCP schema on manage_sprints", () => {
+    const tool = TOOL_DEFINITIONS.find((definition) => definition.name === "manage_sprints");
+    expect(tool).toBeDefined();
+
+    const schema = tool?.inputSchema as { properties: Record<string, JsonSchemaProperty> } | undefined;
+    const properties = schema?.properties ?? {};
+
+    expect(properties.action?.enum).toContain("import_issues");
+    expect(properties.provider?.enum).toEqual(["github", "gitlab", "jira"]);
+    expect(properties.state?.enum).toEqual(["open", "closed", "all"]);
+    expect(properties.labels).toMatchObject({ type: "array", items: { type: "string" } });
+    expect(properties.issueKeys).toMatchObject({ type: "array", items: { type: "string" } });
+    expect(properties.issueNumbers).toMatchObject({ type: "array", items: { type: "number" } });
+    expect(properties.issueRefs).toMatchObject({ type: "array", items: { type: "string" } });
+
+    for (const field of [
+      "repository",
+      "hostDomain",
+      "projectKey",
+      "status",
+      "assignee",
+      "assigneeText",
+      "includeConversation",
+      "attachToSprint",
+      "planAfterImport",
+      "autoStart",
+      "search",
+      "limit",
+      "sprintId",
+      "planningAgentPresetId",
+      "replan",
+      "overrides",
+    ]) {
+      expect(properties[field], field).toBeDefined();
+    }
   });
 
   it("should execute handleManageProjects delete action if approval is provided", async () => {
