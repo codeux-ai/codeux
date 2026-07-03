@@ -2,7 +2,7 @@ import { DatabaseAdapter as Database } from "../db/database-adapter.js";
 import { AppDbStorage } from "../app-db-storage.js";
 import { queryExecutionSprintRuns } from "./execution-sprint-runs-query.js";
 import { queryExecutionTaskDispatches } from "./execution-task-dispatches-query.js";
-import { queryExecutionInvocations } from "./execution-invocations-query.js";
+import { queryProjectExecutionSnapshotInvocations } from "./execution-invocations-query.js";
 import { queryExecutionRuntimeEvents } from "./execution-runtime-events-query.js";
 import { buildHumanInterventionSummaryBySprintRun, listActiveAttentionRowsForProject } from "./execution-human-intervention-query.js";
 import { withWallTime } from "./execution-usage-query.js";
@@ -10,7 +10,6 @@ import { withWallTime } from "./execution-usage-query.js";
 import { ExecutionDashboardSnapshot, ExecutionUsageTotals } from "../../contracts/app-types.js";
 import { ExecutionInvocationRecord } from "../../contracts/invocation-types.js";
 import {
-  mapProviderInvocationUsageRow,
   mapExecutionSprintRunSummaryRow,
   mapExecutionTaskDispatchSummaryRow,
   mapExecutionRuntimeEventSummaryRow,
@@ -60,13 +59,11 @@ export function queryProjectExecutionSnapshot(
   const taskDispatches = queryExecutionTaskDispatches(db, storage, projectId, expandedSprintRunIds);
   const runtimeEvents = queryExecutionRuntimeEvents(db, storage, projectId, expandedSprintRunIds);
   const recentInvocations = mergeInvocations([
-    queryExecutionInvocations(db, { projectId, limit: 24 }),
-    expandedSprintRunIds.length > 0
-      ? queryExecutionInvocations(db, { projectId, sprintRunIds: expandedSprintRunIds, limit: null })
-      : [],
-    options.selectedSprintId
-      ? queryExecutionInvocations(db, { projectId, sprintId: options.selectedSprintId, limit: null })
-      : [],
+    queryProjectExecutionSnapshotInvocations(db, {
+      projectId,
+      sprintRunIds: expandedSprintRunIds,
+      selectedSprintId: options.selectedSprintId,
+    }),
   ]);
 
   const activeAttentionItems = listActiveAttentionRowsForProject(db, projectId);
