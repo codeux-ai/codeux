@@ -43,13 +43,17 @@ describe("TelemetryLedgerTabs Accessibility", () => {
     expect(tabs.length).toBe(3);
     expect(tabs[0]).toHaveTextContent("Task Telemetry");
     expect(tabs[0]).toHaveTextContent("1");
+    expect(tabs[0]).toHaveAttribute("aria-controls", "tabpanel-tasks");
     expect(tabs[1]).toHaveTextContent("Sprint Telemetry");
     expect(tabs[1]).toHaveTextContent("2");
+    expect(tabs[1]).toHaveAttribute("aria-controls", "tabpanel-sprints");
     expect(tabs[2]).toHaveTextContent("Git Telemetry");
     expect(tabs[2]).toHaveTextContent("4");
+    expect(tabs[2]).toHaveAttribute("aria-controls", "tabpanel-git");
 
     // Initial state: Task Telemetry is selected
     expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", "tab-tasks");
     tabs[0].focus();
     expect(tabs[0]).toHaveFocus();
 
@@ -59,6 +63,7 @@ describe("TelemetryLedgerTabs Accessibility", () => {
     // Sprint Telemetry should be selected
     expect(tabs[1]).toHaveAttribute("aria-selected", "true");
     expect(tabs[0]).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", "tab-sprints");
 
     // Press ArrowLeft on tablist
     fireEvent.keyDown(tablist, { key: "ArrowLeft" });
