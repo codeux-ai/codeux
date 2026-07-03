@@ -17,6 +17,10 @@ This map explains where major responsibilities live.
 
 ## Backend (`src/`)
 
+Source trees are intentionally kept free of editor and merge backup artifacts. Files ending in
+`.orig` are ignored under `src/` and `dashboard/src/`, and repository hygiene tests fail if those
+backup files appear there.
+
 - `index.ts`
   - Minimal bootstrap (`dotenv`, app config, server launch).
 - `config/`
