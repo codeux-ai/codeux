@@ -9,6 +9,7 @@
   border-radius: var(--stats-card-radius);
   padding: var(--stats-card-padding);
   min-height: var(--stats-card-min-height);
+  height: 100%;
   box-shadow: var(--stats-card-shadow);
   transition:
     transform var(--stats-motion-fast),
@@ -25,7 +26,7 @@
 }
 
 .card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 
 .card:focus-within {
@@ -36,7 +37,7 @@
 
 .compact {
   padding: var(--stats-card-padding-compact);
-  min-height: 8rem;
+  min-height: var(--stats-card-compact-min-height);
 }
 
 .comfortable {
@@ -52,7 +53,7 @@
 }
 
 .header {
-  @apply relative z-10 mb-5 flex items-start justify-between gap-4;
+  @apply relative z-10 mb-5 flex min-w-0 items-start justify-between gap-4;
 }
 
 .titleGroup {
@@ -60,7 +61,7 @@
 }
 
 .title {
-  @apply min-w-0 text-xs font-semibold uppercase tracking-[0.14em];
+  @apply min-w-0 break-words text-xs font-semibold uppercase tracking-[0.14em];
   color: var(--stats-label-color);
   transition: color var(--stats-motion-fast);
 }
@@ -75,29 +76,38 @@
 }
 
 .valueContainer {
-  @apply relative z-10;
+  @apply relative z-10 mt-auto min-w-0;
 }
 
 .valueRow {
-  @apply mb-1 flex min-w-0 items-end justify-between gap-4;
+  @apply mb-1 flex min-w-0 flex-wrap items-end justify-between gap-3;
 }
 
 .value {
-  @apply min-w-0 break-words font-mono text-[clamp(1.875rem,4vw,2.25rem)] font-semibold leading-none;
+  @apply min-w-0 max-w-full break-words font-mono text-[clamp(1.5rem,4vw,2.25rem)] font-semibold leading-none;
   color: var(--stats-value-color);
+  overflow-wrap: anywhere;
 }
 
 .secondaryValue {
-  @apply shrink-0;
+  @apply min-w-0 max-w-full shrink;
+  overflow-wrap: anywhere;
 }
 
 .description {
   @apply mt-2 text-sm leading-relaxed;
   color: var(--stats-detail-color);
+  overflow-wrap: anywhere;
 }
 
 .trendContainer {
-  @apply flex shrink-0 items-center;
+  @apply flex min-w-0 shrink-0 items-center justify-end;
+  max-width: min(45%, 12rem);
+}
+
+.trendContainer > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* Accent Tints */
@@ -108,7 +118,22 @@
 }
 
 .card:hover .tint {
-  opacity: 1;
+  opacity: 0.72;
+}
+
+.card > :global(svg.absolute) {
+  z-index: 1;
+  max-height: 5rem;
+}
+
+.card > :global(svg:not(.absolute)),
+.card > :global(canvas) {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  max-width: 100%;
+  min-height: 2.5rem;
+  margin-top: 1rem;
 }
 
 /* Variants */

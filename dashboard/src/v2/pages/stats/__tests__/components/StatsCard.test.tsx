@@ -2,9 +2,13 @@
 /** @jsx h */
 import { h } from "preact";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/preact";
+import * as matchers from "@testing-library/jest-dom/matchers";
+import { render, screen, cleanup, fireEvent } from "@testing-library/preact";
 import { StatsCard } from "../../components/StatsCard.js";
+import { CHART_SERIES, SeriesLegendButton, SortButton, ViewToggle } from "../../components/stats-ui-primitives.js";
 import { Activity } from "lucide-preact";
+
+expect.extend(matchers);
 
 // Mock animated foundations to avoid GSAP/DOM issues in jsdom
 vi.mock("../../../../components/ui/WaveFluid.js", () => ({
@@ -24,6 +28,7 @@ describe("StatsCard", () => {
     
     expect(screen.getByText("Daily Active")).toBeDefined();
     expect(screen.getByText("4.2k")).toBeDefined();
+    expect(screen.getByRole("article", { name: "Daily Active: 4.2k" })).toBeDefined();
   });
 
   it("renders icon component when provided", () => {
@@ -47,6 +52,7 @@ describe("StatsCard", () => {
     
     expect(screen.getByTestId("trend-chip")).toBeDefined();
     expect(screen.getByText("vs previous period")).toBeDefined();
+    expect(screen.getByRole("article", { name: "Revenue: $50k: vs previous period" })).toBeDefined();
   });
 
   it("applies variant classes based on accent prop", () => {
@@ -75,6 +81,65 @@ describe("StatsCard", () => {
     const card = container.firstChild as HTMLElement;
     const visual = screen.getByTestId("edge-visual");
     expect(visual.parentElement).toBe(card);
+  });
+
+  it("keeps long labels and values exposed without changing the card contract", () => {
+    const longTitle = "Extremely Long Provider Throughput Label That Should Wrap";
+    const longValue = "123456789012345678901234567890 tokens";
+
+    render(
+      <StatsCard
+        title={longTitle}
+        value={longValue}
+        description="Sustained window with a long descriptive phrase"
+      />,
+    );
+
+    expect(screen.getByText(longTitle)).toBeDefined();
+    expect(screen.getByText(longValue)).toBeDefined();
+    expect(
+      screen.getByRole("article", {
+        name: `${longTitle}: ${longValue}: Sustained window with a long descriptive phrase`,
+      }),
+    ).toBeDefined();
+  });
+
+  it("renders ViewToggle as pressed segmented controls with icon-first labels", () => {
+    const onChange = vi.fn();
+
+    render(<ViewToggle value="models" onChange={onChange} ariaLabel="Stats mode" />);
+
+    expect(screen.getByRole("group", { name: "Stats mode" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Models" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Trend" })).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(screen.getByRole("button", { name: "Ledgers" }));
+
+    expect(onChange).toHaveBeenCalledWith("ledgers");
+  });
+
+  it("exposes selected state on shared sort and series controls", () => {
+    const onSort = vi.fn();
+    const onToggle = vi.fn();
+
+    render(
+      <div>
+        <SortButton label="Recent" active={true} direction="desc" onClick={onSort} />
+        <SeriesLegendButton
+          series={CHART_SERIES[0]}
+          active={true}
+          currentValue={42000}
+          onToggle={onToggle}
+        />
+      </div>,
+    );
+
+    expect(screen.getByRole("button", { name: /Recent/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /Throughput/i })).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: /Throughput/i }));
+
+    expect(onToggle).toHaveBeenCalledTimes(1);
   });
 
 });
