@@ -1267,6 +1267,228 @@ describe("ExecutionRepository", () => {
     });
   });
 
+  it("batches multi-run execution snapshot reads while preserving invocation and runtime shape", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Batched Snapshot Project",
+      sourceType: "local",
+      sourceRef: "/workspace/batched-snapshot-project",
+    });
+    const selectedSprint = projectRepository.createSprint(project.id, {
+      name: "Selected Historical Sprint",
+      number: 4,
+    });
+    const runningSprint = projectRepository.createSprint(project.id, {
+      name: "Running Runtime Sprint",
+      number: 5,
+    });
+    const pausedSprint = projectRepository.createSprint(project.id, {
+      name: "Paused Runtime Sprint",
+      number: 6,
+    });
+    const selectedRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: selectedSprint.id,
+      status: "completed",
+      startedAt: "2026-03-01T08:00:00.000Z",
+      finishedAt: "2026-03-01T08:30:00.000Z",
+    });
+    const runningRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: runningSprint.id,
+      status: "running",
+      startedAt: "2026-03-02T08:00:00.000Z",
+    });
+    const pausedRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: pausedSprint.id,
+      status: "paused",
+      startedAt: "2026-03-03T08:00:00.000Z",
+    });
+
+    const selectedTask = projectRepository.createTask(project.id, {
+      sprintId: selectedSprint.id,
+      taskKey: "SEL",
+      title: "Selected historical task",
+    });
+    const runningTask = projectRepository.createTask(project.id, {
+      sprintId: runningSprint.id,
+      taskKey: "RUN",
+      title: "Running task",
+    });
+    const pausedTask = projectRepository.createTask(project.id, {
+      sprintId: pausedSprint.id,
+      taskKey: "PAU",
+      title: "Paused task",
+    });
+
+    const runningDispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: runningSprint.id,
+      taskId: runningTask.id,
+      sprintRunId: runningRun.id,
+      executorType: "docker_cli",
+      status: "running",
+      priority: 8,
+      queuedAt: "2026-03-02T08:01:00.000Z",
+    });
+    const pausedDispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: pausedSprint.id,
+      taskId: pausedTask.id,
+      sprintRunId: pausedRun.id,
+      executorType: "mcp_worker",
+      status: "queued",
+      priority: 3,
+      queuedAt: "2026-03-03T08:01:00.000Z",
+    });
+    const runningTaskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: runningSprint.id,
+      taskId: runningTask.id,
+      sprintRunId: runningRun.id,
+      dispatchId: runningDispatch.id,
+      provider: "codex",
+      state: "RUNNING",
+      startedAt: "2026-03-02T08:02:00.000Z",
+    });
+    const pausedTaskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: pausedSprint.id,
+      taskId: pausedTask.id,
+      sprintRunId: pausedRun.id,
+      dispatchId: pausedDispatch.id,
+      provider: "claude-code",
+      state: "QUEUED",
+      startedAt: "2026-03-03T08:02:00.000Z",
+    });
+
+    executionRepository.appendTaskRunEvent(runningTaskRun.id, "provider_activity", "agent", {
+      preview: "Running task activity",
+    }, {
+      createdAt: "2026-03-02T08:03:00.000Z",
+      sourceEventKey: "batched-running-activity",
+    });
+    executionRepository.appendTaskRunEvent(pausedTaskRun.id, "worker_dispatch_started", "system", {
+      worker: "paused-worker",
+    }, {
+      createdAt: "2026-03-03T08:03:00.000Z",
+      sourceEventKey: "batched-paused-dispatch",
+    });
+
+    const selectedProviderUsage = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: selectedSprint.id,
+      taskId: selectedTask.id,
+      sprintRunId: selectedRun.id,
+      sessionId: "selected-old-session",
+      provider: "codex",
+      purpose: "task_coding",
+      status: "completed",
+      startedAt: "2026-03-01T08:05:00.000Z",
+      promptChars: 20,
+    });
+    const selectedInvocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      providerInvocationId: selectedProviderUsage.id,
+      type: "task_coding",
+      status: "completed",
+      provider: "codex",
+      startedAt: "2026-03-01T08:05:00.000Z",
+    });
+    const runningProviderUsage = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: runningSprint.id,
+      taskId: runningTask.id,
+      sprintRunId: runningRun.id,
+      dispatchId: runningDispatch.id,
+      taskRunId: runningTaskRun.id,
+      sessionId: "running-old-session",
+      provider: "codex",
+      purpose: "task_coding",
+      status: "running",
+      startedAt: "2026-03-02T08:05:00.000Z",
+      promptChars: 40,
+    });
+    const runningInvocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      providerInvocationId: runningProviderUsage.id,
+      type: "task_coding",
+      status: "running",
+      provider: "codex",
+      startedAt: "2026-03-02T08:05:00.000Z",
+    });
+
+    for (let index = 0; index < 30; index += 1) {
+      executionRepository.createExecutionInvocation({
+        projectId: project.id,
+        type: "planning",
+        status: "completed",
+        provider: "codex",
+        startedAt: `2026-04-01T00:${String(index).padStart(2, "0")}:00.000Z`,
+      });
+    }
+
+    const db = (executionRepository as unknown as {
+      db: { prepare: (sql: string) => unknown };
+    }).db;
+    const usageTaskSpy = vi.spyOn(executionRepository as any, "getUsageTotalsByTaskIds");
+    const usageSprintRunSpy = vi.spyOn(executionRepository as any, "getUsageTotalsBySprintRunIds");
+    const wallTimeTaskSpy = vi.spyOn((executionRepository as any).wallTimeQuery, "getWallTimeTotalsByTaskIds");
+    const wallTimeSprintRunSpy = vi.spyOn((executionRepository as any).wallTimeQuery, "getWallTimeTotalsBySprintRunIds");
+    const prepareSpy = vi.spyOn(db, "prepare");
+
+    const snapshot = executionRepository.getProjectExecutionSnapshot(project.id, {
+      selectedSprintId: selectedSprint.id,
+    });
+
+    expect(snapshot.sprintRuns.map((run) => run.id)).toEqual([
+      runningRun.id,
+      pausedRun.id,
+      selectedRun.id,
+    ]);
+    expect(snapshot.taskDispatches.map((dispatch) => dispatch.id)).toEqual([
+      runningDispatch.id,
+      pausedDispatch.id,
+    ]);
+    expect(snapshot.taskDispatches.find((dispatch) => dispatch.id === runningDispatch.id)).toMatchObject({
+      taskId: runningTask.id,
+      taskKey: "RUN",
+      taskRunId: runningTaskRun.id,
+      taskRunState: "RUNNING",
+      provider: "codex",
+    });
+    expect(snapshot.recentEvents.map((event) => event.eventType)).toEqual([
+      "worker_dispatch_started",
+      "provider_activity",
+    ]);
+    expect(snapshot.recentInvocations?.some((invocation) => invocation.id === selectedInvocation.id)).toBe(true);
+    expect(snapshot.recentInvocations?.find((invocation) => invocation.id === selectedInvocation.id)).toMatchObject({
+      sprintId: selectedSprint.id,
+      taskId: selectedTask.id,
+      sprintRunId: selectedRun.id,
+      taskKey: "SEL",
+    });
+    expect(snapshot.recentInvocations?.some((invocation) => invocation.id === runningInvocation.id)).toBe(true);
+    expect(snapshot.recentInvocations?.find((invocation) => invocation.id === runningInvocation.id)).toMatchObject({
+      sprintId: runningSprint.id,
+      taskId: runningTask.id,
+      sprintRunId: runningRun.id,
+      dispatchId: runningDispatch.id,
+    });
+
+    const invocationSnapshotReads = prepareSpy.mock.calls.filter(([sql]) => {
+      const text = String(sql);
+      return text.includes("FROM execution_invocations")
+        && text.includes("WHERE execution_invocations.project_id = ?");
+    });
+    expect(invocationSnapshotReads).toHaveLength(1);
+    expect(usageTaskSpy).toHaveBeenCalledTimes(1);
+    expect(usageSprintRunSpy).toHaveBeenCalledTimes(1);
+    expect(wallTimeTaskSpy).toHaveBeenCalledTimes(1);
+    expect(wallTimeSprintRunSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("deduplicates task run events by source event key within the same task run", async () => {
     const { projectRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({
