@@ -161,13 +161,8 @@ export const QuicksprintEditorView: FunctionComponent<{
               </div>
 
               <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">Default Tasks</div>
-                <div className="font-mono text-2xl font-black tracking-tight text-slate-900 dark:text-white">{edTaskCount}</div>
-                <input
-                  type="range" min="1" max="15" value={edTaskCount}
-                  onInput={(e) => setEdTaskCount(parseInt((e.target as HTMLInputElement).value, 10))}
-                  className="mt-2 w-full h-1.5 bg-black/[0.06] rounded-full appearance-none cursor-pointer accent-ember-500 dark:bg-white/[0.08]"
-                />
+                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-4">Default Tasks</div>
+                <SubtaskSlider value={edTaskCount} onChange={setEdTaskCount} />
               </div>
             </div>
 

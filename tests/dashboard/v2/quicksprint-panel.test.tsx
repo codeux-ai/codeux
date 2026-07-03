@@ -123,6 +123,37 @@ describe("QuicksprintPanel", () => {
     expect(getByText("Plan & Start")).toBeInTheDocument();
   });
 
+  it("clamps oversized template defaults when the subtask slider loads", async () => {
+    const mockOnExecute = vi.fn().mockResolvedValue(undefined);
+    const oversizedTemplate = {
+      ...mockTemplates[0],
+      id: "tpl-oversized",
+      name: "Oversized Template",
+      defaultTaskCount: 100,
+    };
+
+    const { getByText, getByRole } = render(
+      <QuicksprintPanel
+        {...defaultProps}
+        onExecute={mockOnExecute}
+        templates={[oversizedTemplate]}
+      />
+    );
+
+    fireEvent.click(getByText("Oversized Template"));
+
+    const slider = getByRole("slider", { name: "Subtask count" });
+    expect(slider).toHaveValue("30");
+    expect(slider).toHaveAttribute("aria-valuetext", "30 subtasks");
+
+    fireEvent.click(getByText("Plan Only"));
+
+    await waitFor(() => {
+      expect(mockOnExecute).toHaveBeenCalled();
+    });
+    expect(mockOnExecute.mock.calls[0]?.[1]).toBe(30);
+  });
+
   it("supports unlimited subtasks and disables the slider interaction state", async () => {
     const mockOnExecute = vi.fn().mockResolvedValue(undefined);
     const { getByText, getByRole, container } = render(
@@ -257,6 +288,21 @@ describe("QuicksprintPanel", () => {
     });
     expect(queryByText("Configure Quicksprint")).not.toBeInTheDocument();
     expect(queryByText("New Template")).not.toBeInTheDocument();
+  });
+
+  it("skips the empty default rail when a project only has custom quicksprint templates", () => {
+    const customOnlyTemplates = mockTemplates.filter((template) => !template.isBuiltIn);
+    const { getByRole, getByText, queryByRole, queryByText } = render(
+      <QuicksprintPanel {...defaultProps} templates={customOnlyTemplates} />
+    );
+
+    expect(queryByText("Default Templates")).not.toBeInTheDocument();
+    expect(queryByRole("region", { name: "default templates" })).not.toBeInTheDocument();
+
+    const customRail = getByRole("region", { name: "custom templates" });
+    expect(customRail).toBeInTheDocument();
+    expect(getByText("Custom Sprint Flow")).toBeInTheDocument();
+    expect(getByText("Custom Review Flow")).toBeInTheDocument();
   });
 
   it("selects custom templates from the rail", () => {

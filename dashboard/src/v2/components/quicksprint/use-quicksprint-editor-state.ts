@@ -1,6 +1,7 @@
 import { useState, useCallback } from "preact/hooks";
 import type { QuicksprintTemplateRecord } from "../../../../../src/contracts/quicksprint-types.js";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
+import { clampSubtaskSliderValue } from "./quicksprint-shared.js";
 
 export function useQuicksprintEditorState({
   templates,
@@ -60,7 +61,7 @@ export function useQuicksprintEditorState({
     setEdCategory(t ? t.category : "engineering");
     setEdCategoryColor(t ? t.categoryColor || "#22c55e" : "#22c55e");
     setEdInstruction(t ? t.agentInstructionMarkdown || "" : "");
-    setEdTaskCount(t ? t.defaultTaskCount || 5 : 5);
+    setEdTaskCount(clampSubtaskSliderValue(t ? t.defaultTaskCount || 5 : 5));
     setEdAgentPresetId(t ? t.agentPresetId || "" : "");
     setEdSaving(false);
     setEdConfirmDelete(false);
@@ -79,7 +80,7 @@ export function useQuicksprintEditorState({
           category: edCategory,
           categoryColor: edCategoryColor,
           agentInstructionMarkdown: edInstruction,
-          defaultTaskCount: edTaskCount,
+          defaultTaskCount: clampSubtaskSliderValue(edTaskCount),
           agentPresetId: edAgentPresetId || undefined,
         });
       } else {
@@ -90,7 +91,7 @@ export function useQuicksprintEditorState({
           category: edCategory,
           categoryColor: edCategoryColor,
           agentInstructionMarkdown: edInstruction,
-          defaultTaskCount: edTaskCount,
+          defaultTaskCount: clampSubtaskSliderValue(edTaskCount),
           agentPresetId: edAgentPresetId || undefined,
         });
       }
