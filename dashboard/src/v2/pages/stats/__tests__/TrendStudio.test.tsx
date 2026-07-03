@@ -13,7 +13,7 @@ vi.mock("../components/InteractiveUsageChart.js", () => ({
 }));
 
 describe("TrendStudio", () => {
-  it("renders the summary band, period chips, chart, and purpose breakdown in order", () => {
+  it("renders the KPI band, chart, purpose breakdown, and range metadata in scanning order", () => {
     const { container } = render(
       <TrendStudio
         stats={
@@ -24,6 +24,8 @@ describe("TrendStudio", () => {
               activeTimeMs: 5400000,
               inputTokens: 1000,
               cachedInputTokens: 250,
+              outputTokens: 3200,
+              totalCostUsd: 1.75,
             },
             range: {
               label: "Last 7 Days",
@@ -39,6 +41,7 @@ describe("TrendStudio", () => {
                   activeTimeMs: 1800000,
                   inputTokens: 2400,
                   outputTokens: 1600,
+                  invocationCount: 7,
                 },
               },
             ],
@@ -57,12 +60,14 @@ describe("TrendStudio", () => {
     const chart = screen.getByTestId("interactive-usage-chart");
     const purposeActivity = screen.getByText("Purpose Activity");
 
-    expect(totalTokens.compareDocumentPosition(rangeLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(rangeLabel.compareDocumentPosition(chart) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(totalTokens.compareDocumentPosition(chart) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(chart.compareDocumentPosition(purposeActivity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(purposeActivity.compareDocumentPosition(rangeLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     expect(container.textContent).toContain("12.5k");
     expect(container.textContent).toContain("42");
+    expect(container.textContent).toContain("Token trend");
     expect(container.textContent).toContain("Purpose Activity");
+    expect(screen.getByLabelText("Trend range metadata")).toBeInTheDocument();
   });
 });

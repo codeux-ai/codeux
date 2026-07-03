@@ -136,7 +136,7 @@ export const UsageChartMinimap: FunctionComponent<{
   return (
     <div className="mt-3">
       <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-        <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color,theme(colors.slate.400))]">
+        <div id="usage-chart-minimap-help" className="text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color,theme(colors.slate.400))]">
           Overview - drag to zoom, arrow keys to pan, escape to reset
         </div>
         {zoomRange ? (
@@ -156,6 +156,7 @@ export const UsageChartMinimap: FunctionComponent<{
         aria-label={zoomRange
           ? `Chart minimap zoom region, showing buckets ${zoomRange.start + 1} through ${zoomRange.end + 1} of ${buckets.length}`
           : `Chart minimap zoom region, full range of ${buckets.length} bucket${buckets.length === 1 ? '' : 's'}`}
+        aria-describedby="usage-chart-minimap-help"
         aria-disabled={!hasZoomableRange ? "true" : undefined}
         tabIndex={0}
         className={`relative h-16 w-full select-none overflow-hidden rounded-[1rem] border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/72 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--stats-card-bg)] ${hasZoomableRange ? 'cursor-crosshair touch-none' : 'cursor-default opacity-75'}`}

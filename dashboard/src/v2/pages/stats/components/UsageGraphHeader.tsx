@@ -28,24 +28,55 @@ export const UsageGraphHeader: FunctionComponent<{
   onResetZoom,
 }) => {
   return (
-    <div className="flex flex-col gap-5">
-      <div className="min-w-0">
-        <div className="inline-flex items-center gap-2 rounded-full border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)]">
+    <div className="flex flex-col gap-4">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+        <div className="min-w-0">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)]">
           <Activity className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.2} />
           Usage Graph
+          </div>
+          <div className="mt-3 text-2xl font-black leading-tight text-[var(--stats-value-color)] md:text-3xl">
+            {title}
+          </div>
+          <div className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--stats-detail-color)]">
+            {description}
+          </div>
         </div>
-        <div className="mt-3 text-2xl font-black leading-tight text-[var(--stats-value-color)] md:text-3xl">
-          {title}
-        </div>
-        <div className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--stats-detail-color)]">
-          {description}
+        <div className="flex flex-wrap gap-2 lg:justify-end">
+          <button
+            type="button"
+            onClick={onToggleFilters}
+            aria-expanded={isFiltersOpen}
+            aria-describedby="usage-graph-filter-summary"
+            className={`group inline-flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors motion-reduce:transition-none active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] ${CHIP_CLASS} ${
+              isFiltersOpen
+                ? 'border-signal-500/30 bg-signal-500/[0.08] text-signal-600 dark:text-signal-400'
+                : 'text-[var(--stats-detail-color)] hover:bg-[color:var(--fill-muted-hover)] hover:text-[var(--stats-value-color)]'
+            }`}
+          >
+            <Filter className={`h-3.5 w-3.5 transition-colors motion-reduce:transition-none ${isFiltersOpen ? 'text-signal-500' : 'text-[var(--stats-detail-color)] group-hover:text-signal-500'}`} strokeWidth={2.2} />
+            Filters
+          </button>
+          {isZoomed ? (
+            <button
+              type="button"
+              onClick={onResetZoom}
+              className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/[0.06] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/[0.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] motion-reduce:transition-none dark:text-signal-400"
+            >
+              <RotateCcw className="h-3.5 w-3.5" strokeWidth={2.2} />
+              Reset zoom <span className="sr-only">to {rangeLabel}</span>
+            </button>
+          ) : null}
+          <span id="usage-graph-filter-summary" className="sr-only">
+            {activeSeriesCount} active series.
+          </span>
         </div>
       </div>
 
       <div
         role="toolbar"
         aria-label="Usage graph controls"
-        className="relative z-50 flex flex-col gap-3 rounded-[1.2rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] p-3 sm:flex-row sm:flex-wrap sm:items-center"
+        className="relative z-40 flex flex-col gap-3 rounded-[1.2rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] p-3 sm:flex-row sm:flex-wrap sm:items-center"
       >
         <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 sm:grid-cols-none sm:auto-cols-max sm:grid-flow-col">
           <div className={`${CHIP_CLASS} min-w-0 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]`}>
@@ -62,36 +93,6 @@ export const UsageGraphHeader: FunctionComponent<{
             <span className="sr-only">Active zoom: </span>
             <span className="block truncate">{isZoomed ? zoomLabel : 'Full range'}</span>
           </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={onToggleFilters}
-            aria-expanded={isFiltersOpen}
-            aria-describedby="usage-graph-filter-summary"
-            className={`group inline-flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors motion-reduce:transition-none active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] ${CHIP_CLASS} ${
-              isFiltersOpen
-                ? 'border-signal-500/30 bg-signal-500/[0.08] text-signal-600 dark:text-signal-400'
-                : 'text-[var(--stats-detail-color)] hover:bg-[color:var(--fill-muted-hover)] hover:text-[var(--stats-value-color)]'
-            }`}
-          >
-            <Filter className={`h-3.5 w-3.5 transition-colors motion-reduce:transition-none ${isFiltersOpen ? 'text-signal-500' : 'text-[var(--stats-detail-color)] group-hover:text-signal-500'}`} strokeWidth={2.2} />
-            Filters
-          </button>
-          <span id="usage-graph-filter-summary" className="sr-only">
-            {activeSeriesCount} active series.
-          </span>
-          {isZoomed ? (
-            <button
-              type="button"
-              onClick={onResetZoom}
-              className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/[0.06] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/[0.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] motion-reduce:transition-none dark:text-signal-400"
-            >
-              <RotateCcw className="h-3.5 w-3.5" strokeWidth={2.2} />
-              Reset zoom <span className="sr-only">to {rangeLabel}</span>
-            </button>
-          ) : null}
         </div>
       </div>
     </div>
