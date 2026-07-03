@@ -1,8 +1,8 @@
 import type { FunctionComponent, RefObject } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { Bell, Moon, Sun, ChevronDown, FolderOpen, ArrowRight, Menu } from "lucide-preact";
-import { Link } from "@tanstack/react-router";
+import { Bell, Moon, Sun, ChevronDown, FolderOpen, ArrowRight } from "lucide-preact";
+import { Link, useRouterState } from "@tanstack/react-router";
 import { StatusDot } from "./ui/StatusDot.js";
 
 import { BrandSection } from "./top-nav/BrandSection.js";
@@ -31,12 +31,54 @@ export function useDropdownKeyboard(
     const toggleRef = useRef<HTMLButtonElement>(null);
     const [activeDescendantId, setActiveDescendantId] = useState<string | undefined>(undefined);
 
-    const onToggleKeyDown = useCallback((e: KeyboardEvent) => {
-        if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown") {
-            e.preventDefault();
-            setIsOpen(!isOpen);
+    const getOptions = useCallback((): HTMLElement[] => {
+        if (!containerRef.current) return [];
+        return Array.from(containerRef.current.querySelectorAll<HTMLElement>('[role="option"]'))
+            .filter((el) => !el.hasAttribute("disabled") && el.getAttribute("aria-disabled") !== "true");
+    }, [containerRef]);
+
+    const focusOption = useCallback((index: number) => {
+        const options = getOptions();
+        const nextOption = options[index];
+        if (!nextOption) return;
+        nextOption.focus();
+        if (nextOption.id) {
+            setActiveDescendantId(nextOption.id);
         }
-    }, [isOpen, setIsOpen]);
+    }, [getOptions]);
+
+    const focusInitialOption = useCallback((placement: "first" | "last" | "selected" = "selected") => {
+        const options = getOptions();
+        if (options.length === 0) {
+            setActiveDescendantId(undefined);
+            const filterInput = containerRef.current?.querySelector<HTMLInputElement>('input:not([disabled])');
+            filterInput?.focus();
+            return;
+        }
+        const selectedIndex = options.findIndex((el) => el.getAttribute("aria-selected") === "true");
+        const index = placement === "first"
+            ? 0
+            : placement === "last"
+                ? options.length - 1
+                : selectedIndex >= 0 ? selectedIndex : 0;
+        focusOption(index);
+    }, [containerRef, focusOption, getOptions]);
+
+    const onToggleKeyDown = useCallback((e: KeyboardEvent) => {
+        if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Home" || e.key === "End") {
+            e.preventDefault();
+            if (!isOpen) {
+                setIsOpen(true);
+                const placement = e.key === "ArrowUp" || e.key === "End" ? "last" : "selected";
+                setTimeout(() => focusInitialOption(placement), 0);
+                return;
+            }
+            if (e.key === "Enter" || e.key === " ") {
+                setIsOpen(false);
+                setTimeout(() => toggleRef.current?.focus(), 0);
+            }
+        }
+    }, [focusInitialOption, isOpen, setIsOpen]);
 
     const onContainerKeyDown = useCallback((e: KeyboardEvent) => {
         if (!isOpen || !containerRef.current) return;
@@ -51,34 +93,30 @@ export function useDropdownKeyboard(
         if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Home" || e.key === "End") {
             e.preventDefault();
 
-            const focusableElements = Array.from(
-                containerRef.current.querySelectorAll<HTMLElement>(
-                    'button:not([disabled]), a[href], input'
-                )
-            ).filter(el => el !== toggleRef.current && el.id !== 'sprint-selector-button' && el.id !== 'project-selector-button');
-
-            if (focusableElements.length === 0) return;
-
-            const currentIndex = focusableElements.indexOf(document.activeElement as HTMLElement);
+            const options = getOptions();
+            if (options.length === 0) return;
+            const currentIndex = options.indexOf(document.activeElement as HTMLElement);
 
             let nextIndex = 0;
             if (e.key === "ArrowDown") {
-                nextIndex = currentIndex < focusableElements.length - 1 ? currentIndex + 1 : 0;
+                nextIndex = currentIndex >= 0 && currentIndex < options.length - 1 ? currentIndex + 1 : 0;
             } else if (e.key === "ArrowUp") {
-                nextIndex = currentIndex > 0 ? currentIndex - 1 : focusableElements.length - 1;
+                nextIndex = currentIndex > 0 ? currentIndex - 1 : options.length - 1;
             } else if (e.key === "Home") {
                 nextIndex = 0;
             } else if (e.key === "End") {
-                nextIndex = focusableElements.length - 1;
+                nextIndex = options.length - 1;
             }
 
-            const nextEl = focusableElements[nextIndex];
-            nextEl?.focus();
-            if (nextEl?.id) {
-                setActiveDescendantId(nextEl.id);
-            }
+            focusOption(nextIndex);
+            return;
         }
-    }, [isOpen, setIsOpen, containerRef]);
+
+        if ((e.key === "Enter" || e.key === " ") && (document.activeElement as HTMLElement | null)?.getAttribute("role") === "option") {
+            e.preventDefault();
+            (document.activeElement as HTMLElement).click();
+        }
+    }, [containerRef, focusOption, getOptions, isOpen, setIsOpen]);
 
     useEffect(() => {
         if (!isOpen || !containerRef.current) return;
@@ -99,22 +137,7 @@ export function useDropdownKeyboard(
 
     useEffect(() => {
         if (isOpen && containerRef.current) {
-            // Give the DOM a moment to render the dropdown
-            setTimeout(() => {
-                if (!containerRef.current) return;
-                const focusableElements = Array.from(
-                    containerRef.current.querySelectorAll<HTMLElement>(
-                        'button, a[href], input'
-                    )
-                ).filter(el => el !== toggleRef.current);
-
-                if (focusableElements.length > 0) {
-                    focusableElements[0]?.focus();
-                    if (focusableElements[0]?.id) {
-                        setActiveDescendantId(focusableElements[0].id);
-                    }
-                }
-            }, 0);
+            setTimeout(() => focusInitialOption("selected"), 0);
         } else if (!isOpen) {
             onFilterChange?.("");
             setActiveDescendantId(undefined);
@@ -122,7 +145,7 @@ export function useDropdownKeyboard(
                 toggleRef.current.focus();
             }
         }
-    }, [isOpen, containerRef, onFilterChange]);
+    }, [focusInitialOption, isOpen, containerRef, onFilterChange]);
 
     return { toggleRef, onToggleKeyDown, onContainerKeyDown, activeDescendantId };
 }
@@ -149,6 +172,9 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
     const [sprintSwitchBusy, setSprintSwitchBusy] = useState(false);
     const [projectFilter, setProjectFilter] = useState('');
     const [navAnnouncement, setNavAnnouncement] = useState('');
+    const routeMatches = useRouterState({ select: (state) => state.matches });
+    const currentPath = routeMatches.length > 0 ? routeMatches[routeMatches.length - 1]?.pathname || "/" : "/";
+    const previousPathRef = useRef(currentPath);
 
     // Notification Panel State
     const [notificationInteractionState, setNotificationInteractionState] = useState<'closed' | 'hover' | 'open'>('closed');
@@ -236,6 +262,42 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
     const filteredProjects = useMemo(() => projects.filter(p => p.name.toLowerCase().includes(projectFilter.toLowerCase())), [projects, projectFilter]);
     const filteredSprints = useMemo(() => sprints.filter(s => s.name.toLowerCase().includes(sprintFilter.toLowerCase())), [sprints, sprintFilter]);
 
+    useEffect(() => {
+        if (previousPathRef.current !== currentPath) {
+            previousPathRef.current = currentPath;
+            setNavAnnouncement(`Route changed to ${currentPath === "/" ? "Overview" : currentPath.slice(1).replace(/-/g, " ")}`);
+        }
+    }, [currentPath]);
+
+    useEffect(() => {
+        if (loading) {
+            setNavAnnouncement("Loading projects");
+        } else if (projects.length === 0) {
+            setNavAnnouncement("No projects connected yet");
+        }
+    }, [loading, projects.length]);
+
+    useEffect(() => {
+        if (!selectedProject) return;
+        if (sprintsLoading) {
+            setNavAnnouncement(`Loading sprints for ${selectedProject.name}`);
+        } else if (sprints.length === 0) {
+            setNavAnnouncement(`No sprints available for ${selectedProject.name}`);
+        }
+    }, [selectedProject, sprints.length, sprintsLoading]);
+
+    useEffect(() => {
+        if (dropdownOpen && !loading && filteredProjects.length === 0) {
+            setNavAnnouncement(projectFilter ? `No projects match ${projectFilter}` : "No projects connected yet");
+        }
+    }, [dropdownOpen, filteredProjects.length, loading, projectFilter]);
+
+    useEffect(() => {
+        if (sprintDropdownOpen && !sprintsLoading && filteredSprints.length === 0 && !sprintFilter.toLowerCase().includes("all")) {
+            setNavAnnouncement(sprintFilter ? `No sprints match ${sprintFilter}` : "No sprints available");
+        }
+    }, [filteredSprints.length, sprintDropdownOpen, sprintFilter, sprintsLoading]);
+
     useLayoutEffect(() => {
         if (sprintDropdownOpen && sprintDropdownRef.current) {
             setSprintDropdownWidth(sprintDropdownRef.current.offsetWidth);
@@ -302,7 +364,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
             <div className="flex items-center gap-1 sm:gap-2 md:gap-3 shrink-0 min-w-0 flex-wrap justify-end">
                 {/* Project Selector */}
-                <div className="relative" ref={dropdownRef} onKeyDown={projectKb.onContainerKeyDown}>
+                <div className="relative min-w-0" ref={dropdownRef} onKeyDown={projectKb.onContainerKeyDown}>
                     <button
                         ref={projectKb.toggleRef}
                         onKeyDown={projectKb.onToggleKeyDown}
@@ -311,11 +373,11 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                         aria-haspopup="listbox"
                         aria-expanded={dropdownOpen}
                         id="project-selector-button"
-                        aria-label={`Selected project: ${selectedProject?.name || "None"}`}
-                        aria-controls="project-listbox"
+                        aria-label={`Project selector, selected project: ${selectedProject?.name || "None"}`}
+                        aria-controls={dropdownOpen ? "project-listbox" : undefined}
                         aria-activedescendant={dropdownOpen && filteredProjects.length > 0 ? (projectKb.activeDescendantId || `project-option-${selectedProject?.id || 'none'}`) : undefined}
                         aria-busy={projectSwitchBusy || loading ? "true" : "false"}
-                        className="flex h-9 min-w-0 items-center gap-2.5 rounded-xl border border-black/[0.06] bg-black/[0.04] px-3.5 py-0 transition-all group hover:border-black/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.06] dark:bg-white/[0.04] dark:hover:border-white/[0.08]"
+                        className="flex h-9 min-w-0 max-w-[12rem] sm:max-w-[16rem] md:max-w-none items-center gap-2.5 rounded-xl border border-black/[0.06] bg-black/[0.04] px-3.5 py-0 transition-all group hover:border-black/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.06] dark:bg-white/[0.04] dark:hover:border-white/[0.08]"
                     >
                         <StatusDot status={selectedProject?.status || "idle"} />
                         <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono truncate max-w-[80px] sm:max-w-[140px] md:max-w-[200px]">
@@ -368,7 +430,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                             setProjectSwitchBusy(false);
                                         }
                                     }}
-                                    className={`focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2.5 px-3 py-3 min-h-[44px] text-left hover:bg-signal-500/5 transition-colors group ${selectedProject?.id === source.id ? 'bg-signal-500/8' : ''}`}
+                                    className={`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2.5 px-3 py-3 min-h-[44px] text-left hover:bg-signal-500/5 transition-colors group ${selectedProject?.id === source.id ? 'bg-signal-500/8' : ''}`}
                                 >
                                     <StatusDot status={source.status} />
                                     <span className={`text-sm font-medium font-mono truncate transition-colors ${selectedProject?.id === source.id ? 'text-signal-600 dark:text-signal-400 font-semibold' : 'text-slate-700 dark:text-slate-300'}`}>
@@ -408,26 +470,34 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
                 {/* Sprint Selector */}
                 {selectedProject && (
-                    <div className="relative" ref={sprintDropdownRef} onKeyDown={sprintKb.onContainerKeyDown}>
+                    <div className="relative min-w-0" ref={sprintDropdownRef} onKeyDown={sprintKb.onContainerKeyDown}>
                         <button
                             ref={sprintKb.toggleRef}
-                            onKeyDown={sprintKb.onToggleKeyDown}
+                            onKeyDown={(e) => {
+                                if (sprints.length === 0 && (e.key === "Enter" || e.key === " " || e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Home" || e.key === "End")) {
+                                    e.preventDefault();
+                                    setNavAnnouncement(selectedProject ? `No sprints available for ${selectedProject.name}` : "No sprints available");
+                                    return;
+                                }
+                                sprintKb.onToggleKeyDown(e);
+                            }}
                             aria-haspopup="listbox"
                             aria-expanded={sprintDropdownOpen}
                             id="sprint-selector-button"
-                            aria-label={`Selected sprint: ${sprintsLoading ? "Loading..." : selectedSprint ? formatSprintDisplay(selectedSprint, sprintKeyPrefix) : "All Sprints"}`}
-                            aria-controls="sprint-listbox"
+                            aria-label={`Sprint selector, selected sprint: ${sprintsLoading ? "Loading..." : selectedSprint ? formatSprintDisplay(selectedSprint, sprintKeyPrefix) : "All Sprints"}`}
+                            aria-controls={sprintDropdownOpen && sprints.length > 0 ? "sprint-listbox" : undefined}
                             aria-activedescendant={sprintDropdownOpen && sprints.length > 0 ? (sprintKb.activeDescendantId || `sprint-option-${selectedSprintId || 'none'}`) : undefined}
                             aria-busy={sprintSwitchBusy || sprintsLoading ? "true" : "false"}
                             onClick={(e) => {
                                 if (sprints.length === 0) {
                                     e.preventDefault();
+                                    setNavAnnouncement(selectedProject ? `No sprints available for ${selectedProject.name}` : "No sprints available");
                                     return;
                                 }
                                 setSprintDropdownOpen(!sprintDropdownOpen);
                             }}
                             aria-disabled={sprints.length === 0}
-                            className={`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 flex h-9 min-w-0 items-center gap-2.5 rounded-xl border border-transparent bg-black/[0.04] px-3.5 py-0 transition-all group dark:bg-white/[0.04] ${
+                            className={`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 flex h-9 min-w-0 max-w-[11rem] sm:max-w-[15rem] md:max-w-none items-center gap-2.5 rounded-xl border border-transparent bg-black/[0.04] px-3.5 py-0 transition-all group dark:bg-white/[0.04] ${
                                 sprints.length > 0
                                     ? 'hover:border-black/[0.08] dark:hover:border-white/[0.08] cursor-pointer'
                                     : 'opacity-50 cursor-not-allowed'
@@ -487,7 +557,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                             setSprintSwitchBusy(false);
                                         }
                                     }}
-                                    className={`focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2.5 px-3 py-3 min-h-[44px] text-left hover:bg-signal-500/5 transition-colors group ${selectedSprintId === null ? 'bg-signal-500/8' : ''}`}
+                                    className={`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2.5 px-3 py-3 min-h-[44px] text-left hover:bg-signal-500/5 transition-colors group ${selectedSprintId === null ? 'bg-signal-500/8' : ''}`}
                                 >
                                     <span className={`text-sm font-medium font-mono truncate transition-colors ${selectedSprintId === null ? 'text-signal-600 dark:text-signal-400 font-semibold' : 'text-slate-700 dark:text-slate-300'}`}>
                                         All Sprints
@@ -514,7 +584,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                                 setSprintSwitchBusy(false);
                                             }
                                         }}
-                                        className={`focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2.5 px-3 py-3 min-h-[44px] text-left hover:bg-signal-500/5 transition-colors group ${selectedSprintId === sprint.id ? 'bg-signal-500/8' : ''}`}
+                                        className={`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2.5 px-3 py-3 min-h-[44px] text-left hover:bg-signal-500/5 transition-colors group ${selectedSprintId === sprint.id ? 'bg-signal-500/8' : ''}`}
                                     >
                                         <StatusDot status={sprint.status} />
                                         <span className={`text-sm font-medium font-mono truncate transition-colors ${selectedSprintId === sprint.id ? 'text-signal-600 dark:text-signal-400 font-semibold' : 'text-slate-700 dark:text-slate-300'}`}>

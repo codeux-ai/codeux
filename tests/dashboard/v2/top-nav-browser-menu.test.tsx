@@ -6,7 +6,10 @@ import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/pr
 import { act } from "preact/test-utils";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { BrowserSessionsMenu } from "../../../dashboard/src/v2/components/browser/BrowserSessionsMenu.js";
+import { TopNav } from "../../../dashboard/src/v2/components/TopNav.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
+import { useSprints } from "../../../dashboard/src/hooks/useSprints.js";
+import { useRouterState } from "@tanstack/react-router";
 import * as browserApi from "../../../dashboard/src/v2/lib/browser-api.js";
 import { buildPreviewUrl } from "../../../dashboard/src/v2/lib/preview-origin.js";
 
@@ -16,6 +19,80 @@ vi.mock("../../../dashboard/src/v2/context/project-data.js", () => ({
 
 
   useProjectData: vi.fn(),
+}));
+
+vi.mock("../../../dashboard/src/hooks/useSprints.js", () => ({
+    useSprints: vi.fn(),
+}));
+
+vi.mock("../../../dashboard/src/v2/hooks/use-project-effective-settings.js", () => ({
+    useProjectEffectiveSettings: vi.fn(() => ({
+        data: {
+            settings: {
+                git: { sprintKeyPrefix: "SPR" },
+                sprintPreview: { enabled: true, showInAppBrowser: true },
+            },
+        },
+    })),
+}));
+
+vi.mock("../../../dashboard/src/v2/hooks/use-notifications.js", () => ({
+    useNotifications: vi.fn(() => ({
+        notifications: [],
+        unreadCount: 0,
+        markAllRead: vi.fn(),
+        markRead: vi.fn(),
+        dismiss: vi.fn(),
+        refresh: vi.fn(),
+    })),
+}));
+
+vi.mock("../../../dashboard/src/v2/hooks/useThemeSetting.js", () => ({
+    useThemeSetting: vi.fn(() => ({ setTheme: vi.fn() })),
+}));
+
+vi.mock("../../../dashboard/src/v2/hooks/use-is-dark.js", () => ({
+    useIsDark: vi.fn(() => true),
+}));
+
+vi.mock("../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({
+    useReducedMotion: vi.fn(() => true),
+    useResolvedMotionDuration: (duration: number) => duration,
+}));
+
+vi.mock("../../../dashboard/src/v2/components/DockerStatusMenu.js", () => ({
+    DockerStatusMenu: () => <button type="button" aria-label="Docker Status: 0 active containers" />,
+}));
+
+vi.mock("../../../dashboard/src/v2/components/top-nav/GlobalSearch.js", () => ({
+    GlobalSearch: () => <button type="button" aria-label="Open search" />,
+}));
+
+vi.mock("../../../dashboard/src/v2/components/top-nav/TelemetryStats.js", () => ({
+    TelemetryStats: () => <div aria-hidden="true" />,
+}));
+
+vi.mock("../../../dashboard/src/v2/components/top-nav/BrandSection.js", () => ({
+    BrandSection: ({ isMobileMenuOpen, onMenuToggle }: any) => (
+        <button
+            type="button"
+            aria-label={isMobileMenuOpen ? "Close mobile menu" : "Open mobile menu"}
+            aria-expanded={!!isMobileMenuOpen}
+            onClick={onMenuToggle}
+        />
+    ),
+}));
+
+vi.mock("gsap", () => ({
+    default: {
+        fromTo: vi.fn(),
+        set: vi.fn(),
+        to: vi.fn(),
+        context: (cb: any) => {
+            cb();
+            return { revert: vi.fn() };
+        },
+    },
 }));
 
 vi.mock("../../../dashboard/src/v2/lib/browser-api.js", () => ({
@@ -32,7 +109,63 @@ vi.mock("@tanstack/react-router", () => ({
             {children}
         </a>
     ),
+    useRouterState: vi.fn(() => [{ pathname: "/" }]),
 }));
+
+const makeProject = (id: string, name: string) => ({
+    id,
+    name,
+    status: "idle",
+    sourceType: "local",
+    sourceRef: `/tmp/${id}`,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+});
+
+const makeSprint = (id: string, name: string) => ({
+    id,
+    name,
+    status: "planned",
+    date: "2026-01-01",
+    projectId: "proj-1",
+    sprintKey: id.toUpperCase(),
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+});
+
+const mockTopNavData = ({
+    projects = [makeProject("proj-1", "Alpha"), makeProject("proj-2", "Beta")],
+    selectedProject = makeProject("proj-1", "Alpha"),
+    sprints = [makeSprint("sprint-1", "Build shell"), makeSprint("sprint-2", "Fix nav")],
+    selectedSprintId = "sprint-1",
+    loading = false,
+    sprintsLoading = false,
+    selectProject = vi.fn().mockResolvedValue(undefined),
+    selectSprint = vi.fn().mockResolvedValue(undefined),
+} = {}) => {
+    vi.mocked(useProjectData).mockReturnValue({
+        projects,
+        selectedProject,
+        selectedProjectId: selectedProject?.id ?? null,
+        loading,
+        error: null,
+        refreshProjects: vi.fn(),
+        selectProject,
+        createProject: vi.fn(),
+        updateProject: vi.fn(),
+        deleteProject: vi.fn(),
+    } as any);
+    vi.mocked(useSprints).mockReturnValue({
+        data: sprints,
+        selectedSprintId,
+        selectedSprint: sprints.find((s: any) => s.id === selectedSprintId) ?? null,
+        selectSprint,
+        loading: sprintsLoading,
+        error: null,
+        refetch: vi.fn(),
+    } as any);
+    return { selectProject, selectSprint };
+};
 
 describe("BrowserSessionsMenu", () => {
     beforeEach(() => {
@@ -233,5 +366,78 @@ describe("BrowserSessionsMenu", () => {
             fireEvent.keyDown(menu, { key: "ArrowUp" });
         });
         expect(document.activeElement).toBe(links[1]);
+    });
+});
+
+describe("TopNav shell accessibility", () => {
+    beforeEach(() => {
+        cleanup();
+        vi.clearAllMocks();
+        vi.mocked(useRouterState).mockReturnValue([{ pathname: "/" }] as any);
+    });
+
+    it("supports listbox keyboard navigation and restores project trigger focus on Escape", async () => {
+        mockTopNavData();
+
+        render(<TopNav />);
+
+        const trigger = screen.getByRole("button", { name: /Project selector, selected project: Alpha/i });
+        trigger.focus();
+        fireEvent.keyDown(trigger, { key: "ArrowDown" });
+
+        await waitFor(() => {
+            expect(screen.getByRole("listbox", { name: "Project list" })).toBeInTheDocument();
+            expect(document.activeElement).toHaveAttribute("id", "project-option-proj-1");
+        });
+
+        fireEvent.keyDown(document.activeElement as Element, { key: "End" });
+
+        await waitFor(() => {
+            expect(document.activeElement).toHaveAttribute("id", "project-option-proj-2");
+            expect(trigger).toHaveAttribute("aria-activedescendant", "project-option-proj-2");
+        });
+
+        fireEvent.keyDown(document.activeElement as Element, { key: "Home" });
+
+        await waitFor(() => {
+            expect(document.activeElement).toHaveAttribute("id", "project-option-proj-1");
+            expect(trigger).toHaveAttribute("aria-activedescendant", "project-option-proj-1");
+        });
+
+        fireEvent.keyDown(document.activeElement as Element, { key: "Escape" });
+
+        await waitFor(() => {
+            expect(screen.queryByRole("listbox", { name: "Project list" })).not.toBeInTheDocument();
+            expect(document.activeElement).toBe(trigger);
+        });
+    });
+
+    it("announces selector empty states without opening a disabled sprint listbox", async () => {
+        mockTopNavData({ sprints: [], selectedSprintId: null });
+
+        render(<TopNav />);
+
+        const sprintTrigger = screen.getByRole("button", { name: /Sprint selector, selected sprint: All Sprints/i });
+        expect(sprintTrigger).toHaveAttribute("aria-disabled", "true");
+        expect(sprintTrigger).not.toHaveAttribute("aria-controls");
+
+        fireEvent.click(sprintTrigger);
+
+        await waitFor(() => {
+            expect(screen.getByRole("status")).toHaveTextContent("No sprints available for Alpha");
+        });
+        expect(screen.queryByRole("listbox", { name: "Sprint list" })).not.toBeInTheDocument();
+    });
+
+    it("announces route changes through the persistent nav status region", async () => {
+        mockTopNavData();
+
+        const { rerender } = render(<TopNav />);
+        vi.mocked(useRouterState).mockReturnValue([{ pathname: "/sprints" }] as any);
+        rerender(<TopNav />);
+
+        await waitFor(() => {
+            expect(screen.getByRole("status")).toHaveTextContent("Route changed to sprints");
+        });
     });
 });
