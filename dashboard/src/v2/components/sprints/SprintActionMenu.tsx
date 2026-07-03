@@ -100,10 +100,12 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
                 onPrimaryAction();
               }}
               disabled={primaryBusy}
+              title={primaryBusy ? "Sprint action in progress" : undefined}
+              aria-busy={primaryBusy}
               className={disabledClassName}
             >
               {primaryBusy ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.1} />
+                <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" strokeWidth={2.1} />
               ) : isRunning ? (
                 <Square className="h-3.5 w-3.5" fill="currentColor" strokeWidth={2.1} />
               ) : (
@@ -121,10 +123,12 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
                 onPauseResume?.();
               }}
               disabled={pauseResumeBusy}
+              title={pauseResumeBusy ? "Sprint pause or resume action in progress" : undefined}
+              aria-busy={pauseResumeBusy}
               className={disabledClassName}
             >
               {pauseResumeBusy ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.1} />
+                <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" strokeWidth={2.1} />
               ) : isPaused ? (
                 <Play className="h-3.5 w-3.5" fill="currentColor" strokeWidth={2.1} />
               ) : (
@@ -210,10 +214,16 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
           onToggleShowcase?.();
         }}
         disabled={showcaseBusy}
+        title={showcaseBusy ? "Showcase update in progress" : undefined}
+        aria-busy={showcaseBusy}
         className={disabledClassName}
       >
-        <Heart className="h-3.5 w-3.5" fill={sprint.showcasePinned ? "currentColor" : "none"} strokeWidth={2.1} />
-        {sprint.showcasePinned ? "Remove" : "Add"}
+        {showcaseBusy ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" strokeWidth={2.1} />
+        ) : (
+          <Heart className="h-3.5 w-3.5" fill={sprint.showcasePinned ? "currentColor" : "none"} strokeWidth={2.1} />
+        )}
+        {showcaseBusy ? "Updating" : sprint.showcasePinned ? "Remove" : "Add"}
       </button>
 
       <SectionSeparator />
@@ -227,6 +237,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
             onMarkCompleted?.();
           }}
           disabled={markCompletedDisabled}
+          title={markCompletedDisabled ? "Mark complete is disabled while another sprint action is in progress" : undefined}
           aria-label={`Mark sprint ${sprint.name} as completed`}
           className={disabledClassName}
         >
@@ -248,10 +259,11 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
         disabled={deleteBusy}
         aria-busy={deleteBusy}
         aria-label={deleteBusy ? `Deleting sprint ${sprint.name}` : `Delete sprint ${sprint.name}`}
+        title={deleteBusy ? "Delete action in progress" : undefined}
         className={deleteBusy ? `${handleDeleteClassName} disabled:cursor-not-allowed disabled:opacity-40` : handleDeleteClassName}
       >
         {deleteBusy ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.1} />
+          <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" strokeWidth={2.1} />
         ) : (
           <XCircle className="h-3.5 w-3.5" strokeWidth={2.1} />
         )}
