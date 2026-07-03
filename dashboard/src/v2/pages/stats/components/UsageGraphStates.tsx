@@ -18,7 +18,7 @@ export const UsageGraphEmpty: FunctionComponent<{ onReset?: () => void }> = ({ o
     <div className="w-full max-w-lg">
       <ActionFeedbackRegion
         status="warning"
-        message="No telemetry buckets are available for this window yet."
+        message="No telemetry buckets are available for this window yet. Reset the zoom or adjust the Stats time range to restore the plot."
         retryAction={onReset}
         retryLabel={onReset ? "Reset window" : undefined}
         autoDismiss={false}
@@ -32,7 +32,7 @@ export const UsageGraphError: FunctionComponent<{ message?: string; onRetry?: ()
     <div className="w-full max-w-lg">
       <ActionFeedbackRegion
         status="error"
-        message={message || "Trend telemetry could not be retrieved. Please try again."}
+        message={message || "Trend telemetry could not be retrieved. The existing chart frame is preserved so you can retry without losing context."}
         retryAction={onRetry}
         retryLabel="Retry"
         autoDismiss={false}

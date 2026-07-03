@@ -1,6 +1,6 @@
 .menu {
   position: absolute;
-  top: 100%;
+  top: 0;
   right: 0;
   z-index: 50;
   margin-top: 0.65rem;
@@ -75,5 +75,14 @@
   .menu,
   .content {
     transition: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .menu {
+    left: 0;
+    right: auto;
+    width: min(100%, calc(100vw - 2rem));
+    transform-origin: top left;
   }
 }

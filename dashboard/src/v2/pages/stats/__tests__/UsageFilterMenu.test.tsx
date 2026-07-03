@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { render, fireEvent, cleanup } from '@testing-library/preact';
 import gsap from 'gsap';
 
@@ -20,6 +20,11 @@ vi.mock('gsap', () => ({
 import { UsageFilterMenu } from '../components/UsageFilterMenu.js';
 
 describe('UsageFilterMenu', () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
   const mockProps = {
     isOpen: true,
     onClose: vi.fn(),
@@ -49,12 +54,31 @@ describe('UsageFilterMenu', () => {
   it('should call setEnabledSeries when a metric button is clicked', () => {
     const { getAllByRole } = render(<UsageFilterMenu {...mockProps} />);
     const metricButton = getAllByRole('switch').find((button) => button.getAttribute('aria-label') === 'Tokens, enabled')!;
+    expect(metricButton.getAttribute('aria-checked')).toBe('true');
     fireEvent.click(metricButton);
     expect(mockProps.setEnabledSeries).toHaveBeenCalled();
   });
 
+  it('should reset filters to default enabled series and preserve one active series', () => {
+    const setEnabledSeriesSpy = vi.fn();
+    const props = {
+      ...mockProps,
+      stats: {
+        chartSeries: [
+          { id: 'tokens', label: 'Tokens', color: '#00E0A0', defaultEnabled: false },
+          { id: 'active', label: 'Active Time', color: '#FFB800', defaultEnabled: false }
+        ]
+      } as any,
+      setEnabledSeries: setEnabledSeriesSpy,
+    };
+
+    const { getByRole } = render(<UsageFilterMenu {...props} />);
+    fireEvent.click(getByRole('button', { name: 'Reset filters' }));
+
+    expect(setEnabledSeriesSpy).toHaveBeenCalledWith({ tokens: true, active: false });
+  });
+
   it('should not allow disabling the last enabled series', () => {
-    cleanup();
     const setEnabledSeriesSpy = vi.fn();
     const singleSeriesProps = {
       ...mockProps,
