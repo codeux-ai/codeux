@@ -1,17 +1,7 @@
 import { h } from "preact";
 import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import {
-  Check,
-  ExternalLink,
-  Filter,
-  Loader2,
-  MessageSquare,
-  Search,
-  Tag,
-  UserRound,
-  X,
-} from "lucide-preact";
+import { Loader2, MessageSquare, Search } from "lucide-preact";
 import { JiraIcon } from "../icons/JiraIcon.js";
 import type {
   SprintImportedTaskInput,
@@ -24,7 +14,23 @@ import {
 } from "../../lib/project-api.js";
 import { fetchProjectEffectiveSettings } from "../../lib/settings-api.js";
 import { MultiSelect } from "../ui/MultiSelect.js";
-import { getSafeUrl } from "../../lib/safe-url.js";
+import {
+  buildIssueImportMetadataRows,
+  getIssueImportEmptyStateCopy,
+  getIssueImportErrorCopy,
+  getIssueImportProviderMetadata,
+  getSelectedIssueCountLabel,
+  truncateIssueImportAssignees,
+  truncateIssueImportLabels,
+} from "../../lib/issue-import-view-models.js";
+import { IssueImportEmptyState } from "./importer/IssueImportEmptyState.js";
+import { IssueImportIssueCard } from "./importer/IssueImportIssueCard.js";
+import { IssueImportSummaryRail } from "./importer/IssueImportSummaryRail.js";
+import {
+  IssueImportErrorPanel,
+  IssueImportLoadingSkeletonList,
+  IssueImportShell,
+} from "./importer/IssueImportShell.js";
 
 interface SprintJiraImportModalProps {
   projectId: string;
@@ -58,6 +64,8 @@ const SORT_DIRECTION_OPTIONS: Array<{ value: JiraSortDirection; label: string }>
   { value: "desc", label: "Newest first" },
   { value: "asc", label: "Oldest first" },
 ];
+
+const JIRA_PROVIDER = getIssueImportProviderMetadata("jira");
 
 export const SprintJiraImportModal = ({
   projectId,
@@ -116,6 +124,13 @@ export const SprintJiraImportModal = ({
   const selectedLinkedIssueCount = selectedLinkedIssues.length;
   const selectedConversationEnabled = selectedIssues.length > 0
     && selectedIssues.every((issue) => !conversationDisabledKeys.has(issue.key));
+  const selectedCountLabel = getSelectedIssueCountLabel(
+    selectedIssues.length,
+    selectedLinkedIssueCount,
+    selectedSpecialTaskCount,
+  );
+  const visibleSelectedCount = results.filter((issue) => selectedKeys.has(issue.key)).length;
+  const emptyStateCopy = getIssueImportEmptyStateCopy("jira", hasSearched);
 
   const runSearch = async (
     overrides: Partial<{
@@ -181,7 +196,8 @@ export const SprintJiraImportModal = ({
       if (err instanceof DOMException && err.name === "AbortError") {
         return;
       }
-      setError(err instanceof Error ? err.message : String(err));
+      const copy = getIssueImportErrorCopy(err, "Jira search failed. Check the filters and try again.");
+      setError(`Jira search error: ${copy.message}`);
       setResults([]);
     } finally {
       if (abortRef.current === controller) {
@@ -206,7 +222,8 @@ export const SprintJiraImportModal = ({
         if (cancelled) {
           return;
         }
-        setError(err instanceof Error ? err.message : "Failed to load Jira defaults.");
+        const copy = getIssueImportErrorCopy(err, "Failed to load Jira defaults.");
+        setError(`Jira configuration error: ${copy.message}`);
         setHasSearched(true);
       }
     };
@@ -336,69 +353,35 @@ export const SprintJiraImportModal = ({
 
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const copy = getIssueImportErrorCopy(err, "Jira import failed. Try again after checking the selected issues.");
+      setError(`Jira import error: ${copy.message}`);
     } finally {
       setImporting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-[230] flex items-center justify-center bg-black/55 px-4 py-6 backdrop-blur-xl dark:bg-black/75">
-      <div className="flex max-h-[92vh] w-full max-w-7xl overflow-hidden rounded-[2.25rem] border border-white/70 bg-white shadow-[0_48px_120px_rgba(15,23,42,0.28)] dark:border-white/[0.08] dark:bg-void-800 dark:shadow-[0_48px_120px_rgba(0,0,0,0.72)]">
-        <aside className="relative hidden w-72 shrink-0 flex-col justify-between overflow-hidden bg-slate-950 p-7 text-white xl:flex">
-          <span className="pointer-events-none absolute -left-5 -top-3 select-none font-display text-[7.4rem] font-black leading-none tracking-tighter text-white/[0.035]">
-            JIRA
-          </span>
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-[#4C9AFF]/35 to-transparent" />
-          <div className="relative z-10">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#4C9AFF]/25 bg-[#4C9AFF]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#9ecbff]">
-              <Filter className="h-3.5 w-3.5" strokeWidth={2.2} />
-              Backlog Browser
-            </div>
-            <h2 className="mt-6 font-display text-4xl font-black leading-[0.95] tracking-tight">
-              Select Jira Scope.
-            </h2>
-            <p className="mt-4 text-sm leading-relaxed text-white/52">
-              Search Jira with exact keys, guided filters, and bulk selection, then import linked issues or special task payloads.
-            </p>
-          </div>
-          <div className="relative z-10 grid gap-3">
-            {([
-              ["Project", projectKey || "all projects"],
-              ["Selected", String(selectedIssues.length)],
-              ["Linked", String(selectedLinkedIssueCount)],
-              ["Special", String(selectedSpecialTaskCount)],
-            ] as Array<[string, string]>).map(([label, value]) => (
-              <div key={label} className="rounded-[1.1rem] border border-white/10 bg-white/[0.04] p-4">
-                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/34">{label}</div>
-                <div className="mt-1 truncate text-xs font-bold text-white">{value}</div>
-              </div>
-            ))}
-          </div>
-        </aside>
-
-        <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex items-start justify-between gap-4 border-b border-black/[0.06] p-5 dark:border-white/[0.06] sm:p-7">
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#0052CC] dark:text-[#4C9AFF]">
-                Jira Issues
-              </div>
-              <h2 className="mt-2 font-display text-3xl font-black leading-none text-slate-900 dark:text-white">
-                Import Backlog Scope
-              </h2>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-black/[0.04] text-slate-400 transition-colors hover:bg-black/[0.08] hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0052CC]/40 dark:bg-white/[0.05] dark:hover:text-white"
-              aria-label="Close Jira import"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </header>
-
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <div className="grid gap-5 border-b border-black/[0.06] p-5 dark:border-white/[0.06] sm:p-7">
+    <IssueImportShell
+      provider={JIRA_PROVIDER}
+      title="Import Backlog Scope"
+      description="Search Jira with exact keys, guided filters, and bulk selection, then import linked issues or special task payloads."
+      onClose={onClose}
+      closeLabel="Close Jira import"
+      summaryRail={(
+        <IssueImportSummaryRail
+          provider={JIRA_PROVIDER}
+          title="Select Jira Scope."
+          description="Search Jira with exact keys, guided filters, and bulk selection, then import linked issues or special task payloads."
+          items={[
+            { label: "Project", value: projectKey || "all projects" },
+            { label: "Visible selected", value: `${visibleSelectedCount} / ${results.length}` },
+            { label: "Linked", value: String(selectedLinkedIssueCount) },
+            { label: "Special", value: String(selectedSpecialTaskCount) },
+          ]}
+        />
+      )}
+      filters={(
+        <div className="grid gap-5">
               <section className="grid gap-4 rounded-[1.5rem] border border-black/[0.06] bg-black/[0.015] p-4 dark:border-white/[0.06] dark:bg-white/[0.02]">
                 <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
                   <LabeledControl label="Project key" hint="Leave blank to search all Jira projects.">
@@ -412,6 +395,7 @@ export const SprintJiraImportModal = ({
                       }}
                       placeholder="OPS"
                       className="h-12 rounded-[1.1rem] border border-black/[0.07] bg-white px-4 text-sm font-black uppercase tracking-[0.08em] text-slate-700 outline-none transition-colors focus:border-[#0052CC] focus-visible:ring-2 focus-visible:ring-[#0052CC]/20 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-200"
+                      aria-label="Jira project key"
                     />
                   </LabeledControl>
 
@@ -426,6 +410,7 @@ export const SprintJiraImportModal = ({
                       }}
                       placeholder="OPS-42"
                       className="h-12 rounded-[1.1rem] border border-black/[0.07] bg-white px-4 text-sm text-slate-700 outline-none transition-colors focus:border-[#0052CC] focus-visible:ring-2 focus-visible:ring-[#0052CC]/20 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-200"
+                      aria-label="Jira exact issue key"
                     />
                   </LabeledControl>
 
@@ -440,6 +425,7 @@ export const SprintJiraImportModal = ({
                       }}
                       placeholder="Search title, description, or key"
                       className="h-12 rounded-[1.1rem] border border-black/[0.07] bg-white px-4 text-sm text-slate-700 outline-none transition-colors focus:border-[#0052CC] focus-visible:ring-2 focus-visible:ring-[#0052CC]/20 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-200"
+                      aria-label="Jira search text"
                     />
                   </LabeledControl>
 
@@ -499,6 +485,7 @@ export const SprintJiraImportModal = ({
                       }}
                       placeholder="Bug, Story, Epic"
                       className="h-12 rounded-[1.1rem] border border-black/[0.07] bg-white px-4 text-sm text-slate-700 outline-none transition-colors focus:border-[#0052CC] focus-visible:ring-2 focus-visible:ring-[#0052CC]/20 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-200"
+                      aria-label="Jira issue type"
                     />
                   </LabeledControl>
 
@@ -513,6 +500,7 @@ export const SprintJiraImportModal = ({
                       }}
                       placeholder="High, Critical, Medium"
                       className="h-12 rounded-[1.1rem] border border-black/[0.07] bg-white px-4 text-sm text-slate-700 outline-none transition-colors focus:border-[#0052CC] focus-visible:ring-2 focus-visible:ring-[#0052CC]/20 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-200"
+                      aria-label="Jira priority"
                     />
                   </LabeledControl>
 
@@ -522,6 +510,7 @@ export const SprintJiraImportModal = ({
                       value={updatedAfter}
                       onInput={(event) => setUpdatedAfter((event.target as HTMLInputElement).value)}
                       className="h-12 rounded-[1.1rem] border border-black/[0.07] bg-white px-4 text-sm text-slate-700 outline-none transition-colors focus:border-[#0052CC] focus-visible:ring-2 focus-visible:ring-[#0052CC]/20 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-200"
+                      aria-label="Updated after"
                     />
                   </LabeledControl>
 
@@ -531,11 +520,13 @@ export const SprintJiraImportModal = ({
                       value={updatedBefore}
                       onInput={(event) => setUpdatedBefore((event.target as HTMLInputElement).value)}
                       className="h-12 rounded-[1.1rem] border border-black/[0.07] bg-white px-4 text-sm text-slate-700 outline-none transition-colors focus:border-[#0052CC] focus-visible:ring-2 focus-visible:ring-[#0052CC]/20 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-200"
+                      aria-label="Updated before"
                     />
                   </LabeledControl>
 
                   <LabeledControl label="Sort field">
                     <select
+                      aria-label="Sort field"
                       value={sortField}
                       onChange={(event) => setSortField((event.target as HTMLSelectElement).value as JiraSortField)}
                       className="h-12 rounded-[1.1rem] border border-black/[0.07] bg-white px-3 text-xs font-bold uppercase tracking-[0.12em] text-slate-500 outline-none transition-colors focus:border-[#0052CC] focus-visible:ring-2 focus-visible:ring-[#0052CC]/20 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-300"
@@ -550,6 +541,7 @@ export const SprintJiraImportModal = ({
 
                   <LabeledControl label="Sort direction">
                     <select
+                      aria-label="Sort direction"
                       value={sortDirection}
                       onChange={(event) => setSortDirection((event.target as HTMLSelectElement).value as JiraSortDirection)}
                       className="h-12 rounded-[1.1rem] border border-black/[0.07] bg-white px-3 text-xs font-bold uppercase tracking-[0.12em] text-slate-500 outline-none transition-colors focus:border-[#0052CC] focus-visible:ring-2 focus-visible:ring-[#0052CC]/20 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-300"
@@ -573,6 +565,7 @@ export const SprintJiraImportModal = ({
                         setLimit(Number.isFinite(nextValue) ? Math.max(1, Math.min(100, Math.trunc(nextValue))) : 40);
                       }}
                       className="h-12 rounded-[1.1rem] border border-black/[0.07] bg-white px-4 text-sm text-slate-700 outline-none transition-colors focus:border-[#0052CC] focus-visible:ring-2 focus-visible:ring-[#0052CC]/20 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-200"
+                      aria-label="Jira result limit"
                     />
                   </LabeledControl>
                 </div>
@@ -592,6 +585,7 @@ export const SprintJiraImportModal = ({
                       onClick={() => void runSearch()}
                       disabled={loading}
                       className="inline-flex h-12 min-w-40 items-center justify-center gap-2 rounded-[1.1rem] bg-slate-900 px-5 text-xs font-black uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-px hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-950 dark:hover:bg-white/90"
+                      aria-label="Search"
                     >
                       {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
                       Search
@@ -615,6 +609,7 @@ export const SprintJiraImportModal = ({
                       rows={4}
                       placeholder="project = OPS AND labels in (security)"
                       className="w-full rounded-[1.1rem] border border-black/[0.07] bg-white px-4 py-3 text-sm text-slate-700 outline-none transition-colors focus:border-[#0052CC] focus-visible:ring-2 focus-visible:ring-[#0052CC]/20 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-200"
+                      aria-label="Jira JQL override"
                     />
                     <p className="text-xs leading-relaxed text-slate-400">
                       JQL is optional. Leave it empty for guided search, or use it to override every other filter.
@@ -623,154 +618,15 @@ export const SprintJiraImportModal = ({
                 </details>
               </section>
             </div>
-
-            <div className="min-h-0 flex-1 p-5 sm:p-7">
-              {error && (
-                <div className="mb-4 rounded-[1.1rem] border border-status-red/20 bg-status-red/[0.08] px-4 py-3 text-sm font-semibold text-status-red">
-                  {error}
-                </div>
-              )}
-
-              {loading ? (
-                <div className="grid gap-3">
-                  {Array.from({ length: 5 }).map((_, index) => (
-                    <div key={index} className="h-28 animate-pulse rounded-[1.25rem] bg-black/[0.04] dark:bg-white/[0.04]" />
-                  ))}
-                </div>
-              ) : hasSearched && results.length === 0 ? (
-                <div className="rounded-[1.5rem] border border-dashed border-black/[0.1] p-10 text-center text-sm font-semibold text-slate-400 dark:border-white/[0.1]">
-                  No Jira issues found for the current filters.
-                </div>
-              ) : (
-                <div className="grid gap-3">
-                  {results.map((issue) => {
-                    const selected = selectedKeys.has(issue.key);
-                    const safeUrl = getSafeUrl(issue.url);
-                    const importMode = getIssueImportMode(issue);
-                    const isSpecialTask = importMode !== "linked";
-                    const updatedLabel = formatTimestamp(issue.updatedAt);
-                    return (
-                      <button
-                        key={issue.key}
-                        type="button"
-                        onClick={() => toggleIssue(issue)}
-                        aria-pressed={selected}
-                        className={`group rounded-[1.35rem] border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0052CC]/20 ${
-                          selected
-                            ? "border-[#0052CC]/35 bg-[#0052CC]/[0.08] shadow-[0_14px_32px_rgba(0,82,204,0.08)] dark:border-[#4C9AFF]/35 dark:bg-[#4C9AFF]/[0.12]"
-                            : "border-black/[0.06] bg-black/[0.02] hover:-translate-y-0.5 hover:border-black/[0.12] hover:bg-white/82 dark:border-white/[0.07] dark:bg-white/[0.03] dark:hover:border-white/[0.14] dark:hover:bg-white/[0.055]"
-                        }`}
-                      >
-                        <div className="flex items-start gap-4">
-                          <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[0.85rem] ${
-                            selected
-                              ? "bg-[#0052CC] text-white dark:bg-[#4C9AFF] dark:text-slate-900"
-                              : "bg-slate-900/[0.06] text-slate-500 dark:bg-white/[0.06] dark:text-slate-300"
-                          }`}>
-                            {selected ? <Check className="h-4 w-4" strokeWidth={2.5} /> : <JiraIcon className="h-4 w-4" />}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                              <span className="font-mono text-[#0052CC] dark:text-[#4C9AFF]">{issue.key}</span>
-                              {issue.projectKey && <span>{issue.projectKey}</span>}
-                              {issue.issueType && <span>{issue.issueType}</span>}
-                              {issue.priority && <span>{issue.priority}</span>}
-                              {isSpecialTask && (
-                                <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-emerald-600 dark:text-emerald-300">
-                                  {importMode} task
-                                </span>
-                              )}
-                            </div>
-                            <div className="mt-1 text-sm font-black leading-snug text-slate-900 dark:text-white">
-                              {issue.title}
-                            </div>
-                            {issue.bodyPreview && (
-                              <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                                {issue.bodyPreview}
-                              </p>
-                            )}
-                            <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                              <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-black/[0.04] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-600 ring-1 ring-black/[0.05] dark:bg-white/[0.06] dark:text-slate-300 dark:ring-white/[0.06]">
-                                {issue.state || "Open"}
-                              </span>
-                              {updatedLabel && (
-                                <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500 ring-1 ring-black/[0.05] dark:bg-white/[0.06] dark:text-slate-300 dark:ring-white/[0.06]">
-                                  Updated {updatedLabel}
-                                </span>
-                              )}
-                              {issue.issueReporter && (
-                                <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500 ring-1 ring-black/[0.05] dark:bg-white/[0.06] dark:text-slate-300 dark:ring-white/[0.06]">
-                                  <UserRound className="h-3 w-3 shrink-0" strokeWidth={2} />
-                                  <span className="truncate">{issue.issueReporter}</span>
-                                </span>
-                              )}
-                                {(issue.assignees || []).map((name: string) => (
-                                  <span key={name} className="inline-flex max-w-full items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600 ring-1 ring-black/[0.05] dark:bg-white/[0.06] dark:text-slate-300 dark:ring-white/[0.06]">
-                                    <UserRound className="h-3 w-3 shrink-0" strokeWidth={2} />
-                                    <span className="truncate">{name}</span>
-                                  </span>
-                                ))}
-                              {(issue.labels || []).slice(0, 6).map((label: string) => (
-                                <span key={label} className="inline-flex max-w-full items-center gap-1 rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-slate-500 ring-1 ring-black/[0.05] dark:bg-white/[0.06] dark:text-slate-300 dark:ring-white/[0.06]">
-                                  <Tag className="h-3 w-3 shrink-0" strokeWidth={2} />
-                                  <span className="truncate">{label}</span>
-                                </span>
-                              ))}
-                            </div>
-                            <div className="mt-3 flex flex-wrap items-center gap-2">
-                              <label
-                                className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:text-white"
-                                onClick={(event) => event.stopPropagation()}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={!conversationDisabledKeys.has(issue.key)}
-                                  onChange={() => toggleConversation(issue)}
-                                  className="h-3.5 w-3.5 rounded border-slate-300 text-[#0052CC] focus:ring-[#0052CC] dark:border-white/[0.18] dark:bg-transparent"
-                                />
-                                <MessageSquare className="h-3.5 w-3.5" strokeWidth={2.1} />
-                                Append Conversation
-                              </label>
-                              <span className="inline-flex items-center gap-1 rounded-full border border-black/[0.06] bg-white px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300">
-                                {selected ? "Selected" : "Click to select"}
-                              </span>
-                            </div>
-                          </div>
-                          {safeUrl ? (
-                            <a
-                              href={safeUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(event) => event.stopPropagation()}
-                              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-900 dark:hover:bg-white/[0.06] dark:hover:text-white"
-                              aria-label={`Open ${issue.key}`}
-                            >
-                              <ExternalLink className="h-4 w-4" strokeWidth={2.1} />
-                            </a>
-                          ) : (
-                            <span
-                              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-300 dark:text-slate-600"
-                              aria-hidden="true"
-                            >
-                              <ExternalLink className="h-4 w-4" strokeWidth={2.1} />
-                            </span>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <footer className="border-t border-black/[0.06] p-5 dark:border-white/[0.06] sm:p-7">
+      )}
+      footer={(
             <div className="flex flex-col gap-4 rounded-[1.4rem] border border-black/[0.06] bg-black/[0.015] p-4 dark:border-white/[0.06] dark:bg-white/[0.02]">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="text-xs font-semibold text-slate-400" aria-live="polite">
-                  {selectedIssues.length === 0
-                    ? "No Jira issues selected."
-                    : `${selectedIssues.length} selected issue${selectedIssues.length === 1 ? "" : "s"} will be imported. ${selectedLinkedIssueCount} linked, ${selectedSpecialTaskCount} special task${selectedSpecialTaskCount === 1 ? "" : "s"}.`}
+                  <span className="font-bold text-slate-600 dark:text-slate-200">
+                    {selectedCountLabel}
+                  </span>{" "}
+                  {visibleSelectedCount} of {results.length} visible results selected.
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
@@ -778,6 +634,7 @@ export const SprintJiraImportModal = ({
                     onClick={selectAllVisible}
                     disabled={results.length === 0 || loading}
                     className="rounded-[1rem] border border-black/[0.06] px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:text-white"
+                    aria-label="Select all visible results"
                   >
                     Select all visible
                   </button>
@@ -786,6 +643,7 @@ export const SprintJiraImportModal = ({
                     onClick={clearSelection}
                     disabled={selectedIssues.length === 0}
                     className="rounded-[1rem] border border-black/[0.06] px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:text-white"
+                    aria-label="Clear selection"
                   >
                     Clear all
                   </button>
@@ -800,8 +658,10 @@ export const SprintJiraImportModal = ({
                   <input
                     type="checkbox"
                     checked={selectedConversationEnabled}
+                    disabled={selectedIssues.length === 0}
                     onChange={(event) => setConversationForAllSelected((event.target as HTMLInputElement).checked)}
                     className="h-3.5 w-3.5 rounded border-slate-300 text-[#0052CC] focus:ring-[#0052CC] dark:border-white/[0.18] dark:bg-transparent"
+                    aria-label="Append conversation to all selected Jira issues"
                   />
                   <MessageSquare className="h-3.5 w-3.5" strokeWidth={2.1} />
                   Append conversation to all selected
@@ -819,16 +679,83 @@ export const SprintJiraImportModal = ({
                     onClick={() => { void handleImport(); }}
                     disabled={selectedIssues.length === 0 || importing}
                     className="rounded-[1rem] bg-[#0052CC] px-5 py-3 text-sm font-black text-white shadow-[0_12px_28px_rgba(0,82,204,0.2)] transition-all hover:-translate-y-px hover:bg-[#0047b3] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#4C9AFF] dark:text-slate-900 dark:hover:bg-[#3b85e0]"
+                    aria-label={selectedIssues.length === 0 ? "Import issues disabled until Jira issues are selected" : "Import issues"}
                   >
                     {importing ? "Importing..." : "Import Issues"}
                   </button>
                 </div>
               </div>
             </div>
-          </footer>
+      )}
+    >
+      {error && (
+        <IssueImportErrorPanel error={getIssueImportErrorCopy(error)} />
+      )}
+
+      {loading ? (
+        <IssueImportLoadingSkeletonList />
+      ) : hasSearched && results.length === 0 ? (
+        <IssueImportEmptyState
+          title={emptyStateCopy.title}
+          description={emptyStateCopy.description}
+          action={(
+            <button
+              type="button"
+              onClick={() => void runSearch()}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-[1rem] bg-[#0052CC] px-4 text-xs font-black uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-px hover:bg-[#0047b3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0052CC]/30 dark:bg-[#4C9AFF] dark:text-slate-950"
+              aria-label="Search Jira issues again"
+            >
+              <Search className="h-4 w-4" aria-hidden="true" />
+              Search Again
+            </button>
+          )}
+        />
+      ) : (
+        <div className="grid gap-3">
+          {results.map((issue) => {
+            const selected = selectedKeys.has(issue.key);
+            const importMode = getIssueImportMode(issue);
+            return (
+              <IssueImportIssueCard
+                key={issue.key}
+                provider={JIRA_PROVIDER}
+                issueKey={issue.key}
+                title={issue.title}
+                url={issue.url}
+                bodyPreview={issue.bodyPreview}
+                selected={selected}
+                includeConversation={!conversationDisabledKeys.has(issue.key)}
+                metadataRows={buildIssueImportMetadataRows({
+                  provider: "jira",
+                  projectKey: issue.projectKey,
+                  issueKey: issue.key,
+                  state: issue.state,
+                  issueType: issue.issueType,
+                  priority: issue.priority,
+                  issueAuthor: issue.issueAuthor,
+                  issueReporter: issue.issueReporter,
+                  issueMilestone: issue.issueMilestone,
+                  issueCommentCount: issue.issueCommentCount,
+                  createdAt: issue.createdAt,
+                  updatedAt: issue.updatedAt,
+                })}
+                labels={truncateIssueImportLabels(issue.labels ?? [], 6)}
+                assignees={truncateIssueImportAssignees(issue.assignees ?? [], 4)}
+                selectionLabel={selected ? "Selected" : "Click to select"}
+                modeLabel={importMode === "linked" ? null : `${importMode} task`}
+                icon={<JiraIcon className="h-4 w-4" />}
+                onToggle={() => toggleIssue(issue)}
+                onToggleConversation={() => {
+                  if (selected) {
+                    toggleConversation(issue);
+                  }
+                }}
+              />
+            );
+          })}
         </div>
-      </div>
-    </div>
+      )}
+    </IssueImportShell>
   );
 };
 
@@ -956,17 +883,4 @@ function extractHostDomain(url: string): string {
   } catch {
     return "";
   }
-}
-
-function formatTimestamp(value: string | null | undefined): string {
-  if (!value) {
-    return "";
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  return parsed.toLocaleString();
 }
