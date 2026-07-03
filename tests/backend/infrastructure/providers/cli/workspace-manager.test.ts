@@ -420,6 +420,141 @@ describe("WorkspaceManager", () => {
       "feature/task-1",
       "origin/feature/task-1",
     ]);
+    expect(vi.mocked(runCommandStrict).mock.calls).not.toContainEqual([
+      "git",
+      expect.arrayContaining(["branch"]),
+      expect.anything(),
+      expect.anything(),
+    ]);
+    expect(vi.mocked(runCommandStrict).mock.calls).not.toContainEqual([
+      "git",
+      expect.arrayContaining(["for-each-ref"]),
+      expect.anything(),
+      expect.anything(),
+    ]);
+
+    const showRefCalls = vi.mocked(runCommandStrict).mock.calls.filter((call) =>
+      call[0] === "git" && call[1][0] === "show-ref"
+    );
+    expect(showRefCalls.map((call) => call[1].at(-1))).toEqual([
+      "refs/remotes/origin/feature/task-1",
+      "refs/heads/feature/task-1",
+      "refs/remotes/origin/feature/sprint-1",
+      "refs/heads/feature/sprint-1",
+    ]);
+  });
+
+  it("prefers the exact remote worker ref over a local worker ref", async () => {
+    vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
+      if (command === "git" && args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        return { ok: true, stdout: "/repo/project\n", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "remote" && args[1] === "get-url") {
+        return { ok: true, stdout: "https://github.com/example/project.git\n", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "fetch") {
+        return { ok: true, stdout: "", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "show-ref") {
+        if (args.includes("refs/remotes/origin/feature/task-1")
+          || args.includes("refs/heads/feature/task-1")
+          || args.includes("refs/remotes/origin/feature/sprint-1")) {
+          return { ok: true, stdout: "", stderr: "" } as any;
+        }
+        throw new Error("missing ref");
+      }
+      if (command === "docker" && args[0] === "volume" && args[1] === "inspect") {
+        throw new Error("missing");
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0, signal: null } as any;
+    });
+
+    await manager.prepareWorktree(
+      "/repo/project",
+      "docker-volume://code-ux-project-abcd1234ef56-session-1",
+      "feature/task-1",
+      "feature/sprint-1",
+    );
+
+    const checkoutCall = vi.mocked(runCommandStrict).mock.calls.find((call) =>
+      call[0] === "docker"
+      && call[1].includes("--entrypoint")
+      && call[1].includes("git")
+      && call[1].includes("checkout")
+    );
+    expect(checkoutCall?.[1].slice(-4)).toEqual([
+      "checkout",
+      "-B",
+      "feature/task-1",
+      "origin/feature/task-1",
+    ]);
+  });
+
+  it("falls back to local worker refs when the remote worker ref is missing", async () => {
+    vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
+      if (command === "git" && args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        return { ok: true, stdout: "/repo/project\n", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "remote" && args[1] === "get-url") {
+        return { ok: true, stdout: "", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "fetch") {
+        throw new Error("remote branch missing");
+      }
+      if (command === "git" && args[0] === "show-ref") {
+        if (args.includes("refs/heads/feature/task-1")) {
+          return { ok: true, stdout: "", stderr: "" } as any;
+        }
+        throw new Error("missing ref");
+      }
+      if (command === "git" && args[0] === "worktree" && args[1] === "add") {
+        return { ok: true, stdout: "", stderr: "" } as any;
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0, signal: null } as any;
+    });
+
+    await manager.prepareWorktree(
+      "/repo/project",
+      "/repo/project/.worktrees/session-1",
+      "feature/task-1",
+      "feature/sprint-1",
+    );
+
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "git",
+      ["worktree", "add", "--force", "-B", "feature/task-1", "/repo/project/.worktrees/session-1", "feature/task-1"],
+      "/repo/project",
+    );
+  });
+
+  it("reports missing worker and feature refs without broad branch enumeration", async () => {
+    vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
+      if (command === "git" && args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        return { ok: true, stdout: "/repo/project\n", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "remote" && args[1] === "get-url") {
+        return { ok: true, stdout: "", stderr: "" } as any;
+      }
+      if (command === "git" && args[0] === "fetch") {
+        throw new Error("remote unavailable");
+      }
+      if (command === "git" && args[0] === "show-ref") {
+        throw new Error("missing ref");
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0, signal: null } as any;
+    });
+
+    await expect(manager.prepareWorktree(
+      "/repo/project",
+      "/repo/project/.worktrees/session-1",
+      "feature/task-1",
+      "feature/sprint-1",
+    )).rejects.toThrow("neither worker branch feature/task-1 nor feature branch feature/sprint-1 exists");
+
+    const gitCalls = vi.mocked(runCommandStrict).mock.calls.filter((call) => call[0] === "git");
+    expect(gitCalls.some((call) => call[1].includes("branch"))).toBe(false);
+    expect(gitCalls.some((call) => call[1].includes("for-each-ref"))).toBe(false);
+    expect(gitCalls.some((call) => call[1][0] === "show-ref" && !call[1].includes("--verify"))).toBe(false);
   });
 
   it("builds workspace guidance with in-volume path checks", async () => {
