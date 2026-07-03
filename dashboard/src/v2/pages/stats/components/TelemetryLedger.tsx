@@ -29,7 +29,7 @@ import {
   type LedgerSortKey,
 } from "./StatsShared.js";
 
-function getStatusChipTone(status: string): string {
+export function getStatusChipTone(status: string): string {
   const normalized = status.toLowerCase();
   if (normalized.includes("complete") || normalized.includes("done") || normalized.includes("merged")) {
     return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
@@ -46,7 +46,7 @@ function getStatusChipTone(status: string): string {
   return "bg-slate-500/10 text-slate-500 dark:text-slate-300";
 }
 
-const LedgerSummaryCard: FunctionComponent<{
+export const LedgerSummaryTile: FunctionComponent<{
   icon: typeof Zap;
   label: string;
   value: string;
@@ -124,7 +124,7 @@ const LedgerComparisonCard: FunctionComponent<{
                 total={topItem.usage.totalTokens}
               />
               <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
-                {formatTokens(topItem.usage.totalTokens)} tokens, {formatPercent(totals.totalTokens > 0 ? (topItem.usage.totalTokens / totals.totalTokens) * 100 : 0)} of the visible set.
+                {formatTokens(topItem.usage.totalTokens)} tokens, {formatPercent(totals.totalTokens > 0 ? (topItem.usage.totalTokens / totals.totalTokens) * 100 : 0)} of all window tokens.
               </div>
             </>
           ) : (
@@ -212,13 +212,22 @@ export const TelemetryLedger: FunctionComponent<{
   const overallTotals = useMemo(() => {
     let totalTokens = 0;
     let totalActiveTimeMs = 0;
+    let invocationCount = 0;
+    let newestActivityMs = 0;
+    let newestActivityAt: string | null = null;
 
     for (const item of items) {
       totalTokens += item.usage.totalTokens;
       totalActiveTimeMs += item.usage.activeTimeMs;
+      invocationCount += item.usage.invocationCount;
+      const activityMs = item.lastActivityAt ? new Date(item.lastActivityAt).getTime() : 0;
+      if (!Number.isNaN(activityMs) && activityMs > newestActivityMs) {
+        newestActivityMs = activityMs;
+        newestActivityAt = item.lastActivityAt;
+      }
     }
 
-    return { totalTokens, totalActiveTimeMs };
+    return { totalTokens, totalActiveTimeMs, invocationCount, newestActivityAt };
   }, [items]);
 
   const topItem = useMemo(() => {
@@ -247,6 +256,9 @@ export const TelemetryLedger: FunctionComponent<{
   const queryIsActive = query.trim().length > 0;
   const averageTokens = items.length > 0 ? overallTotals.totalTokens / items.length : 0;
   const averageActiveTime = items.length > 0 ? overallTotals.totalActiveTimeMs / items.length : 0;
+  const averageCalls = items.length > 0 ? overallTotals.invocationCount / items.length : 0;
+  const filteredShare = overallTotals.totalTokens > 0 ? (totals.totalTokens / overallTotals.totalTokens) * 100 : 0;
+  const singularKind = kindLabel.replace(/s$/, "");
 
   return (
     <div className={`${PANEL_CLASS} p-6 md:p-7`}>
@@ -266,30 +278,44 @@ export const TelemetryLedger: FunctionComponent<{
         </div>
 
         {items.length > 0 ? (
-          <div className="grid gap-3 lg:grid-cols-4">
-            <LedgerSummaryCard
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <LedgerSummaryTile
               icon={Hash}
-              label="Total"
+              label="Entities"
               value={items.length.toLocaleString()}
               detail={kindLabel}
             />
-            <LedgerSummaryCard
+            <LedgerSummaryTile
+              icon={Database}
+              label="Total Tokens"
+              value={formatTokens(overallTotals.totalTokens)}
+              detail={`${overallTotals.invocationCount.toLocaleString()} calls`}
+              tone="text-cyan-500"
+            />
+            <LedgerSummaryTile
               icon={Zap}
-              label="Average Tokens"
+              label="Avg Tokens"
               value={formatTokens(averageTokens)}
-              detail={`per ${kindLabel.replace(/s$/, "")}`}
+              detail={`per ${singularKind}`}
             />
-            <LedgerSummaryCard
+            <LedgerSummaryTile
               icon={Clock3}
-              label="Average Active"
+              label="Avg Active"
               value={formatStatsDuration(averageActiveTime)}
-              detail={`per ${kindLabel.replace(/s$/, "")}`}
+              detail={`${averageCalls.toFixed(1)} calls/${singularKind}`}
             />
-            <LedgerSummaryCard
+            <LedgerSummaryTile
               icon={Activity}
               label="Most Recent"
-              value={items[0]?.lastActivityAt ? formatDateTime(items[0].lastActivityAt) : "—"}
+              value={overallTotals.newestActivityAt ? formatDateTime(overallTotals.newestActivityAt) : "—"}
               detail="last activity"
+            />
+            <LedgerSummaryTile
+              icon={Brain}
+              label="Top Contributor"
+              value={topItem ? topItem.label : "—"}
+              detail={topItem ? `${formatTokens(topItem.usage.totalTokens)} tokens` : "no leader"}
+              tone="text-indigo-500"
             />
           </div>
         ) : (
@@ -300,8 +326,12 @@ export const TelemetryLedger: FunctionComponent<{
 
         <div className={`${SUBPANEL_CLASS} sticky top-3 z-20 grid gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center`}>
           <div className="relative">
+            <label htmlFor={`${kindLabel}-ledger-search`} className="sr-only">
+              Search {kindLabel}
+            </label>
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" strokeWidth={2} />
             <input
+              id={`${kindLabel}-ledger-search`}
               type="text"
               value={query}
               onInput={(event) => setQuery((event.currentTarget as HTMLInputElement).value)}
@@ -319,7 +349,7 @@ export const TelemetryLedger: FunctionComponent<{
               </button>
             ) : null}
           </div>
-          <div className="flex max-w-full gap-2 overflow-x-auto pb-1 pr-1 scrollbar-hide lg:flex-wrap lg:justify-end">
+          <div className="flex max-w-full flex-wrap gap-2 pr-1 lg:justify-end" role="group" aria-label={`${title} sort controls`}>
             {([
               ["last", "Latest"],
               ["tokens", "Tokens"],
@@ -357,45 +387,30 @@ export const TelemetryLedger: FunctionComponent<{
                 }}
               />
               <div className="grid gap-3 sm:grid-cols-3">
-                <LedgerSummaryCard
+                <LedgerSummaryTile
                   icon={Activity}
                   label="Search Results"
                   value={filteredItems.length.toLocaleString()}
                   detail={queryIsActive ? `matching "${query.trim()}"` : "all visible"}
                   tone="text-amber-500"
                 />
-                <LedgerSummaryCard
+                <LedgerSummaryTile
                   icon={Brain}
                   label="Top Lane"
                   value={topItem ? topItem.label : "—"}
                   detail={topItem ? `${formatTokens(topItem.usage.totalTokens)} tokens` : "no lane yet"}
                   tone="text-indigo-500"
                 />
-                <LedgerSummaryCard
+                <LedgerSummaryTile
                   icon={Database}
                   label="Visible Share"
-                  value={totals.totalTokens > 0 ? formatPercent((totals.totalTokens / Math.max(1, overallTotals.totalTokens)) * 100) : "—"}
+                  value={totals.totalTokens > 0 ? formatPercent(filteredShare) : "—"}
                   detail="of current window tokens"
                   tone="text-cyan-500"
                 />
               </div>
             </div>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-12 text-center text-sm text-slate-400 dark:border-white/[0.08]">
-              {queryIsActive ? (
-                <div className="space-y-3">
-                  <div>No {kindLabel} match “{query.trim()}”.</div>
-                  <button
-                    type="button"
-                    onClick={() => setQuery("")}
-                    className="inline-flex items-center rounded-full border border-black/[0.06] bg-white/72 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300 dark:hover:text-white"
-                  >
-                    Clear search
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          )
+          ) : null
         ) : null}
 
         {searchHasResults ? (
@@ -404,22 +419,24 @@ export const TelemetryLedger: FunctionComponent<{
               {visibleItems.map((item, index) => {
                 const shareOfTotal = totals.totalTokens > 0 ? (item.usage.totalTokens / totals.totalTokens) * 100 : 0;
                 const shareOfLeader = totals.leaderTokens > 0 ? (item.usage.totalTokens / totals.leaderTokens) * 100 : 0;
+                const tokenPerCall = item.usage.invocationCount > 0 ? item.usage.totalTokens / item.usage.invocationCount : 0;
+                const providerLabel = item.provider ? String(item.provider) : "No provider";
+                const purposeLabel = item.purpose ? item.purpose.replace(/_/g, " ") : "No purpose";
+                const statusLabel = item.status ? item.status.replace(/_/g, " ") : "No status";
 
                 return (
-                  <div key={item.id} className={`${LEDGER_ROW_MODERN_CLASS} !p-4`}>
-                    <div className="flex flex-col gap-3">
-                      <div className="flex items-start justify-between gap-4">
+                  <div key={item.id} role="article" className={`${LEDGER_ROW_MODERN_CLASS} !p-4`} aria-label={`${item.label} ${kindLabel} telemetry row`}>
+                    <div className="flex flex-col gap-4">
+                      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
                           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] text-xs font-black text-slate-900 shadow-sm backdrop-blur-xl dark:text-white">
                             {index + 1}
                           </div>
                           <div className="min-w-0">
                             <div className="truncate text-base font-black tracking-tight text-slate-900 dark:text-white">{item.label}</div>
-                            {kindLabel === "sprints" ? (
-                              <div className="text-[10px] text-slate-400">
-                                {formatTokens(item.usage.totalTokens / Math.max(1, item.usage.invocationCount))}/call
-                              </div>
-                            ) : null}
+                            <div className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                              {formatTokens(tokenPerCall)}/call · last {formatDateTime(item.lastActivityAt)}
+                            </div>
                             <div className="mt-1.5 flex flex-wrap items-center gap-2 min-w-0">
                               {item.provider ? (() => {
                                 const pIcon = getProviderIcon(item.provider as string);
@@ -450,7 +467,7 @@ export const TelemetryLedger: FunctionComponent<{
                             </div>
                           </div>
                         </div>
-                        <div className="hidden shrink-0 grid-cols-3 gap-6 text-right lg:grid">
+                        <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-4 xl:w-auto xl:min-w-[34rem] xl:grid-cols-4 xl:text-right">
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Tokens</div>
                             <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatTokens(item.usage.totalTokens)}</div>
@@ -463,21 +480,10 @@ export const TelemetryLedger: FunctionComponent<{
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Calls</div>
                             <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{item.usage.invocationCount.toLocaleString()}</div>
                           </div>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-4 lg:hidden">
-                        <div>
-                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Tokens</div>
-                          <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatTokens(item.usage.totalTokens)}</div>
-                        </div>
-                        <div>
-                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Active</div>
-                          <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatStatsDuration(item.usage.activeTimeMs)}</div>
-                        </div>
-                        <div>
-                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Calls</div>
-                          <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{item.usage.invocationCount.toLocaleString()}</div>
+                          <div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Share</div>
+                            <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatPercent(shareOfTotal)}</div>
+                          </div>
                         </div>
                       </div>
 
@@ -489,9 +495,14 @@ export const TelemetryLedger: FunctionComponent<{
                           reasoning={item.usage.reasoningOutputTokens}
                           total={item.usage.totalTokens}
                         />
-                        <div className="h-1 rounded-full bg-black/[0.04] dark:bg-white/[0.05]">
+                        <div
+                          role="img"
+                          aria-label={`${item.label} contributes ${formatPercent(shareOfLeader)} of the leading ${singularKind} token volume.`}
+                          className="h-1 rounded-full bg-black/[0.04] dark:bg-white/[0.05]"
+                        >
                           <div
-                            className="h-1 rounded-full bg-emerald-500/60 transition-all duration-500"
+                            aria-hidden="true"
+                            className="h-1 rounded-full bg-emerald-500/60 motion-safe:transition-all motion-safe:duration-500"
                             style={{ width: `${Math.min(100, Math.max(shareOfLeader > 0 ? 3 : 0, shareOfLeader))}%` }}
                           />
                         </div>
@@ -502,8 +513,8 @@ export const TelemetryLedger: FunctionComponent<{
                             <TokenChip icon={ArrowUpRight} label="Output" value={item.usage.outputTokens} tone="border-amber-500/16 bg-amber-500/8 text-amber-600 dark:text-amber-400" />
                             <TokenChip icon={Brain} label="Reasoning" value={item.usage.reasoningOutputTokens} tone="border-rose-500/16 bg-rose-500/8 text-rose-600 dark:text-rose-400" />
                           </div>
-                          <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                            {formatPercent(shareOfTotal)} of visible tokens
+                          <div className="max-w-full text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                            {providerLabel} · {purposeLabel} · {statusLabel}
                           </div>
                         </div>
                       </div>

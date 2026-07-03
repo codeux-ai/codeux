@@ -9,6 +9,11 @@ vi.mock("gsap", () => ({
     set: vi.fn(),
     context: vi.fn(() => ({ revert: vi.fn() })),
     registerPlugin: vi.fn(),
+    matchMedia: vi.fn(() => ({
+      add: vi.fn((query, fn) => fn()),
+      revert: vi.fn(),
+      kill: vi.fn()
+    })),
     timeline: vi.fn(() => ({
       to: vi.fn().mockReturnThis(),
       fromTo: vi.fn().mockReturnThis(),
@@ -198,10 +203,16 @@ describe('StatsPage visual tests', () => {
     }
     expect(screen.getByText('Analysis Studio')).toBeTruthy();
     expect(screen.getByRole('heading', { name: studioTitle })).toBeTruthy();
-    expect(screen.getByText('Ready')).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Statistics' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: `${studioTitle === 'Reliability' ? 'Providers' : studioTitle} telemetry` })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: `${studioTitle === 'Reliability' ? 'Providers' : studioTitle} summary cards` })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Analysis workspace' })).toBeTruthy();
+    expect(screen.getByLabelText('Stats workspace context')).toHaveTextContent('Window');
+    expect(screen.getByLabelText('Current telemetry window')).toHaveTextContent('Freshness');
+    expect(screen.getAllByText('Ready').length).toBeGreaterThan(0);
   });
 
-  it('renders empty states with new amber visual language', () => {
+  it('renders the no-project state in the stats shell hierarchy', () => {
     vi.mocked(useProjectDataModule.useProjectData).mockReturnValue({
       selectedProjectId: null,
       createProject: vi.fn(),
@@ -241,13 +252,17 @@ describe('StatsPage visual tests', () => {
     });
 
     const { getByText, queryByText } = render(<StatsPage />);
+    expect(screen.getByRole('region', { name: 'Statistics' })).toBeTruthy();
+    expect(screen.getByLabelText('Stats workspace context')).toHaveTextContent('Trend telemetry');
+    expect(screen.getByLabelText('Stats workspace context')).toHaveTextContent('Awaiting telemetry');
     expect(screen.getByRole('status')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'No project selected' })).toBeTruthy();
     expect(getByText('Stats panel idle')).toBeTruthy();
+    expect(getByText('Project · No project selected')).toBeTruthy();
     expect(queryByText('Time-series and throughput analysis')).toBeNull();
   });
 
-  it('renders the loading state as a polite status panel', () => {
+  it('renders the loading state as a polite stats shell panel', () => {
     vi.mocked(useStatsPageDataModule.useStatsPageData).mockReturnValue({
       stats: null,
       loading: true,
@@ -276,17 +291,20 @@ describe('StatsPage visual tests', () => {
 
     render(<StatsPage />);
 
+    expect(screen.getByText(/^Generated · Loading snapshot$/i)).toBeTruthy();
+    expect(screen.getByLabelText('Stats workspace context')).toHaveTextContent('Refreshing');
     expect(screen.getByRole('status')).toHaveTextContent('Loading telemetry field');
     expect(screen.getByRole('status')).toHaveTextContent('Stats panel refreshing');
     expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite');
   });
 
-  it('renders the error state as an alert panel', () => {
+  it('renders the error state as an alert panel with recovery action', () => {
+    const refresh = vi.fn();
     vi.mocked(useStatsPageDataModule.useStatsPageData).mockReturnValue({
       stats: null,
       loading: false,
       error: 'Stats fetch failed.',
-      refresh: vi.fn(),
+      refresh,
       usage: null as any,
       tokenSeries: [],
       activeTimeSeries: [],
@@ -312,6 +330,9 @@ describe('StatsPage visual tests', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent('Stats panel unavailable');
     expect(screen.getByRole('alert')).toHaveTextContent('Stats fetch failed.');
+    expect(screen.getByRole('alert')).toHaveTextContent('Project · Project 1');
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+    expect(screen.getByText(/^Generated · No snapshot$/i)).toBeTruthy();
   });
 
   it('renders the system studio without crashing', () => {

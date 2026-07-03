@@ -1,8 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import type { ExecutionInvocationRecord } from "../../../../../types.js";
 import { fetchInvocationMessages } from "../../../../../lib/invocation-api.js";
 import { InvocationsTable } from "../../../components/system/InvocationsTable.js";
@@ -58,6 +58,10 @@ function createInvocation(overrides: Partial<ExecutionInvocationRecord> = {}): E
 describe("InvocationsTable", () => {
   beforeEach(() => {
     mockedFetchInvocationMessages.mockReset();
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it("renders formatted tokens, status colors, and context chips", () => {

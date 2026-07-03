@@ -53,6 +53,8 @@ describe("UsageChartMinimap", () => {
     );
     const strip = container.querySelector("[data-testid='usage-chart-minimap']");
     expect(strip).toBeTruthy();
+    expect(strip?.getAttribute("aria-label")).toBe("Chart minimap zoom region, full range of 1 bucket");
+    expect(strip?.getAttribute("aria-disabled")).toBe("true");
     expect(strip?.textContent).toContain("Zoom becomes available after the next bucket lands.");
   });
 
@@ -93,6 +95,8 @@ describe("UsageChartMinimap", () => {
     const { container } = render(
       <UsageChartMinimap buckets={createBuckets(10)} zoomRange={{ start: 2, end: 5 }} onZoomChange={vi.fn()} />,
     );
+    expect(container.querySelector("[data-testid='usage-chart-minimap']")?.getAttribute("aria-label"))
+      .toBe("Chart minimap zoom region, showing buckets 3 through 6 of 10");
     expect(container.textContent).toContain("4 of 10 buckets");
   });
 });

@@ -94,7 +94,8 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
   };
 
   const groupedSeries: Record<string, ProjectExecutionStatsChartSeries[]> = stats?.chartSeries?.reduce((acc, series) => {
-    (acc[series.grouping] ??= []).push(series);
+    const grouping = series.grouping || 'core';
+    (acc[grouping] ??= []).push(series);
     return acc;
   }, {} as Record<string, ProjectExecutionStatsChartSeries[]>) ?? {};
 

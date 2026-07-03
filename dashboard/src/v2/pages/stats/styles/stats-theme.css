@@ -9,6 +9,7 @@
     --stats-card-padding: 1.5rem;
     --stats-card-padding-compact: 1rem;
     --stats-card-min-height: 10rem;
+    --stats-card-compact-min-height: 8rem;
     
     /* Surface Tokens (Light Mode) */
     --stats-surface-panel: var(--surface-glass);
@@ -16,7 +17,10 @@
     --stats-surface-subpanel: var(--fill-muted);
     --stats-surface-subpanel-hover: var(--fill-muted-hover);
     --stats-surface-chip: var(--fill-muted);
+    --stats-surface-chip-hover: var(--fill-muted-hover);
     --stats-surface-input: var(--fill-muted);
+    --stats-surface-control-active: var(--stats-accent-signal-fill);
+    --stats-surface-control-active-strong: var(--stats-accent-amber-fill);
     --stats-card-bg: var(--stats-surface-panel);
     --stats-card-border: var(--border-hairline);
     --stats-card-shadow: var(--elevation-base);
@@ -26,6 +30,9 @@
     --stats-subpanel-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
     --stats-border-hairline: var(--border-hairline);
     --stats-border-strong: rgba(15, 23, 42, 0.12);
+    --stats-control-shadow: var(--elevation-base);
+    --stats-control-shadow-active: 0 3px 10px rgba(0, 122, 94, 0.14);
+    --stats-control-border-active: rgba(0, 122, 94, 0.24);
     
     /* Accent Tokens */
     --stats-accent-signal: var(--signal-600);
@@ -40,11 +47,16 @@
     --stats-accent-emerald-fill: rgba(0, 122, 94, 0.07);
     --stats-accent-muted-fill: rgba(15, 23, 42, 0.045);
     --stats-focus-ring: var(--accent-focus-ring);
+    --stats-focus-ring-offset: var(--surface-page);
     
     /* Typography Tokens */
     --stats-label-color: var(--text-metadata);
     --stats-value-color: var(--text-primary);
     --stats-detail-color: var(--text-metadata);
+    --stats-control-text: var(--text-metadata);
+    --stats-control-text-hover: var(--text-primary);
+    --stats-control-text-active: var(--stats-accent-signal);
+    --stats-control-text-active-strong: var(--stats-accent-amber);
     
     /* Motion Tokens */
     --stats-motion-fast: var(--motion-fast) var(--motion-ease-standard);
@@ -62,6 +74,8 @@
     --stats-panel-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
     --stats-subpanel-shadow: 0 1px 2px rgba(0, 0, 0, 0.16);
     --stats-border-strong: rgba(250, 244, 237, 0.14);
+    --stats-control-shadow-active: 0 3px 12px rgba(0, 224, 160, 0.16);
+    --stats-control-border-active: rgba(0, 224, 160, 0.26);
     
     /* Accent Tokens (Dark Mode) */
     --stats-accent-cyan: #38bdf8;

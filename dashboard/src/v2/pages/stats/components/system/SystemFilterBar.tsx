@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { Search, SlidersHorizontal, X } from "lucide-preact";
+import { ChevronLeft, ChevronRight, Search, SlidersHorizontal, X } from "lucide-preact";
 import { CHIP_CLASS, INPUT_CLASS, SUBPANEL_CLASS } from "../StatsShared.js";
 import type { SystemFilters } from "../../hooks/use-system-view-data.js";
 
@@ -43,10 +43,28 @@ function toggleValue<T extends string>(values: T[], value: T): T[] {
 function buildChipClass(active: boolean, activeClass: string): string {
   return [
     CHIP_CLASS,
-    "inline-flex items-center gap-2 px-3.5 py-2 text-[11px] font-bold uppercase tracking-[0.16em] transition-all motion-safe:active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900",
+    "inline-flex min-h-9 max-w-full items-center gap-2 whitespace-normal px-3 py-1.5 text-left text-[10px] font-bold uppercase leading-tight tracking-[0.14em] transition-all motion-safe:active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900",
     active ? activeClass : "text-slate-500 hover:bg-black/[0.05] hover:border-black/[0.1] hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/[0.05] dark:hover:text-white",
   ].join(" ");
 }
+
+const FilterGroup: FunctionComponent<{
+  label: string;
+  children: import("preact").ComponentChildren;
+  icon?: boolean;
+}> = ({ label, children, icon }) => (
+  <div
+    className="min-w-0 rounded-2xl border border-black/[0.04] bg-white/42 p-2.5 dark:border-white/[0.04] dark:bg-white/[0.025]"
+    role="group"
+    aria-label={`${label} filters`}
+  >
+    <div className="mb-2 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+      {icon ? <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={2.2} /> : null}
+      {label}
+    </div>
+    <div className="flex min-w-0 flex-wrap items-center gap-2">{children}</div>
+  </div>
+);
 
 export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
   filters,
@@ -66,11 +84,13 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
   const totalShown = totalCount.toLocaleString();
 
   return (
-    <div className={`${SUBPANEL_CLASS} sticky top-3 z-20 flex min-w-0 flex-col gap-4 p-4 md:p-5`}>
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+    <div className={`${SUBPANEL_CLASS} sticky top-3 z-20 flex min-w-0 max-w-full flex-col gap-4 p-4 md:p-5`}>
+      <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,32rem)] xl:items-start">
         <div className="relative min-w-0">
+          <label htmlFor="system-filter-search" className="sr-only">Search system stats</label>
           <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" strokeWidth={2} />
           <input
+            id="system-filter-search"
             type="search"
             value={search}
             onInput={(event) => onSearchChange((event.currentTarget as HTMLInputElement).value)}
@@ -89,11 +109,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center justify-start gap-2 lg:justify-end" role="group" aria-label="Status filters">
-          <div className={`inline-flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
-            <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={2.2} />
-            Status
-          </div>
+        <FilterGroup label="Status" icon>
           {STATUS_OPTIONS.map((status) => {
             const active = filters.status.includes(status.value);
             return (
@@ -108,15 +124,12 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
               </button>
             );
           })}
-        </div>
+        </FilterGroup>
       </div>
 
-      <div className="flex flex-wrap items-start gap-3">
+      <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
         {availablePurposes.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Purposes filters">
-            <div className={`px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
-              Purposes
-            </div>
+          <FilterGroup label="Purposes">
             {availablePurposes.map((purpose) => {
               const active = filters.purpose.includes(purpose);
               return (
@@ -131,14 +144,11 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
                 </button>
               );
             })}
-          </div>
+          </FilterGroup>
         ) : null}
 
         {availableProviders.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Providers filters">
-            <div className={`px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
-              Providers
-            </div>
+          <FilterGroup label="Providers">
             {availableProviders.map((provider) => {
               const active = filters.provider.includes(provider);
               return (
@@ -153,13 +163,10 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
                 </button>
               );
             })}
-          </div>
+          </FilterGroup>
         ) : null}
 
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Error Category filters">
-          <div className={`inline-flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
-            Error Category
-          </div>
+        <FilterGroup label="Error Category">
           {["timeout", "rateLimit", "apiError", "modelError", "cancelled"].map((errorCat) => {
             const active = filters.errorCategories?.includes(errorCat) ?? false;
             return (
@@ -174,7 +181,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
               </button>
             );
           })}
-        </div>
+        </FilterGroup>
       </div>
 
       <div className="flex flex-col gap-3 border-t border-black/[0.06] pt-3 dark:border-white/[0.06] lg:flex-row lg:items-center lg:justify-between">
@@ -186,7 +193,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
                 onFiltersChange({ status: [], purpose: [], provider: [], errorCategories: [] });
                 onSearchChange("");
               }}
-              className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400 transition-colors hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:hover:text-slate-200 dark:focus-visible:ring-offset-void-900"
+              className="rounded-full text-xs font-bold uppercase tracking-[0.16em] text-slate-400 transition-colors hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:hover:text-slate-200 dark:focus-visible:ring-offset-void-900"
             >
               Clear all
             </button>
@@ -196,28 +203,30 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
           </div>
           {page !== undefined ? (
             <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
-              Page {page + 1}
+              Page {page + 1}{hasMore ? " · more available" : ""}
             </div>
           ) : null}
         </div>
 
         {page !== undefined && onPageChange ? (
-          <div className="flex items-center gap-2 lg:justify-end">
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end" role="group" aria-label="Invocation pagination">
             <button
               type="button"
               disabled={page === 0}
               onClick={() => onPageChange(page - 1)}
-              className="rounded-full border border-black/[0.06] bg-white/72 px-3 py-1.5 text-xs font-bold text-slate-500 transition-colors hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-400 dark:hover:text-slate-300 dark:focus-visible:ring-offset-void-900"
+              className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.06] bg-white/72 px-3 py-1.5 text-xs font-bold text-slate-500 transition-colors hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-400 dark:hover:text-slate-300 dark:focus-visible:ring-offset-void-900"
             >
+              <ChevronLeft className="h-3.5 w-3.5" />
               Prev
             </button>
             <button
               type="button"
               disabled={!hasMore}
               onClick={() => onPageChange(page + 1)}
-              className="rounded-full border border-black/[0.06] bg-white/72 px-3 py-1.5 text-xs font-bold text-slate-500 transition-colors hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-400 dark:hover:text-slate-300 dark:focus-visible:ring-offset-void-900"
+              className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.06] bg-white/72 px-3 py-1.5 text-xs font-bold text-slate-500 transition-colors hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-400 dark:hover:text-slate-300 dark:focus-visible:ring-offset-void-900"
             >
               Next
+              <ChevronRight className="h-3.5 w-3.5" />
             </button>
           </div>
         ) : null}

@@ -1,6 +1,6 @@
 import type { ComponentType, FunctionComponent } from "preact";
 import { useMemo, useState } from "preact/hooks";
-import { AlertTriangle, GitMerge, GitPullRequest, FileEdit, Flag, ListTodo, PlusSquare, MinusSquare, Search } from "lucide-preact";
+import { AlertTriangle, GitMerge, GitPullRequest, FileEdit, Flag, ListTodo, PlusSquare, MinusSquare, Search, X } from "lucide-preact";
 import { useProgressiveList } from "../../../../hooks/use-progressive-list.js";
 import type { ExecutionGitStatsEntitySummary, ExecutionGitStatsSummary } from "../../../types.js";
 import { formatPercent } from "../stats-utils.js";
@@ -99,6 +99,11 @@ export const GitTelemetryLedger: FunctionComponent<{
   const totalPRs = items.reduce((s, i) => s + i.metrics.prCount, 0);
   const mergedPRs = items.reduce((s, i) => s + i.metrics.mergedCount, 0);
   const totalInsertions = items.reduce((s, i) => s + i.metrics.insertions, 0);
+  const totalDeletions = items.reduce((s, i) => s + i.metrics.deletions, 0);
+  const totalFiles = items.reduce((s, i) => s + i.metrics.filesChanged, 0);
+  const queryIsActive = query.trim().length > 0;
+  const mergeRate = totalPRs > 0 ? (mergedPRs / totalPRs) * 100 : 0;
+  const filteredShare = (totalInsertions + totalDeletions) > 0 ? (totals.churn / (totalInsertions + totalDeletions)) * 100 : 0;
 
   return (
     <div className={`${PANEL_CLASS} p-6`}>
@@ -116,22 +121,36 @@ export const GitTelemetryLedger: FunctionComponent<{
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-6">
           <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center text-center !p-4`}>
-            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Total PRs</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Insertions</div>
+            <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">+{totalInsertions.toLocaleString()}</div>
+            <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">lines added</div>
+          </div>
+          <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center text-center !p-4`}>
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Deletions</div>
+            <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">-{totalDeletions.toLocaleString()}</div>
+            <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">lines removed</div>
+          </div>
+          <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center text-center !p-4`}>
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Files</div>
+            <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">{totalFiles.toLocaleString()}</div>
+            <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">changed</div>
+          </div>
+          <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center text-center !p-4`}>
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">PRs</div>
             <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">{totalPRs.toLocaleString()}</div>
+            <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">opened</div>
           </div>
           <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center text-center !p-4`}>
-            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Merged PRs</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Merged</div>
             <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">{mergedPRs.toLocaleString()}</div>
+            <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">{formatPercent(mergeRate)} merge rate</div>
           </div>
           <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center text-center !p-4`}>
-            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Merge Rate</div>
-            <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">{formatPercent(mergedPRs / Math.max(1, totalPRs))}</div>
-          </div>
-          <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center text-center !p-4`}>
-            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">+lines</div>
-            <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">{totalInsertions.toLocaleString()}</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Visible Churn</div>
+            <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">{totals.churn.toLocaleString()}</div>
+            <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">{formatPercent(filteredShare)} in view</div>
           </div>
         </div>
 
@@ -143,10 +162,20 @@ export const GitTelemetryLedger: FunctionComponent<{
               value={query}
               onInput={(event) => setQuery((event.currentTarget as HTMLInputElement).value)}
               placeholder={`Search ${kindLabel}`}
-              className={`${INPUT_CLASS} w-full pl-10`}
+              className={`${INPUT_CLASS} w-full pl-10 pr-10`}
             />
+            {queryIsActive ? (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:hover:bg-white/[0.06] dark:hover:text-slate-200 dark:focus-visible:ring-offset-void-900"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : null}
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex max-w-full gap-2 overflow-x-auto pb-1 pr-1 scrollbar-hide xl:flex-wrap xl:justify-end">
             {([
               ["insertions", "Insertions"],
               ["deletions", "Deletions"],
@@ -168,7 +197,18 @@ export const GitTelemetryLedger: FunctionComponent<{
 
         {filteredItems.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-12 text-center text-sm text-slate-400 dark:border-white/[0.08]">
-            {emptyLabel}
+            {queryIsActive ? (
+              <div className="space-y-3">
+                <div>No {kindLabel} match “{query.trim()}”.</div>
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  className="inline-flex items-center rounded-full border border-black/[0.06] bg-white/72 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300 dark:hover:text-white"
+                >
+                  Clear search
+                </button>
+              </div>
+            ) : emptyLabel}
           </div>
         ) : (
           <div ref={scrollContainerRef} className="max-h-[42rem] overflow-y-auto pr-2 dashboard-scrollbar">
@@ -179,9 +219,9 @@ export const GitTelemetryLedger: FunctionComponent<{
                 const shareOfLeader = totals.leaderChurn > 0 ? (itemChurn / totals.leaderChurn) * 100 : 0;
 
                 return (
-                  <div key={item.id} className={`${LEDGER_ROW_MODERN_CLASS} !p-4`}>
-                    <div className="flex flex-col gap-3">
-                      <div className="flex items-start justify-between gap-4">
+                  <div key={item.id} className={`${LEDGER_ROW_MODERN_CLASS} !p-4`} aria-label={`${item.label} git telemetry row`}>
+                    <div className="flex flex-col gap-4">
+                      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
                           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-black/[0.06] bg-white/75 text-xs font-black text-slate-900 shadow-[0_6px_16px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/55 dark:text-white">
                             {index + 1}
@@ -200,7 +240,7 @@ export const GitTelemetryLedger: FunctionComponent<{
                             </div>
                           </div>
                         </div>
-                        <div className="hidden shrink-0 grid-cols-4 gap-6 text-right lg:grid">
+                        <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-5 xl:w-auto xl:min-w-[40rem] xl:grid-cols-5 xl:text-right">
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Code Churn</div>
                             <div className="mt-1 flex items-center justify-end gap-3 text-lg font-black tracking-tight text-slate-900 dark:text-white">
@@ -218,30 +258,22 @@ export const GitTelemetryLedger: FunctionComponent<{
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Merged</div>
                             <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{item.metrics.mergedCount.toLocaleString()}</div>
                           </div>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-4 gap-4 lg:hidden">
-                        <div>
-                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Code Churn</div>
-                          <div className="mt-1 flex items-center gap-3 text-lg font-black tracking-tight text-slate-900 dark:text-white">
-                            {itemChurn.toLocaleString()}
-                            <div className="w-16 h-1.5">
-                              <ChurnFlowBar insertions={item.metrics.insertions} deletions={item.metrics.deletions} />
-                            </div>
+                          <div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Files</div>
+                            <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{item.metrics.filesChanged.toLocaleString()}</div>
                           </div>
-                        </div>
-                        <div>
-                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">PRs</div>
-                          <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{item.metrics.prCount.toLocaleString()}</div>
-                        </div>
-                        <div>
-                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Merged</div>
-                          <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{item.metrics.mergedCount.toLocaleString()}</div>
+                          <div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Share</div>
+                            <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatPercent(shareOfTotal)}</div>
+                          </div>
                         </div>
                       </div>
 
                       <div className="flex flex-col gap-2.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                          <span>Churn mix</span>
+                          <span>Insertions vs deletions</span>
+                        </div>
                         <ChurnFlowBar
                           insertions={item.metrics.insertions}
                           deletions={item.metrics.deletions}

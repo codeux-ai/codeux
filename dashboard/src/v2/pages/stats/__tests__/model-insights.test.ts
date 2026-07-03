@@ -152,7 +152,7 @@ describe("buildTelemetrySourceSummary", () => {
     expect(summary.label).toBe("Unavailable");
     expect(summary.tone).toBe("neutral");
     expect(summary.mix.total).toBe(0);
-    expect(summary.caveat).toMatch(/missing/i);
+    expect(summary.caveat).toMatch(/compare/i);
   });
 
   it("describes mixed telemetry with a clear caveat", () => {
