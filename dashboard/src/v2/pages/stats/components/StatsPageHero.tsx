@@ -5,6 +5,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Layers3,
+  Sparkles,
 } from "lucide-preact";
 import type {
   Source,
@@ -13,7 +14,6 @@ import type {
   ProjectStatsWindow,
 } from "../../../types.js";
 import { isValidCustomRange } from "../stats-utils.js";
-import { PageHeader } from "../../../components/layout/PageHeader.js";
 import {
   PANEL_CLASS,
   CHIP_CLASS,
@@ -33,6 +33,15 @@ export const MODE_DESCRIPTIONS: Record<StatsVisualMode, string> = {
   reliability: "Provider health, source confidence, failures, and integrity notes.",
   ledgers: "Dense task, sprint, and git telemetry rows for audit-style review.",
   system: "Invocation health, filters, transcript detail, and debugging context.",
+};
+
+const MODE_LABELS: Record<StatsVisualMode, string> = {
+  trend: "Trend",
+  composition: "Composition",
+  models: "Models",
+  reliability: "Providers",
+  ledgers: "Ledgers",
+  system: "System",
 };
 
 const HERO_PANEL_CLASS = PANEL_CLASS.replace("overflow-hidden", "overflow-visible");
@@ -122,6 +131,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
   const canApplyCustomRange = isValidCustomRange(customFrom, customTo);
   const selectedProjectLabel = selectedProject?.name || "No project selected";
   const rangeScopeLabel = stats?.range?.label || formatWindowLabel(activeQuery);
+  const activeModeLabel = MODE_LABELS[visualMode];
   const activeModeDescription = MODE_DESCRIPTIONS[visualMode];
 
   useEffect(() => {
@@ -157,13 +167,37 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
       <div className={styles.heroGrid}>
         <div className={styles.heroIntro}>
           <div className={styles.heroTitleBlock}>
-            <PageHeader
-              icon={BarChart3}
-              eyebrow="Project Analytics"
-              title="Stats"
-              subtitle="Telemetry, usage movement, and operational ledgers for the selected project."
-            />
-            <h2 id="stats-hero-title" className="sr-only">Stats command header</h2>
+            <div className={styles.heroHeader}>
+              <div className={styles.heroKicker}>
+                <span className={styles.heroKickerIcon} aria-hidden="true">
+                  <BarChart3 strokeWidth={2.2} />
+                </span>
+                <span>Project Analytics</span>
+              </div>
+              <div className={styles.heroTitleRow}>
+                <h1 id="stats-hero-title" className={styles.heroTitle}>Stats</h1>
+                <span className={styles.heroStatusPill}>
+                  <span className={styles.heroStatusDot} aria-hidden="true" />
+                  Current
+                </span>
+              </div>
+              <p className={styles.heroSubtitle}>
+                Telemetry, usage movement, and operational ledgers for the selected project.
+              </p>
+            </div>
+
+            <div className={styles.heroSignalRow} aria-label="Stats active lens">
+              <div className={`${CHIP_CLASS} ${styles.heroSignalBadge}`}>
+                <Sparkles className={styles.heroSignalIcon} strokeWidth={2.1} aria-hidden="true" />
+                <span>Window</span>
+                <strong>{rangeScopeLabel}</strong>
+              </div>
+              <div className={`${CHIP_CLASS} ${styles.heroSignalBadge}`}>
+                <CheckCircle2 className={styles.heroSignalIcon} strokeWidth={2.1} aria-hidden="true" />
+                <span>Mode</span>
+                <strong>{activeModeLabel}</strong>
+              </div>
+            </div>
 
             <div className={styles.heroContextGrid} aria-label="Stats project context">
               <ContextBadge icon={Layers3} label="Project" value={selectedProjectLabel} />
@@ -184,8 +218,12 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                   Time window
                 </div>
                 <div className={styles.heroControlDescription}>
-                  Current · {rangeScopeLabel}
+                  Select the telemetry range for every analysis mode.
                 </div>
+              </div>
+              <div className={styles.heroControlSummary} aria-label={`Current time window ${rangeScopeLabel}`}>
+                <span>Current</span>
+                <strong>{rangeScopeLabel}</strong>
               </div>
               <CalendarDays className={styles.heroControlIcon} strokeWidth={2.2} aria-hidden="true" />
             </div>
@@ -276,6 +314,10 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                 <div className={styles.heroControlDescription}>
                   {activeModeDescription}
                 </div>
+              </div>
+              <div className={styles.heroControlSummary} aria-label={`Active analysis mode ${activeModeLabel}`}>
+                <span>Mode</span>
+                <strong>{activeModeLabel}</strong>
               </div>
               <CheckCircle2 className={styles.heroModeIcon} strokeWidth={2.2} aria-hidden="true" />
             </div>

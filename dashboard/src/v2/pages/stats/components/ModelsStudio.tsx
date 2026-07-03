@@ -6,6 +6,7 @@ import {
   Clock3,
   Cpu,
   Database,
+  DollarSign,
   Gauge,
   ShieldCheck,
   TrendingUp,
@@ -13,7 +14,7 @@ import {
   type LucideIcon,
 } from "lucide-preact";
 import type { ExecutionModelStatsSummary, ProjectExecutionStatsSnapshot } from "../../../types.js";
-import { formatStatsDuration, formatTokens, formatDateTime, formatPercent } from "../stats-utils.js";
+import { formatStatsDuration, formatTokens, formatDateTime, formatPercent, formatCost } from "../stats-utils.js";
 import {
   PANEL_CLASS,
   SUBPANEL_CLASS,
@@ -56,6 +57,10 @@ const formatMetricTokens = (value: number | null): string => (
 
 const formatVelocity = (value: number | null): string => (
   value === null || value <= 0 ? "—" : `${formatTokens(Math.round(value))} tok/s`
+);
+
+const formatPricingValue = (value: number | null): string => (
+  value === null || value <= 0 ? "—" : formatCost(value)
 );
 
 const formatShare = (value: number): string => (
@@ -115,6 +120,13 @@ export const ModelCard: FunctionComponent<{
   const successTone = getSuccessTone(model.successRate);
   const hasDuration = model.duration.sampleCount > 0;
   const hasLowTelemetry = model.usage.invocationCount > 0 && model.usage.invocationCount < LOW_SAMPLE_THRESHOLD;
+  const hasCost = Number.isFinite(model.usage.totalCostUsd) && model.usage.totalCostUsd > 0;
+  const costPerCall = hasCost && model.usage.invocationCount > 0
+    ? model.usage.totalCostUsd / model.usage.invocationCount
+    : null;
+  const costPerMillionTokens = hasCost && model.usage.totalTokens > 0
+    ? model.usage.totalCostUsd / (model.usage.totalTokens / 1_000_000)
+    : null;
   const statusSummary = `${model.statusCounts.completed} completed · ${model.statusCounts.failed} failed · ${model.statusCounts.running} running · ${model.statusCounts.cancelled} cancelled`;
 
   return (
@@ -153,6 +165,13 @@ export const ModelCard: FunctionComponent<{
             </span>
             <span className="text-[color:var(--stats-label-color)]">tokens</span>
           </div>
+          <div className={`inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
+            <DollarSign className="h-3.5 w-3.5 text-[color:var(--stats-positive-text)]" strokeWidth={2.2} />
+            <span className="text-base font-black normal-case text-[color:var(--stats-value-color)]">
+              {formatPricingValue(hasCost ? model.usage.totalCostUsd : null)}
+            </span>
+            <span className="text-[color:var(--stats-label-color)]">cost</span>
+          </div>
           <div className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${SUCCESS_TONE_CLASS[successTone]}`}>
             <ShieldCheck className="h-3 w-3" strokeWidth={2.4} />
             {formatSuccessRate(model.successRate)}
@@ -166,7 +185,7 @@ export const ModelCard: FunctionComponent<{
         </div>
       ) : null}
 
-      <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-5">
         <ModelMetric
           label="Invocations"
           value={model.usage.invocationCount.toLocaleString()}
@@ -186,6 +205,16 @@ export const ModelCard: FunctionComponent<{
           label="Success"
           value={formatSuccessRate(model.successRate)}
           detail={model.successRate === null ? "pending outcomes" : statusSummary}
+        />
+        <ModelMetric
+          label="Cost"
+          value={formatPricingValue(hasCost ? model.usage.totalCostUsd : null)}
+          detail={costPerCall !== null ? `${formatCost(costPerCall)}/call` : "no pricing signal"}
+        />
+        <ModelMetric
+          label="$ / 1M Tok"
+          value={formatPricingValue(costPerMillionTokens)}
+          detail={costPerMillionTokens !== null ? "blended token rate" : "pricing unavailable"}
         />
         <ModelMetric
           label="Output Velocity"
@@ -254,6 +283,7 @@ export const ModelsStudio: FunctionComponent<{
   const totalOutput = models.reduce((sum, model) => sum + model.usage.outputTokens, 0);
   const totalReasoning = models.reduce((sum, model) => sum + model.usage.reasoningOutputTokens, 0);
   const totalCached = models.reduce((sum, model) => sum + model.usage.cachedInputTokens, 0);
+  const totalCost = models.reduce((sum, model) => sum + model.usage.totalCostUsd, 0);
   const sampledModels = models.filter((model) => model.duration.sampleCount > 0).length;
   const sorted = [...models].sort((left, right) => {
     const delta = right.usage.totalTokens - left.usage.totalTokens;
@@ -348,6 +378,7 @@ export const ModelsStudio: FunctionComponent<{
                 <ModelMetric label="Output" value={formatTokens(totalOutput)} detail="generated" />
                 <ModelMetric label="Cached" value={formatTokens(totalCached)} detail="input reuse" />
                 <ModelMetric label="Reasoning" value={formatTokens(totalReasoning)} detail="thinking tokens" />
+                <ModelMetric label="Cost" value={formatPricingValue(totalCost)} detail={totalCost > 0 ? "priced usage" : "no pricing signal"} />
               </div>
               <div className={`${DASHED_EMPTY_CLASS} mt-4 py-3 text-left text-xs leading-relaxed ${TEXT_DETAIL_CLASS}`}>
                 {sampledModels === 0

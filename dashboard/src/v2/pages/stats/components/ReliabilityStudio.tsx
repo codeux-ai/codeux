@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock3,
+  DollarSign,
   HelpCircle,
   ShieldCheck,
   Sparkles,
@@ -17,6 +18,7 @@ import type {
   TokenUsageSource,
 } from "../../../types.js";
 import {
+  formatCost,
   formatPercent,
   formatStatsDuration,
   formatTokens,
@@ -130,6 +132,10 @@ const RISK_TONE_CLASS = {
   medium: STATUS_TONE_CLASS.warning,
   high: STATUS_TONE_CLASS.negative,
 };
+
+const formatPricingValue = (value: number | null): string => (
+  value === null || value <= 0 ? "—" : formatCost(value)
+);
 
 function getUsageSourceCount(usage: ExecutionUsageTotals, source: TokenUsageSource): number {
   if (source === "reported") return usage.reportedInvocationCount || 0;
@@ -369,6 +375,13 @@ const ProviderReliabilityCard: FunctionComponent<{
   const successTone = getSuccessTone(row.successRate);
   const riskLevel = row.riskScore >= 55 ? "high" : row.riskScore >= 25 ? "medium" : "low";
   const providerActiveVsWall = provider.usage.wallTimeMs > 0 ? provider.usage.activeTimeMs / provider.usage.wallTimeMs : null;
+  const hasCost = Number.isFinite(provider.usage.totalCostUsd) && provider.usage.totalCostUsd > 0;
+  const costPerCall = hasCost && provider.usage.invocationCount > 0
+    ? provider.usage.totalCostUsd / provider.usage.invocationCount
+    : null;
+  const costPerMillionTokens = hasCost && provider.usage.totalTokens > 0
+    ? provider.usage.totalCostUsd / (provider.usage.totalTokens / 1_000_000)
+    : null;
 
   return (
     <div className={`${PANEL_CLASS} p-5`}>
@@ -403,10 +416,17 @@ const ProviderReliabilityCard: FunctionComponent<{
             </span>
             <span className="text-[color:var(--stats-label-color)]">calls</span>
           </div>
+          <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
+            <DollarSign className="h-3.5 w-3.5 text-[color:var(--stats-positive-text)]" strokeWidth={2.2} aria-hidden="true" />
+            <span className="text-base font-black normal-case tracking-tight text-[color:var(--stats-value-color)]">
+              {formatPricingValue(hasCost ? provider.usage.totalCostUsd : null)}
+            </span>
+            <span className="text-[color:var(--stats-label-color)]">cost</span>
+          </div>
         </div>
       </div>
 
-      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StudioMetricTile
           label="Failures"
           value={row.failedCount.toLocaleString()}
@@ -433,6 +453,19 @@ const ProviderReliabilityCard: FunctionComponent<{
           value={formatTokens(provider.usage.totalTokens)}
           detail={provider.usage.invocationCount > 0 ? `${formatTokens(Math.round(provider.usage.totalTokens / provider.usage.invocationCount))}/call` : "No calls yet"}
           toneClass="text-[color:var(--stats-signal-text)]"
+        />
+        <StudioMetricTile
+          label="Cost"
+          value={formatPricingValue(hasCost ? provider.usage.totalCostUsd : null)}
+          detail={costPerCall !== null ? `${formatCost(costPerCall)}/call` : "No pricing signal"}
+          toneClass="text-[color:var(--stats-positive-text)]"
+          icon={DollarSign}
+        />
+        <StudioMetricTile
+          label="$ / 1M Tok"
+          value={formatPricingValue(costPerMillionTokens)}
+          detail={costPerMillionTokens !== null ? "Blended token rate" : "Pricing unavailable"}
+          toneClass="text-[color:var(--stats-positive-text)]"
         />
         <StudioMetricTile
           label="Active Time"
@@ -495,6 +528,13 @@ export const ReliabilityStudio: FunctionComponent<{
   const failureRiskCount = sourceRows.find((row) => row.source === "unavailable")!.count
     + sourceRows.find((row) => row.source === "unsupported")!.count;
   const highestRiskProvider = providerRows[0] || null;
+  const providerCost = providerRows.reduce((sum, row) => sum + row.provider.usage.totalCostUsd, 0);
+  const highestCostProvider = providerRows.reduce<ExecutionStatsEntitySummary | null>((highest, row) => {
+    if (!highest || row.provider.usage.totalCostUsd > highest.usage.totalCostUsd) {
+      return row.provider;
+    }
+    return highest;
+  }, null);
 
   return (
     <section className="space-y-6">
@@ -522,7 +562,7 @@ export const ReliabilityStudio: FunctionComponent<{
           </div>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <StudioMetricTile
             label="Telemetry Confidence"
             value={sourceSummary.label}
@@ -549,6 +589,13 @@ export const ReliabilityStudio: FunctionComponent<{
             value={providerRows.length > 0 ? `${providerRows.length.toLocaleString()} providers` : "No providers"}
             detail={highestRiskProvider ? `Highest risk: ${highestRiskProvider.provider.label}` : "No provider telemetry landed"}
             toneClass="text-[color:var(--stats-accent-cyan)]"
+          />
+          <StudioMetricTile
+            label="Provider Cost"
+            value={formatPricingValue(providerCost)}
+            detail={highestCostProvider && highestCostProvider.usage.totalCostUsd > 0 ? `Highest cost: ${highestCostProvider.label}` : "No pricing signal"}
+            toneClass="text-[color:var(--stats-positive-text)]"
+            icon={DollarSign}
           />
         </div>
       </div>
@@ -622,17 +669,6 @@ export const ReliabilityStudio: FunctionComponent<{
       </div>
 
       <div className="space-y-4">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Provider Confidence Board</div>
-            <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">
-              Providers are sorted by risk first, then token volume. Cards surface failures, success rate, token volume, active time, duration, and source confidence.
-            </div>
-          </div>
-          <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
-            {providerRows.length.toLocaleString()} providers
-          </div>
-        </div>
         {providerRows.length === 0 ? (
           <EmptyTelemetryPanel
             title="No provider telemetry for this window."

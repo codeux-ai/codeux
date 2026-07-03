@@ -22,12 +22,13 @@ Do not document or render speculative metrics. Missing telemetry is a first-clas
 The redesigned Stats page uses a stable top-to-bottom shell:
 
 1. Header command band
-   - The hero names the Stats workspace and keeps only selected project, sprint lens, time window, and active visual mode controls visible.
+   - The hero names the Stats workspace with a Stats-native command masthead rather than the generic dashboard page header. It uses the Stats token palette, a compact current-state pill, and active lens chips for the selected time window and mode.
+   - Keep only selected project, sprint lens, time window, and active visual mode controls visible in the command band.
    - Time presets are `1h`, `24h`, `7d`, `30d`, `All time`, and `Custom`.
    - Choosing `Custom` opens start and end date fields. The selected range changes only after `Apply` succeeds.
    - Invalid or incomplete custom ranges keep focusable controls visible, set `aria-invalid`, connect `aria-errormessage`, and announce inline error text.
 2. Mode navigation
-   - The mode rail is a wrapped segmented control with icon-first buttons and stable accessible labels: `Trend`, `Composition`, `Models`, `Providers`, `Ledgers`, and `System`.
+   - The mode rail is a responsive segmented grid with icon-first buttons and stable accessible labels: `Trend`, `Composition`, `Models`, `Providers`, `Ledgers`, and `System`.
    - The visible `Providers` label maps to the internal reliability mode. Keep user-facing copy and tests aligned if this mapping changes.
    - The rail uses `role="group"` and `aria-pressed`; it is not a tablist because mode changes replace the whole analysis workspace.
 3. Metric deck
@@ -77,7 +78,8 @@ Models compares model activity, latency, reliability, and efficiency.
 
 - The overview balances model-share distribution, efficiency highlights, total window volume, and low-data states.
 - The leaderboard ranks by `usage.totalTokens` descending with label tie-breaks.
-- Rows surface success tone, p50/p95 latency, tokens per call, output velocity, cache-hit rate, reasoning share, provider identity, and token-flow anatomy when those fields are present.
+- Rows surface success tone, p50/p95 latency, tokens per call, output velocity, cache-hit rate, reasoning share, provider identity, pricing stats, and token-flow anatomy when those fields are present.
+- Model pricing stats use `usage.totalCostUsd` and should show total cost, cost per invocation, and blended cost per million tokens only when a positive cost signal exists.
 - Missing model arrays, zero model usage, zero duration samples, and low invocation counts render as explicit low-data states.
 - Long model and provider names must wrap within stable cards and rows; chips and metrics cannot force horizontal page overflow.
 
@@ -88,7 +90,8 @@ Providers is the reliability studio.
 - The visible mode label is `Providers`; the studio title may describe reliability.
 - Start with confidence, fallback usage, failure pressure, and provider coverage before detailed rows.
 - Source mix explicitly shows reported, estimated, unavailable, unsupported, and unknown invocation-source counts. Estimated data is usable but lower precision.
-- Provider cards sort by computed risk first and token volume second, then show failure count, success-rate tone, token volume, active time, duration coverage, and source confidence.
+- Provider cards sort by computed risk first and token volume second, then show failure count, success-rate tone, token volume, pricing stats, active time, duration coverage, and source confidence.
+- Provider pricing stats use `usage.totalCostUsd` and should show total cost, cost per invocation, and blended cost per million tokens only when a positive cost signal exists.
 - Provider status and latency details may be derived from matching model summaries, but health must not be fabricated when model/status telemetry is absent.
 - Empty provider or source segments use shared Stats panels and explain what data is missing.
 
