@@ -78,7 +78,14 @@ To prevent scanning entire thread collections or loading full message arrays int
 - `getThread` accesses a single thread state immediately (e.g. for single-thread reload scenarios).
 - `getFirstReplyAfterMessage` queries exactly one row representing the chronologically first reply after a specific message.
 
-These precise reads are separated into read-query helper modules (`conversation-thread-query.ts`, `conversation-message-query.ts`, `conversation-query-utils.ts`), which keeps repository files clean and side-effect free. These methods are now actively utilized by the ChatThreadRuntimeService and PlanningAgentService to eliminate full-collection rescans.
+Conversation read SQL is owned by focused helper modules under `src/repositories/connection-chat/`:
+- `conversation-thread-query.ts` owns thread lookup and project-scoped thread list queries, including message count, pending dashboard-message count, and visible last-message preview aggregation.
+- `conversation-message-query.ts` owns message lookup and thread-scoped message list queries, including hidden-message filtering and first-reply lookup.
+- `conversation-query-utils.ts` owns shared row mapping, visibility predicates, and pagination normalization.
+
+`ConnectionChatRepository` remains the compatibility facade for services and routes. It validates project/thread existence, handles write-side behavior and realtime notifications, and delegates read-only thread/message list SQL to the helper modules.
+
+Thread and message list queries use explicit bounded pagination even when callers use the facade's default methods. Thread pages are ordered by newest visible activity, then thread creation time, then thread id for deterministic tie-breaking. Message pages are ordered chronologically by `created_at` and then message id. Hidden internal control messages remain excluded from visible lists, counts, and previews unless a caller explicitly opts into hidden messages; processed dashboard messages remain visible in history but are excluded from pending inbox counts.
 
 ### Virtual Provider Management Actions
 
