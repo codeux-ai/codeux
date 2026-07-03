@@ -80,6 +80,24 @@ describe("MemoryCard", () => {
         expect(onClick).not.toHaveBeenCalled();
     });
 
+    test("open details action selects the card once", () => {
+        const onClick = vi.fn();
+
+        const { getByRole } = render(
+            <MemoryCard
+                id="test-id"
+                content="test-content"
+                category="context"
+                strength={0.8}
+                onClick={onClick}
+            />
+        );
+
+        fireEvent.click(getByRole("button", { name: "Open Context memory details" }));
+
+        expect(onClick).toHaveBeenCalledTimes(1);
+    });
+
     test("does not show X button when lobotomizeModeSignal is false", () => {
         lobotomizeModeSignal.value = false;
 
@@ -114,6 +132,23 @@ describe("MemoryCard", () => {
 
         expect(selectedMemoryIdsSignal.value).toContain("test-id");
         expect(getByRole("button", { name: "Deselect Context memory" })).toHaveAttribute("aria-pressed", "true");
+    });
+
+    test("batch selection keyboard event does not also open the card", () => {
+        const onClick = vi.fn();
+        const { getByRole } = render(
+            <MemoryCard
+                id="test-id"
+                content="toggle-test-content"
+                category="context"
+                strength={0.8}
+                onClick={onClick}
+            />
+        );
+
+        fireEvent.keyDown(getByRole("button", { name: "Select Context memory" }), { key: "Enter" });
+
+        expect(onClick).not.toHaveBeenCalled();
     });
 
     test("has correct accessibility attributes", () => {
