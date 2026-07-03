@@ -424,6 +424,45 @@ describe("ProviderExecutionService", () => {
     expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledTimes(2);
   });
 
+  it("skips provider usage writes when a telemetry tick repeats the same usage state", async () => {
+    providerRunner.runProvider.mockImplementation(async (opts: any) => {
+      const tick = (totalTokens: number) => opts.onTelemetry({
+        ...mockResult.usageTelemetry,
+        transcriptText: "same transcript",
+        inputTokens: totalTokens / 3,
+        outputTokens: totalTokens / 3,
+        totalTokens,
+        usageSource: "estimated",
+        rawUsageJson: { totalTokens },
+        conversation: [
+          { kind: "assistant", text: "Working..." },
+        ],
+      });
+      tick(30);
+      tick(30);
+      tick(33);
+      return {
+        ...mockResult,
+        usageTelemetry: {
+          ...mockResult.usageTelemetry,
+          transcriptText: "",
+        },
+      };
+    });
+
+    await service.executeProvider({
+      ...defaultArgs,
+      trackPromptInInvocation: false,
+    });
+
+    const runningUsageWrites = executionRepository.updateProviderInvocationUsage.mock.calls.filter(([, update]) => (
+      (update as { status?: string }).status === "running"
+    ));
+    expect(runningUsageWrites).toHaveLength(2);
+    expect(runningUsageWrites[0]?.[1]).toEqual(expect.objectContaining({ totalTokens: 30 }));
+    expect(runningUsageWrites[1]?.[1]).toEqual(expect.objectContaining({ totalTokens: 33 }));
+  });
+
   it("allows structured callers to defer invocation completion and assistant transcript writes", async () => {
     const textMockResult = { ...mockResult, text: "text output" };
     providerRunner.runProviderForText.mockResolvedValue(textMockResult);

@@ -93,9 +93,17 @@ describe("OverviewTelemetryQuery", () => {
       `).run(tr.id, `2026-01-01T10:01:${String(i).padStart(2, "0")}.000Z`); // removed extra 10:01:${String(i).padStart(2, "0")}.000Z`);
     }
 
+    for (let i = 0; i < 20; i++) {
+      db.prepare(`
+        INSERT INTO task_run_events (task_run_id, event_type, originator, created_at)
+        VALUES (?, 'status_sync', 'system', ?)
+      `).run(tr.id, `2026-01-01T10:02:${String(i).padStart(2, "0")}.000Z`);
+    }
+
     const snapshot = executionRepository.getOverviewTelemetrySnapshot();
 
     expect(snapshot.recentEvents).toHaveLength(80);
+    expect(snapshot.recentEvents.some((event) => event.eventType === "status_sync")).toBe(false);
     // The most recent 50 should all be task_run_events (from 10:01)
     for (let i = 0; i < 50; i++) {
         expect(snapshot.recentEvents[i]!.scopeType).toBe('task_run');

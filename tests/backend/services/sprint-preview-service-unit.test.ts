@@ -35,6 +35,7 @@ vi.mock("../../../src/services/cli-docker-utils.js", () => ({
   pickContainerEnv: vi.fn(() => []),
   resolveConfiguredPath: vi.fn((_base: string, rel: string) => `/resolved/${rel}`),
   toDockerMountArg: vi.fn((m: any) => `type=${m.type ?? "bind"},source=${m.source},target=${m.destination}`),
+  writeDockerEnvFile: vi.fn(async () => undefined),
 }));
 
 vi.mock("../../../src/infrastructure/providers/cli/docker-runtime-paths.js", () => ({
@@ -79,6 +80,7 @@ vi.mock("../../../src/shared/config/code-ux-paths.js", () => ({
 vi.mock("fs/promises", async () => {
   return {
     mkdir: vi.fn(async () => undefined),
+    mkdtemp: vi.fn(async () => "/tmp/code-ux-preview-env-test"),
     writeFile: vi.fn(async () => undefined),
     chmod: vi.fn(async () => undefined),
     rm: vi.fn(async () => undefined),
@@ -190,6 +192,7 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
         recentEvents: [],
         updatedAt: null,
       })),
+      listSprintRunsByStatus: vi.fn(() => []),
     },
     settingsRepository: {
       resolveSprintDashboardSettings: vi.fn(() => ({
@@ -959,16 +962,6 @@ describe("SprintPreviewService unit tests", () => {
     it("does not auto-start or create session when sprint run is queued or paused", async () => {
       deps.sprintPreviewRepository.listSessions.mockReturnValue([]);
       deps.projectManagementRepository.listProjects.mockReturnValue({ projects: [{ id: "proj-1", name: "Project 1" }] });
-      deps.projectManagementRepository.listSprints.mockReturnValue({
-        sprints: [{
-          id: "sprint-1",
-          projectId: "proj-1",
-          name: "Sprint 1",
-          number: 1,
-          status: "running",
-          featureBranch: "feature/sprint-1",
-        }],
-      });
       deps.settingsRepository.resolveSprintDashboardSettings.mockReturnValue({
         settings: { ...DEFAULT_DASHBOARD_SETTINGS,
           sprintPreview: makePreviewSettings({
@@ -982,14 +975,7 @@ describe("SprintPreviewService unit tests", () => {
         },
       });
 
-      // Provide execution snapshot with paused and queued runs, but no running
-      deps.executionRepository.getProjectExecutionSnapshot.mockReturnValue({
-        projectId: "proj-1",
-        sprintRuns: [
-          { sprintId: "sprint-1", status: "queued", testExecutions: [], commandExecutions: [], workflowInvocations: [], manualVerificationTasks: [] },
-          { sprintId: "sprint-2", status: "paused", testExecutions: [], commandExecutions: [], workflowInvocations: [], manualVerificationTasks: [] },
-        ],
-      });
+      deps.executionRepository.listSprintRunsByStatus.mockReturnValue([]);
 
       const service = new SprintPreviewService(deps as any);
       service.startSession = vi.fn().mockResolvedValue(undefined);
@@ -1002,16 +988,6 @@ describe("SprintPreviewService unit tests", () => {
     it("auto-starts and creates session when sprint run is running", async () => {
       deps.sprintPreviewRepository.listSessions.mockReturnValue([]);
       deps.projectManagementRepository.listProjects.mockReturnValue({ projects: [{ id: "proj-1", name: "Project 1" }] });
-      deps.projectManagementRepository.listSprints.mockReturnValue({
-        sprints: [{
-          id: "sprint-1",
-          projectId: "proj-1",
-          name: "Sprint 1",
-          number: 1,
-          status: "running",
-          featureBranch: "feature/sprint-1",
-        }],
-      });
       deps.sprintPreviewRepository.getSessionByProjectSprint.mockReturnValue(null);
       deps.settingsRepository.resolveSprintDashboardSettings.mockReturnValue({
         settings: { ...DEFAULT_DASHBOARD_SETTINGS,
@@ -1026,13 +1002,9 @@ describe("SprintPreviewService unit tests", () => {
         },
       });
 
-      // Provide execution snapshot with a running sprint
-      deps.executionRepository.getProjectExecutionSnapshot.mockReturnValue({
-        projectId: "proj-1",
-        sprintRuns: [
-          { sprintId: "sprint-1", status: "running", testExecutions: [], commandExecutions: [], workflowInvocations: [], manualVerificationTasks: [] },
-        ],
-      });
+      deps.executionRepository.listSprintRunsByStatus.mockReturnValue([
+        { projectId: "proj-1", sprintId: "sprint-1", status: "running" },
+      ]);
 
       const service = new SprintPreviewService(deps as any);
       service.startSession = vi.fn().mockResolvedValue(undefined);

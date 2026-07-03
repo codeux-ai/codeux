@@ -1,5 +1,5 @@
 import { CONTAINER_SETUP_SCRIPT } from "./cli-workflow-utils.js";
-import { pickContainerEnv, toDockerMountArg } from "./cli-docker-utils.js";
+import { toDockerMountArg } from "./cli-docker-utils.js";
 
 export const CONTAINER_PREVIEW_PROXY_PORT = 39000;
 export const CONTAINER_PREVIEW_RUNTIME_ROOT = "/code-ux-preview-runtime";
@@ -29,6 +29,7 @@ export interface SprintPreviewDockerPlanArgs {
    * script can skip the build when the branch hasn't changed since the last cached build.
    */
   sourceCommit: string | null;
+  envFileSource?: string | null;
   resolvedImage: string;
   bootstrapScript: string;
 }
@@ -61,6 +62,10 @@ export function buildSprintPreviewDockerCreateArgs(args: SprintPreviewDockerPlan
     "-e", `SPRINT_PREVIEW_SOURCE_COMMIT=${args.sourceCommit || ""}`,
   ];
 
+  if (args.envFileSource) {
+    dockerArgs.push("--env-file", args.envFileSource);
+  }
+
   if (args.userSpec) {
     dockerArgs.push("--user", args.userSpec);
   }
@@ -69,9 +74,6 @@ export function buildSprintPreviewDockerCreateArgs(args: SprintPreviewDockerPlan
     dockerArgs.push("--mount", toDockerMountArg({ source: args.setupScriptSource, destination: CONTAINER_SETUP_SCRIPT, readonly: true }));
   }
 
-  for (const variable of pickContainerEnv(process.env)) {
-    dockerArgs.push("-e", `${variable.key}=${variable.value}`);
-  }
   dockerArgs.push(
     "-e", `CODE_UX_GIT_USER_NAME=${args.containerGitUserName}`,
     "-e", `CODE_UX_GIT_USER_EMAIL=${args.containerGitUserEmail}`,

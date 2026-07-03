@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { Terminal, Trash2 } from "lucide-preact";
-import { PillChoiceGroup, ProviderLogo, Row, SelectInput, TextInput, Toggle } from "./SettingsFormFields.js";
+import { PillChoiceGroup, ProviderLogo, Row, SecretInput, SelectInput, TextInput, Toggle } from "./SettingsFormFields.js";
 import { getProviderDefaultAuthPath, getProviderTypeLabel } from "../../lib/settings-view-models.js";
 import { TerminalLoginModal } from "./TerminalLoginModal.js";
 import { ModelCombobox } from "../ui/ModelCombobox.js";
@@ -209,7 +209,7 @@ export const ProviderInstanceCard: FunctionComponent<{
       {/* API Key Panel */}
       {currentAuthType === "apiKey" && (
         <Row label="API key" description="Stored for this named provider instance.">
-          <TextInput value={provider.apiKey} onChange={(value) => onUpdate(sanitizeSystemProviderConfig({ ...provider, apiKey: value }))} aria-label={`${providerInstanceLabel} API key`} mono />
+          <SecretInput value={provider.apiKey} onChange={(value) => onUpdate(sanitizeSystemProviderConfig({ ...provider, apiKey: value }))} aria-label={`${providerInstanceLabel} API key`} mono />
         </Row>
       )}
 

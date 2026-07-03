@@ -14,6 +14,7 @@ import {
   pickContainerEnv,
   resolveConfiguredPath,
   toDockerMountArg,
+  writeDockerEnvFile,
   ContainerMount,
 } from "../../../services/cli-docker-utils.js";
 import { CONTAINER_SETUP_SCRIPT } from "../../../services/cli-workflow-utils.js";
@@ -148,6 +149,9 @@ export class DockerRunner implements IDockerRunner {
       const argvFilePath = path.join(tempRoot, "provider-argv.sh");
       await fs.writeFile(argvFilePath, this.buildProviderArgvFile(args), "utf8");
       const argvFileSource = this.mapDockerSourcePathForDaemon(argvFilePath, repoPath, sessionId, "provider argv", onActivity);
+      const envFilePath = path.join(tempRoot, "provider.env");
+      await writeDockerEnvFile(envFilePath, pickContainerEnv(providerEnv));
+      const envFileSource = this.mapDockerSourcePathForDaemon(envFilePath, repoPath, sessionId, "provider env", onActivity);
 
       const containerName = this.buildContainerName(providerLabel, sessionId);
 
@@ -185,6 +189,8 @@ export class DockerRunner implements IDockerRunner {
         `HOME=${runtimeHome}`,
         "-e",
         `CODE_UX_PROVIDER_ARGV_FILE=${CONTAINER_PROVIDER_ARGV_FILE}`,
+        "--env-file",
+        envFileSource,
         "--mount",
         toDockerMountArg({
           source: argvFileSource,
@@ -209,9 +215,6 @@ export class DockerRunner implements IDockerRunner {
         dockerArgs.push("--mount", toDockerMountArg({ source: passwdSource, destination: "/etc/passwd", readonly: true }));
       }
 
-      for (const variable of pickContainerEnv(providerEnv)) {
-        dockerArgs.push("-e", `${variable.key}=${variable.value}`);
-      }
       dockerArgs.push(
         "-e", `CODE_UX_GIT_USER_NAME=${workflowSettings.containerGitUserName}`,
         "-e", `CODE_UX_GIT_USER_EMAIL=${workflowSettings.containerGitUserEmail}`,

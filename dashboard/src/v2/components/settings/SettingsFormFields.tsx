@@ -1,5 +1,6 @@
 import type { ComponentChildren, FunctionComponent } from "preact";
-import { useRef } from "preact/hooks";
+import { useRef, useState } from "preact/hooks";
+import { Eye, EyeOff } from "lucide-preact";
 import { SHARED_INTERACTION_CLASSES } from "../ui/Button.js";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
@@ -142,6 +143,49 @@ export const TextInput: FunctionComponent<{
     className={`transition-all focus:border-signal-500/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-white/[0.05] dark:text-slate-200 aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.14)] data-[valid=true]:border-signal-500/50 data-[valid=true]:bg-signal-500/[0.02] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.15)] dark:data-[valid=true]:bg-signal-500/[0.04] ${mono ? "font-mono" : "font-sans"}`}
   />
 );
+
+export const SecretInput: FunctionComponent<{
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  mono?: boolean;
+  disabled?: boolean;
+  invalid?: boolean;
+  "aria-label"?: string;
+  "aria-description"?: string;
+}> = ({ value, onChange, placeholder, mono, disabled, invalid, "aria-label": ariaLabel, "aria-description": ariaDescription }) => {
+  const [revealed, setRevealed] = useState(false);
+  const RevealIcon = revealed ? EyeOff : Eye;
+
+  return (
+    <div className="relative min-w-0">
+      <UiInput
+        type={revealed ? "text" : "password"}
+        value={value}
+        placeholder={placeholder}
+        disabled={disabled}
+        autoComplete="off"
+        autoCapitalize="off"
+        spellcheck={false}
+        aria-invalid={invalid}
+        aria-label={ariaLabel}
+        aria-description={ariaDescription}
+        onInput={(event) => onChange((event.currentTarget as HTMLInputElement).value)}
+        className={`pr-11 transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:border-signal-500/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-white/[0.05] dark:text-slate-200 aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.14)] data-[valid=true]:border-signal-500/50 data-[valid=true]:bg-signal-500/[0.02] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.15)] dark:data-[valid=true]:bg-signal-500/[0.04] ${mono ? "font-mono" : "font-sans"}`}
+      />
+      <button
+        type="button"
+        disabled={disabled}
+        aria-label={revealed ? "Hide secret" : "Show secret"}
+        aria-pressed={revealed}
+        onClick={() => setRevealed((current) => !current)}
+        className={`${SHARED_INTERACTION_CLASSES} absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-lg border border-black/[0.06] bg-white/80 text-slate-500 hover:bg-white hover:text-slate-800 dark:border-white/[0.08] dark:bg-void-900/80 dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-slate-100`}
+      >
+        <RevealIcon className="h-3.5 w-3.5" strokeWidth={2.4} />
+      </button>
+    </div>
+  );
+};
 
 export const TextAreaInput: FunctionComponent<{
   value: string;
