@@ -16,6 +16,7 @@ import {
   QwenUsageTotals,
   ParsedConversationTurn
 } from "./provider-usage.js";
+import { extractJsonContainer } from "./provider-logs/usage-parse-utils.js";
 import { IDockerRunner } from "./docker-runner.js";
 
 export async function readQwenLogData(
@@ -29,12 +30,11 @@ export async function readQwenLogData(
     if (executionMode === "DOCKER") {
       const arrayJson = await dockerRunner.readWorkspaceJsonArray?.(cwd, CONTAINER_QWEN_OPENAI_LOG_DIR).catch(() => null);
       if (!arrayJson) return null;
-      try {
-        const parsed = JSON.parse(arrayJson);
-        records = Array.isArray(parsed) ? parsed : [];
-      } catch {
+      const parsed = extractJsonContainer<unknown[]>(arrayJson, "array");
+      if (!parsed.ok) {
         return null;
       }
+      records = parsed.value;
     } else {
       records = await readQwenOpenAiLogRecords(resolveQwenHostLogDir(sessionId), startTimeMs);
     }
