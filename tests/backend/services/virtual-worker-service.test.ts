@@ -650,6 +650,57 @@ describe("VirtualWorkerService", () => {
     expect((virtualWorkerService as any).projectNeedsVirtualWorker(project.id)).toBe(true);
   });
 
+  it("projectNeedsVirtualWorker returns true for virtual projects with pending dispatches and no attention", async () => {
+    const {
+      settingsRepository,
+      sessionTracking,
+      projectManagementRepository,
+      executionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionService,
+      workerTaskDispatchService,
+    } = await createFixture();
+
+    const project = projectManagementRepository.createProject({
+      name: "Pending Dispatch Project",
+      sourceType: "local",
+      sourceRef: "/workspace/pending-dispatch-project",
+      defaultBranch: "main",
+    });
+
+    settingsRepository.saveProjectSettings(project.id, {
+      workers: {
+        executionMode: "VIRTUAL",
+        virtualWorkerProvider: "codex",
+      },
+    });
+    vi.spyOn(executionRepository, "listProjectIdsWithPendingDispatches").mockReturnValue([project.id]);
+
+    const virtualWorkerService = new VirtualWorkerService({
+      settingsRepository,
+      sessionTracking,
+      executionRepository,
+      projectManagementRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectWorkerAssignmentService: new ProjectWorkerAssignmentService(
+        projectWorkerAssignmentRepository,
+        workerEndpointRepository,
+      ),
+      projectAttentionService,
+      workerTaskDispatchService,
+      cliWorkflowService: {
+        startTask: vi.fn(),
+      } as any,
+      providerConcurrencyService: {
+        hasAvailableCapacity: vi.fn().mockResolvedValue(true),
+      } as any,
+    });
+
+    expect((virtualWorkerService as any).projectNeedsVirtualWorker(project.id)).toBe(true);
+  });
+
   it("start and stop manage the reconcile timer", async () => {
     const {
       settingsRepository,

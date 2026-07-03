@@ -1,15 +1,104 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  decideVirtualWorkerProjectScheduling,
   isOrchestratorHandledClarificationItem,
+  planVirtualWorkerAttentionClaim,
   resolveWorkerExecutionMode,
   projectNeedsVirtualWorker,
   peekNextWorkerAttention,
-  computeReconciliationCandidates
+  computeReconciliationCandidates,
+  resolveVirtualWorkerAttentionRoute
 } from "../../../../src/domain/workers/virtual-worker-scheduling-policy.js";
 import type { DashboardSettings } from "../../../../src/contracts/app-types.js";
 import type { ProjectAttentionItemRecord } from "../../../../src/contracts/project-attention-types.js";
 
 describe("Virtual Worker Scheduling Policy", () => {
+  describe("table-driven scheduling decisions", () => {
+    const actionableAttention = {
+      ownerType: "worker",
+      status: "open",
+      summaryMarkdown: "Needs worker action.",
+      attentionType: "worker_dispatch_blocked",
+    } as ProjectAttentionItemRecord;
+
+    const cases = [
+      {
+        name: "idle virtual worker project with attention is selected",
+        state: {
+          executionMode: "VIRTUAL",
+          hasActiveCycle: false,
+          isAlreadyScheduled: false,
+          nextAttentionItem: actionableAttention,
+          hasPendingDispatch: false,
+        },
+        expected: { shouldSchedule: true, reason: "virtual_worker_work_available" },
+      },
+      {
+        name: "idle virtual worker project with a pending dispatch is selected",
+        state: {
+          executionMode: "VIRTUAL",
+          hasActiveCycle: false,
+          isAlreadyScheduled: false,
+          nextAttentionItem: null,
+          hasPendingDispatch: true,
+        },
+        expected: { shouldSchedule: true, reason: "virtual_worker_work_available" },
+      },
+      {
+        name: "busy project with an active cycle is skipped",
+        state: {
+          executionMode: "VIRTUAL",
+          hasActiveCycle: true,
+          isAlreadyScheduled: false,
+          nextAttentionItem: actionableAttention,
+          hasPendingDispatch: true,
+        },
+        expected: { shouldSchedule: false, reason: "active_cycle" },
+      },
+      {
+        name: "busy project already queued is skipped",
+        state: {
+          executionMode: "VIRTUAL",
+          hasActiveCycle: false,
+          isAlreadyScheduled: true,
+          nextAttentionItem: actionableAttention,
+          hasPendingDispatch: true,
+        },
+        expected: { shouldSchedule: false, reason: "already_scheduled" },
+      },
+      {
+        name: "disabled virtual scheduling for connected-worker mode is skipped",
+        state: {
+          executionMode: "CONNECTED",
+          hasActiveCycle: false,
+          isAlreadyScheduled: false,
+          nextAttentionItem: actionableAttention,
+          hasPendingDispatch: true,
+        },
+        expected: { shouldSchedule: false, reason: "workers_not_virtual" },
+      },
+      {
+        name: "idle project with no actionable work is skipped",
+        state: {
+          executionMode: "VIRTUAL",
+          hasActiveCycle: false,
+          isAlreadyScheduled: false,
+          nextAttentionItem: null,
+          hasPendingDispatch: false,
+        },
+        expected: { shouldSchedule: false, reason: "no_actionable_work" },
+      },
+    ] satisfies Array<{
+      name: string;
+      state: Parameters<typeof decideVirtualWorkerProjectScheduling>[0];
+      expected: ReturnType<typeof decideVirtualWorkerProjectScheduling>;
+    }>;
+
+    it.each(cases)("$name", ({ state, expected }) => {
+      expect(decideVirtualWorkerProjectScheduling(state)).toEqual(expected);
+    });
+  });
+
   describe("isOrchestratorHandledClarificationItem", () => {
     it("returns true for cooldown active", () => {
       expect(isOrchestratorHandledClarificationItem("Clarification cooldown active...")).toBe(true);
@@ -64,6 +153,34 @@ describe("Virtual Worker Scheduling Policy", () => {
     it("ignores orchestrator handled clarification items", () => {
       const item = { ownerType: "worker", status: "open", summaryMarkdown: "Clarification cooldown active" } as ProjectAttentionItemRecord;
       expect(peekNextWorkerAttention([item], () => mockSettings({}))).toBeNull();
+    });
+
+    it.each([
+      {
+        name: "retry deferral for clarification cooldown",
+        item: {
+          ownerType: "worker",
+          status: "open",
+          summaryMarkdown: "Clarification cooldown active for this task.",
+          attentionType: "action_required",
+        } as ProjectAttentionItemRecord,
+      },
+      {
+        name: "retry deferral for already answered clarification",
+        item: {
+          ownerType: "worker",
+          status: "open",
+          summaryMarkdown: "The clarification was already answered automatically.",
+          attentionType: "action_required",
+        } as ProjectAttentionItemRecord,
+      },
+    ])("defers $name", ({ item }) => {
+      const resolver = vi.fn().mockReturnValue(mockSettings({
+        automationInterventions: { autoAnswerClarification: true },
+      }));
+
+      expect(peekNextWorkerAttention([item], resolver)).toBeNull();
+      expect(resolver).not.toHaveBeenCalled();
     });
 
     it("handles merge_conflict based on settings", () => {
@@ -123,6 +240,48 @@ describe("Virtual Worker Scheduling Policy", () => {
 
     it("handles non-overlapping lists", () => {
       expect(computeReconciliationCandidates(["p1"], ["p2"], ["p3"])).toEqual(["p1", "p2", "p3"]);
+    });
+  });
+
+  describe("attention route and claim policy", () => {
+    it.each([
+      {
+        name: "attention escalation for unsupported worker attention",
+        item: { attentionType: "worker_dispatch_blocked", summaryMarkdown: "Blocked." } as ProjectAttentionItemRecord,
+        expected: "escalate_to_human",
+      },
+      {
+        name: "merge conflict repair",
+        item: { attentionType: "merge_conflict", summaryMarkdown: "Conflict." } as ProjectAttentionItemRecord,
+        expected: "merge_conflict",
+      },
+      {
+        name: "ci retry repair",
+        item: { attentionType: "ci_fix_required", summaryMarkdown: "CI failed." } as ProjectAttentionItemRecord,
+        expected: "ci_fix",
+      },
+      {
+        name: "retry deferral for orchestrator-handled clarification",
+        item: { attentionType: "action_required", summaryMarkdown: "Resume instruction already sent." } as ProjectAttentionItemRecord,
+        expected: "skip_orchestrator_handled",
+      },
+    ])("$name routes to $expected", ({ item, expected }) => {
+      expect(resolveVirtualWorkerAttentionRoute(item)).toBe(expected);
+    });
+
+    it.each([
+      {
+        name: "open attention uses a claimed reason",
+        item: { status: "open" } as ProjectAttentionItemRecord,
+        expected: "virtual_worker_claimed:reconcile",
+      },
+      {
+        name: "unassigned claimed attention uses a reclaimed reason",
+        item: { status: "claimed" } as ProjectAttentionItemRecord,
+        expected: "virtual_worker_reclaimed:reconcile",
+      },
+    ])("$name", ({ item, expected }) => {
+      expect(planVirtualWorkerAttentionClaim(item, "reconcile").claimReason).toBe(expected);
     });
   });
 });

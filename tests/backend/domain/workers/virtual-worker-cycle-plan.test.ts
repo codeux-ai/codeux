@@ -24,6 +24,7 @@ describe("planVirtualWorkerCycle", () => {
   it("returns NO_WORKER_NEEDED when no attention item and no dispatch claim", async () => {
     const action = await planVirtualWorkerCycle({
       projectId: "p1",
+      cycleReason: "test",
       attentionItem: null,
       dispatchClaim: null,
       isProviderConcurrencyAvailable: mockIsProviderConcurrencyAvailable,
@@ -35,6 +36,7 @@ describe("planVirtualWorkerCycle", () => {
   it("returns ORCHESTRATOR_HANDLED_CLARIFICATION when attention item is orchestrator handled", async () => {
     const action = await planVirtualWorkerCycle({
       projectId: "p1",
+      cycleReason: "test",
       attentionItem: { summaryMarkdown: "Clarification cooldown active" } as ProjectAttentionItemRecord,
       dispatchClaim: null,
       isProviderConcurrencyAvailable: mockIsProviderConcurrencyAvailable,
@@ -47,6 +49,7 @@ describe("planVirtualWorkerCycle", () => {
     mockIsProviderConcurrencyAvailable.mockResolvedValueOnce(false);
     const action = await planVirtualWorkerCycle({
       projectId: "p1",
+      cycleReason: "test",
       attentionItem: { summaryMarkdown: "Standard task", sprintId: "s1" } as ProjectAttentionItemRecord,
       dispatchClaim: null,
       isProviderConcurrencyAvailable: mockIsProviderConcurrencyAvailable,
@@ -61,6 +64,7 @@ describe("planVirtualWorkerCycle", () => {
     const dispatchClaim = { sprint: { id: "s1" } } as WorkerTaskDispatchClaim;
     const action = await planVirtualWorkerCycle({
       projectId: "p1",
+      cycleReason: "test",
       attentionItem: { summaryMarkdown: "Standard task", sprintId: "s1" } as ProjectAttentionItemRecord,
       dispatchClaim,
       isProviderConcurrencyAvailable: mockIsProviderConcurrencyAvailable,
@@ -78,6 +82,7 @@ describe("planVirtualWorkerCycle", () => {
     const attentionItem = { summaryMarkdown: "Standard task", sprintId: "s1" } as ProjectAttentionItemRecord;
     const action = await planVirtualWorkerCycle({
       projectId: "p1",
+      cycleReason: "test_attention",
       attentionItem,
       dispatchClaim: null,
       isProviderConcurrencyAvailable: mockIsProviderConcurrencyAvailable,
@@ -87,6 +92,8 @@ describe("planVirtualWorkerCycle", () => {
     if (action.type === "HANDLE_ATTENTION") {
       expect(action.attentionItem).toBe(attentionItem);
       expect(action.cycleProviderType).toBe("codex");
+      expect(action.claimReason).toBe("virtual_worker_claimed:test_attention");
+      expect(action.attentionRoute).toBe("escalate_to_human");
     }
   });
 });
