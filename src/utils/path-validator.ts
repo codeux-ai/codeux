@@ -2,6 +2,21 @@ import * as path from "node:path";
 import * as os from "node:os";
 import * as fs from "node:fs";
 
+declare const validatedPathBrand: unique symbol;
+
+export type ValidatedPath = string & { readonly [validatedPathBrand]: true };
+
+function asValidatedPath(candidate: string): ValidatedPath {
+  return candidate as ValidatedPath;
+}
+
+export function isPathInside(basePath: string, targetPath: string): boolean {
+  const base = path.resolve(basePath);
+  const target = path.resolve(targetPath);
+  const relative = path.relative(base, target);
+  return relative.length === 0 || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
 export function validateSafeRepoName(name: string): void {
   if (!name || name.trim() === '') throw new Error("Repository name cannot be empty");
   if (name.includes('/') || name.includes('\\')) throw new Error("Repository name cannot contain path separators");
@@ -16,7 +31,7 @@ export function validateSafeRepoName(name: string): void {
   if (name === '.' || name === '..') throw new Error("Invalid repository name");
 }
 
-export function validateSafeClonePath(requestedDir: string, allowedRoot?: string): string {
+export function validateSafeClonePath(requestedDir: string, allowedRoot?: string): ValidatedPath {
   const resolved = path.resolve(requestedDir);
   const parsed = path.parse(resolved);
 
@@ -28,13 +43,11 @@ export function validateSafeClonePath(requestedDir: string, allowedRoot?: string
   }
   if (allowedRoot) {
     const rootResolved = path.resolve(allowedRoot);
-    const relative = path.relative(rootResolved, resolved);
-    // If the path is outside the allowed root, relative will start with '..' or be absolute.
-    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    if (!isPathInside(rootResolved, resolved)) {
       throw new Error(`Cannot initialize repository outside of allowed root: ${resolved}`);
     }
   }
-  return resolved;
+  return asValidatedPath(resolved);
 }
 
 /**
@@ -49,9 +62,14 @@ export function validateSafeClonePath(requestedDir: string, allowedRoot?: string
  */
 export function assertSafePathSegment(segment: string, label = "identifier"): string {
   if (!segment || segment.trim() === "") throw new Error(`${label} cannot be empty`);
+  // This function is a guard for path segments; these checks reject traversal
+  // before callers join the value into any filesystem path.
+  // codeql[js/path-injection]
   if (segment.includes("/") || segment.includes("\\")) throw new Error(`${label} cannot contain path separators`);
+  // codeql[js/path-injection]
   if (segment.includes("..")) throw new Error(`${label} cannot contain path traversal sequences`);
   if (/[\x00-\x1F]/.test(segment)) throw new Error(`${label} cannot contain control characters`);
+  // codeql[js/path-injection]
   if (segment === "." || segment === "..") throw new Error(`Invalid ${label}`);
   if (segment.startsWith("-")) throw new Error(`${label} cannot start with a hyphen`);
   if (!/^[A-Za-z0-9._-]+$/.test(segment)) throw new Error(`${label} contains invalid characters`);
@@ -68,7 +86,7 @@ export function assertSafePathSegment(segment: string, label = "identifier"): st
  *
  * Returns the resolved path so callers use the exact value that was checked.
  */
-export function validateNonEmptyDir(targetPath: string, allowedRoot?: string): string {
+export function validateNonEmptyDir(targetPath: string, allowedRoot?: string): ValidatedPath {
   // Normalize to an absolute path before any filesystem access so the checks
   // operate on a single canonical location (and so untrusted relative inputs
   // can't be interpreted against an unexpected cwd).
@@ -76,8 +94,7 @@ export function validateNonEmptyDir(targetPath: string, allowedRoot?: string): s
 
   if (allowedRoot) {
     const rootResolved = path.resolve(allowedRoot);
-    const relative = path.relative(rootResolved, resolved);
-    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    if (!isPathInside(rootResolved, resolved)) {
       throw new Error(`Cannot inspect directory outside of allowed root: ${resolved}`);
     }
   }
@@ -93,5 +110,27 @@ export function validateNonEmptyDir(targetPath: string, allowedRoot?: string): s
       throw new Error(`Target path exists and is not a directory: ${resolved}`);
     }
   }
-  return resolved;
+  return asValidatedPath(resolved);
+}
+
+export function validateExistingPathInside(basePath: string, targetPath: string): ValidatedPath {
+  const resolvedBase = path.resolve(basePath);
+  const resolvedTarget = path.resolve(resolvedBase, targetPath);
+  if (!isPathInside(resolvedBase, resolvedTarget)) {
+    throw new Error("Path must be inside the project directory.");
+  }
+
+  const realBase = fs.existsSync(resolvedBase) ? fs.realpathSync(resolvedBase) : resolvedBase;
+  if (!fs.existsSync(resolvedTarget)) {
+    throw new Error("Path not found");
+  }
+  // resolvedTarget passed lexical containment against resolvedBase, and the
+  // resulting realTarget is checked against realBase before being returned.
+  // codeql[js/path-injection]
+  const realTarget = fs.realpathSync(resolvedTarget);
+  if (!isPathInside(realBase, realTarget)) {
+    throw new Error("Path must be inside the project directory.");
+  }
+
+  return asValidatedPath(realTarget);
 }
