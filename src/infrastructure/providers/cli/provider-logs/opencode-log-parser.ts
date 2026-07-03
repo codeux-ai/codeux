@@ -62,6 +62,7 @@ function flattenVisibleReasoning(value: unknown): string {
 
 interface OpenCodeTokens {
   input: number;
+  rawInput: number;
   output: number;
   reasoning: number;
   cacheRead: number;
@@ -75,11 +76,14 @@ interface OpenCodeTokens {
  */
 function readOpenCodeTokens(tokens: Record<string, unknown>): OpenCodeTokens {
   const cache = asRecord(tokens.cache);
+  const rawInput = toNumber(tokens.input ?? tokens.inputTokens ?? tokens.promptTokens ?? tokens.prompt_tokens ?? 0);
+  const cacheRead = toNumber(cache?.read ?? tokens.cache_read ?? tokens.cachedInputTokens ?? 0);
   return {
-    input: toNumber(tokens.input ?? tokens.inputTokens ?? tokens.promptTokens ?? tokens.prompt_tokens ?? 0),
+    input: Math.max(0, rawInput - cacheRead),
+    rawInput,
     output: toNumber(tokens.output ?? tokens.outputTokens ?? tokens.completionTokens ?? tokens.completion_tokens ?? 0),
     reasoning: toNumber(tokens.reasoning ?? tokens.reasoningTokens ?? tokens.reasoning_tokens ?? 0),
-    cacheRead: toNumber(cache?.read ?? tokens.cache_read ?? tokens.cachedInputTokens ?? 0),
+    cacheRead,
     cacheWrite: toNumber(cache?.write ?? tokens.cache_write ?? 0),
   };
 }
@@ -158,7 +162,7 @@ export function parseOpenCodeExport(exportStdout: string): OpenCodeExportUsage |
     reasoningOutputTokens: t.reasoning,
     cost,
     rawUsageJson: {
-      tokens: { input: t.input, output: t.output, reasoning: t.reasoning, cache: { read: t.cacheRead, write: t.cacheWrite } },
+      tokens: { input: t.rawInput, output: t.output, reasoning: t.reasoning, cache: { read: t.cacheRead, write: t.cacheWrite } },
       cost,
     },
   };
@@ -216,7 +220,7 @@ export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult | null
   let foundEvent = false;
 
   // Usage summed across `step-finish` parts (one per completed LLM call).
-  const stepTotals: OpenCodeTokens = { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 };
+  const stepTotals: OpenCodeTokens = { input: 0, rawInput: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 };
   let stepCost = 0;
   let sawStepFinish = false;
   // Fallback: latest cumulative usage per assistant message id.
@@ -315,6 +319,7 @@ export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult | null
       if (tokens) {
         const t = readOpenCodeTokens(tokens);
         stepTotals.input += t.input;
+        stepTotals.rawInput += t.rawInput;
         stepTotals.output += t.output;
         stepTotals.reasoning += t.reasoning;
         stepTotals.cacheRead += t.cacheRead;
@@ -343,10 +348,11 @@ export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult | null
   let usage: OpenCodeTokens = stepTotals;
   let cost = stepCost;
   if (!sawStepFinish && messageTotals.size > 0) {
-    usage = { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 };
+    usage = { input: 0, rawInput: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 };
     cost = 0;
     for (const entry of messageTotals.values()) {
       usage.input += entry.tokens.input;
+      usage.rawInput += entry.tokens.rawInput;
       usage.output += entry.tokens.output;
       usage.reasoning += entry.tokens.reasoning;
       usage.cacheRead += entry.tokens.cacheRead;
@@ -359,7 +365,7 @@ export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult | null
   const rawUsageJson = hasUsage
     ? {
       tokens: {
-        input: usage.input,
+        input: usage.rawInput,
         output: usage.output,
         reasoning: usage.reasoning,
         cache: { read: usage.cacheRead, write: usage.cacheWrite },

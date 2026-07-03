@@ -42,7 +42,7 @@ This makes usage first-class instead of trying to infer it from task status rows
 The shared usage shape is:
 
 - `inputTokens`
-- `cachedInputTokens` (tracked separately; does not count toward `totalTokens` usage surfaced in the dashboard)
+- `cachedInputTokens`
 - `outputTokens`
 - `reasoningOutputTokens`
 - `totalTokens`
@@ -50,6 +50,8 @@ The shared usage shape is:
 - `wallTimeMs`
 - `invocationCount`
 - usage-source counters for `reported`, `estimated`, `unavailable`, and `unsupported`
+
+`inputTokens` is the non-cached input bucket used for full-rate input pricing. `cachedInputTokens` is tracked separately for cache-hit/cache-write visibility and cached-rate pricing. `totalTokens` includes both non-cached input and cached input plus output, so dashboard volume matches the full provider token footprint without charging cached tokens as full-rate input.
 
 Rollups are exposed in:
 
@@ -74,7 +76,7 @@ If a historical or failed run lacks the structured stats envelope, Code UX can s
 
 Codex runs with `codex exec --json`.
 
-Code UX first looks for `token_count` JSONL events, then normalizes the usage payload via the same shared `prompt/completion/total` adapter used by other providers. This includes safe fallback handling when Codex payloads omit completion counts but provide prompt and total tokens. If JSONL usage is missing, Code UX falls back to session JSON usage, then token estimation using `js-tiktoken` over the prompt plus captured transcript.
+Code UX first looks for `token_count` JSONL events, then normalizes the usage payload via the same shared `prompt/completion/total` adapter used by other providers. Codex/OpenAI-style prompt counters can include cached tokens while also reporting `cached_input_tokens` or `*_token_details.cached_tokens`; Code UX subtracts those cached tokens from `inputTokens`, records them in `cachedInputTokens`, and keeps them inside `totalTokens`. This prevents cached context from being double-priced as full-rate input while preserving total token volume. If Codex omits completion counts but provides prompt and total tokens, the parser can infer output from either all prompt tokens or non-cached prompt tokens depending on whether the provider total includes cache. If JSONL usage is missing, Code UX falls back to session JSON usage, then token estimation using `js-tiktoken` over the prompt plus captured transcript.
 Visible Codex reasoning summaries are also preserved as `reasoning` turns when the rollout JSONL or exec stream exposes them, but encrypted or empty reasoning blobs are skipped.
 
 Codex's rollout file (`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`) is cumulative for the whole session and keeps accumulating across `codex exec resume --last` (used for follow-up/QA-reopened runs and multi-turn retries). `parseCodexRolloutJsonl` isolates each run's own usage by treating the last `total_token_usage` snapshot *before* the run's time window as a baseline and subtracting it from the final cumulative snapshot — otherwise a follow-up would re-report every earlier turn's tokens too, inflating that run's persisted usage.
@@ -83,7 +85,7 @@ Codex's rollout file (`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`) is cumulat
 
 Qwen Code runs via its OpenAI-compatible request/response logging (`enableOpenAILoggingDir`), written to a directory that is reset at the start of every run so usage aggregation only ever sums the current invocation's own log files — unlike Codex/OpenCode, there is no cross-run cumulative counter to isolate.
 
-`src/infrastructure/providers/cli/provider-logs/qwen-log-parser.ts` sums `response.usage` (falling back to a bare top-level `usage` for older loggers) across every logged call in the run. Cached and reasoning token extraction delegates to the shared `parseUsageObject` adapter (also used by Codex), which checks OpenAI-style `prompt_tokens_details.cached_tokens` / `completion_tokens_details.reasoning_tokens` first, then falls back to Anthropic-style `cache_read_input_tokens` + `cache_creation_input_tokens` — relevant because Qwen Code can be configured with `qwenProtocol: "anthropic"` against an Anthropic-compatible backend, whose usage payload doesn't carry OpenAI's `*_details` shape.
+`src/infrastructure/providers/cli/provider-logs/qwen-log-parser.ts` sums `response.usage` (falling back to a bare top-level `usage` for older loggers) across every logged call in the run. Cached and reasoning token extraction delegates to the shared `parseUsageObject` adapter (also used by Codex), which checks OpenAI-style `prompt_tokens_details.cached_tokens` / `completion_tokens_details.reasoning_tokens` first, then falls back to Anthropic-style `cache_read_input_tokens` + `cache_creation_input_tokens` — relevant because Qwen Code can be configured with `qwenProtocol: "anthropic"` against an Anthropic-compatible backend, whose usage payload doesn't carry OpenAI's `*_details` shape. OpenAI-style cached tokens are subtracted from `inputTokens`; Anthropic-style cache counters are already separate and are not subtracted from `input_tokens`.
 
 ### Claude Code
 
@@ -134,7 +136,7 @@ Because `agy --conversation=<id>` resumes the same conversation db across follow
 
 OpenCode runs with `opencode run --format json`.
 
-Code UX reads the JSON event stream for the transcript, structured conversation turns, and native `ses_...` session id. Because recent OpenCode builds expose authoritative token and cost totals through `opencode export <sessionID>`, Code UX captures that export after the run and stores `info.tokens` plus `info.cost` in `raw_usage_json`, including `cache.read` as `cachedInputTokens`.
+Code UX reads the JSON event stream for the transcript, structured conversation turns, and native `ses_...` session id. Because recent OpenCode builds expose authoritative token and cost totals through `opencode export <sessionID>`, Code UX captures that export after the run and stores `info.tokens` plus `info.cost` in `raw_usage_json`, including `cache.read` as `cachedInputTokens`. The normalized numeric columns subtract `cache.read` from `inputTokens`, but the stored `raw_usage_json` keeps the provider's cumulative raw `tokens.input` value so the next resumed run can subtract an accurate baseline.
 
 `opencode export` reports totals **cumulative for the whole session**, and resuming a session (follow-up task runs, QA-reopened runs, provider retries, and dashboard chat replies that continue an earlier turn) all pass `--session <id>` to keep using it. Without correction this means every resumed invocation would re-report all of the session's prior tokens on top of its own, inflating that invocation's persisted usage each time it happens (compounding further on longer follow-up chains). `subtractOpenCodeBaseline` (`opencode-log-parser.ts`) corrects for this: callers that resume a session look up the previous invocation's raw `{ tokens, cost }` export snapshot for that same session/purpose and pass it through `collectProviderUsageTelemetry`'s `opencodeBaselineUsage`, which is subtracted from the freshly exported cumulative totals so only the current run's own tokens are recorded. The stored `raw_usage_json` itself is left as the fresh, unadjusted snapshot so it can serve as the baseline for the *next* follow-up. This baseline is threaded through every known session-resuming call path: `execute-provider-stage.ts` (task coding), `quality-assurance-service.ts` (QA follow-up implementation passes), the in-process retry loops inside `ProviderExecutionService.executeProvider` and `StructuredProviderResponseService.executeAndParse`, and dashboard chat continuations (`chat-thread-runtime-service.ts` → `chat-management-action-service.ts`).
 
@@ -203,9 +205,11 @@ Usage data now appears in two read models:
 
 Historical Docker-backed CLI invocations that were persisted as `unavailable` before container telemetry fallback support are backfilled at startup when they have prompt or transcript character counts. The backfill marks them as `estimated` using the same conservative character heuristic, preserving rows that already have provider-reported or provider-specific estimated usage.
 
+Historical provider-reported rows created before the v2 token-accounting contract are normalized once at startup via `provider_invocations.token_accounting_version`. Legacy Codex/OpenCode rows have cached tokens subtracted from `input_tokens` while leaving total token volume intact; legacy Gemini, Claude Code, and Antigravity rows have `total_tokens` raised to include their already-separate cached input bucket. Rows are marked version `2` after the migration so restart recovery never subtracts or adds the cached bucket twice.
+
 The stats snapshot includes:
 
-- project totals (including dynamic cost rollups based on typed token-pricing configurations which calculate input, output, and cached input costs in USD based on per-million token rates, defaulting to zero if unset or unconfigured. This relies on a per-snapshot pricing cache to prevent redundant provider/model lookups)
+- project totals (including dynamic cost rollups based on typed token-pricing configurations which calculate non-cached input, output, and cached input costs in USD based on per-million token rates, defaulting to zero if unset or unconfigured. This relies on a per-snapshot pricing cache to prevent redundant provider/model lookups)
 - total provider cost totals (e.g. `providerCost` map)
 - total model cost totals (e.g. `modelCost` map)
 - usage cost chart series for historical visualization (e.g. `core_total_cost`, `provider_cost_*`)

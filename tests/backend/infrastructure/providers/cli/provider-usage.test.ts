@@ -52,7 +52,7 @@ describe("collectProviderUsageTelemetry", () => {
       cachedInputTokens: 18,
       outputTokens: 42,
       reasoningOutputTokens: 7,
-      totalTokens: 169,
+      totalTokens: 187,
       usageSource: "reported",
       transcriptText: "Applied the edit.",
       nativeSessionId: "gemini-session-1",
@@ -125,7 +125,7 @@ describe("collectProviderUsageTelemetry", () => {
       cachedInputTokens: 10,
       outputTokens: 20,
       reasoningOutputTokens: 4,
-      totalTokens: 114,
+      totalTokens: 124,
       usageSource: "reported",
       transcriptText: "Applied the edit.",
     });
@@ -194,7 +194,7 @@ describe("collectProviderUsageTelemetry", () => {
       cachedInputTokens: 2859,
       outputTokens: 34,
       reasoningOutputTokens: 202,
-      totalTokens: 12558,
+      totalTokens: 15417,
       usageSource: "reported",
       transcriptText: "ok",
     });
@@ -250,7 +250,7 @@ describe("collectProviderUsageTelemetry", () => {
     });
 
     expect(result).toMatchObject({
-      inputTokens: 210,
+      inputTokens: 175,
       cachedInputTokens: 35,
       outputTokens: 84,
       reasoningOutputTokens: 16,
@@ -365,7 +365,7 @@ describe("collectProviderUsageTelemetry", () => {
     });
 
     expect(result).toMatchObject({
-      inputTokens: 88608,
+      inputTokens: 87408,
       cachedInputTokens: 1200,
       outputTokens: 10284,
       reasoningOutputTokens: 490,
@@ -400,7 +400,7 @@ describe("collectProviderUsageTelemetry", () => {
     });
 
     expect(result).toMatchObject({
-      inputTokens: 38608,
+      inputTokens: 38208,
       cachedInputTokens: 400,
       outputTokens: 4284,
       reasoningOutputTokens: 290,
@@ -436,7 +436,7 @@ describe("collectProviderUsageTelemetry", () => {
     });
 
     expect(result).toMatchObject({
-      inputTokens: 500,
+      inputTokens: 420,
       cachedInputTokens: 80,
       outputTokens: 120,
       reasoningOutputTokens: 10,
@@ -474,7 +474,7 @@ describe("collectProviderUsageTelemetry", () => {
     });
 
     expect(result).toMatchObject({
-      inputTokens: 500,
+      inputTokens: 420,
       cachedInputTokens: 80,
       outputTokens: 120,
       usageSource: "reported",
@@ -493,7 +493,7 @@ describe("collectProviderUsageTelemetry", () => {
     });
 
     expect(result).toMatchObject({
-      inputTokens: 210,
+      inputTokens: 175,
       cachedInputTokens: 35,
       outputTokens: 84,
       usageSource: "reported",
@@ -594,7 +594,7 @@ describe("collectProviderUsageTelemetry", () => {
     });
 
     expect(result.usageSource).toBe("reported");
-    expect(result.inputTokens).toBe(60);
+    expect(result.inputTokens).toBe(50);
     expect(result.cachedInputTokens).toBe(10);
     expect(result.outputTokens).toBe(25);
     expect(result.reasoningOutputTokens).toBe(4);
@@ -625,7 +625,7 @@ describe("collectProviderUsageTelemetry", () => {
     });
 
     expect(result).toMatchObject({
-      inputTokens: 144,
+      inputTokens: 132,
       cachedInputTokens: 12,
       outputTokens: 56,
       totalTokens: 200,
@@ -659,6 +659,38 @@ describe("collectProviderUsageTelemetry", () => {
       inputTokens: 300,
       outputTokens: 170,
       totalTokens: 470,
+      usageSource: "reported",
+    });
+  });
+
+  it("infers Codex output from total when total excludes cached input", async () => {
+    const result = await collectProviderUsageTelemetry({
+      provider: "codex",
+      model: "gpt-4o-codex",
+      prompt: "Generate tests.",
+      cwd: "/workspace/repo",
+      stdout: JSON.stringify({
+        type: "token_count",
+        payload: {
+          type: "token_count",
+          info: {
+            total_token_usage: {
+              input_tokens: 1000,
+              cached_input_tokens: 800,
+              total_tokens: 250,
+            },
+          },
+        },
+      }),
+      stderr: "",
+      capturedText: "Generated tests.",
+    });
+
+    expect(result).toMatchObject({
+      inputTokens: 200,
+      cachedInputTokens: 800,
+      outputTokens: 50,
+      totalTokens: 1050,
       usageSource: "reported",
     });
   });
@@ -722,7 +754,7 @@ describe("collectProviderUsageTelemetry", () => {
       inputTokens: 91,
       cachedInputTokens: 19,
       outputTokens: 33,
-      totalTokens: 124,
+      totalTokens: 143,
       usageSource: "reported",
       transcriptText: "Implemented the requested fix.",
       nativeSessionId: sessionId,
@@ -757,7 +789,7 @@ describe("collectProviderUsageTelemetry", () => {
       inputTokens: 44,
       cachedInputTokens: 11,
       outputTokens: 22,
-      totalTokens: 66,
+      totalTokens: 77,
       usageSource: "reported",
       transcriptText: "Container fix complete.",
       nativeSessionId: "container-native-1",
@@ -793,11 +825,11 @@ describe("collectProviderUsageTelemetry", () => {
       stdout: "Here is the binary search implementation.",
       stderr: "",
       nativeSessionId: "qwen-session-123",
-      qwenReportedUsage: { inputTokens: 1500, cachedInputTokens: 50, outputTokens: 450, reasoningOutputTokens: 0 },
+      qwenReportedUsage: { inputTokens: 1450, cachedInputTokens: 50, outputTokens: 450, reasoningOutputTokens: 0 },
     });
 
     expect(result).toMatchObject({
-      inputTokens: 1500,
+      inputTokens: 1450,
       cachedInputTokens: 50,
       outputTokens: 450,
       totalTokens: 1950,
@@ -838,7 +870,7 @@ describe("parseQwenOpenAiLogs", () => {
 
     const usage = await parseQwenOpenAiLogs(logDir, Date.now() - 500);
 
-    expect(usage).toEqual({ inputTokens: 1700, cachedInputTokens: 50, outputTokens: 530, reasoningOutputTokens: 0 });
+    expect(usage).toEqual({ inputTokens: 1650, cachedInputTokens: 50, outputTokens: 530, reasoningOutputTokens: 0 });
   });
 
   it("returns null when no log file reports usage", async () => {
