@@ -8,11 +8,18 @@ import { JiraIcon } from "../icons/JiraIcon.js";
 interface SprintImportMenuProps {
   disabled?: boolean;
   onImportMarkdown: () => void;
-  onImportIssues: () => void;
+  onImportGitHubIssues: () => void;
+  onImportGitLabIssues: () => void;
   onImportJira?: () => void;
 }
 
-export const SprintImportMenu = ({ disabled, onImportMarkdown, onImportIssues, onImportJira }: SprintImportMenuProps) => {
+export const SprintImportMenu = ({
+  disabled,
+  onImportMarkdown,
+  onImportGitHubIssues,
+  onImportGitLabIssues,
+  onImportJira,
+}: SprintImportMenuProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -153,7 +160,7 @@ export const SprintImportMenu = ({ disabled, onImportMarkdown, onImportIssues, o
             role="menuitem"
             onClick={() => {
               setIsOpen(false);
-              onImportIssues();
+              onImportGitHubIssues();
             }}
             className="group flex w-full items-center gap-3 rounded-[0.9rem] px-3 py-2.5 text-left transition-all hover:bg-black/[0.04] dark:hover:bg-white/[0.05]"
           >
@@ -175,7 +182,7 @@ export const SprintImportMenu = ({ disabled, onImportMarkdown, onImportIssues, o
             role="menuitem"
             onClick={() => {
               setIsOpen(false);
-              onImportIssues();
+              onImportGitLabIssues();
             }}
             className="group flex w-full items-center gap-3 rounded-[0.9rem] px-3 py-2.5 text-left transition-all hover:bg-black/[0.04] dark:hover:bg-white/[0.05]"
           >

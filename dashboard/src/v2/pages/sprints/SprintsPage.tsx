@@ -51,6 +51,7 @@ import type { SprintImportedTaskInput } from "../../types.js";
 
 const ACCENT_CYCLE = ["text-signal-500", "text-ember-500", "text-status-green"] as const;
 const SPRINT_GALLERY_VISIBILITY_STORAGE_KEY = "code_ux_sprints_show_gallery";
+type RepositoryIssueImportProvider = "github" | "gitlab";
 
 const getImportedTaskKey = (task: SprintImportedTaskInput): string => (
   [
@@ -171,6 +172,7 @@ export const SprintsPage: FunctionComponent = () => {
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
   const [showSprintGallery, setShowSprintGallery] = useState(readStoredSprintGalleryVisibility);
   const [showIssueImportModal, setShowIssueImportModal] = useState(false);
+  const [issueImportProvider, setIssueImportProvider] = useState<RepositoryIssueImportProvider>("github");
   const [isJiraModalOpen, setIsJiraModalOpen] = useState(false);
   const [linkedIssues, setLinkedIssues] = useState<SprintLinkedIssueInput[]>([]);
   const [pendingImportedTasks, setPendingImportedTasks] = useState<SprintImportedTaskInput[]>([]);
@@ -562,7 +564,14 @@ export const SprintsPage: FunctionComponent = () => {
             <SprintImportMenu
               disabled={!selectedProject}
               onImportMarkdown={() => setShowImportModal(true)}
-              onImportIssues={() => setShowIssueImportModal(true)}
+              onImportGitHubIssues={() => {
+                setIssueImportProvider("github");
+                setShowIssueImportModal(true);
+              }}
+              onImportGitLabIssues={() => {
+                setIssueImportProvider("gitlab");
+                setShowIssueImportModal(true);
+              }}
               onImportJira={() => setIsJiraModalOpen(true)}
             />
             <button
@@ -876,6 +885,7 @@ export const SprintsPage: FunctionComponent = () => {
       {showIssueImportModal && selectedProject && (
         <SprintIssueImportModal
           project={selectedProject}
+          initialProvider={issueImportProvider}
           onClose={() => setShowIssueImportModal(false)}
           onImport={(issues) => {
             mergeLinkedIssues(issues);
