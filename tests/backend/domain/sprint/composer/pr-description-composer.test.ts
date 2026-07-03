@@ -182,7 +182,7 @@ describe("composeTaskPrBody", () => {
     expect(body).not.toContain("NaN");
   });
 
-  it("omits the cost line but keeps token counts when nothing was billed (all-subscription usage)", () => {
+  it("omits the metered cost line and billing notice but keeps token counts when nothing was billed", () => {
     const body = composeTaskPrBody({
       ...baseTaskInput,
       usage: {
@@ -193,7 +193,8 @@ describe("composeTaskPrBody", () => {
       },
     });
     expect(body).not.toContain("Est. cost");
-    expect(body).toContain("ran via subscription/local login");
+    expect(body).not.toContain("ran via subscription/local login");
+    expect(body).not.toContain("not billed separately");
     expect(body).toContain("Total tokens");
   });
 
@@ -312,7 +313,8 @@ describe("composeSprintPrBody", () => {
     expect(body).not.toContain("Est. cost");
     expect(body).not.toContain("Included cost");
     expect(body).not.toContain("Total cost");
-    expect(body).toContain("ran via subscription/local login");
+    expect(body).not.toContain("ran via subscription/local login");
+    expect(body).not.toContain("not billed separately");
   });
 
   it("shows metered, included estimate, and reference total rows for the aggregate sprint usage mix", () => {

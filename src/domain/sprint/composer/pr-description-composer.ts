@@ -164,12 +164,6 @@ function renderUsageBlock(usage: PrUsageStats | null, heading: string): string {
   if (billedCostLabel && includedCostLabel && totalCostLabel) {
     noteLines.push(`**Reference total (metered + included estimate):** ${totalCostLabel}`);
   }
-  if (usage.subscriptionInvocationCount > 0) {
-    noteLines.push(
-      `ℹ️ ${usage.subscriptionInvocationCount} invocation(s) ran via subscription/local login — not billed separately.`,
-    );
-  }
-
   const parts = [rows.join("\n")];
   if (noteLines.length > 0) parts.push(noteLines.join("\n"));
 
