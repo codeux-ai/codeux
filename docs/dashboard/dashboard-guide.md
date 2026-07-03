@@ -359,6 +359,9 @@ Legacy runtime:
   - route changes coming from the Browser chrome use the preview bridge and HTML5 history where possible, so SPA previews stop hard-refreshing on every in-app navigation
   - when the active preview is stopped, still starting, or otherwise unavailable, the iframe stays on the preview origin and the server returns a same-origin standby page with `Start Container` / `Rebuild Container` controls instead of exposing raw proxy connection errors
   - non-critical side-panel data such as startup-script contents and container logs now load after the main browser surface, so the page opens faster and the iframe/session rail render first
+  - browser chrome and session controls expose explicit accessible names for window controls, back/forward/reload, external open, rebuild, stop, script save, and session removal
+  - preview state changes are announced through status/alert regions for loading, starting, running, stopped, reconnecting or unavailable containers, stale logs, saving scripts, launching containers, and empty session states
+  - address entry has a programmatic label, disabled-state description, and announced navigation submissions while preserving focus in the form
   - remove actions on session cards fully delete preview-session entries after stopping any live container
   - rebuild, stop, open-in-tab, startup-script editing, and log viewing
   - sprint previews are proxied through the dashboard instead of embedding raw localhost origins directly
@@ -369,6 +372,8 @@ Legacy runtime:
   - normalized control rail with semantic status badge, sprint/branch context, mode toggle, and rebuild/stop controls
   - restrained panel surfaces for sidebar and viewer regions using shared neutral/light-dark borders and backgrounds
   - launch state card matching Browser Preview container-launch conventions (accent icon treatment, selector styling, and primary action button)
+  - file tree, change list, loading, empty, and error states expose explicit roles and selected-state semantics so keyboard and screen-reader users can browse without pointer hover
+  - long sprint names, branch names, file paths, and diff labels wrap inside their panels instead of forcing page-level horizontal overflow
   - file browsing/diff behavior remains unchanged (`files` and `changes` modes, selected path display, side-by-side toggle, and status semantics)
 - Stats page uses a flatter project analytics workspace with light/dark support and responsive behavior across screen sizes:
   - page-scoped Stats panels, chips, cards, inputs, ledgers, and focus rings come from `stats-theme.css` and the shared Stats primitives.
@@ -424,7 +429,8 @@ Legacy runtime:
 ### File Browser view
 - Responsive container layout with bounded height stacking on narrow screens and side-by-side grid panels on wide screens
 - Automatic toggle between inline and side-by-side diff modes based on viewport width
-- Resilient long-path truncation in action bar and active file viewer controls
+- Resilient long-path wrapping in action bar, file tree rows, change-list rows, and active file viewer controls
+- File tree rows expose treeitem selection/expanded state, change rows expose listbox option selection, and loading/error/empty regions announce their state
 - Automatic Monaco viewer layout recalculation to prevent hidden or overflowing code views
 
 ### Dashboard view

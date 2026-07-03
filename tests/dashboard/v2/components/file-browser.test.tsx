@@ -68,6 +68,8 @@ describe("File Browser Components", () => {
 
       render(<FileTree nodes={nodes as any} selectedPath={null} onSelectFile={onSelect} searchTerm="test" />);
 
+      expect(screen.getByRole("tree", { name: "Sprint file tree" })).toBeInTheDocument();
+
       // Ensure highlight is rendered
       const mark = screen.getByText("test");
       expect(mark.tagName.toLowerCase()).toBe("mark");
@@ -89,6 +91,8 @@ describe("File Browser Components", () => {
       const row = container.querySelector('[tabindex="0"]');
       expect(row?.className).toContain("bg-signal-500/[0.14]");
       expect(row?.className).toContain("focus-visible:ring-2");
+      expect(row).toHaveAttribute("role", "treeitem");
+      expect(row).toHaveAttribute("aria-selected", "true");
     });
   });
 
@@ -108,9 +112,11 @@ describe("File Browser Components", () => {
 
       expect(screen.getByText("changed.ts")).toBeInTheDocument();
       expect(screen.getByText("+5")).toBeInTheDocument();
+      expect(screen.getByRole("listbox", { name: "Changed files" })).toBeInTheDocument();
 
       const button = container.querySelector('button');
       expect(button?.className).toContain("bg-signal-500/[0.12]");
+      expect(button).toHaveAttribute("aria-selected", "true");
 
       fireEvent.click(button!);
       expect(onSelect).toHaveBeenCalledWith("/changed.ts");
