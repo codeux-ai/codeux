@@ -2,7 +2,7 @@ import type { ProjectManagementRepository } from "../../repositories/project-man
 import type { ExecutionControlService } from "../../services/execution-control-service.js";
 import type { ExecutionRepository } from "../../repositories/execution-repository.js";
 import type { ManagementResponseEnvelope, ManagementApproval, ManageCodeUxArgs } from "../../contracts/internal-management-types.js";
-import type { CreateSprintInput, UpdateSprintInput, PlanSprintOptions, PlanningOverrides } from "../../contracts/project-management-types.js";
+import type { CreateSprintInput, UpdateSprintInput, PlanSprintOptions, PlanningOverrides, SprintLinkedIssueInput } from "../../contracts/project-management-types.js";
 import type { PlanningAgentService } from "../../services/planning-agent-service.js";
 import type { IssueSearchInput, SprintIssueService } from "../../services/sprint-issue-service.js";
 import { mergePromptWithLinkedIssues } from "../../services/linked-issue-prompt-markdown.js";
@@ -49,6 +49,28 @@ function readStringAlias(payload: Record<string, unknown>, primaryKey: string, a
   return undefined;
 }
 
+function readStringArray(payload: Record<string, unknown>, key: string): string[] | undefined {
+  const value = payload[key];
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const strings = value
+    .map((item) => typeof item === "string" ? item.trim() : "")
+    .filter(Boolean);
+  return strings.length > 0 ? strings : undefined;
+}
+
+function readNumberArray(payload: Record<string, unknown>, key: string): number[] | undefined {
+  const value = payload[key];
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const numbers = value
+    .map((item) => typeof item === "number" ? item : typeof item === "string" ? Number(item.trim()) : NaN)
+    .filter((item) => Number.isFinite(item));
+  return numbers.length > 0 ? numbers : undefined;
+}
+
 function readSprintStatus(value: unknown): CreateSprintInput["status"] | UpdateSprintInput["status"] | undefined {
   return typeof value === "string" && VALID_SPRINT_STATUSES.includes(value as typeof VALID_SPRINT_STATUSES[number])
     ? value as CreateSprintInput["status"]
@@ -57,6 +79,26 @@ function readSprintStatus(value: unknown): CreateSprintInput["status"] | UpdateS
 
 function normalizeLinkedIssues(value: unknown): CreateSprintInput["linkedIssues"] | undefined {
   return Array.isArray(value) ? value as CreateSprintInput["linkedIssues"] : undefined;
+}
+
+function toLinkedIssueInput(issue: SprintLinkedIssueInput): SprintLinkedIssueInput {
+  return {
+    provider: issue.provider,
+    hostDomain: issue.hostDomain,
+    projectKey: issue.projectKey,
+    repository: issue.repository,
+    issueNumber: issue.issueNumber,
+    issueKey: issue.issueKey,
+    title: issue.title,
+    url: issue.url,
+    state: issue.state,
+    labels: issue.labels,
+    assignees: issue.assignees,
+    includeConversation: issue.includeConversation,
+    issueAuthor: issue.issueAuthor,
+    issueCreatedAt: issue.issueCreatedAt,
+    issueUpdatedAt: issue.issueUpdatedAt,
+  };
 }
 
 function normalizeCreateSprintInput(payload: Record<string, unknown>): CreateSprintInput {
@@ -206,17 +248,33 @@ export class SprintActions {
         const sprintId = readString(payload, "sprintId");
         const searchInput: IssueSearchInput = {
           search: readString(payload, "search"),
-          provider: payload.provider === "github" || payload.provider === "gitlab"
+          provider: payload.provider === "github" || payload.provider === "gitlab" || payload.provider === "jira"
             ? payload.provider
             : undefined,
+          repository: readString(payload, "repository"),
+          hostDomain: readString(payload, "hostDomain"),
+          projectKey: readString(payload, "projectKey"),
+          assignee: readString(payload, "assignee"),
+          assigneeText: readString(payload, "assigneeText"),
+          issueText: readString(payload, "issueText"),
+          issueKeys: readStringArray(payload, "issueKeys"),
+          issueNumbers: readNumberArray(payload, "issueNumbers"),
+          issueRefs: readStringArray(payload, "issueRefs"),
           limit: typeof payload.limit === 'number' ? payload.limit : undefined,
         };
 
-        const issues = await this.deps.sprintIssueService.searchIssues(projectId, searchInput);
+        const hasExplicitRefs = Boolean(searchInput.issueKeys?.length || searchInput.issueNumbers?.length || searchInput.issueRefs?.length);
+        const issues = hasExplicitRefs
+          ? await this.deps.sprintIssueService.getIssuePromptContextsForReferences(projectId, searchInput)
+          : await this.deps.sprintIssueService.searchIssues(projectId, searchInput);
 
         let result: unknown = issues;
         if (sprintId) {
-          result = this.deps.projectManagementRepository.replaceSprintLinkedIssues(projectId, sprintId, issues);
+          result = this.deps.projectManagementRepository.replaceSprintLinkedIssues(
+            projectId,
+            sprintId,
+            issues.map(toLinkedIssueInput),
+          );
         }
         return { result };
       }

@@ -5,8 +5,12 @@ import type {
   ProjectSummary,
   RepositoryIssueSearchInput,
   RepositoryIssueSearchResult,
+  RepositoryIssueSearchSortDirection,
+  RepositoryIssueSearchSortField,
   JiraIssueSearchInput,
   JiraIssueSearchResult,
+  JiraIssueSearchSortField,
+  JiraIssueSearchSortDirection,
   SprintLinkedIssueInput,
   SprintLinkedIssueRecord,
 } from "../contracts/project-management-types.js";
@@ -18,23 +22,29 @@ import { execFile } from "child_process";
 import * as jiraApiClient from "./jira-api-client.js";
 
 export interface IssueSearchInput {
-  provider?: RepositoryIssueSearchInput["provider"];
+  provider?: LinkedIssueProvider;
   repository?: string;
   hostDomain?: string;
+  projectKey?: string;
   search?: string;
   state?: RepositoryIssueSearchInput["state"];
+  status?: JiraIssueSearchInput["status"];
   labels?: string[];
   assignee?: string;
+  assigneeText?: string;
   author?: string;
   reporter?: string;
   milestone?: string;
   issueText?: string;
+  issueKeys?: string[];
+  issueNumbers?: number[];
+  issueRefs?: string[];
   createdAfter?: string;
   createdBefore?: string;
   updatedAfter?: string;
   updatedBefore?: string;
-  sortField?: RepositoryIssueSearchInput["sortField"];
-  sortDirection?: RepositoryIssueSearchInput["sortDirection"];
+  sortField?: RepositoryIssueSearchInput["sortField"] | JiraIssueSearchSortField;
+  sortDirection?: RepositoryIssueSearchInput["sortDirection"] | JiraIssueSearchSortDirection;
   limit?: number;
 }
 
@@ -92,10 +102,15 @@ export class SprintIssueService {
 
   async searchIssues(projectId: string, input: IssueSearchInput): Promise<RepositoryIssueSearchResult[]> {
     const project = this.requireProject(projectId);
-    const target = resolveIssueTarget(project, input);
+    const provider = resolveIssueProvider(project, input);
     const settings = this.deps.getDashboardSettings({ projectId });
     const limit = clampLimit(input.limit);
 
+    if (provider === "jira") {
+      return this.searchJiraIssuesForProject(project, input, settings, limit);
+    }
+
+    const target = resolveRepositoryIssueTarget(project, input, provider);
     if (target.provider === "github") {
       return this.searchGitHubIssues({
         ...target,
@@ -112,8 +127,8 @@ export class SprintIssueService {
         createdBefore: input.createdBefore,
         updatedAfter: input.updatedAfter,
         updatedBefore: input.updatedBefore,
-        sortField: input.sortField,
-        sortDirection: input.sortDirection,
+        sortField: normalizeRepositorySearchSortField(input.sortField),
+        sortDirection: normalizeRepositorySearchSortDirection(input.sortDirection),
         limit,
       });
     }
@@ -133,10 +148,25 @@ export class SprintIssueService {
       createdBefore: input.createdBefore,
       updatedAfter: input.updatedAfter,
       updatedBefore: input.updatedBefore,
-      sortField: input.sortField,
-      sortDirection: input.sortDirection,
+      sortField: normalizeRepositorySearchSortField(input.sortField),
+      sortDirection: normalizeRepositorySearchSortDirection(input.sortDirection),
       limit,
     });
+  }
+
+  async getIssuePromptContextsForReferences(projectId: string, input: IssueSearchInput): Promise<IssuePromptContext[]> {
+    const project = this.requireProject(projectId);
+    const provider = resolveIssueProvider(project, input);
+    const settings = this.deps.getDashboardSettings({ projectId });
+    const hasJiraReferences = shouldResolveJiraReferences(input, provider) && collectJiraIssueKeys(input).length > 0;
+    if (hasJiraReferences && (!settings.jira.host.trim() || !settings.jira.apiToken.trim())) {
+      throw new Error("Jira site URL and API token must be configured in Settings -> Integrations.");
+    }
+    const issueInputs = buildExplicitIssuePromptInputs(project, input, provider, settings);
+    if (issueInputs.length === 0) {
+      return [];
+    }
+    return this.getIssuePromptContexts(projectId, issueInputs);
   }
 
   async getIssuePromptContexts(projectId: string, issues: IssuePromptContextInput[]): Promise<IssuePromptContext[]> {
@@ -337,6 +367,48 @@ export class SprintIssueService {
       }));
   }
 
+  private async searchJiraIssuesForProject(
+    project: ProjectSummary,
+    input: IssueSearchInput,
+    settings: DashboardSettings,
+    limit: number,
+  ): Promise<RepositoryIssueSearchResult[]> {
+    if (!this.deps.jiraApiClient) {
+      throw new Error("Jira API client is not injected.");
+    }
+    if (!settings.jira.host.trim() || !settings.jira.apiToken.trim()) {
+      throw new Error("Jira site URL and API token must be configured in Settings -> Integrations.");
+    }
+
+    const jiraInput: JiraIssueSearchInput = {
+      projectKey: input.projectKey || settings.jira.defaultProject,
+      search: input.search,
+      status: input.status,
+      assignee: normalizeJiraAssignee(input.assignee),
+      assigneeText: input.assigneeText || input.assignee,
+      labels: input.labels || [],
+      updatedAfter: input.updatedAfter,
+      updatedBefore: input.updatedBefore,
+      sortField: normalizeJiraSearchSortField(input.sortField),
+      sortDirection: normalizeJiraSearchSortDirection(input.sortDirection),
+      limit,
+    };
+    const explicitIssueKeys = collectJiraIssueKeys(input);
+    if (explicitIssueKeys.length === 1 && !jiraInput.search) {
+      jiraInput.issueKey = explicitIssueKeys[0];
+    }
+
+    const issues = await this.deps.jiraApiClient.searchIssues(
+      settings.jira.host,
+      settings.jira.email,
+      settings.jira.apiToken,
+      jiraInput,
+      limit,
+    );
+    const hostDomain = jiraHostDomain(settings.jira.host);
+    return issues.map((issue) => normalizeJiraIssueSummary(issue, hostDomain, project));
+  }
+
   private async getGitHubIssuePromptContext(input: IssuePromptContextInput, tokenValue: string): Promise<IssuePromptContext> {
     const token = tokenValue.trim();
     if (!token) {
@@ -526,9 +598,9 @@ export class SprintIssueService {
       url: issue.url,
       state: issue.state,
       body: issue.descriptionMarkdown || "",
-      author: null,
-      createdAt: null,
-      updatedAt: null,
+      author: issue.issueAuthor,
+      createdAt: issue.createdAt,
+      updatedAt: issue.updatedAt,
       labels: issue.labels,
       assignees: issue.assignees,
       conversationMarkdown: issue.commentsMarkdown || "",
@@ -553,7 +625,7 @@ export class SprintIssueService {
 }
 
 interface ResolvedIssueTarget {
-  provider: LinkedIssueProvider;
+  provider: "github" | "gitlab";
   hostDomain: string;
   repository: string;
 }
@@ -572,8 +644,8 @@ interface SearchRuntimeOptions {
   createdBefore?: string;
   updatedAfter?: string;
   updatedBefore?: string;
-  sortField?: RepositoryIssueSearchInput["sortField"];
-  sortDirection?: RepositoryIssueSearchInput["sortDirection"];
+  sortField?: RepositoryIssueSearchSortField;
+  sortDirection?: RepositoryIssueSearchSortDirection;
   limit: number;
 }
 
@@ -652,17 +724,235 @@ interface BuildIssuePromptContextOptions {
   includeConversation: boolean;
 }
 
-function resolveIssueTarget(project: ProjectSummary, input: IssueSearchInput): ResolvedIssueTarget {
-  const repo = (input.repository || inferRepository(project)).trim().replace(/^\/+|\/+$/g, "");
+function resolveIssueProvider(project: ProjectSummary, input: IssueSearchInput): LinkedIssueProvider {
   const provider = input.provider || project.gitProvider;
-  const hostDomain = (input.hostDomain || project.gitHostDomain || defaultHostForProvider(provider)).trim().toLowerCase();
-  if (provider !== "github" && provider !== "gitlab") {
-    throw new Error("Select a GitHub or GitLab-backed project before importing issues.");
+  if (provider !== "github" && provider !== "gitlab" && provider !== "jira") {
+    throw new Error("Select a GitHub, GitLab, or Jira-backed project before importing issues.");
   }
+  return provider;
+}
+
+function resolveRepositoryIssueTarget(project: ProjectSummary, input: IssueSearchInput, provider: LinkedIssueProvider): ResolvedIssueTarget {
+  if (provider !== "github" && provider !== "gitlab") {
+    throw new Error("Select a GitHub or GitLab-backed project before importing repository issues.");
+  }
+  const repo = (input.repository || inferRepository(project)).trim().replace(/^\/+|\/+$/g, "");
+  const hostDomain = (input.hostDomain || project.gitHostDomain || defaultHostForProvider(provider)).trim().toLowerCase();
   if (!repo) {
     throw new Error("Repository is required for issue import.");
   }
   return { provider, hostDomain, repository: repo };
+}
+
+function buildExplicitIssuePromptInputs(
+  project: ProjectSummary,
+  input: IssueSearchInput,
+  preferredProvider: LinkedIssueProvider,
+  settings: DashboardSettings,
+): IssuePromptContextInput[] {
+  const contexts: IssuePromptContextInput[] = [];
+  const jiraHost = jiraHostDomain(settings.jira.host);
+  const jiraKeys = shouldResolveJiraReferences(input, preferredProvider) ? collectJiraIssueKeys(input) : [];
+  for (const issueKey of jiraKeys) {
+    const issueNumber = parseIssueNumberFromJiraKey(issueKey);
+    if (!issueNumber || !jiraHost) {
+      continue;
+    }
+    const projectKey = issueKey.slice(0, issueKey.lastIndexOf("-"));
+    contexts.push({
+      provider: "jira",
+      hostDomain: jiraHost,
+      repository: projectKey,
+      projectKey,
+      issueNumber,
+      issueKey,
+      title: issueKey,
+      url: `${normalizeJiraHost(settings.jira.host)}/browse/${issueKey}`,
+      includeConversation: input.issueRefs !== undefined || input.issueKeys !== undefined || input.issueNumbers !== undefined
+        ? true
+        : undefined,
+    });
+  }
+
+  const repositoryProvider = preferredProvider === "gitlab" ? "gitlab" : preferredProvider === "github" ? "github" : undefined;
+  if (!repositoryProvider) {
+    return contexts;
+  }
+
+  const target = tryResolveRepositoryIssueTarget(project, input, repositoryProvider);
+  if (!target) {
+    return contexts;
+  }
+
+  for (const issueNumber of collectRepositoryIssueNumbers(input)) {
+    contexts.push({
+      provider: target.provider,
+      hostDomain: target.hostDomain,
+      repository: target.repository,
+      issueNumber,
+      issueKey: `${target.provider === "github" ? "#" : "!"}${issueNumber}`,
+      title: `${target.repository}#${issueNumber}`,
+      url: repositoryIssueUrl(target, issueNumber),
+      includeConversation: true,
+    });
+  }
+
+  return contexts;
+}
+
+function tryResolveRepositoryIssueTarget(
+  project: ProjectSummary,
+  input: IssueSearchInput,
+  provider: "github" | "gitlab",
+): ResolvedIssueTarget | null {
+  try {
+    return resolveRepositoryIssueTarget(project, input, provider);
+  } catch {
+    return null;
+  }
+}
+
+function collectJiraIssueKeys(input: IssueSearchInput): string[] {
+  const candidates = [
+    ...(input.issueKeys || []),
+    ...(input.issueRefs || []),
+    input.issueText || "",
+    input.search || "",
+  ];
+  if (input.projectKey) {
+    for (const issueNumber of input.issueNumbers || []) {
+      if (Number.isFinite(issueNumber) && issueNumber > 0) {
+        candidates.push(`${input.projectKey}-${Math.trunc(issueNumber)}`);
+      }
+    }
+  }
+  return uniqueStrings(candidates
+    .flatMap((value) => extractJiraIssueKeys(value))
+    .map((value) => value.toUpperCase()));
+}
+
+function shouldResolveJiraReferences(input: IssueSearchInput, preferredProvider: LinkedIssueProvider): boolean {
+  return preferredProvider === "jira" || (input.issueKeys?.length || 0) > 0;
+}
+
+function collectRepositoryIssueNumbers(input: IssueSearchInput): number[] {
+  const numbers = [
+    ...(input.issueNumbers || []),
+    ...(input.issueRefs || []).flatMap(extractRepositoryIssueNumbers),
+    ...extractRepositoryIssueNumbers(input.issueText || ""),
+  ];
+  return Array.from(new Set(numbers
+    .map((value) => Math.trunc(value))
+    .filter((value) => Number.isFinite(value) && value > 0)));
+}
+
+function extractJiraIssueKeys(value: string): string[] {
+  return Array.from(value.matchAll(/\b([A-Z][A-Z0-9_]+-\d+)\b/gi))
+    .map((match) => match[1])
+    .filter((match): match is string => Boolean(match));
+}
+
+function extractRepositoryIssueNumbers(value: string): number[] {
+  const trimmed = value.trim();
+  if (!trimmed || extractJiraIssueKeys(trimmed).length > 0) {
+    return [];
+  }
+  const match = trimmed.match(/^(?:#|!)?(\d+)$/);
+  return match?.[1] ? [Number(match[1])] : [];
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function normalizeJiraIssueSummary(issue: JiraIssueSearchResult, hostDomain: string, project: ProjectSummary): RepositoryIssueSearchResult {
+  const issueNumber = parseIssueNumberFromJiraKey(issue.key) || 1;
+  const projectKey = issue.projectKey || issue.key.slice(0, Math.max(0, issue.key.lastIndexOf("-"))) || project.name;
+  return {
+    provider: "jira",
+    hostDomain,
+    repository: projectKey,
+    projectKey,
+    issueNumber,
+    issueKey: issue.key,
+    title: issue.title,
+    url: issue.url,
+    state: issue.state,
+    labels: issue.labels,
+    assignees: issue.assignees,
+    bodyPreview: issue.bodyPreview,
+    createdAt: issue.createdAt,
+    updatedAt: issue.updatedAt,
+    issueAuthor: issue.issueAuthor,
+    issueReporter: issue.issueReporter,
+    issueMilestone: issue.issueMilestone,
+    issueType: issue.issueType,
+    issuePriority: issue.priority,
+    issueCommentCount: issue.issueCommentCount,
+    sourceProvider: "jira",
+  };
+}
+
+function parseIssueNumberFromJiraKey(issueKey: string): number | null {
+  const match = issueKey.trim().match(/-(\d+)$/);
+  if (!match?.[1]) {
+    return null;
+  }
+  const issueNumber = Number(match[1]);
+  return Number.isFinite(issueNumber) && issueNumber > 0 ? issueNumber : null;
+}
+
+function normalizeJiraAssignee(value?: string): JiraIssueSearchInput["assignee"] | undefined {
+  if (value === "me" || value === "unassigned") {
+    return value;
+  }
+  return undefined;
+}
+
+function normalizeJiraSearchSortField(value?: IssueSearchInput["sortField"]): JiraIssueSearchSortField | undefined {
+  if (value === "updated" || value === "created" || value === "priority" || value === "status" || value === "assignee" || value === "reporter") {
+    return value;
+  }
+  return undefined;
+}
+
+function normalizeJiraSearchSortDirection(value?: IssueSearchInput["sortDirection"]): JiraIssueSearchSortDirection | undefined {
+  return value === "asc" ? "asc" : value === "desc" ? "desc" : undefined;
+}
+
+function normalizeRepositorySearchSortField(value?: IssueSearchInput["sortField"]): RepositoryIssueSearchSortField | undefined {
+  if (value === "updated" || value === "created" || value === "comments") {
+    return value;
+  }
+  return undefined;
+}
+
+function normalizeRepositorySearchSortDirection(value?: IssueSearchInput["sortDirection"]): RepositoryIssueSearchSortDirection | undefined {
+  return value === "asc" ? "asc" : value === "desc" ? "desc" : undefined;
+}
+
+function jiraHostDomain(host: string): string {
+  const normalized = normalizeJiraHost(host);
+  if (!normalized) {
+    return "";
+  }
+  try {
+    return new URL(normalized).host.toLowerCase();
+  } catch {
+    return normalized.replace(/^https?:\/\//i, "").replace(/\/+$/, "").toLowerCase();
+  }
+}
+
+function normalizeJiraHost(host: string): string {
+  return host.trim().replace(/\/+$/, "");
+}
+
+function repositoryIssueUrl(target: ResolvedIssueTarget, issueNumber: number): string {
+  const host = target.hostDomain.replace(/\/+$/, "");
+  if (target.provider === "gitlab") {
+    return `https://${host}/${target.repository}/-/issues/${issueNumber}`;
+  }
+  return `https://${host}/${target.repository}/issues/${issueNumber}`;
 }
 
 function normalizeIssuePromptContextInputs(issues: IssuePromptContextInput[]): IssuePromptContextInput[] {
@@ -703,6 +993,7 @@ function buildIssuePromptContext(input: IssuePromptContextInput, options: BuildI
   return {
     provider: input.provider,
     hostDomain: input.hostDomain,
+    projectKey: input.projectKey,
     repository: input.repository,
     issueNumber: input.issueNumber,
     issueKey: input.issueKey || `${input.provider === "github" ? "#" : "!"}${input.issueNumber}`,

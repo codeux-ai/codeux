@@ -79,6 +79,7 @@ export const TOOL_DEFINITIONS = [
         labels: { type: "array", items: { type: "string" }, description: "Optional labels to filter or identify imported issues." },
         assignee: { type: "string", description: "Optional GitHub/GitLab assignee filter for import_issues." },
         assigneeText: { type: "string", description: "Optional Jira assignee text filter for import_issues, such as me, unassigned, or an account identifier." },
+        issueText: { type: "string", description: "Optional issue text or exact issue reference for import_issues." },
         issueKeys: { type: "array", items: { type: "string" }, description: "Optional explicit Jira issue keys for import_issues." },
         issueNumbers: { type: "array", items: { type: "number" }, description: "Optional explicit GitHub/GitLab issue numbers for import_issues." },
         issueRefs: { type: "array", items: { type: "string" }, description: "Optional explicit issue references for import_issues, such as #123 or OPS-42." },
