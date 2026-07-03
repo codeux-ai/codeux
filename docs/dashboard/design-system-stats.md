@@ -42,12 +42,15 @@ The final Stats page is organized into four layers:
 - Use consistent vertical rhythm between the hero, the mode cards, and the analysis studio.
 - Keep control clusters tight enough to read as a single system, but separate them enough that keyboard focus remains obvious.
 - Preserve panel height across loading and empty states so the layout does not jump.
+- Metric cards use the established `StatsCard` radius and internal padding (`1.85rem` radius, `1.75rem` padding) so the dashboard overview and Stats page share the same card proportions.
+- Chart and bar background layers inside metric cards render as direct card children so their absolute positioning reaches the card edges; do not wrap them in a padded content container.
 
 ### Color
 
 - Use signal colors to encode state, not decoration.
 - Status chips, tab pills, and legend switches should remain legible in both light and dark themes.
 - Avoid introducing new color tokens when existing semantic tokens already describe the same intent.
+- Metric cards use solid card surfaces (`#FFFFFF` in light mode, `#181411` in dark mode) rather than the shared translucent glass surface, which prevents the page background from reading as inner card padding.
 
 ## Interaction Rules
 

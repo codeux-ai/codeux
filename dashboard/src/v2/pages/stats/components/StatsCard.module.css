@@ -13,7 +13,11 @@
 
 .card:hover {
   @apply -translate-y-0.5;
-  box-shadow: var(--elevation-raised);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+}
+
+.dark .card:hover {
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
 }
 
 .card:focus-within {
@@ -102,10 +106,6 @@
 .accentCyan .iconContainer { color: var(--stats-accent-cyan); }
 .accentRose .iconContainer { color: var(--stats-accent-rose); }
 .accentEmerald .iconContainer { color: var(--stats-accent-emerald); }
-
-.children {
-  @apply relative z-10;
-}
 
 @media (prefers-reduced-motion: reduce) {
   .card,

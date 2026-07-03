@@ -74,7 +74,7 @@ export const StatsCard: FunctionComponent<StatsCardProps> = ({
       </div>
 
       {/* Extra Children (e.g. Action Buttons, extra footer elements, or Sparkline) */}
-      {children ? <div className={styles.children}>{children}</div> : null}
+      {children}
     </div>
   );
 };
