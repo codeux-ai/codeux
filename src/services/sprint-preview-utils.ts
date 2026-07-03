@@ -11,12 +11,23 @@ export interface SprintPreviewCommandDetection {
   runCommand: string | null;
 }
 
-interface PackageJsonLike {
-  scripts?: Record<string, string>;
+export interface SprintPreviewCommandSource {
+  exists(filePath: string): Promise<boolean>;
+  readTextFile(filePath: string): Promise<string>;
+  listFiles?(): Promise<string[]>;
 }
 
-const PREVIEW_SCRIPT_NAMES = ["preview", "start", "serve"] as const;
+interface PackageJsonLike {
+  name?: string;
+  scripts?: Record<string, string>;
+  workspaces?: string[] | { packages?: string[] };
+}
+
+const PREVIEW_SCRIPT_NAMES = ["preview", "start", "serve", "dev"] as const;
 const STATIC_DIR_CANDIDATES = ["dist", "build", "out", "public"] as const;
+const WORKSPACE_PACKAGE_DIRS = ["apps", "packages", "frontend", "client", "web"] as const;
+const WEB_DEV_SCRIPT_PATTERN = /\b(vite|next\s+dev|astro\s+dev|nuxt\s+dev|remix\s+dev|webpack(?:-dev-server)?|rspack(?:\s+serve)?|rsbuild\s+dev|parcel|expo\s+start|react-scripts\s+start|vite-node)\b/i;
+const WEB_RUNTIME_SCRIPT_PATTERN = /\b(vite|next|astro|nuxt|remix|webpack(?:-dev-server)?|rspack|rsbuild|parcel|serve|http-server|sirv|wrangler|node|tsx|ts-node)\b/i;
 
 const commandExistsSnippet = (command: string): string => `if ! command -v ${command} >/dev/null 2>&1; then npm install -g ${command}; fi`;
 
@@ -67,28 +78,33 @@ export const normalizePreviewPath = (value: string | null | undefined): string =
   }
 };
 
-export async function detectSprintPreviewCommands(repoPath: string): Promise<SprintPreviewCommandDetection> {
-  const packageManager = await detectPackageManager(repoPath);
-  const packageJson = await readPackageJson(repoPath);
+export async function detectSprintPreviewCommands(repoPath: string, source?: SprintPreviewCommandSource): Promise<SprintPreviewCommandDetection> {
+  const packageManager = await detectPackageManager(repoPath, source);
+  const packageJson = await readPackageJson(repoPath, source);
   const scripts = packageJson?.scripts || {};
   const runner = getRunCommandFactory(packageManager);
 
   const installCommand = buildInstallCommand(packageManager);
-  const buildCommand = typeof scripts.build === "string" && scripts.build.trim().length > 0
-    ? runner("build")
-    : null;
-  let runCommand = buildRunCommand(packageManager, scripts);
+  const rootRuntime = buildRunCommand(packageManager, scripts, "", false);
+  const workspacePackageJsonPaths = rootRuntime ? [] : await listWorkspacePackageJsonPaths(repoPath, source);
+  const workspaceRuntime = rootRuntime
+    ? null
+    : await detectWorkspacePreviewRuntime(repoPath, packageManager, source, workspacePackageJsonPaths);
+  const runtime = rootRuntime || workspaceRuntime;
+  const hasWorkspacePackages = Boolean(packageJson?.workspaces) || workspacePackageJsonPaths.length > 0;
+  const buildCommand = runtime?.scriptName === "dev"
+    ? null
+    : buildBuildCommand(packageManager, runtime?.packageDir || "", runtime?.scripts || scripts, hasWorkspacePackages);
+  let runCommand = runtime?.command
+    || (!hasWorkspacePackages && buildCommand ? buildStaticFallbackRunCommand() : null);
 
   if (!runCommand) {
     // Fallback: Check for common entry files if no script is found in package.json
     const entries = ["server.js", "app.js", "index.js", "src/server.js", "src/index.js"];
     for (const entry of entries) {
-      try {
-        await fs.access(path.join(repoPath, entry));
+      if (await fileExists(repoPath, entry, source)) {
         runCommand = `node ${entry}`;
         break;
-      } catch {
-        continue;
       }
     }
   }
@@ -101,9 +117,10 @@ export async function detectSprintPreviewCommands(repoPath: string): Promise<Spr
   };
 }
 
-export async function detectPackageManager(repoPath: string): Promise<SprintPreviewPackageManager> {
+export async function detectPackageManager(repoPath: string, source?: SprintPreviewCommandSource): Promise<SprintPreviewPackageManager> {
   const checks: Array<{ file: string; packageManager: SprintPreviewPackageManager }> = [
     { file: "pnpm-lock.yaml", packageManager: "pnpm" },
+    { file: "pnpm-workspace.yaml", packageManager: "pnpm" },
     { file: "yarn.lock", packageManager: "yarn" },
     { file: "bun.lockb", packageManager: "bun" },
     { file: "bun.lock", packageManager: "bun" },
@@ -111,11 +128,8 @@ export async function detectPackageManager(repoPath: string): Promise<SprintPrev
   ];
 
   for (const check of checks) {
-    try {
-      await fs.access(path.join(repoPath, check.file));
+    if (await fileExists(repoPath, check.file, source)) {
       return check.packageManager;
-    } catch {
-      continue;
     }
   }
 
@@ -348,37 +362,191 @@ function buildInstallCommand(packageManager: SprintPreviewPackageManager): strin
 function buildRunCommand(
   packageManager: SprintPreviewPackageManager,
   scripts: Record<string, string>,
-): string | null {
-  const runner = getRunCommandFactory(packageManager);
-  const availableScript = PREVIEW_SCRIPT_NAMES.find((name) => typeof scripts[name] === "string" && scripts[name].trim().length > 0);
+  packageDir = "",
+  allowStaticFallback = true,
+): { command: string; scriptName: typeof PREVIEW_SCRIPT_NAMES[number]; packageDir: string; scripts: Record<string, string> } | null {
+  const availableScript = PREVIEW_SCRIPT_NAMES.find((name) => isUsablePreviewScript(name, scripts[name]));
 
   if (availableScript === "preview") {
     const previewArgs = ["--host", "0.0.0.0", "--port", "\"$SPRINT_PREVIEW_PORT\""];
-    return `HOST=0.0.0.0 PORT="$SPRINT_PREVIEW_PORT" DASHBOARD_HOST=0.0.0.0 DASHBOARD_PORT="$SPRINT_PREVIEW_PORT" ${runner("preview", previewArgs)}`;
+    return {
+      command: `HOST=0.0.0.0 PORT="$SPRINT_PREVIEW_PORT" DASHBOARD_HOST=0.0.0.0 DASHBOARD_PORT="$SPRINT_PREVIEW_PORT" ${runPackageScript(packageManager, packageDir, "preview", previewArgs)}`,
+      scriptName: availableScript,
+      packageDir,
+      scripts,
+    };
   }
 
-  if (availableScript === "start" || availableScript === "serve") {
-    return `HOST=0.0.0.0 PORT="$SPRINT_PREVIEW_PORT" DASHBOARD_HOST=0.0.0.0 DASHBOARD_PORT="$SPRINT_PREVIEW_PORT" ${runner(availableScript)}`;
+  if (availableScript === "start" || availableScript === "serve" || availableScript === "dev") {
+    return {
+      command: `HOST=0.0.0.0 PORT="$SPRINT_PREVIEW_PORT" DASHBOARD_HOST=0.0.0.0 DASHBOARD_PORT="$SPRINT_PREVIEW_PORT" ${runPackageScript(packageManager, packageDir, availableScript)}`,
+      scriptName: availableScript,
+      packageDir,
+      scripts,
+    };
   }
 
-  if (typeof scripts.build === "string" && scripts.build.trim().length > 0) {
-    return [
-      "for candidate in dist build out public; do",
-      "  if [ -d \"$candidate\" ]; then",
-      "    if ! command -v serve >/dev/null 2>&1; then npm install -g serve; fi",
-      "    exec serve -s \"$candidate\" -l \"$SPRINT_PREVIEW_PORT\"",
-      "  fi",
-      "done",
-      "exit 1",
-    ].join(" ");
+  if (allowStaticFallback && typeof scripts.build === "string" && scripts.build.trim().length > 0) {
+    return {
+      command: buildStaticFallbackRunCommand(),
+      scriptName: "serve",
+      packageDir,
+      scripts,
+    };
   }
 
   return null;
 }
 
-async function readPackageJson(repoPath: string): Promise<PackageJsonLike | null> {
+function buildStaticFallbackRunCommand(): string {
+  return [
+    "for candidate in dist build out public; do",
+    "  if [ -d \"$candidate\" ]; then",
+    "    if ! command -v serve >/dev/null 2>&1; then npm install -g serve; fi",
+    "    exec serve -s \"$candidate\" -l \"$SPRINT_PREVIEW_PORT\"",
+    "  fi",
+    "done",
+    "exit 1",
+  ].join(" ");
+}
+
+function buildBuildCommand(
+  packageManager: SprintPreviewPackageManager,
+  packageDir: string,
+  scripts: Record<string, string>,
+  hasWorkspacePackages: boolean,
+): string | null {
+  if (typeof scripts.build !== "string" || scripts.build.trim().length === 0) {
+    return null;
+  }
+  if (!packageDir && hasWorkspacePackages) {
+    return null;
+  }
+  return runPackageScript(packageManager, packageDir, "build");
+}
+
+async function detectWorkspacePreviewRuntime(
+  repoPath: string,
+  packageManager: SprintPreviewPackageManager,
+  source?: SprintPreviewCommandSource,
+  packageJsonPaths?: string[],
+): Promise<ReturnType<typeof buildRunCommand>> {
+  const paths = packageJsonPaths ?? await listWorkspacePackageJsonPaths(repoPath, source);
+  for (const packageJsonPath of paths) {
+    const packageDir = path.posix.dirname(packageJsonPath);
+    const packageJson = await readJsonFile(repoPath, packageJsonPath, source);
+    const runtime = buildRunCommand(packageManager, packageJson?.scripts || {}, packageDir, false);
+    if (runtime) {
+      return runtime;
+    }
+  }
+  return null;
+}
+
+async function listWorkspacePackageJsonPaths(repoPath: string, source?: SprintPreviewCommandSource): Promise<string[]> {
+  if (source?.listFiles) {
+    return (await source.listFiles())
+      .filter((filePath) => filePath.endsWith("/package.json"))
+      .filter((filePath) => WORKSPACE_PACKAGE_DIRS.some((dir) => filePath.startsWith(`${dir}/`)))
+      .sort((left, right) => scorePackagePath(left) - scorePackagePath(right) || left.localeCompare(right));
+  }
+
+  const results: string[] = [];
+  for (const dir of WORKSPACE_PACKAGE_DIRS) {
+    const root = path.join(repoPath, dir);
+    let entries: string[];
+    try {
+      entries = await fs.readdir(root);
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const packageJsonPath = path.join(root, entry, "package.json");
+      try {
+        await fs.access(packageJsonPath);
+        results.push(path.posix.join(dir, entry, "package.json"));
+      } catch {
+        continue;
+      }
+    }
+  }
+  return results.sort((left, right) => scorePackagePath(left) - scorePackagePath(right) || left.localeCompare(right));
+}
+
+function scorePackagePath(filePath: string): number {
+  const normalized = filePath.toLowerCase();
+  if (/apps\/(web|client|app|frontend|dashboard|admin|studio|site)/.test(normalized)) return 0;
+  if (normalized.startsWith("apps/")) return 1;
+  if (/packages\/(web|client|app|frontend|dashboard|admin|studio|site)/.test(normalized)) return 2;
+  return 3;
+}
+
+function isUsablePreviewScript(scriptName: typeof PREVIEW_SCRIPT_NAMES[number], script: string | undefined): boolean {
+  if (typeof script !== "string" || script.trim().length === 0) {
+    return false;
+  }
+  if (scriptName === "dev") {
+    return WEB_DEV_SCRIPT_PATTERN.test(script);
+  }
+  return scriptName !== "start" || WEB_RUNTIME_SCRIPT_PATTERN.test(script);
+}
+
+function runPackageScript(
+  packageManager: SprintPreviewPackageManager,
+  packageDir: string,
+  script: string,
+  args: string[] = [],
+): string {
+  if (!packageDir) {
+    return getRunCommandFactory(packageManager)(script, args);
+  }
+  const quotedDir = shellQuote(packageDir);
+  switch (packageManager) {
+    case "pnpm":
+      return args.length > 0
+        ? `pnpm --dir ${quotedDir} ${script} -- ${args.join(" ")}`
+        : `pnpm --dir ${quotedDir} ${script}`;
+    case "yarn":
+      return args.length > 0
+        ? `yarn --cwd ${quotedDir} ${script} ${args.join(" ")}`
+        : `yarn --cwd ${quotedDir} ${script}`;
+    case "bun":
+      return args.length > 0
+        ? `bun --cwd ${quotedDir} run ${script} -- ${args.join(" ")}`
+        : `bun --cwd ${quotedDir} run ${script}`;
+    case "npm":
+    default:
+      return args.length > 0
+        ? `npm --prefix ${quotedDir} run ${script} -- ${args.join(" ")}`
+        : `npm --prefix ${quotedDir} run ${script}`;
+  }
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+async function fileExists(repoPath: string, filePath: string, source?: SprintPreviewCommandSource): Promise<boolean> {
+  if (source) {
+    return await source.exists(filePath);
+  }
   try {
-    const raw = await fs.readFile(path.join(repoPath, "package.json"), "utf8");
+    await fs.access(path.join(repoPath, filePath));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function readPackageJson(repoPath: string, source?: SprintPreviewCommandSource): Promise<PackageJsonLike | null> {
+  return await readJsonFile(repoPath, "package.json", source);
+}
+
+async function readJsonFile(repoPath: string, filePath: string, source?: SprintPreviewCommandSource): Promise<PackageJsonLike | null> {
+  try {
+    const raw = source
+      ? await source.readTextFile(filePath)
+      : await fs.readFile(path.join(repoPath, filePath), "utf8");
     const parsed = JSON.parse(raw.replace(/^\uFEFF/, "")) as PackageJsonLike;
     return parsed && typeof parsed === "object" ? parsed : null;
   } catch {
