@@ -89,17 +89,18 @@ See [Memory Claims and Evidence](../architecture/memory-claims.md) for the archi
 When a sprint completes, Code UX can run memory remediation according to `memory.remediationMode`:
 - `off`: no post-sprint curation.
 - `deterministic`: uses promotion scoring and promotes qualifying sprint evidence clusters up to `memory.remediationMaxPromotions`.
-- `ai`: first builds deterministic candidates, then invokes the provider routed through the `remediation` invocation route. The AI may select which candidates to promote; if the AI invocation fails, deterministic claim promotion is used as a fallback.
+- `ai`: first builds promotion candidates, then invokes the provider routed through the `remediation` invocation route. The AI may select which compact candidate IDs to promote; if the AI invocation fails, deterministic claim promotion is used as a fallback.
 
 The remediation guardrail job type is `remediation`, so runaway review loops are capped by the same guardrail system as planning, CI fix, and merge-conflict repair.
 
 Promotion analysis treats short-term sprint memories as evidence, not as durable knowledge by default:
-- sprint memories below strength `0.6` are ignored
-- semantically similar memories from the same sprint are clustered into one promotion candidate with `evidenceMemoryIds`
+- sprint memories below strength `0.45` are ignored
+- semantically similar memories from the same sprint are clustered into one promotion candidate with one selectable `id` plus `evidenceCount`; full source evidence IDs stay internal for claim provenance
 - recurrence across previous sprints and agreement across agents can raise the candidate score
 - near-duplicates of existing project-scope memories are skipped
 - risk flags such as `test_fixture`, `task_local`, `file_specific`, `implementation_trivia`, `speculative`, and `ci_failure` reduce the score before the promotion threshold is applied
-- AI remediation receives the cluster claim, evidence IDs, score, reason, and risk flags so repeated smoke-test or fixture mechanics are visible as risky evidence rather than durable project knowledge
+- the default promotion threshold is `0.5`; AI remediation uses a lower review floor of `0.45` so the model has a useful candidate set to curate without automatically promoting every reviewed memory
+- AI remediation receives the cluster claim, score, reason, risk flags, evidence count, and cross-sprint count so repeated smoke-test or fixture mechanics are visible as risky evidence rather than durable project knowledge
 - selected candidates become long-term claims with evidence links; raw sprint notes are not copied verbatim unless the claim itself is already the durable statement
 
 CI-failure learnings are treated specially:

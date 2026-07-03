@@ -620,7 +620,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     autoCaptureSprint: true,
     autoCaptureAgent: true,
     autoPromote: false,
-    promotionThreshold: 0.7,
+    promotionThreshold: 0.5,
     remediationMode: "deterministic",
     remediationMaxPromotions: 12,
     maxSprintMemories: 200,

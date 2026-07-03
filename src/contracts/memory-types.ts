@@ -263,10 +263,13 @@ export type MemoryPromotionRiskFlag =
   | "speculative";
 
 export interface PromotionCandidate {
+  /** Stable ID used by remediation decisions. For clusters, this is the representative source memory ID. */
+  id: string;
   memory: MemoryRecord;
   clusterId: string;
   claim: string;
   evidenceMemoryIds: string[];
+  evidenceCount: number;
   riskFlags: MemoryPromotionRiskFlag[];
   score: number;
   reason: string;
