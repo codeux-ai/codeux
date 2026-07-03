@@ -12,6 +12,7 @@ The redesigned Stats page follows a stable top-to-bottom rhythm:
 
 1. Header and command band
    - The hero names the selected project and sprint context, shows generated-at and freshness metadata, and owns all time-window changes.
+   - The hero uses a responsive command grid: title and context chips lead, time-window and visual-mode controls stay in the top command zone, and the KPI strip sits below without forcing horizontal page overflow.
    - Time presets include `24h`, `7d`, `30d`, `All`, and `Custom`. `Custom` reveals date fields, but the range changes only after the guarded `Apply` action succeeds.
    - The visual mode control is a grouped button rail with stable labels: `Trend`, `Composition`, `Models`, `Providers`, `Ledgers`, and `System`. `Providers` maps to reliability analysis and should not be renamed without updating tests and copy together.
 2. Workspace context strip
@@ -112,6 +113,7 @@ Navigation controls must never be clipped or require page-level horizontal scrol
 - Wrap command groups before allowing horizontal overflow. Use `flex-wrap`, `min-w-0`, stable button dimensions, and grid tracks such as `minmax(0, 1fr)`.
 - The hero command panel, visual mode rail, chart toolbar, ledger tabs, ledger sort bars, system filters, and pagination controls should all remain reachable at mobile widths.
 - Avoid overflow-hidden ancestors around controls that can wrap, open popovers, or show validation messages.
+- The Stats hero keeps time-window presets, custom date fields, and `ViewToggle` in a wrapped top-right command panel on wide viewports; on tablet and mobile the same command panel stacks below the project context without hiding controls.
 - Keep button accessible names stable. Current tests and users rely on labels such as `Trend`, `Composition`, `Models`, `Providers`, `Ledgers`, `System`, `Custom`, `Apply`, and `Filters`.
 - Use `role="group"` plus `aria-pressed` for local visual modes, filter chips, and sort choices. Use tab semantics only for actual tabbed ledgers.
 - The visual mode rail is a segmented control with icon-first buttons and stable accessible names: `Trend`, `Composition`, `Models`, `Providers`, `Ledgers`, and `System`. It must wrap and may scroll within its own rail on very narrow widths, but it must not create page-level horizontal overflow.

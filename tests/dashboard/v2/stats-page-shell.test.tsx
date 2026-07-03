@@ -25,29 +25,6 @@ vi.mock("../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({
   useReducedMotion: vi.fn(),
 }));
 
-vi.mock("../../../dashboard/src/v2/pages/stats/components/StatsPageHero.js", () => ({
-  StatsPageHero: ({
-    selectedProject,
-    stats,
-    applyPresetWindow,
-  }: {
-    selectedProject: { name: string } | null;
-    stats: { activeSprint?: { sprintNumber?: number } } | null;
-    applyPresetWindow: (window: string) => void;
-  }) => (
-    <section>
-      <h1>Statistics.</h1>
-      <div>{selectedProject?.name}</div>
-      <div>{stats?.activeSprint?.sprintNumber ? `Live sprint ${stats.activeSprint.sprintNumber}` : "No live sprint"}</div>
-      <button type="button" onClick={() => applyPresetWindow("all")}>All time</button>
-    </section>
-  ),
-}));
-
-vi.mock("../../../dashboard/src/v2/pages/stats/components/StatsShared.js", () => ({
-  SignalMetricCard: ({ label }: { label: string }) => <div>{label}</div>,
-}));
-
 vi.mock("../../../dashboard/src/v2/pages/stats/components/AnalysisStudioSection.js", () => ({
   AnalysisStudioSection: ({
     stats,
@@ -103,10 +80,13 @@ vi.mock("../../../dashboard/src/v2/pages/stats/components/AnalysisStudioSection.
   },
 }));
 
-// Mock the context
+const projectContextMock = vi.hoisted(() => ({
+  selectedProject: { id: "proj-1", name: "Test Project" } as { id: string; name: string } | null,
+}));
+
 vi.mock("../../../dashboard/src/v2/context/project-data.js", () => ({
   useProjectData: () => ({
-    selectedProject: { id: "proj-1", name: "Test Project" },
+    selectedProject: projectContextMock.selectedProject,
   }),
 }));
 
@@ -185,11 +165,32 @@ expect.extend(matchers);
 beforeEach(() => {
   cleanup();
   vi.clearAllMocks();
+  projectContextMock.selectedProject = { id: "proj-1", name: "Test Project" };
   vi.mocked(useStatsPageData).mockReturnValue(baseMockValue as any);
   vi.mocked(useReducedMotion).mockReturnValue(false);
 });
 
 describe("StatsPage Shell", () => {
+  it("renders the command header and no-project state without dropping context", () => {
+    projectContextMock.selectedProject = null;
+    vi.mocked(useStatsPageData).mockReturnValue({
+      ...baseMockValue,
+      stats: null,
+      loading: false,
+      error: null,
+    } as any);
+
+    render(<StatsPage />);
+
+    expect(screen.getByRole("region", { name: "Statistics" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Statistics." })).toBeInTheDocument();
+    expect(screen.getAllByText("No project selected")[0]).toBeInTheDocument();
+    expect(screen.getByText("No snapshot yet")).toBeInTheDocument();
+    expect(screen.getByText("Stats panel idle")).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Time window presets" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Analytics modes" })).toBeInTheDocument();
+  });
+
   it("shows loading empty state if stats are loading", () => {
     vi.mocked(useStatsPageData).mockReturnValue({
       ...baseMockValue,
@@ -197,6 +198,8 @@ describe("StatsPage Shell", () => {
       loading: true,
     } as any);
     render(<StatsPage />);
+    expect(screen.getByRole("heading", { name: "Statistics." })).toBeInTheDocument();
+    expect(screen.getByText("Stats panel refreshing")).toBeInTheDocument();
     expect(screen.getByText(/Loading telemetry field/i)).toBeInTheDocument();
   });
 
@@ -207,7 +210,10 @@ describe("StatsPage Shell", () => {
       error: "Something went wrong",
     } as any);
     render(<StatsPage />);
+    expect(screen.getByRole("heading", { name: "Statistics." })).toBeInTheDocument();
+    expect(screen.getByText("Stats panel unavailable")).toBeInTheDocument();
     expect(screen.getByText("Something went wrong")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
   });
 
   it("renders previous stats when loading is true but stats exist", () => {
@@ -240,10 +246,12 @@ expect(gsap.fromTo).toHaveBeenCalled();
 
   it("renders the hero content and range controls", () => {
     render(<StatsPage />);
-    expect(screen.getByText("Statistics.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Statistics." })).toBeInTheDocument();
     expect(screen.getByText("Test Project")).toBeInTheDocument();
-    expect(screen.getByText("Live sprint 5")).toBeInTheDocument();
-    expect(screen.getByText("All time")).toBeInTheDocument();
+    expect(screen.getAllByText("#5")[0]).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "All time" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Custom" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Analytics modes" })).toBeInTheDocument();
   });
 
   it("renders metric cards", () => {
@@ -258,10 +266,11 @@ expect(gsap.fromTo).toHaveBeenCalled();
 
   it("renders the analysis studio section with view toggle above it", () => {
     render(<StatsPage />);
-    expect(screen.getByRole("button", { name: /Trend/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Composition/i })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Trend/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /Composition/i }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /Providers/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Reliability/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Ledgers/i })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Ledgers/i }).length).toBeGreaterThan(0);
 
     // Default mode from mock is "composition"
     expect(screen.getByText("Composition analysis")).toBeInTheDocument();
@@ -296,7 +305,7 @@ expect(gsap.fromTo).toHaveBeenCalled();
     expect(screen.getByText("Composition analysis")).toBeInTheDocument();
     expect(screen.getAllByText("Provider Share")[0]).toBeInTheDocument();
     expect(screen.getAllByText("Token Anatomy")[0]).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Composition" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getAllByRole("button", { name: "Composition" }).some((button) => button.getAttribute("aria-pressed") === "true")).toBe(true);
     expect(screen.getByRole("button", { name: "Reliability" })).toHaveAttribute("aria-pressed", "false");
   });
 
@@ -314,8 +323,9 @@ expect(gsap.fromTo).toHaveBeenCalled();
     expect(screen.getByText("Reliability analysis")).toBeInTheDocument();
     expect(screen.getByText("Telemetry Source Mix")).toBeInTheDocument();
     expect(screen.getByText("Confidence Board")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Providers" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Reliability" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "Composition" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getAllByRole("button", { name: "Composition" }).every((button) => button.getAttribute("aria-pressed") === "false")).toBe(true);
   });
 
   it("allows searching in telemetry ledgers", () => {

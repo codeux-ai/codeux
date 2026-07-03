@@ -195,7 +195,7 @@ export const ViewToggle: FunctionComponent<{
     <div
       role="group"
       aria-label={ariaLabel}
-      className={`flex w-full max-w-full min-w-0 flex-wrap gap-1 overflow-x-auto overscroll-x-contain p-1 ${CHIP_CLASS} ${className}`.trim()}
+      className={`flex w-full max-w-full min-w-0 flex-wrap gap-1 p-1 ${CHIP_CLASS} ${className}`.trim()}
     >
       {modes.map((mode) => {
         const Icon = mode.icon;
