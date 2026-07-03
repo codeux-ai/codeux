@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { ExecutionModelStatsSummary, ExecutionUsageTotals } from "../../../types.js";
 import {
+  buildProviderConfidenceSummary,
   buildModelHighlights,
   buildModelSegments,
+  buildTelemetryQualityIndicators,
   buildTelemetrySourceSummary,
   computeUsageEfficiency,
+  formatShare,
   formatSuccessRate,
   getSuccessTone,
 } from "../model-insights.js";
@@ -168,6 +171,45 @@ describe("buildTelemetrySourceSummary", () => {
     expect(summary.detail).toContain("8 reported");
     expect(summary.detail).toContain("3 estimated");
     expect(summary.caveat).toMatch(/fallback/i);
+  });
+});
+
+describe("telemetry quality helpers", () => {
+  it("builds reported, estimated, unavailable, and unsupported indicator rows", () => {
+    const indicators = buildTelemetryQualityIndicators({
+      reportedInvocationCount: 6,
+      estimatedInvocationCount: 2,
+      unavailableInvocationCount: 1,
+      unsupportedInvocationCount: 1,
+    });
+
+    expect(indicators.map((indicator) => indicator.label)).toEqual([
+      "Reported",
+      "Estimated",
+      "Unavailable",
+      "Unsupported",
+    ]);
+    expect(indicators[0]!.summary).toBe("60% directly reported");
+    expect(indicators[1]!.summary).toBe("20% estimated from fallback records");
+    expect(indicators[2]!.status).toBe("missing");
+    expect(indicators[3]!.summary).toBe("10% unsupported by provider telemetry");
+  });
+
+  it("summarizes provider confidence from direct source coverage", () => {
+    expect(buildProviderConfidenceSummary(createUsage({ reportedInvocationCount: 9, estimatedInvocationCount: 1 })).label).toBe("Direct");
+    expect(buildProviderConfidenceSummary(createUsage({ reportedInvocationCount: 3, estimatedInvocationCount: 7 })).label).toBe("Partial");
+    expect(buildProviderConfidenceSummary(createUsage({ reportedInvocationCount: 0, estimatedInvocationCount: 10 })).label).toBe("Fallback");
+    expect(buildProviderConfidenceSummary(createUsage({
+      reportedInvocationCount: 0,
+      estimatedInvocationCount: 0,
+      unavailableInvocationCount: 0,
+      unsupportedInvocationCount: 0,
+    })).label).toBe("Unknown");
+  });
+
+  it("formats source shares consistently", () => {
+    expect(formatShare(null)).toBe("—");
+    expect(formatShare(0.625)).toBe("63%");
   });
 });
 
