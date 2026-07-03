@@ -1584,6 +1584,9 @@ export class QualityAssuranceService {
     });
     args.task.worker_branch = workerBranch;
     args.task.pr_url = prUrl || undefined;
+    args.task.status = "CODING_COMPLETED";
+    args.task.is_merged = false;
+    args.task.merge_indicator = undefined;
     if (args.taskRun?.id) {
       args.taskRun.workerBranch = workerBranch;
       args.taskRun.prUrl = prUrl;
@@ -1594,6 +1597,8 @@ export class QualityAssuranceService {
     }
     this.deps.projectManagementRepository.updateTask(args.task.record_id!, {
       status: "coding_completed",
+      isMerged: false,
+      mergeIndicator: null,
     });
   }
 
