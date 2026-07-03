@@ -73,6 +73,23 @@ export const CONTROL_FOCUS_CLASS = "focus-visible:outline-none focus-visible:rin
 export const INPUT_CLASS = `stats-surface-input h-11 rounded-[var(--stats-control-radius)] px-4 text-sm text-[color:var(--stats-value-color)] outline-none transition-[background-color,border-color,box-shadow,color] duration-200 placeholder:text-[color:var(--stats-detail-color)] focus:border-[color:var(--stats-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`;
 export const LEDGER_ROW_CLASS = "stats-surface-subpanel group rounded-[var(--stats-subpanel-radius)] p-4 transition-[transform,background-color,border-color,box-shadow] duration-200 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-subpanel-hover)] hover:shadow-[var(--stats-card-shadow-hover)] motion-safe:hover:-translate-y-0.5 motion-reduce:transition-none";
 export const LEDGER_ROW_MODERN_CLASS = "stats-surface-panel group relative overflow-hidden rounded-[var(--stats-panel-radius)] p-6 transition-[transform,background-color,border-color,box-shadow] duration-200 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-panel-hover)] hover:shadow-[var(--stats-card-shadow-hover)] motion-safe:hover:-translate-y-0.5 motion-reduce:transition-none";
+export const TEXT_LABEL_CLASS = "text-[color:var(--stats-label-color)]";
+export const TEXT_DETAIL_CLASS = "text-[color:var(--stats-detail-color)]";
+export const TEXT_VALUE_CLASS = "text-[color:var(--stats-value-color)]";
+export const TRACK_CLASS = "bg-[color:var(--stats-quiet-track)]";
+export const DASHED_EMPTY_CLASS = "rounded-2xl border border-dashed border-[color:var(--stats-card-border)] px-4 py-8 text-center text-sm text-[color:var(--stats-label-color)]";
+export const STATUS_TONE_CLASS = {
+  signal: "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-accent-signal-fill)] text-[color:var(--stats-signal-text)]",
+  positive: "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-accent-emerald-fill)] text-[color:var(--stats-positive-text)]",
+  warning: "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-accent-amber-fill)] text-[color:var(--stats-warning-text)]",
+  negative: "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-accent-rose-fill)] text-[color:var(--stats-negative-text)]",
+  cyan: "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-accent-cyan-fill)] text-[color:var(--stats-accent-cyan)]",
+  neutral: "border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-chip)] text-[color:var(--stats-detail-color)]",
+} as const;
+export const TAB_ACTIVE_CLASS = "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-surface-control-active)] text-[color:var(--stats-control-text-active)] shadow-[var(--stats-control-shadow-active)]";
+export const TAB_IDLE_CLASS = "text-[color:var(--stats-detail-color)] hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[color:var(--stats-value-color)]";
+export const TAB_COUNT_ACTIVE_CLASS = "bg-[color:var(--stats-surface-control-active-strong)] text-[color:var(--stats-control-text-active-strong)]";
+export const TAB_COUNT_IDLE_CLASS = "text-[color:var(--stats-detail-color)]";
 const CONTROL_BASE_CLASS = `inline-flex min-w-0 items-center justify-center rounded-[var(--stats-chip-radius)] border px-3 text-[11px] font-bold uppercase tracking-[0.14em] transition-[background-color,border-color,box-shadow,color] duration-200 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS}`;
 const CONTROL_IDLE_CLASS = "border-transparent text-[color:var(--stats-control-text)] hover:bg-[color:var(--stats-surface-chip-hover)] hover:text-[color:var(--stats-control-text-hover)]";
 const CONTROL_ACTIVE_CLASS = "border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-surface-control-active)] text-[color:var(--stats-control-text-active)] shadow-[var(--stats-control-shadow-active)]";
@@ -243,9 +260,11 @@ export const SignalMetricCard: FunctionComponent<{
     // We map hex to known accent if possible, or just pass children
     accent={accentHex === "#00E0A0" ? "signal" : accentHex === "#FFB800" ? "amber" : "cyan"}
   >
-    <Sparkline points={sparkline} color={accentHex} />
-    <div className="mt-4 flex flex-col gap-1 border-t border-black/[0.06] pt-4 dark:border-white/[0.06]">
-      <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+    <div className="relative z-10 mt-4 h-16 rounded-[var(--stats-control-radius)]">
+      <Sparkline points={sparkline} color={accentHex} className="absolute inset-0 h-full w-full pointer-events-none" />
+    </div>
+    <div className="mt-4 flex flex-col gap-1 border-t border-[color:var(--stats-card-border)] pt-4">
+      <div className="text-xs font-medium text-[color:var(--stats-detail-color)]">
         {detail}
       </div>
     </div>
@@ -271,14 +290,14 @@ export const TokenChip: FunctionComponent<{
 
 export function getProviderIcon(provider: string | null | undefined): { icon: ComponentType<any>; bg: string; text: string } {
   const p = (provider || "").toLowerCase();
-  if (p.includes("gemini")) return { icon: Sparkles, bg: "bg-indigo-500/10", text: "text-indigo-600 dark:text-indigo-400" };
-  if (p.includes("claude")) return { icon: Brain, bg: "bg-amber-500/10", text: "text-amber-600 dark:text-amber-400" };
-  if (p.includes("codex")) return { icon: Terminal, bg: "bg-cyan-500/10", text: "text-cyan-600 dark:text-cyan-400" };
-  if (p.includes("jules")) return { icon: Layers3, bg: "bg-signal-500/10", text: "text-signal-600 dark:text-signal-400" };
-  if (p.includes("qwen-code")) return { icon: Code2, bg: "bg-violet-500/10", text: "text-violet-600 dark:text-violet-400" };
-  if (p.includes("opencode")) return { icon: GitBranch, bg: "bg-emerald-500/10", text: "text-emerald-600 dark:text-emerald-400" };
-  if (p.includes("antigravity")) return { icon: Zap, bg: "bg-orange-500/10", text: "text-orange-600 dark:text-orange-400" };
-  return { icon: Bot, bg: "bg-slate-500/10", text: "text-slate-600 dark:text-slate-400" };
+  if (p.includes("gemini")) return { icon: Sparkles, bg: "bg-[color:var(--stats-accent-cyan-fill)]", text: "text-[color:var(--stats-accent-cyan)]" };
+  if (p.includes("claude")) return { icon: Brain, bg: "bg-[color:var(--stats-accent-amber-fill)]", text: "text-[color:var(--stats-warning-text)]" };
+  if (p.includes("codex")) return { icon: Terminal, bg: "bg-[color:var(--stats-accent-cyan-fill)]", text: "text-[color:var(--stats-accent-cyan)]" };
+  if (p.includes("jules")) return { icon: Layers3, bg: "bg-[color:var(--stats-accent-signal-fill)]", text: "text-[color:var(--stats-signal-text)]" };
+  if (p.includes("qwen-code")) return { icon: Code2, bg: "bg-[color:var(--stats-accent-signal-fill)]", text: "text-[color:var(--stats-signal-text)]" };
+  if (p.includes("opencode")) return { icon: GitBranch, bg: "bg-[color:var(--stats-accent-emerald-fill)]", text: "text-[color:var(--stats-positive-text)]" };
+  if (p.includes("antigravity")) return { icon: Zap, bg: "bg-[color:var(--stats-accent-amber-fill)]", text: "text-[color:var(--stats-warning-text)]" };
+  return { icon: Bot, bg: "bg-[color:var(--stats-surface-chip)]", text: TEXT_DETAIL_CLASS };
 }
 
 export const TokenFlowBar: FunctionComponent<{
@@ -292,18 +311,18 @@ export const TokenFlowBar: FunctionComponent<{
     ? `Input ${formatTokens(input)}; cached ${formatTokens(cached)}; output ${formatTokens(output)}; reasoning ${formatTokens(reasoning)}; total ${formatTokens(total)}.`
     : "No token flow data available.";
 
-  if (total <= 0) return <div role="img" aria-label={summary} className="h-2 w-full rounded-full bg-black/[0.05] dark:bg-white/[0.05]" />;
+  if (total <= 0) return <div role="img" aria-label={summary} className={`h-2 w-full rounded-full ${TRACK_CLASS}`} />;
   const inPct = (input / total) * 100;
   const cachedPct = (cached / total) * 100;
   const outPct = (output / total) * 100;
   const reasonPct = (reasoning / total) * 100;
 
   return (
-    <div role="img" aria-label={summary} className="flex h-2 w-full overflow-hidden rounded-full bg-black/[0.05] dark:bg-white/[0.05]">
-      {inPct > 0 && <div aria-hidden="true" className="h-full bg-signal-500/80 motion-safe:transition-all motion-safe:duration-500" style={{ width: `${inPct}%` }} title={`Input: ${inPct.toFixed(1)}%`} />}
-      {cachedPct > 0 && <div aria-hidden="true" className="h-full bg-sky-500/55 motion-safe:transition-all motion-safe:duration-500" style={{ width: `${cachedPct}%` }} title={`Cached: ${cachedPct.toFixed(1)}%`} />}
-      {outPct > 0 && <div aria-hidden="true" className="h-full bg-amber-500/70 motion-safe:transition-all motion-safe:duration-500" style={{ width: `${outPct}%` }} title={`Output: ${outPct.toFixed(1)}%`} />}
-      {reasonPct > 0 && <div aria-hidden="true" className="h-full bg-rose-500/55 motion-safe:transition-all motion-safe:duration-500" style={{ width: `${reasonPct}%` }} title={`Reasoning: ${reasonPct.toFixed(1)}%`} />}
+    <div role="img" aria-label={summary} className={`flex h-2 w-full overflow-hidden rounded-full ${TRACK_CLASS}`}>
+      {inPct > 0 && <div aria-hidden="true" className="h-full bg-[color:var(--stats-signal-text)] motion-safe:transition-all motion-safe:duration-500" style={{ width: `${inPct}%` }} title={`Input: ${inPct.toFixed(1)}%`} />}
+      {cachedPct > 0 && <div aria-hidden="true" className="h-full bg-[color:var(--stats-accent-cyan)] motion-safe:transition-all motion-safe:duration-500" style={{ width: `${cachedPct}%` }} title={`Cached: ${cachedPct.toFixed(1)}%`} />}
+      {outPct > 0 && <div aria-hidden="true" className="h-full bg-[color:var(--stats-warning-text)] motion-safe:transition-all motion-safe:duration-500" style={{ width: `${outPct}%` }} title={`Output: ${outPct.toFixed(1)}%`} />}
+      {reasonPct > 0 && <div aria-hidden="true" className="h-full bg-[color:var(--stats-negative-text)] motion-safe:transition-all motion-safe:duration-500" style={{ width: `${reasonPct}%` }} title={`Reasoning: ${reasonPct.toFixed(1)}%`} />}
     </div>
   );
 };
@@ -317,14 +336,14 @@ export const ChurnFlowBar: FunctionComponent<{
     ? `Code churn mix: ${insertions.toLocaleString()} insertions, ${deletions.toLocaleString()} deletions, ${total.toLocaleString()} total changed lines.`
     : "No code churn data available.";
 
-  if (total <= 0) return <div role="img" aria-label={summary} className="h-2 w-full rounded-full bg-black/[0.05] dark:bg-white/[0.05]" />;
+  if (total <= 0) return <div role="img" aria-label={summary} className={`h-2 w-full rounded-full ${TRACK_CLASS}`} />;
   const inPct = (insertions / total) * 100;
   const delPct = (deletions / total) * 100;
 
   return (
-    <div role="img" aria-label={summary} className="flex h-2 w-full overflow-hidden rounded-full bg-black/[0.05] dark:bg-white/[0.05]">
-      {inPct > 0 && <div aria-hidden="true" className="h-full bg-emerald-500/70 motion-safe:transition-all motion-safe:duration-500" style={{ width: `${inPct}%` }} title={`Insertions: ${inPct.toFixed(1)}%`} />}
-      {delPct > 0 && <div aria-hidden="true" className="h-full bg-rose-500/55 motion-safe:transition-all motion-safe:duration-500" style={{ width: `${delPct}%` }} title={`Deletions: ${delPct.toFixed(1)}%`} />}
+    <div role="img" aria-label={summary} className={`flex h-2 w-full overflow-hidden rounded-full ${TRACK_CLASS}`}>
+      {inPct > 0 && <div aria-hidden="true" className="h-full bg-[color:var(--stats-positive-text)] motion-safe:transition-all motion-safe:duration-500" style={{ width: `${inPct}%` }} title={`Insertions: ${inPct.toFixed(1)}%`} />}
+      {delPct > 0 && <div aria-hidden="true" className="h-full bg-[color:var(--stats-negative-text)] motion-safe:transition-all motion-safe:duration-500" style={{ width: `${delPct}%` }} title={`Deletions: ${delPct.toFixed(1)}%`} />}
     </div>
   );
 };
@@ -426,12 +445,12 @@ export const DonutCard: FunctionComponent<{
 
   return (
     <div ref={cardRef} className={`${PANEL_CLASS} h-full p-6`}>
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.08] to-transparent dark:via-white/[0.14]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[color:var(--stats-card-border)]" />
       <div className="relative flex h-full flex-col gap-6">
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">{eyebrow}</div>
-          <div className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</div>
-          <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{description}</div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">{eyebrow}</div>
+          <div className="mt-2 text-2xl font-black tracking-tight text-[color:var(--stats-value-color)]">{title}</div>
+          <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">{description}</div>
         </div>
         <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-center">
           <div className="flex items-center justify-center">
@@ -478,15 +497,15 @@ export const DonutCard: FunctionComponent<{
                   );
                 })}
               </svg>
-              <div className="pointer-events-none absolute inset-[24%] rounded-full border border-black/[0.05] bg-white/88 shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/88 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_12px_28px_rgba(0,0,0,0.28)]" />
+              <div className="pointer-events-none absolute inset-[24%] rounded-full border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-panel)] shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl" />
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <div className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+                <div className="text-3xl font-black tracking-tight text-[color:var(--stats-value-color)]">
                   {activeSegment ? formatTokens(activeSegment.value) : centerValue}
                 </div>
-                <div className="mt-1 max-w-[7.5rem] break-words text-center text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                <div className="mt-1 max-w-[7.5rem] break-words text-center text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
                   {activeSegment ? activeSegment.label : centerLabel}
                 </div>
-                <div className="mt-2 text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                <div className="mt-2 text-[11px] font-mono text-[color:var(--stats-detail-color)]">
                   {activeSegment ? `${formatPercent(activeSegment.share)} of visible volume` : `${segments.length} lanes`}
                 </div>
               </div>
@@ -494,7 +513,7 @@ export const DonutCard: FunctionComponent<{
           </div>
           <div className="space-y-3">
             {segments.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-8 text-center text-sm text-slate-400 dark:border-white/[0.08]">
+              <div className={DASHED_EMPTY_CLASS}>
                 No telemetry landed in this composition yet.
               </div>
             ) : slices.map((segment, index) => {
@@ -510,19 +529,19 @@ export const DonutCard: FunctionComponent<{
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: segment.color }} />
-                        <span className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">#{index + 1}</span>
+                        <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">#{index + 1}</span>
                         <span className={`min-w-0 break-words text-sm font-semibold ${segment.textClassName}`} title={segment.label}>{segment.label}</span>
                       </div>
-                      <div className="mt-1 text-[11px] font-mono text-slate-400 dark:text-slate-500">
+                      <div className="mt-1 text-[11px] font-mono text-[color:var(--stats-detail-color)]">
                         {formatPercent(segment.share)} of visible volume
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-sm font-black text-slate-900 dark:text-white">{formatTokens(segment.value)}</div>
-                      <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">tokens</div>
+                      <div className="text-sm font-black text-[color:var(--stats-value-color)]">{formatTokens(segment.value)}</div>
+                      <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">tokens</div>
                     </div>
                   </div>
-                  <div className="mt-3 h-1.5 rounded-full bg-black/[0.05] dark:bg-white/[0.06]">
+                  <div className={`mt-3 h-1.5 rounded-full ${TRACK_CLASS}`}>
                     <div
                       className="h-1.5 rounded-full"
                       style={{
@@ -554,7 +573,7 @@ export const PurposeRibbon: FunctionComponent<{
 
   if (rankedPurposes.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-8 text-center text-sm text-slate-400 dark:border-white/[0.08]">
+      <div className={DASHED_EMPTY_CLASS}>
         No purpose data for this window.
       </div>
     );
@@ -568,21 +587,21 @@ export const PurposeRibbon: FunctionComponent<{
         const tokenShare = totalTokens > 0 ? (purpose.usage.totalTokens / totalTokens) * 100 : null;
         const isDominant = dominantPurposeId === purpose.id;
         const accentTextClass: Record<StatsCardAccent, string> = {
-          default: "text-slate-500 dark:text-slate-400",
-          signal: "text-signal-600 dark:text-signal-400",
-          amber: "text-amber-600 dark:text-amber-400",
-          cyan: "text-cyan-600 dark:text-cyan-400",
-          rose: "text-rose-600 dark:text-rose-400",
-          emerald: "text-emerald-600 dark:text-emerald-400",
+          default: TEXT_DETAIL_CLASS,
+          signal: "text-[color:var(--stats-signal-text)]",
+          amber: "text-[color:var(--stats-warning-text)]",
+          cyan: "text-[color:var(--stats-accent-cyan)]",
+          rose: "text-[color:var(--stats-negative-text)]",
+          emerald: "text-[color:var(--stats-positive-text)]",
         };
         return (
           <div key={purpose.id} className={`${SUBPANEL_CLASS} flex min-h-[9rem] flex-col justify-between p-4`}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="break-words text-sm font-black capitalize text-slate-900 dark:text-white" title={purpose.label.replace(/_/g, " ")}>
+                <div className="break-words text-sm font-black capitalize text-[color:var(--stats-value-color)]" title={purpose.label.replace(/_/g, " ")}>
                   {purpose.label.replace(/_/g, " ")}
                 </div>
-                <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">
                   {purpose.usage.invocationCount.toLocaleString()} calls / {formatStatsDuration(purpose.usage.activeTimeMs)} active
                 </div>
               </div>
@@ -593,20 +612,20 @@ export const PurposeRibbon: FunctionComponent<{
             <div>
               <div className="mt-4 flex flex-wrap items-end justify-between gap-2">
                 <div>
-                  <div className="text-xl font-black text-slate-900 dark:text-white">{formatTokens(purpose.usage.totalTokens)}</div>
-                  <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                  <div className="text-xl font-black text-[color:var(--stats-value-color)]">{formatTokens(purpose.usage.totalTokens)}</div>
+                  <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">
                     {tokenShare !== null ? `${formatPercent(tokenShare)} token share` : "No token share"}
                   </div>
                 </div>
                 {isDominant ? (
-                  <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-400 ${CHIP_CLASS}`}>
+                  <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-signal-text)] ${CHIP_CLASS}`}>
                     Dominant
                   </div>
                 ) : null}
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                <TokenChip icon={ArrowDownRight} label="In" value={purpose.usage.inputTokens} tone="border-black/[0.06] bg-white/55 text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300" />
-                <TokenChip icon={ArrowUpRight} label="Out" value={purpose.usage.outputTokens} tone="border-black/[0.06] bg-white/55 text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300" />
+                <TokenChip icon={ArrowDownRight} label="In" value={purpose.usage.inputTokens} tone={STATUS_TONE_CLASS.neutral} />
+                <TokenChip icon={ArrowUpRight} label="Out" value={purpose.usage.outputTokens} tone={STATUS_TONE_CLASS.neutral} />
               </div>
             </div>
           </div>
@@ -623,13 +642,13 @@ export const StudioHeader: FunctionComponent<{
   description: string;
 }> = ({ icon: Icon, eyebrow, title, description }) => (
   <div className="flex max-w-4xl items-start gap-4">
-    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-chip)] text-signal-600 dark:text-signal-400">
+    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-chip)] text-[color:var(--stats-signal-text)]">
       <Icon className="h-5 w-5" strokeWidth={2.2} />
     </div>
     <div className="min-w-0">
-      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">{eyebrow}</div>
-      <div className="mt-1 break-words text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</div>
-      <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{description}</div>
+      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">{eyebrow}</div>
+      <div className="mt-1 break-words text-2xl font-black tracking-tight text-[color:var(--stats-value-color)]">{title}</div>
+      <div className="mt-2 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">{description}</div>
     </div>
   </div>
 );

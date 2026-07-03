@@ -1,10 +1,10 @@
 @layer base {
   :root {
     /* Layout Tokens */
-    --stats-card-radius: var(--radius-ui);
-    --stats-panel-radius: var(--radius-ui);
-    --stats-subpanel-radius: var(--radius-ui);
-    --stats-control-radius: var(--radius-ui);
+    --stats-card-radius: 1.25rem;
+    --stats-panel-radius: 1.35rem;
+    --stats-subpanel-radius: 1.05rem;
+    --stats-control-radius: 0.95rem;
     --stats-chip-radius: 9999px;
     --stats-card-padding: 1.5rem;
     --stats-card-padding-compact: 1rem;
@@ -19,9 +19,9 @@
     /* Surface Tokens (Light Mode) */
     --stats-surface-panel: var(--surface-glass);
     --stats-surface-panel-hover: var(--surface-glass-hover);
-    --stats-surface-subpanel: var(--fill-muted);
+    --stats-surface-subpanel: color-mix(in srgb, var(--fill-muted) 86%, var(--surface-glass) 14%);
     --stats-surface-subpanel-hover: var(--fill-muted-hover);
-    --stats-surface-chip: var(--fill-muted);
+    --stats-surface-chip: color-mix(in srgb, var(--surface-glass) 76%, var(--fill-muted) 24%);
     --stats-surface-chip-hover: var(--fill-muted-hover);
     --stats-surface-input: var(--fill-muted);
     --stats-surface-control-active: var(--stats-accent-signal-fill);
@@ -38,6 +38,12 @@
     --stats-control-shadow: var(--elevation-base);
     --stats-control-shadow-active: var(--elevation-raised);
     --stats-control-border-active: color-mix(in srgb, var(--stats-accent-signal) 24%, transparent);
+    --stats-quiet-track: color-mix(in srgb, var(--stats-value-color) 5%, transparent);
+    --stats-scrim: color-mix(in srgb, var(--stats-value-color) 10%, transparent);
+    --stats-selection-fill: color-mix(in srgb, var(--stats-accent-signal) 8%, transparent);
+    --stats-selection-border: color-mix(in srgb, var(--stats-accent-signal) 32%, transparent);
+    --stats-window-fill: color-mix(in srgb, var(--stats-accent-amber) 10%, transparent);
+    --stats-window-border: color-mix(in srgb, var(--stats-accent-amber) 36%, transparent);
     
     /* Accent Tokens */
     --stats-accent-signal: var(--signal-600);
@@ -62,6 +68,10 @@
     --stats-control-text-hover: var(--text-primary);
     --stats-control-text-active: var(--stats-accent-signal);
     --stats-control-text-active-strong: var(--stats-accent-amber);
+    --stats-positive-text: var(--status-green);
+    --stats-negative-text: var(--status-red);
+    --stats-warning-text: var(--stats-accent-amber);
+    --stats-signal-text: var(--stats-accent-signal);
     
     /* Motion Tokens */
     --stats-motion-fast: var(--motion-fast) var(--motion-ease-standard);
@@ -96,7 +106,9 @@
 @layer components {
   .stats-surface-panel {
     border: 1px solid var(--stats-border-hairline);
-    background: var(--stats-surface-panel);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-panel) 96%, var(--stats-accent-signal-fill) 4%), var(--stats-surface-panel)),
+      var(--stats-surface-panel);
     box-shadow: var(--stats-panel-shadow);
     backdrop-filter: blur(var(--stats-surface-blur-panel));
     -webkit-backdrop-filter: blur(var(--stats-surface-blur-panel));
@@ -104,7 +116,9 @@
 
   .stats-surface-subpanel {
     border: 1px solid var(--stats-border-hairline);
-    background: var(--stats-surface-subpanel);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-subpanel) 94%, var(--surface-glass) 6%), var(--stats-surface-subpanel)),
+      var(--stats-surface-subpanel);
     box-shadow: var(--stats-subpanel-shadow);
     backdrop-filter: blur(var(--stats-surface-blur-subpanel));
     -webkit-backdrop-filter: blur(var(--stats-surface-blur-subpanel));
@@ -112,7 +126,9 @@
 
   .stats-surface-chip {
     border: 1px solid var(--stats-border-hairline);
-    background: var(--stats-surface-chip);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-chip) 92%, var(--surface-glass) 8%), var(--stats-surface-chip)),
+      var(--stats-surface-chip);
     box-shadow: var(--stats-subpanel-shadow);
     backdrop-filter: blur(var(--stats-surface-blur-subpanel));
     -webkit-backdrop-filter: blur(var(--stats-surface-blur-subpanel));

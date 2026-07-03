@@ -5,7 +5,15 @@ import { GitBranch, ListTodo, Rows3 } from "lucide-preact";
 import type { ProjectExecutionStatsSnapshot } from "../../../types.js";
 import { TelemetryLedger } from "./TelemetryLedger.js";
 import { GitTelemetryTab } from "./GitTelemetryTab.js";
-import { CHIP_CLASS, CONTROL_FOCUS_CLASS } from "./StatsShared.js";
+import {
+  CHIP_CLASS,
+  CONTROL_FOCUS_CLASS,
+  TAB_ACTIVE_CLASS,
+  TAB_COUNT_ACTIVE_CLASS,
+  TAB_COUNT_IDLE_CLASS,
+  TAB_IDLE_CLASS,
+  TEXT_DETAIL_CLASS,
+} from "./StatsShared.js";
 import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
 
 export interface TelemetryLedgerTabsProps {
@@ -121,24 +129,20 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
               onClick={() => setActiveTab(tab.id)}
               aria-label={`${tab.label}, ${tab.count.toLocaleString()} ${tab.count === 1 ? "entry" : "entries"}`}
               className={`grid min-h-16 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[calc(var(--stats-subpanel-radius)-0.35rem)] px-3 py-2 text-left transition-[background-color,border-color,box-shadow,color] motion-safe:duration-200 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS} ${
-                isActive
-                  ? "bg-slate-900 text-white shadow-sm dark:bg-white dark:text-void-900"
-                  : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                isActive ? TAB_ACTIVE_CLASS : TAB_IDLE_CLASS
               }`}
             >
               <Icon className="h-4 w-4 shrink-0" strokeWidth={2.2} aria-hidden="true" />
               <span className="min-w-0">
                 <span className="block truncate text-[11px] font-black uppercase tracking-[0.14em]">{tab.label}</span>
                 <span className={`mt-0.5 block truncate text-[10px] font-bold normal-case tracking-normal ${
-                  isActive ? "text-white/72 dark:text-void-900/65" : "text-slate-400 dark:text-slate-500"
+                  isActive ? TEXT_DETAIL_CLASS : TEXT_DETAIL_CLASS
                 }`}>
                   {tab.detail}
                 </span>
               </span>
               <span className={`inline-flex min-w-10 justify-center rounded-full px-2 py-1 text-[10px] font-black tabular-nums tracking-wider ${CHIP_CLASS} ${
-                  isActive
-                    ? "bg-white/20 text-white dark:bg-void-900/15 dark:text-void-900"
-                    : "text-slate-500 dark:text-slate-400"
+                  isActive ? TAB_COUNT_ACTIVE_CLASS : TAB_COUNT_IDLE_CLASS
               }`}>
                 {formatCompactCount(tab.count)}
               </span>

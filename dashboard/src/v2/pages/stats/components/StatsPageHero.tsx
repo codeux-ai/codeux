@@ -1,17 +1,11 @@
 import type { FunctionComponent, ComponentType } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import {
-  Activity,
   BarChart3,
   CalendarDays,
   CheckCircle2,
-  Clock3,
-  Cpu,
-  Gauge,
   Layers3,
-  RadioTower,
-  ShieldCheck,
-  Zap,
+  Sparkles,
 } from "lucide-preact";
 import type {
   Source,
@@ -19,8 +13,7 @@ import type {
   ProjectStatsQuery,
   ProjectStatsWindow,
 } from "../../../types.js";
-import { formatDateTime, formatStatsDuration, formatTokens, isValidCustomRange } from "../stats-utils.js";
-import { PageHeader } from "../../../components/layout/PageHeader.js";
+import { isValidCustomRange } from "../stats-utils.js";
 import {
   PANEL_CLASS,
   CHIP_CLASS,
@@ -42,31 +35,16 @@ export const MODE_DESCRIPTIONS: Record<StatsVisualMode, string> = {
   system: "Invocation health, filters, transcript detail, and debugging context.",
 };
 
-const HERO_PANEL_CLASS = PANEL_CLASS.replace("overflow-hidden", "overflow-visible");
+const MODE_LABELS: Record<StatsVisualMode, string> = {
+  trend: "Trend",
+  composition: "Composition",
+  models: "Models",
+  reliability: "Providers",
+  ledgers: "Ledgers",
+  system: "System",
+};
 
-export const HeroKpi: FunctionComponent<{
-  icon: ComponentType<any>;
-  label: string;
-  value: string;
-  detail: string;
-  valueClassName?: string;
-}> = ({ icon: Icon, label, value, detail, valueClassName = "text-slate-900 dark:text-white" }) => (
-  <article
-    aria-label={`${label}: ${value}. ${detail}`}
-    className={`${SUBPANEL_CLASS} ${styles.heroKpi}`}
-  >
-    <div className={styles.heroKpiHeader}>
-      <div className={styles.heroKpiIcon}>
-        <Icon className="h-4 w-4" strokeWidth={2.15} aria-hidden="true" />
-      </div>
-      <div className={styles.heroKpiLabel}>{label}</div>
-    </div>
-    <div>
-      <div className={`${styles.heroKpiValue} ${valueClassName}`}>{value}</div>
-      <div className={styles.heroKpiDetail}>{detail}</div>
-    </div>
-  </article>
-);
+const HERO_PANEL_CLASS = PANEL_CLASS.replace("overflow-hidden", "overflow-visible");
 
 const ContextBadge: FunctionComponent<{
   icon: ComponentType<any>;
@@ -116,85 +94,6 @@ function getCustomRangeMessage(from: string, to: string): string {
   return "";
 }
 
-function getTelemetrySourceQuality(usage: NonNullable<ProjectExecutionStatsSnapshot["usage"]>): string {
-  if (usage.reportedInvocationCount > 0 && usage.estimatedInvocationCount === 0) {
-    return "Reported";
-  }
-
-  if (usage.reportedInvocationCount > 0 && usage.estimatedInvocationCount > 0) {
-    return "Mixed";
-  }
-
-  if (usage.estimatedInvocationCount > 0) {
-    return "Estimated";
-  }
-
-  return "Unavailable";
-}
-
-function getSuccessRate(stats: ProjectExecutionStatsSnapshot | null): { value: string; className: string } {
-  const finishedCount = stats?.statusCounts
-    ? stats.statusCounts.completed + stats.statusCounts.failed + stats.statusCounts.cancelled
-    : 0;
-
-  if (!stats?.statusCounts || finishedCount === 0) {
-    return { value: "—", className: "text-slate-900 dark:text-white" };
-  }
-
-  const rate = Math.round((stats.statusCounts.completed / finishedCount) * 100);
-  if (rate >= 95) {
-    return { value: `${rate}%`, className: "text-emerald-600 dark:text-emerald-400" };
-  }
-
-  if (rate >= 80) {
-    return { value: `${rate}%`, className: "text-amber-600 dark:text-amber-400" };
-  }
-
-  return { value: `${rate}%`, className: "text-red-500 dark:text-red-400" };
-}
-
-function getActiveModelSummary(stats: ProjectExecutionStatsSnapshot | null): {
-  activeModelCount: number;
-  activeProviderCount: number;
-  topModelLabel: string;
-} {
-  if (!stats) {
-    return {
-      activeModelCount: 0,
-      activeProviderCount: 0,
-      topModelLabel: "No model telemetry",
-    };
-  }
-
-  const activeModels = (stats.models || []).filter((model) => model.usage.totalTokens > 0);
-  const activeProviders = (stats.providers || []).filter((provider) => provider.usage.totalTokens > 0);
-  const topModel = activeModels.reduce<ProjectExecutionStatsSnapshot["models"][number] | null>((current, model) => {
-    if (!current || model.usage.totalTokens > current.usage.totalTokens) {
-      return model;
-    }
-    return current;
-  }, null);
-
-  return {
-    activeModelCount: activeModels.length,
-    activeProviderCount: activeProviders.length,
-    topModelLabel: topModel?.label || "No model telemetry",
-  };
-}
-
-function getFinishedTaskDetail(stats: ProjectExecutionStatsSnapshot | null): string {
-  if (!stats?.statusCounts) {
-    return "No task telemetry";
-  }
-
-  const finishedCount = stats.statusCounts.completed + stats.statusCounts.failed + stats.statusCounts.cancelled;
-  if (finishedCount === 0) {
-    return `${stats.statusCounts.running} running · none finished`;
-  }
-
-  return `${stats.statusCounts.completed} completed · ${stats.statusCounts.failed} failed · ${stats.statusCounts.cancelled} cancelled`;
-}
-
 export interface StatsPageHeroProps {
   selectedProject: Source | null;
   stats: ProjectExecutionStatsSnapshot | null;
@@ -208,7 +107,6 @@ export interface StatsPageHeroProps {
   applyCustomRange: () => void;
   visualMode: StatsVisualMode;
   setVisualMode: (mode: StatsVisualMode) => void;
-  completionConfidence?: string;
 }
 
 export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
@@ -223,30 +121,17 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
   applyCustomRange,
   visualMode,
   setVisualMode,
-  completionConfidence = "No telemetry",
 }) => {
   const [customRangeError, setCustomRangeError] = useState<string>("");
   const [customControlsOpen, setCustomControlsOpen] = useState(activeQuery.window === "custom");
 
-  const usage = stats?.usage;
   const customRangeMessage = customControlsOpen ? getCustomRangeMessage(customFrom, customTo) : "";
   const rangeMessage = customRangeError || customRangeMessage;
   const rangeHasError = Boolean(rangeMessage);
   const canApplyCustomRange = isValidCustomRange(customFrom, customTo);
   const selectedProjectLabel = selectedProject?.name || "No project selected";
-  const generatedAtLabel = stats?.generatedAt ? formatDateTime(stats.generatedAt) : "No snapshot yet";
-  const freshnessLabel = stats?.generatedAt ? getRelativeTime(stats.generatedAt) || "unknown" : "Awaiting first snapshot";
-  const successRate = getSuccessRate(stats);
-  const modelSummary = getActiveModelSummary(stats);
-  const invocationCount = usage?.invocationCount ?? 0;
-  const telemetrySourceQuality = usage ? getTelemetrySourceQuality(usage) : "Unavailable";
-  const rangeResolutionLabel = stats?.range
-    ? `${stats.range.resolutionLabel} · ${stats.range.bucketCount} buckets`
-    : "Resolution pending";
   const rangeScopeLabel = stats?.range?.label || formatWindowLabel(activeQuery);
-  const sprintScopeLabel = stats?.activeSprint
-    ? `Sprint ${stats.activeSprint.sprintNumber ?? "?"}`
-    : "Historical window";
+  const activeModeLabel = MODE_LABELS[visualMode];
   const activeModeDescription = MODE_DESCRIPTIONS[visualMode];
 
   useEffect(() => {
@@ -282,13 +167,37 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
       <div className={styles.heroGrid}>
         <div className={styles.heroIntro}>
           <div className={styles.heroTitleBlock}>
-            <PageHeader
-              icon={BarChart3}
-              eyebrow="Telemetry Command"
-              title="Statistics."
-              subtitle="A project-scoped analytics command header for telemetry range, freshness, sprint state, and visual mode."
-            />
-            <h2 id="stats-hero-title" className="sr-only">Stats command header</h2>
+            <div className={styles.heroHeader}>
+              <div className={styles.heroKicker}>
+                <span className={styles.heroKickerIcon} aria-hidden="true">
+                  <BarChart3 strokeWidth={2.2} />
+                </span>
+                <span>Project Analytics</span>
+              </div>
+              <div className={styles.heroTitleRow}>
+                <h1 id="stats-hero-title" className={styles.heroTitle}>Stats</h1>
+                <span className={styles.heroStatusPill}>
+                  <span className={styles.heroStatusDot} aria-hidden="true" />
+                  Current
+                </span>
+              </div>
+              <p className={styles.heroSubtitle}>
+                Telemetry, usage movement, and operational ledgers for the selected project.
+              </p>
+            </div>
+
+            <div className={styles.heroSignalRow} aria-label="Stats active lens">
+              <div className={`${CHIP_CLASS} ${styles.heroSignalBadge}`}>
+                <Sparkles className={styles.heroSignalIcon} strokeWidth={2.1} aria-hidden="true" />
+                <span>Window</span>
+                <strong>{rangeScopeLabel}</strong>
+              </div>
+              <div className={`${CHIP_CLASS} ${styles.heroSignalBadge}`}>
+                <CheckCircle2 className={styles.heroSignalIcon} strokeWidth={2.1} aria-hidden="true" />
+                <span>Mode</span>
+                <strong>{activeModeLabel}</strong>
+              </div>
+            </div>
 
             <div className={styles.heroContextGrid} aria-label="Stats project context">
               <ContextBadge icon={Layers3} label="Project" value={selectedProjectLabel} />
@@ -297,10 +206,6 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                 label="Sprint"
                 value={stats?.activeSprint ? `#${stats.activeSprint.sprintNumber ?? "?"}` : "Historical lens"}
               />
-              <ContextBadge icon={Clock3} label="Generated" value={generatedAtLabel} />
-              <ContextBadge icon={RadioTower} label="Freshness" value={freshnessLabel} />
-              <ContextBadge icon={ShieldCheck} label="Source" value={telemetrySourceQuality} />
-              <ContextBadge icon={Gauge} label="Resolution" value={rangeResolutionLabel} />
             </div>
           </div>
         </div>
@@ -313,8 +218,12 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                   Time window
                 </div>
                 <div className={styles.heroControlDescription}>
-                  Current · {rangeScopeLabel}
+                  Select the telemetry range for every analysis mode.
                 </div>
+              </div>
+              <div className={styles.heroControlSummary} aria-label={`Current time window ${rangeScopeLabel}`}>
+                <span>Current</span>
+                <strong>{rangeScopeLabel}</strong>
               </div>
               <CalendarDays className={styles.heroControlIcon} strokeWidth={2.2} aria-hidden="true" />
             </div>
@@ -406,6 +315,10 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                   {activeModeDescription}
                 </div>
               </div>
+              <div className={styles.heroControlSummary} aria-label={`Active analysis mode ${activeModeLabel}`}>
+                <span>Mode</span>
+                <strong>{activeModeLabel}</strong>
+              </div>
               <CheckCircle2 className={styles.heroModeIcon} strokeWidth={2.2} aria-hidden="true" />
             </div>
             <ViewToggle
@@ -415,46 +328,6 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
               className={styles.heroViewToggle}
             />
           </div>
-        </div>
-
-        <div aria-label="Executive summary" className={styles.heroKpiGrid}>
-          <HeroKpi
-            icon={Zap}
-            label="Tokens"
-            value={usage ? formatTokens(usage.totalTokens) : "—"}
-            detail={usage ? `${telemetrySourceQuality} telemetry · selected window` : "No usage telemetry"}
-          />
-          <HeroKpi
-            icon={Clock3}
-            label="Active time"
-            value={usage ? formatStatsDuration(usage.activeTimeMs) : "—"}
-            detail={rangeResolutionLabel}
-          />
-          <HeroKpi
-            icon={Activity}
-            label="Invocations"
-            value={usage ? invocationCount.toLocaleString() : "—"}
-            detail={`${completionConfidence} · ${sprintScopeLabel}`}
-          />
-          <HeroKpi
-            icon={ShieldCheck}
-            label="Success rate"
-            value={successRate.value}
-            detail={getFinishedTaskDetail(stats)}
-            valueClassName={successRate.className}
-          />
-          <HeroKpi
-            icon={Cpu}
-            label="Models"
-            value={stats ? `${modelSummary.activeModelCount}` : "—"}
-            detail={`${modelSummary.activeProviderCount} providers · ${modelSummary.topModelLabel}`}
-          />
-          <HeroKpi
-            icon={CalendarDays}
-            label="Range"
-            value={rangeScopeLabel}
-            detail={`${stats?.range?.isCustom ? "Custom" : "Preset"} · ${sprintScopeLabel}`}
-          />
         </div>
       </div>
     </section>

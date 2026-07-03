@@ -1,45 +1,18 @@
 import type { ProjectExecutionStatsSnapshot, ExecutionStatsEntitySummary, SegmentDefinition } from "../../../types.js";
 import type { UsageChartState } from "../use-usage-chart-state.js";
 import type { FunctionComponent } from "preact";
-import { BarChart3, Cpu, Layers3, PieChart, ShieldCheck, Terminal } from "lucide-preact";
+import { Layers3 } from "lucide-preact";
 import { TrendStudio } from "./TrendStudio.js";
 import { CompositionStudio } from "./CompositionStudio.js";
 import { ReliabilityStudio } from "./ReliabilityStudio.js";
 import {
   PANEL_CLASS,
-  StudioHeader,
+  STATUS_TONE_CLASS,
   type StatsVisualMode,
 } from "./stats-ui-primitives.js";
 import { SystemStudio } from "./system/SystemStudio.js";
 import { ModelsStudio } from "./ModelsStudio.js";
 import { TelemetryLedgerTabs } from "./TelemetryLedgerTabs.js";
-
-const STUDIO_SUBTITLES: Record<StatsVisualMode, string> = {
-  trend: "Time-series and throughput analysis.",
-  composition: "Token utilization, source mix, and provider activity.",
-  models: "Ranked model performance, latency, and efficiency.",
-  reliability: "Provider health, telemetry confidence, and integrity notes.",
-  ledgers: "Dense task, sprint, and git telemetry ledgers.",
-  system: "Invocation debugging, filters, and message inspection.",
-};
-
-const STUDIO_TITLES: Record<StatsVisualMode, string> = {
-  trend: "Trend",
-  composition: "Composition",
-  models: "Models",
-  reliability: "Reliability",
-  ledgers: "Ledgers",
-  system: "System",
-};
-
-const STUDIO_ICONS = {
-  trend: BarChart3,
-  composition: PieChart,
-  models: Cpu,
-  reliability: ShieldCheck,
-  ledgers: Layers3,
-  system: Terminal,
-};
 
 const STUDIO_EMPTY_MESSAGES: Record<StatsVisualMode, string> = {
   trend: "Select a time window to see Trend data.",
@@ -78,51 +51,18 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
   visualMode,
   chartState,
 }) => {
-  const StudioIcon = STUDIO_ICONS[visualMode];
-
   const renderEmptyState = (mode: StatsVisualMode) => (
     <div role="status" aria-live="polite" className={`${PANEL_CLASS} flex flex-col items-center justify-center py-20 text-center`}>
-      <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-[1.25rem] border border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+      <div className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-[1.25rem] ${STATUS_TONE_CLASS.warning}`}>
         <Layers3 className="h-8 w-8" strokeWidth={2} />
       </div>
-      <div className="text-base font-bold text-slate-900 dark:text-white">Waiting for Telemetry</div>
-      <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">{STUDIO_EMPTY_MESSAGES[mode]}</div>
+      <div className="text-base font-bold text-[color:var(--stats-value-color)]">Waiting for Telemetry</div>
+      <div className="mt-2 text-sm text-[color:var(--stats-detail-color)]">{STUDIO_EMPTY_MESSAGES[mode]}</div>
     </div>
   );
 
   return (
     <div key={visualMode} className="animate-in fade-in duration-200 motion-reduce:animate-none">
-      <div className={`${PANEL_CLASS} mb-6 p-4 md:p-5`}>
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex min-w-0 items-start gap-4">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-chip)] text-signal-600 dark:text-signal-400">
-              <StudioIcon className="h-5 w-5" strokeWidth={2.2} />
-            </div>
-            <div className="min-w-0">
-              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Analysis Studio</div>
-              <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-                {STUDIO_TITLES[visualMode]}
-              </h2>
-              <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                {STUDIO_SUBTITLES[visualMode]}
-              </p>
-            </div>
-          </div>
-          <div
-            role="status"
-            aria-live="polite"
-            className={`self-start rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] md:self-center ${
-              loading
-                ? "border-amber-500/24 bg-amber-500/[0.08] text-amber-700 dark:text-amber-300"
-                : "border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-chip)] text-slate-500 dark:text-slate-400"
-            }`}
-          >
-            {loading ? "Refreshing" : stats ? "Ready" : "Waiting"}
-          </div>
-        </div>
-      </div>
-
-
       {visualMode === "trend" ? (
         stats ? (
           <TrendStudio
@@ -163,14 +103,6 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
       {visualMode === "ledgers" ? (
         stats ? (
           <section className={`space-y-6 ${loading ? "pointer-events-none opacity-60 transition-opacity motion-reduce:transition-none" : "transition-opacity motion-reduce:transition-none"}`}>
-            <div className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7`}>
-              <StudioHeader
-                icon={Layers3}
-                eyebrow="Telemetry Ledgers"
-                title="Task and sprint telemetry"
-                description="Deep operational ledgers for execution scopes, redesigned around search, recency, sort controls, and richer usage breakdowns."
-              />
-            </div>
             <TelemetryLedgerTabs stats={stats} />
           </section>
         ) : renderEmptyState("ledgers")

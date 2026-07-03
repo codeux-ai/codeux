@@ -142,7 +142,7 @@ describe("CompositionStudio", () => {
     expect(screen.getByText("Output Ratio")).toBeInTheDocument();
     expect(screen.getByText("Reasoning Share")).toBeInTheDocument();
     expect(screen.getByText("Total Cost")).toBeInTheDocument();
-    expect(screen.getAllByText("$12.3456").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("$12.35").length).toBeGreaterThan(0);
     expect(screen.getByText("2 calls / 1m 0s active")).toBeInTheDocument();
     expect(screen.getByText("11% token share")).toBeInTheDocument();
     expect(screen.getByText("Dominant")).toBeInTheDocument();

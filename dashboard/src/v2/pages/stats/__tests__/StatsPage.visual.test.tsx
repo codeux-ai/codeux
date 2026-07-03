@@ -201,15 +201,10 @@ describe('StatsPage visual tests', () => {
     for (const label of labels) {
       expect(getAllByText(label).length).toBeGreaterThan(0);
     }
-    expect(screen.getByText('Analysis Studio')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: studioTitle })).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Statistics' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: `${studioTitle === 'Reliability' ? 'Providers' : studioTitle} telemetry` })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: `${studioTitle === 'Reliability' ? 'Providers' : studioTitle} summary cards` })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Analysis workspace' })).toBeTruthy();
-    expect(screen.getByLabelText('Stats workspace context')).toHaveTextContent('Window');
-    expect(screen.getByLabelText('Current telemetry window')).toHaveTextContent('Freshness');
-    expect(screen.getAllByText('Ready').length).toBeGreaterThan(0);
+    expect(screen.getByRole('region', { name: `${studioTitle === 'Reliability' ? 'Providers' : studioTitle} metrics` })).toBeTruthy();
+    expect(screen.queryByText('Analysis Studio')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Analysis workspace' })).toBeNull();
   });
 
   it('renders the no-project state in the stats shell hierarchy', () => {
@@ -253,8 +248,7 @@ describe('StatsPage visual tests', () => {
 
     const { getByText, queryByText } = render(<StatsPage />);
     expect(screen.getByRole('region', { name: 'Statistics' })).toBeTruthy();
-    expect(screen.getByLabelText('Stats workspace context')).toHaveTextContent('Trend telemetry');
-    expect(screen.getByLabelText('Stats workspace context')).toHaveTextContent('Awaiting telemetry');
+    expect(screen.queryByLabelText('Stats workspace context')).toBeNull();
     expect(screen.getByRole('status')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'No project selected' })).toBeTruthy();
     expect(getByText('Stats panel idle')).toBeTruthy();
@@ -292,7 +286,7 @@ describe('StatsPage visual tests', () => {
     render(<StatsPage />);
 
     expect(screen.getByText(/^Generated · Loading snapshot$/i)).toBeTruthy();
-    expect(screen.getByLabelText('Stats workspace context')).toHaveTextContent('Refreshing');
+    expect(screen.queryByLabelText('Stats workspace context')).toBeNull();
     expect(screen.getByRole('status')).toHaveTextContent('Loading telemetry field');
     expect(screen.getByRole('status')).toHaveTextContent('Stats panel refreshing');
     expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite');

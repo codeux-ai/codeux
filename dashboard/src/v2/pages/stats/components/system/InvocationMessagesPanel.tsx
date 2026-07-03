@@ -13,23 +13,24 @@ import {
 import type { ExecutionInvocationMessageRecord, ExecutionInvocationRecord } from "../../../../types.js";
 import { fetchInvocationMessages } from "../../../../lib/invocation-api.js";
 import { formatCost, formatDateTime, formatStatsDuration, formatTokens } from "../../stats-utils.js";
+import { CHIP_CLASS, CONTROL_FOCUS_CLASS, STATUS_TONE_CLASS, SUBPANEL_CLASS } from "../StatsShared.js";
 
 interface InvocationMessagesPanelProps {
   invocation: ExecutionInvocationRecord;
 }
 
 const ROLE_CARD_CLASS: Record<ExecutionInvocationMessageRecord["role"], string> = {
-  system: "rounded-xl bg-slate-900/70 border border-white/[0.06] p-3",
-  user: "rounded-xl bg-void-800/60 p-3",
-  assistant: "rounded-xl bg-void-700/50 p-3",
-  tool: "rounded-xl bg-void-900/80 border border-white/[0.04] p-3 font-mono text-xs",
+  system: `${SUBPANEL_CLASS} p-3`,
+  user: `${SUBPANEL_CLASS} p-3`,
+  assistant: `${SUBPANEL_CLASS} p-3`,
+  tool: `${SUBPANEL_CLASS} p-3 font-mono text-xs`,
 };
 
 const ROLE_ICON_CLASS: Record<ExecutionInvocationMessageRecord["role"], string> = {
-  system: "bg-slate-800 text-slate-200",
-  user: "bg-sky-500/10 text-sky-300",
-  assistant: "bg-emerald-500/10 text-emerald-300",
-  tool: "bg-violet-500/10 text-violet-300",
+  system: STATUS_TONE_CLASS.neutral,
+  user: STATUS_TONE_CLASS.cyan,
+  assistant: STATUS_TONE_CLASS.positive,
+  tool: STATUS_TONE_CLASS.signal,
 };
 
 function formatStatsDurationLabel(invocation: ExecutionInvocationRecord): string {
@@ -51,17 +52,17 @@ function renderStatusChip(status: ExecutionInvocationRecord["status"]): JSX.Elem
 
   switch (status) {
     case "running":
-      return <span className={`${baseClass} bg-blue-500/15 text-blue-300`}>Running</span>;
+      return <span className={`${baseClass} ${STATUS_TONE_CLASS.signal}`}>Running</span>;
     case "completed":
-      return <span className={`${baseClass} bg-emerald-500/15 text-emerald-300`}>Completed</span>;
+      return <span className={`${baseClass} ${STATUS_TONE_CLASS.positive}`}>Completed</span>;
     case "failed":
-      return <span className={`${baseClass} bg-red-500/15 text-red-300`}>Failed</span>;
+      return <span className={`${baseClass} ${STATUS_TONE_CLASS.negative}`}>Failed</span>;
     case "cancelled":
-      return <span className={`${baseClass} bg-slate-500/15 text-slate-300`}>Cancelled</span>;
+      return <span className={`${baseClass} ${STATUS_TONE_CLASS.neutral}`}>Cancelled</span>;
     case "paused":
-      return <span className={`${baseClass} bg-amber-500/15 text-amber-300`}>Paused</span>;
+      return <span className={`${baseClass} ${STATUS_TONE_CLASS.warning}`}>Paused</span>;
     default:
-      return <span className={`${baseClass} bg-white/10 text-slate-300`}>{status}</span>;
+      return <span className={`${baseClass} ${STATUS_TONE_CLASS.neutral}`}>{status}</span>;
   }
 }
 
@@ -188,14 +189,14 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
   return (
     <div
       id={`invocation-messages-${invocation.id}`}
-      className="mt-2 max-h-[560px] w-full min-w-0 max-w-full space-y-4 overflow-y-auto rounded-2xl border border-white/[0.05] bg-slate-950/70 p-3 text-slate-200 sm:p-4"
+      className={`${SUBPANEL_CLASS} mt-2 max-h-[560px] w-full min-w-0 max-w-full space-y-4 overflow-y-auto p-3 text-[color:var(--stats-detail-color)] sm:p-4`}
     >
       {invocation.lastErrorMessage ? (
         <details className="mb-4 group">
-          <summary className="cursor-pointer list-none rounded px-1 text-sm font-bold uppercase tracking-[0.16em] text-red-400 transition-colors hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500">
+          <summary className={`cursor-pointer list-none rounded px-1 text-sm font-bold uppercase tracking-[0.16em] text-[color:var(--stats-negative-text)] transition-colors ${CONTROL_FOCUS_CLASS}`}>
             Error Summary
           </summary>
-          <div className="mt-2 whitespace-pre-wrap break-words rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm leading-relaxed text-red-200 [overflow-wrap:anywhere]">
+          <div className={`mt-2 whitespace-pre-wrap break-words rounded-2xl p-4 text-sm leading-relaxed [overflow-wrap:anywhere] ${STATUS_TONE_CLASS.negative}`}>
             {invocation.lastErrorMessage}
           </div>
         </details>
@@ -204,10 +205,10 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
       <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">
               Message transcript
             </div>
-            <div className="text-[11px] text-slate-500">
+            <div className="text-[11px] text-[color:var(--stats-detail-color)]">
               {formatDateTime(invocation.lastMessageAt)}
             </div>
           </div>
@@ -215,54 +216,54 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
             type="button"
             onClick={() => navigator.clipboard.writeText(JSON.stringify(messages, null, 2))}
             aria-label="Copy as JSON"
-            className="text-slate-400 hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 rounded p-1"
+            className={`rounded p-1 text-[color:var(--stats-label-color)] hover:text-[color:var(--stats-value-color)] ${CONTROL_FOCUS_CLASS}`}
           >
             <Clipboard className="h-4 w-4" />
           </button>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 text-sm">
-          <div className="rounded-full border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 text-slate-200">
+          <div className={`${CHIP_CLASS} rounded-full px-2.5 py-1 text-[color:var(--stats-value-color)]`}>
             {invocation.model || "Unknown model"}
           </div>
           {renderStatusChip(invocation.status)}
-          <div className="rounded-full border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 text-slate-300">
+          <div className={`${CHIP_CLASS} rounded-full px-2.5 py-1 text-[color:var(--stats-detail-color)]`}>
             {formatStatsDurationLabel(invocation)}
           </div>
-          <div className="rounded-full border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 text-slate-300">
+          <div className={`${CHIP_CLASS} rounded-full px-2.5 py-1 text-[color:var(--stats-detail-color)]`}>
             {formatTokens(invocation.totalTokens ?? 0)} total tokens
           </div>
-          <div className="rounded-full border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 text-slate-300">
+          <div className={`${CHIP_CLASS} rounded-full px-2.5 py-1 text-[color:var(--stats-detail-color)]`}>
             {formatTokens(invocation.inputTokens ?? 0)} in / {formatTokens(invocation.outputTokens ?? 0)} out
           </div>
           {invocation.cachedInputTokens && invocation.cachedInputTokens > 0 ? (
-            <div className="rounded-full border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 text-slate-300">
+            <div className={`${CHIP_CLASS} rounded-full px-2.5 py-1 text-[color:var(--stats-detail-color)]`}>
               {formatTokens(invocation.cachedInputTokens)} cached
             </div>
           ) : null}
-          <div className="rounded-full border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 text-slate-300">
+          <div className={`${CHIP_CLASS} rounded-full px-2.5 py-1 text-[color:var(--stats-detail-color)]`}>
             {messageCount.toLocaleString()} messages
           </div>
         </div>
 
         {invocation.lastErrorMessage ? (
-          <div className="whitespace-pre-wrap break-words rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm leading-relaxed text-red-200 [overflow-wrap:anywhere]">
+          <div className={`whitespace-pre-wrap break-words rounded-xl px-3 py-2 text-sm leading-relaxed [overflow-wrap:anywhere] ${STATUS_TONE_CLASS.negative}`}>
             {invocation.lastErrorMessage}
           </div>
         ) : null}
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 rounded-xl border border-white/[0.05] bg-white/[0.03] px-3 py-3 text-sm text-slate-400">
+        <div className={`${SUBPANEL_CLASS} flex items-center gap-2 px-3 py-3 text-sm text-[color:var(--stats-label-color)]`}>
           <Loader2 className="h-4 w-4 motion-safe:animate-spin" />
           Loading messages
         </div>
       ) : error ? (
-        <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-3 text-sm text-red-300">
+        <div className={`rounded-xl px-3 py-3 text-sm ${STATUS_TONE_CLASS.negative}`}>
           Failed to load invocation messages — {error}
         </div>
       ) : messages.length === 0 ? (
-        <div className="rounded-xl border border-white/[0.05] bg-white/[0.03] px-3 py-4 text-sm text-slate-400">
+        <div className={`${SUBPANEL_CLASS} px-3 py-4 text-sm text-[color:var(--stats-label-color)]`}>
           No messages recorded for this invocation
         </div>
       ) : (
@@ -286,7 +287,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
               <article
                 key={message.id}
                 aria-label={`${message.role} message ${index + 1}`}
-                className={`${ROLE_CARD_CLASS[message.role]} min-w-0 ${index % 2 === 1 ? "bg-transparent" : "bg-black/[0.015] dark:bg-white/[0.015]"} ${isErrorMessage ? "border-l-2 border-red-400 text-red-300" : ""}`}
+                className={`${ROLE_CARD_CLASS[message.role]} min-w-0 ${isErrorMessage ? "border-l-2 border-l-[color:var(--stats-negative-text)] text-[color:var(--stats-negative-text)]" : ""}`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-2">
@@ -297,17 +298,17 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
                       {message.role === "tool" ? <Code2 className="h-3.5 w-3.5" /> : null}
                     </span>
                     <div className="min-w-0">
-                      <div className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                      <div className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">
                         {message.role === "assistant" ? (invocation.model || "ASSISTANT") : message.role.toUpperCase()}
                       </div>
-                      <div className="mt-1 text-[10px] text-slate-500">{formatDateTime(message.createdAt)}</div>
+                      <div className="mt-1 text-[10px] text-[color:var(--stats-detail-color)]">{formatDateTime(message.createdAt)}</div>
                     </div>
                   </div>
 
                   {metadataLabels.length > 0 ? (
                     <div className="flex min-w-0 flex-wrap justify-end gap-1.5">
                       {metadataLabels.map((label) => (
-                        <span key={label} className="max-w-full rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-0.5 text-[10px] text-slate-400">
+                        <span key={label} className={`${CHIP_CLASS} max-w-full px-2 py-0.5 text-[10px] text-[color:var(--stats-label-color)]`}>
                           <span className="block truncate">{label}</span>
                         </span>
                       ))}
@@ -315,7 +316,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
                   ) : null}
                 </div>
 
-                <pre className={`mt-3 max-w-full whitespace-pre-wrap break-words font-mono text-xs leading-relaxed [overflow-wrap:anywhere] ${isErrorMessage ? "text-red-200" : "text-slate-300"}`} style={contentStyle}>
+                <pre className={`mt-3 max-w-full whitespace-pre-wrap break-words font-mono text-xs leading-relaxed [overflow-wrap:anywhere] ${isErrorMessage ? "text-[color:var(--stats-negative-text)]" : "text-[color:var(--stats-detail-color)]"}`} style={contentStyle}>
                   {message.contentMarkdown}
                 </pre>
 
@@ -324,7 +325,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
                     type="button"
                     onClick={() => toggleSystemMessage(message.id)}
                     aria-expanded={isExpanded}
-                    className="mt-2 inline-flex items-center gap-1.5 rounded px-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500"
+                    className={`mt-2 inline-flex items-center gap-1.5 rounded px-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)] transition-colors hover:text-[color:var(--stats-value-color)] ${CONTROL_FOCUS_CLASS}`}
                   >
                     {isExpanded ? "Show less" : "Show more"}
                   </button>
@@ -337,14 +338,14 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
             <button
               type="button"
               onClick={() => setShowAllMessages(true)}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300 transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500"
+              className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-detail-color)] transition-colors hover:text-[color:var(--stats-value-color)] ${CHIP_CLASS} ${CONTROL_FOCUS_CLASS}`}
             >
               <ExternalLink className="h-3.5 w-3.5" />
               Show all {messages.length} messages
             </button>
           ) : null}
 
-          <div className="flex items-center gap-2 text-[11px] text-slate-500">
+          <div className="flex items-center gap-2 text-[11px] text-[color:var(--stats-detail-color)]">
             <MessageSquare className="h-3.5 w-3.5" />
             Transcript rendered as plain text for readability and safety.
           </div>

@@ -1,8 +1,10 @@
 @import "tailwindcss";
 
 .card {
-  @apply relative flex min-w-0 flex-col justify-between overflow-hidden motion-safe:transform-gpu;
-  background: var(--stats-card-bg);
+  @apply relative flex min-w-0 flex-col justify-between overflow-visible motion-safe:transform-gpu;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--stats-card-bg) 95%, var(--stats-card-accent-fill, transparent) 5%), var(--stats-card-bg)),
+    var(--stats-card-bg);
   backdrop-filter: blur(var(--stats-surface-blur-panel));
   -webkit-backdrop-filter: blur(var(--stats-surface-blur-panel));
   border: 1px solid var(--stats-card-border);
@@ -20,7 +22,9 @@
 
 .card:hover,
 .card.active {
-  background: var(--stats-surface-panel-hover);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-panel-hover) 92%, var(--stats-card-accent-fill, transparent) 8%), var(--stats-surface-panel-hover)),
+    var(--stats-surface-panel-hover);
   border-color: var(--stats-border-strong);
   box-shadow: var(--stats-card-shadow-hover);
 }
@@ -47,15 +51,19 @@
 }
 
 .toneWarm {
-  background: var(--stats-surface-panel);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-panel) 95%, var(--stats-card-accent-fill, transparent) 5%), var(--stats-surface-panel)),
+    var(--stats-surface-panel);
 }
 
 .toneMuted {
-  background: var(--stats-surface-subpanel);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--stats-surface-subpanel) 95%, var(--stats-card-accent-fill, transparent) 5%), var(--stats-surface-subpanel)),
+    var(--stats-surface-subpanel);
 }
 
 .header {
-  @apply relative z-10 mb-5 flex min-w-0 flex-wrap items-start justify-between gap-3;
+  @apply relative z-10 mb-3 flex min-w-0 flex-wrap items-start justify-between gap-2;
 }
 
 .titleGroup {
@@ -81,11 +89,11 @@
 }
 
 .valueContainer {
-  @apply relative z-10 mt-auto flex min-w-0 flex-col gap-2;
+  @apply relative z-10 mt-auto flex min-w-0 flex-col gap-1.5;
 }
 
 .valueRow {
-  @apply flex min-w-0 flex-wrap items-end justify-between gap-3;
+  @apply flex min-w-0 flex-wrap items-end justify-between gap-2;
 }
 
 .value {
@@ -102,7 +110,7 @@
 }
 
 .description {
-  @apply text-sm leading-relaxed;
+  @apply text-xs leading-snug;
   color: var(--stats-detail-color);
   overflow-wrap: anywhere;
 }
@@ -120,6 +128,7 @@
 /* Accent Tints */
 .tint {
   @apply pointer-events-none absolute inset-0 opacity-0;
+  border-radius: inherit;
   background: var(--stats-card-accent-fill, var(--stats-accent-muted-fill));
   transition: opacity var(--stats-motion-standard);
 }

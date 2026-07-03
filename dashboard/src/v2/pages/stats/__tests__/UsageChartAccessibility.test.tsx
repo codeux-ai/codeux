@@ -165,9 +165,9 @@ describe("UsageChartAccessibility", () => {
     expect(button).toHaveAttribute('aria-expanded', 'false');
     expect(button).toHaveAccessibleDescription(/active series/i);
     expect(screen.getByRole("toolbar", { name: /Usage graph controls/i })).toBeInTheDocument();
-    expect(screen.getByLabelText(/Usage chart summary metrics/i)).toBeInTheDocument();
-    expect(screen.getByRole("article", { name: /Peak tokens: 200/i })).toBeInTheDocument();
-    expect(screen.getByRole("article", { name: /Visible cost: \$0.45/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Usage chart summary metrics/i)).toBeNull();
+    expect(screen.queryByRole("article", { name: /Peak tokens: 200/i })).toBeNull();
+    expect(screen.queryByRole("article", { name: /Visible cost: \$0.45/i })).toBeNull();
   });
 
   it("announces zoom reset", () => {

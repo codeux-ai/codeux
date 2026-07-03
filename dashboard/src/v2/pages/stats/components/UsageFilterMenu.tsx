@@ -4,11 +4,11 @@ import gsap from 'gsap';
 import { X } from 'lucide-preact';
 import { MODAL_MOTION } from '../../../lib/motion/modal-motion.js';
 import type {
-  ProjectExecutionStatsChartSeries,
   ProjectExecutionStatsSnapshot,
 } from '../../../types.js';
 import styles from './UsageFilterMenu.module.css';
 import { UsageGraphLegend } from './UsageGraphLegend.js';
+import { groupChartSeries } from '../chart-view-models.js';
 
 interface UsageFilterMenuProps {
   isOpen: boolean;
@@ -93,19 +93,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
     setEnabledSeries(resetSeries);
   };
 
-  const groupedSeries: Record<string, ProjectExecutionStatsChartSeries[]> = stats?.chartSeries?.reduce((acc, series) => {
-    const grouping = series.grouping || 'core';
-    (acc[grouping] ??= []).push(series);
-    return acc;
-  }, {} as Record<string, ProjectExecutionStatsChartSeries[]>) ?? {};
-
-  const displayOrder = ['core', 'purposes', 'providers', 'git'];
-  const orderedGroups = displayOrder.filter((groupKey) => groupedSeries[groupKey]?.length)
-    .concat(Object.keys(groupedSeries).filter((groupKey) => !displayOrder.includes(groupKey) && groupedSeries[groupKey]?.length));
-  const orderedSeriesGroups = orderedGroups.reduce((acc, groupKey) => {
-    acc[groupKey] = groupedSeries[groupKey]!;
-    return acc;
-  }, {} as Record<string, ProjectExecutionStatsChartSeries[]>);
+  const orderedSeriesGroups = groupChartSeries(stats?.chartSeries ?? []);
 
   return (
     <div
@@ -119,7 +107,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
         <div className={`${styles.header} flex items-center justify-between`}>
           <div aria-live="polite" className="sr-only">Showing {activeSeriesCount} filter{activeSeriesCount !== 1 ? 's' : ''}</div>
           <div className="flex items-center gap-3">
-            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-900 dark:text-white">
+            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-value-color)]">
               Graph Filters
             </span>
             {activeSeriesCount > 0 && (

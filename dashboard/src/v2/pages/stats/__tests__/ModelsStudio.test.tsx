@@ -63,7 +63,7 @@ const model = createModel({
   provider: "claude",
   model: "claude-opus-4-8",
   label: "claude-opus-4-8",
-  usage,
+  usage: createUsage({ totalCostUsd: 55.4093 }),
   statusCounts: { completed: 11, failed: 1, cancelled: 0, running: 0, paused: 0 },
   successRate: 11 / 12,
   duration: { sampleCount: 12, avgMs: 42000, p50Ms: 38000, p95Ms: 95000, maxMs: 120000 },
@@ -91,6 +91,9 @@ describe("ModelsStudio", () => {
     expect(container.textContent).toContain("Token-Flow Anatomy");
     expect(container.textContent).toContain("Efficiency Highlights");
     expect(container.textContent).toContain("Most Reliable");
+    expect(container.textContent).toContain("$55.41");
+    expect(container.textContent).toContain("$4,262.25");
+    expect(container.textContent).toContain("$4.62/call");
   });
 
   it("orders the leaderboard by token volume and labels rank chips clearly", () => {
@@ -141,7 +144,7 @@ describe("ModelsStudio", () => {
     expect(screen.getAllByText(longLabel).length).toBeGreaterThan(0);
     expect(container.textContent).toContain("Low sample");
     expect(container.textContent).toContain("Leaderboard placement is based on limited invocation telemetry.");
-    expect(container.querySelector(".text-rose-700")).toBeTruthy();
+    expect(container.innerHTML).toContain("--stats-negative-text");
   });
 
   it("renders sparse model telemetry intentionally when duration and token volume are missing", () => {

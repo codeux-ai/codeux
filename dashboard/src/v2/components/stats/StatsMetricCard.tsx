@@ -42,18 +42,18 @@ export const StatsMetricCard: FunctionComponent<StatsMetricCardProps> = ({
       title={label}
       value={value}
       trend={
-        <div className={`max-w-full whitespace-normal break-words px-3 py-1 text-center text-[10px] font-bold uppercase leading-tight tracking-[0.14em] text-slate-500 dark:text-slate-400 ${CHIP_CLASS}`}>
+        <div className={`max-w-full whitespace-normal break-words px-3 py-1 text-center text-[10px] font-bold uppercase leading-tight tracking-[0.14em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
           {signalLabel}
         </div>
       }
       description={detail}
       accent={accent}
       density="compact"
-      tone="muted"
-      className="min-h-[14rem] min-w-0"
+      tone="warm"
+      className="min-h-[11.5rem] min-w-0"
     >
       <div
-        className="relative z-10 mt-4 min-h-[3.25rem] overflow-hidden rounded-[var(--stats-control-radius)]"
+        className="relative z-10 mt-3 h-14 min-h-14 rounded-[var(--stats-control-radius)]"
         role="img"
         aria-label={
           hasSparkline
@@ -62,20 +62,20 @@ export const StatsMetricCard: FunctionComponent<StatsMetricCardProps> = ({
         }
       >
         {hasSparkline ? (
-          <Sparkline points={sparkline} color={accentHex} />
+          <Sparkline points={sparkline} color={accentHex} className="absolute inset-0 h-full w-full pointer-events-none" />
         ) : (
           <div
-            className="pointer-events-none h-12 rounded-[var(--stats-control-radius)] border border-dashed border-black/[0.06] bg-slate-500/[0.035] dark:border-white/[0.07] dark:bg-white/[0.025]"
+            className="pointer-events-none h-10 rounded-[var(--stats-control-radius)] border border-dashed border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-subpanel)]"
             aria-hidden="true"
           />
         )}
       </div>
-      <div className="relative z-10 mt-4 grid min-h-[2.5rem] min-w-0 content-end gap-2 border-t border-black/[0.06] pt-3 dark:border-white/[0.06]">
+      <div className="relative z-10 mt-3 grid min-h-[2.25rem] min-w-0 content-end gap-2 border-t border-[color:var(--stats-card-border)] pt-2.5">
         {(secondaryDetail || qualityHint) && (
-          <div className="flex min-w-0 flex-wrap items-center gap-2 text-[10px] font-medium leading-snug text-slate-500 dark:text-slate-400">
+          <div className="flex min-w-0 flex-wrap items-center gap-2 text-[10px] font-medium leading-snug text-[color:var(--stats-detail-color)]">
             {secondaryDetail && <span className="min-w-0 max-w-full flex-1 basis-32 break-words">{secondaryDetail}</span>}
             {qualityHint && (
-              <span className="min-w-0 max-w-full rounded-full border border-black/[0.06] bg-white/[0.42] px-2 py-0.5 text-[9px] font-bold uppercase leading-tight tracking-[0.1em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400">
+              <span className="min-w-0 max-w-full rounded-full border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-chip)] px-2 py-0.5 text-[9px] font-bold uppercase leading-tight tracking-[0.1em] text-[color:var(--stats-detail-color)]">
                 {qualityHint}
               </span>
             )}

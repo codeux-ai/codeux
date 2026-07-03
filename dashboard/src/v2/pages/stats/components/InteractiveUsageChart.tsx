@@ -6,17 +6,13 @@ import type {
   ProjectExecutionStatsSnapshot,
 } from '../../../types.js';
 import {
-  formatTokens,
-  formatStatsDuration,
   formatDateTime,
-  formatCost
 } from '../stats-utils.js';
 import {
   PANEL_CLASS,
   getAxisLabelStep,
   formatAxisLabel,
 } from './StatsShared.js';
-import { UsageSeriesSidebar } from './UsageSeriesSidebar.js';
 import { UsageChartMinimap } from './UsageChartMinimap.js';
 import { UsageGraphLegend } from './UsageGraphLegend.js';
 import type { UsageChartState } from '../use-usage-chart-state.js';
@@ -154,8 +150,6 @@ export const InteractiveUsageChart: FunctionComponent<{
   const axisLabelStep = getAxisLabelStep(stats.range);
 
   const visibleMetrics = useMemo(() => calculateChartMetrics(visibleBuckets), [visibleBuckets]);
-  const { peakTokens, peakActiveTimeMs, peakInvocations, averageTokens, totalCostUsd, invocationDensity } = visibleMetrics;
-  const invocationDensityLabel = visibleBuckets.length > 0 ? `${invocationDensity.toFixed(1)} / bucket` : "—";
   const activeSeriesLabels = useMemo(() => visibleSeries.map((series) => series.label), [visibleSeries]);
   const chartSummaryText = useMemo(
     () => describeChartMetrics(
@@ -165,14 +159,6 @@ export const InteractiveUsageChart: FunctionComponent<{
     ),
     [activeSeriesLabels, visibleMetrics, zoomLabel]
   );
-  const summaryCards = [
-    { label: 'Peak tokens', value: formatTokens(peakTokens), detail: 'highest bucket' },
-    { label: 'Peak active time', value: formatStatsDuration(peakActiveTimeMs), detail: 'highest bucket' },
-    { label: 'Average tokens', value: formatTokens(averageTokens), detail: 'per bucket' },
-    { label: 'Peak invocations', value: peakInvocations.toLocaleString(), detail: 'highest bucket' },
-    { label: 'Visible cost', value: formatCost(totalCostUsd), detail: 'visible window' },
-    { label: 'Invocation density', value: invocationDensityLabel, detail: 'visible window' },
-  ];
 
   useEffect(() => {
     const handleMouseUp = () => {
@@ -246,8 +232,8 @@ export const InteractiveUsageChart: FunctionComponent<{
   };
 
   return (
-    <div ref={panelRef} className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7 border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] shadow-[var(--stats-card-shadow)]`}>
-      <div className="relative flex flex-col gap-8">
+    <div ref={panelRef} className={`${PANEL_CLASS} rounded-[1.35rem] border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-3 shadow-[var(--stats-card-shadow)] md:p-4`}>
+      <div className="relative flex flex-col gap-4">
         {/* Screen reader summary */}
         <div className="sr-only" aria-live="polite" aria-atomic="true">
           <h2 id="chart-summary-heading" className="sr-only">Data Visualization for {zoomRange ? "zoomed timeframe" : stats.range.label}</h2>
@@ -301,38 +287,9 @@ export const InteractiveUsageChart: FunctionComponent<{
           />
         </div>
 
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_18rem] xl:items-stretch">
-          <div
-            aria-label="Usage chart summary metrics"
-            className="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6"
-          >
-            {summaryCards.map((card) => (
-              <article
-                key={card.label}
-                data-chart-card
-                aria-label={`${card.label}: ${card.value}, ${card.detail}`}
-                className="min-w-0 rounded-[1.15rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-4 py-3"
-              >
-                <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">{card.label}</div>
-                <div className="mt-2 break-words text-lg font-black leading-tight text-[var(--stats-value-color)]">{card.value}</div>
-                <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]">{card.detail}</div>
-              </article>
-            ))}
-          </div>
-          <div className="rounded-[1.15rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-4 py-3">
-            <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">Active series</div>
-            <div className="mt-2 text-sm font-bold leading-snug text-[var(--stats-value-color)]">
-              {activeSeriesLabels.length > 0 ? activeSeriesLabels.join(", ") : "No active series"}
-            </div>
-            <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]">
-              {zoomLabel}
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_20rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]">
-          <div className="flex min-w-0 flex-col gap-4">
-            <div id="usage-chart-instructions" className="flex flex-wrap items-center justify-between gap-3 rounded-[1.15rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-4 py-3">
+        <div className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_20rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]">
+          <div className="flex min-w-0 flex-col gap-3">
+            <div id="usage-chart-instructions" className="flex flex-wrap items-center justify-between gap-3 rounded-[1.05rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-3 py-2.5">
               <div className="min-w-0">
                 <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">Interactive plot</div>
                 <div className="mt-1 text-xs leading-relaxed text-[var(--stats-detail-color)]">
@@ -344,8 +301,8 @@ export const InteractiveUsageChart: FunctionComponent<{
               </div>
             </div>
 
-            <div className="rounded-[1.35rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] p-3 md:p-4">
-              <div ref={svgContainerRef} className="relative h-[22rem] w-full sm:h-[26rem] lg:h-[30rem]">
+            <div className="rounded-[1.1rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] p-2.5 md:p-3">
+              <div ref={svgContainerRef} className="relative h-[clamp(32rem,62vh,52rem)] w-full">
                 {error ? (
                   <div className="absolute inset-0 z-20 flex items-center justify-center rounded-[1.1rem] bg-[var(--stats-card-bg)]/72 backdrop-blur-sm">
                     <UsageGraphError message={error} onRetry={() => { refresh().catch(() => {}); }} />
@@ -353,7 +310,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                 ) : null}
                 {loading && !error ? (
                   <div className="absolute right-3 top-3 z-20 flex items-center gap-2 rounded-full border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/88 px-3 py-1.5 shadow-sm backdrop-blur-md" role="status" aria-live="polite" aria-busy="true" aria-label="Loading new chart data">
-                    <Activity className="h-3.5 w-3.5 animate-pulse text-signal-500 motion-reduce:animate-none" aria-hidden="true" />
+                    <Activity className="h-3.5 w-3.5 animate-pulse text-[color:var(--stats-signal-text)] motion-reduce:animate-none" aria-hidden="true" />
                     <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
                       Syncing
                     </span>
@@ -395,8 +352,8 @@ export const InteractiveUsageChart: FunctionComponent<{
                         )}
                         height={height - padding * 2}
                         rx="18"
-                        fill="rgba(0,224,160,0.055)"
-                        stroke="rgba(0,224,160,0.28)"
+                        fill="var(--stats-selection-fill)"
+                        stroke="var(--stats-selection-border)"
                         strokeDasharray="8 8"
                       />
                     ) : null}
@@ -461,7 +418,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                           width={rectWidth}
                           height={height - padding * 2}
                           fill="transparent"
-                          className="focus:outline-none focus:ring-2 focus:ring-signal-500"
+                          className="focus:outline-none focus:ring-2 focus:ring-[color:var(--stats-focus-ring)]"
                           onMouseDown={() => {
                             setDragStartIndex(absoluteIndex);
                             setDragCurrentIndex(absoluteIndex);
@@ -519,8 +476,8 @@ export const InteractiveUsageChart: FunctionComponent<{
             </div>
           </div>
 
-          <aside className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-6">
-            <div className="rounded-[1.35rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] p-4">
+          <aside className="flex h-full min-w-0 flex-col gap-3 xl:sticky xl:top-6 xl:max-h-[clamp(32rem,62vh,52rem)] xl:overflow-y-auto xl:pr-1">
+            <div className="flex h-full min-h-full flex-col overflow-y-auto rounded-[1.1rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">Focused bucket</div>
@@ -575,35 +532,29 @@ export const InteractiveUsageChart: FunctionComponent<{
               </div>
             </div>
 
-            <div className="rounded-[1.35rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] p-4">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">Series switches</div>
-                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
-                  {activeSeriesCount} active
-                </div>
-              </div>
-              <UsageGraphLegend
-                seriesGroups={seriesGroups}
-                enabledSeries={enabledSeries}
-                activeSeriesCount={activeSeriesCount}
-                onToggleSeries={onToggleSeries}
-              />
-            </div>
-
-            <div className="rounded-[1.35rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] p-4">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">Live values</div>
-                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
-                  Peak {formatTokens(peakTokens)}
-                </div>
-              </div>
-              <UsageSeriesSidebar
-                series={chartData}
-                enabledSeries={enabledSeries}
-                activeIndex={activeIndex}
-              />
-            </div>
           </aside>
+        </div>
+
+        <div className="rounded-[1.1rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] p-3">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">Series switches</div>
+              <div className="mt-1 text-xs leading-relaxed text-[var(--stats-detail-color)]">
+                Toggle chart lines by category without leaving the usage graph.
+              </div>
+            </div>
+            <div className="rounded-full border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] px-3 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
+              {activeSeriesCount} active
+            </div>
+          </div>
+          <UsageGraphLegend
+            seriesGroups={seriesGroups}
+            enabledSeries={enabledSeries}
+            activeSeriesCount={activeSeriesCount}
+            onToggleSeries={onToggleSeries}
+            className="[grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr))]"
+            seriesGridClassName="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))]"
+          />
         </div>
       </div>
     </div>

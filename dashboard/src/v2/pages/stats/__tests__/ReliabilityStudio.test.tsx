@@ -77,6 +77,7 @@ const baseStats = {
         cachedInputTokens: 75,
         outputTokens: 300,
         reasoningOutputTokens: 75,
+        totalCostUsd: 1.234,
         reportedInvocationCount: 6,
         estimatedInvocationCount: 0,
         unavailableInvocationCount: 0,
@@ -101,6 +102,7 @@ const baseStats = {
         cachedInputTokens: 50,
         outputTokens: 220,
         reasoningOutputTokens: 50,
+        totalCostUsd: 0.756,
         reportedInvocationCount: 0,
         estimatedInvocationCount: 0,
         unavailableInvocationCount: 0,
@@ -125,6 +127,7 @@ const baseStats = {
         cachedInputTokens: 25,
         outputTokens: 90,
         reasoningOutputTokens: 15,
+        totalCostUsd: 0.454,
         reportedInvocationCount: 0,
         estimatedInvocationCount: 2,
         unavailableInvocationCount: 0,
@@ -148,6 +151,7 @@ const baseStats = {
         cachedInputTokens: 75,
         outputTokens: 300,
         reasoningOutputTokens: 75,
+        totalCostUsd: 1.234,
         reportedInvocationCount: 6,
         estimatedInvocationCount: 0,
         unavailableInvocationCount: 0,
@@ -173,6 +177,7 @@ const baseStats = {
         cachedInputTokens: 50,
         outputTokens: 220,
         reasoningOutputTokens: 50,
+        totalCostUsd: 0.756,
         reportedInvocationCount: 0,
         estimatedInvocationCount: 0,
         unavailableInvocationCount: 0,
@@ -198,6 +203,7 @@ const baseStats = {
         cachedInputTokens: 25,
         outputTokens: 90,
         reasoningOutputTokens: 15,
+        totalCostUsd: 0.454,
         reportedInvocationCount: 0,
         estimatedInvocationCount: 2,
         unavailableInvocationCount: 0,
@@ -250,17 +256,22 @@ describe("ReliabilityStudio", () => {
     const summary = screen.getByText("Provider confidence & failure risk");
     const telemetrySourceMix = screen.getByText("Telemetry Source Mix");
     const sourceCountBoard = screen.getByText("Source Count Board");
-    const providerConfidenceBoard = screen.getByText("Provider Confidence Board");
+    const providerCard = screen.getAllByTitle("Antigravity").at(-1)!;
     const audit = screen.getByText("Fallback & Error Audit");
 
     expect(summary.compareDocumentPosition(telemetrySourceMix) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(telemetrySourceMix.compareDocumentPosition(sourceCountBoard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(sourceCountBoard.compareDocumentPosition(providerConfidenceBoard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(providerConfidenceBoard.compareDocumentPosition(audit) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(sourceCountBoard.compareDocumentPosition(providerCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(providerCard.compareDocumentPosition(audit) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     expect(screen.getByText("Telemetry Confidence")).toBeInTheDocument();
     expect(screen.getByText("Fallback Usage")).toBeInTheDocument();
     expect(screen.getByText("Failure Pressure")).toBeInTheDocument();
+    expect(screen.getByText("Provider Cost")).toBeInTheDocument();
+    expect(screen.getAllByText("$2.44").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("$1.23").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("$0.45").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("$1,513.33").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Reported").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Estimated").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Unavailable").length).toBeGreaterThan(0);
@@ -377,8 +388,8 @@ describe("ReliabilityStudio", () => {
     const fiftyPercent = screen.getByText("50%");
     const eightyThreePercent = screen.getByText(/83%/);
 
-    expect(fiftyPercent.className).toContain("text-rose");
-    expect(eightyThreePercent.className).toContain("text-amber");
+    expect(fiftyPercent.className).toContain("--stats-negative-text");
+    expect(eightyThreePercent.className).toContain("--stats-warning-text");
   });
 
   it("uses dedicated icons for the newer provider names", () => {

@@ -34,6 +34,7 @@ export const UsageChartMinimap: FunctionComponent<{
 
   const lastIndex = buckets.length - 1;
   const hasZoomableRange = buckets.length > 1;
+  const showBucketLabels = buckets.length > 1 && buckets.length <= 14;
 
   const indexToX = (index: number): number =>
     lastIndex <= 0
@@ -140,7 +141,7 @@ export const UsageChartMinimap: FunctionComponent<{
           Overview - drag to zoom, arrow keys to pan, escape to reset
         </div>
         {zoomRange ? (
-          <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-400">
+          <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-signal-text)]">
             {zoomRange.end - zoomRange.start + 1} of {buckets.length} buckets
           </div>
         ) : !hasZoomableRange ? (
@@ -193,22 +194,22 @@ export const UsageChartMinimap: FunctionComponent<{
                 y="0"
                 width={Math.max(0, indexToX(windowBounds.start))}
                 height={MINIMAP_HEIGHT}
-                fill="rgba(15,23,42,0.1)"
+                fill="var(--stats-scrim)"
               />
               <rect
                 x={indexToX(windowBounds.end)}
                 y="0"
                 width={Math.max(0, MINIMAP_WIDTH - indexToX(windowBounds.end))}
                 height={MINIMAP_HEIGHT}
-                fill="rgba(15,23,42,0.1)"
+                fill="var(--stats-scrim)"
               />
               <rect
                 x={indexToX(windowBounds.start)}
                 y="1"
                 width={Math.max(4, indexToX(windowBounds.end) - indexToX(windowBounds.start))}
                 height={MINIMAP_HEIGHT - 2}
-                fill="rgba(255, 184, 0, 0.08)"
-                stroke="rgba(255, 184, 0, 0.32)"
+                fill="var(--stats-window-fill)"
+                stroke="var(--stats-window-border)"
                 stroke-width="1.5"
                 rx="6"
                 vector-effect="non-scaling-stroke"
@@ -224,6 +225,15 @@ export const UsageChartMinimap: FunctionComponent<{
           </div>
         ) : null}
       </div>
+      {showBucketLabels ? (
+        <div className="mt-2 grid gap-1 text-center text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]" style={{ gridTemplateColumns: `repeat(${buckets.length}, minmax(0, 1fr))` }}>
+          {buckets.map((bucket) => (
+            <span key={bucket.bucketStart} className="min-w-0 truncate" title={bucket.label}>
+              {bucket.label}
+            </span>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 };

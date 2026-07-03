@@ -13,7 +13,7 @@ vi.mock("../components/InteractiveUsageChart.js", () => ({
 }));
 
 describe("TrendStudio", () => {
-  it("renders the KPI band, chart, purpose breakdown, and range metadata in scanning order", () => {
+  it("renders the compact signal cards, chart, and purpose breakdown without duplicate trend KPI cards", () => {
     const { container } = render(
       <TrendStudio
         stats={
@@ -55,19 +55,20 @@ describe("TrendStudio", () => {
       />,
     );
 
-    const totalTokens = screen.getByText("Total Tokens");
-    const rangeLabel = screen.getByText("Last 7 Days");
+    const median = screen.getByText("Median");
     const chart = screen.getByTestId("interactive-usage-chart");
     const purposeActivity = screen.getByText("Purpose Activity");
 
-    expect(totalTokens.compareDocumentPosition(chart) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(median.compareDocumentPosition(chart) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(chart.compareDocumentPosition(purposeActivity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(purposeActivity.compareDocumentPosition(rangeLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-    expect(container.textContent).toContain("12.5k");
-    expect(container.textContent).toContain("42");
-    expect(container.textContent).toContain("Token trend");
+    expect(container.textContent).toContain("Velocity");
+    expect(container.textContent).toContain("Success");
+    expect(container.textContent).not.toContain("vs first half of window");
+    expect(container.textContent).not.toContain("Token trend");
+    expect(container.textContent).not.toContain("Invocation trend");
+    expect(container.textContent).not.toContain("Active time trend");
     expect(container.textContent).toContain("Purpose Activity");
-    expect(screen.getByLabelText("Trend range metadata")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Trend range metadata")).toBeNull();
   });
 });

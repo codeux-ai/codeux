@@ -8,7 +8,11 @@ import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
  * Draws on mount via GSAP stroke-dashoffset animation.
  * On hover (detected via closest `.group`): replays from the start and adds a glow.
  */
-export const Sparkline: FunctionComponent<{ points: number[]; color: string }> = ({ points, color }) => {
+export const Sparkline: FunctionComponent<{ points: number[]; color: string; className?: string }> = ({
+    points,
+    color,
+    className = "absolute bottom-0 left-0 h-20 w-full pointer-events-none",
+}) => {
     const isReducedMotion = useReducedMotion();
 
     if (!points || points.length === 0) {
@@ -100,7 +104,7 @@ export const Sparkline: FunctionComponent<{ points: number[]; color: string }> =
     return (
         <svg
             ref={svgRef}
-            className="absolute bottom-0 left-0 w-full h-20 pointer-events-none"
+            className={className}
             style={{ opacity: 0.2 }}
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
