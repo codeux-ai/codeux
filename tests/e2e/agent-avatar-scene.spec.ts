@@ -1,21 +1,21 @@
 import { test, expect } from '@playwright/test';
-import { completeOnboarding, ensureSelectedProject } from './helpers/prepare-app';
+import { completeOnboarding, createE2EAgentPreset, ensureSelectedProject } from './helpers/prepare-app';
 
 test.describe('AgentAvatarScene E2E Tests', () => {
+  let agentName: string;
+
   test.beforeEach(async ({ request }) => {
     await completeOnboarding(request);
     // Agents are project-scoped; the create button is disabled without a
     // selected project, so seed one before the page loads.
-    await ensureSelectedProject(request);
+    const projectId = await ensureSelectedProject(request);
+    const agent = await createE2EAgentPreset(request, projectId);
+    agentName = agent.name;
   });
 
   test('should render the WebGL canvas when WebGL is supported', async ({ page }) => {
-    // Navigate to agents page. Open the customizer via whichever entry point is
-    // present (empty-state "Create First Agent" or the toolbar "New Agent").
-    // `click()` auto-waits for the control, so we avoid the flaky `networkidle`
-    // wait, which never settles while the dashboard's realtime stream is open.
     await page.goto('/agents');
-    await page.getByRole('button', { name: /Create First Agent|New Agent/ }).first().click();
+    await page.getByRole('button', { name: new RegExp(agentName) }).click();
 
     // Assert that the 3D scene container is rendered and contains a canvas
     const avatarScene = page.locator('[data-testid="agent-avatar-scene"]');
@@ -39,7 +39,7 @@ test.describe('AgentAvatarScene E2E Tests', () => {
     });
 
     await page.goto('/agents');
-    await page.getByRole('button', { name: /Create First Agent|New Agent/ }).first().click();
+    await page.getByRole('button', { name: new RegExp(agentName) }).click();
 
     // Verify that the fallback SVG container is rendered instead of the WebGL canvas
     const fallbackSvg = page.locator('[data-testid="agent-avatar-fallback"]');
