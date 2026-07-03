@@ -18,11 +18,18 @@ import {
   cloneSystemSettings,
   dashboardSettingsToProjectSettings,
 } from "../lib/settings-view-models.js";
+import {
+  buildSettingsSearchIndex,
+  searchSettingsCategories,
+} from "../lib/settings-search-index.js";
+import {
+  providerDescriptions,
+  providerLabels,
+} from "../lib/onboarding-provider-settings.js";
 import type {
   InvocationRoutingId,
   ProviderConfigId,
   ProjectSettings,
-  ProviderId,
   SettingsValueSource,
   SystemSettings,
   ThinkingMode,
@@ -46,16 +53,6 @@ interface Category {
 
 
 
-
-const providerLabels: Record<ProviderId, string> = {
-  jules: "Jules",
-  gemini: "Gemini",
-  codex: "Codex",
-  "claude-code": "Claude Code",
-  "qwen-code": "Qwen Code",
-  opencode: "OpenCode",
-  antigravity: "Antigravity",
-};
 
 const thinkingModeOptions: Array<{ value: ThinkingMode; label: string }> = [
   { value: "SMALL", label: "Small" },
@@ -92,13 +89,13 @@ interface IntegrationDefinition {
 }
 
 const INTEGRATIONS: IntegrationDefinition[] = [
-  { id: "jules", label: "Jules", description: "Google Jules API service for agent session and workspace orchestration" },
-  { id: "gemini", label: "Gemini", description: "Hosted execution provider and future worker endpoint" },
-  { id: "antigravity", label: "Antigravity", description: "Google Antigravity CLI (agy) local container worker execution" },
-  { id: "codex", label: "Codex", description: "Hosted execution provider and future worker endpoint" },
-  { id: "claude-code", label: "Claude Code", description: "Hosted execution provider and future worker endpoint" },
-  { id: "qwen-code", label: "Qwen Code", description: "Qwen CLI with OAuth, Alibaba Coding Plan, and custom model providers" },
-  { id: "opencode", label: "OpenCode", description: "OpenCode CLI with local auth, provider keys, and custom OpenAI-compatible endpoints" },
+  { id: "jules", label: providerLabels.jules, description: providerDescriptions.jules },
+  { id: "gemini", label: providerLabels.gemini, description: providerDescriptions.gemini },
+  { id: "antigravity", label: providerLabels.antigravity, description: providerDescriptions.antigravity },
+  { id: "codex", label: providerLabels.codex, description: providerDescriptions.codex },
+  { id: "claude-code", label: providerLabels["claude-code"], description: providerDescriptions["claude-code"] },
+  { id: "qwen-code", label: providerLabels["qwen-code"], description: providerDescriptions["qwen-code"] },
+  { id: "opencode", label: providerLabels.opencode, description: providerDescriptions.opencode },
   { id: "github", label: "GitHub", description: "Repository, pull request, branch, and CI integration" },
   { id: "gitlab", label: "GitLab", description: "GitLab repository, merge request, and CI token integration" },
   { id: "jira", label: "Jira", description: "Atlassian Jira issue search, sprint linking, and completion transitions" },
@@ -152,7 +149,6 @@ const sortAgentPresetOptions = (
 
 export const useSettingsPageState = (
   categories: Category[],
-  searchHints: Record<CategoryId, string[]>
 ) => {
   const { deleteProject, selectedProject, selectedProjectId } = useProjectData();
 
@@ -351,20 +347,25 @@ export const useSettingsPageState = (
   }, []);
 
   const normalizedSearch = settingsSearch.trim().toLowerCase();
+  const settingsSearchIndex = useMemo(() => buildSettingsSearchIndex({
+    categories,
+    providerLabels,
+    integrations: INTEGRATIONS,
+    invocationRouteDefinitions,
+    agentInstructionTemplateOptions: AGENT_INSTRUCTION_TEMPLATE_OPTIONS,
+    thinkingModeOptions,
+  }), [categories]);
+  const settingsSearchMatches = useMemo(
+    () => searchSettingsCategories(settingsSearchIndex, normalizedSearch),
+    [normalizedSearch, settingsSearchIndex],
+  );
   const filteredCategories = useMemo(() => {
     if (!normalizedSearch) {
       return categories;
     }
 
-    return categories.filter((category) => {
-      const haystack = [
-        category.label,
-        category.description,
-        ...(searchHints[category.id] || []),
-      ].join(" ").toLowerCase();
-      return haystack.includes(normalizedSearch);
-    });
-  }, [normalizedSearch]);
+    return categories.filter((category) => Boolean(settingsSearchMatches[category.id]));
+  }, [categories, normalizedSearch, settingsSearchMatches]);
 
   useEffect(() => {
     if (filteredCategories.length === 0) {
@@ -716,7 +717,7 @@ export const useSettingsPageState = (
     savingSystem, savingProject, activeSaving, activeDirty,
     resettingProject, deletingProject, resettingDatabase, memoryClearBusy, importingHints,
     externalHints,
-    activeCategoryConfig, filteredCategories,
+    activeCategoryConfig, filteredCategories, settingsSearchMatches,
     categories: categories,
     providerLabels,
     thinkingModeOptions,

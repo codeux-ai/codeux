@@ -43,10 +43,6 @@ vi.mock("../../../dashboard/src/v2/components/settings/SettingsCategoryRail.js",
 
   return {
     CATEGORIES: categories,
-    CATEGORY_SEARCH_HINTS: {
-      general: ["general"],
-      agents: ["agents"],
-    },
     SettingsCategoryRail: ({
       filteredCategories,
       onSwitchCategory,
