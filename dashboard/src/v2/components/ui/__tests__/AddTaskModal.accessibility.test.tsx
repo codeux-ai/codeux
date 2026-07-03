@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 import { h } from "preact";
-import { render, screen, waitFor } from "@testing-library/preact";
-import { expect, test, describe, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { afterEach, expect, test, describe, vi } from "vitest";
 import { AddTaskModal } from "../AddTaskModal.js";
 import * as matchers from '@testing-library/jest-dom/matchers';
 expect.extend(matchers);
@@ -9,6 +9,10 @@ expect.extend(matchers);
 describe("AddTaskModal Accessibility", () => {
   const dummySprints = [{ id: "1", name: "Sprint 1", repositoryId: "r1", sprintMarkdownId: "m1", status: "active", createdAt: "now", updatedAt: "now" }];
   const dummyTasks: any[] = [];
+
+  afterEach(() => {
+    cleanup();
+  });
 
   test("renders with accessible name and structure", () => {
     render(<AddTaskModal sprints={dummySprints as any} availableTasks={dummyTasks as any} onClose={() => {}} onSubmit={() => {}} />);
@@ -33,5 +37,24 @@ describe("AddTaskModal Accessibility", () => {
     render(<AddTaskModal sprints={dummySprints as any} availableTasks={dummyTasks as any} onClose={() => {}} onSubmit={() => {}} />);
     const titleInput = screen.getAllByRole("textbox").find(el => el.id === "add-task-title");
     expect(titleInput).toHaveAttribute("aria-required", "true");
+  });
+
+  test("invalid submit focuses the first invalid field and scrolls inside the form body", async () => {
+    render(<AddTaskModal sprints={dummySprints as any} availableTasks={dummyTasks as any} onClose={() => {}} onSubmit={() => {}} />);
+
+    const form = document.getElementById("add-task-form") as HTMLFormElement;
+    const formBody = document.getElementById("add-task-form-body") as HTMLDivElement;
+    const scrollTo = vi.fn();
+    Object.defineProperty(formBody, "scrollTo", { value: scrollTo, configurable: true });
+
+    fireEvent.submit(form);
+
+    const titleInput = document.getElementById("add-task-title") as HTMLInputElement;
+    await waitFor(() => {
+      expect(titleInput).toHaveAttribute("aria-invalid", "true");
+      expect(titleInput.getAttribute("aria-errormessage")).toContain("add-task-title-error");
+      expect(document.activeElement).toBe(titleInput);
+      expect(scrollTo).toHaveBeenCalled();
+    });
   });
 });

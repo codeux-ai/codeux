@@ -9,6 +9,7 @@ When using shared overlay components (`Modal`, `Dialog`, `Drawer`, `Notification
 1.  **Modals & Dialogs**:
     *   Always use dynamic viewport-relative limits: `max-w-[calc(100vw-2rem)]` and `max-h-[calc(100dvh-2rem)]`.
     *   Include `overflow-y-auto` so internal content scrolls naturally if it exceeds the viewport height.
+    *   Provide a stable accessible name with `ariaLabel`, `ariaLabelledBy`, or `titleId`; avoid generic fallback labels when the visible title can label the surface.
     *   For layouts with sidebars or decorative panels (e.g., `AddProjectModal`, `AddTaskModal`, `SprintMarkdownModal`), stack the layout on small screens using `flex-col sm:flex-row`, or hide purely decorative panels (`hidden sm:flex`).
 
 2.  **Drawers**:
@@ -56,6 +57,7 @@ For modals with extensive form content (like `AddProjectModal` and `AddTaskModal
 1.  **Headers and Footers are Fixed**: The modal header (title/description) and footer (actions like Cancel/Submit) must remain pinned and visible at all times, independent of scrolling.
 2.  **Scrolling Body**: The internal form body should own the vertical scrolling using `overflow-y-auto` and `flex-1 min-h-0`. This ensures forms are robust under small viewport heights and on-screen keyboards.
 3.  **Invalid Field Scroll**: When a form validation fails, use `getBoundingClientRect()` against the scrollable container to smoothly scroll the first invalid field into view, preventing the browser from natively scrolling it under fixed headers or keyboards.
+4.  **Error Wiring**: Validation errors should be exposed only while visible using `aria-describedby` or `aria-errormessage`, and invalid submits should focus the first invalid control with `preventScroll` before scrolling the internal form body.
 
 ## Safe Areas & Bottom Navigation
 

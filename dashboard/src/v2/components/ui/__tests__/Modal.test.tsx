@@ -9,14 +9,25 @@ describe("Modal", () => {
     cleanup();
   });
 
-  test("renders with accessible name", () => {
+  test("does not add a generic fallback name", () => {
     render(
       <Modal isOpen={true} onClose={() => {}}>
         <div>Content</div>
       </Modal>
     );
     const dialog = screen.getByRole("dialog");
-    expect(dialog.getAttribute("aria-label")).toBe("Dialog");
+    expect(dialog.getAttribute("aria-label")).toBeNull();
+    expect(dialog.getAttribute("aria-labelledby")).toBeNull();
+  });
+
+  test("uses explicit aria-label as accessible name", () => {
+    render(
+      <Modal isOpen={true} onClose={() => {}} ariaLabel="Project settings">
+        <div>Content</div>
+      </Modal>
+    );
+    const dialog = screen.getByRole("dialog", { name: "Project settings" });
+    expect(dialog.getAttribute("aria-label")).toBe("Project settings");
   });
 
   test("does not add fallback if aria-labelledby is provided", () => {
@@ -28,6 +39,16 @@ describe("Modal", () => {
     const dialog = screen.getByRole("dialog");
     expect(dialog.getAttribute("aria-label")).toBeNull();
     expect(dialog.getAttribute("aria-labelledby")).toBe("title-id");
+  });
+
+  test("uses titleId for visible title labelling", () => {
+    render(
+      <Modal isOpen={true} onClose={() => {}} titleId="modal-title">
+        <h1 id="modal-title">Create Project</h1>
+      </Modal>
+    );
+    const dialog = screen.getByRole("dialog", { name: "Create Project" });
+    expect(dialog.getAttribute("aria-labelledby")).toBe("modal-title");
   });
 
   test("omits aria-describedby when not provided", () => {
