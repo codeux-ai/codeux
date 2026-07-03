@@ -44,13 +44,13 @@ Supported task fields include `title`, `depends_on`, `is_independent`, `merged` 
 
 ## GitHub/GitLab Issue Import
 
-Use `Import -> GitHub Issues` or `Import -> GitLab Issues` to browse the selected project's remote backlog. Each menu entry opens the shared importer on its selected provider while still allowing provider switching, repository override, text search, state filtering, label filtering, and bulk selection.
+Use `Import -> GitHub Issues` or `Import -> GitLab Issues` to browse the selected project's remote backlog. Each provider has its own menu entry, and the entry opens the shared issue importer with that provider selected. Operators can still switch providers inside the modal, override the repository, search by text, filter by state, labels, assignee, author, milestone, exact issue number, created or updated date windows, sort order, and bounded result limit.
 
-The dashboard keeps a shared importer UI foundation under `dashboard/src/v2/components/sprints/importer/` with provider-neutral modal, summary rail, result card, loading, error, and empty-state primitives. Pure view-model helpers in `dashboard/src/v2/lib/issue-import-view-models.ts` provide provider display metadata, selection labels, metadata rows, safe copy, and truncation helpers for GitHub, GitLab, and Jira without making API calls. The GitHub/GitLab modal composes those shared primitives for its chrome, status states, result cards, selected-count affordances, and responsive filter layout. The Jira modal also uses these shared primitives while preserving its Jira-specific guided filters, default project loading, prompt-context inputs, and special-task import behavior.
+The importer result list supports multi-select, `Select all visible results`, `Clear selection`, and per-card `Append Conversation` controls. The footer keeps the selected count visible and lets operators import selected issues as linked sprint issues or, when available, route selected issues into special remediation tasks.
 
-The issue search layer also exposes the advanced fields that the dashboard renders in the modal: assignee, author or reporter text, milestone, exact issue-number lookup, created and updated date windows, sort field, sort direction, and bounded result limits. Importer requests trim empty text fields, deduplicate labels, reject malformed limits, and clamp valid result limits before reaching GitHub or GitLab. The result cards preserve the imported issue title, preview body, repository, issue key, labels, and assignee data while surfacing any extra metadata the provider returns, such as authors, milestones, timestamps, and comment counts.
+Result cards preserve the imported issue title, preview body, repository, issue key, labels, assignees, source link, and provider metadata such as authors, milestones, timestamps, and comment counts when the provider returns those fields.
 
-Quick presets are available for the most common triage flows: open backlog, recently updated work, assigned-to-me or text-user matches, security-labeled items, quality and tech-debt items, failed-CI follow-ups, and merge-conflict follow-ups. The selection tray keeps linked issues and special remediation tasks separate, shows the selected count, supports selecting all visible results, supports clearing the selection, and lets each selected issue independently append or omit its conversation history before import.
+Quick presets are available for common triage flows: open backlog, recently updated work, assigned-to-me or text-user matches, security-labeled items, quality and tech-debt items, failed-CI follow-ups, and merge-conflict follow-ups.
 
 For local projects, the dashboard reads the repository's `remote.origin.url` from `.git/config` when available. This pre-fills the provider and `owner/repository` target for projects that were added from a local checkout instead of a Git clone URL.
 
@@ -62,13 +62,15 @@ Special imported tasks selected from the same import flows appear in their own c
 
 Issue import uses the saved integration tokens:
 - GitHub: system/project effective `git.githubToken`, usually configured in Settings -> Integrations.
-- GitLab: system/project effective `git.gitlabToken`, also available through `GITLAB_TOKEN` / `GLAB_TOKEN` host hints.
+- GitLab: system/project effective `git.gitlabToken`, usually configured in Settings -> Integrations or seeded from `GITLAB_TOKEN` / `GLAB_TOKEN` host hints.
 
 When the GitHub token is empty, GitHub issue search, issue context loading, and auto-close fail with a token-required error. Code UX does not fall back to local `gh` or `glab` CLI authentication for dashboard or MCP importer workflows; Docker auth-copy mount settings help worker containers, but issue search, explicit import, linked sprint attachment, planning imports, and close operations need saved GitHub/GitLab tokens.
 
 ## Jira Issue Import
 
-Use `Import -> Jira Issues` to search Jira with guided filters, multi-select issues, and attach them to the sprint composer. The Jira modal uses the shared importer shell, summary rail, result cards, loading, error, and empty states, but its filters are Jira-specific: project key, exact issue key lookup, free-text search, status, assignee text, reporter text, issue type, priority, labels, updated-date windows, sort controls, bounded result limits, selectable issue cards, source links, and per-issue `Append Conversation` toggles.
+Use `Import -> Jira Issues` to search Jira with guided filters, multi-select issues, and attach them to the sprint composer. The Jira modal keeps Jira-specific controls for project key, exact issue key lookup, free-text search, status, assignee text, reporter text, issue type, priority, labels, updated-date windows, sort controls, bounded result limits, and optional JQL override.
+
+Jira results use selectable issue cards with source links, `Select all visible`, `Clear selection`, bulk conversation selection, and per-card `Append Conversation` toggles. The selected count stays visible while operators choose whether each issue should become linked sprint context or, for detected security and quality follow-ups, a special imported task.
 
 The assignee field accepts a Jira user full name, email address, or account ID. It also accepts `me` / `currentUser()` for the connected Jira account and `unassigned` / `empty` for issues without an assignee. The server builds the Jira query from the selected filters, defaults to open issues sorted by recent updates, and uses `Settings -> Integrations -> Jira -> Default project` to prefill the project key when available. Clearing the project key browses all Jira issues the saved credentials can see.
 
@@ -94,4 +96,4 @@ The Jira import modal keeps each selected card's stored mode choice across resul
 
 `Settings -> Sprint -> Git Flow -> Auto-close linked issues` controls whether imported GitHub/GitLab issues are closed automatically. `Settings -> Integrations -> Jira -> Auto-close Jira issues` separately controls Jira transitions.
 
-When enabled, the sprint loop closes linked issues only after the sprint reaches terminal completion and the main merge gate is no longer blocking. GitHub/GitLab issues are closed through their host APIs or `gh`; Jira issues are moved through the configured transition. Closing failures are recorded per issue and surfaced in the sprint completion report without hiding the sprint result.
+When enabled, the sprint loop closes linked issues only after the sprint reaches terminal completion and the main merge gate is no longer blocking. GitHub and GitLab issues are closed through their configured host APIs using saved tokens; Jira issues are moved through the configured transition using saved Jira settings. Closing failures are recorded per issue and surfaced in the sprint completion report without hiding the sprint result.
