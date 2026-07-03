@@ -114,6 +114,7 @@ describe("LiveSessionPage Runtime Status", () => {
     render(<LiveSessionPage />);
     expect(screen.getByText("Disconnected")).toBeInTheDocument();
     expect(screen.getByText(/Lost connection to the live stream/)).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveAttribute("aria-live", "assertive");
   });
 
   it("does not show a recovering banner (transient state must not flash/shift layout)", () => {
@@ -159,6 +160,7 @@ describe("LiveSessionPage Runtime Status", () => {
     render(<LiveSessionPage />);
     expect(screen.getByText("Connection Error")).toBeInTheDocument();
     expect(screen.getByText("Some network failure")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Connection Error");
   });
 
   it("renders manual pause messaging and shows intervention label only once", () => {
@@ -1091,6 +1093,10 @@ describe("LiveSessionPage Integration Isolation", () => {
     const ciRunCard = inProgressStatus.closest("a");
     expect(ciRunCard).not.toBeNull();
     expect(ciRunCard?.querySelector("svg.animate-spin")).toBeTruthy();
+    expect(ciRunCard).toHaveTextContent("CI status: IN PROGRESS");
+    expect(screen.getByRole("log", { name: "Live invocation feed" })).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByRole("region", { name: "Dispatch queue" })).toBeInTheDocument();
+    expect(screen.getByText("No task dispatches yet.")).toHaveAttribute("aria-live", "polite");
   });
 });
 

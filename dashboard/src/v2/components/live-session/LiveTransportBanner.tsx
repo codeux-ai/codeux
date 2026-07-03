@@ -71,10 +71,10 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
   }, [isVisible, shouldRender, isReducedMotion, enterDuration]);
 
   const icon = bannerState?.icon === "error"
-    ? <Zap className="w-5 h-5 shrink-0" />
+    ? <Zap className="w-5 h-5 shrink-0" aria-hidden="true" />
     : bannerState?.icon === "reconnecting"
-      ? <RefreshCcw className="w-5 h-5 shrink-0 motion-safe:animate-spin" />
-      : <WifiOff className="w-5 h-5 shrink-0" />;
+      ? <RefreshCcw className="w-5 h-5 shrink-0 motion-safe:animate-spin" aria-hidden="true" />
+      : <WifiOff className="w-5 h-5 shrink-0" aria-hidden="true" />;
 
   return (
     <div
@@ -90,6 +90,7 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
         <>
           <div className={`flex items-center justify-center ${bannerState.iconClass}`}>
             {icon}
+            <span className="sr-only">Live transport state: {bannerState.title}</span>
           </div>
           <div className="flex flex-col min-w-0">
             <span className="text-sm font-bold tracking-tight">{bannerState.title}</span>

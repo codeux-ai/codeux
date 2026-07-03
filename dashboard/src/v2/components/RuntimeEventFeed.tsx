@@ -48,8 +48,8 @@ const RuntimeEventFeed: FunctionComponent<{ events?: ExecutionRuntimeEventSummar
 
     if (!events || events.length === 0) {
         return (
-            <div className="flex flex-col items-center justify-center py-12 text-slate-400 dark:text-slate-600 rounded-xl border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800">
-                <Activity className="w-8 h-8 mb-3 opacity-40 text-signal-500" strokeWidth={1.5} />
+            <div role="status" aria-live="polite" className="flex flex-col items-center justify-center rounded-xl border border-black/[0.08] bg-white py-12 text-slate-400 shadow-sm dark:border-white/[0.08] dark:bg-void-800 dark:text-slate-600">
+                <Activity className="w-8 h-8 mb-3 opacity-40 text-signal-500" strokeWidth={1.5} aria-hidden="true" />
                 <p className="text-sm font-bold tracking-tight text-slate-600 dark:text-slate-400">No runtime events yet</p>
                 <p className="text-xs mt-1 font-mono opacity-80">Listening for execution activity...</p>
             </div>
@@ -57,19 +57,20 @@ const RuntimeEventFeed: FunctionComponent<{ events?: ExecutionRuntimeEventSummar
     }
 
     return (
-        <div ref={feedRef} className="max-h-[50dvh] sm:max-h-64 overflow-y-auto pr-2 dashboard-scrollbar space-y-1" aria-live="polite" role="log" aria-label="Runtime feed">
+        <div ref={feedRef} className="max-h-[50dvh] sm:max-h-64 overflow-y-auto pr-2 dashboard-scrollbar space-y-1" aria-live="polite" aria-relevant="additions text" role="log" aria-label="Runtime feed">
             {events.map((event) => {
                 const cfg = getOriginatorCfg(event.originator || "system");
                 const isError = event.eventType.toLowerCase().includes("error") || event.eventType.toLowerCase().includes("fail");
+                const eventTypeLabel = event.eventType.replace(/_/g, " ");
                 return (
-                    <div key={event.id} className={`flex gap-3 border-l-2 ${isError ? 'border-status-red' : cfg.border} ${isError ? 'bg-status-red/[0.04]' : ''} pl-3 py-2 group/entry hover:bg-black/[0.02] dark:hover:bg-white/[0.02] rounded-r-lg transition-colors duration-200`}>
+                    <div key={event.id} className={`flex gap-3 border-l-2 ${isError ? 'border-status-red' : cfg.border} ${isError ? 'bg-status-red/[0.04]' : ''} pl-3 py-2 group/entry hover:bg-black/[0.02] dark:hover:bg-white/[0.02] rounded-r-lg transition-colors duration-200`} aria-label={`${isError ? "Error event" : "Runtime event"}: ${eventTypeLabel} from ${cfg.label} at ${formatTime(event.createdAt)}`}>
                         <div className="flex-grow min-w-0">
-                            <div className="flex items-center gap-2 mb-0.5">
+                            <div className="mb-0.5 flex flex-wrap items-center gap-2">
                                 <span className={`text-[9px] font-bold uppercase tracking-[0.14em] ${isError ? 'text-status-red' : cfg.text}`}>
                                     {cfg.label}
                                 </span>
                                 <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                                    {event.eventType.replace(/_/g, " ")}
+                                    {eventTypeLabel}
                                 </span>
                                 <span className="text-[9px] text-slate-400 dark:text-slate-600 font-mono">
                                     {formatTime(event.createdAt)}

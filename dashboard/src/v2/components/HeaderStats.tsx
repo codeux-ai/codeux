@@ -13,7 +13,8 @@ export const HeaderStats: FunctionComponent<{ pageData: ReturnType<typeof import
 
     if (isLoading) {
         return (
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4 w-full">
+            <div role="status" aria-live="polite" aria-busy="true" aria-label="Loading overview stats" className="grid w-full grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-4">
+                <span className="sr-only">Loading overview stats.</span>
                 <SkeletonCard />
                 <SkeletonCard />
                 <SkeletonCard />
@@ -23,20 +24,20 @@ export const HeaderStats: FunctionComponent<{ pageData: ReturnType<typeof import
     }
 
     return (
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4 w-full">
+        <div role="region" aria-label="Overview metric cards" className="grid w-full grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-4">
 
             {/* Card 1: Total Tokens */}
             <StatsCard
                 title="Total Tokens"
                 value={formatTokens(stats.totalTokens)}
                 accent="signal"
-                trend={<div className="w-2 h-2 rounded-full bg-signal-500 shadow-[0_0_10px_rgba(0,224,160,0.6)]" />}
+                trend={<div className="w-2 h-2 rounded-full bg-signal-500 shadow-[0_0_10px_rgba(0,224,160,0.6)]"><span className="sr-only">Token telemetry active</span></div>}
             >
                 <Sparkline points={stats.tokensTrend} color="#00E0A0" />
                 <div className="flex flex-col gap-1 mt-4 border-t border-black/[0.06] dark:border-white/[0.06] pt-4">
                     <div className="flex justify-between items-center text-xs font-mono font-medium">
                         <span className="text-slate-400">PROJECT</span>
-                        <span className="text-slate-700 dark:text-slate-300 truncate ml-4">{selectedProject?.name || "None"}</span>
+                        <span className="ml-4 min-w-0 break-words text-right text-slate-700 dark:text-slate-300">{selectedProject?.name || "None"}</span>
                     </div>
                 </div>
             </StatsCard>
@@ -46,7 +47,7 @@ export const HeaderStats: FunctionComponent<{ pageData: ReturnType<typeof import
                 title="Sprints"
                 value={String(stats.totalSprints)}
                 accent="cyan"
-                trend={<div className="w-2 h-2 rounded-full bg-cyan-500 shadow-[0_0_10px_rgba(0,170,255,0.6)]" />}
+                trend={<div className="w-2 h-2 rounded-full bg-cyan-500 shadow-[0_0_10px_rgba(0,170,255,0.6)]"><span className="sr-only">Sprint telemetry available</span></div>}
             >
                 <Sparkline points={stats.sprintsTrend} color="#00AAFF" />
                 <div className="flex flex-col gap-1 mt-4 border-t border-black/[0.06] dark:border-white/[0.06] pt-4">
@@ -66,7 +67,7 @@ export const HeaderStats: FunctionComponent<{ pageData: ReturnType<typeof import
                 title="Open Tasks"
                 value={String(stats.openTasks)}
                 accent="amber"
-                trend={<div className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_10px_rgba(255,184,0,0.6)] motion-safe:animate-pulse" />}
+                trend={<div className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_10px_rgba(255,184,0,0.6)] motion-safe:animate-pulse"><span className="sr-only">{stats.runningTasks} live tasks</span></div>}
                 description={<span className="text-ember-600 dark:text-ember-500 text-xs font-bold font-mono">{stats.runningTasks} live</span>}
             >
                 <Sparkline points={stats.openTasksTrend} color="#FFB800" />
@@ -91,6 +92,7 @@ export const HeaderStats: FunctionComponent<{ pageData: ReturnType<typeof import
                     <div className="relative w-2 h-2">
                         <div className="w-full h-full rounded-full bg-signal-500 relative z-10 shadow-[0_0_10px_rgba(0,224,160,0.7)]" />
                         <div className="absolute inset-0 bg-signal-500 rounded-full motion-safe:animate-ping opacity-60" />
+                        <span className="sr-only">Completion telemetry updated</span>
                     </div>
                 }
                 description={

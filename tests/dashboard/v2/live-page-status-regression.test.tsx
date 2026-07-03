@@ -109,6 +109,7 @@ describe("LiveSessionPage Status Regression", () => {
 
     // Assert intervention badge exists
     expect(screen.getByText("Needs you")).toBeInTheDocument();
+    expect(screen.getAllByRole("status").length).toBeGreaterThan(0);
   });
 
   it("shows system stop copy and hides intervention badge when stopped by system", () => {
