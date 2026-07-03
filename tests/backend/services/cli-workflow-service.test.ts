@@ -502,20 +502,23 @@ describe("CliWorkflowService unpushed commit detection", () => {
 
     const session = await service.startTask({
       provider: "opencode",
-      task: { id: "T1", prompt: "prompt", title: "title" } as any,
+      task: { id: "T01", record_id: "task-record-1", prompt: "prompt", title: "title" } as any,
+      taskRecordId: "task-record-1",
       repoPath: "/repo",
       featureBranch: "main",
       sprintNumber: 1,
       taskRunId: "current-run",
     });
 
-    expect(deps.executionRepository.getLatestTaskWorkspaceResumeTarget).toHaveBeenCalledWith("T1", "sprint-run-1");
+    expect(deps.executionRepository.getLatestTaskWorkspaceResumeTarget).toHaveBeenCalledWith("task-record-1", "sprint-run-1");
     expect((service as any).workspaceManager.resolveResumeWorktreePath).not.toHaveBeenCalled();
     expect(deps.sessionTracking.appendActivity).toHaveBeenCalledWith(session.id, {
       originator: "system",
       description: "Retry configured to resume workspace from workspace-session at docker-volume://code-ux-project-workspace-session.",
     });
     expect((service as any).runTaskWorkflow).toHaveBeenCalledWith(expect.objectContaining({
+      task: expect.objectContaining({ id: "T01", record_id: "task-record-1" }),
+      taskRecordId: "task-record-1",
       workerBranch: "worker/bound-branch",
       resumeFromFailedSessionId: "workspace-session",
       resumeWorktreePath: "docker-volume://code-ux-project-workspace-session",

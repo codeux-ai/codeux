@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import type {
   ProjectLiveDashboardSnapshot,
   DashboardStatus,
@@ -18,6 +19,14 @@ export interface ProjectLiveSnapshotDeps {
   ) => ExecutionDashboardSnapshot;
   getGitStatus: () => Promise<GitTrackingStatus>;
   logger: Logger;
+}
+
+function monotonicNowMs(): number {
+  return performance.now();
+}
+
+function elapsedMs(startedAt: number): number {
+  return Math.max(0, Math.round(monotonicNowMs() - startedAt));
 }
 
 /**
@@ -47,7 +56,7 @@ export async function getProjectLiveSnapshot(
   // dedicated channel (`project.git.updated` / `/api/git-status`). The realtime live tick and the
   // shared `/api/live` payload build with `includeGit: false` so the hot path stays small.
   const includeGit = options?.includeGit !== false;
-  const startedAt = Date.now();
+  const startedAt = monotonicNowMs();
   const projectId = typeof projectIdHint === "string" && projectIdHint.trim().length > 0
     ? projectIdHint.trim()
     : deps.projectManagementRepository.getSelectedProjectId();
@@ -80,13 +89,13 @@ export async function getProjectLiveSnapshot(
     };
   }
 
-  const tMgmt = Date.now();
+  const tMgmt = monotonicNowMs();
   const listSprintsResult = deps.projectManagementRepository.listSprints(projectId);
-  const projectMgmtMs = Date.now() - tMgmt;
+  const projectMgmtMs = elapsedMs(tMgmt);
 
   const selectedSprintId = listSprintsResult.selectedSprintId ?? null;
 
-  const tGit = Date.now();
+  const tGit = monotonicNowMs();
   const gitStatusPromise: Promise<{ result: GitTrackingStatus | null; error: string | null }> = includeGit
     ? deps.getGitStatus()
         .then((result) => ({ result, error: null }))
@@ -96,16 +105,16 @@ export async function getProjectLiveSnapshot(
         }))
     : Promise.resolve({ result: null, error: null });
 
-  const tRuntime = Date.now();
+  const tRuntime = monotonicNowMs();
   const status = deps.projectRuntimeRepository.getProjectStatus(projectId, selectedSprintId);
-  const runtimeMs = Date.now() - tRuntime;
+  const runtimeMs = elapsedMs(tRuntime);
 
-  const tExecution = Date.now();
+  const tExecution = monotonicNowMs();
   const execution = deps.getProjectExecutionSnapshot(projectId, { selectedSprintId });
-  const executionMs = Date.now() - tExecution;
+  const executionMs = elapsedMs(tExecution);
 
   const { result: gitStatus, error: gitStatusError } = await gitStatusPromise;
-  const gitMs = Date.now() - tGit;
+  const gitMs = elapsedMs(tGit);
 
   if (!selectedSprintId && execution.sprintRuns.some(r => r.status === 'running' || r.status === 'queued')) {
     deps.logger.warn("selected_sprint_missing_while_active", {
@@ -149,7 +158,7 @@ export async function getProjectLiveSnapshot(
 
   deps.logger.info("project_live_snapshot_assembled", {
     projectId,
-    buildTimeMs: Date.now() - startedAt,
+    buildTimeMs: elapsedMs(startedAt),
     projectMgmtMs,
     runtimeMs,
     executionMs,

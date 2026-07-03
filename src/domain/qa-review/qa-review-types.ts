@@ -42,6 +42,7 @@ export type QaReviewErrorCode =
   | 'TRANSPORT_ERROR'
   | 'AUTH_FAILURE'
   | 'SCHEMA_VIOLATION'
+  | 'CANCELLED'
   | 'UNKNOWN';
 
 export class QaReviewError extends Error {
@@ -67,7 +68,10 @@ export function parseQaError(error: unknown): QaReviewError {
   let code: QaReviewErrorCode = 'UNKNOWN';
   let isRetryable = false;
 
-  if (
+  if (isQaReviewCancellationError(error)) {
+    code = 'CANCELLED';
+    isRetryable = true;
+  } else if (
     lowerMessage.includes("json") ||
     lowerMessage.includes("validation") ||
     lowerMessage.includes("failed to extract valid json") ||
@@ -97,4 +101,10 @@ export function parseQaError(error: unknown): QaReviewError {
     isRetryable,
     error instanceof Error ? { name: error.name, stack: error.stack } : { raw: error }
   );
+}
+
+export function isQaReviewCancellationError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return /Command spawner host exited/i.test(message)
+    && /(signal=SIGINT|signal=SIGTERM|signal=SIGHUP)/i.test(message);
 }

@@ -491,6 +491,17 @@ export class ProjectRuntimeRepository {
     const finishedAt = TERMINAL_TASK_STATES.has(runtimeState)
       ? (existing.finished_at || now)
       : null;
+    const incomingPrUrl = nonEmptyString(subtask.pr_url);
+    const existingPrUrl = nonEmptyString(existing.pr_url);
+    const preservesSameRuntime =
+      runtimeState !== "PENDING"
+      && existingPrUrl
+      && (
+        (nonEmptyString(subtask.session_id) && nonEmptyString(subtask.session_id) === nonEmptyString(existing.session_id))
+        || (nonEmptyString(subtask.session_name) && nonEmptyString(subtask.session_name) === nonEmptyString(existing.session_name))
+        || (nonEmptyString(subtask.worker_branch) && nonEmptyString(subtask.worker_branch) === nonEmptyString(existing.worker_branch))
+      );
+    const prUrl = incomingPrUrl || (preservesSameRuntime ? existingPrUrl : null);
 
     this.db.prepare(`
       UPDATE task_runs
@@ -504,7 +515,7 @@ export class ProjectRuntimeRepository {
       subtask.session_name || existing.session_name || null,
       persistedRunState,
       subtask.worker_branch || null,
-      subtask.pr_url || null,
+      prUrl,
       startedAt,
       finishedAt,
       startedAt && finishedAt ? Math.max(0, new Date(finishedAt).getTime() - new Date(startedAt).getTime()) : null,

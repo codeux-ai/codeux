@@ -105,6 +105,6 @@ On `SIGINT`, `SIGTERM`, or `SIGHUP`, and when the Electron shell quits:
 - Server stops scheduler and virtual-worker loops so no new local work is claimed.
 - Server requests every registered active dispatch to stop through its normal abort hook.
 - Server scans running Docker containers for `code-ux.*` labels and kills any remaining Code UX-managed containers directly.
-- Server preserves Docker workspace/runtime volumes and leaves shutdown-interrupted Docker-backed task rows retryable. Startup recovery closes the interrupted local CLI invocation/dispatch telemetry as `cancelled`, not `failed`, and can resume from the same workspace volume when that retry mode is enabled.
+- Server preserves Docker workspace/runtime volumes and leaves shutdown-interrupted Docker-backed task rows retryable. Startup recovery closes the interrupted local CLI invocation/dispatch/QA telemetry as `cancelled`, not `failed`, and can resume from the same workspace volume when that retry mode is enabled.
 - Server closes MCP stdio and HTTP transports. The dashboard and MCP HTTP listeners track open sockets and destroy them during shutdown, including upgraded dashboard WebSocket sockets, so an open browser tab does not hold the process in the HTTP close path.
 - Process exits cleanly.

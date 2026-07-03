@@ -229,6 +229,7 @@ export class SprintTaskDispatchService {
         dispatch.id,
         taskRun.id,
         {
+          taskRecordId,
           resumeWorkspaceSessionId: args.resumeWorkspaceSessionId,
           resumeWorkerBranch: args.resumeWorkerBranch,
           forceFreshWorkspace: args.forceFreshWorkspace,

@@ -122,6 +122,7 @@ For `status` and `orchestrate`, each cycle can run:
   - commit/push branch
   - open PR back to sprint feature branch
   - track state and activity in sqlite
+- CLI task dispatch carries two task identities through the runtime: the human task key (`T01`, `T02`, ...) stays in branch names, titles, prompts, and task-run tags, while repository/execution lookups use the persisted task record id (`record_id`). Workspace resume targets, task runs, dispatches, and provider invocations must use the record id so normal planned sprint tasks can resume from the correct Docker workspace volume after cancellation or restart.
 
 5. Build protocol instructions
 - `protocol-step.ts`

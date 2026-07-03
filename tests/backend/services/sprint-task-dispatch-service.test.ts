@@ -112,7 +112,20 @@ describe("SprintTaskDispatchService", () => {
       name: "Container task",
       provider: "codex",
     });
-    expect(taskService.startSprintTask).toHaveBeenCalled();
+    expect(taskService.startSprintTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: taskRecord.taskKey,
+        record_id: taskRecord.id,
+      }),
+      undefined,
+      "feature/sprint-8",
+      "/workspace/dispatch-project",
+      8,
+      expect.objectContaining({ projectId: project.id }),
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({ taskRecordId: taskRecord.id }),
+    );
 
     const dispatches = executionRepository.listTaskDispatches({
       projectId: project.id,

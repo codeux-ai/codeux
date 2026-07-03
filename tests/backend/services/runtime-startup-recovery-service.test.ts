@@ -150,7 +150,7 @@ describe("RuntimeStartupRecoveryService", () => {
     expect(executionRepository.listTaskRunEvents(taskRun.id).map((event) => event.eventType)).toContain("task_dispatch_reconciled");
   });
 
-  it("fails stale running QA review rows without provider runtime linkage on startup", async () => {
+  it("cancels stale running QA review rows without provider runtime linkage on startup", async () => {
     const {
       projectRepository,
       executionRepository,
@@ -201,12 +201,12 @@ describe("RuntimeStartupRecoveryService", () => {
 
     expect(result.reconciledQaReviewRunIds).toEqual(expect.arrayContaining([qaRun.id]));
     expect(qaReviewRepository.getRun(qaRun.id)).toMatchObject({
-      status: "failed",
+      status: "cancelled",
       summaryMarkdown: expect.stringContaining("without provider runtime linkage"),
     });
     expect(executionRepository.getExecutionInvocation(invocation.id)).toMatchObject({
-      status: "failed",
-      errorMessage: expect.stringContaining("without provider runtime linkage"),
+      status: "cancelled",
+      errorMessage: null,
     });
   });
 
@@ -1363,7 +1363,8 @@ describe("RuntimeStartupRecoveryService", () => {
 
     await cliWorkflowService.startTask({
       provider: "gemini",
-      task: { id: "T01", title: "Preserve workspace", prompt: "Implement T01" } as any,
+      task: { id: "T01", record_id: task.id, title: "Preserve workspace", prompt: "Implement T01" } as any,
+      taskRecordId: task.id,
       repoPath,
       featureBranch,
       sprintNumber: sprint.number,

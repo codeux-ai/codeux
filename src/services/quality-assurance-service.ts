@@ -38,7 +38,7 @@ import { composeTaskPrBody, composeTaskPrTitle } from "../domain/sprint/composer
 import type { MemoryService } from "./memory-service.js";
 import { syncRemoteBranchIfAvailable } from "./git-branch-sync-service.js";
 import { evaluateQaReviewBudget, isRecoveredStaleQaRun } from "../domain/qa-review/qa-review-budget.js";
-import { parseQaError } from "../domain/qa-review/qa-review-types.js";
+import { isQaReviewCancellationError, parseQaError } from "../domain/qa-review/qa-review-types.js";
 import { normalizeQaReviewResult } from "../domain/qa-review/qa-review-result-normalizer.js";
 import type { NormalizedQaReviewResult } from "../domain/qa-review/qa-review-types.js";
 
@@ -386,6 +386,38 @@ export class QualityAssuranceService {
 
       // Handle retryable_failure and fatal_failure
       const qaError = intentOutcome.error;
+      if (qaError.code === "CANCELLED" || isQaReviewCancellationError(caughtError || qaError)) {
+        this.deps.qaReviewRepository.updateRun(run.id, {
+          status: "cancelled",
+          summaryMarkdown: qaError.message,
+          payload: {
+            error_code: qaError.code,
+          },
+          finishedAt: new Date().toISOString(),
+        });
+        this.appendTaskEvent(taskRun, "qa_review_cancelled", {
+          triggerType,
+          error: qaError.message,
+          error_code: qaError.code,
+          qaReviewRunId: run.id,
+        });
+        this.setTaskQaPending(args.task, false);
+        this.deps.logger?.info("Task QA review cancelled", {
+          projectId: args.projectId,
+          sprintId: args.sprintId,
+          taskId,
+          triggerType,
+          error: qaError.message,
+          error_code: qaError.code,
+        });
+        return {
+          reviewed: false,
+          reopenedTask: false,
+          mergeBlocked: true,
+          reportText: "",
+        };
+      }
+
       this.deps.qaReviewRepository.updateRun(run.id, {
         status: "failed",
         summaryMarkdown: qaError.message,
@@ -626,6 +658,30 @@ export class QualityAssuranceService {
       };
     } catch (error) {
       const qaError = parseQaError(error);
+      if (qaError.code === "CANCELLED" || isQaReviewCancellationError(error)) {
+        this.deps.qaReviewRepository.updateRun(run.id, {
+          status: "cancelled",
+          summaryMarkdown: qaError.message,
+          payload: {
+            error_code: qaError.code,
+          },
+          finishedAt: new Date().toISOString(),
+        });
+        this.deps.logger?.info("Sprint QA review cancelled", {
+          projectId: args.projectId,
+          sprintId: args.sprintId,
+          sprintRunId: args.sprintRunId,
+          error: qaError.message,
+          error_code: qaError.code,
+        });
+        return {
+          reviewed: false,
+          blockedCompletion: true,
+          mergeBlocked: true,
+          reportText: "",
+        };
+      }
+
       this.deps.qaReviewRepository.updateRun(run.id, {
         status: "failed",
         summaryMarkdown: qaError.message,
@@ -836,11 +892,11 @@ export class QualityAssuranceService {
       return run;
     }
 
-    if (latestInvocation && recoveryDecision.shouldFailExecutionInvocation) {
+    if (latestInvocation && recoveryDecision.shouldCancelExecutionInvocation) {
       this.deps.executionRepository.updateExecutionInvocation(latestInvocation.id, {
-        status: "failed",
+        status: "cancelled",
         finishedAt: recoveryDecision.finishedAt,
-        errorMessage: recoveryDecision.summaryMarkdown,
+        errorMessage: null,
       });
       this.deps.executionRepository.appendExecutionInvocationMessage(latestInvocation.id, {
         role: "system",
@@ -852,9 +908,9 @@ export class QualityAssuranceService {
         createdAt: recoveryDecision.finishedAt,
       });
 
-      if (providerInvocation && recoveryDecision.shouldFailProviderInvocation) {
+      if (providerInvocation && recoveryDecision.shouldCancelProviderInvocation) {
         this.deps.executionRepository.updateProviderInvocationUsage(providerInvocation.id, {
-          status: "failed",
+          status: "cancelled",
           finishedAt: recoveryDecision.finishedAt,
           durationMs: this.calculateProviderInvocationDurationMs(providerInvocation, recoveryDecision.finishedAt),
         });
@@ -862,7 +918,7 @@ export class QualityAssuranceService {
     }
 
     return this.deps.qaReviewRepository.updateRun(run.id, {
-      status: "failed",
+      status: "cancelled",
       summaryMarkdown: recoveryDecision.summaryMarkdown,
       finishedAt: recoveryDecision.finishedAt,
     });

@@ -686,10 +686,10 @@ describe("QualityAssuranceService", () => {
       },
     });
 
-    expect(gate.reason).toBe("review_failed");
-    expect(gate.latestRun?.status).toBe("failed");
+    expect(gate.reason).toBe("pending_review");
+    expect(gate.latestRun?.status).toBe("cancelled");
     expect(gate.latestRun?.summaryMarkdown).toContain("Recovered stale QA review run");
-    expect(qaReviewRepository.getRun(staleRun.id)?.status).toBe("failed");
+    expect(qaReviewRepository.getRun(staleRun.id)?.status).toBe("cancelled");
   });
 
   it("keeps merge blocked when latest QA requested changes at the retry cap", () => {
@@ -1312,13 +1312,13 @@ describe("QualityAssuranceService", () => {
 
     const recoveredRun = qaReviewRepository.getRun(qaRun.id);
     const recoveredInvocation = executionRepository.getExecutionInvocation(invocation.id);
-    expect(gate.reason).toBe("review_failed");
-    expect(gate.runsUsed).toBe(1);
+    expect(gate.reason).toBe("pending_review");
+    expect(gate.runsUsed).toBe(0);
     expect(gate.maxRuns).toBe(1);
-    expect(recoveredRun?.status).toBe("failed");
+    expect(recoveredRun?.status).toBe("cancelled");
     expect(recoveredRun?.summaryMarkdown).toContain("without provider runtime linkage");
-    expect(recoveredInvocation?.status).toBe("failed");
-    expect(recoveredInvocation?.errorMessage).toContain("without provider runtime linkage");
+    expect(recoveredInvocation?.status).toBe("cancelled");
+    expect(recoveredInvocation?.errorMessage).toBeNull();
     expect(recoveredInvocation?.finishedAt).toBeTruthy();
   });
 
@@ -1451,10 +1451,10 @@ describe("QualityAssuranceService", () => {
     const recoveredRun = qaReviewRepository.getRun(qaRun.id);
     const recoveredInvocation = executionRepository.getExecutionInvocation(invocation.id);
     const recoveredProviderInvocation = executionRepository.getProviderInvocationUsage(providerInvocation.id);
-    expect(recoveredRun?.status).toBe("failed");
+    expect(recoveredRun?.status).toBe("cancelled");
     expect(recoveredRun?.summaryMarkdown).toContain("Docker container disappeared");
-    expect(recoveredInvocation?.status).toBe("failed");
-    expect(recoveredProviderInvocation?.status).toBe("failed");
+    expect(recoveredInvocation?.status).toBe("cancelled");
+    expect(recoveredProviderInvocation?.status).toBe("cancelled");
   });
 
   it("reruns sprint QA after recovering a stale running review row", async () => {
@@ -1584,8 +1584,129 @@ describe("QualityAssuranceService", () => {
       blockedCompletion: false,
       mergeBlocked: false,
     });
-    expect(qaReviewRepository.getRun(staleRun.id)?.status).toBe("failed");
+    expect(qaReviewRepository.getRun(staleRun.id)?.status).toBe("cancelled");
     expect(qaReviewRepository.getLatestSprintRun(sprint.id)?.outcome).toBe("pass");
+  });
+
+  it("marks a shutdown-interrupted task QA review as cancelled instead of failed", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "qa-service-shutdown-cancelled-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const qaReviewRepository = new QaReviewRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "QA Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      goal: "Ship safely",
+      status: "running",
+      featureBranch: "feature/sprint-1",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "Initial task",
+      promptMarkdown: "Implement the initial feature.",
+      status: "coding_completed",
+      isIndependent: true,
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      state: "COMPLETED",
+      provider: "opencode",
+      sessionId: "session-1",
+      startedAt: "2026-07-03T10:00:00.000Z",
+      finishedAt: "2026-07-03T10:05:00.000Z",
+    });
+    const qaPreset = agentPresetRepository.createAgentPreset(project.id, {
+      name: "QA",
+      presetId: "QA-shutdown",
+      instructionMarkdown: "QA Agent",
+    });
+    const updateTaskSpy = vi.spyOn(projectRepository, "updateTask");
+
+    const service = new QualityAssuranceService({
+      projectManagementRepository: projectRepository,
+      executionRepository,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {} as any,
+      qaReviewRepository,
+      taskService: {} as any,
+      agentPresetSyncService: {
+        resolveTargetedQualityAssuranceAgent: async () => ({
+          id: qaPreset.id,
+          name: qaPreset.name,
+          instructionMarkdown: qaPreset.instructionMarkdown,
+        }),
+      } as any,
+      providerRunner: {} as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        agents: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents,
+          qualityAssurance: {
+            ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+            enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: qaPreset.id },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: qaPreset.id },
+            maxTaskReviewRuns: 3,
+          },
+        },
+      }),
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+    vi.spyOn(service as any, "runReview").mockRejectedValue(
+      new Error("Command spawner host exited (code=null, signal=SIGINT)"),
+    );
+
+    const outcome = await service.reviewCompletedTask({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      repoPath: dir,
+      task: {
+        record_id: task.id,
+        project_id: project.id,
+        sprint_id: sprint.id,
+        id: "T1",
+        title: "Initial task",
+        prompt: "Implement the initial feature.",
+        depends_on: [],
+        is_independent: true,
+        status: "CODING_COMPLETED",
+        provider: "opencode",
+        session_id: "session-1",
+        pr_url: "https://example.com/pr/1",
+      },
+      subtasks: [],
+    });
+
+    const latestRun = qaReviewRepository.getLatestTaskRun(task.id);
+    expect(outcome).toMatchObject({
+      reviewed: false,
+      reopenedTask: false,
+      mergeBlocked: true,
+      reportText: "",
+    });
+    expect(latestRun?.status).toBe("cancelled");
+    expect(latestRun?.payload?.error_code).toBe("CANCELLED");
+    expect(updateTaskSpy).toHaveBeenCalledWith(task.id, { mergeIndicator: null });
+    expect(executionRepository.listTaskRunEvents(taskRun.id).map((event) => event.eventType)).toContain("qa_review_cancelled");
   });
 
   it("retries when the provider returns malformed JSON", async () => {

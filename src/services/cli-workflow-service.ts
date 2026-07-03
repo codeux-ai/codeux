@@ -66,6 +66,7 @@ interface StartCliTaskInput {
   provider: Exclude<ProviderId, "jules">;
   providerSettingsOverride?: ProviderSettingsOverride;
   task: Subtask;
+  taskRecordId?: string;
   repoPath: string;
   featureBranch: string;
   sprintNumber: number;
@@ -133,6 +134,7 @@ export class CliWorkflowService {
 
     const sessionId = `cli-${input.provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
     const taskRunKey = buildTaskRunKey(input.repoPath, input.sprintNumber, input.task.id);
+    const taskRecordId = input.taskRecordId || input.task.record_id || input.task.id;
     
     const explicitResumeTarget = !input.forceFreshWorkspace && input.resumeWorkspaceSessionId && input.resumeWorkerBranch
       ? {
@@ -145,7 +147,7 @@ export class CliWorkflowService {
       ? this.deps.executionRepository.getTaskRun(input.taskRunId)
       : null;
     const workspaceResumeTarget = !input.forceFreshWorkspace && workflowSettings.resumeFailedTaskInSameWorkspace && this.deps.executionRepository
-      ? this.deps.executionRepository.getLatestTaskWorkspaceResumeTarget(input.task.id, taskRun?.sprintRunId || undefined)
+      ? this.deps.executionRepository.getLatestTaskWorkspaceResumeTarget(taskRecordId, taskRun?.sprintRunId || undefined)
       : null;
     const executionResumeTarget = workspaceResumeTarget
       && workspaceResumeTarget.workerBranch
