@@ -153,7 +153,9 @@ export const UsageChartMinimap: FunctionComponent<{
         ref={containerRef}
         data-testid="usage-chart-minimap"
         role="region"
-        aria-label="Chart minimap zoom region"
+        aria-label={zoomRange
+          ? `Chart minimap zoom region, showing buckets ${zoomRange.start + 1} through ${zoomRange.end + 1} of ${buckets.length}`
+          : `Chart minimap zoom region, full range of ${buckets.length} bucket${buckets.length === 1 ? '' : 's'}`}
         aria-disabled={!hasZoomableRange ? "true" : undefined}
         tabIndex={0}
         className={`relative h-16 w-full select-none overflow-hidden rounded-[1rem] border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/72 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--stats-card-bg)] ${hasZoomableRange ? 'cursor-crosshair touch-none' : 'cursor-default opacity-75'}`}

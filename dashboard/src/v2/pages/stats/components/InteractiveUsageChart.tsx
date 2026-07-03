@@ -12,7 +12,6 @@ import {
   formatCost
 } from '../stats-utils.js';
 import {
-  CHIP_CLASS,
   PANEL_CLASS,
   getAxisLabelStep,
   formatAxisLabel,
@@ -34,7 +33,7 @@ import { UsageFilterMenu } from './UsageFilterMenu.js';
 import { useUsageFilters } from '../hooks/useUsageFilters.js';
 import { UsageGraphTooltip } from './UsageGraphTooltip.js';
 import { UsageGraphEmpty, UsageGraphError } from './UsageGraphStates.js';
-import { Activity, Filter } from 'lucide-preact';
+import { Activity } from 'lucide-preact';
 
 export const InteractiveUsageChart: FunctionComponent<{
   stats: ProjectExecutionStatsSnapshot;
@@ -152,6 +151,14 @@ export const InteractiveUsageChart: FunctionComponent<{
 
   const { peakTokens, peakActiveTimeMs, peakInvocations, averageTokens, totalCostUsd, invocationDensity } = useMemo(() => calculateChartMetrics(visibleBuckets), [visibleBuckets]);
   const invocationDensityLabel = visibleBuckets.length > 0 ? `${invocationDensity.toFixed(1)} / bucket` : "—";
+  const summaryCards = [
+    { label: 'Peak tokens', value: formatTokens(peakTokens), detail: 'highest bucket' },
+    { label: 'Peak active time', value: formatStatsDuration(peakActiveTimeMs), detail: 'highest bucket' },
+    { label: 'Average tokens', value: formatTokens(averageTokens), detail: 'per bucket' },
+    { label: 'Peak invocations', value: peakInvocations.toLocaleString(), detail: 'highest bucket' },
+    { label: 'Total cost', value: formatCost(totalCostUsd), detail: 'visible window' },
+    { label: 'Invocation density', value: invocationDensityLabel, detail: 'visible window' },
+  ];
 
   useEffect(() => {
     const handleMouseUp = () => {
@@ -260,50 +267,57 @@ export const InteractiveUsageChart: FunctionComponent<{
         <UsageGraphHeader
           title={zoomRange ? "Zoomed telemetry window" : stats.range.label}
           description="Normalized telemetry lines reveal shape instead of forcing tokens, duration, and invocation counts into one scale. Drag across the plot or the overview strip to zoom a timeframe, hover for exact bucket values, and use filters to focus the graph."
+          rangeLabel={stats.range.label}
+          bucketCount={visibleBuckets.length}
+          resolutionLabel={stats.range.resolutionLabel}
+          zoomLabel={zoomLabel}
+          isZoomed={!!zoomRange}
+          isFiltersOpen={isFiltersOpen}
+          activeSeriesCount={activeSeriesCount}
+          onToggleFilters={toggleFilters}
+          onResetZoom={() => setZoomRange(null)}
         />
+
+        <div className="relative z-50">
+          <UsageFilterMenu
+            isOpen={isFiltersOpen}
+            onClose={closeFilters}
+            stats={stats}
+            enabledSeries={enabledSeries}
+            setEnabledSeries={setEnabledSeries}
+          />
+        </div>
+
+        <div
+          aria-label="Usage chart summary metrics"
+          className="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6"
+        >
+          {summaryCards.map((card) => (
+            <article
+              key={card.label}
+              data-chart-card
+              aria-label={`${card.label}: ${card.value}, ${card.detail}`}
+              className="min-w-0 rounded-[1.15rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-4 py-3"
+            >
+              <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">{card.label}</div>
+              <div className="mt-2 break-words text-lg font-black leading-tight text-[var(--stats-value-color)]">{card.value}</div>
+              <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]">{card.detail}</div>
+            </article>
+          ))}
+        </div>
 
         <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_20rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]">
           <div className="flex min-w-0 flex-col gap-4">
-            <div className="relative z-50 flex flex-wrap items-center gap-2 rounded-[1.15rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-3 py-3">
-              <div className="mr-auto min-w-0 text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">Interactive Plot</div>
-              <div className={`max-w-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)] ${CHIP_CLASS}`}>
-                {zoomLabel}
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.15rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-4 py-3">
+              <div className="min-w-0">
+                <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">Interactive plot</div>
+                <div className="mt-1 text-xs leading-relaxed text-[var(--stats-detail-color)]">
+                  Drag the plot or minimap to zoom. Hover, focus, or use the slider to inspect a bucket.
+                </div>
               </div>
-              <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)] ${CHIP_CLASS}`}>
-                {formatCost(totalCostUsd)} total
+              <div className="rounded-full border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] px-3 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
+                {visibleSeries.length} visible series
               </div>
-              <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)] ${CHIP_CLASS}`}>
-                {invocationDensityLabel}
-              </div>
-              <button
-                type="button"
-                onClick={toggleFilters}
-                aria-expanded={isFiltersOpen}
-                className={`group inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors motion-reduce:transition-none active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] ${CHIP_CLASS} ${
-                  isFiltersOpen
-                    ? 'border-signal-500/30 bg-signal-500/[0.08] text-signal-600 dark:text-signal-400'
-                    : 'text-[var(--stats-detail-color)] hover:bg-[color:var(--fill-muted-hover)] hover:text-[var(--stats-value-color)]'
-                }`}
-              >
-                <Filter className={`h-3 w-3 transition-colors motion-reduce:transition-none ${isFiltersOpen ? 'text-signal-500' : 'text-[var(--stats-detail-color)] group-hover:text-signal-500'}`} strokeWidth={2.2} />
-                Filters
-              </button>
-              {zoomRange ? (
-                <button
-                  type="button"
-                  onClick={() => setZoomRange(null)}
-                  className="rounded-full border border-signal-500/20 bg-signal-500/[0.06] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/[0.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] motion-reduce:transition-none dark:text-signal-400"
-                >
-                  Reset zoom <span className="sr-only">to {stats.range.label}</span>
-                </button>
-              ) : null}
-              <UsageFilterMenu
-                isOpen={isFiltersOpen}
-                onClose={closeFilters}
-                stats={stats}
-                enabledSeries={enabledSeries}
-                setEnabledSeries={setEnabledSeries}
-              />
             </div>
 
             <div className="rounded-[1.35rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] p-3 md:p-4">
@@ -497,6 +511,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                 left={tooltipLeft}
                 label={activeBucket?.label || ""}
                 bucketStart={activeBucket?.bucketStart || ""}
+                bucket={activeBucket}
                 activeSeries={visibleSeries.map((s) => ({
                   id: s.id,
                   label: s.label,

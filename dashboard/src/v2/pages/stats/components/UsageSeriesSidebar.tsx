@@ -18,12 +18,12 @@ export const UsageSeriesSidebar: FunctionComponent<{
             key={s.id}
             className="rounded-[1.05rem] border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/68 px-3 py-3 transition-colors hover:bg-[var(--stats-card-bg)] motion-reduce:transition-none"
           >
-            <div className="flex items-center gap-3">
-              <span className="h-2.5 w-2.5 rounded-full ring-2 ring-[var(--stats-card-bg)]" style={{ backgroundColor: s.accentHex }} />
-              <span className="min-w-0 truncate text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">{s.label}</span>
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-[var(--stats-card-bg)]" style={{ backgroundColor: s.accentHex }} />
+              <span className="min-w-0 break-words text-[10px] font-bold uppercase leading-snug tracking-[0.14em] text-[var(--stats-label-color)]">{s.label}</span>
             </div>
             <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3">
-              <div className="min-w-0 text-lg font-black leading-tight text-[var(--stats-value-color)]">{s.formatter(currentValue)}</div>
+              <div className="min-w-0 break-words text-lg font-black leading-tight text-[var(--stats-value-color)]">{s.formatter(currentValue)}</div>
               <div className="text-right text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)] opacity-80">{s.signalLabel || 'Metric'}</div>
             </div>
           </div>

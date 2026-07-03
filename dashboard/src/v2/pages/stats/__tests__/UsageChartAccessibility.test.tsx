@@ -41,9 +41,9 @@ vi.mock("gsap", () => ({
 const mockStats = {
   range: { label: "Last 7 Days", bucketCount: 7, resolutionLabel: "per day", from: new Date(), to: new Date() },
   buckets: [
-    { bucketStart: "2024-01-01T00:00:00Z", bucketEnd: "2024-01-02T00:00:00Z", label: "Jan 1", usage: { totalTokens: 100, activeTimeMs: 1000, invocationCount: 10 } },
-    { bucketStart: "2024-01-02T00:00:00Z", bucketEnd: "2024-01-03T00:00:00Z", label: "Jan 2", usage: { totalTokens: 200, activeTimeMs: 2000, invocationCount: 20 } },
-    { bucketStart: "2024-01-03T00:00:00Z", bucketEnd: "2024-01-04T00:00:00Z", label: "Jan 3", usage: { totalTokens: 150, activeTimeMs: 1500, invocationCount: 15 } }
+    { bucketStart: "2024-01-01T00:00:00Z", bucketEnd: "2024-01-02T00:00:00Z", label: "Jan 1", usage: { totalTokens: 100, activeTimeMs: 1000, invocationCount: 10, totalCostUsd: 0.1 } },
+    { bucketStart: "2024-01-02T00:00:00Z", bucketEnd: "2024-01-03T00:00:00Z", label: "Jan 2", usage: { totalTokens: 200, activeTimeMs: 2000, invocationCount: 20, totalCostUsd: 0.2 } },
+    { bucketStart: "2024-01-03T00:00:00Z", bucketEnd: "2024-01-04T00:00:00Z", label: "Jan 3", usage: { totalTokens: 150, activeTimeMs: 1500, invocationCount: 15, totalCostUsd: 0.15 } }
   ],
   chartSeries: [
     { id: "tokens", label: "Tokens", accentHex: "#00E0A0", data: [100, 200, 150], formatter: "number", signalLabel: "tokens" }
@@ -148,6 +148,9 @@ describe("UsageChartAccessibility", () => {
 
     expect(slider).toHaveAttribute('aria-valuetext', expect.stringContaining('Jan 2'));
     expect(document.getElementById('usage-chart-tooltip')).toBeInTheDocument();
+    expect(screen.getAllByText('Cost').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('$0.20').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Invocations').length).toBeGreaterThan(0);
 
     // Zoom by pressing enter
     fireEvent.keyDown(slider, { key: "Enter" });
@@ -158,6 +161,11 @@ describe("UsageChartAccessibility", () => {
     const button = screen.getByRole("button", { name: /Filters/i });
     expect(button).toBeInTheDocument();
     expect(button).toHaveAttribute('aria-expanded', 'false');
+    expect(button).toHaveAccessibleDescription(/active series/i);
+    expect(screen.getByRole("toolbar", { name: /Usage graph controls/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Usage chart summary metrics/i)).toBeInTheDocument();
+    expect(screen.getByRole("article", { name: /Peak tokens: 200/i })).toBeInTheDocument();
+    expect(screen.getByRole("article", { name: /Total cost: \$0.45/i })).toBeInTheDocument();
   });
 
   it("announces zoom reset", () => {
