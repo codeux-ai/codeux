@@ -4,7 +4,7 @@ expect.extend(matchers);
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/preact';
+import { fireEvent, render, screen, cleanup } from '@testing-library/preact';
 import { StatsPageHero, getRelativeTime } from '../components/StatsPageHero.js';
 
 describe('StatsPageHero', () => {
@@ -70,6 +70,33 @@ describe('StatsPageHero', () => {
     expect(screen.getByRole('button', { name: 'Apply' })).toBeTruthy();
   });
 
+  it('exposes grouped pressed-state controls for presets and analysis modes', () => {
+    render(
+      <StatsPageHero
+        selectedProject={{ id: 'proj-1', name: 'Project 1' } as any}
+        stats={null}
+        activeQuery={{ window: '24h' } as any}
+        customFrom="2026-05-01"
+        customTo="2026-05-02"
+        applyPresetWindow={vi.fn()}
+        setCustomFrom={vi.fn()}
+        setCustomTo={vi.fn()}
+        applyCustomRange={vi.fn()}
+        visualMode="models"
+        setVisualMode={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('group', { name: 'Time window presets' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '24h' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Custom' })).toHaveAttribute('aria-pressed', 'false');
+
+    expect(screen.getByRole('group', { name: 'Analytics modes' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Models' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Trend' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByLabelText('Executive summary')).toBeTruthy();
+  });
+
   it('disables the Apply button when custom dates are missing', () => {
     cleanup();
     const { rerender } = render(
@@ -109,5 +136,65 @@ describe('StatsPageHero', () => {
 
     applyBtn = screen.getAllByRole('button', { name: 'Apply' })[0] as HTMLButtonElement;
     expect(applyBtn.disabled).toBe(false);
+  });
+
+  it('reveals custom dates from the Custom preset without applying the range', () => {
+    cleanup();
+    const applyCustomRange = vi.fn();
+    const applyCustomWindow = vi.fn();
+
+    render(
+      <StatsPageHero
+        selectedProject={{ id: 'proj-1', name: 'Project 1' } as any}
+        stats={null}
+        activeQuery={{ window: '24h' } as any}
+        customFrom="2026-05-01"
+        customTo="2026-05-02"
+        applyPresetWindow={vi.fn()}
+        applyCustomWindow={applyCustomWindow}
+        setCustomFrom={vi.fn()}
+        setCustomTo={vi.fn()}
+        applyCustomRange={applyCustomRange}
+        visualMode="trend"
+        setVisualMode={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByLabelText('Custom start date')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Custom' }));
+
+    expect(screen.getByLabelText('Custom start date')).toBeTruthy();
+    expect(screen.getByLabelText('Custom end date')).toBeTruthy();
+    expect(applyCustomWindow).not.toHaveBeenCalled();
+    expect(applyCustomRange).not.toHaveBeenCalled();
+  });
+
+  it('blocks and announces custom ranges where the end date is before the start date', () => {
+    cleanup();
+
+    render(
+      <StatsPageHero
+        selectedProject={{ id: 'proj-1', name: 'Project 1' } as any}
+        stats={null}
+        activeQuery={{ window: 'custom' } as any}
+        customFrom="2026-05-03"
+        customTo="2026-05-02"
+        applyPresetWindow={vi.fn()}
+        setCustomFrom={vi.fn()}
+        setCustomTo={vi.fn()}
+        applyCustomRange={vi.fn()}
+        visualMode="trend"
+        setVisualMode={vi.fn()}
+      />
+    );
+
+    const applyBtn = screen.getByRole('button', { name: 'Apply' }) as HTMLButtonElement;
+    expect(applyBtn.disabled).toBe(true);
+    expect(screen.getByRole('alert')).toHaveTextContent('End date must be after start date.');
+    expect(screen.getByLabelText('Custom start date')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('Custom end date')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('Custom start date')).toHaveAttribute('aria-errormessage', 'stats-custom-range-error');
+    expect(screen.getByLabelText('Custom end date')).toHaveAttribute('aria-errormessage', 'stats-custom-range-error');
   });
 });

@@ -2,11 +2,11 @@ import type { FunctionComponent } from 'preact';
 import { ActionFeedbackRegion } from '../../../components/ui/ActionFeedbackRegion.js';
 
 export const UsageGraphLoading: FunctionComponent = () => (
-  <div className="flex min-h-[24rem] w-full items-center justify-center px-6">
+  <div className="flex min-h-[22rem] w-full items-center justify-center px-6">
     <div className="w-full max-w-lg">
       <ActionFeedbackRegion
         status="pending"
-        message="Loading chart data..."
+        message="Loading telemetry trend data..."
         autoDismiss={false}
       />
     </div>
@@ -14,7 +14,7 @@ export const UsageGraphLoading: FunctionComponent = () => (
 );
 
 export const UsageGraphEmpty: FunctionComponent<{ onReset?: () => void }> = ({ onReset }) => (
-  <div className="flex min-h-[24rem] w-full items-center justify-center px-6">
+  <div className="flex min-h-[22rem] w-full items-center justify-center px-6">
     <div className="w-full max-w-lg">
       <ActionFeedbackRegion
         status="warning"
@@ -28,11 +28,11 @@ export const UsageGraphEmpty: FunctionComponent<{ onReset?: () => void }> = ({ o
 );
 
 export const UsageGraphError: FunctionComponent<{ message?: string; onRetry?: () => void }> = ({ message, onRetry }) => (
-  <div className="flex min-h-[24rem] w-full items-center justify-center px-6">
+  <div className="flex min-h-[22rem] w-full items-center justify-center px-6">
     <div className="w-full max-w-lg">
       <ActionFeedbackRegion
         status="error"
-        message={message || "An unexpected error occurred while retrieving graph data. Please try refreshing the page."}
+        message={message || "Trend telemetry could not be retrieved. Please try again."}
         retryAction={onRetry}
         retryLabel="Retry"
         autoDismiss={false}

@@ -38,7 +38,7 @@ function getStatusChipTone(status: string): string {
     return "bg-rose-500/10 text-rose-600 dark:text-rose-400";
   }
   if (normalized.includes("running") || normalized.includes("progress") || normalized.includes("active")) {
-    return "bg-blue-500/10 text-blue-600 dark:text-blue-400";
+    return "bg-signal-500/[0.08] text-signal-700 dark:text-signal-300";
   }
   if (normalized.includes("cancel") || normalized.includes("paused")) {
     return "bg-amber-500/10 text-amber-600 dark:text-amber-400";
@@ -298,7 +298,7 @@ export const TelemetryLedger: FunctionComponent<{
           </div>
         )}
 
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+        <div className={`${SUBPANEL_CLASS} sticky top-3 z-20 grid gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center`}>
           <div className="relative">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" strokeWidth={2} />
             <input
@@ -406,8 +406,8 @@ export const TelemetryLedger: FunctionComponent<{
                 const shareOfLeader = totals.leaderTokens > 0 ? (item.usage.totalTokens / totals.leaderTokens) * 100 : 0;
 
                 return (
-                  <div key={item.id} className={`${LEDGER_ROW_MODERN_CLASS} !p-5`}>
-                    <div className="flex flex-col gap-4">
+                  <div key={item.id} className={`${LEDGER_ROW_MODERN_CLASS} !p-4`}>
+                    <div className="flex flex-col gap-3">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex min-w-0 items-start gap-3">
                           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] text-xs font-black text-slate-900 shadow-sm backdrop-blur-xl dark:text-white">

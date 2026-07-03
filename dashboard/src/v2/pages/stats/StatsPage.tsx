@@ -11,7 +11,7 @@ import { TopCardsModeRenderer } from "../../components/stats/TopCardsModeRendere
 import { Button } from "../../components/ui/Button.js";
 import { PageContainer } from "../../components/layout/PageContainer.js";
 import { EmptyState } from "../../components/ui/EmptyState.js";
-import { PANEL_CLASS, CHIP_CLASS } from "./components/stats-ui-primitives.js";
+import { PANEL_CLASS, CHIP_CLASS, SUBPANEL_CLASS } from "./components/stats-ui-primitives.js";
 import { formatDateTime } from "./stats-utils.js";
 import styles from "./StatsPage.module.css";
 
@@ -52,10 +52,6 @@ export const StatsPage: FunctionComponent = () => {
     loading,
     error,
     refresh,
-    usage,
-    tokenSeries,
-    activeTimeSeries,
-    wallTimeSeries,
     planningUsage,
     activeQuery,
     customFrom,
@@ -73,7 +69,6 @@ export const StatsPage: FunctionComponent = () => {
     applyCustomRange,
     completionConfidence,
   } = useStatsPageData(selectedProject?.id || null);
-  const activateCustomWindow = applyCustomWindow || applyCustomRange;
 
   useLayoutEffect(() => {
     if (!rootRef.current || reducedMotion || !stats || hasAnimated.current) {
@@ -124,23 +119,29 @@ export const StatsPage: FunctionComponent = () => {
     title: string;
     description: string;
     primaryAction?: ComponentChildren;
-    role?: "status" | "alert";
+    role: "status" | "alert";
     iconClassName?: string;
+    badge: string;
   }) => (
     <section
-      className={`${PANEL_CLASS} ${styles.statePanel}`}
+      className={`${PANEL_CLASS} ${styles.statePanel} !p-5 md:!p-6`}
       data-stats-shell-animate
       role={options.role}
       aria-live={options.role === "status" ? "polite" : undefined}
     >
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-5">
         {renderContextRail()}
-        <EmptyState
-          icon={<options.icon className={`h-8 w-8 ${options.iconClassName || ""}`} />}
-          title={options.title}
-          description={options.description}
-          primaryAction={options.primaryAction}
-        />
+        <div className={`${SUBPANEL_CLASS} flex min-h-[12rem] flex-col items-center justify-center gap-4 !p-6 text-center`}>
+          <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700 dark:text-amber-300 ${CHIP_CLASS}`}>
+            {options.badge}
+          </div>
+          <EmptyState
+            icon={<options.icon className={`h-8 w-8 text-amber-600 dark:text-amber-300 ${options.iconClassName || ""}`} />}
+            title={options.title}
+            description={options.description}
+            primaryAction={options.primaryAction}
+          />
+        </div>
       </div>
     </section>
   );
@@ -148,24 +149,28 @@ export const StatsPage: FunctionComponent = () => {
   const statePanel = !selectedProject
     ? renderStatePanel({
         icon: Folder,
-        title: "Select a project",
-        description: "Choose a project to load telemetry, execution history, and live controls.",
+        title: "No project selected",
+        description: "Select a project to open the stats command panel, telemetry summary, and analysis modes.",
+        role: "status",
+        badge: "Stats panel idle",
       })
     : loading && !stats
       ? renderStatePanel({
           icon: Loader2,
           title: "Loading telemetry field",
-          description: `Gathering statistics for ${selectedProject.name} in the ${getWindowLabel(activeQuery.window)} window.`,
+          description: `Gathering ${selectedProject.name} telemetry for the ${getWindowLabel(activeQuery.window)} window.`,
           role: "status",
           iconClassName: "animate-spin",
+          badge: "Stats panel refreshing",
         })
       : error && !stats
         ? renderStatePanel({
             icon: AlertTriangle,
             title: error,
-            description: `${selectedProject.name} · ${getWindowLabel(activeQuery.window)} · retry when ready`,
+            description: `${selectedProject.name} remains selected for the ${getWindowLabel(activeQuery.window)} window.`,
             role: "alert",
             iconClassName: "text-rose-500 dark:text-rose-400",
+            badge: "Stats panel unavailable",
             primaryAction: (
               <Button variant="danger" size="sm" onClick={() => refresh()}>
                 Retry
@@ -193,7 +198,7 @@ export const StatsPage: FunctionComponent = () => {
           applyPresetWindow={applyPresetWindow}
           setCustomFrom={setCustomFrom}
           setCustomTo={setCustomTo}
-          applyCustomWindow={activateCustomWindow}
+          applyCustomWindow={applyCustomWindow}
           applyCustomRange={applyCustomRange}
           visualMode={visualMode}
           setVisualMode={setVisualMode}

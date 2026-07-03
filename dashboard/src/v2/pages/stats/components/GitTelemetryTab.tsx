@@ -135,7 +135,7 @@ export const GitTelemetryLedger: FunctionComponent<{
           </div>
         </div>
 
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+        <div className={`${SUBPANEL_CLASS} sticky top-3 z-20 grid gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center`}>
           <div className="relative">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" strokeWidth={2} />
             <input
@@ -179,8 +179,8 @@ export const GitTelemetryLedger: FunctionComponent<{
                 const shareOfLeader = totals.leaderChurn > 0 ? (itemChurn / totals.leaderChurn) * 100 : 0;
 
                 return (
-                  <div key={item.id} className={`${LEDGER_ROW_MODERN_CLASS} !p-5`}>
-                    <div className="flex flex-col gap-4">
+                  <div key={item.id} className={`${LEDGER_ROW_MODERN_CLASS} !p-4`}>
+                    <div className="flex flex-col gap-3">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex min-w-0 items-start gap-3">
                           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-black/[0.06] bg-white/75 text-xs font-black text-slate-900 shadow-[0_6px_16px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/55 dark:text-white">
@@ -248,7 +248,7 @@ export const GitTelemetryLedger: FunctionComponent<{
                         />
                         <div className="h-1 rounded-full bg-black/[0.04] dark:bg-white/[0.05]">
                           <div
-                            className="h-1 rounded-full bg-emerald-500/60 transition-all duration-500"
+                            className="h-1 rounded-full bg-emerald-500/55 transition-all duration-500"
                             style={{ width: `${Math.min(100, Math.max(shareOfLeader > 0 ? 3 : 0, shareOfLeader))}%` }}
                           />
                         </div>
@@ -459,7 +459,7 @@ export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSum
 
       <GitRankingPanel buckets={gitStats.buckets} tasks={gitStats.tasks} sprints={gitStats.sprints} />
 
-      <div className="flex max-w-full gap-1 overflow-x-auto rounded-2xl border border-black/[0.05] bg-white/68 p-1 dark:border-white/[0.05] dark:bg-void-900/35">
+      <div className="sticky top-3 z-20 flex max-w-full gap-1 overflow-x-auto rounded-2xl border border-black/[0.05] bg-white/82 p-1 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/75">
         {leaderboardTabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;

@@ -193,14 +193,18 @@ Legacy runtime:
 ## UI Sections
 
 ### Stats page
-- The Stats page keeps the time-window selector in the hero header, above the visual mode toggle, so preset and custom range controls remain visible no matter which analysis view is active.
-- The mode toggle exposes `trend`, `composition`, `models`, `reliability`, `ledgers`, and `system` as the primary analytics views.
-- Trend mode uses a compact metric strip, the interactive usage chart, and a persistent right-side summary rail; the graph filter menu only controls series visibility.
-- The chart summary stays keyboard and screen-reader friendly, with hover, focus, and drag zoom all feeding the same active-bucket state.
-- Ledgers mode uses tabbed task, sprint, and git telemetry with stable counts and roving focus.
-- System mode uses a controlled filter bar with search, status chips, provider/purpose chips, and pagination controls above a sortable invocation table.
-- The system invocation table preserves status chips, task context chips, token columns, loading and empty states, and expandable detail rows for transcript history.
-- The System stats view uses a local `useSystemViewData(projectId)` hook to fetch project invocation records, apply controlled search/filter/sort state, and derive summary metrics directly from the filtered list.
+- Shared Stats surfaces use `stats-theme.css` as the warm-void visual foundation. Panel, subpanel, chip, input, ledger row, and card primitives map onto dashboard semantic tokens for surfaces, hairline borders, focus rings, motion, elevation, and low-opacity status/accent fills.
+- The Stats hero is a two-zone command band. Project, sprint, generated-at, freshness, and telemetry-source context sit beside compact time-window controls, custom date entry, and the analysis mode rail.
+- Time-window presets always stay in the hero. Choosing `Custom` reveals date inputs without applying the range; the validated `Apply` action is the only path that changes a custom range, and invalid ranges announce inline errors.
+- The analysis mode rail exposes Trend, Composition, Models, Providers, Ledgers, and System. Providers maps to the reliability workspace while keeping the user-facing label short.
+- The top summary cards change with the selected mode. Trend emphasizes tokens, active time, cost, invocations, and cache rate; Composition, Models, Reliability, Ledgers, and System use mode-specific cards for provider mix, model performance, telemetry confidence, ledger volume, and invocation health.
+- Every mode renders a warm-void Analysis Studio header with the mode icon, title, short description, and a live Ready/Refreshing/Waiting state so polling refreshes do not disorient the workspace.
+- Trend mode uses a compact KPI band, interactive usage chart, graph filter menu, minimap, screen-reader data table, and persistent active-bucket/series rail. Hover, keyboard focus, slider exploration, minimap selection, and drag zoom all feed the same active-bucket state.
+- Composition, Models, and Reliability are secondary studios for token/provider mix, ranked model efficiency, latency, success rates, source quality, provider health, and telemetry gaps.
+- Ledgers mode uses sticky tabbed Task Telemetry, Sprint Telemetry, and Git Telemetry with stable count badges, roving focus, search/sort controls, and progressive rendering for large result sets.
+- System mode uses a compact debugging workbench with summary strips, status distribution, invocation filters, search, status/purpose/provider/error chips, pagination controls, and a sortable invocation table.
+- The system invocation table preserves subdued status indicators, semantic column headers, task context chips, token columns, loading and empty states, and expandable transcript detail rows.
+- Stats data comes from `GET /api/projects/:projectId/stats`, and the System stats view additionally uses `useSystemViewData(projectId)` to fetch invocation records. Stats refresh through the normal dashboard polling/realtime path: existing snapshots remain visible while loading states mark the studio as refreshing.
 
 ### V2 project management
 - Interactive dashboard controls use pointer cursors consistently: enabled buttons, links, tab controls, form toggles, menu/popover triggers, DAG nodes, cards, and dismissible overlays expose a pointer affordance, while disabled controls retain `not-allowed`.

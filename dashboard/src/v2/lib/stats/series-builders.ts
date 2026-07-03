@@ -17,8 +17,26 @@ export function extractModelSeries(stats: ProjectExecutionStatsSnapshot | null, 
   return extractChartSeries(stats, `model_${modelId}`);
 }
 
+export function extractPurposeInvocationSeries(stats: ProjectExecutionStatsSnapshot | null, purposeId: string): number[] {
+  return extractChartSeries(stats, `purpose_invocations_${purposeId}`);
+}
+
 export function buildMetricSeries(stats: ProjectExecutionStatsSnapshot | null) {
   return {
+    totalTokens: extractChartSeries(stats, "core_total_tokens"),
+    activeTime: stats && stats.buckets && stats.buckets.length > 0
+      ? stats.buckets.map(b => b.usage.activeTimeMs || 0)
+      : new Array(Math.max(stats?.buckets?.length || 7, 7)).fill(0),
+    invocations: stats && stats.buckets && stats.buckets.length > 0
+      ? stats.buckets.map(b => b.usage.invocationCount || 0)
+      : new Array(Math.max(stats?.buckets?.length || 7, 7)).fill(0),
+    totalCost: extractChartSeries(stats, "core_total_cost"),
+    cacheRate: stats && stats.buckets && stats.buckets.length > 0
+      ? stats.buckets.map((bucket) => {
+          const promptTokens = bucket.usage.inputTokens + bucket.usage.cachedInputTokens;
+          return promptTokens > 0 ? (bucket.usage.cachedInputTokens / promptTokens) * 100 : 0;
+        })
+      : new Array(Math.max(stats?.buckets?.length || 7, 7)).fill(0),
     taskCodingTokens: extractChartSeries(stats, "purpose_invocations_task_coding"),
     ciFixTokens: extractChartSeries(stats, "purpose_invocations_ci_fix"),
     qaReviewTokens: extractChartSeries(stats, "purpose_invocations_qa_review"),

@@ -18,11 +18,11 @@ export interface SystemFilterBarProps {
 }
 
 const STATUS_OPTIONS = [
-  { value: "running", label: "Running", activeClass: "border-blue-500/40 bg-blue-500/15 text-blue-300" },
-  { value: "completed", label: "Completed", activeClass: "border-emerald-500/40 bg-emerald-500/15 text-emerald-300" },
-  { value: "failed", label: "Failed", activeClass: "border-red-500/40 bg-red-500/15 text-red-300" },
+  { value: "running", label: "Running", activeClass: "border-signal-500/30 bg-signal-500/10 text-signal-700 dark:text-signal-300" },
+  { value: "completed", label: "Completed", activeClass: "border-emerald-500/28 bg-emerald-500/[0.08] text-emerald-700 dark:text-emerald-300" },
+  { value: "failed", label: "Failed", activeClass: "border-rose-500/24 bg-rose-500/[0.08] text-rose-700 dark:text-rose-300" },
   { value: "cancelled", label: "Cancelled", activeClass: "border-slate-500/40 bg-slate-500/15 text-slate-300" },
-  { value: "paused", label: "Paused", activeClass: "border-amber-500/40 bg-amber-500/15 text-amber-300" },
+  { value: "paused", label: "Paused", activeClass: "border-amber-500/26 bg-amber-500/[0.08] text-amber-700 dark:text-amber-300" },
 ] as const;
 
 function formatChipLabel(value: string): string {
@@ -66,7 +66,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
   const totalShown = totalCount.toLocaleString();
 
   return (
-    <div className={`${SUBPANEL_CLASS} flex min-w-0 flex-col gap-4 p-4 md:p-5`}>
+    <div className={`${SUBPANEL_CLASS} sticky top-3 z-20 flex min-w-0 flex-col gap-4 p-4 md:p-5`}>
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
         <div className="relative min-w-0">
           <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" strokeWidth={2} />
@@ -89,7 +89,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center justify-start gap-2 lg:justify-end">
+        <div className="flex flex-wrap items-center justify-start gap-2 lg:justify-end" role="group" aria-label="Status filters">
           <div className={`inline-flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
             <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={2.2} />
             Status
