@@ -28,6 +28,7 @@ import { matchPrForTask } from "../ci/feature-pr/pr-matcher.js";
 import { resolveCiEscalationOwner } from "../ci/feature-pr/ci-autofix-policy.js";
 import type { MemoryCategory, CreateMemoryInput } from "../../../contracts/memory-types.js";
 import { isTaskCodeComplete } from "../task-merge-state.js";
+import { evaluateSprintTransitionState } from "../task-transition-state.js";
 import pLimit from "p-limit";
 import { PROVIDER_IDS } from "../../../repositories/settings-defaults.js";
 import {
@@ -354,6 +355,14 @@ export class CycleRunner {
       activeHumanMergeConflictEscalationTaskIds,
       this.mergeConflictDebouncer,
     );
+    const transitionState = evaluateSprintTransitionState({
+      subtasks,
+      manualMergeTasks: protocolResult.manualMergeTasks,
+      workerEscalatedMergeConflictTasks: protocolResult.workerEscalatedMergeConflictTasks,
+      activeProjectAttentionItems,
+      sprintRunId: args.sprintRunId ?? "",
+      githubMode: args.githubMode,
+    });
 
     const statusTable = args.loopSteps.statusTable ? runStatusTableStep(subtasks) : "";
 
@@ -362,7 +371,7 @@ export class CycleRunner {
       reportText,
       statusTable,
       instructions: protocolResult.instructions,
-      awaitingMerge: protocolResult.awaitingMerge,
+      awaitingMerge: transitionState.mergeRequiredTasks,
       manualMergeTasks: protocolResult.manualMergeTasks,
       workerEscalatedMergeConflictTasks: protocolResult.workerEscalatedMergeConflictTasks,
     };

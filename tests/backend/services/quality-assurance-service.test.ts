@@ -1319,6 +1319,7 @@ describe("QualityAssuranceService", () => {
     expect(recoveredRun?.summaryMarkdown).toContain("without provider runtime linkage");
     expect(recoveredInvocation?.status).toBe("failed");
     expect(recoveredInvocation?.errorMessage).toContain("without provider runtime linkage");
+    expect(recoveredInvocation?.finishedAt).toBeTruthy();
   });
 
   it("recovers a running Docker task QA review when its provider container is missing", async () => {

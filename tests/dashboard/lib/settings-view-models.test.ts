@@ -13,6 +13,7 @@ import {
   providerSupportsThinkingMode,
   isProviderAvailable,
   getProviderAuthLabel,
+  getProviderInstanceAuthLabel,
   getEligibleProviders,
   sourceLabel,
   thinkingModeOptions,
@@ -24,8 +25,14 @@ import {
   getDefaultRouteOptionLabel,
   getProviderDisplayMetadata,
   getVirtualProviderDisplayMetadata,
+  applyExternalHintsToSystemSettings,
+  formatModelPrice,
+  getRelevantModelPricingRefs,
+  normalizeModelPricingOverrideId,
+  normalizeModelPricingOverrides,
 } from "../../../dashboard/src/v2/lib/settings-view-models.js";
 import type { SystemSettings, ProjectSettings, ExternalSettingsHints, DashboardSettings } from "../../../dashboard/src/types.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
 describe("sortProviderConfigEntries", () => {
   it("keeps the primary first and orders added instances by creation, not by name", () => {
@@ -88,6 +95,15 @@ describe("settings view model source helpers", () => {
     expect(sourceLabel("sprint")).toBe("Sprint override");
     expect(sourceLabel("mixed")).toBe("Mixed sources");
     expect(sourceLabel("system")).toBe("Inherited");
+  });
+
+  it("distinguishes inherited, overridden, and mixed project section sources", () => {
+    expect(getFieldSource({}, "git.defaultBranch")).toBe("system");
+    expect(getFieldSource({ "git.defaultBranch": "project" }, "git.defaultBranch")).toBe("project");
+    expect(getFieldSource({
+      "git.defaultBranch": "project",
+      "git.autoCreatePr": "system",
+    }, "git")).toBe("mixed");
   });
 
   it("provides thinking mode options", () => {
@@ -207,6 +223,61 @@ describe("settings view model source helpers", () => {
   });
 });
 
+describe("model pricing view model helpers", () => {
+  it("normalizes stale custom override ids without overwriting canonical overrides", () => {
+    expect(normalizeModelPricingOverrideId("custom/google/gemma")).toBe("google/gemma");
+    expect(normalizeModelPricingOverrideId("custom/local-model")).toBe("custom/local-model");
+
+    expect(normalizeModelPricingOverrides({
+      "google/gemma": { inputTokens: 1, outputTokens: 2, cachedInputTokens: 0 },
+      "custom/google/gemma": { inputTokens: 3, outputTokens: 4, cachedInputTokens: 0 },
+    })).toEqual({
+      "google/gemma": { inputTokens: 1, outputTokens: 2, cachedInputTokens: 0 },
+    });
+  });
+
+  it("formats missing and configured token pricing consistently", () => {
+    expect(formatModelPrice(undefined)).toBe("No published pricing");
+    expect(formatModelPrice({ inputTokens: 1, outputTokens: 2, cachedInputTokens: 0.5 })).toBe("$1/M in • $2/M out • $0.5/M cached");
+  });
+
+  it("keeps enabled project defaults visible as relevant pricing refs", () => {
+    const refs = getRelevantModelPricingRefs({
+      integrations: {
+        providers: {
+          codex: { provider: "codex", name: "Codex Primary", apiKey: "", mountAuth: false, authPath: "" },
+        },
+      },
+      defaults: {
+        aiProvider: {
+          providers: {
+            codex: {
+              provider: "codex",
+              name: "Codex Primary",
+              enabled: true,
+              model: "gpt-5.5",
+              weight: 1,
+              thinkingMode: "HIGH",
+              maxConcurrentTasks: 0,
+            },
+          },
+        },
+      },
+    } as SystemSettings, [{
+      id: "openai/gpt-5.5",
+      providerId: "openai",
+      providerName: "OpenAI",
+      modelId: "gpt-5.5",
+      modelName: "GPT-5.5",
+      cost: { inputTokens: 1, outputTokens: 2, cachedInputTokens: 0 },
+    }], {});
+
+    expect(refs.get("openai/gpt-5.5")?.usedBy).toEqual([
+      { id: "codex", label: "Codex Primary", provider: "codex" },
+    ]);
+  });
+});
+
 describe("provider availability helpers", () => {
   const mockHints: ExternalSettingsHints = {
     env: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
@@ -274,6 +345,10 @@ describe("provider availability helpers", () => {
     expect(getProviderAuthLabel("claude-code", mockSystemSettings, mockHints, true)).toBe("Auth mount enabled");
   });
 
+  it("returns no auth display for an invalid provider config id", () => {
+    expect(getProviderInstanceAuthLabel("missing-provider", mockSystemSettings, true)).toBeNull();
+  });
+
   it("getEligibleProviders returns providers that are available AND enabled", () => {
     const eligible = getEligibleProviders(mockSystemSettings, {
       ...mockProjectSettings,
@@ -287,6 +362,43 @@ describe("provider availability helpers", () => {
     // codex local auth alone should not activate it
     // claude-code is activated via auth mount and enabled
     expect(eligible).toEqual(["jules", "claude-code"]);
+  });
+});
+
+describe("external hint project override helpers", () => {
+  it("fills only inherited empty provider keys from external hints", () => {
+    const settings = {
+      runtime: { dashboardPort: 5173, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
+      integrations: {
+        providers: {
+          jules: { provider: "jules", name: "Jules Primary", apiKey: "", mountAuth: false, authPath: "" },
+          gemini: { provider: "gemini", name: "Gemini Primary", apiKey: "project-gemini", mountAuth: false, authPath: "~/.gemini" },
+        },
+        githubToken: "",
+      },
+      defaults: DEFAULT_DASHBOARD_SETTINGS as ProjectSettings,
+      mcpTools: [],
+      customMcpServers: [],
+      modelPricing: { overrides: {} },
+    } as SystemSettings;
+    const hints: ExternalSettingsHints = {
+      env: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+      settingsJson: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+      resolved: {
+        julesApiKey: "hint-jules",
+        geminiApiKey: "hint-gemini",
+        codexApiKey: "",
+        claudeCodeApiKey: "",
+        githubToken: "hint-gh",
+      },
+      providerAvailability: {},
+    };
+
+    const next = applyExternalHintsToSystemSettings(settings, hints);
+
+    expect(next.integrations.providers.jules.apiKey).toBe("hint-jules");
+    expect(next.integrations.providers.gemini.apiKey).toBe("project-gemini");
+    expect(next.integrations.githubToken).toBe("hint-gh");
   });
 });
 

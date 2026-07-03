@@ -108,6 +108,10 @@ For `status` and `orchestrate`, each cycle can run:
 
 3. Derive effective task status
 - `status-derivation-step.ts`
+- Task transition decisions are centralized in `src/domain/sprint/task-transition-state.ts`.
+  The step asks this pure helper whether dependencies are met, whether a failed
+  session should reset to `PENDING` or remain `BLOCKED`, and whether terminal,
+  QA-pending, merge-required, quota, or failed states should be preserved.
 
 4. Start ready tasks (orchestrate only)
 - `start-ready-tasks-step.ts`
@@ -152,6 +156,10 @@ When `action=orchestrate`, `wait` is true, and `watchLoop` is enabled:
   - all tasks terminal (`COMPLETED+merged` or `FAILED`), or
   - no runnable tasks remain, or
   - merge-required tasks are detected.
+- The watch loop uses the same `task-transition-state.ts` helper as the cycle
+  runner to classify settled tasks, failed terminal tasks, PR-backed merge waits,
+  QA-pending tasks, quota waits, dependency blockers, and worker attention waits.
+  Protocol text and status table rendering remain separate presentation steps.
 
 On completion it may:
 - clean up subtask directory,

@@ -13,7 +13,7 @@ vi.mock('../../../../src/repositories/execution/execution-runtime-events-query.j
   queryExecutionRuntimeEvents: vi.fn(() => [])
 }));
 vi.mock('../../../../src/repositories/execution/execution-invocations-query.js', () => ({
-  queryExecutionInvocations: vi.fn(() => [])
+  queryProjectExecutionSnapshotInvocations: vi.fn(() => [])
 }));
 vi.mock('../../../../src/repositories/execution/execution-human-intervention-query.js', () => ({
   buildHumanInterventionSummaryBySprintRun: vi.fn(() => new Map()),
@@ -85,7 +85,7 @@ describe('queryProjectExecutionSnapshot', () => {
   });
 
   it('should include bounded recent invocations in the execution snapshot', async () => {
-    const { queryExecutionInvocations } = await import('../../../../src/repositories/execution/execution-invocations-query.js');
+    const { queryProjectExecutionSnapshotInvocations } = await import('../../../../src/repositories/execution/execution-invocations-query.js');
     const invocation = {
       id: 'xi-live',
       projectId: 'proj-1',
@@ -96,17 +96,21 @@ describe('queryProjectExecutionSnapshot', () => {
       createdAt: '2024-01-01T10:00:00.000Z',
       updatedAt: '2024-01-01T10:01:00.000Z',
     };
-    (queryExecutionInvocations as any).mockReturnValueOnce([invocation]);
+    (queryProjectExecutionSnapshotInvocations as any).mockReturnValueOnce([invocation]);
 
     const snapshot = queryProjectExecutionSnapshot(mockDb as DatabaseAdapter, mockStorage, 'proj-1', mockDeps);
 
-    expect(queryExecutionInvocations).toHaveBeenCalledWith(mockDb, { projectId: 'proj-1', limit: 24 });
+    expect(queryProjectExecutionSnapshotInvocations).toHaveBeenCalledWith(mockDb, {
+      projectId: 'proj-1',
+      sprintRunIds: [],
+      selectedSprintId: undefined,
+    });
     expect(snapshot.recentInvocations).toEqual([invocation]);
   });
 
   it('merges selected sprint and expanded run invocations into the live feed', async () => {
     const { queryExecutionSprintRuns } = await import('../../../../src/repositories/execution/execution-sprint-runs-query.js');
-    const { queryExecutionInvocations } = await import('../../../../src/repositories/execution/execution-invocations-query.js');
+    const { queryProjectExecutionSnapshotInvocations } = await import('../../../../src/repositories/execution/execution-invocations-query.js');
     const sprintRuns = [{ id: 'run-active' }, { id: 'run-paused' }];
 
     const makeInvocation = (id: string, startedAt: string) => ({
@@ -128,10 +132,8 @@ describe('queryProjectExecutionSnapshot', () => {
       sprintRuns,
       expandedSprintRunIds: ['run-active', 'run-paused'],
     });
-    (queryExecutionInvocations as any)
-      .mockReturnValueOnce([projectRecentInvocation])
-      .mockReturnValueOnce([activeRunInvocation, projectRecentInvocation])
-      .mockReturnValueOnce([selectedSprintInvocation]);
+    (queryProjectExecutionSnapshotInvocations as any)
+      .mockReturnValueOnce([activeRunInvocation, projectRecentInvocation, selectedSprintInvocation]);
 
     const snapshot = queryProjectExecutionSnapshot(
       mockDb as DatabaseAdapter,
@@ -141,16 +143,10 @@ describe('queryProjectExecutionSnapshot', () => {
       { selectedSprintId: 'sprint-paused' },
     );
 
-    expect(queryExecutionInvocations).toHaveBeenNthCalledWith(1, mockDb, { projectId: 'proj-1', limit: 24 });
-    expect(queryExecutionInvocations).toHaveBeenNthCalledWith(2, mockDb, {
+    expect(queryProjectExecutionSnapshotInvocations).toHaveBeenCalledWith(mockDb, {
       projectId: 'proj-1',
       sprintRunIds: ['run-active', 'run-paused'],
-      limit: null,
-    });
-    expect(queryExecutionInvocations).toHaveBeenNthCalledWith(3, mockDb, {
-      projectId: 'proj-1',
-      sprintId: 'sprint-paused',
-      limit: null,
+      selectedSprintId: 'sprint-paused',
     });
     expect(snapshot.recentInvocations.map((invocation: any) => invocation.id)).toEqual([
       'xi-active-run',

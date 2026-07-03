@@ -183,7 +183,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
       this.queuedExecutionRefreshProjectIds.clear();
 
       if (projectIds.length > 0) {
-        this.publishRawEvent({
+        const event = this.publishRawEvent({
           scopeType: "projects",
           scopeId: "projects",
           eventType: "execution_refresh",
@@ -192,7 +192,9 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
           payload: { projectIds },
           replayable: false,
         });
-        this.incrementMetric("execution_refresh", "published");
+        if (event) {
+          this.incrementMetric("execution_refresh", "published");
+        }
       }
     }, 10);
   }
@@ -313,11 +315,55 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
     this.scheduleExecutionRefreshDebouncer();
   }
 
-  publishRawEvent(input: AppendDashboardRealtimeEventInput): DashboardRealtimeEvent {
-    const event = this.eventRepository.appendEvent(input);
-    this.latestSequence = Math.max(this.latestSequence, event.sequence);
-    this.broadcast(event);
-    return event;
+  publishRawEvent(input: AppendDashboardRealtimeEventInput): DashboardRealtimeEvent | null {
+    try {
+      const event = this.eventRepository.appendEvent(input);
+      this.latestSequence = Math.max(this.latestSequence, event.sequence);
+      this.broadcast(event);
+      return event;
+    } catch (error) {
+      this.incrementMetric(input.eventType, "failures");
+      this.logger.error("dashboard_realtime_event_write_failed", {
+        eventType: input.eventType,
+        scopeType: input.scopeType,
+        scopeId: input.scopeId,
+        projectId: input.projectId ?? null,
+        correlationId: input.correlationId ?? null,
+        error,
+      });
+      return null;
+    }
+  }
+
+  async drain(): Promise<void> {
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+      this.flushDueAt = null;
+    }
+
+    if (this.executionRefreshDebounceTimer) {
+      clearTimeout(this.executionRefreshDebounceTimer);
+      this.executionRefreshDebounceTimer = null;
+      const projectIds = Array.from(this.queuedExecutionRefreshProjectIds);
+      this.queuedExecutionRefreshProjectIds.clear();
+      if (projectIds.length > 0) {
+        const event = this.publishRawEvent({
+          scopeType: "projects",
+          scopeId: "projects",
+          eventType: "execution_refresh",
+          entityType: "project_collection",
+          entityId: "projects",
+          payload: { projectIds },
+          replayable: false,
+        });
+        if (event) {
+          this.incrementMetric("execution_refresh", "published");
+        }
+      }
+    }
+
+    await this.flushScheduledSnapshots();
   }
 
   private scheduleFlush(delayMs: number = DEFAULT_FLUSH_DELAY_MS): void {
@@ -391,7 +437,7 @@ const task = (async () => {
           payloadSizeBytes = Buffer.byteLength(fingerprint, "utf8");
         }
 
-        this.publishRawEvent({
+        const event = this.publishRawEvent({
           scopeType: options.scopeType,
           scopeId: options.scopeId,
           eventType: options.eventType,
@@ -402,6 +448,9 @@ const task = (async () => {
           payload,
           replayable: false,
         });
+        if (!event) {
+          return;
+        }
         this.incrementMetric(options.eventType, "published");
 
         if (options.logType) {
@@ -683,8 +732,12 @@ const task = (async () => {
         listener(event);
       } catch (error) {
         this.logger.warn("Dashboard realtime listener failed", {
+          logPurpose: "realtime",
           eventType: event.eventType,
+          sequence: event.sequence,
           scope: event.scope,
+          projectId: event.projectId,
+          correlationId: event.correlationId,
           error,
         });
       }

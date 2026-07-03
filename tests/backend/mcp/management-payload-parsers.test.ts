@@ -7,6 +7,10 @@ import {
   parseOptionalBoolean,
   parseOptionalObject,
   parseOptionalEnum,
+  parseOptionalEnumStrict,
+  parseOptionalIntegerStrict,
+  formatManagementErrorEnvelope,
+  ManagementValidationError,
 } from "../../../src/mcp/management/payload-parsers.js";
 
 describe("Payload Parsers", () => {
@@ -57,5 +61,45 @@ describe("Payload Parsers", () => {
     expect(parseOptionalEnum({ foo: " YES " }, "foo", valid)).toBe("yes");
     expect(parseOptionalEnum({ foo: "maybe" }, "foo", valid)).toBeUndefined();
     expect(parseOptionalEnum({}, "foo", valid)).toBeUndefined();
+  });
+
+  it("parseOptionalEnumStrict", () => {
+    const valid = ["yes", "no"] as const;
+    expect(parseOptionalEnumStrict({ foo: " YES " }, "foo", valid)).toBe("yes");
+    expect(parseOptionalEnumStrict({}, "foo", valid)).toBeUndefined();
+    expect(() => parseOptionalEnumStrict({ foo: "maybe" }, "foo", valid))
+      .toThrow("Invalid value for foo. Must be one of: yes, no");
+  });
+
+  it("parseOptionalIntegerStrict", () => {
+    expect(parseOptionalIntegerStrict({ count: "6.9" }, "count", { min: 1 })).toBe(6);
+    expect(parseOptionalIntegerStrict({}, "count", { min: 1 })).toBeUndefined();
+    expect(() => parseOptionalIntegerStrict({ count: "not-a-number" }, "count", { min: 1 }))
+      .toThrow("Invalid value for count. Must be a valid integer.");
+    expect(() => parseOptionalIntegerStrict({ count: "0" }, "count", { min: 1 }))
+      .toThrow("Invalid value for count. Must be at least 1.");
+  });
+
+  it("formats validation and runtime error envelopes consistently", () => {
+    expect(formatManagementErrorEnvelope("tasks", "create", new ManagementValidationError("bad input", "priority"))).toEqual({
+      result: {
+        status: "error",
+        domain: "tasks",
+        action: "create",
+        message: "bad input",
+        errorType: "validation",
+        field: "priority",
+      },
+    });
+
+    expect(formatManagementErrorEnvelope("tasks", "create", new Error("boom"))).toEqual({
+      result: {
+        status: "error",
+        domain: "tasks",
+        action: "create",
+        message: "boom",
+        errorType: "runtime",
+      },
+    });
   });
 });

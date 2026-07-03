@@ -2448,6 +2448,7 @@ describe("evaluateSprintRunState", () => {
       sprintRunId: "run-1",
     });
     expect(result.qaPendingTasks.length).toBe(1);
+    expect(result.mergeRequiredTasks).toEqual([]);
     expect(result.noMoreActionPossible).toBe(false);
     expect(result.allFinished).toBe(false);
   });
@@ -2483,13 +2484,18 @@ describe("evaluateSprintRunState", () => {
 
   it("identifies when all tasks are terminal", () => {
     const result = evaluateSprintRunState({
-      subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true })],
+      subtasks: [
+        buildMockSubtask({ status: "COMPLETED", is_merged: true }),
+        buildMockSubtask({ status: "FAILED", is_merged: false }),
+      ],
       manualMergeTasks: [],
       workerEscalatedMergeConflictTasks: [],
       activeProjectAttentionItems: [],
       sprintRunId: "run-1",
     });
     expect(result.allTerminal).toBe(true);
+    expect(result.settledTasks).toHaveLength(1);
+    expect(result.failedTasks).toHaveLength(1);
     expect(result.allFinished).toBe(true);
   });
 
@@ -2506,14 +2512,21 @@ describe("evaluateSprintRunState", () => {
   });
 
   it("identifies when manual merge is needed", () => {
+    const task = buildMockSubtask({
+      status: "COMPLETED",
+      is_merged: false,
+      worker_branch: "worker/T1",
+      pr_url: "https://example.com/pr/1",
+    });
     const result = evaluateSprintRunState({
-      subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: false })],
-      manualMergeTasks: [buildMockSubtask({ status: "COMPLETED", is_merged: false })],
+      subtasks: [task],
+      manualMergeTasks: [task],
       workerEscalatedMergeConflictTasks: [],
       activeProjectAttentionItems: [],
       sprintRunId: "run-1",
     });
     expect(result.needsManualMerge).toBe(true);
+    expect(result.mergeRequiredTasks.map((mergeTask) => mergeTask.id)).toEqual([task.id]);
     expect(result.allFinished).toBe(true);
   });
 

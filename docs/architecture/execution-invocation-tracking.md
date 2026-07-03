@@ -29,6 +29,8 @@ During live telemetry, `ProviderExecutionService` rewrites invocation messages f
 
 Provider telemetry uses the richest data the provider actually exposes. Readable reasoning is captured only when the structured parser can reconstruct it; if a provider exposes only token-level reasoning counts or opaque encrypted reasoning, the invocation keeps the token telemetry but does not fabricate a transcript turn.
 
+CLI provider parsers share side-effect-free JSON helpers in `src/infrastructure/providers/cli/provider-logs/usage-parse-utils.ts`. The helpers provide strict JSON object/array parsing for JSONL records and balanced object/array extraction for noisy wrapper output, such as Docker bootstrap lines before a Qwen log array or incidental stdout around `opencode export` payloads. Malformed records and wrong-shape payloads are non-fatal: parsers skip the bad record or return `null` for unavailable usage while preserving provider-specific normalization for valid records. Missing usage fields likewise produce `null` usage rather than zeroed reported telemetry, so Code UX does not convert absent provider data into authoritative token counts.
+
 Invocation persistence applies a narrow hygiene sanitizer for one known noisy bootstrap case: lines matching `fatal: your current branch 'code-ux-bootstrap-*' does not have any commits yet` are removed before chat-facing invocation message content is written. Other `fatal:` lines and unrelated stderr/stdout remain unchanged so real failures still surface.
 
 ## Chat Thread Usage
@@ -80,6 +82,8 @@ This prevents stale `qa_review` or worker invocations from remaining indefinitel
 Execution invocations cascade when their parent \`project_id\`, \`sprint_id\`, or \`task_id\` are deleted. They optionally reference \`task_run_id\` or \`dispatch_id\` but function independently to track planning sweeps, conflict resolution, or ad-hoc agent activity.
 
 Additionally, every execution invocation explicitly links to a `provider_invocations` usage row. The execution transcripts stored in `execution_invocation_messages` serve as the replayable prompt history corresponding to the exact token and time consumption recorded in the usage row, allowing the dashboard Stats page to drill down into the exact sequence that generated specific costs.
+
+`ExecutionRepository` remains the public persistence facade for both sides of this relationship. The table-specific write ownership is split behind that facade: `execution-invocation-writes.ts` owns invocation and transcript mutations, while `provider-invocation-usage-writes.ts` owns provider usage creation, slot-claim creation, provider session association, runtime row association, and usage updates. Both modules preserve the facade's validation behavior, timestamps, returned DTO shapes, and project realtime refresh semantics.
 
 ## Provider Slot Waiting Semantics
 

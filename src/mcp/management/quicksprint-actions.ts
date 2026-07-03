@@ -5,34 +5,19 @@ import type {
   UpdateQuicksprintTemplateInput,
 } from "../../contracts/quicksprint-types.js";
 import type { QuicksprintService } from "../../services/quicksprint-service.js";
+import {
+  parseOptionalEnumStrict,
+  parseOptionalIntegerStrict,
+  parseOptionalString,
+  parseRequiredString as readRequiredString,
+} from "./payload-parsers.js";
 
 function readString(payload: Record<string, unknown>, key: string): string | undefined {
-  return typeof payload[key] === "string" ? payload[key].trim() : undefined;
-}
-
-function readRequiredString(payload: Record<string, unknown>, key: string): string {
-  const value = readString(payload, key);
-  if (!value) {
-    throw new Error(`${key} is required`);
-  }
-  return value;
-}
-
-function parsePositiveInteger(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return Math.max(1, Math.floor(value));
-  }
-  if (typeof value === "string" && value.trim()) {
-    const parsed = Number(value.trim());
-    if (Number.isFinite(parsed)) {
-      return Math.max(1, Math.floor(parsed));
-    }
-  }
-  return undefined;
+  return parseOptionalString(payload, key);
 }
 
 function readPositiveInteger(payload: Record<string, unknown>, key: string, fallback: number): number {
-  return parsePositiveInteger(payload[key]) ?? fallback;
+  return parseOptionalIntegerStrict(payload, key, { min: 1 }) ?? fallback;
 }
 
 function readBoolean(payload: Record<string, unknown>, key: string, fallback = false): boolean {
@@ -40,7 +25,10 @@ function readBoolean(payload: Record<string, unknown>, key: string, fallback = f
 }
 
 function readSubmitMode(value: unknown, fallback: QuicksprintExecutionInput["submitMode"]): QuicksprintExecutionInput["submitMode"] {
-  return value === "plan_only" || value === "plan_and_start" ? value : fallback;
+  if (value === undefined || value === null) {
+    return fallback;
+  }
+  return parseOptionalEnumStrict({ submitMode: value }, "submitMode", ["plan_only", "plan_and_start"] as const) ?? fallback;
 }
 
 function normalizeCreateTemplateInput(payload: Record<string, unknown>): CreateQuicksprintTemplateInput {

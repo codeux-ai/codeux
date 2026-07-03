@@ -861,7 +861,10 @@ export function AgentAvatarScene({
 }: AgentAvatarSceneProps) {
   const mountRef = useRef<HTMLDivElement>(null);
   const [webglError, setWebglError] = useState(false);
-  const [isReducedMotion, setIsReducedMotion] = useState(false);
+  const [isReducedMotion, setIsReducedMotion] = useState(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return false;
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  });
 
   /** Persistent across config changes. Created once on mount. */
   const rendererRef = useRef<{
@@ -895,10 +898,11 @@ export function AgentAvatarScene({
   }, []);
 
   const configKey = `${config.chassis}-${config.eyes}-${config.antenna}-${config.wings}-${config.headphones}-${config.accent}-${config.baseColor}-${config.visorColor}`;
+  const shouldUseFallback = fallbackMode || isReducedMotion;
 
   /* ── Effect 1: mount renderer + scene (runs once per mount) ── */
   useEffect(() => {
-    if (fallbackMode || webglError) return;
+    if (shouldUseFallback || webglError) return;
     const mount = mountRef.current;
     if (!mount) return;
 
@@ -995,12 +999,12 @@ export function AgentAvatarScene({
       r.renderer.dispose();
       rendererRef.current = null;
     };
-  }, [fallbackMode, webglError]);
+  }, [shouldUseFallback, webglError]);
 
   /* ── Effect 2: rebuild avatar contents when config changes ── */
   useEffect(() => {
     const r = rendererRef.current;
-    if (!r || fallbackMode || webglError) return;
+    if (!r || shouldUseFallback || webglError) return;
 
     // 2a. Remove + dispose previous avatar contents
     if (avatarRef.current) {
@@ -1048,7 +1052,7 @@ export function AgentAvatarScene({
     r.avatarGroup.add(particles);
 
     avatarRef.current = { parts, particles, envMap };
-  }, [configKey, fallbackMode, webglError]);
+  }, [configKey, shouldUseFallback, webglError]);
 
   /* ════════════════════════════════════════════════════════════════════════
    *  Animation loop — choreography per expression
@@ -1059,7 +1063,7 @@ export function AgentAvatarScene({
    * ════════════════════════════════════════════════════════════════════════ */
   useEffect(() => {
     const r = rendererRef.current;
-    if (!r || fallbackMode || webglError) return;
+    if (!r || shouldUseFallback || webglError) return;
     let t = 0;
     let nextBlink = 3 + Math.random() * 2;
 
@@ -1237,16 +1241,18 @@ export function AgentAvatarScene({
       const r2 = rendererRef.current;
       if (r2) cancelAnimationFrame(r2.animationId);
     };
-  }, [expression, isReducedMotion, fallbackMode, webglError]);
+  }, [expression, shouldUseFallback, webglError]);
 
-  if (fallbackMode || webglError) {
+  if (shouldUseFallback || webglError) {
     return (
       <div
         className={`flex items-center justify-center rounded-2xl bg-slate-50 dark:bg-void-800/40 ${className}`}
         style={{ minHeight: "200px", width: "100%", height: "100%" }}
         data-testid="agent-avatar-fallback"
+        role="img"
+        aria-label="Agent avatar preview"
       >
-        <AgentAvatarSvg config={config} expression={expression} className="w-full h-full max-w-[220px]" />
+        <AgentAvatarSvg config={config} expression={expression} className="w-full h-full max-w-[220px]" static />
       </div>
     );
   }

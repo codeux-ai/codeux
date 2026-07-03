@@ -95,6 +95,7 @@ Use this page as the main entrypoint.
 - [Dashboard Realtime Foundation](./architecture/dashboard-realtime-foundation.md)
 - [Live Runtime Contract](./architecture/live-runtime-contract.md)
 - [Execution Runtime Event Timeline](./architecture/execution-runtime-event-timeline.md)
+- [Quality Guardrails](./architecture/quality-guardrails.md)
 - [Usage Telemetry And Stats](./architecture/usage-telemetry-and-stats.md)
 - [Git Stats Analytics](./architecture/git-stats-analytics.md)
 - [Dashboard Resource Layer](./architecture/dashboard-resource-layer.md)
@@ -146,6 +147,7 @@ Use this page as the main entrypoint.
 - [CLI Commands Reference](./reference/cli-commands.md) - `codeux` management syntax, aliases, prompting, JSON payloads, and approvals
 - [CLI Management Surface](./operations/management-cli.md)
 - [Testing and Quality](./development/testing-and-quality.md)
+- [Quality Guardrails](./architecture/quality-guardrails.md)
 - [Electron Desktop App](./deployment/electron-desktop.md)
 - [Documentation Standards](./development/documentation-standards.md)
 - [Glossary](./reference/glossary.md)

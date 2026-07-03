@@ -38,11 +38,13 @@ import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import { LEARNINGS_FILENAME } from "../contracts/memory-types.js";
 import { DockerService } from "./docker-service.js";
 import {
-  isOrchestratorHandledClarificationItem,
+  planVirtualWorkerAttentionClaim,
   projectNeedsVirtualWorker,
   peekNextWorkerAttention,
   resolveWorkerExecutionMode,
   computeReconciliationCandidates,
+  resolveVirtualWorkerAttentionRoute,
+  type VirtualWorkerAttentionRoute,
 } from "../domain/workers/virtual-worker-scheduling-policy.js";
 import { planVirtualWorkerCycle } from "../domain/workers/virtual-worker-cycle-plan.js";
 
@@ -254,24 +256,33 @@ export class VirtualWorkerService {
       if (this.activeCycles.has(projectId) || this.scheduledProjects.has(projectId)) {
         continue;
       }
-      if (this.projectNeedsVirtualWorker(projectId, resolver)) {
+      if (this.projectNeedsVirtualWorker(projectId, resolver, pendingDispatchProjects.includes(projectId))) {
         this.scheduleProject(projectId, "reconcile", resolver);
       }
     }
-  }
-
-  private projectUsesVirtualWorkers(projectId: string, sprintId?: string | null): boolean {
-    return resolveWorkerExecutionMode(this.resolveDashboardSettings(projectId, sprintId)) === "VIRTUAL";
   }
 
   private resolveDashboardSettings(projectId: string, sprintId?: string | null): DashboardSettings {
     return resolveEffectiveDashboardSettings(this.deps.settingsRepository, projectId, sprintId).settings;
   }
 
-  private projectNeedsVirtualWorker(projectId: string, resolver?: (pId: string, sId?: string | null) => DashboardSettings): boolean {
+  private projectNeedsVirtualWorker(
+    projectId: string,
+    resolver?: (pId: string, sId?: string | null) => DashboardSettings,
+    hasPendingDispatch?: boolean,
+  ): boolean {
+    const effectiveResolver = resolver || ((pId, sId) => this.resolveDashboardSettings(pId, sId));
+    const nextAttentionItem = this.peekNextWorkerAttention(projectId, resolver);
+    const pendingDispatchAvailable = hasPendingDispatch ?? this.deps.executionRepository.listProjectIdsWithPendingDispatches().includes(projectId);
+    const executionMode = !nextAttentionItem && pendingDispatchAvailable
+      ? resolveWorkerExecutionMode(effectiveResolver(projectId))
+      : "VIRTUAL";
     return projectNeedsVirtualWorker(
       this.activeCycles.has(projectId),
-      this.peekNextWorkerAttention(projectId, resolver)
+      nextAttentionItem,
+      executionMode,
+      pendingDispatchAvailable,
+      this.scheduledProjects.has(projectId),
     );
   }
 
@@ -306,6 +317,7 @@ export class VirtualWorkerService {
 
       const plan = await planVirtualWorkerCycle({
         projectId,
+        cycleReason: reason,
         attentionItem,
         dispatchClaim,
         isProviderConcurrencyAvailable: async (pId, limit) => await this.deps.providerConcurrencyService.hasAvailableCapacity(pId, limit),
@@ -313,13 +325,13 @@ export class VirtualWorkerService {
       });
 
       if (plan.type === "HANDLE_ATTENTION") {
-        // We peeked earlier, so we need to properly claim it now exactly as pickNextWorkerAttention did
-        const nextItem = plan.attentionItem;
-        if (nextItem.status === "open") {
-          this.deps.projectAttentionService.resolveItem(nextItem.id, { status: "claimed" } as any);
-          nextItem.status = "claimed";
-        }
-        await this.handleAttentionItem(endpoint.id, nextItem, reason);
+        await this.handleAttentionItem(
+          endpoint.id,
+          plan.attentionItem,
+          reason,
+          plan.attentionRoute,
+          plan.claimReason,
+        );
       } else if (plan.type === "DISPATCH_READY") {
         await this.handleTaskDispatch(endpoint.id, plan.dispatchClaim);
       }
@@ -454,29 +466,31 @@ export class VirtualWorkerService {
     return effectiveResolver(projectId);
   }
 
-  private async handleAttentionItem(workerEndpointId: string, item: ProjectAttentionItemRecord, reason: string): Promise<void> {
-    // Check if it's an orchestrator-managed clarification recovery item we somehow claimed anyway.
-    if (isOrchestratorHandledClarificationItem(item.summaryMarkdown)) {
-      // Just release it, don't escalate. The orchestrator will handle it.
+  private async handleAttentionItem(
+    workerEndpointId: string,
+    item: ProjectAttentionItemRecord,
+    reason: string,
+    attentionRoute: VirtualWorkerAttentionRoute = resolveVirtualWorkerAttentionRoute(item),
+    claimReason: string = planVirtualWorkerAttentionClaim(item, reason).claimReason,
+  ): Promise<void> {
+    if (attentionRoute === "skip_orchestrator_handled") {
       return;
     }
 
-    const claimed = item.status === "claimed"
-      ? this.deps.projectAttentionService.claimItem(item.id, workerEndpointId, `virtual_worker_reclaimed:${reason}`)
-      : this.deps.projectAttentionService.claimItem(item.id, workerEndpointId, `virtual_worker_claimed:${reason}`);
+    const claimed = this.deps.projectAttentionService.claimItem(item.id, workerEndpointId, claimReason);
     this.deps.workerEndpointRepository.touchWorkerEndpointHeartbeat(workerEndpointId, "connected");
 
-    if (claimed.attentionType === "merge_conflict" || claimed.attentionType === "merge_required") {
+    if (attentionRoute === "merge_conflict") {
       await this.resolveMergeConflictAttention(workerEndpointId, claimed);
       return;
     }
 
-    if (claimed.attentionType === "ci_fix_required") {
+    if (attentionRoute === "ci_fix") {
       await this.resolveCiFixAttention(workerEndpointId, claimed);
       return;
     }
 
-    if (claimed.attentionType === "action_required") {
+    if (attentionRoute === "action_required") {
       await this.resolveActionRequiredAttention(workerEndpointId, claimed);
       return;
     }

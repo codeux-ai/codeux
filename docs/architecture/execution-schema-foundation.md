@@ -19,6 +19,7 @@ It established:
 - `src/repositories/app-db-storage.ts`
 - `src/contracts/execution-types.ts`
 - `src/repositories/execution-repository.ts`
+- `src/repositories/execution/*-writes.ts`
 
 ## Why This Matters
 
@@ -79,12 +80,17 @@ Current fields include:
 
 ## Repository Surface
 
+`ExecutionRepository` is the stable public facade for execution persistence. Callers should continue using it rather than importing lower-level persistence modules directly.
+
+Focused modules under `src/repositories/execution/` own cohesive read and write responsibilities behind that facade. Query modules own projection SQL, while write modules such as `execution-invocation-writes.ts` and `provider-invocation-usage-writes.ts` own mutation SQL, validation calls, timestamp handling, transaction boundaries, returned DTO reloading, and realtime refresh decisions for their table groups.
+
 `ExecutionRepository` currently supports:
 
 - create / list / get / update sprint runs
 - create / list / update task dispatches
 - claim next queued dispatch for an executor type
 - acquire / renew / release leases
+- create / update provider invocation usage records and associate them with provider sessions or runtime rows
 
 ## Follow-Up
 

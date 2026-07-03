@@ -55,6 +55,7 @@ Runtime resolution:
 - project settings inherit live system defaults; they do not snapshot them
 - project saves are diffed against the current system defaults, not hardcoded app defaults
 - sprint settings are sparse temporary overrides on top of resolved project settings
+- effective system, project, and sprint resolution uses an in-process typed cache owned by `SettingsRepository` and implemented in `SettingsResolutionService`. Cache entries are keyed by scope plus a process-wide settings resolution revision. Any system save, project save/reset, sprint save/reset, or test data reset increments that revision and clears the writer's local cache, so other repository instances can no longer hit entries created before the write. The cache is bounded by the repository service lifetime and does not retain provider secrets beyond the existing settings service lifetime.
 - orchestration, worker dispatch, and selected-project CI tracking resolve effective settings for the active project or sprint at runtime instead of using only the startup system snapshot
 - `git.defaultBranch` resolves with the following precedence:
   1. Sprint setting override (Dashboard)

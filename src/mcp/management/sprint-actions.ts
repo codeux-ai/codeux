@@ -1,7 +1,7 @@
 import type { ProjectManagementRepository } from "../../repositories/project-management-repository.js";
 import type { ExecutionControlService } from "../../services/execution-control-service.js";
 import type { ExecutionRepository } from "../../repositories/execution-repository.js";
-import type { ManagementResponseEnvelope, ManagementApproval, ManageCodeUxArgs } from "../../contracts/internal-management-types.js";
+import type { ManagementResponseEnvelope, ManageCodeUxArgs } from "../../contracts/internal-management-types.js";
 import type {
   CreateSprintInput,
   IssuePromptContext,
@@ -16,47 +16,20 @@ import type {
 import type { PlanningAgentService } from "../../services/planning-agent-service.js";
 import type { IssueSearchInput, SprintIssueService } from "../../services/sprint-issue-service.js";
 import { mergePromptWithLinkedIssues } from "../../services/linked-issue-prompt-markdown.js";
+import {
+  parseOptionalEnumStrict,
+  parseOptionalIntegerStrict,
+  parseOptionalNullableString,
+  parseOptionalString,
+  parseOptionalStringAlias,
+  parseRequiredString as readRequiredString,
+  parseRequiredStringAlias as readRequiredStringAlias,
+} from "./payload-parsers.js";
 
 const VALID_SPRINT_STATUSES = ["running", "paused", "completed", "failed", "cancelled", "idle"] as const;
 
 function readString(payload: Record<string, unknown>, key: string): string | undefined {
-  return typeof payload[key] === "string" ? payload[key].trim() : undefined;
-}
-
-function readRequiredString(payload: Record<string, unknown>, key: string): string {
-  const value = readString(payload, key);
-  if (!value) {
-    throw new Error(`${key} is required`);
-  }
-  return value;
-}
-
-function readRequiredStringAlias(payload: Record<string, unknown>, primaryKey: string, aliasKey: string): string {
-  const value = readString(payload, primaryKey) || readString(payload, aliasKey);
-  if (!value) {
-    throw new Error(`${primaryKey} or ${aliasKey} is required`);
-  }
-  return value;
-}
-
-function readNullableString(payload: Record<string, unknown>, key: string): string | null | undefined {
-  if (!(key in payload)) {
-    return undefined;
-  }
-  if (payload[key] === null) {
-    return null;
-  }
-  return typeof payload[key] === "string" ? payload[key].trim() : undefined;
-}
-
-function readStringAlias(payload: Record<string, unknown>, primaryKey: string, aliasKey: string): string | undefined {
-  if (typeof payload[primaryKey] === "string") {
-    return payload[primaryKey].trim();
-  }
-  if (typeof payload[aliasKey] === "string") {
-    return payload[aliasKey].trim();
-  }
-  return undefined;
+  return parseOptionalString(payload, key);
 }
 
 function readStringArray(payload: Record<string, unknown>, key: string): string[] | undefined {
@@ -81,34 +54,11 @@ function readNumberArray(payload: Record<string, unknown>, key: string): number[
   return numbers.length > 0 ? numbers : undefined;
 }
 
-function readOptionalNumber(payload: Record<string, unknown>, key: string): number | undefined {
-  const value = payload[key];
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : undefined;
-  }
-  if (typeof value === "string") {
-    const parsed = Number(value.trim());
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  return undefined;
-}
-
 function clampImportLimit(value: number | undefined): number | undefined {
   if (!Number.isFinite(value)) {
     return undefined;
   }
   return Math.max(1, Math.min(100, Math.trunc(value as number)));
-}
-
-function readEnum<T extends string>(payload: Record<string, unknown>, key: string, values: readonly T[]): T | undefined {
-  const value = readString(payload, key);
-  return value && values.includes(value as T) ? value as T : undefined;
-}
-
-function readSprintStatus(value: unknown): CreateSprintInput["status"] | UpdateSprintInput["status"] | undefined {
-  return typeof value === "string" && VALID_SPRINT_STATUSES.includes(value as typeof VALID_SPRINT_STATUSES[number])
-    ? value as CreateSprintInput["status"]
-    : undefined;
 }
 
 function normalizeLinkedIssues(value: unknown): CreateSprintInput["linkedIssues"] | undefined {
@@ -166,12 +116,12 @@ function hasExplicitIssueReferences(input: IssueSearchInput): boolean {
 function buildImportIssueSearchInput(payload: Record<string, unknown>): IssueSearchInput {
   const input: IssueSearchInput = {
     search: readString(payload, "search"),
-    provider: readEnum(payload, "provider", ["github", "gitlab", "jira"] as const),
+    provider: parseOptionalEnumStrict(payload, "provider", ["github", "gitlab", "jira"] as const),
     repository: readString(payload, "repository"),
     hostDomain: readString(payload, "hostDomain"),
     projectKey: readString(payload, "projectKey"),
-    state: readEnum(payload, "state", ["open", "closed", "all"] as const),
-    status: readEnum(payload, "status", ["open", "in_progress", "done", "all"] as const),
+    state: parseOptionalEnumStrict(payload, "state", ["open", "closed", "all"] as const),
+    status: parseOptionalEnumStrict(payload, "status", ["open", "in_progress", "done", "all"] as const),
     labels: readStringArray(payload, "labels"),
     assignee: readString(payload, "assignee"),
     assigneeText: readString(payload, "assigneeText"),
@@ -187,9 +137,9 @@ function buildImportIssueSearchInput(payload: Record<string, unknown>): IssueSea
     createdBefore: readString(payload, "createdBefore"),
     updatedAfter: readString(payload, "updatedAfter"),
     updatedBefore: readString(payload, "updatedBefore"),
-    sortField: readEnum(payload, "sortField", ["updated", "created", "comments", "priority", "status", "assignee", "reporter"] as const),
-    sortDirection: readEnum(payload, "sortDirection", ["asc", "desc"] as const),
-    limit: clampImportLimit(readOptionalNumber(payload, "limit")),
+    sortField: parseOptionalEnumStrict(payload, "sortField", ["updated", "created", "comments", "priority", "status", "assignee", "reporter"] as const),
+    sortDirection: parseOptionalEnumStrict(payload, "sortDirection", ["asc", "desc"] as const),
+    limit: clampImportLimit(parseOptionalIntegerStrict(payload, "limit")),
   };
   return input;
 }
@@ -218,10 +168,10 @@ function normalizeCreateSprintInput(payload: Record<string, unknown>): CreateSpr
   const input: CreateSprintInput = {
     name: readRequiredStringAlias(payload, "name", "title"),
   };
-  const originalPrompt = readNullableString(payload, "originalPrompt");
-  const goal = readStringAlias(payload, "goal", "goalMarkdown");
+  const originalPrompt = parseOptionalNullableString(payload, "originalPrompt");
+  const goal = parseOptionalStringAlias(payload, "goal", "goalMarkdown");
   const slug = readString(payload, "slug");
-  const status = readSprintStatus(payload.status);
+  const status = parseOptionalEnumStrict(payload, "status", VALID_SPRINT_STATUSES);
   const linkedIssues = normalizeLinkedIssues(payload.linkedIssues);
 
   if (originalPrompt !== undefined) input.originalPrompt = originalPrompt;
@@ -244,10 +194,10 @@ function normalizeUpdateSprintInput(payload: Record<string, unknown>): UpdateSpr
   if ("name" in payload || "title" in payload) {
     input.name = readRequiredStringAlias(payload, "name", "title");
   }
-  const originalPrompt = readNullableString(payload, "originalPrompt");
-  const goal = readStringAlias(payload, "goal", "goalMarkdown");
+  const originalPrompt = parseOptionalNullableString(payload, "originalPrompt");
+  const goal = parseOptionalStringAlias(payload, "goal", "goalMarkdown");
   const slug = readString(payload, "slug");
-  const status = readSprintStatus(payload.status);
+  const status = parseOptionalEnumStrict(payload, "status", VALID_SPRINT_STATUSES);
   const linkedIssues = normalizeLinkedIssues(payload.linkedIssues);
 
   if (originalPrompt !== undefined) input.originalPrompt = originalPrompt;

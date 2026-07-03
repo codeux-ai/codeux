@@ -101,6 +101,34 @@ describe("TaskActions", () => {
     expect(result.result).toEqual({ task });
   });
 
+  it("rejects invalid task priority enum values", async () => {
+    await expect(taskActions.handleTaskAction({
+      domain: "tasks",
+      action: "create",
+      payload: {
+        projectId: "p1",
+        sprintId: "s1",
+        title: "Task title",
+        priority: "urgent",
+      },
+    })).rejects.toThrow("Invalid value for priority. Must be one of: critical, high, medium, low");
+
+    expect(projectManagementRepository.createTask).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid task status enum values", async () => {
+    await expect(taskActions.handleTaskAction({
+      domain: "tasks",
+      action: "update",
+      payload: {
+        taskId: "t1",
+        status: "done",
+      },
+    })).rejects.toThrow("Invalid value for status. Must be one of: pending, in_progress, coding_completed, completed, QA_REVIEW_FAILED");
+
+    expect(projectManagementRepository.updateTask).not.toHaveBeenCalled();
+  });
+
   it("updates task edit fields from MCP payload", async () => {
     const task = { id: "t1", title: "Updated" };
     projectManagementRepository.updateTask.mockReturnValue(task as any);

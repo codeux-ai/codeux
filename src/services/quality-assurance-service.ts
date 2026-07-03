@@ -37,38 +37,23 @@ import { buildTaskPrComposerInput } from "../domain/sprint/composer/task-pr-inpu
 import { composeTaskPrBody, composeTaskPrTitle } from "../domain/sprint/composer/pr-description-composer.js";
 import type { MemoryService } from "./memory-service.js";
 import { syncRemoteBranchIfAvailable } from "./git-branch-sync-service.js";
-import {
-  QA_INFRA_FAILURE_GRACE,
-  RECOVERED_STALE_QA_SUMMARY_PREFIX,
-  evaluateQaReviewBudget,
-  isRecoveredStaleQaRun
-} from "../domain/qa-review/qa-review-budget.js";
-
-import { parseQaError, type QaReviewError } from "../domain/qa-review/qa-review-types.js";
+import { evaluateQaReviewBudget, isRecoveredStaleQaRun } from "../domain/qa-review/qa-review-budget.js";
+import { parseQaError } from "../domain/qa-review/qa-review-types.js";
 import { normalizeQaReviewResult } from "../domain/qa-review/qa-review-result-normalizer.js";
 import type { NormalizedQaReviewResult } from "../domain/qa-review/qa-review-types.js";
 
 
 import { resolveReviewBranch } from "../domain/qa-review/qa-review-branch-resolution.js";
 import { determineTaskReviewIntent } from "../domain/qa-review/task-review-outcome.js";
-import { resolveStaleRunningQaInvocationReason, QA_RUN_START_TIMEOUT_MS as STALE_QA_RUN_START_TIMEOUT_MS } from "../domain/qa-review/qa-review-stale-run.js";
+import { resolveRunningQaRunRecoveryDecision } from "../domain/qa-review/qa-review-stale-run.js";
 import { clearMergeProjectionForRerun, MERGE_PROJECTION_RESET } from "../domain/sprint/task-reset-state.js";
 import { buildQaReviewRequest, resolveTaskTriggerType } from "../domain/qa-review/qa-review-request-builder.js";
-import { buildSprintQaSnapshot, shouldRunSprintQaReview } from "../domain/qa-review/sprint-qa-snapshot.js";
+import { buildSprintQaSnapshot, evaluateSprintQaReviewDecision, shouldRunSprintQaReview } from "../domain/qa-review/sprint-qa-snapshot.js";
 
 type CliQaProvider = Exclude<ProviderId, "jules">;
 
 const SPRINT_RUN_KEEPALIVE_MS = 30_000;
 const SPRINT_LEASE_EXTENSION_MS = 5 * 60 * 1000;
-
-/**
- * How many extra QA attempts beyond `maxTaskReviewRuns` we tolerate when the
- * reviewer keeps failing for infrastructure reasons (auth/config/container).
- * Infra failures don't consume the verdict budget (see
- * {@link QaReviewRepository.countDecisiveTaskRuns}), but a permanently broken
- * reviewer must still stop retrying eventually and escalate the task to a human
- * (QA_REVIEW_FAILED) rather than loop forever or — worse — fail open.
- */
 
 export interface TaskQaReviewOutcome {
   reviewed: boolean;
@@ -493,37 +478,23 @@ export class QualityAssuranceService {
       currentTaskSnapshot,
       isRecoveredStaleRun: recoveredStaleLatestRun,
     });
-    // Only count the budget as exhausted when the latest run actually produced a
-    // verdict (`completed`) at/over the cap. A reviewer that crashed for infra
-    // reasons (`failed`) yielded no judgement and must not let the sprint settle
-    // as reviewed — fall through so it is retried or held instead.
-    const retriesExhausted = typeof latestRun?.runIndex === "number"
-      && latestRun.runIndex >= maxRuns
-      && latestRun.status === "completed";
 
-    if (latestRun?.status === "running") {
+    const sprintQaDecision = evaluateSprintQaReviewDecision({
+      latestRun,
+      maxSprintReviewRuns: maxRuns,
+      shouldRunReview,
+    });
+
+    if (sprintQaDecision.action === "skip_review") {
+      return { reviewed: false, blockedCompletion: false, mergeBlocked: false, reportText: "" };
+    }
+
+    if (sprintQaDecision.action === "block_completion") {
       return {
         reviewed: false,
         blockedCompletion: true,
         mergeBlocked: true,
-        reportText: renderSprintQaPendingReport(latestRun),
-      };
-    }
-    if (latestRun?.outcome === "pass") {
-      return { reviewed: false, blockedCompletion: false, mergeBlocked: false, reportText: "" };
-    }
-    if (retriesExhausted) {
-      return { reviewed: false, blockedCompletion: false, mergeBlocked: false, reportText: "" };
-    }
-    if (
-      (latestRun?.outcome === "changes_requested" || latestRun?.status === "failed")
-      && !shouldRunReview
-    ) {
-      return {
-        reviewed: false,
-        blockedCompletion: true,
-        mergeBlocked: true,
-        reportText: renderSprintQaPendingReport(latestRun),
+        reportText: latestRun ? renderSprintQaPendingReport(latestRun) : "",
       };
     }
 
@@ -855,59 +826,45 @@ export class QualityAssuranceService {
 
     const latestInvocation = this.findLatestQaExecutionInvocation(run);
     const providerInvocation = latestInvocation ? this.resolveProviderInvocationUsage(latestInvocation) : null;
-    const staleRunningInvocationReason = latestInvocation
-      ? resolveStaleRunningQaInvocationReason({
-          invocation: latestInvocation,
-          activeContainerSessionIds: options.activeContainerSessionIds,
-          providerInvocation,
-        })
-      : null;
-    if ((latestInvocation?.status === "running" || latestInvocation?.status === "paused") && !staleRunningInvocationReason) {
+    const recoveryDecision = resolveRunningQaRunRecoveryDecision({
+      run,
+      latestInvocation,
+      providerInvocation,
+      activeContainerSessionIds: options.activeContainerSessionIds,
+    });
+    if (recoveryDecision.action === "keep_running") {
       return run;
     }
 
-    const runStartedAtMs = Date.parse(run.startedAt);
-    const ageMs = Number.isFinite(runStartedAtMs) ? Date.now() - runStartedAtMs : 0;
-    if (!latestInvocation && ageMs < STALE_QA_RUN_START_TIMEOUT_MS) {
-      return run;
-    }
-
-    const finishedAt = latestInvocation?.finishedAt || new Date().toISOString();
-    const summaryMarkdown = staleRunningInvocationReason
-      || (latestInvocation
-        ? `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after the backing invocation ${latestInvocation.status}. Code UX will retry the review.`
-        : `${RECOVERED_STALE_QA_SUMMARY_PREFIX} that never started its backing invocation. Code UX will retry the review.`);
-
-    if (latestInvocation && (latestInvocation.status === "running" || latestInvocation.status === "paused")) {
+    if (latestInvocation && recoveryDecision.shouldFailExecutionInvocation) {
       this.deps.executionRepository.updateExecutionInvocation(latestInvocation.id, {
         status: "failed",
-        finishedAt,
-        errorMessage: summaryMarkdown,
+        finishedAt: recoveryDecision.finishedAt,
+        errorMessage: recoveryDecision.summaryMarkdown,
       });
       this.deps.executionRepository.appendExecutionInvocationMessage(latestInvocation.id, {
         role: "system",
-        contentMarkdown: summaryMarkdown,
+        contentMarkdown: recoveryDecision.summaryMarkdown,
         metadata: {
           recovery: "qa_runtime_reconcile",
           qaRunId: run.id,
         },
-        createdAt: finishedAt,
+        createdAt: recoveryDecision.finishedAt,
       });
 
-
-      if (providerInvocation?.status === "running") {
+      if (providerInvocation && recoveryDecision.shouldFailProviderInvocation) {
         this.deps.executionRepository.updateProviderInvocationUsage(providerInvocation.id, {
           status: "failed",
-          finishedAt,
-          durationMs: this.calculateProviderInvocationDurationMs(providerInvocation, finishedAt),
+          finishedAt: recoveryDecision.finishedAt,
+          durationMs: this.calculateProviderInvocationDurationMs(providerInvocation, recoveryDecision.finishedAt),
         });
       }
     }
 
     return this.deps.qaReviewRepository.updateRun(run.id, {
       status: "failed",
-      summaryMarkdown,
-      finishedAt,
+      summaryMarkdown: recoveryDecision.summaryMarkdown,
+      finishedAt: recoveryDecision.finishedAt,
     });
   }
 

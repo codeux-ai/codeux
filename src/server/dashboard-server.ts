@@ -1,13 +1,7 @@
 import express, { type Express } from "express";
-import * as fs from "fs";
-import * as path from "path";
 import type { Server } from "http";
-import { createServer, request as httpRequest } from "http";
-import type { IncomingMessage } from "http";
-import net from "net";
-import type { Duplex } from "stream";
+import { createServer } from "http";
 import type {
-  DashboardStatus,
   ExecutionAttentionItemSummary,
   ExecutionAssignedWorkerSummary,
   DockerContainer,
@@ -33,7 +27,6 @@ import type {
 import type { OnboardingStateRecord } from "../domain/user/onboarding-state.js";
 import type {
   EffectiveSettingsResponse,
-  ProjectSettings,
   ProjectSettingsOverride,
   SprintSettingsOverride,
   SystemSettings,
@@ -104,7 +97,7 @@ import type { MemoryRepository } from "../repositories/memory-repository.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
 
-import { registerDashboardRoutes } from "./dashboard-route-registration.js";
+import { createDashboardRouteDependencies, registerDashboardRoutes } from "./dashboard-route-registration.js";
 import { applyDashboardPreRouteMiddleware, applyDashboardPostRouteMiddleware } from "./dashboard-middleware.js";
 
 
@@ -118,9 +111,6 @@ import type { EmbeddingModelManager } from "../services/embedding-model-manager.
 import type { EmbeddingService } from "../services/embedding-service.js";
 import type { KnowledgeService } from "../services/knowledge-service.js";
 import type { UpdateStatus } from "../services/update-checker-service.js";
-import { CODE_UX_VERSION } from "../shared/config/code-ux-paths.js";
-import { asyncRoute, syncRoute, toErrorResponse } from "./route-utils.js";
-import { parseTrimmedString, requireTrimmedString } from "./request-parsers.js";
 import { parsePreviewSessionIdFromHost, pipePreviewUpgradeRequest } from "./preview-host-utils.js";
 
 export type DashboardDependencies = Omit<
@@ -339,14 +329,11 @@ export const configureDashboardApp = (options: DashboardServerOptions): Logger =
     }
   });
 
-  const deps: DashboardDependencies = Object.create(options) as unknown as DashboardDependencies;
-  deps.getUpdateStatus = options.getUpdateStatus ?? (async () => ({
-    currentVersion: CODE_UX_VERSION,
-    latestVersion: null,
-    updateAvailable: false,
-    checkedAt: new Date().toISOString(),
-  }));
-  registerDashboardRoutes(app, deps, liveActivityCacheMs);
+  registerDashboardRoutes({
+    app,
+    deps: createDashboardRouteDependencies(options),
+    liveActivityCacheMs,
+  });
 
   applyDashboardPostRouteMiddleware(app, dashboardDir);
 

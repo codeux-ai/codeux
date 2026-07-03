@@ -1,6 +1,11 @@
 import type { ConversationMessageRecord, ConversationThreadRecord } from "../../contracts/connection-chat-types.js";
 import { toNumber } from "../repository-utils.js";
 
+export interface ConversationQueryPaginationOptions {
+  limit?: number;
+  offset?: number;
+}
+
 export interface ThreadRow {
   id: string;
   project_id: string;
@@ -30,6 +35,10 @@ export interface MessageRow {
 }
 
 export const HIDDEN_INTERNAL_VISIBILITY = "hidden";
+export const DEFAULT_CONVERSATION_THREAD_LIST_LIMIT = 500;
+export const MAX_CONVERSATION_THREAD_LIST_LIMIT = 500;
+export const DEFAULT_CONVERSATION_MESSAGE_LIST_LIMIT = 5000;
+export const MAX_CONVERSATION_MESSAGE_LIST_LIMIT = 5000;
 
 export function visibleConversationMessageFilter(alias: string): string {
   return `(COALESCE(json_extract(${alias}.metadata_json, '$.internalVisibility'), '') != '${HIDDEN_INTERNAL_VISIBILITY}')`;
@@ -65,4 +74,24 @@ export function mapMessageRow(row: MessageRow): ConversationMessageRecord {
     metadata: row.metadata_json ? JSON.parse(row.metadata_json) : null,
     createdAt: row.created_at,
   };
+}
+
+export function normalizeQueryLimit(
+  requestedLimit: number | undefined,
+  defaultLimit: number,
+  maxLimit: number,
+): number {
+  if (requestedLimit === undefined || !Number.isFinite(requestedLimit)) {
+    return defaultLimit;
+  }
+
+  return Math.max(1, Math.min(maxLimit, Math.floor(requestedLimit)));
+}
+
+export function normalizeQueryOffset(requestedOffset: number | undefined): number {
+  if (requestedOffset === undefined || !Number.isFinite(requestedOffset)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.floor(requestedOffset));
 }

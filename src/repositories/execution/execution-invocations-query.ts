@@ -1,4 +1,5 @@
 import { DatabaseAdapter as Database } from "../db/database-adapter.js";
+import type { SQLiteParam } from "../repository-utils.js";
 import {
   ExecutionInvocationRecord,
   ExecutionInvocationMessageRecord
@@ -116,6 +117,48 @@ export function queryExecutionInvocations(
   `;
 
   const rows = db.prepare(sql).all(...values, ...paginationValues) as ExecutionInvocationRow[];
+  return rows.map(mapExecutionInvocationRow);
+}
+
+export function queryProjectExecutionSnapshotInvocations(
+  db: Database,
+  params: {
+    projectId: string;
+    sprintRunIds: string[];
+    selectedSprintId?: string | null;
+  },
+): ExecutionInvocationRecord[] {
+  const scopePredicates = [`
+    execution_invocations.id IN (
+      SELECT id
+      FROM execution_invocations
+      WHERE project_id = ?
+      ORDER BY started_at DESC, rowid DESC
+      LIMIT 24
+    )
+  `];
+  const values: SQLiteParam[] = [params.projectId, params.projectId];
+
+  if (params.sprintRunIds.length > 0) {
+    scopePredicates.push(
+      `COALESCE(execution_invocations.sprint_run_id, provider_invocations.sprint_run_id) IN (${params.sprintRunIds.map(() => "?").join(", ")})`,
+    );
+    values.push(...params.sprintRunIds);
+  }
+
+  if (params.selectedSprintId) {
+    scopePredicates.push("COALESCE(execution_invocations.sprint_id, provider_invocations.sprint_id) = ?");
+    values.push(params.selectedSprintId);
+  }
+
+  const rows = db.prepare(`
+    SELECT${INVOCATION_SELECT}
+    FROM execution_invocations${INVOCATION_JOINS}
+    WHERE execution_invocations.project_id = ?
+      AND (${scopePredicates.join(" OR ")})
+    ORDER BY execution_invocations.started_at DESC, execution_invocations.rowid DESC
+  `).all(...values) as ExecutionInvocationRow[];
+
   return rows.map(mapExecutionInvocationRow);
 }
 

@@ -74,12 +74,32 @@ describe("ActivityWriteCoalescer", () => {
   });
 
   it("never throws when the sink fails", () => {
+    const logger = { warn: vi.fn() };
     const coalescer = new ActivityWriteCoalescer(
       { appendActivities: () => { throw new Error("db locked"); } },
       "s1",
-      { flushIntervalMs: 10 },
+      { flushIntervalMs: 10, logger },
     );
     coalescer.push("x");
     expect(() => coalescer.stop()).not.toThrow();
+    expect(logger.warn).toHaveBeenCalledWith(
+      "activity_write_coalescer_flush_failed",
+      expect.objectContaining({
+        sessionId: "s1",
+        batchSize: 1,
+        error: expect.any(Error),
+      }),
+    );
+  });
+
+  it("drain() flushes buffered activity explicitly", () => {
+    const sink = makeSink();
+    const coalescer = new ActivityWriteCoalescer(sink, "s1", { flushIntervalMs: 250 });
+
+    coalescer.push("tail");
+    coalescer.drain();
+
+    expect(sink.batches).toHaveLength(1);
+    expect(sink.batches[0].items.map((item) => item.description)).toEqual(["tail"]);
   });
 });

@@ -60,14 +60,35 @@ Each virtual cycle is project-scoped and one-shot:
 
 1. Scheduler notices worker work for a project.
 2. Code UX creates an ephemeral virtual endpoint and project assignment.
-3. The cycle handles one worker-owned attention item.
-4. It handles one item.
+3. The cycle handles one worker-owned attention item or one pending dispatch.
+4. It executes that single unit of work.
 5. It releases the assignment and deletes the endpoint.
 6. If more worker work remains, it schedules another cycle.
 
 This is intentionally not an endless watch loop.
 
-The background reconcile loop stays conservative (`3s`) to avoid unnecessary sqlite write contention, while virtual worker session completion polling is tighter (`2s`) because it only checks local session and dispatch state. Decisions about whether to schedule a cycle and which attention items are eligible are handled by a set of pure policy helpers (`virtual-worker-scheduling-policy.ts`). Scheduling operations use microtask queueing to consolidate rapid sync events while preventing simultaneous cycle overlap for the same project.
+The background reconcile loop stays conservative (`3s`) to avoid unnecessary sqlite write contention, while virtual worker session completion polling is tighter (`2s`) because it only checks local session and dispatch state. Scheduling operations use microtask queueing to consolidate rapid sync events while preventing simultaneous cycle overlap for the same project.
+
+## Planning Boundary
+
+Virtual worker scheduling is split between pure domain policies and the stateful service:
+
+- `src/domain/workers/virtual-worker-scheduling-policy.ts` decides whether a project should schedule a cycle from plain inputs: worker execution mode, active-cycle state, queued-cycle state, next eligible attention item, and pending-dispatch presence.
+- The same policy module filters attention eligibility, defers orchestrator-managed clarification retries, chooses attention routing (`merge_conflict`, `ci_fix`, `action_required`, or human escalation), and formats virtual claim reasons for open versus reclaimable claimed items.
+- `src/domain/workers/virtual-worker-cycle-plan.ts` combines the next attention item, the next dispatch claim, resolved settings, and provider capacity into a typed `VirtualWorkerCycleAction`. Dispatches keep precedence over attention when both are available.
+
+The pure helpers receive repository/service state as values and do not mutate storage, call providers, start containers, or log. This makes idle worker selection, busy worker skipping, retry deferral, disabled worker mode, and attention escalation directly unit-testable.
+
+`src/services/virtual-worker-service.ts` remains the side-effect boundary. It:
+
+- reads repositories and settings
+- creates and deletes ephemeral virtual endpoints
+- creates and releases project worker assignments
+- claims attention items and dispatch leases
+- checks provider concurrency through `ProviderConcurrencyService`
+- starts CLI provider workflows and Docker workspaces
+- updates session, dispatch, attention, guardrail, memory, and git state
+- emits operational logs
 
 ## Supported Work
 

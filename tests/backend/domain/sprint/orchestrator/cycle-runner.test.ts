@@ -723,6 +723,196 @@ describe("CycleRunner attention sync", () => {
     expect(deps.startTask).toHaveBeenCalledWith(expect.objectContaining({ id: "T2" }), expect.anything());
   });
 
+  it("treats no-output completed tasks as settled and unlocks dependents", async () => {
+    const deps = buildDeps();
+    const runner = new CycleRunner(deps);
+    vi.mocked(deps.sprintExecutionStateService.loadSubtasks).mockResolvedValue([
+      {
+        id: "T1",
+        record_id: "task-1",
+        title: "No-op task",
+        prompt: "No changes were needed.",
+        depends_on: [],
+        is_independent: true,
+        status: "COMPLETED",
+        is_merged: false,
+      },
+      {
+        id: "T2",
+        record_id: "task-2",
+        title: "Dependent task",
+        prompt: "Start once T1 is settled.",
+        depends_on: ["T1"],
+        is_independent: false,
+        status: "BLOCKED",
+        is_merged: false,
+      },
+    ] as any);
+    deps.startTask = vi.fn().mockResolvedValue({ id: "session-2", provider: "codex" });
+
+    const result = await runner.run({
+      action: "orchestrate",
+      automationLevel: "FULL",
+      automationInterventions: DEFAULT_DASHBOARD_SETTINGS.automationInterventions,
+      executionContext: {
+        project: { id: "project-1", name: "Project 1" } as any,
+        sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+        sprintNumber: 1,
+        repoPath: "/repo/project-1",
+        featureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+      },
+      repoPath: "/repo/project-1",
+      defaultFeatureBranch: "feature/sprint-1",
+      retryFailed: false,
+      loopSteps: {
+        loadSubtasks: true,
+        sessionSync: false,
+        statusDerivation: true,
+        startReadyTasks: true,
+        statusTable: false,
+        mergeProtocol: true,
+        actionRequiredProtocol: true,
+      } as any,
+      ciIntelligence: { enabled: false } as any,
+      githubMode: "REMOTE",
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      sprintRunId: "run-1",
+    });
+
+    expect(result.awaitingMerge).toEqual([]);
+    expect(result.subtasks.find((task) => task.id === "T2")).toMatchObject({ status: "RUNNING" });
+    expect(deps.startTask).toHaveBeenCalledWith(expect.objectContaining({ id: "T2" }), expect.anything());
+  });
+
+  it("keeps PR-backed completed tasks waiting for merge and blocks dependents", async () => {
+    const deps = buildDeps();
+    const runner = new CycleRunner(deps);
+    vi.mocked(deps.sprintExecutionStateService.loadSubtasks).mockResolvedValue([
+      {
+        id: "T1",
+        record_id: "task-1",
+        title: "PR task",
+        prompt: "Merge this PR first.",
+        depends_on: [],
+        is_independent: true,
+        status: "COMPLETED",
+        is_merged: false,
+        worker_branch: "worker/T1",
+        pr_url: "https://example.com/pr/1",
+      },
+      {
+        id: "T2",
+        record_id: "task-2",
+        title: "Dependent task",
+        prompt: "Must wait for T1 merge.",
+        depends_on: ["T1"],
+        is_independent: false,
+        status: "BLOCKED",
+        is_merged: false,
+      },
+    ] as any);
+    deps.startTask = vi.fn().mockResolvedValue({ id: "session-2", provider: "codex" });
+
+    const result = await runner.run({
+      action: "orchestrate",
+      automationLevel: "FULL",
+      automationInterventions: DEFAULT_DASHBOARD_SETTINGS.automationInterventions,
+      executionContext: {
+        project: { id: "project-1", name: "Project 1" } as any,
+        sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+        sprintNumber: 1,
+        repoPath: "/repo/project-1",
+        featureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+      },
+      repoPath: "/repo/project-1",
+      defaultFeatureBranch: "feature/sprint-1",
+      retryFailed: false,
+      loopSteps: {
+        loadSubtasks: true,
+        sessionSync: false,
+        statusDerivation: true,
+        startReadyTasks: true,
+        statusTable: false,
+        mergeProtocol: true,
+        actionRequiredProtocol: true,
+      } as any,
+      ciIntelligence: { enabled: false } as any,
+      githubMode: "REMOTE",
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      sprintRunId: "run-1",
+    });
+
+    expect(result.awaitingMerge.map((task) => task.id)).toEqual(["T1"]);
+    expect(result.subtasks.find((task) => task.id === "T2")).toMatchObject({ status: "BLOCKED" });
+    expect(deps.startTask).not.toHaveBeenCalled();
+  });
+
+  it("keeps tasks blocked when a dependency failed", async () => {
+    const deps = buildDeps();
+    const runner = new CycleRunner(deps);
+    vi.mocked(deps.sprintExecutionStateService.loadSubtasks).mockResolvedValue([
+      {
+        id: "T1",
+        record_id: "task-1",
+        title: "Failed task",
+        prompt: "This failed.",
+        depends_on: [],
+        is_independent: true,
+        status: "FAILED",
+        is_merged: false,
+      },
+      {
+        id: "T2",
+        record_id: "task-2",
+        title: "Dependent task",
+        prompt: "Cannot start after failed dependency.",
+        depends_on: ["T1"],
+        is_independent: false,
+        status: "BLOCKED",
+        is_merged: false,
+      },
+    ] as any);
+    deps.startTask = vi.fn().mockResolvedValue({ id: "session-2", provider: "codex" });
+
+    const result = await runner.run({
+      action: "orchestrate",
+      automationLevel: "FULL",
+      automationInterventions: DEFAULT_DASHBOARD_SETTINGS.automationInterventions,
+      executionContext: {
+        project: { id: "project-1", name: "Project 1" } as any,
+        sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+        sprintNumber: 1,
+        repoPath: "/repo/project-1",
+        featureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+      },
+      repoPath: "/repo/project-1",
+      defaultFeatureBranch: "feature/sprint-1",
+      retryFailed: false,
+      loopSteps: {
+        loadSubtasks: true,
+        sessionSync: false,
+        statusDerivation: true,
+        startReadyTasks: true,
+        statusTable: false,
+        mergeProtocol: true,
+        actionRequiredProtocol: true,
+      } as any,
+      ciIntelligence: { enabled: false } as any,
+      githubMode: "REMOTE",
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      sprintRunId: "run-1",
+    });
+
+    expect(result.subtasks.find((task) => task.id === "T2")).toMatchObject({ status: "BLOCKED" });
+    expect(deps.startTask).not.toHaveBeenCalled();
+  });
+
   it("does not open action_required attention while the same clarification request is already answered", async () => {
     const deps = buildDeps();
     deps.isActionRequiredState = (state?: string) => state === "AWAITING_USER_FEEDBACK";

@@ -160,10 +160,10 @@ describe("VirtualWorkerService", () => {
 
     await virtualWorkerService.reconcile();
 
-    // The first resolution gets cached, the subsequent ones hit the cache
-    // 2 times: once for resolveDashboardSettings(projectId) and once for resolveDashboardSettings(projectId, sprintId)
-    // because sprintId ?? "" resolves to different keys.
-    expect(settingsSpy).toHaveBeenCalledTimes(1);
+    // The repository-level effective settings cache may already be warm from
+    // setup, but this scheduling pass must not repeatedly hit settings rows for
+    // duplicate attention items in the same sprint.
+    expect(settingsSpy.mock.calls.length).toBeLessThanOrEqual(1);
   });
 
   it("reconcile skips projects already scheduled or active", async () => {
@@ -625,6 +625,57 @@ describe("VirtualWorkerService", () => {
         sessionState: "AWAITING_PLAN_APPROVAL",
       },
     });
+
+    const virtualWorkerService = new VirtualWorkerService({
+      settingsRepository,
+      sessionTracking,
+      executionRepository,
+      projectManagementRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectWorkerAssignmentService: new ProjectWorkerAssignmentService(
+        projectWorkerAssignmentRepository,
+        workerEndpointRepository,
+      ),
+      projectAttentionService,
+      workerTaskDispatchService,
+      cliWorkflowService: {
+        startTask: vi.fn(),
+      } as any,
+      providerConcurrencyService: {
+        hasAvailableCapacity: vi.fn().mockResolvedValue(true),
+      } as any,
+    });
+
+    expect((virtualWorkerService as any).projectNeedsVirtualWorker(project.id)).toBe(true);
+  });
+
+  it("projectNeedsVirtualWorker returns true for virtual projects with pending dispatches and no attention", async () => {
+    const {
+      settingsRepository,
+      sessionTracking,
+      projectManagementRepository,
+      executionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionService,
+      workerTaskDispatchService,
+    } = await createFixture();
+
+    const project = projectManagementRepository.createProject({
+      name: "Pending Dispatch Project",
+      sourceType: "local",
+      sourceRef: "/workspace/pending-dispatch-project",
+      defaultBranch: "main",
+    });
+
+    settingsRepository.saveProjectSettings(project.id, {
+      workers: {
+        executionMode: "VIRTUAL",
+        virtualWorkerProvider: "codex",
+      },
+    });
+    vi.spyOn(executionRepository, "listProjectIdsWithPendingDispatches").mockReturnValue([project.id]);
 
     const virtualWorkerService = new VirtualWorkerService({
       settingsRepository,
