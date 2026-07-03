@@ -36,6 +36,12 @@ The Memory UI relies on specific hex colors that match existing app accents:
 - **Filters & Search:** Filter controls wrap into multiple rows with `flex-wrap`, `min-w-0`, and `max-w-full` so tier tabs, sprint selectors, agent selectors, model catalog, add memory, and danger actions never force horizontal scrolling.
 - **Truncation:** Metadata limits string lengths gracefully using `truncate`, `break-words`, and compact badges for connected-memory details.
 
+## Model Catalog
+- The embedding model catalog uses one Warm Void panel instead of a plain grid. The panel header summarizes available, downloaded, stale, and active model state before the card grid.
+- Model cards keep model name, status, description, dimension, size, language, progress, stale count, and action controls in stable regions so one-column mobile and two-column desktop layouts remain scannable.
+- Signal Jade is reserved for download, activate, active, downloaded-progress, and re-embedding progress states. Ember is only used when stale embeddings need re-embedding. Status red is reserved for unavailable/error state and delete affordances.
+- The delete control is an icon-only quiet destructive action with an explicit accessible name. It remains keyboard reachable, has a visible focus ring, and is disabled for the active model.
+
 ## Sidebar Contract
 - The memory search UI only appears in the expanded sidebar. Closing the sidebar clears the active search query so the filter state does not linger invisibly behind the rail.
 - The collapse/expand toggle must remain visible in both states and the arrow should point toward the next action, not the current state.

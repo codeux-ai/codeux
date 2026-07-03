@@ -119,6 +119,8 @@ If deterministic prefiltering finds no cleanup candidates, Code UX records a com
 The Memory settings panel also manages one project-scoped scheduler entry for long-term remediation. Users can set it to Off, Every day, or Every week without leaving Settings. Entries created this way are marked as `memoryRemediationTarget.source = "memory_settings"` so manually created Scheduler page entries are not overwritten.
 
 ## UI Updates and Accessibility
+- The Memory page model catalog is presented as a Warm Void panel with a state summary and responsive model cards. It distinguishes active, downloaded, downloading, stale, and unavailable models without using legacy violet action styling.
+- Model catalog primary actions use Signal Jade for download and activation, stale re-embedding warnings use Ember, and destructive/error states use status red. The downloaded-model delete action is icon-only with an accessible label and is disabled while the model is active.
 - The memory sidebar now starts collapsed by default and exposes a compact rail/tab so the graph canvas remains visible until the user explicitly expands it.
 - Expanding the sidebar opens directly to the current alive memory list for the selected tier, sprint, and agent filter set. The sidebar no longer places search in the primary browse path.
 - Closing the sidebar clears the current search query and selected memory IDs so returning to the sidebar starts from the current visible memory list. `MemorySearch.tsx` remains available as a standalone accessible search control.
