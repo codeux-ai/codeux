@@ -7,6 +7,7 @@ import { failStaleProviderInvocation } from "../../domain/runtime/provider-invoc
 
 const QA_RUN_START_TIMEOUT_MS = 60_000;
 const TASK_CODING_INVOCATION_TYPES = ["task_coding", "cli_task_coding", "cli_task_followup"] as const;
+const STRUCTURED_INVOCATION_TYPES = ["planning", "qa_review"] as const;
 const ACTIVE_DISPATCH_STATUSES = ["queued", "claimed", "running", "cancel_requested"] as const;
 
 interface InvocationRecoveryServiceDeps {
@@ -17,6 +18,84 @@ interface InvocationRecoveryServiceDeps {
 
 export class InvocationRecoveryService {
   constructor(private readonly deps: InvocationRecoveryServiceDeps) {}
+
+  reconcileTerminalProviderLinkedInvocations(): string[] {
+    const executionRepository = this.deps.executionRepository as ExecutionRepository & {
+      listActiveExecutionInvocations?: () => ExecutionInvocationRecord[];
+    };
+    if (typeof executionRepository.listActiveExecutionInvocations !== "function") {
+      return [];
+    }
+
+    const invocations = executionRepository.listActiveExecutionInvocations();
+    if (invocations.length === 0) {
+      return [];
+    }
+
+    const reconciledInvocationIds: string[] = [];
+    for (const invocation of invocations) {
+      if (this.isTypeSpecificStartupInvocation(invocation.type)) {
+        continue;
+      }
+      if (!invocation.providerInvocationId) {
+        const referenceAt = Date.parse(invocation.lastMessageAt || invocation.startedAt);
+        const ageMs = Number.isFinite(referenceAt) ? Date.now() - referenceAt : 0;
+        if (ageMs < QA_RUN_START_TIMEOUT_MS) {
+          continue;
+        }
+        const finishedAt = new Date().toISOString();
+        const message = `Recovered stale ${invocation.type} invocation after it stayed running without provider runtime linkage.`;
+        this.deps.executionRepository.updateExecutionInvocation(invocation.id, {
+          status: "cancelled",
+          finishedAt,
+          errorMessage: null,
+        });
+        this.deps.executionRepository.appendExecutionInvocationMessage(invocation.id, {
+          role: "system",
+          contentMarkdown: message,
+          metadata: {
+            recovery: "startup_terminal_provider_invocation_reconcile",
+            providerInvocationId: null,
+          },
+          createdAt: finishedAt,
+        });
+        reconciledInvocationIds.push(invocation.id);
+        continue;
+      }
+      const providerInvocation = this.deps.executionRepository.getProviderInvocationUsage(invocation.providerInvocationId);
+      if (!providerInvocation || providerInvocation.status === "running") {
+        continue;
+      }
+
+      const finishedAt = providerInvocation.finishedAt || new Date().toISOString();
+      const status = this.mapTerminalProviderStatus(providerInvocation.status);
+      const message = `Recovered stale ${invocation.type} invocation after the backing provider invocation ${providerInvocation.status}.`;
+      this.deps.executionRepository.updateExecutionInvocation(invocation.id, {
+        status,
+        finishedAt,
+        errorMessage: status === "failed" ? message : null,
+      });
+      this.deps.executionRepository.appendExecutionInvocationMessage(invocation.id, {
+        role: "system",
+        contentMarkdown: message,
+        metadata: {
+          recovery: "startup_terminal_provider_invocation_reconcile",
+          providerInvocationId: providerInvocation.id,
+          providerStatus: providerInvocation.status,
+        },
+        createdAt: finishedAt,
+      });
+
+      reconciledInvocationIds.push(invocation.id);
+    }
+
+    return reconciledInvocationIds;
+  }
+
+  private isTypeSpecificStartupInvocation(type: string): boolean {
+    return TASK_CODING_INVOCATION_TYPES.includes(type as (typeof TASK_CODING_INVOCATION_TYPES)[number])
+      || STRUCTURED_INVOCATION_TYPES.includes(type as (typeof STRUCTURED_INVOCATION_TYPES)[number]);
+  }
 
   async reconcileInterruptedStructuredInvocations(activeContainerSessionIds: ReadonlySet<string>): Promise<string[]> {
     const executionRepository = this.deps.executionRepository as ExecutionRepository & {
@@ -205,6 +284,16 @@ export class InvocationRecoveryService {
     }
 
     return null;
+  }
+
+  private mapTerminalProviderStatus(status: ProviderInvocationUsageRecord["status"]): "completed" | "failed" | "cancelled" {
+    if (status === "completed") {
+      return "completed";
+    }
+    if (status === "cancelled") {
+      return "cancelled";
+    }
+    return "failed";
   }
 
   reconcileOrphanedTaskCodingProviderInvocations(): string[] {

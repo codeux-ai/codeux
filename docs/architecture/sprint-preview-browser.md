@@ -77,7 +77,7 @@ Install behavior:
 - preview containers now reuse the shared Docker runtime package caches instead of mounting host `node_modules`, and pnpm is pinned to a persistent store under that runtime cache so exported workspaces do not trigger cold installs on every rebuild
 - preview docker arguments and runtime path layouts are deterministically constructed via the helper in `sprint-preview-docker-plan.ts`
 - preview fallback now prefers the base image plus app-level install/build commands over re-running the worker-oriented setup script, which avoids unrelated provider/Playwright bootstrap work from blocking app previews
-- the shared worker setup script now leaves Playwright bootstrap disabled by default, so fresh Docker startup in WSL is not blocked by browser downloads unless an image explicitly opts in with `CODE_UX_INSTALL_PLAYWRIGHT=1`
+- preview image resolution keeps Playwright bootstrap disabled even when the provider Docker Runtime setting preinstalls Playwright browsers for coding containers; preview startup avoids unrelated browser downloads unless that runtime is explicitly changed later
 - before the preview container is created, Code UX repairs the per-sprint Docker volume by creating the expected workspace, `HOME`, npm cache, and pnpm store directories as root, then applying ownership and writable directory permissions so the non-root preview bootstrap can start reliably
 
 Runtime command preference:

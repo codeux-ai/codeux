@@ -122,6 +122,7 @@ export class DockerRunner implements IDockerRunner {
     const runtimeNpmPrefix = pathPosix.join(runtimeHome, ".npm-global");
     const runtimeNpmCache = pathPosix.join(runtimeHome, ".npm-cache");
     const runtimeVolumeName = buildRuntimeVolumeName(workspace.volumeName);
+    const installPlaywrightBrowsers = workflowSettings.containerInstallPlaywrightBrowsers !== false;
 
     await this.maybeLogDockerPathMappingHint(sessionId, repoPath, onActivity);
 
@@ -135,6 +136,7 @@ export class DockerRunner implements IDockerRunner {
         baseImage,
         setupScriptPath,
         cacheEnabled: workflowSettings.containerCacheSetupScriptImage,
+        installPlaywrightBrowsers,
         runtimeRoot,
         repoPath,
         signal,
@@ -213,6 +215,7 @@ export class DockerRunner implements IDockerRunner {
       dockerArgs.push(
         "-e", `CODE_UX_GIT_USER_NAME=${workflowSettings.containerGitUserName}`,
         "-e", `CODE_UX_GIT_USER_EMAIL=${workflowSettings.containerGitUserEmail}`,
+        "-e", `CODE_UX_INSTALL_PLAYWRIGHT=${installPlaywrightBrowsers ? "1" : "0"}`,
       );
 
       if (setupScriptPath && resolvedImage.runSetupScriptAtRuntime) {

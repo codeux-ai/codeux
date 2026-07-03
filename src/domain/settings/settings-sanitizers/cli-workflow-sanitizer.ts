@@ -71,6 +71,10 @@ export const sanitizeCliWorkflow = (
       cliInput.containerCacheSetupScriptImage,
       DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerCacheSetupScriptImage
     ),
+    containerInstallPlaywrightBrowsers: readBoolean(
+      cliInput.containerInstallPlaywrightBrowsers,
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerInstallPlaywrightBrowsers
+    ),
     containerMountGitConfig: readBoolean(
       cliInput.containerMountGitConfig,
       DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerMountGitConfig

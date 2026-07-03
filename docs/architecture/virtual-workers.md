@@ -123,6 +123,7 @@ For merge conflicts, Code UX:
 - merges the target branch into it
 - runs the selected CLI provider against the conflict context plus the worker agent's current long-term and sprint memory context when available
 - accepts both the original merge-conflict prompt payload fields (`currentTaskPrompt`, `mergedTaskPrompts`) and the newer task-context payload fields (`currentTask`, `featureBranchTaskContexts`) when constructing that provider prompt
+- explicitly instructs the worker to preserve exact literal identifiers from the prompt and conflict content, including branch names, file paths, directory names, timestamp-like marker strings, task keys, separators, hyphens, underscores, colons, and casing, and to repair malformed variants back to exact prompt literals, so conflict repair does not silently rename branch-specific artifacts
 - requires the worker to write durable learnings to `.task-learnings.md`, which Code UX captures back into memory after the conflict is resolved
 - verifies conflicts are resolved
 - verifies the resolved source branch actually contains `origin/<targetBranch>` before clearing the merge-conflict attention item

@@ -107,6 +107,12 @@ function isTerminalSessionState(state: string | undefined): boolean {
   return state === "COMPLETED" || state === "FAILED" || state === "CANCELLED" || state === "QUOTA" || state === "RATE_LIMITED";
 }
 
+function isProviderCancellationError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return /Command spawner host exited/i.test(message)
+    && /(signal=SIGINT|signal=SIGTERM|signal=SIGHUP)/i.test(message);
+}
+
 function extractPullRequest(session: JulesSession): { url?: string; workerBranch?: string } | null {
   const output = (session.outputs || [])
     .map((entry) => entry.pullRequest)
@@ -795,6 +801,7 @@ export class VirtualWorkerService {
         });
       }
       await this.ensureMergeConflictResolved(finalWorktreePath);
+      await this.ensureMergeConflictPreservesPromptLiterals(finalWorktreePath, item);
       await this.finalizeMergeCommit(finalWorktreePath, sourceBranch, targetBranch);
       await this.ensureTargetMergedIntoSource(finalWorktreePath, targetRef);
       if (settings.memory?.enabled && settings.memory.autoCaptureSprint) {
@@ -876,13 +883,56 @@ export class VirtualWorkerService {
       succeeded = true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      if (isProviderCancellationError(error)) {
+        this.deps.sessionTracking.updateSession(sessionId, { state: "CANCELLED" });
+        this.deps.sessionTracking.appendActivity(sessionId, {
+          originator: "system",
+          description: `Virtual worker merge-conflict run cancelled before completion: ${message}`,
+        });
+        this.deps.logger?.info("Virtual worker merge-conflict run cancelled", {
+          projectId: item.projectId,
+          sprintId: item.sprintId,
+          taskId: item.taskId,
+          attentionItemId: item.id,
+          sessionId,
+          provider,
+          error,
+        });
+        return;
+      }
       this.deps.sessionTracking.updateSession(sessionId, { state: "FAILED" });
       this.deps.sessionTracking.appendActivity(sessionId, {
         originator: "system",
         description: `Virtual worker failed to resolve merge conflict: ${message}`,
       });
+      const retryEval = this.evaluateMergeConflictGuardrail(settings, guardrailScope, item);
+      if (!retryEval || retryEval.allowed || retryEval.action === "WARN_ONLY") {
+        const now = new Date().toISOString();
+        this.deps.projectAttentionService.patchItemPayload(item.id, {
+          lastVirtualWorkerError: message,
+          lastVirtualWorkerFailedAt: now,
+          lastVirtualWorkerProvider: provider,
+          lastVirtualWorkerSessionId: sessionId,
+          mergeConflictRetryCount: retryEval?.count ?? null,
+          mergeConflictRetryCap: retryEval?.cap ?? null,
+        });
+        this.deps.logger?.warn("Virtual worker merge-conflict attempt failed; leaving attention retryable", {
+          projectId: item.projectId,
+          sprintId: item.sprintId,
+          taskId: item.taskId,
+          attentionItemId: item.id,
+          sessionId,
+          provider,
+          retryCount: retryEval?.count,
+          retryCap: retryEval?.cap,
+          error,
+        });
+        return;
+      }
       this.escalateAttentionToHuman(workerEndpointId, item, [
         `Virtual ${this.getProviderLabel(provider)} worker failed to resolve the merge conflict automatically.`,
+        "",
+        `Attempts: ${retryEval.count}/${retryEval.cap > 0 ? retryEval.cap : "∞"}`,
         "",
         `Error: ${message}`,
         "",
@@ -1467,6 +1517,111 @@ export class VirtualWorkerService {
     }
   }
 
+  private async ensureMergeConflictPreservesPromptLiterals(
+    worktreePath: string,
+    item: ProjectAttentionItemRecord,
+  ): Promise<void> {
+    const requiredLiterals = this.extractRequiredMergeTimestampLiterals(item);
+    if (requiredLiterals.length === 0) {
+      return;
+    }
+
+    const malformedVariants = new Map<string, string>();
+    for (const literal of requiredLiterals) {
+      for (const variant of this.buildMalformedTimestampLiteralVariants(literal)) {
+        malformedVariants.set(variant, literal);
+      }
+    }
+    if (malformedVariants.size === 0) {
+      return;
+    }
+
+    const matches: string[] = [];
+    try {
+      const grepArgs = [
+        "grep",
+        "--cached",
+        "-n",
+        "-F",
+        ...Array.from(malformedVariants.keys()).flatMap((variant) => ["-e", variant]),
+        "--",
+        ".",
+      ];
+      const result = await this.runWorkspaceCommand(worktreePath, "git", grepArgs);
+      matches.push(...result.stdout.split("\n").map((line) => line.trim()).filter(Boolean));
+    } catch {
+      // `git grep` exits non-zero when there are no matches.
+    }
+
+    try {
+      const result = await this.runWorkspaceCommand(worktreePath, "git", [
+        "ls-files",
+        "--cached",
+        "--others",
+        "--exclude-standard",
+      ]);
+      for (const filePath of result.stdout.split("\n").map((line) => line.trim()).filter(Boolean)) {
+        for (const variant of malformedVariants.keys()) {
+          if (filePath.includes(variant)) {
+            matches.push(filePath);
+            break;
+          }
+        }
+      }
+    } catch {
+      // Path-level validation is best-effort; content validation above is the primary guard.
+    }
+
+    if (matches.length === 0) {
+      return;
+    }
+
+    const sample = matches.slice(0, 8).join("; ");
+    throw new Error(
+      `Merge conflict resolution mutated required prompt timestamp literals. Found malformed marker variants in: ${sample}`,
+    );
+  }
+
+  private extractRequiredMergeTimestampLiterals(item: ProjectAttentionItemRecord): string[] {
+    const payload = item.payload || {};
+    const texts = [
+      item.summaryMarkdown,
+      this.extractCurrentTaskPrompt(payload),
+      ...this.extractMergeConflictTaskPrompts(
+        Array.isArray(payload.mergedTaskPrompts)
+          ? payload.mergedTaskPrompts
+          : Array.isArray(payload.featureBranchTaskContexts)
+            ? payload.featureBranchTaskContexts
+            : [],
+      ),
+    ];
+    const literals = new Set<string>();
+    const markerPattern = /\b\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\b/g;
+    for (const text of texts) {
+      if (!text) {
+        continue;
+      }
+      for (const match of text.matchAll(markerPattern)) {
+        literals.add(match[0]);
+      }
+    }
+    return Array.from(literals);
+  }
+
+  private buildMalformedTimestampLiteralVariants(literal: string): string[] {
+    const match = literal.match(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/);
+    if (!match) {
+      return [];
+    }
+    const [, date, hour, minute, second, millis] = match;
+    return [
+      `${date}T${hour}:${minute}-${second}-${millis}Z`,
+      `${date}T${hour}:${minute}:${second}-${millis}Z`,
+      `${date}T${hour}:${minute}-${second}Z`,
+      `${date}T${hour}:${minute}:${second}Z`,
+    ];
+  }
+
   private async listUnresolvedFiles(worktreePath: string): Promise<string[]> {
     const result = await this.runWorkspaceCommand(worktreePath, "git", ["diff", "--name-only", "--diff-filter=U"]);
     return result.stdout.split("\n").map((entry) => entry.trim()).filter(Boolean);
@@ -1554,6 +1709,7 @@ export class VirtualWorkerService {
           : [],
     );
     const currentTaskPrompt = this.extractCurrentTaskPrompt(payload);
+    const previousFailure = this.formatPreviousMergeConflictFailure(payload);
 
     return [
       "Resolve the active Git merge conflict already present in this worktree.",
@@ -1565,9 +1721,15 @@ export class VirtualWorkerService {
       "",
       "Requirements:",
       "- Preserve the intended work from both branches.",
+      "- Preserve exact literal identifiers, branch names, file paths, directory names, timestamps, marker strings, and task keys from the task prompts and conflict content.",
+      "- Do not normalize, reformat, or reinterpret timestamp-like strings, separators, hyphens, underscores, colons, or casing when copying required identifiers.",
+      "- When resolving text files, copy required existing lines verbatim unless the task prompt explicitly asks you to change that line.",
+      "- If the source branch contains a malformed variant of a required prompt literal, repair it to the exact literal from the task prompt before committing.",
+      "- If two branches contain similarly named paths or markers, keep each branch's exact literals and combine the intended content without inventing replacement names.",
       "- Resolve only the conflict and any directly related fallout.",
       "- Leave the branch in a clean, committed, pushable state.",
       "- Do not open a new pull request or rewrite history.",
+      previousFailure,
       "",
       currentTaskPrompt ? "Current task prompt:" : null,
       currentTaskPrompt || null,
@@ -1582,6 +1744,25 @@ export class VirtualWorkerService {
       item.summaryMarkdown.trim(),
       "",
       workspaceGuidance,
+    ].filter(Boolean).join("\n");
+  }
+
+  private formatPreviousMergeConflictFailure(payload: Record<string, unknown>): string | null {
+    const error = typeof payload.lastVirtualWorkerError === "string" ? payload.lastVirtualWorkerError.trim() : "";
+    if (!error) {
+      return null;
+    }
+    const provider = typeof payload.lastVirtualWorkerProvider === "string" ? payload.lastVirtualWorkerProvider.trim() : "";
+    const sessionId = typeof payload.lastVirtualWorkerSessionId === "string" ? payload.lastVirtualWorkerSessionId.trim() : "";
+    const failedAt = typeof payload.lastVirtualWorkerFailedAt === "string" ? payload.lastVirtualWorkerFailedAt.trim() : "";
+
+    return [
+      "",
+      "Previous automatic merge-conflict attempt failed. Correct this exact issue on this retry:",
+      provider ? `Provider: ${provider}` : null,
+      sessionId ? `Session: ${sessionId}` : null,
+      failedAt ? `Failed at: ${failedAt}` : null,
+      `Error: ${error}`,
     ].filter(Boolean).join("\n");
   }
 

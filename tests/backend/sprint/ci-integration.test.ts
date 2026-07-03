@@ -226,7 +226,7 @@ describe("SprintOrchestrator - CI & Merge Gates", () => {
     });
 
     expect(result.content[0].text).toContain("CI autofix guardrail reached");
-    expect(result.content[0].text).toContain("AGENT INTERVENTION NEEDED");
+    expect(result.content[0].text).toContain("Escalation (AGENT)");
 
     await fs.rm(tmpRoot, { recursive: true, force: true });
   });

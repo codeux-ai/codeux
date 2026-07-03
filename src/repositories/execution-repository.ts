@@ -11,6 +11,7 @@ import {
   queryExecutionInvocationMessages,
   queryExecutionInvocationsByProviderInvocationId,
   queryRunningRetryExecutionInvocations,
+  queryActiveExecutionInvocations,
   queryActiveExecutionInvocationsByTypes,
 } from "./execution/execution-invocations-query.js";
 
@@ -339,6 +340,10 @@ export class ExecutionRepository {
 
   listRunningRetryExecutionInvocations(): ExecutionInvocationRecord[] {
     return queryRunningRetryExecutionInvocations(this.db);
+  }
+
+  listActiveExecutionInvocations(): ExecutionInvocationRecord[] {
+    return queryActiveExecutionInvocations(this.db);
   }
 
   listActiveExecutionInvocationsByTypes(types: string[]): ExecutionInvocationRecord[] {

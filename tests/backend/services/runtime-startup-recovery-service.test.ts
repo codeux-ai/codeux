@@ -5,14 +5,19 @@ import * as path from "path";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
+import { GuardrailRepository } from "../../../src/repositories/guardrail-repository.js";
+import { ProjectAttentionRepository } from "../../../src/repositories/project-attention-repository.js";
+import { ProjectWorkerAssignmentRepository } from "../../../src/repositories/project-worker-assignment-repository.js";
 import { QaReviewRepository } from "../../../src/repositories/qa-review-repository.js";
 import { SessionTrackingRepository } from "../../../src/repositories/session-tracking-repository.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
+import { ProjectAttentionService } from "../../../src/domain/workers/project-attention-service.js";
 import { RuntimeStartupRecoveryService } from "../../../src/services/runtime-startup-recovery-service.js";
 import { QaReviewRecoveryService } from "../../../src/services/runtime-recovery/qa-review-recovery.js";
 import { InvocationRecoveryService } from "../../../src/services/runtime-recovery/invocation-recovery.js";
 import { CliWorkflowService } from "../../../src/services/cli-workflow-service.js";
 import { buildTaskRunKey } from "../../../src/services/task-run-key.js";
+import { GuardrailService } from "../../../src/services/guardrail-service.js";
 import type { SprintOrchestrator } from "../../../src/sprint/sprint-orchestrator.js";
 import type { Logger } from "../../../src/shared/logging/logger.js";
 
@@ -28,6 +33,17 @@ async function createFixture(options?: {
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   const projectRepository = new ProjectManagementRepository(storage);
   const executionRepository = new ExecutionRepository(storage);
+  const guardrailRepository = new GuardrailRepository(storage);
+  const projectAttentionRepository = new ProjectAttentionRepository(storage);
+  const projectWorkerAssignmentRepository = new ProjectWorkerAssignmentRepository(storage);
+  const projectAttentionService = new ProjectAttentionService(
+    projectAttentionRepository,
+    projectWorkerAssignmentRepository,
+  );
+  const guardrailService = new GuardrailService(
+    guardrailRepository,
+    () => DEFAULT_DASHBOARD_SETTINGS.guardrails,
+  );
   const qaReviewRepository = new QaReviewRepository(storage);
   const sessionTracking = new SessionTrackingRepository(path.join(dir, "session-tracking.db"));
   const recoverSprintRun = options?.recoverSprintRun ?? vi.fn().mockResolvedValue(null);
@@ -37,6 +53,8 @@ async function createFixture(options?: {
     executionRepository,
     qaReviewRepository,
     projectManagementRepository: projectRepository,
+    projectAttentionService,
+    guardrailService,
     sprintOrchestrator: {
       recoverSprintRun,
     } as SprintOrchestrator,
@@ -48,6 +66,10 @@ async function createFixture(options?: {
   return {
     projectRepository,
     executionRepository,
+    guardrailRepository,
+    projectAttentionRepository,
+    projectAttentionService,
+    guardrailService,
     qaReviewRepository,
     sessionTracking,
     service,
@@ -64,6 +86,7 @@ describe("RuntimeStartupRecoveryService", () => {
     const { service } = await createFixture();
 
     const qaReviewSpy = vi.spyOn(QaReviewRecoveryService.prototype, "reconcileInterruptedQaReviewRuns");
+    const terminalProviderSpy = vi.spyOn(InvocationRecoveryService.prototype, "reconcileTerminalProviderLinkedInvocations");
     const structuredSpy = vi.spyOn(InvocationRecoveryService.prototype, "reconcileInterruptedStructuredInvocations");
     const taskCodingSpy = vi.spyOn(InvocationRecoveryService.prototype, "reconcileInterruptedTaskCodingInvocations");
     const orphanedProviderSpy = vi.spyOn(InvocationRecoveryService.prototype, "reconcileOrphanedTaskCodingProviderInvocations");
@@ -71,18 +94,102 @@ describe("RuntimeStartupRecoveryService", () => {
     await service.recover();
 
     expect(qaReviewSpy).toHaveBeenCalledTimes(1);
+    expect(terminalProviderSpy).toHaveBeenCalledTimes(1);
     expect(structuredSpy).toHaveBeenCalledTimes(1);
     expect(taskCodingSpy).toHaveBeenCalledTimes(1);
     expect(orphanedProviderSpy).toHaveBeenCalledTimes(1);
 
     const qaOrder = qaReviewSpy.mock.invocationCallOrder[0];
+    const terminalProviderOrder = terminalProviderSpy.mock.invocationCallOrder[0];
     const structOrder = structuredSpy.mock.invocationCallOrder[0];
     const taskCodingOrder = taskCodingSpy.mock.invocationCallOrder[0];
     const providerOrder = orphanedProviderSpy.mock.invocationCallOrder[0];
 
-    expect(qaOrder).toBeLessThan(structOrder);
+    expect(qaOrder).toBeLessThan(terminalProviderOrder);
+    expect(terminalProviderOrder).toBeLessThan(structOrder);
     expect(structOrder).toBeLessThan(taskCodingOrder);
     expect(taskCodingOrder).toBeLessThan(providerOrder);
+  });
+
+  it("demotes premature virtual merge-conflict human escalations back to automatic worker attention", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      guardrailRepository,
+      projectAttentionRepository,
+      projectAttentionService,
+      service,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Premature Escalation Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/premature-escalation-recovery",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Premature Escalation Recovery Sprint",
+      number: 11,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T01",
+      title: "Resolve conflict automatically",
+      status: "coding_completed",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "docker_cli",
+      status: "running",
+    });
+
+    guardrailRepository.record({ projectId: project.id, taskId: task.id, purpose: "merge_conflict" });
+    guardrailRepository.record({ projectId: project.id, taskId: task.id, purpose: "merge_conflict" });
+
+    const escalation = projectAttentionService.openItem({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      attentionType: "human_escalation_required",
+      severity: "high",
+      ownerType: "human",
+      title: "Virtual worker escalation: Merge conflict for T01",
+      summaryMarkdown: "Virtual worker failed once, but the merge-conflict cap is not exhausted.",
+      payload: {
+        sourceAttentionType: "merge_conflict",
+        sourceAttentionItemId: "source-attention-1",
+        escalatedBy: "virtual_worker",
+        repoPath: "/workspace/premature-escalation-recovery",
+      },
+    });
+
+    const result = await service.recover();
+
+    expect(result.demotedPrematureMergeConflictEscalationIds).toEqual([escalation.id]);
+    expect(projectAttentionRepository.getAttentionItem(escalation.id)).toMatchObject({
+      status: "dismissed",
+    });
+
+    const restoredItems = projectAttentionRepository.listProjectAttentionItems(project.id, {
+      statuses: ["open"],
+      limit: 10,
+    });
+    expect(restoredItems).toEqual([
+      expect.objectContaining({
+        attentionType: "merge_conflict",
+        ownerType: "worker",
+        taskId: task.id,
+        sprintRunId: sprintRun.id,
+        payload: expect.objectContaining({
+          recoveredFromHumanEscalationItemId: escalation.id,
+          recoveryReason: "startup_premature_merge_conflict_escalation_demoted",
+          mergeConflictRetryCount: 2,
+          mergeConflictRetryCap: 3,
+        }),
+      }),
+    ]);
   });
 
   it("repairs stale blocked dispatch rows linked to completed task runs", async () => {
@@ -331,6 +438,116 @@ describe("RuntimeStartupRecoveryService", () => {
       errorMessage: null,
     });
     expect(sessionTracking.getSession("jules-stale-task-coding")?.state).toBe("COMPLETED");
+  });
+
+  it("reconciles stale non-task execution audit rows when the provider invocation already failed", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "CI Fix Audit Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/ci-fix-audit-recovery-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "CI Fix Audit Recovery Sprint",
+      number: 10,
+      status: "running",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "docker_cli",
+      status: "running",
+    });
+    const providerInvocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      sessionId: "virtual-cifix-codex-stale",
+      provider: "codex",
+      purpose: "ci_fix",
+      status: "running",
+      startedAt: "2026-03-29T10:00:00.000Z",
+    });
+    executionRepository.updateProviderInvocationUsage(providerInvocation.id, {
+      status: "failed",
+      finishedAt: "2026-03-29T10:00:20.000Z",
+      durationMs: 20_000,
+    });
+    const invocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      providerInvocationId: providerInvocation.id,
+      type: "ci_fix",
+      provider: "codex",
+      status: "running",
+      startedAt: "2026-03-29T10:00:00.000Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledTerminalProviderLinkedInvocationIds).toEqual([invocation.id]);
+    expect(executionRepository.getExecutionInvocation(invocation.id)).toMatchObject({
+      status: "failed",
+      finishedAt: "2026-03-29T10:00:20.000Z",
+      errorMessage: "Recovered stale ci_fix invocation after the backing provider invocation failed.",
+    });
+    expect(executionRepository.listExecutionInvocationMessages(invocation.id)).toEqual([
+      expect.objectContaining({
+        role: "system",
+        contentMarkdown: "Recovered stale ci_fix invocation after the backing provider invocation failed.",
+        metadata: expect.objectContaining({
+          recovery: "startup_terminal_provider_invocation_reconcile",
+          providerInvocationId: providerInvocation.id,
+          providerStatus: "failed",
+        }),
+      }),
+    ]);
+  });
+
+  it("cancels stale non-task execution audit rows without provider runtime linkage", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Chat Compaction Audit Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/chat-compaction-audit-recovery-project",
+    });
+    const invocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      type: "chat_compaction",
+      provider: "qwen-code",
+      status: "running",
+      startedAt: "2026-03-29T10:00:00.000Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledTerminalProviderLinkedInvocationIds).toEqual([invocation.id]);
+    expect(executionRepository.getExecutionInvocation(invocation.id)).toMatchObject({
+      status: "cancelled",
+      errorMessage: null,
+      finishedAt: expect.any(String),
+    });
+    expect(executionRepository.listExecutionInvocationMessages(invocation.id)).toEqual([
+      expect.objectContaining({
+        role: "system",
+        contentMarkdown: "Recovered stale chat_compaction invocation after it stayed running without provider runtime linkage.",
+        metadata: expect.objectContaining({
+          recovery: "startup_terminal_provider_invocation_reconcile",
+          providerInvocationId: null,
+        }),
+      }),
+    ]);
   });
 
   it("reconciles stale active task runs from terminal project task state on startup", async () => {

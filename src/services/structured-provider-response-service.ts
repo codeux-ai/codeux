@@ -34,6 +34,13 @@ export class ProviderEmptyOutputError extends Error {
   }
 }
 
+export class ProviderInvocationCancelledError extends Error {
+  constructor(message = "Provider invocation cancelled.") {
+    super(message);
+    this.name = "ProviderInvocationCancelledError";
+  }
+}
+
 export interface StructuredProviderResponseServiceDeps {
   providerExecutionService: ProviderExecutionService;
   executionRepository?: ExecutionRepository;
@@ -91,6 +98,10 @@ export class StructuredProviderResponseService {
 
       bodyMarkdown = result.text?.trim() || "";
       if (!result.ok) {
+        if (args.signal?.aborted || this.isExecutionInvocationCancelled(args.invocationId)) {
+          throw new ProviderInvocationCancelledError(this.buildProviderCancellationMessage(result.stderr || result.stdout));
+        }
+
         lastError = new ProviderTransportError(
           this.buildProviderFailureMessage(args.providerLabel, result.stderr || result.stdout, currentProviderAttempt),
           currentProviderAttempt,
@@ -181,6 +192,20 @@ export class StructuredProviderResponseService {
       return false;
     }
     return maxProviderAttempts === null || providerAttempts < maxProviderAttempts;
+  }
+
+  private isExecutionInvocationCancelled(invocationId: string | undefined): boolean {
+    if (!invocationId || typeof this.deps.executionRepository?.getExecutionInvocation !== "function") {
+      return false;
+    }
+    return this.deps.executionRepository.getExecutionInvocation(invocationId)?.status === "cancelled";
+  }
+
+  private buildProviderCancellationMessage(output: string | undefined): string {
+    const detail = output?.trim();
+    return detail
+      ? `Provider invocation cancelled: ${detail}`
+      : "Provider invocation cancelled.";
   }
 
   private buildProviderFailureMessage(providerLabel: string, output: string | undefined, attempt: number): string {

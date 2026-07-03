@@ -90,6 +90,26 @@ describe("DockerSetupImageCache", () => {
     const dockerfileWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("Dockerfile"));
     expect(dockerfileWrite?.[1]).toContain('LABEL org.opencontainers.image.title="Code UX setup cache"');
     expect(dockerfileWrite?.[1]).toContain('LABEL ai.codeux.base-image="node:24-bookworm"');
+    expect(dockerfileWrite?.[1]).not.toContain("PLAYWRIGHT_BROWSERS_PATH");
+  });
+
+  it("bakes Playwright browser location into cached images when enabled", async () => {
+    const result = await new DockerSetupImageCache().resolveImage({
+      baseImage: "node:24-bookworm",
+      setupScriptPath: "/repo/.code-ux/container/setup.sh",
+      cacheEnabled: true,
+      installPlaywrightBrowsers: true,
+      runtimeRoot: "/runtime",
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+      mapSourcePathForDaemon: (sourcePath) => `/mapped${sourcePath}`,
+    });
+
+    expect(result.runSetupScriptAtRuntime).toBe(false);
+    const dockerfileWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("Dockerfile"));
+    expect(dockerfileWrite?.[1]).toContain("ENV CODE_UX_INSTALL_PLAYWRIGHT=1");
+    expect(dockerfileWrite?.[1]).toContain("ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright");
+    expect(dockerfileWrite?.[1]).toContain("chmod -R a+rX /ms-playwright");
   });
 
   it("falls back to runtime setup when the build fails", async () => {

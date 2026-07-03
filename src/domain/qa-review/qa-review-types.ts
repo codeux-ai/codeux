@@ -105,6 +105,8 @@ export function parseQaError(error: unknown): QaReviewError {
 
 export function isQaReviewCancellationError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error || "");
-  return /Command spawner host exited/i.test(message)
-    && /(signal=SIGINT|signal=SIGTERM|signal=SIGHUP)/i.test(message);
+  return (
+    /Command spawner host exited/i.test(message)
+      && /(signal=SIGINT|signal=SIGTERM|signal=SIGHUP)/i.test(message)
+  ) || /provider invocation cancelled|invocation cancelled/i.test(message);
 }

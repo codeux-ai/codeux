@@ -222,6 +222,17 @@ export function queryActiveExecutionInvocationsByTypes(
   return rows.map(mapExecutionInvocationRow);
 }
 
+export function queryActiveExecutionInvocations(db: Database): ExecutionInvocationRecord[] {
+  const rows = db.prepare(`
+    SELECT${INVOCATION_SELECT}
+    FROM execution_invocations${INVOCATION_JOINS}
+    WHERE execution_invocations.status IN ('running', 'paused')
+    ORDER BY execution_invocations.started_at DESC, execution_invocations.rowid DESC
+  `).all() as ExecutionInvocationRow[];
+
+  return rows.map(mapExecutionInvocationRow);
+}
+
 export function queryProjectInvocations(
   db: import("../db/database-adapter.js").DatabaseAdapter,
   params: import("../../contracts/invocation-types.js").ProjectInvocationsQuery & { projectId: string }

@@ -8,11 +8,13 @@ import type { QaReviewRepository } from "../repositories/qa-review-repository.js
 import type { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
 import type { SprintOrchestrator } from "../sprint/sprint-orchestrator.js";
 import type { Logger } from "../shared/logging/logger.js";
+import type { ProjectAttentionService } from "../domain/workers/project-attention-service.js";
 import { sanitizeToken } from "./cli-workflow-utils.js";
 import { QaReviewRecoveryService } from "./runtime-recovery/qa-review-recovery.js";
 import { InvocationRecoveryService } from "./runtime-recovery/invocation-recovery.js";
 import { calculateInvocationDurationMs, isTerminalTaskRunState } from "./runtime-recovery/recovery-utils.js";
 import { cancelStaleProviderInvocation, failStaleProviderInvocation } from "../domain/runtime/provider-invocation-recovery.js";
+import type { GuardrailService } from "./guardrail-service.js";
 
 const ACTIVE_SPRINT_RUN_STATUSES = ["queued", "running"] as const;
 const ACTIVE_DISPATCH_STATUSES = ["queued", "claimed", "running", "cancel_requested"] as const;
@@ -30,6 +32,8 @@ export interface RuntimeStartupRecoveryResult {
   reconciledProviderDispatchIds: string[];
   reconciledContainerInvocationIds: string[];
   reconciledQaReviewRunIds: string[];
+  reconciledTerminalProviderLinkedInvocationIds: string[];
+  demotedPrematureMergeConflictEscalationIds: string[];
   reconciledStructuredInvocationIds: string[];
   reconciledTaskCodingInvocationIds: string[];
   reconciledTaskCodingProviderIds: string[];
@@ -47,6 +51,8 @@ interface RuntimeStartupRecoveryServiceDeps {
   executionRepository: ExecutionRepository;
   qaReviewRepository?: QaReviewRepository;
   projectManagementRepository: ProjectManagementRepository;
+  projectAttentionService?: Pick<ProjectAttentionService, "listActiveProjectItems" | "openItem" | "resolveItem">;
+  guardrailService?: Pick<GuardrailService, "evaluate">;
   sprintOrchestrator: SprintOrchestrator;
   dockerService?: Pick<{ listContainers: () => Promise<DockerContainer[]> }, "listContainers">;
   getDashboardSettings?: (scope?: DashboardSettingsScope) => DashboardSettings;
@@ -77,6 +83,8 @@ export class RuntimeStartupRecoveryService {
     const reconciledRetryInvocationIds = this.reconcileInterruptedRetryWaits();
     const reconciledContainerInvocationIds = await this.reconcileInterruptedCliInvocations(new Set(recoveredCliSessionIds), activeContainerSessionIds);
     const reconciledQaReviewRunIds = await qaReviewRecovery.reconcileInterruptedQaReviewRuns(activeContainerSessionIds);
+    const reconciledTerminalProviderLinkedInvocationIds = invocationRecovery.reconcileTerminalProviderLinkedInvocations();
+    const demotedPrematureMergeConflictEscalationIds = this.demotePrematureMergeConflictEscalations();
     const reconciledStructuredInvocationIds = await invocationRecovery.reconcileInterruptedStructuredInvocations(activeContainerSessionIds);
     const rehydratedSprintRunIds = this.rehydrateDurableProviderSprintRuns();
     const reconciledTaskCodingInvocationIds = await invocationRecovery.reconcileInterruptedTaskCodingInvocations(activeContainerSessionIds);
@@ -93,6 +101,8 @@ export class RuntimeStartupRecoveryService {
       || reconciledRetryInvocationIds.length > 0
       || reconciledContainerInvocationIds.length > 0
       || reconciledQaReviewRunIds.length > 0
+      || reconciledTerminalProviderLinkedInvocationIds.length > 0
+      || demotedPrematureMergeConflictEscalationIds.length > 0
       || reconciledStructuredInvocationIds.length > 0
       || reconciledTaskCodingInvocationIds.length > 0
       || reconciledTaskCodingProviderIds.length > 0
@@ -110,6 +120,8 @@ export class RuntimeStartupRecoveryService {
         reconciledRetryInvocations: reconciledRetryInvocationIds.length,
         reconciledContainerInvocations: reconciledContainerInvocationIds.length,
         reconciledQaReviewRuns: reconciledQaReviewRunIds.length,
+        reconciledTerminalProviderLinkedInvocations: reconciledTerminalProviderLinkedInvocationIds.length,
+        demotedPrematureMergeConflictEscalations: demotedPrematureMergeConflictEscalationIds.length,
         reconciledStructuredInvocations: reconciledStructuredInvocationIds.length,
         reconciledTaskCodingInvocations: reconciledTaskCodingInvocationIds.length,
         reconciledTaskCodingProviders: reconciledTaskCodingProviderIds.length,
@@ -129,6 +141,8 @@ export class RuntimeStartupRecoveryService {
       reconciledRetryInvocationIds,
       reconciledContainerInvocationIds,
       reconciledQaReviewRunIds,
+      reconciledTerminalProviderLinkedInvocationIds,
+      demotedPrematureMergeConflictEscalationIds,
       reconciledStructuredInvocationIds,
       reconciledTaskCodingInvocationIds,
       reconciledTaskCodingProviderIds,
@@ -139,6 +153,81 @@ export class RuntimeStartupRecoveryService {
       resumedSprintRunIds,
       supersededSprintRunIds,
     };
+  }
+
+  private demotePrematureMergeConflictEscalations(): string[] {
+    const projectAttentionService = this.deps.projectAttentionService;
+    const guardrailService = this.deps.guardrailService;
+    if (!projectAttentionService || !guardrailService) {
+      return [];
+    }
+
+    const demotedIds: string[] = [];
+    const projects = this.deps.projectManagementRepository.listProjects().projects;
+
+    for (const project of projects) {
+      const items = projectAttentionService.listActiveProjectItems(project.id);
+      for (const item of items) {
+        if (
+          item.ownerType !== "human"
+          || item.attentionType !== "human_escalation_required"
+          || !item.taskId
+          || item.payload?.sourceAttentionType !== "merge_conflict"
+          || item.payload?.escalatedBy !== "virtual_worker"
+        ) {
+          continue;
+        }
+
+        const guardrail = guardrailService.evaluate(
+          { projectId: item.projectId, sprintId: item.sprintId },
+          item.taskId,
+          "merge_conflict",
+        );
+        if (!guardrail.allowed && guardrail.action !== "WARN_ONLY") {
+          continue;
+        }
+
+        const restoredTitle = item.title.replace(/^Virtual worker escalation:\s*/i, "").trim()
+          || "Merge conflict requires automatic resolution";
+        const payload = {
+          ...(item.payload || {}),
+          recoveredFromHumanEscalationItemId: item.id,
+          recoveryReason: "startup_premature_merge_conflict_escalation_demoted",
+          mergeConflictRetryCount: guardrail.count,
+          mergeConflictRetryCap: guardrail.cap,
+        };
+
+        projectAttentionService.openItem({
+          projectId: item.projectId,
+          sprintId: item.sprintId,
+          taskId: item.taskId,
+          sprintRunId: item.sprintRunId,
+          dispatchId: item.dispatchId,
+          attentionType: "merge_conflict",
+          severity: item.severity,
+          ownerType: "worker",
+          title: restoredTitle,
+          summaryMarkdown: item.summaryMarkdown,
+          payload,
+        });
+        projectAttentionService.resolveItem(item.id, {
+          status: "dismissed",
+          reason: "startup_premature_merge_conflict_escalation_demoted",
+          resolutionSummaryMarkdown: [
+            "Startup recovery moved this premature merge-conflict escalation back to automatic virtual-worker handling.",
+            "",
+            `The merge-conflict guardrail still allowed another attempt (${guardrail.count}/${guardrail.cap > 0 ? guardrail.cap : "∞"}).`,
+          ].join("\n"),
+          payloadPatch: {
+            recoveredByStartup: true,
+            recoveryReason: "startup_premature_merge_conflict_escalation_demoted",
+          },
+        });
+        demotedIds.push(item.id);
+      }
+    }
+
+    return demotedIds;
   }
 
   private rehydrateDurableProviderSprintRuns(): string[] {

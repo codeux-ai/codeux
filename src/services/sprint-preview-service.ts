@@ -222,6 +222,7 @@ export class SprintPreviewService {
           baseImage,
           setupScriptPath,
           cacheEnabled: effectiveSettings.cliWorkflow.containerCacheSetupScriptImage,
+          installPlaywrightBrowsers: false,
           buildIfMissing: false,
           runtimeRoot: projectRuntimeRoot,
           repoPath: project.baseDir,

@@ -178,6 +178,7 @@ describe("validateSettingsPayload", () => {
         containerImage: 1,
         containerSetupScriptPath: 2,
         containerCacheSetupScriptImage: "bad",
+        containerInstallPlaywrightBrowsers: "bad",
         containerMountGitConfig: "bad",
         containerGitUserName: 7,
         containerGitUserEmail: 8,
@@ -242,6 +243,7 @@ describe("validateSettingsPayload", () => {
     expect(paths).toContain("cliWorkflow.executionMode");
     expect(paths).toContain("cliWorkflow.gitMode");
     expect(paths).toContain("cliWorkflow.containerCacheSetupScriptImage");
+    expect(paths).toContain("cliWorkflow.containerInstallPlaywrightBrowsers");
     expect(paths).toContain("cliWorkflow.containerClaudeCodeAuthPath");
     expect(paths).toContain("workers.executionMode");
     expect(paths).toContain("workers.virtualWorkerProvider");

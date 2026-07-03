@@ -72,6 +72,7 @@ import { getCodeUxSubtasksDir, CODE_UX_SERVICE_NAME, CODE_UX_VERSION } from "../
 import { SprintMarkdownService } from "../services/sprint-markdown-service.js";
 import type { SprintIssueService } from "../services/sprint-issue-service.js";
 import { VirtualWorkerService } from "../services/virtual-worker-service.js";
+import type { ProjectAttentionService } from "../domain/workers/project-attention-service.js";
 import type { ProjectWorkerAssignmentService } from "../domain/workers/project-worker-assignment-service.js";
 import { SprintPreviewRepository } from "../repositories/sprint-preview-repository.js";
 import { SprintPreviewService } from "../services/sprint-preview-service.js";
@@ -147,6 +148,7 @@ export class CodeUxServer {
   private projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
   private projectWorkerAssignmentService: ProjectWorkerAssignmentService;
   private projectAttentionRepository: ProjectAttentionRepository;
+  private projectAttentionService: ProjectAttentionService;
   private qaReviewRepository: QaReviewRepository;
   private agentPresetRepository: AgentPresetRepository;
   private dockerService: DockerService;
@@ -219,6 +221,7 @@ export class CodeUxServer {
     this.projectWorkerAssignmentRepository = deps.projectWorkerAssignmentRepository;
     this.projectWorkerAssignmentService = deps.projectWorkerAssignmentService;
     this.projectAttentionRepository = deps.projectAttentionRepository;
+    this.projectAttentionService = deps.projectAttentionService;
     this.qaReviewRepository = deps.qaReviewRepository;
     this.agentPresetRepository = deps.agentPresetRepository;
     this.agentPresetSyncService = deps.agentPresetSyncService;
@@ -256,6 +259,8 @@ export class CodeUxServer {
       executionRepository: this.executionRepository,
       qaReviewRepository: this.qaReviewRepository,
       projectManagementRepository: this.projectManagementRepository,
+      projectAttentionService: this.projectAttentionService,
+      guardrailService: this.guardrailService,
       sprintOrchestrator: this.sprintOrchestrator,
       dockerService: this.dockerService,
       getDashboardSettings: (scope) => {
@@ -762,7 +767,7 @@ export class CodeUxServer {
     const dashboardBindUp = !this.isDashboardEnabled() || this.runtimeContext.dashboardRuntimePort !== null;
     const mcpServiceUp = this.mcpServiceBound;
 
-    const isReady = settingsDbUp && dashboardBindUp && mcpServiceUp && !!this.projectRuntimeRepository.getSelectedProjectLiveStatus().timestamp;
+    const isReady = settingsDbUp && dashboardBindUp && mcpServiceUp;
 
     return {
       status: isReady ? "READY" : "NOT_READY",

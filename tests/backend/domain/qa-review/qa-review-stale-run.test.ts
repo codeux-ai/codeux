@@ -120,11 +120,11 @@ describe("qa-review-stale-run", () => {
         providerInvocation: null,
         now: new Date("2026-06-01T00:03:00.000Z"),
         expected: {
-          action: "recover_as_failed",
+          action: "recover_as_cancelled",
           summaryMarkdown: `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after the backing invocation completed. Code UX will retry the review.`,
           finishedAt: "2026-06-01T00:02:00.000Z",
-          shouldFailExecutionInvocation: false,
-          shouldFailProviderInvocation: false,
+          shouldCancelExecutionInvocation: false,
+          shouldCancelProviderInvocation: false,
         },
       },
       {
@@ -138,11 +138,11 @@ describe("qa-review-stale-run", () => {
         providerInvocation: null,
         now: new Date("2026-06-01T00:02:10.000Z"),
         expected: {
-          action: "recover_as_failed",
+          action: "recover_as_cancelled",
           summaryMarkdown: `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after the backing invocation stayed running without provider runtime linkage. Code UX will retry the review.`,
           finishedAt: "2026-06-01T00:02:10.000Z",
-          shouldFailExecutionInvocation: true,
-          shouldFailProviderInvocation: false,
+          shouldCancelExecutionInvocation: true,
+          shouldCancelProviderInvocation: false,
         },
       },
       {
@@ -162,11 +162,11 @@ describe("qa-review-stale-run", () => {
         activeContainerSessionIds: new Set(["other-session"]),
         now: new Date("2026-06-01T00:00:30.000Z"),
         expected: {
-          action: "recover_as_failed",
+          action: "recover_as_cancelled",
           summaryMarkdown: `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after its Docker container disappeared for session qa-session. Code UX will retry the review.`,
           finishedAt: "2026-06-01T00:00:30.000Z",
-          shouldFailExecutionInvocation: true,
-          shouldFailProviderInvocation: true,
+          shouldCancelExecutionInvocation: true,
+          shouldCancelProviderInvocation: true,
         },
       },
       {
@@ -176,11 +176,11 @@ describe("qa-review-stale-run", () => {
         providerInvocation: null,
         now: new Date("2026-06-01T00:02:00.000Z"),
         expected: {
-          action: "recover_as_failed",
+          action: "recover_as_cancelled",
           summaryMarkdown: `${RECOVERED_STALE_QA_SUMMARY_PREFIX} that never started its backing invocation. Code UX will retry the review.`,
           finishedAt: "2026-06-01T00:02:00.000Z",
-          shouldFailExecutionInvocation: false,
-          shouldFailProviderInvocation: false,
+          shouldCancelExecutionInvocation: false,
+          shouldCancelProviderInvocation: false,
         },
       },
     ])("$name", ({ run, latestInvocation, providerInvocation, activeContainerSessionIds, now, expected }) => {
