@@ -91,40 +91,41 @@ export const TemplateCard: FunctionComponent<{
           onSelect();
         }
       }}
-      className="group relative flex h-full min-h-[16.5rem] cursor-pointer flex-col rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-5 text-left transition-all hover:border-ember-500/30 hover:shadow-[0_0_24px_rgba(255,107,0,0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-white/[0.06] dark:bg-void-800/60 dark:focus-visible:ring-offset-void-800 dark:hover:border-ember-500/30"
+      className="group relative flex h-[16.25rem] min-w-0 cursor-pointer flex-col overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-5 text-left transition-all hover:border-ember-500/30 hover:shadow-[0_0_24px_rgba(255,107,0,0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-white/[0.06] dark:bg-void-800/60 dark:focus-visible:ring-offset-void-800 dark:hover:border-ember-500/30"
     >
       {!template.isBuiltIn && onEdit && (
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onEdit(); }}
-          className="absolute top-4 right-4 rounded-lg min-h-[44px] min-w-[44px] p-1.5 text-slate-300 opacity-0 transition-all group-hover:opacity-100 hover:bg-ember-500/10 hover:text-ember-500 dark:text-slate-500"
+          aria-label={`Edit ${template.name} template`}
+          className="absolute top-4 right-4 z-10 rounded-lg min-h-[44px] min-w-[44px] p-1.5 text-slate-300 opacity-0 transition-all group-hover:opacity-100 hover:bg-ember-500/10 hover:text-ember-500 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/45 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-slate-500 dark:focus-visible:ring-offset-void-800"
           title="Edit template"
         >
           <Settings2 className="h-3.5 w-3.5" />
         </button>
       )}
 
-      <div className="mb-3 flex items-center gap-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-ember-500/[0.08] text-ember-500 transition-colors group-hover:bg-ember-500/[0.14]">
+      <div className="mb-3 flex min-w-0 items-center gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-ember-500/[0.08] text-ember-500 transition-colors group-hover:bg-ember-500/[0.14]">
           <Icon className="h-4.5 w-4.5" />
         </div>
-        <h3 id={titleId} className="flex-1 pr-6 text-sm font-bold leading-tight text-slate-900 dark:text-white">{template.name}</h3>
+        <h3 id={titleId} className="line-clamp-2 min-w-0 flex-1 pr-6 text-sm font-bold leading-tight text-slate-900 dark:text-white">{template.name}</h3>
       </div>
 
-      <p id={descriptionId} className="line-clamp-3 flex-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{template.description}</p>
+      <p id={descriptionId} className="line-clamp-4 min-h-0 flex-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{template.description}</p>
 
-      <div className="mt-4 flex items-center justify-between gap-3">
+      <div className="mt-4 flex min-w-0 items-center justify-between gap-3">
         <span
-          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ${getTagStyles(tagColor).bg} ${getTagStyles(tagColor).text}`}
+          className={`inline-flex min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ${getTagStyles(tagColor).bg} ${getTagStyles(tagColor).text}`}
           style={getTagStyles(tagColor).style?.["--accent"] ? { backgroundColor: "color-mix(in srgb, var(--accent) 15%, transparent)", color: "var(--accent)", ...getTagStyles(tagColor).style } : undefined}
         >
           <span
-            className={`block h-1.5 w-1.5 rounded-full ${getTagStyles(tagColor).dot}`}
+            className={`block h-1.5 w-1.5 shrink-0 rounded-full ${getTagStyles(tagColor).dot}`}
             style={getTagStyles(tagColor).style?.["--accent"] ? { backgroundColor: "var(--accent)", ...getTagStyles(tagColor).style } : undefined}
           />
-          {template.category}
+          <span className="truncate">{template.category}</span>
         </span>
-        <span className="text-[10px] font-medium text-slate-400">
+        <span className="shrink-0 text-[10px] font-medium text-slate-400">
           {template.defaultTaskCount} subtask{template.defaultTaskCount !== 1 ? "s" : ""}
         </span>
       </div>

@@ -128,7 +128,7 @@ const TemplateRail: FunctionComponent<TemplateRailProps> = ({
         aria-label={ariaLabel}
         onKeyDown={onRailKeyDown}
         data-qs-template-rail={railId}
-        className="dashboard-scrollbar grid max-w-full grid-flow-col grid-rows-1 gap-4 overflow-x-auto overflow-y-visible pb-3 pr-2 outline-none scrollbar-hide touch-pan-x scroll-smooth auto-cols-[16rem] sm:auto-cols-[17rem] lg:grid-rows-3 lg:auto-cols-[18rem]"
+        className="dashboard-scrollbar grid max-w-full grid-flow-col grid-rows-3 gap-4 overflow-x-auto overflow-y-visible overscroll-x-contain pb-4 pr-2 outline-none scrollbar-hide touch-pan-x scroll-smooth auto-cols-[minmax(15rem,calc(100vw-4rem))] sm:auto-cols-[17rem] lg:auto-cols-[18rem]"
       >
         {templates.map((template) => (
           <TemplateCard
