@@ -243,7 +243,7 @@ The dashboard now has a dedicated `/stats` page.
 
 The page focuses on:
 
-- the hero keeps the project and window context visible, with preset chips and custom date inputs always available above the mode toggle
+- the hero keeps project, sprint, snapshot freshness, range resolution, and active-mode context visible, with wrap-first preset chips and explicit custom date inputs above the mode toggle
 - the mode toggle exposes trend, composition, models, reliability, ledgers, and system as primary analysis surfaces
 - trend mode uses a compact metric strip, an interactive usage chart, a persistent side rail, and a graph filter menu that only controls series visibility
 - chart controls keep hover, keyboard focus, and drag zoom synchronized so the accessible summary and the plot always describe the same bucket
@@ -255,7 +255,8 @@ The page focuses on:
 - the system ledger keeps status, purpose, provider, and search outside the table so the operator can reason about the filtered set before reading rows
 - loading, error, and empty states use semantic feedback regions and preserve the surrounding layout instead of collapsing the workspace
 - the page uses the same stats snapshot contract as before; the sprint refactor only changed presentation and local client state, not the backend route shape or payload fields
-- each visual mode opens with a balanced summary deck of four to six metric cards: trend emphasizes tokens, active time, cost, invocations, and cache rate; composition emphasizes provider share, token anatomy, purpose activity, and merge conflicts; models emphasizes active models, top model, latency, success, and cache; reliability emphasizes provider health, telemetry confidence, failures, and retry/error signals; ledgers and system emphasize row counts and operational health
+- each visual mode opens with a balanced summary deck of compact executive cards. Trend emphasizes tokens, active time, cost, invocation health, cache rate, and token velocity; composition emphasizes provider, token, source, purpose, and git-blocker mix; models emphasizes active models, top model, latency, success, cache, and velocity highlights; reliability emphasizes provider health, telemetry confidence, failures, retry signals, and fallback quality; ledgers emphasizes task, sprint, pull request, diff, and conflict scope; system emphasizes invocation, provider, model, source, and outcome health.
+- the top metric cards preserve the stats snapshot contract and use low-data labels such as "No data", "No tokens", "No runs", or "Low data" when telemetry is unavailable so empty windows do not imply meaningful zero performance.
 
 This page is intentionally separate from the live execution view so the live dashboard can stay optimized for orchestration while the Stats page handles historical analysis.
 

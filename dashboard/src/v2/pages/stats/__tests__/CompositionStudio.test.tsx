@@ -138,6 +138,9 @@ describe("CompositionStudio", () => {
 
     expect(screen.getByText("20.0%")).toBeInTheDocument();
     expect(screen.getByText(/250 tokens saved/i)).toBeInTheDocument();
+    expect(screen.getByText("Provider vs Source Signals")).toBeInTheDocument();
+    expect(screen.getByText("Source Distribution")).toBeInTheDocument();
+    expect(screen.getByText("No source counts recorded")).toBeInTheDocument();
     expect(screen.getByText("9m 0s")).toBeInTheDocument();
     expect(screen.getByText("0s")).toBeInTheDocument();
 
@@ -149,5 +152,45 @@ describe("CompositionStudio", () => {
 
     expect(geminiLabel.compareDocumentPosition(claudeLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(container.textContent).not.toContain("No provider data for this window.");
+  });
+
+  it("keeps low-data source and purpose fallbacks visible", () => {
+    render(
+      <CompositionStudio
+        stats={
+          {
+            usage: {
+              inputTokens: 0,
+              cachedInputTokens: 0,
+              inputCostUsd: 0,
+              outputCostUsd: 0,
+              cachedInputCostUsd: 0,
+              totalCostUsd: 0,
+              outputTokens: 0,
+              reasoningOutputTokens: 0,
+              totalTokens: 0,
+              invocationCount: 0,
+              activeTimeMs: 0,
+              wallTimeMs: 0,
+              reportedInvocationCount: 0,
+              estimatedInvocationCount: 0,
+              unavailableInvocationCount: 0,
+              unsupportedInvocationCount: 0,
+            },
+            providers: [],
+            purposes: [],
+            models: [],
+            tokenSources: [],
+          } as any
+        }
+        providerSegments={[]}
+        tokenSegments={[]}
+      />,
+    );
+
+    expect(screen.getByText(/Composition is waiting on provider token totals/i)).toBeInTheDocument();
+    expect(screen.getByText("No purpose distribution available for this window.")).toBeInTheDocument();
+    expect(screen.getByText("No provider data for this window.")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Token Anatomy\. Input, cached, output, and reasoning balance/i)).toBeInTheDocument();
   });
 });

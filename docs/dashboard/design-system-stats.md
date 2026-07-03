@@ -6,25 +6,29 @@ The `/stats` page is the telemetry command surface for a selected project. Its d
 
 ## Information Architecture
 
-The Stats surface has five persistent layers:
+The Stats surface has six persistent layers:
 
 1. Hero command band
    - Project, sprint, generated-at, freshness, source quality, time window, custom range, analysis mode, and executive summary stay visible before the workspace changes.
    - The hero owns all time-window decisions. Downstream charts and tables respond to the selected range; they do not duplicate range controls.
-2. Mode summary cards
+2. Workspace context strip
+   - A lightweight strip follows the hero and names the active workspace, current window, freshness, resolution, and sprint scope without duplicating the hero's controls.
+   - The strip stays visible for selected-project, no-project, loading, and error paths so the page never falls into an unanchored empty state.
+3. Mode summary cards
    - Each mode renders a compact top-card deck tuned to the active analysis question.
-   - Trend focuses on throughput, runtime, cost, invocations, and cache rate.
-   - Composition, Models, Reliability, Ledgers, and System use their own mode-specific card taxonomy while preserving the same card density.
-3. Analysis studio header
+   - Metric cards show a primary value, supporting detail, signal badge, optional sparkline, and a compact quality hint so each deck reads as an executive summary instead of a raw KPI list.
+   - Trend focuses on throughput, runtime, cost, invocations, cache rate, and token velocity.
+   - Composition, Models, Reliability, Ledgers, and System use their own mode-specific card taxonomy while preserving the same card density and explicit low-data fallbacks.
+4. Analysis studio header
    - Every mode starts with a warm-void header band containing the mode icon, mode name, short description, and loading state.
    - The header keeps operators oriented when switching between dense workspaces.
-4. Mode workspace
+5. Mode workspace
    - Trend renders the KPI band, chart workspace, active bucket rail, graph filters, minimap, and purpose activity ledger.
-   - Composition, Models, and Reliability render secondary studio panels for mix, performance, telemetry confidence, and provider health.
+   - Composition, Models, and Reliability render secondary studio panels for mix, performance, telemetry confidence, and provider health. These studios should expose comparable insight bands before detailed rows so operators can compare provider/source concentration, model efficiency, and telemetry quality without relying on the chart workspace.
    - Ledgers renders tabbed Task Telemetry, Sprint Telemetry, and Git Telemetry.
    - System renders the invocation workbench with summaries, controlled filters, and the invocation table.
-5. Feedback states
-   - No-project, loading, error, empty, and reduced-data states preserve page rhythm and use semantic `status` or `alert` roles.
+6. Feedback states
+   - No-project, loading, error, empty, and reduced-data states preserve the hero → context → state rhythm and use semantic `status` or `alert` roles.
 
 ## Warm-Void Visual Language
 
@@ -37,8 +41,8 @@ The Stats surface has five persistent layers:
 
 ### Spacing And Density
 
-- Keep vertical rhythm tight: hero, top cards, studio header, and workspace sections use consistent `gap-5` to `gap-8` spacing depending on viewport.
-- Metric cards are compact and stable. Values, badges, sparklines, and loading content must not resize the card footprint unexpectedly.
+- Keep vertical rhythm tight: hero, context strip, top cards, studio header, and workspace sections use consistent `gap-5` to `gap-8` spacing depending on viewport.
+- Metric cards are compact and stable. Values, badges, secondary detail, sparklines, quality hints, and loading content must not resize the card footprint unexpectedly.
 - Summary rows should wrap cleanly instead of overflowing horizontally. Use `min-w-0`, truncation, and responsive grid tracks for long project names, model names, and custom date labels.
 - Sticky controls in ledgers and system workbench should use warm-void subpanel styling with backdrop blur and semantic borders.
 
@@ -96,7 +100,7 @@ The Stats surface has five persistent layers:
 
 ## Motion
 
-- Use subtle section and mode-transition motion for orientation only.
+- Use subtle section and mode-transition motion for orientation only. Page shell entrance animation should target only stable section containers like the hero wrapper, context strip, metric deck, studio shell, and first-load state panels.
 - Honor `prefers-reduced-motion` by disabling entrance, chart, and tab animation while preserving state changes.
 - Never depend on motion to reveal essential information, validation errors, or table content.
 
@@ -111,5 +115,8 @@ The Stats surface has five persistent layers:
 ## Implementation Notes
 
 - Keep Stats visuals aligned with `dashboard/src/v2/pages/stats/styles/stats-theme.css` and the shared primitives re-exported by `StatsShared.tsx`.
+- Composition should make token anatomy, provider lanes, source confidence, purpose distribution, and low-data fallbacks visible in one flow. Donut and ribbon visuals must have a single coherent accessible label that summarizes the data instead of fragmenting SVG or decorative segment output.
+- Models should compare the same dimensions across aggregate highlights and each ranked model card: latency, success rate, token volume, cache efficiency, output velocity, and reasoning share.
+- Reliability should lead with an actionable source-quality status, then show reported/estimated/unavailable/unsupported coverage, provider confidence, duration sample coverage, and provider-level reliability notes.
 - Documentation and tests should describe the integrated behavior: hero command band, mode card taxonomy, studio header, trend chart workspace, secondary studios, ledgers, system workbench, and realtime/polling refresh states.
 - Small visual fixes are acceptable only when needed to keep tests or docs truthful; redesign changes belong in dedicated UI tasks.

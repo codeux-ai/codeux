@@ -62,6 +62,11 @@ describe("ModelsStudio", () => {
     expect(container.textContent).toContain("60%");
     expect(container.textContent).toContain("92%");
     expect(container.textContent).toContain("Median Latency");
+    expect(container.textContent).toContain("Window Success");
+    expect(container.textContent).toContain("Token Volume");
+    expect(container.textContent).toContain("Reasoning Share");
+    expect(screen.getByLabelText(/Highest Velocity: claude-opus-4-8/i)).toBeTruthy();
+    expect(screen.getByLabelText(/claude-opus-4-8 model comparison/i)).toBeTruthy();
     expect(container.textContent).toContain("Efficiency Highlights");
     expect(container.textContent).toContain("Most Reliable");
   });
