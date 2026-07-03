@@ -173,6 +173,9 @@ export const UsageChartMinimap: FunctionComponent<{
               ? 'Zoom reset. Use arrow keys to pan and escape to clear.'
               : 'Single-bucket view. Zoom is unavailable until more buckets exist.'}
         </div>
+        <div className="sr-only">
+          Minimap bucket order: {buckets.map((bucket, index) => `${index + 1}. ${bucket.label}, ${bucket.usage.totalTokens.toLocaleString()} tokens`).join("; ")}.
+        </div>
         <svg
           aria-hidden="true"
           viewBox={`0 0 ${MINIMAP_WIDTH} ${MINIMAP_HEIGHT}`}

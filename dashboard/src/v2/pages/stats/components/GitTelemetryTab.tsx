@@ -1,5 +1,5 @@
 import type { ComponentType, FunctionComponent } from "preact";
-import { useMemo, useState } from "preact/hooks";
+import { useMemo, useRef, useState } from "preact/hooks";
 import { AlertTriangle, GitMerge, GitPullRequest, FileEdit, Flag, ListTodo, PlusSquare, MinusSquare, Search, X, Hash } from "lucide-preact";
 import { useProgressiveList } from "../../../../hooks/use-progressive-list.js";
 import type { ExecutionGitStatsEntitySummary, ExecutionGitStatsSummary } from "../../../types.js";
@@ -124,7 +124,7 @@ export const GitTelemetryLedger: FunctionComponent<{
               Search, sort, and compare {kindLabel} by code churn, PRs opened, and changes merged.
             </div>
           </div>
-          <div className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
+          <div aria-live="polite" aria-atomic="true" className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
             {filteredItems.length.toLocaleString()} visible / {items.length.toLocaleString()} total
           </div>
         </div>
@@ -164,8 +164,12 @@ export const GitTelemetryLedger: FunctionComponent<{
 
         <div className={`${SUBPANEL_CLASS} sticky top-3 z-20 grid gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center`}>
           <div className="relative">
+            <label htmlFor={`${kindLabel}-git-ledger-search`} className="sr-only">
+              Search {kindLabel} git telemetry
+            </label>
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--stats-detail-color)]" strokeWidth={2} />
             <input
+              id={`${kindLabel}-git-ledger-search`}
               type="text"
               value={query}
               onInput={(event) => setQuery((event.currentTarget as HTMLInputElement).value)}
@@ -235,7 +239,7 @@ export const GitTelemetryLedger: FunctionComponent<{
                             {index + 1}
                           </div>
                           <div className="min-w-0">
-                            <div className="truncate text-base font-black tracking-tight text-[color:var(--stats-value-color)]">{item.label}</div>
+                            <div className="break-words text-base font-black tracking-tight text-[color:var(--stats-value-color)] [overflow-wrap:anywhere]">{item.label}</div>
                             <div className="mt-1.5 flex flex-wrap items-center gap-2">
                               {item.secondaryLabel ? (
                                 <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
@@ -440,6 +444,10 @@ const GitRankingPanel: FunctionComponent<{
 
 export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSummary }> = ({ gitStats }) => {
   const [activeTab, setActiveTab] = useState<"tasks" | "sprints">("tasks");
+  const tabRefs = useRef<Record<"tasks" | "sprints", HTMLButtonElement | null>>({
+    tasks: null,
+    sprints: null,
+  });
 
   if (!gitStats.totals.insertions && !gitStats.totals.deletions && !gitStats.totals.filesChanged && !gitStats.totals.prCount && !gitStats.totals.mergedCount && !gitStats.tasks.length && !gitStats.sprints.length) {
     return (
@@ -561,7 +569,9 @@ export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSum
               : event.key === "ArrowRight"
                 ? (currentIndex + 1) % leaderboardTabs.length
                 : (currentIndex - 1 + leaderboardTabs.length) % leaderboardTabs.length;
-          setActiveTab(leaderboardTabs[nextIndex]?.id ?? "tasks");
+          const nextTab = leaderboardTabs[nextIndex]?.id ?? "tasks";
+          setActiveTab(nextTab);
+          tabRefs.current[nextTab]?.focus();
         }}
       >
         {leaderboardTabs.map((tab) => {
@@ -572,12 +582,15 @@ export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSum
               key={tab.id}
               type="button"
               id={`git-tab-${tab.id}`}
+              ref={(node) => {
+                tabRefs.current[tab.id] = node;
+              }}
               role="tab"
               aria-selected={isActive}
               aria-controls={`git-panel-${tab.id}`}
               tabIndex={isActive ? 0 : -1}
               onClick={() => setActiveTab(tab.id)}
-              className={`grid min-h-12 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[calc(var(--stats-subpanel-radius)-0.35rem)] px-3 py-2 text-left text-[11px] font-bold uppercase tracking-[0.18em] transition-all motion-safe:duration-200 ${
+              className={`grid min-h-12 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[calc(var(--stats-subpanel-radius)-0.35rem)] px-3 py-2 text-left text-[11px] font-bold uppercase tracking-[0.18em] transition-all motion-safe:duration-200 ${CONTROL_FOCUS_CLASS} ${
                 isActive ? TAB_ACTIVE_CLASS : TAB_IDLE_CLASS
               }`}
             >
@@ -591,7 +604,13 @@ export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSum
         })}
       </div>
 
-      <div role="tabpanel" id={`git-panel-${activeTab}`} aria-labelledby={`git-tab-${activeTab}`}>
+      <div
+        role="tabpanel"
+        id={`git-panel-${activeTab}`}
+        aria-labelledby={`git-tab-${activeTab}`}
+        tabIndex={0}
+        className={`${CONTROL_FOCUS_CLASS} rounded-2xl`}
+      >
         {activeTab === "tasks" ? (
           <GitTelemetryLedger
             title="Task Git Telemetry"

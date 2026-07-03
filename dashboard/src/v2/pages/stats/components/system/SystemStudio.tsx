@@ -1,5 +1,5 @@
-import type { FunctionComponent, ComponentType } from "preact";
-import { useMemo, useState } from "preact/hooks";
+import type { FunctionComponent, ComponentType, JSX } from "preact";
+import { useMemo, useRef, useState } from "preact/hooks";
 import {
   Activity,
   Clock,
@@ -15,6 +15,7 @@ import {
   PANEL_CLASS,
   SUBPANEL_CLASS,
   CHIP_CLASS,
+  CONTROL_FOCUS_CLASS,
   StudioHeader,
   STATUS_TONE_CLASS,
   TAB_ACTIVE_CLASS,
@@ -147,6 +148,11 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
   } = useSystemViewData(projectId);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<SystemTab>("all");
+  const recordViewRefs = useRef<Record<SystemTab, HTMLButtonElement | null>>({
+    all: null,
+    errors: null,
+    system: null,
+  });
 
   void refetch;
 
@@ -208,6 +214,30 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
   };
   const errorEntries = Object.entries(errorData).filter(([_, count]) => count > 0);
   const totalErrors = errorEntries.reduce((sum, [_, count]) => sum + count, 0);
+  const recordTabs: SystemTab[] = ["all", "errors", "system"];
+  const focusRecordTab = (tab: SystemTab) => {
+    setActiveTab(tab);
+    recordViewRefs.current[tab]?.focus();
+  };
+  const handleRecordViewKeyDown = (event: JSX.TargetedKeyboardEvent<HTMLDivElement>) => {
+    if (!["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Home", "End"].includes(event.key)) {
+      return;
+    }
+
+    event.preventDefault();
+    const currentIndex = recordTabs.indexOf(activeTab);
+    if (event.key === "Home") {
+      focusRecordTab(recordTabs[0]);
+      return;
+    }
+    if (event.key === "End") {
+      focusRecordTab(recordTabs[recordTabs.length - 1]);
+      return;
+    }
+
+    const delta = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
+    focusRecordTab(recordTabs[(currentIndex + delta + recordTabs.length) % recordTabs.length]);
+  };
 
   return (
     <div className="space-y-6">
@@ -416,20 +446,30 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
         </div>
 
         <div className="mt-6 space-y-4">
-          <div className="sticky top-3 z-30 flex max-w-full flex-wrap gap-1 self-start rounded-2xl border border-[color:var(--stats-card-border)] bg-[color:var(--stats-card-bg)] p-1 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl" role="group" aria-label="Invocation record views">
-            {(["all", "errors", "system"] as SystemTab[]).map((tab) => {
+          <div
+            className="sticky top-3 z-30 flex max-w-full flex-wrap gap-1 self-start rounded-2xl border border-[color:var(--stats-card-border)] bg-[color:var(--stats-card-bg)] p-1 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl"
+            role="group"
+            aria-label="Invocation record views"
+            onKeyDown={handleRecordViewKeyDown}
+          >
+            {recordTabs.map((tab) => {
               const tabCount = tab === "all" ? invocations.length : tab === "errors" ? errorCount : systemCount;
+              const tabLabel = tab === "all" ? "All" : tab === "errors" ? "Errors" : "System Msgs";
               return (
               <button
                 key={tab}
                 type="button"
+                ref={(node) => {
+                  recordViewRefs.current[tab] = node;
+                }}
                 onClick={() => setActiveTab(tab)}
                 aria-pressed={activeTab === tab}
-                className={`inline-flex min-w-max items-center gap-2 rounded-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-all ${
+                aria-label={`${tabLabel} invocation records, ${tabCount.toLocaleString()} ${tabCount === 1 ? "record" : "records"}`}
+                className={`inline-flex min-w-max items-center gap-2 rounded-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-all ${CONTROL_FOCUS_CLASS} ${
                   activeTab === tab ? TAB_ACTIVE_CLASS : TAB_IDLE_CLASS
                 }`}
               >
-                {tab === "all" ? "All" : tab === "errors" ? "Errors" : "System Msgs"}
+                {tabLabel}
                 <span className={`rounded-full px-2 py-0.5 text-[9px] font-black tabular-nums tracking-[0.12em] ${activeTab === tab ? TAB_COUNT_ACTIVE_CLASS : TAB_COUNT_IDLE_CLASS}`}>
                   {tabCount.toLocaleString()}
                 </span>
@@ -456,7 +496,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
           </div>
 
           {error ? (
-            <div className={`rounded-2xl px-4 py-3 text-sm ${STATUS_TONE_CLASS.negative}`}>
+            <div role="alert" className={`rounded-2xl px-4 py-3 text-sm ${STATUS_TONE_CLASS.negative}`}>
               Failed to load invocations — {error}
             </div>
           ) : null}

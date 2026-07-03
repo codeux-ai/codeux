@@ -85,7 +85,8 @@ describe("InvocationMessagesPanel", () => {
 
     render(<InvocationMessagesPanel invocation={createInvocation()} />);
 
-    expect(screen.getByText("Loading messages")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Invocation inv-1 message transcript" }).getAttribute("aria-busy")).toBe("true");
+    expect(screen.getByRole("status").textContent).toContain("Loading messages");
 
     await waitFor(() => {
       expect(screen.getByText("gemini-2.0-flash")).toBeTruthy();
@@ -105,8 +106,8 @@ describe("InvocationMessagesPanel", () => {
       expect(screen.getByText("Message 21")).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Show more" }));
-    expect(screen.getByRole("button", { name: "Show less" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Expand system message 1" }));
+    expect(screen.getByRole("button", { name: "Collapse system message 1" })).toBeTruthy();
   });
 
   it("surfaces fetch errors", async () => {
@@ -115,7 +116,7 @@ describe("InvocationMessagesPanel", () => {
     render(<InvocationMessagesPanel invocation={createInvocation()} />);
 
     await waitFor(() => {
-      expect(screen.getByText("Failed to load invocation messages — network down")).toBeTruthy();
+      expect(screen.getByRole("alert").textContent).toContain("Failed to load invocation messages — network down");
     });
   });
 });

@@ -166,6 +166,36 @@ describe('StatsPageHero', () => {
     expect(screen.queryByLabelText('Executive summary')).toBeNull();
   });
 
+  it('supports arrow-key navigation across analysis modes', () => {
+    const setVisualMode = vi.fn();
+
+    render(
+      <StatsPageHero
+        selectedProject={{ id: 'proj-1', name: 'Project 1' } as any}
+        stats={null}
+        activeQuery={{ window: '24h' } as any}
+        customFrom="2026-05-01"
+        customTo="2026-05-02"
+        applyPresetWindow={vi.fn()}
+        setCustomFrom={vi.fn()}
+        setCustomTo={vi.fn()}
+        applyCustomRange={vi.fn()}
+        visualMode="trend"
+        setVisualMode={setVisualMode}
+      />,
+    );
+
+    const modeGroup = screen.getByRole('group', { name: 'Analytics modes' });
+    const trendButton = screen.getByRole('button', { name: 'Trend' });
+    const compositionButton = screen.getByRole('button', { name: 'Composition' });
+    trendButton.focus();
+
+    fireEvent.keyDown(modeGroup, { key: 'ArrowRight' });
+
+    expect(setVisualMode).toHaveBeenCalledWith('composition');
+    expect(compositionButton).toHaveFocus();
+  });
+
   it('invokes preset and visual-mode callbacks from the command controls', () => {
     const applyPresetWindow = vi.fn();
     const setVisualMode = vi.fn();
@@ -361,6 +391,8 @@ describe('StatsPageHero', () => {
     expect(screen.getByLabelText('Custom end date')).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getByLabelText('Custom start date')).toHaveAttribute('aria-errormessage', 'stats-custom-range-error');
     expect(screen.getByLabelText('Custom end date')).toHaveAttribute('aria-errormessage', 'stats-custom-range-error');
+    expect(screen.getByLabelText('Custom start date')).toHaveAttribute('aria-describedby', expect.stringContaining('stats-custom-range-error'));
+    expect(screen.getByLabelText('Custom end date')).toHaveAttribute('aria-describedby', expect.stringContaining('stats-custom-range-error'));
   });
 
   it('does not render clipping-prone horizontal overflow wrappers in the command controls', () => {
