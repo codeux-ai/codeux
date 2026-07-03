@@ -34,6 +34,118 @@ vi.mock('../use-stats-page-data.js', () => ({
   useStatsPageData: vi.fn()
 }));
 
+const usage = {
+  invocationCount: 6,
+  activeTimeMs: 150_000,
+  wallTimeMs: 240_000,
+  inputTokens: 1_200,
+  cachedInputTokens: 300,
+  outputTokens: 800,
+  reasoningOutputTokens: 120,
+  totalTokens: 2_420,
+  reportedInvocationCount: 4,
+  estimatedInvocationCount: 1,
+  unavailableInvocationCount: 1,
+  unsupportedInvocationCount: 0,
+  inputCostUsd: 0.012,
+  outputCostUsd: 0.02,
+  cachedInputCostUsd: 0.001,
+  totalCostUsd: 0.033,
+};
+
+const makeEntity = (overrides: Record<string, unknown> = {}) => ({
+  id: 'entity-1',
+  label: 'Entity 1',
+  secondaryLabel: null,
+  status: null,
+  purpose: null,
+  provider: null,
+  usage,
+  lastActivityAt: null,
+  ...overrides,
+});
+
+function makeStats() {
+  return {
+    projectId: 'proj-1',
+    projectName: 'Project 1',
+    window: '24h',
+    query: { window: '24h' },
+    generatedAt: '2026-01-02T00:00:00.000Z',
+    usage,
+    chartSeries: [
+      { id: 'core_total_tokens', label: 'Total Tokens', grouping: 'totals', defaultEnabled: true, data: [100, 200, 300] },
+      { id: 'core_total_cost', label: 'Total Cost', grouping: 'totals', defaultEnabled: false, data: [0.01, 0.02, 0.033] },
+      { id: 'provider_codex', label: 'Codex', grouping: 'providers', defaultEnabled: false, data: [80, 160, 240] },
+      { id: 'model_codex/gpt-5-codex', label: 'GPT-5 Codex', grouping: 'models', defaultEnabled: false, data: [70, 120, 220] },
+      { id: 'purpose_invocations_task_coding', label: 'Task Coding', grouping: 'purposes_invocations', defaultEnabled: false, data: [1, 2, 3] },
+      { id: 'git_files_changed', label: 'Files Changed', grouping: 'git', defaultEnabled: false, data: [2, 4, 6] },
+      { id: 'git_prs', label: 'PRs', grouping: 'git', defaultEnabled: false, data: [0, 1, 1] },
+    ],
+    range: { window: '24h', resolution: 'hour', resolutionLabel: 'Hourly', bucketCount: 3, label: '24h', from: '2026-01-01T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z', isCustom: false },
+    buckets: [
+      { bucketStart: '2026-01-01T00:00:00.000Z', bucketEnd: '2026-01-01T01:00:00.000Z', label: '00:00', usage: { ...usage, totalTokens: 100, activeTimeMs: 30_000, invocationCount: 1, cachedInputTokens: 10, inputTokens: 90 } },
+      { bucketStart: '2026-01-01T01:00:00.000Z', bucketEnd: '2026-01-01T02:00:00.000Z', label: '01:00', usage: { ...usage, totalTokens: 200, activeTimeMs: 45_000, invocationCount: 2, cachedInputTokens: 40, inputTokens: 120 } },
+      { bucketStart: '2026-01-01T02:00:00.000Z', bucketEnd: '2026-01-01T03:00:00.000Z', label: '02:00', usage: { ...usage, totalTokens: 300, activeTimeMs: 75_000, invocationCount: 3, cachedInputTokens: 80, inputTokens: 180 } },
+    ],
+    providers: [makeEntity({ id: 'codex', label: 'Codex' })],
+    purposes: [makeEntity({ id: 'task_coding', label: 'Task Coding' })],
+    models: [{
+      id: 'codex/gpt-5-codex',
+      provider: 'codex',
+      model: 'gpt-5-codex',
+      label: 'GPT-5 Codex',
+      usage,
+      statusCounts: { completed: 5, failed: 1, cancelled: 0, running: 0, paused: 0 },
+      successRate: 5 / 6,
+      duration: { sampleCount: 6, avgMs: 20_000, p50Ms: 18_000, p95Ms: 35_000, maxMs: 40_000 },
+      lastActivityAt: null,
+    }],
+    tasks: [makeEntity({ id: 'task-1', label: 'Task 1' })],
+    sprints: [makeEntity({ id: 'sprint-1', label: 'Sprint 1' })],
+    tokenSources: [{ source: 'reported', count: 4 }, { source: 'estimated', count: 1 }],
+    activeSprint: { sprintId: 'sprint-1', sprintName: 'Sprint 1', sprintNumber: 1 },
+    git: {
+      totals: { insertions: 120, deletions: 40, filesChanged: 6, prCount: 1, mergedCount: 1, mergeConflictCount: 1 },
+      buckets: [],
+      tasks: [],
+      sprints: [],
+    },
+    mergeConflictCount: 1,
+    statusCounts: { completed: 5, failed: 1, cancelled: 0, running: 0, paused: 0 },
+    duration: { sampleCount: 6, avgMs: 20_000, p50Ms: 18_000, p95Ms: 35_000, maxMs: 40_000 },
+  } as any;
+}
+
+function mockStatsPageData(visualMode: 'trend' | 'composition' | 'models' | 'reliability' | 'ledgers' | 'system') {
+  vi.spyOn(useStatsPageDataModule, 'useStatsPageData').mockReturnValue({
+    stats: makeStats(),
+    loading: false,
+    error: null,
+    refresh: vi.fn(),
+    usage,
+    tokenSeries: [100, 200, 300],
+    activeTimeSeries: [30_000, 45_000, 75_000],
+    wallTimeSeries: [60_000, 80_000, 100_000],
+    planningUsage: null,
+    activeQuery: { window: '24h' },
+    customFrom: '2026-01-01',
+    setCustomFrom: vi.fn(),
+    customTo: '2026-01-02',
+    setCustomTo: vi.fn(),
+    applyCustomWindow: vi.fn(),
+    visualMode,
+    setVisualMode: vi.fn(),
+    chartState: { enabledSeries: {} } as any,
+    providerSegments: [{ label: 'Codex', value: usage.totalTokens, color: '#D99A12', textClassName: 'text-amber-600' }],
+    sourceSegments: [{ label: 'reported', value: 4, color: '#00E0A0', textClassName: 'text-signal-600' }],
+    tokenSegments: [{ label: 'Input', value: usage.inputTokens, color: '#00E0A0', textClassName: 'text-signal-600' }],
+    applyPresetWindow: vi.fn(),
+    applyCustomRange: vi.fn(),
+    completionConfidence: '83%'
+  });
+}
+
 describe('StatsPage visual tests', () => {
   beforeEach(() => {
     vi.spyOn(useProjectDataModule, 'useProjectData').mockReturnValue({
@@ -50,57 +162,22 @@ describe('StatsPage visual tests', () => {
 
     });
 
-    vi.spyOn(useStatsPageDataModule, 'useStatsPageData').mockReturnValue({
-      stats: {
-        usage: { invocationCount: 1, activeTimeMs: 1000, wallTimeMs: 1000, inputTokens: 10, cachedInputTokens: 0, outputTokens: 20, reasoningOutputTokens: 0, totalTokens: 30, reportedInvocationCount: 1, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0, inputCostUsd: 0, outputCostUsd: 0, cachedInputCostUsd: 0, totalCostUsd: 0 },
-        chartSeries: [],
-        range: { resolution: 'hour', bucketCount: 1, label: '24h' },
-        buckets: [],
-        providers: [],
-        purposes: [{
-          id: 'code_generation',
-          label: 'Code Generation',
-          lastActivityAt: null,
-          usage: {
-            invocationCount: 1, activeTimeMs: 1000, wallTimeMs: 1000, inputTokens: 10, cachedInputTokens: 0, outputTokens: 20, reasoningOutputTokens: 0, totalTokens: 30, reportedInvocationCount: 1, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0, inputCostUsd: 0, outputCostUsd: 0, cachedInputCostUsd: 0, totalCostUsd: 0
-          }
-        }],
-        tokenSources: [],
-        activeSprint: null
-      } as any,
-      loading: false,
-      error: null,
-      refresh: vi.fn(),
-      usage: {
-        invocationCount: 1, activeTimeMs: 1000, wallTimeMs: 1000, inputTokens: 10, cachedInputTokens: 0, outputTokens: 20, reasoningOutputTokens: 0, totalTokens: 30, reportedInvocationCount: 1, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0, inputCostUsd: 0, outputCostUsd: 0, cachedInputCostUsd: 0, totalCostUsd: 0
-      },
-      tokenSeries: [0, 0, 0],
-      activeTimeSeries: [0, 0, 0],
-      wallTimeSeries: [0, 0, 0],
-      planningUsage: null,
-      activeQuery: { window: '24h' },
-      customFrom: '2026-01-01',
-      setCustomFrom: vi.fn(),
-      customTo: '2026-01-02',
-      setCustomTo: vi.fn(),
-      visualMode: 'composition',
-      setVisualMode: vi.fn(),
-      chartState: { enabledSeries: {} } as any,
-      providerSegments: [],
-      sourceSegments: [],
-      tokenSegments: [],
-      applyPresetWindow: vi.fn(),
-      applyCustomRange: vi.fn(),
-      completionConfidence: '100%'
-    });
+    mockStatsPageData('composition');
   });
 
-  it('renders StatsPage with composition cards in the top row', () => {
-    const { getByText } = render(<StatsPage />);
-    expect(getByText('Active Providers')).toBeTruthy();
-    expect(getByText('Top Provider')).toBeTruthy();
-    expect(getByText('Input Tokens')).toBeTruthy();
-    expect(getByText('Output Tokens')).toBeTruthy();
+  it.each([
+    ['trend', ['Total Tokens', 'Active Time', 'Cost', 'Invocations', 'Cache Rate']],
+    ['composition', ['Provider Share', 'Token Anatomy', 'Purpose Activity', 'Merge Conflicts']],
+    ['models', ['Active Models', 'Top Model', 'Median Latency', 'Success Rate', 'Cache Hit Rate']],
+    ['reliability', ['Provider Health', 'Telemetry Mix', 'Failures', 'Retry Signals', 'Telemetry Gaps']],
+    ['ledgers', ['Task Rows', 'Sprint Rows', 'Pull Requests', 'Files Changed', 'Merge Conflicts']],
+    ['system', ['Invocation Rows', 'Provider Rows', 'Model Rows', 'Source Rows', 'System Health']],
+  ] as const)('renders %s mode top cards', (mode, labels) => {
+    mockStatsPageData(mode);
+    const { getAllByText } = render(<StatsPage />);
+    for (const label of labels) {
+      expect(getAllByText(label).length).toBeGreaterThan(0);
+    }
   });
 
   it('renders empty states with new amber visual language', () => {
@@ -148,49 +225,7 @@ describe('StatsPage visual tests', () => {
   });
 
   it('renders the system studio without crashing', () => {
-    vi.spyOn(useStatsPageDataModule, 'useStatsPageData').mockReturnValueOnce({
-      stats: {
-        usage: { invocationCount: 1, activeTimeMs: 1000, wallTimeMs: 1000, inputTokens: 10, cachedInputTokens: 0, outputTokens: 20, reasoningOutputTokens: 0, totalTokens: 30, reportedInvocationCount: 1, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0, inputCostUsd: 0, outputCostUsd: 0, cachedInputCostUsd: 0, totalCostUsd: 0 },
-        chartSeries: [],
-        range: { resolution: 'hour', bucketCount: 1, label: '24h' },
-        buckets: [],
-        providers: [],
-        purposes: [{
-          id: 'code_generation',
-          label: 'Code Generation',
-          lastActivityAt: null,
-          usage: {
-            invocationCount: 1, activeTimeMs: 1000, wallTimeMs: 1000, inputTokens: 10, cachedInputTokens: 0, outputTokens: 20, reasoningOutputTokens: 0, totalTokens: 30, reportedInvocationCount: 1, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0, inputCostUsd: 0, outputCostUsd: 0, cachedInputCostUsd: 0, totalCostUsd: 0
-          }
-        }],
-        tokenSources: [],
-        activeSprint: null
-      } as any,
-      loading: false,
-      error: null,
-      refresh: vi.fn(),
-      usage: {
-        invocationCount: 1, activeTimeMs: 1000, wallTimeMs: 1000, inputTokens: 10, cachedInputTokens: 0, outputTokens: 20, reasoningOutputTokens: 0, totalTokens: 30, reportedInvocationCount: 1, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0, inputCostUsd: 0, outputCostUsd: 0, cachedInputCostUsd: 0, totalCostUsd: 0
-      },
-      tokenSeries: [0, 0, 0],
-      activeTimeSeries: [0, 0, 0],
-      wallTimeSeries: [0, 0, 0],
-      planningUsage: null,
-      activeQuery: { window: '24h' },
-      customFrom: '2026-01-01',
-      setCustomFrom: vi.fn(),
-      customTo: '2026-01-02',
-      setCustomTo: vi.fn(),
-      visualMode: 'system',
-      setVisualMode: vi.fn(),
-      chartState: { enabledSeries: {} } as any,
-      providerSegments: [],
-      sourceSegments: [],
-      tokenSegments: [],
-      applyPresetWindow: vi.fn(),
-      applyCustomRange: vi.fn(),
-      completionConfidence: '100%'
-    });
+    mockStatsPageData('system');
 
     const { getByTestId } = render(<StatsPage />);
     expect(getByTestId('system-studio')).toBeTruthy();

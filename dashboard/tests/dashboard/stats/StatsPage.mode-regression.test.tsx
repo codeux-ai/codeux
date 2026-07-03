@@ -128,19 +128,17 @@ afterEach(() => {
 describe("TopCardsModeRenderer mode regression", () => {
   it("keeps the trend, composition, models, reliability, and ledgers labels stable", () => {
     render(<TopCardsModeRenderer mode="trend" {...baseProps} />);
-    expect(screen.getByText("Task Coding")).toBeInTheDocument();
-    expect(screen.getByText("CI Fix")).toBeInTheDocument();
-    expect(screen.getByText("QA Review")).toBeInTheDocument();
-    expect(screen.getByText("Planning")).toBeInTheDocument();
-    expect(screen.getByText("Wall Runtime")).toBeInTheDocument();
+    expect(screen.getByText("Total Tokens")).toBeInTheDocument();
+    expect(screen.getByText("Active Time")).toBeInTheDocument();
+    expect(screen.getByText("Cost")).toBeInTheDocument();
+    expect(screen.getByText("Invocations")).toBeInTheDocument();
+    expect(screen.getByText("Cache Rate")).toBeInTheDocument();
 
     cleanup();
     render(<TopCardsModeRenderer mode="composition" {...baseProps} />);
-    expect(screen.getByText("Active Providers")).toBeInTheDocument();
-    expect(screen.getByText("Top Provider")).toBeInTheDocument();
-    expect(screen.getByText("Provider A")).toBeInTheDocument();
-    expect(screen.getByText("Input Tokens")).toBeInTheDocument();
-    expect(screen.getByText("Output Tokens")).toBeInTheDocument();
+    expect(screen.getByText("Provider Share")).toBeInTheDocument();
+    expect(screen.getByText("Token Anatomy")).toBeInTheDocument();
+    expect(screen.getByText("Purpose Activity")).toBeInTheDocument();
     expect(screen.getByText("Merge Conflicts")).toBeInTheDocument();
 
     cleanup();
@@ -154,15 +152,19 @@ describe("TopCardsModeRenderer mode regression", () => {
 
     cleanup();
     render(<TopCardsModeRenderer mode="reliability" {...baseProps} />);
-    expect(screen.getByText("Provider A")).toBeInTheDocument();
+    expect(screen.getByText("Provider Health")).toBeInTheDocument();
+    expect(screen.getByText("Telemetry Mix")).toBeInTheDocument();
+    expect(screen.getByText("Failures")).toBeInTheDocument();
+    expect(screen.getByText("Retry Signals")).toBeInTheDocument();
+    expect(screen.getByText("Telemetry Gaps")).toBeInTheDocument();
 
     cleanup();
     render(<TopCardsModeRenderer mode="ledgers" {...baseProps} />);
-    expect(screen.getByText("Insertions")).toBeInTheDocument();
-    expect(screen.getByText("Deletions")).toBeInTheDocument();
+    expect(screen.getByText("Task Rows")).toBeInTheDocument();
+    expect(screen.getByText("Sprint Rows")).toBeInTheDocument();
     expect(screen.getByText("Pull Requests")).toBeInTheDocument();
-    expect(screen.getByText("Merged Commits")).toBeInTheDocument();
     expect(screen.getByText("Files Changed")).toBeInTheDocument();
+    expect(screen.getByText("Merge Conflicts")).toBeInTheDocument();
   });
 });
 
