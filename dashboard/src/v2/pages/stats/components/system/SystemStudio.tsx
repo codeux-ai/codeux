@@ -47,11 +47,11 @@ const STATUS_BAR_SEGMENTS: Array<{
   barClassName: string;
   dotClassName: string;
 }> = [
-  { key: "completedCount", label: "Completed", barClassName: "bg-emerald-500", dotClassName: "bg-emerald-500" },
-  { key: "runningCount", label: "Running", barClassName: "bg-blue-500", dotClassName: "bg-blue-500" },
-  { key: "failedCount", label: "Failed", barClassName: "bg-red-500", dotClassName: "bg-red-500" },
+  { key: "completedCount", label: "Completed", barClassName: "bg-emerald-500/70", dotClassName: "bg-emerald-500/70" },
+  { key: "runningCount", label: "Running", barClassName: "bg-signal-500/70", dotClassName: "bg-signal-500/70" },
+  { key: "failedCount", label: "Failed", barClassName: "bg-rose-500/60", dotClassName: "bg-rose-500/60" },
   { key: "cancelledCount", label: "Cancelled", barClassName: "bg-slate-400", dotClassName: "bg-slate-400" },
-  { key: "pausedCount", label: "Paused", barClassName: "bg-amber-500", dotClassName: "bg-amber-500" },
+  { key: "pausedCount", label: "Paused", barClassName: "bg-amber-500/70", dotClassName: "bg-amber-500/70" },
 ];
 
 const StatusDistributionBar: FunctionComponent<{ metrics: SystemSummaryMetrics }> = ({ metrics }) => {
@@ -178,7 +178,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
       ? "text-emerald-600 dark:text-emerald-400"
       : summaryMetrics.successRate >= 0.8
         ? "text-amber-600 dark:text-amber-400"
-        : "text-red-500 dark:text-red-400";
+        : "text-rose-600 dark:text-rose-400";
 
   const sprintData = sprintStateSummary || {
     totalSprints: 0, activeSprints: 0, completedSprints: 0, failedSprints: 0,
@@ -203,49 +203,56 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
           icon={Terminal}
           eyebrow="System Telemetry"
           title="Invocations & System Logs"
-          description="Full operational log of every invocation across this project — filterable by status, type, and provider, with reliability and latency metrics computed live over the filtered set."
+          description="Project invocation workbench with status, latency, token flow, filters, and expandable message detail."
         />
       </section>
 
-      <section className={`${PANEL_CLASS} p-6 md:p-7`}>
+      <section className={`${PANEL_CLASS} p-5 md:p-6`}>
         <StudioSectionHeader
           eyebrow="Sprint Overview"
-          title="Sprint State"
-          description="Active sprint shape, task load, and blocked work are summarized independently from the invocation stream so the operational picture stays readable."
+          title="Operational Summary"
+          description="Sprint state and invocation health stay compact so the log remains the primary work area."
         />
-        <div className="mt-6 grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-5">
           <SystemMetricCard
             icon={Activity}
-            label="Total Sprints"
+            label="Sprints"
             value={sprintData.totalSprints.toLocaleString()}
             detail="recorded across logs"
             circleClassName="bg-slate-500/10 text-slate-500 dark:text-slate-400"
           />
           <SystemMetricCard
             icon={TrendingUp}
-            label="Active Sprints"
+            label="Active"
             value={sprintData.activeSprints > 0 ? sprintData.activeSprints.toLocaleString() : "0"}
             detail={sprintData.activeSprints > 0 ? `${sprintData.runningTasks} tasks live` : <span className="inline-flex items-center rounded-full bg-signal-500 px-2 py-0.5 text-[9px] font-bold text-white">All settled</span>}
-            circleClassName="bg-blue-500/10 text-blue-500 dark:text-blue-400"
+            circleClassName="bg-signal-500/10 text-signal-600 dark:text-signal-400"
           />
           <SystemMetricCard
             icon={ShieldCheck}
-            label="Completed Sprints"
+            label="Completed"
             value={sprintData.completedSprints.toLocaleString()}
             detail={`${sprintData.failedSprints} failed`}
             circleClassName="bg-emerald-500/10 text-emerald-500 dark:text-emerald-400"
           />
           <SystemMetricCard
             icon={Database}
-            label="Total Tasks"
+            label="Tasks"
             value={sprintData.totalTasks.toLocaleString()}
             detail={`${sprintData.blockedTasks} blocked`}
-            circleClassName="bg-cyan-500/10 text-cyan-500 dark:text-cyan-400"
+            circleClassName="bg-slate-500/10 text-slate-500 dark:text-slate-400"
+          />
+          <SystemMetricCard
+            icon={Terminal}
+            label="Invocations"
+            value={summaryMetrics.totalInvocations.toLocaleString()}
+            detail={`${summaryMetrics.runningCount.toLocaleString()} running`}
+            circleClassName="bg-signal-500/10 text-signal-600 dark:text-signal-400"
           />
         </div>
       </section>
 
-      <section className={`${PANEL_CLASS} p-6 md:p-7`}>
+      <section className={`${PANEL_CLASS} p-5 md:p-6`}>
         <StudioSectionHeader
           eyebrow="Invocation Health"
           title="Invocation Health"
@@ -279,22 +286,22 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             label="Avg Duration"
             value={formatStatsDuration(summaryMetrics.avgDurationMs)}
             detail={summaryMetrics.p95DurationMs > 0 ? `p95 ${formatStatsDuration(summaryMetrics.p95DurationMs)}` : "no finished calls"}
-            circleClassName="bg-cyan-500/10 text-cyan-500 dark:text-cyan-400"
+            circleClassName="bg-slate-500/10 text-slate-500 dark:text-slate-400"
           />
           <SystemMetricCard
             icon={Database}
             label="Cache Hits"
             value={summaryMetrics.cacheHitRate !== null ? `${Math.round(summaryMetrics.cacheHitRate * 100)}%` : "—"}
             detail={`${formatTokens(summaryMetrics.totalCachedTokens)} cached tokens`}
-            circleClassName="bg-violet-500/10 text-violet-500 dark:text-violet-400"
+            circleClassName="bg-slate-500/10 text-slate-500 dark:text-slate-400"
           />
           <SystemMetricCard
             icon={TrendingUp}
             label="Running"
             value={summaryMetrics.runningCount.toLocaleString()}
             detail={summaryMetrics.runningCount > 0 ? "live right now" : "all settled"}
-            circleClassName={summaryMetrics.runningCount > 0 ? "bg-blue-500/10 text-blue-500 dark:text-blue-400" : "bg-slate-500/10 text-slate-500 dark:text-slate-400"}
-            valueClassName={summaryMetrics.runningCount > 0 ? "text-blue-600 dark:text-blue-300" : undefined}
+            circleClassName={summaryMetrics.runningCount > 0 ? "bg-signal-500/10 text-signal-600 dark:text-signal-400" : "bg-slate-500/10 text-slate-500 dark:text-slate-400"}
+            valueClassName={summaryMetrics.runningCount > 0 ? "text-signal-700 dark:text-signal-300" : undefined}
           />
         </div>
         <div className="mt-4">
@@ -302,11 +309,11 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
         </div>
       </section>
 
-      <section className={`${PANEL_CLASS} p-6 md:p-7`}>
+      <section className={`${PANEL_CLASS} p-5 md:p-6`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <StudioSectionHeader
-            eyebrow="Failure Analysis"
-            title="Failure Analysis"
+            eyebrow="Error Log"
+            title="Error Log"
             description="Error classes are grouped so operators can separate transient issues from provider, model, and cancellation problems at a glance."
           />
           {totalErrors > 0 ? (
@@ -326,7 +333,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
           <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
             {errorEntries.map(([category, count]) => {
               const label = category === "rateLimit" ? "Rate Limit" : category === "apiError" ? "API Error" : category === "modelError" ? "Model Error" : category.charAt(0).toUpperCase() + category.slice(1);
-              const tone = category === "timeout" ? "bg-amber-500" : category === "rateLimit" ? "bg-orange-500" : category === "cancelled" ? "bg-slate-400" : "bg-red-500";
+              const tone = category === "timeout" ? "bg-amber-500/70" : category === "rateLimit" ? "bg-orange-500/65" : category === "cancelled" ? "bg-slate-400" : "bg-rose-500/60";
               return (
                 <div key={category} className={`${SUBPANEL_CLASS} flex items-center justify-between p-4 hover:bg-[color:var(--fill-muted-hover)] transition-colors`}>
                   <div className="flex items-center gap-3">
@@ -342,7 +349,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
         </div>
       </section>
 
-      <section className={`${PANEL_CLASS} p-6 md:p-7`}>
+      <section className={`${PANEL_CLASS} p-5 md:p-6`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <StudioSectionHeader
             eyebrow="External APIs"
@@ -371,11 +378,11 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
         </div>
       </section>
 
-      <section className={`${PANEL_CLASS} p-6 md:p-7`}>
+      <section className={`${PANEL_CLASS} p-5 md:p-6`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <StudioSectionHeader
-            eyebrow="Filters"
-            title="Invocation Filters"
+            eyebrow="Invocation Filters"
+            title="Detailed Log"
             description="Search and filter controls stay separate from the table so the result counts and page controls remain easy to scan."
           />
           <div className="flex flex-wrap gap-2">
@@ -392,7 +399,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
         </div>
 
         <div className="mt-6 space-y-4">
-          <div className="flex max-w-full gap-1 overflow-x-auto rounded-2xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-1 self-start">
+          <div className="sticky top-3 z-30 flex max-w-full gap-1 self-start overflow-x-auto rounded-2xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-1 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl">
             {(["all", "errors", "system"] as SystemTab[]).map((tab) => {
               const tabCount = tab === "all" ? invocations.length : tab === "errors" ? errorCount : systemCount;
               return (
@@ -403,7 +410,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
                 aria-pressed={activeTab === tab}
                 className={`inline-flex min-w-max items-center gap-2 rounded-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-all ${
                   activeTab === tab
-                    ? "bg-amber-500 text-white shadow-sm ring-2 ring-amber-500/30"
+                    ? "bg-slate-900 text-white shadow-sm dark:bg-white dark:text-void-900"
                     : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
                 }`}
               >

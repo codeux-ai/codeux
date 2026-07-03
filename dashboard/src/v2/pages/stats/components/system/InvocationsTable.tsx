@@ -97,8 +97,8 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
     switch (status) {
       case "running":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border border-black/[0.06] bg-[color:var(--surface-glass)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-300 dark:border-white/[0.06]`}>
-            <div className="h-2 w-2 rounded-full bg-blue-500" />
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border border-black/[0.06] bg-[color:var(--surface-glass)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-signal-700 dark:text-signal-300 dark:border-white/[0.06]`}>
+            <div className="h-2 w-2 rounded-full bg-signal-500/75" />
             <Loader2 className="h-3 w-3 animate-spin" />
             Running
           </div>
@@ -113,8 +113,8 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
         );
       case "failed":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border border-black/[0.06] bg-[color:var(--surface-glass)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-red-600 dark:text-red-300 dark:border-white/[0.06]`}>
-            <div className="h-2 w-2 rounded-full bg-red-500" />
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border border-black/[0.06] bg-[color:var(--surface-glass)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-300 dark:border-white/[0.06]`}>
+            <div className="h-2 w-2 rounded-full bg-rose-500/65" />
             <XCircle className="h-3 w-3" />
             Failed
           </div>
@@ -234,7 +234,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               <>
                 <tr key={invocation.id} className="block lg:table-row">
                   <td colSpan={11} className="p-0 block lg:table-cell">
-                    <div className={`${LEDGER_ROW_MODERN_CLASS} flex items-center p-4 lg:p-6 ${invocation.status === "running" ? "border-l-2 border-l-blue-400 bg-blue-500/[0.02]" : invocation.status === "failed" ? "border-l-2 border-l-red-400 bg-red-500/[0.02]" : ""}`}>
+                    <div className={`${LEDGER_ROW_MODERN_CLASS} flex items-center p-4 lg:p-5 ${invocation.status === "running" ? "border-l-2 border-l-signal-500/60" : invocation.status === "failed" ? "border-l-2 border-l-rose-500/55" : ""}`}>
                       <div className="flex flex-col gap-3 lg:grid lg:w-full lg:grid-cols-[1.2fr_1fr_1fr_1.4fr_0.6fr_0.6fr_0.6fr_0.8fr_0.8fr_1fr_0.4fr] lg:items-center lg:gap-2">
                         {/* Header Row: Time and Expand */}
                         <div className="flex items-center justify-between lg:contents">
@@ -298,7 +298,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                           {/* In Tokens */}
                           <div>
                             <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">In</div>
-                            <div className="text-[11px] text-blue-600 dark:text-blue-400">
+                            <div className="text-[11px] text-slate-600 dark:text-slate-300">
 
                           {formatTokens(invocation.inputTokens ?? 0)}
                         </div>
@@ -307,7 +307,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                         {/* Out Tokens */}
                           <div>
                             <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Out</div>
-                            <div className="text-[11px] text-emerald-600 dark:text-emerald-400">
+                            <div className="text-[11px] text-slate-600 dark:text-slate-300">
 
                           {formatTokens(invocation.outputTokens ?? 0)}
                         </div>
@@ -316,7 +316,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                         {/* Cached Tokens */}
                           <div>
                             <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Cached</div>
-                            <div className="text-[11px] text-purple-600 dark:text-purple-400">
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400">
 
                           {formatTokens(invocation.cachedInputTokens ?? 0)}
                         </div>
@@ -335,7 +335,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                         {/* Duration */}
                           <div>
                             <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Duration</div>
-                            <div className={`text-[11px] ${invocation.finishedAt ? "text-slate-600 dark:text-slate-300" : "text-blue-600 dark:text-blue-400"}`}>
+                            <div className={`text-[11px] ${invocation.finishedAt ? "text-slate-600 dark:text-slate-300" : "text-signal-700 dark:text-signal-300"}`}>
 
                             {duration}
                             </div>
@@ -383,7 +383,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                     {/* Error Sub-row inside main card if failed */}
                     {invocation.status === "failed" && (invocation.lastErrorMessage || invocation.errorMessage) && (
                       <div className="mt-[-8px] px-6 pb-4">
-                        <div className="flex items-center gap-1.5 text-[11px] text-red-600 dark:text-red-400">
+                        <div className="flex items-center gap-1.5 text-[11px] text-rose-700 dark:text-rose-300">
                           <AlertTriangle className="h-3 w-3 flex-shrink-0" />
                           <span>{invocation.lastErrorMessage || invocation.errorMessage}</span>
                         </div>

@@ -31,9 +31,9 @@ import {
 } from "../model-insights.js";
 
 const SUCCESS_TONE_CLASS: Record<ReturnType<typeof getSuccessTone>, string> = {
-  strong: "border-status-green/30 bg-status-green/10 text-status-green",
-  warn: "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  critical: "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400",
+  strong: "border-status-green/20 bg-status-green/[0.08] text-status-green",
+  warn: "border-amber-500/22 bg-amber-500/[0.08] text-amber-700 dark:text-amber-300",
+  critical: "border-rose-500/22 bg-rose-500/[0.08] text-rose-700 dark:text-rose-300",
   neutral: "border-slate-500/20 bg-slate-500/10 text-slate-500 dark:text-slate-400",
 };
 
@@ -81,16 +81,16 @@ const ModelCard: FunctionComponent<{
   const statusSummary = `${model.statusCounts.completed} completed · ${model.statusCounts.failed} failed · ${model.statusCounts.running} running · ${model.statusCounts.cancelled} cancelled`;
 
   return (
-    <div className={`${PANEL_CLASS} p-5`}>
+    <div className={`${PANEL_CLASS} p-4 md:p-5`}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
           <div className={`rounded-xl p-2 ${bg} ${text}`}>
             <Icon className="h-4 w-4" strokeWidth={2.1} />
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">#{rank}</span>
-              <span className="break-words text-base font-black text-slate-900 dark:text-white">{model.label}</span>
+              <span className="min-w-0 break-all text-base font-black leading-tight text-slate-900 dark:text-white" title={model.label}>{model.label}</span>
             </div>
             <div className="mt-1 break-words text-sm text-slate-500 dark:text-slate-400 capitalize">
               {model.provider} · {shareOfTotal > 0 ? `${shareOfTotal.toFixed(1)}% of window volume` : "no token volume"}
@@ -179,12 +179,12 @@ const ModelCard: FunctionComponent<{
             {model.statusCounts.completed} completed
           </span>
           {model.statusCounts.failed > 0 ? (
-            <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-rose-500 dark:text-rose-400 ${CHIP_CLASS}`}>
+            <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-rose-700 dark:text-rose-300 ${CHIP_CLASS}`}>
               {model.statusCounts.failed} failed
             </span>
           ) : null}
           {model.statusCounts.running > 0 ? (
-            <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-600 dark:text-cyan-400 ${CHIP_CLASS}`}>
+            <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-700 dark:text-signal-300 ${CHIP_CLASS}`}>
               {model.statusCounts.running} running
             </span>
           ) : null}

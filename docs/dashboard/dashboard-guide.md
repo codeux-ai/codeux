@@ -199,9 +199,9 @@ Legacy runtime:
 - The mode toggle exposes `trend`, `composition`, `models`, `reliability`, `ledgers`, and `system` as the primary analytics views.
 - Trend mode uses a compact metric strip, the interactive usage chart, and a persistent right-side summary rail; the graph filter menu only controls series visibility.
 - The chart summary stays keyboard and screen-reader friendly, with hover, focus, and drag zoom all feeding the same active-bucket state.
-- Ledgers mode uses tabbed task, sprint, and git telemetry with stable counts and roving focus.
-- System mode uses a controlled filter bar with search, status chips, provider/purpose chips, and pagination controls above a sortable invocation table.
-- The system invocation table preserves status chips, task context chips, token columns, loading and empty states, and expandable detail rows for transcript history.
+- Ledgers mode uses sticky tabbed task, sprint, and git telemetry with stable counts, roving focus, unified search/sort controls, and progressive rendering for large result sets.
+- System mode uses a compact debugging workbench with summary strips, calm status distribution, sticky filters, search, status chips, provider/purpose chips, and pagination controls above a sortable invocation table.
+- The system invocation table preserves subdued status indicators, semantic table headers, task context chips, token columns, loading and empty states, and expandable detail rows for transcript history.
 - The System stats view uses a local `useSystemViewData(projectId)` hook to fetch project invocation records, apply controlled search/filter/sort state, and derive summary metrics directly from the filtered list.
 
 ### V2 project management

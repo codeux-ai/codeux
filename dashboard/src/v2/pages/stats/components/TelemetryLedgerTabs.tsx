@@ -67,7 +67,7 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
         role="tablist"
         aria-orientation="horizontal"
         aria-label="Telemetry ledgers"
-        className="flex max-w-full gap-1 overflow-x-auto overscroll-x-contain rounded-2xl border border-black/[0.05] bg-white/68 p-1 shadow-[0_1px_0_rgba(255,255,255,0.55)_inset] scrollbar-hide dark:border-white/[0.05] dark:bg-void-900/35"
+        className="sticky top-3 z-20 flex max-w-full gap-1 overflow-x-auto overscroll-x-contain rounded-2xl border border-black/[0.05] bg-white/82 p-1 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl scrollbar-hide dark:border-white/[0.05] dark:bg-void-900/75"
         onKeyDown={(e) => {
           if (tabs.length === 0) {
             return;
