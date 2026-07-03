@@ -36,3 +36,17 @@ Stable layouts on narrow widths (especially mobile or multi-panel layouts) must 
 ### 5. Hover and Active Indicators
 - **Interactions:** Hover backgrounds for triggers follow `hover:bg-black/[0.05] dark:hover:bg-white/[0.05]`. Active routes in the Sidebar use the primary `signal-500` marker tone.
 - **Tooltips:** Minimized primary sidebar navigation items expose semantic `aria-label`s on their links and keep visual tooltips explicitly mapped via `aria-hidden="true"` styled to mimic standard dropdown glass panels (`shadow-2xl rounded-2xl`). Footer actions such as Settings and the sidebar collapse/expand control keep semantic `aria-label`s but do not render custom hover text labels.
+
+## Accessibility Contracts
+
+### Top Navigation
+
+- The shell header owns a persistent `role="status"` live region for route changes, project and sprint loading states, selector empty states, and completed project/sprint switches. Keep this region visually hidden with `sr-only` so announcements do not add visible chrome.
+- Project and sprint selectors use a listbox contract. Triggers expose stable names, real `aria-expanded`, `aria-busy`, and `aria-controls` only while their listbox is mounted. Options use `role="option"` and update `aria-selected`; keyboard navigation supports `Enter`, `Space`, `ArrowDown`, `ArrowUp`, `Home`, `End`, and `Escape`.
+- Escape closes open selector menus and returns focus to the trigger. Disabled selector states, such as a project with no sprints, announce the empty state without opening an empty listbox.
+
+### Sidebar And Dock
+
+- Desktop and mobile sidebar landmarks must have distinct accessible names. Mobile sidebars use dialog semantics only while open, with the inner workspace navigation named separately from the outer dialog.
+- Every shell route link keeps a stable accessible name even when rendered icon-only or visually minimized. Active route links use `aria-current="page"`; hidden tooltip labels remain `aria-hidden`.
+- Fixed bottom dock containers must stay inside their own horizontal scroll boundary, account for `env(safe-area-inset-bottom)`, and preserve visible Signal Jade focus rings at the viewport edges.

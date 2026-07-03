@@ -7,6 +7,7 @@ import { render, screen, cleanup } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { Sidebar } from "../../../dashboard/src/v2/components/layout/Sidebar.js";
 import { KineticDock } from "../../../dashboard/src/v2/components/KineticDock.js";
+import { useRouterState } from "@tanstack/react-router";
 
 expect.extend(matchers);
 
@@ -18,7 +19,7 @@ vi.mock("@tanstack/react-router", () => {
                 {children}
             </a>
         )),
-        useRouterState: vi.fn().mockReturnValue({ matches: [{ pathname: "/" }] }),
+        useRouterState: vi.fn().mockReturnValue([{ pathname: "/" }]),
     };
 });
 
@@ -72,6 +73,7 @@ global.ResizeObserver = class ResizeObserver {
 describe("Knowledge Base Navigation", () => {
     afterEach(() => {
         cleanup();
+        vi.mocked(useRouterState).mockReturnValue([{ pathname: "/" }] as any);
     });
 
     it("renders Knowledge link in Sidebar", () => {
@@ -87,5 +89,16 @@ describe("Knowledge Base Navigation", () => {
         expect(knowledgeLinks[knowledgeLinks.length - 1]).toBeInTheDocument();
         // The label might be in a tooltip/span
         expect(screen.getAllByText("Knowledge")[0]).toBeInTheDocument();
+    });
+
+    it("gives dock links stable names and current-page semantics", () => {
+        vi.mocked(useRouterState).mockReturnValue([{ pathname: "/knowledge" }] as any);
+
+        render(<KineticDock />);
+
+        const knowledgeLink = screen.getByRole("link", { name: "Knowledge" });
+        expect(knowledgeLink).toHaveAttribute("aria-current", "page");
+        expect(screen.getByRole("link", { name: "Files" })).not.toHaveClass("text-violet-400");
+        expect(screen.getByRole("link", { name: "Live" })).not.toHaveClass("text-status-red");
     });
 });
