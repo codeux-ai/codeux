@@ -81,6 +81,8 @@ Execution invocations cascade when their parent \`project_id\`, \`sprint_id\`, o
 
 Additionally, every execution invocation explicitly links to a `provider_invocations` usage row. The execution transcripts stored in `execution_invocation_messages` serve as the replayable prompt history corresponding to the exact token and time consumption recorded in the usage row, allowing the dashboard Stats page to drill down into the exact sequence that generated specific costs.
 
+`ExecutionRepository` remains the public persistence facade for both sides of this relationship. The table-specific write ownership is split behind that facade: `execution-invocation-writes.ts` owns invocation and transcript mutations, while `provider-invocation-usage-writes.ts` owns provider usage creation, slot-claim creation, provider session association, runtime row association, and usage updates. Both modules preserve the facade's validation behavior, timestamps, returned DTO shapes, and project realtime refresh semantics.
+
 ## Provider Slot Waiting Semantics
 
 When a provider's global concurrency limit is reached, ready tasks are deferred rather than blocked with a failure:

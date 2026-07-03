@@ -20,6 +20,14 @@ import {
   writeClearExecutionInvocationMessages,
   writeExecutionInvocationMessage,
 } from "./execution/execution-invocation-writes.js";
+import {
+  writeProviderInvocationRuntimeAssociation,
+  writeProviderInvocationSessionAssociation,
+  writeProviderInvocationUsage,
+  writeProviderInvocationUsageIfSlotAvailable,
+  writeProviderInvocationUsageUpdate,
+  type ProviderInvocationUsageWriteGetters,
+} from "./execution/provider-invocation-usage-writes.js";
 
 import { randomUUID } from "crypto";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
@@ -115,7 +123,6 @@ import {
   requireSprintRunScoped,
   requireTaskDispatch,
   requireTaskRun,
-  requireProviderInvocationUsage,
   requireLease
 } from "./execution/execution-validators.js";
 
@@ -752,77 +759,13 @@ export class ExecutionRepository {
   }
 
   createProviderInvocationUsage(input: CreateProviderInvocationUsageInput): ProviderInvocationUsageRecord {
-    try {
-      requireProject(this.db, input.projectId);
-      if (input.sprintId) {
-        requireSprint(this.db, input.sprintId, input.projectId);
-      }
-      if (input.taskId) {
-        requireTask(this.db, input.taskId, input.projectId, input.sprintId || undefined);
-      }
-      if (input.sprintRunId) {
-        requireSprintRun((id) => this.getSprintRun(id), input.sprintRunId);
-      }
-      if (input.dispatchId) {
-        requireTaskDispatch((id) => this.getTaskDispatch(id), input.dispatchId);
-      }
-      if (input.taskRunId) {
-        requireTaskRun((id) => this.getTaskRun(id), input.taskRunId);
-      }
-
-      const id = randomUUID();
-      const now = new Date().toISOString();
-      this.db.prepare(`
-        INSERT INTO provider_invocations (
-          id, project_id, sprint_id, task_id, sprint_run_id, dispatch_id, task_run_id, attention_item_id,
-          session_id, provider, purpose, status, model, execution_mode, native_session_id, started_at, finished_at, duration_ms,
-          prompt_chars, transcript_chars, input_tokens, cached_input_tokens, output_tokens, reasoning_output_tokens,
-          total_tokens, token_accounting_version, tool_call_count, jules_tokens, usage_source, invocation_source, raw_usage_json, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        id,
-        input.projectId,
-        input.sprintId ?? null,
-        input.taskId ?? null,
-        input.sprintRunId ?? null,
-        input.dispatchId ?? null,
-        input.taskRunId ?? null,
-        input.attentionItemId ?? null,
-        input.sessionId,
-        input.provider,
-        input.purpose,
-        input.status || "running",
-        input.model ?? null,
-        input.executionMode ?? null,
-        input.nativeSessionId ?? null,
-        input.startedAt || now,
-        null,
-        null,
-        input.promptChars ?? 0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        2,
-        input.julesTokens ?? 0,
-        "unavailable",
-        input.invocationSource ?? "internal",
-        null,
-        now,
-        now,
-      );
-
-      const created = requireProviderInvocationUsage((id) => this.getProviderInvocationUsage(id), id);
-      this.notifyRealtime(created.projectId, false);
-      return created;
-      } catch (error) {
-      if (error instanceof RepositoryError) throw error;
-      this.logger.error("Operation failed", { error, projectId: input.projectId });
-      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
-    }
+    return writeProviderInvocationUsage(
+      this.db,
+      this.logger,
+      this.getProviderInvocationUsageWriteGetters(),
+      input,
+      (projectId, includeOverview) => this.notifyRealtime(projectId, includeOverview),
+    );
   }
 
   /**
@@ -830,25 +773,14 @@ export class ExecutionRepository {
    * Returns the created record if a slot was available, or null if the limit was reached.
    */
   tryCreateProviderInvocationUsage(input: CreateProviderInvocationUsageInput, limit: number): ProviderInvocationUsageRecord | null {
-    if (limit <= 0) {
-      return this.createProviderInvocationUsage(input);
-    }
-
-    return this.db.transaction(() => {
-      // Use queryRunningProviderInvocationUsages logic but inside the transaction for atomicity.
-      // We count rows where status is 'running' for this specific provider.
-      const runningRow = this.db.prepare(`
-        SELECT COUNT(*) as count
-        FROM provider_invocations
-        WHERE status = 'running' AND provider = ?
-      `).get(input.provider) as { count: number };
-
-      if (runningRow.count >= limit) {
-        return null;
-      }
-
-      return this.createProviderInvocationUsage(input);
-    });
+    return writeProviderInvocationUsageIfSlotAvailable(
+      this.db,
+      this.logger,
+      this.getProviderInvocationUsageWriteGetters(),
+      input,
+      limit,
+      (projectId, includeOverview) => this.notifyRealtime(projectId, includeOverview),
+    );
   }
 
   /**
@@ -858,97 +790,32 @@ export class ExecutionRepository {
    * the session-sync lifecycle can release the slot when the session reaches a terminal state.
    */
   associateProviderInvocationSession(invocationId: string, sessionId: string, nativeSessionId?: string | null): void {
-    const trimmed = sessionId.trim();
-    if (!trimmed) {
-      return;
-    }
-    const now = new Date().toISOString();
-    this.db.prepare(`
-      UPDATE provider_invocations
-      SET session_id = ?, native_session_id = ?, updated_at = ?
-      WHERE id = ?
-    `).run(trimmed, nativeSessionId ?? trimmed, now, invocationId);
+    writeProviderInvocationSessionAssociation(this.db, invocationId, sessionId, nativeSessionId);
   }
 
   associateProviderInvocationRuntime(
     invocationId: string,
     input: { sprintRunId?: string | null; dispatchId?: string | null; taskRunId?: string | null },
   ): ProviderInvocationUsageRecord {
-    try {
-      const current = requireProviderInvocationUsage((id) => this.getProviderInvocationUsage(id), invocationId);
-      const sprintRunId = input.sprintRunId === undefined ? current.sprintRunId : input.sprintRunId;
-      const dispatchId = input.dispatchId === undefined ? current.dispatchId : input.dispatchId;
-      const taskRunId = input.taskRunId === undefined ? current.taskRunId : input.taskRunId;
-
-      if (sprintRunId) {
-        requireSprintRun((id) => this.getSprintRun(id), sprintRunId);
-      }
-      if (dispatchId) {
-        requireTaskDispatch((id) => this.getTaskDispatch(id), dispatchId);
-      }
-      if (taskRunId) {
-        requireTaskRun((id) => this.getTaskRun(id), taskRunId);
-      }
-
-      const now = new Date().toISOString();
-      this.db.prepare(`
-        UPDATE provider_invocations
-        SET sprint_run_id = ?, dispatch_id = ?, task_run_id = ?, updated_at = ?
-        WHERE id = ?
-      `).run(sprintRunId ?? null, dispatchId ?? null, taskRunId ?? null, now, invocationId);
-
-      const updated = requireProviderInvocationUsage((id) => this.getProviderInvocationUsage(id), invocationId);
-      this.notifyRealtime(updated.projectId, false);
-      return updated;
-    } catch (error) {
-      if (error instanceof RepositoryError) throw error;
-      this.logger.error("Operation failed", { error, invocationId });
-      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
-    }
+    return writeProviderInvocationRuntimeAssociation(
+      this.db,
+      this.logger,
+      this.getProviderInvocationUsageWriteGetters(),
+      invocationId,
+      input,
+      (projectId, includeOverview) => this.notifyRealtime(projectId, includeOverview),
+    );
   }
 
   updateProviderInvocationUsage(invocationId: string, input: UpdateProviderInvocationUsageInput): ProviderInvocationUsageRecord {
-    try {
-      const current = requireProviderInvocationUsage((id) => this.getProviderInvocationUsage(id), invocationId);
-      const now = new Date().toISOString();
-      this.db.prepare(`
-        UPDATE provider_invocations
-        SET status = ?, model = ?, execution_mode = ?, native_session_id = ?, finished_at = ?, duration_ms = ?, transcript_chars = ?,
-          input_tokens = ?, cached_input_tokens = ?, output_tokens = ?, reasoning_output_tokens = ?, total_tokens = ?,
-          token_accounting_version = 2, tool_call_count = ?, jules_tokens = ?, usage_source = ?, invocation_source = ?, raw_usage_json = ?, updated_at = ?
-        WHERE id = ?
-      `).run(
-        input.status || current.status,
-        input.model === undefined ? current.model : input.model,
-        input.executionMode === undefined ? current.executionMode : input.executionMode,
-        input.nativeSessionId === undefined ? current.nativeSessionId : input.nativeSessionId,
-        input.finishedAt === undefined ? current.finishedAt : input.finishedAt,
-        input.durationMs === undefined ? current.durationMs : input.durationMs,
-        input.transcriptChars === undefined ? current.transcriptChars : input.transcriptChars,
-        input.inputTokens === undefined ? current.inputTokens : input.inputTokens,
-        input.cachedInputTokens === undefined ? current.cachedInputTokens : input.cachedInputTokens,
-        input.outputTokens === undefined ? current.outputTokens : input.outputTokens,
-        input.reasoningOutputTokens === undefined ? current.reasoningOutputTokens : input.reasoningOutputTokens,
-        input.totalTokens === undefined ? current.totalTokens : input.totalTokens,
-        input.toolCallCount === undefined ? current.toolCallCount : input.toolCallCount,
-        input.julesTokens === undefined ? current.julesTokens : input.julesTokens,
-        input.usageSource === undefined ? current.usageSource : input.usageSource,
-        input.invocationSource === undefined ? current.invocationSource : input.invocationSource,
-        input.rawUsageJson === undefined
-          ? JSON.stringify(current.rawUsageJson)
-          : (input.rawUsageJson === null ? null : JSON.stringify(input.rawUsageJson)),
-        now,
-        invocationId,
-      );
-
-      const updated = requireProviderInvocationUsage((id) => this.getProviderInvocationUsage(id), invocationId);
-      this.notifyRealtime(updated.projectId, false);
-      return updated;
-      } catch (error) {
-      if (error instanceof RepositoryError) throw error;
-      this.logger.error("Operation failed", { error, invocationId });
-      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
-    }
+    return writeProviderInvocationUsageUpdate(
+      this.db,
+      this.logger,
+      this.getProviderInvocationUsageWriteGetters(),
+      invocationId,
+      input,
+      (projectId, includeOverview) => this.notifyRealtime(projectId, includeOverview),
+    );
   }
 
   getTaskRun(taskRunId: string): TaskRunRecord | null {
@@ -1638,6 +1505,15 @@ export class ExecutionRepository {
     });
     this.releaseStaleSprintLease(updated.projectId, updated.sprintId);
     return updated;
+  }
+
+  private getProviderInvocationUsageWriteGetters(): ProviderInvocationUsageWriteGetters {
+    return {
+      getSprintRun: (id) => this.getSprintRun(id),
+      getTaskDispatch: (id) => this.getTaskDispatch(id),
+      getTaskRun: (id) => this.getTaskRun(id),
+      getProviderInvocationUsage: (id) => this.getProviderInvocationUsage(id),
+    };
   }
 
   private getUsageTotalsByTaskIds(projectId: string, taskIds: string[]): Map<string, ExecutionUsageTotals> {

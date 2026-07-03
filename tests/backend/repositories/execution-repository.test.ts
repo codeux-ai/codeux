@@ -82,6 +82,59 @@ afterEach(async () => {
       const snapshot = executionRepository.getProjectExecutionSnapshot(project.id);
       expect(snapshot).toBeDefined();
     });
+
+    it("claims provider invocation slots through the repository facade", async () => {
+      const { projectRepository, executionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Provider Slot Project",
+        sourceType: "local",
+        sourceRef: "/workspace/provider-slot",
+      });
+
+      const claimed = executionRepository.tryCreateProviderInvocationUsage({
+        projectId: project.id,
+        sessionId: "slot-session-1",
+        provider: "codex",
+        purpose: "task_coding",
+        status: "running",
+      }, 1);
+      const blocked = executionRepository.tryCreateProviderInvocationUsage({
+        projectId: project.id,
+        sessionId: "slot-session-2",
+        provider: "codex",
+        purpose: "task_coding",
+        status: "running",
+      }, 1);
+
+      expect(claimed).toMatchObject({
+        projectId: project.id,
+        sessionId: "slot-session-1",
+        provider: "codex",
+        status: "running",
+      });
+      expect(blocked).toBeNull();
+      expect(executionRepository.listRunningProviderInvocationUsages(["codex"])).toHaveLength(1);
+    });
+
+    it("validates provider invocation runtime associations through the repository facade", async () => {
+      const { projectRepository, executionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Provider Runtime Validation Project",
+        sourceType: "local",
+        sourceRef: "/workspace/provider-runtime-validation",
+      });
+      const usage = executionRepository.createProviderInvocationUsage({
+        projectId: project.id,
+        sessionId: "runtime-validation-session",
+        provider: "codex",
+        purpose: "task_coding",
+        status: "running",
+      });
+
+      expect(() => executionRepository.associateProviderInvocationRuntime(usage.id, {
+        dispatchId: "missing-dispatch",
+      })).toThrowError("Task dispatch not found: missing-dispatch");
+    });
   });
 
 describe("ExecutionRepository", () => {
