@@ -1,8 +1,17 @@
-import { useRef, useCallback } from "preact/hooks";
 import type { FunctionComponent } from "preact";
 import { Sparkles, ShieldCheck, Accessibility, Zap, Bug, Code2, Database, FileSearch, FlaskConical, GitBranch, Globe, Hammer, Heart, Layers, LayoutGrid, Lock, Microscope, Monitor, Paintbrush, RefreshCw, Search, Server, Shield, Terminal, TestTube2, Wrench, Settings2 } from "lucide-preact";
 import type { LucideProps } from "lucide-preact";
 import type { QuicksprintTemplateRecord } from "../../../../../src/contracts/quicksprint-types.js";
+
+export const SUBTASK_SLIDER_MIN = 1;
+export const SUBTASK_SLIDER_MAX = 30;
+
+export function clampSubtaskSliderValue(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 5;
+  }
+  return Math.min(SUBTASK_SLIDER_MAX, Math.max(SUBTASK_SLIDER_MIN, Math.round(value)));
+}
 
 export const IconMap: Record<string, FunctionComponent<LucideProps>> = {
   Sparkles, ShieldCheck, Accessibility, Zap,
@@ -141,30 +150,8 @@ export const SubtaskSlider: FunctionComponent<{
   onChange: (v: number) => void;
   disabled?: boolean;
 }> = ({ value, onChange, disabled = false }) => {
-  const min = 1;
-  const max = 30;
-  const pct = ((value - min) / (max - min)) * 100;
-  const trackRef = useRef<HTMLDivElement>(null);
-
-  const handlePointer = useCallback((e: PointerEvent) => {
-    if (disabled || !trackRef.current) return;
-    const rect = trackRef.current.getBoundingClientRect();
-    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    onChange(Math.round(min + x * (max - min)));
-  }, [disabled, onChange]);
-
-  const handlePointerDown = useCallback((e: PointerEvent) => {
-    if (disabled) return;
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    handlePointer(e);
-  }, [disabled, handlePointer]);
-
-  const handlePointerMove = useCallback((e: PointerEvent) => {
-    if (disabled) return;
-    if (e.buttons === 1) {
-      handlePointer(e);
-    }
-  }, [disabled, handlePointer]);
+  const displayValue = clampSubtaskSliderValue(value);
+  const pct = ((displayValue - SUBTASK_SLIDER_MIN) / (SUBTASK_SLIDER_MAX - SUBTASK_SLIDER_MIN)) * 100;
 
   return (
     <div className={`select-none ${disabled ? "opacity-55" : ""}`}>
@@ -173,22 +160,31 @@ export const SubtaskSlider: FunctionComponent<{
         <span className={`font-mono text-[3.5rem] font-black leading-none tracking-tighter tabular-nums ${
           disabled ? "text-slate-400 dark:text-slate-500" : "text-slate-900 dark:text-white"
         }`}>
-          {String(value).padStart(2, "0")}
+          {String(displayValue).padStart(2, "0")}
         </span>
         <span className={`text-sm font-medium ${disabled ? "text-slate-400 dark:text-slate-500" : "text-slate-400"}`}>
-          subtask{value !== 1 ? "s" : ""}
+          subtask{displayValue !== 1 ? "s" : ""}
         </span>
       </div>
 
       {/* Track */}
       <div
-        ref={trackRef}
         className={`relative h-10 ${disabled ? "cursor-not-allowed pointer-events-none" : "cursor-pointer touch-none"}`}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
       >
+        <input
+          type="range"
+          min={SUBTASK_SLIDER_MIN}
+          max={SUBTASK_SLIDER_MAX}
+          step="1"
+          value={displayValue}
+          disabled={disabled}
+          aria-label="Subtask count"
+          aria-valuetext={`${displayValue} subtask${displayValue === 1 ? "" : "s"}`}
+          onInput={(e) => onChange(clampSubtaskSliderValue(parseInt((e.target as HTMLInputElement).value, 10)))}
+          className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+        />
         {/* Background track */}
-        <div className="absolute top-1/2 left-0 right-0 h-2 -translate-y-1/2 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.06]">
+        <div className="pointer-events-none absolute top-1/2 left-0 right-0 h-2 -translate-y-1/2 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.06]">
           {/* Fill */}
           <div
             className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-ember-500 to-ember-400 transition-[width] duration-75"
@@ -197,10 +193,10 @@ export const SubtaskSlider: FunctionComponent<{
         </div>
 
         {/* Notches */}
-        <div className="absolute top-1/2 left-0 right-0 -translate-y-1/2 flex justify-between px-[2px]">
-          {Array.from({ length: max - min + 1 }, (_, i) => {
-            const n = min + i;
-            const isActive = n <= value;
+        <div className="pointer-events-none absolute top-1/2 left-0 right-0 -translate-y-1/2 flex justify-between px-[2px]">
+          {Array.from({ length: SUBTASK_SLIDER_MAX - SUBTASK_SLIDER_MIN + 1 }, (_, i) => {
+            const n = SUBTASK_SLIDER_MIN + i;
+            const isActive = n <= displayValue;
             const isMajor = n === 1 || n === 5 || n === 10 || n === 15 || n === 20 || n === 25 || n === 30;
             return (
               <div
@@ -215,7 +211,7 @@ export const SubtaskSlider: FunctionComponent<{
 
         {/* Thumb */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-[left] duration-75"
+          className="pointer-events-none absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-[left] duration-75"
           style={{ left: `${pct}%` }}
         >
           <div className="relative">
