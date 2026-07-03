@@ -3,6 +3,8 @@ import styles from "./StatsCard.module.css";
 import "../styles/stats-theme.css";
 
 export type StatsCardAccent = "signal" | "amber" | "cyan" | "rose" | "emerald" | "default";
+export type StatsCardDensity = "compact" | "comfortable";
+export type StatsCardTone = "warm" | "muted";
 
 interface StatsCardProps {
   title: string;
@@ -11,6 +13,8 @@ interface StatsCardProps {
   icon?: ComponentType<any>;
   description?: ComponentChildren;
   accent?: StatsCardAccent;
+  density?: StatsCardDensity;
+  tone?: StatsCardTone;
   className?: string;
   isActive?: boolean;
   children?: ComponentChildren;
@@ -25,9 +29,19 @@ const ACCENT_CLASS_MAP: Record<StatsCardAccent, string> = {
   default: "",
 };
 
+const DENSITY_CLASS_MAP: Record<StatsCardDensity, string> = {
+  compact: styles.compact,
+  comfortable: styles.comfortable,
+};
+
+const TONE_CLASS_MAP: Record<StatsCardTone, string> = {
+  warm: styles.toneWarm,
+  muted: styles.toneMuted,
+};
+
 /**
- * Reusable StatsCard primitive with award-grade styling.
- * Supports multiple accents, icon slots, and trend/metadata.
+ * Reusable StatsCard primitive for stats surfaces.
+ * Supports named accents, density/tone hooks, icon slots, and trend/metadata.
  */
 export const StatsCard: FunctionComponent<StatsCardProps> = ({
   title,
@@ -36,13 +50,18 @@ export const StatsCard: FunctionComponent<StatsCardProps> = ({
   icon: Icon,
   description,
   accent = "default",
+  density = "comfortable",
+  tone = "warm",
   className = "",
+  isActive = false,
   children,
 }) => {
   const accentClass = ACCENT_CLASS_MAP[accent];
+  const densityClass = DENSITY_CLASS_MAP[density];
+  const toneClass = TONE_CLASS_MAP[tone];
 
   return (
-    <div className={`${styles.card} ${accentClass} ${className} group`}>
+    <div className={`${styles.card} ${accentClass} ${densityClass} ${toneClass} ${isActive ? styles.active : ""} ${className} group`}>
       {/* Background Tint */}
       <div className={styles.tint} aria-hidden="true" />
       
