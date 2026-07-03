@@ -46,7 +46,7 @@ Supported task fields include `title`, `depends_on`, `is_independent`, `merged` 
 
 Use `Import -> GitHub Issues` or `Import -> GitLab Issues` to browse the selected project's remote backlog with provider switching, repository override, text search, state filtering, label filtering, and bulk selection.
 
-The issue search layer also exposes the advanced fields that the dashboard renders in the modal: assignee, author or reporter text, milestone, exact issue-number lookup, created and updated date windows, sort field, sort direction, and bounded result limits. The result cards preserve the imported issue title, preview body, repository, issue key, labels, and assignee data while surfacing any extra metadata the provider returns, such as authors, milestones, timestamps, and comment counts.
+The issue search layer also exposes the advanced fields that the dashboard renders in the modal: assignee, author or reporter text, milestone, exact issue-number lookup, created and updated date windows, sort field, sort direction, and bounded result limits. Importer requests trim empty text fields, deduplicate labels, reject malformed limits, and clamp valid result limits before reaching GitHub or GitLab. The result cards preserve the imported issue title, preview body, repository, issue key, labels, and assignee data while surfacing any extra metadata the provider returns, such as authors, milestones, timestamps, and comment counts.
 
 Quick presets are available for the most common triage flows: open backlog, recently updated work, assigned-to-me or text-user matches, security-labeled items, quality and tech-debt items, failed-CI follow-ups, and merge-conflict follow-ups. The selection tray keeps linked issues and special remediation tasks separate, and each selected issue can independently append or omit its conversation history before import.
 
@@ -70,7 +70,7 @@ Use `Import -> Jira Issues` to search Jira with guided filters, multi-select iss
 
 The assignee field accepts a Jira user full name, email address, or account ID. It also accepts `me` / `currentUser()` for the connected Jira account and `unassigned` / `empty` for issues without an assignee. The server builds the Jira query from the selected filters, defaults to open issues sorted by recent updates, and uses `Settings -> Integrations -> Jira -> Default project` to prefill the project key when available. Clearing the project key browses all Jira issues the saved credentials can see.
 
-The search endpoint also honors an exact issue key, user text, issue type, priority, labels, updated-date windows, sort field, sort direction, and a bounded result limit. Advanced users can open the JQL override and replace the guided query entirely; when JQL is present, it overrides the other filters.
+The search endpoint also honors an exact issue key, user text, issue type, priority, labels, updated-date windows, sort field, sort direction, and a bounded result limit. Jira import requests use the same trimming, label deduplication, malformed-limit rejection, and pre-client result-limit clamp as repository issue search. Advanced users can open the JQL override and replace the guided query entirely; when JQL is present, it overrides the other filters.
 
 Jira uses system-scoped settings from `Settings -> Integrations -> Jira`:
 - site URL, for example `https://company.atlassian.net`

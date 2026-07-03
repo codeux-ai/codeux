@@ -85,7 +85,7 @@ export class SprintIssueService {
     }
     const searchInput = typeof input === "string"
       ? input
-      : { ...input, projectKey: input.projectKey || defaultProjectKey };
+      : normalizeJiraIssueSearchInput({ ...input, projectKey: input.projectKey || defaultProjectKey });
     return this.deps.jiraApiClient.searchIssues(host, email, apiToken, searchInput);
   }
 
@@ -103,33 +103,34 @@ export class SprintIssueService {
 
   async searchIssues(projectId: string, input: IssueSearchInput): Promise<RepositoryIssueSearchResult[]> {
     const project = this.requireProject(projectId);
-    const provider = resolveIssueProvider(project, input);
+    const searchInput = normalizeIssueSearchInput(input);
+    const provider = resolveIssueProvider(project, searchInput);
     const settings = this.deps.getDashboardSettings({ projectId });
-    const limit = clampLimit(input.limit);
+    const limit = clampLimit(searchInput.limit);
 
     if (provider === "jira") {
-      return this.searchJiraIssuesForProject(project, input, settings, limit);
+      return this.searchJiraIssuesForProject(project, searchInput, settings, limit);
     }
 
-    const target = resolveRepositoryIssueTarget(project, input, provider);
+    const target = resolveIssueTarget(project, searchInput, provider);
     if (target.provider === "github") {
       return this.searchGitHubIssues({
         ...target,
         token: settings.git.githubToken,
-        search: input.search,
-        state: input.state || "open",
-        labels: input.labels || [],
-        assignee: input.assignee,
-        author: input.author,
-        reporter: input.reporter,
-        milestone: input.milestone,
-        issueText: input.issueText,
-        createdAfter: input.createdAfter,
-        createdBefore: input.createdBefore,
-        updatedAfter: input.updatedAfter,
-        updatedBefore: input.updatedBefore,
-        sortField: normalizeRepositorySearchSortField(input.sortField),
-        sortDirection: normalizeRepositorySearchSortDirection(input.sortDirection),
+        search: searchInput.search,
+        state: searchInput.state || "open",
+        labels: searchInput.labels || [],
+        assignee: searchInput.assignee,
+        author: searchInput.author,
+        reporter: searchInput.reporter,
+        milestone: searchInput.milestone,
+        issueText: searchInput.issueText,
+        createdAfter: searchInput.createdAfter,
+        createdBefore: searchInput.createdBefore,
+        updatedAfter: searchInput.updatedAfter,
+        updatedBefore: searchInput.updatedBefore,
+        sortField: normalizeRepositorySearchSortField(searchInput.sortField),
+        sortDirection: normalizeRepositorySearchSortDirection(searchInput.sortDirection),
         limit,
       });
     }
@@ -137,33 +138,34 @@ export class SprintIssueService {
     return this.searchGitLabIssues({
       ...target,
       token: settings.git.gitlabToken || "",
-      search: input.search,
-      state: input.state || "open",
-      labels: input.labels || [],
-      assignee: input.assignee,
-      author: input.author,
-      reporter: input.reporter,
-      milestone: input.milestone,
-      issueText: input.issueText,
-      createdAfter: input.createdAfter,
-      createdBefore: input.createdBefore,
-      updatedAfter: input.updatedAfter,
-      updatedBefore: input.updatedBefore,
-      sortField: normalizeRepositorySearchSortField(input.sortField),
-      sortDirection: normalizeRepositorySearchSortDirection(input.sortDirection),
+      search: searchInput.search,
+      state: searchInput.state || "open",
+      labels: searchInput.labels || [],
+      assignee: searchInput.assignee,
+      author: searchInput.author,
+      reporter: searchInput.reporter,
+      milestone: searchInput.milestone,
+      issueText: searchInput.issueText,
+      createdAfter: searchInput.createdAfter,
+      createdBefore: searchInput.createdBefore,
+      updatedAfter: searchInput.updatedAfter,
+      updatedBefore: searchInput.updatedBefore,
+      sortField: normalizeRepositorySearchSortField(searchInput.sortField),
+      sortDirection: normalizeRepositorySearchSortDirection(searchInput.sortDirection),
       limit,
     });
   }
 
   async getIssuePromptContextsForReferences(projectId: string, input: IssueSearchInput): Promise<IssuePromptContext[]> {
     const project = this.requireProject(projectId);
-    const provider = resolveIssueProvider(project, input);
+    const searchInput = normalizeIssueSearchInput(input);
+    const provider = resolveIssueProvider(project, searchInput);
     const settings = this.deps.getDashboardSettings({ projectId });
-    const hasJiraReferences = shouldResolveJiraReferences(input, provider) && collectJiraIssueKeys(input).length > 0;
+    const hasJiraReferences = shouldResolveJiraReferences(searchInput, provider) && collectJiraIssueKeys(searchInput).length > 0;
     if (hasJiraReferences && (!settings.jira.host.trim() || !settings.jira.apiToken.trim())) {
       throw new Error("Jira site URL and API token must be configured in Settings -> Integrations.");
     }
-    const issueInputs = buildExplicitIssuePromptInputs(project, input, provider, settings);
+    const issueInputs = buildExplicitIssuePromptInputs(project, searchInput, provider, settings);
     if (issueInputs.length === 0) {
       return [];
     }
@@ -331,7 +333,7 @@ export class SprintIssueService {
       args.issueText?.trim() || "",
       args.search?.trim() || "",
     ].filter(Boolean).join(" ");
-    const url = new URL("https://api.github.com/search/issues");
+    const url = new URL(`${githubApiBaseUrl(args.hostDomain)}/search/issues`);
     url.searchParams.set("q", qualifiers);
     url.searchParams.set("per_page", String(args.limit));
     url.searchParams.set("sort", mapGitHubSortField(args.sortField));
@@ -733,7 +735,7 @@ function resolveIssueProvider(project: ProjectSummary, input: IssueSearchInput):
   return provider;
 }
 
-function resolveRepositoryIssueTarget(project: ProjectSummary, input: IssueSearchInput, provider: LinkedIssueProvider): ResolvedIssueTarget {
+export function resolveIssueTarget(project: ProjectSummary, input: IssueSearchInput, provider: LinkedIssueProvider): ResolvedIssueTarget {
   if (provider !== "github" && provider !== "gitlab") {
     throw new Error("Select a GitHub or GitLab-backed project before importing repository issues.");
   }
@@ -805,7 +807,7 @@ function tryResolveRepositoryIssueTarget(
   provider: "github" | "gitlab",
 ): ResolvedIssueTarget | null {
   try {
-    return resolveRepositoryIssueTarget(project, input, provider);
+    return resolveIssueTarget(project, input, provider);
   } catch {
     return null;
   }
@@ -908,6 +910,98 @@ function normalizeJiraAssignee(value?: string): JiraIssueSearchInput["assignee"]
   return undefined;
 }
 
+function normalizeIssueSearchInput(input: IssueSearchInput): IssueSearchInput {
+  return {
+    ...input,
+    provider: normalizeIssueProviderValue(input.provider),
+    repository: normalizeOptionalString(input.repository),
+    hostDomain: normalizeOptionalString(input.hostDomain)?.toLowerCase(),
+    projectKey: normalizeOptionalString(input.projectKey),
+    search: normalizeOptionalString(input.search),
+    state: normalizeRepositoryIssueStateValue(input.state),
+    status: normalizeJiraIssueStatusValue(input.status),
+    labels: normalizeStringList(input.labels).slice(0, 12),
+    assignee: normalizeOptionalString(input.assignee),
+    assigneeText: normalizeOptionalString(input.assigneeText),
+    author: normalizeOptionalString(input.author),
+    reporter: normalizeOptionalString(input.reporter),
+    milestone: normalizeOptionalString(input.milestone),
+    issueText: normalizeOptionalString(input.issueText),
+    issueKeys: normalizeStringList(input.issueKeys),
+    issueNumbers: normalizeIssueNumbers(input.issueNumbers),
+    issueRefs: normalizeStringList(input.issueRefs),
+    createdAfter: normalizeOptionalString(input.createdAfter),
+    createdBefore: normalizeOptionalString(input.createdBefore),
+    updatedAfter: normalizeOptionalString(input.updatedAfter),
+    updatedBefore: normalizeOptionalString(input.updatedBefore),
+    sortField: normalizeIssueSearchSortFieldValue(input.sortField),
+    sortDirection: normalizeIssueSearchSortDirectionValue(input.sortDirection),
+    limit: clampLimit(input.limit),
+  };
+}
+
+function normalizeJiraIssueSearchInput(input: JiraIssueSearchInput): JiraIssueSearchInput {
+  return {
+    ...input,
+    jql: normalizeOptionalString(input.jql),
+    projectKey: normalizeOptionalString(input.projectKey),
+    search: normalizeOptionalString(input.search),
+    issueKey: normalizeOptionalString(input.issueKey),
+    status: normalizeJiraIssueStatusValue(input.status),
+    assignee: normalizeJiraAssigneeValue(input.assignee),
+    assigneeText: normalizeOptionalString(input.assigneeText),
+    reporterText: normalizeOptionalString(input.reporterText),
+    issueType: normalizeOptionalString(input.issueType),
+    priority: normalizeOptionalString(input.priority),
+    labels: normalizeStringList(input.labels).slice(0, 12),
+    updatedAfter: normalizeOptionalString(input.updatedAfter),
+    updatedBefore: normalizeOptionalString(input.updatedBefore),
+    sortField: normalizeJiraSearchSortField(input.sortField),
+    sortDirection: normalizeJiraSearchSortDirection(input.sortDirection),
+    limit: clampLimit(input.limit ?? input.maxResults),
+    maxResults: clampLimit(input.maxResults ?? input.limit),
+  };
+}
+
+function normalizeOptionalString(value: string | undefined): string | undefined {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function normalizeStringList(values: string[] | undefined): string[] {
+  return Array.from(new Set((values || []).map((value) => value.trim()).filter(Boolean)));
+}
+
+function normalizeIssueNumbers(values: number[] | undefined): number[] {
+  return Array.from(new Set((values || [])
+    .map((value) => Math.trunc(value))
+    .filter((value) => Number.isFinite(value) && value > 0)));
+}
+
+function normalizeIssueProviderValue(value: LinkedIssueProvider | undefined): LinkedIssueProvider | undefined {
+  return value === "github" || value === "gitlab" || value === "jira" ? value : undefined;
+}
+
+function normalizeRepositoryIssueStateValue(value: IssueSearchInput["state"]): IssueSearchInput["state"] {
+  return value === "open" || value === "closed" || value === "all" ? value : undefined;
+}
+
+function normalizeJiraIssueStatusValue(value: IssueSearchInput["status"]): IssueSearchInput["status"] {
+  return value === "open" || value === "in_progress" || value === "done" || value === "all" ? value : undefined;
+}
+
+function normalizeJiraAssigneeValue(value: JiraIssueSearchInput["assignee"]): JiraIssueSearchInput["assignee"] {
+  return value === "any" || value === "me" || value === "unassigned" ? value : undefined;
+}
+
+function normalizeIssueSearchSortFieldValue(value: IssueSearchInput["sortField"]): IssueSearchInput["sortField"] {
+  return normalizeRepositorySearchSortField(value) || normalizeJiraSearchSortField(value);
+}
+
+function normalizeIssueSearchSortDirectionValue(value: IssueSearchInput["sortDirection"]): IssueSearchInput["sortDirection"] {
+  return normalizeRepositorySearchSortDirection(value) || normalizeJiraSearchSortDirection(value);
+}
+
 function normalizeJiraSearchSortField(value?: IssueSearchInput["sortField"]): JiraIssueSearchSortField | undefined {
   if (value === "updated" || value === "created" || value === "priority" || value === "status" || value === "assignee" || value === "reporter") {
     return value;
@@ -954,7 +1048,7 @@ function repositoryIssueUrl(target: ResolvedIssueTarget, issueNumber: number): s
   return `https://${host}/${target.repository}/issues/${issueNumber}`;
 }
 
-function normalizeIssuePromptContextInputs(issues: IssuePromptContextInput[]): IssuePromptContextInput[] {
+export function normalizeIssuePromptContextInputs(issues: IssuePromptContextInput[]): IssuePromptContextInput[] {
   const seen = new Set<string>();
   const normalized: IssuePromptContextInput[] = [];
   for (const issue of issues) {
@@ -1019,7 +1113,7 @@ function defaultHostForProvider(provider: string): string {
   return provider === "gitlab" ? "gitlab.com" : "github.com";
 }
 
-function clampLimit(limit: number | undefined): number {
+export function clampLimit(limit: number | undefined): number {
   if (!Number.isFinite(limit)) {
     return 30;
   }
