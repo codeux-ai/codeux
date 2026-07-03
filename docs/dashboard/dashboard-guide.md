@@ -197,6 +197,7 @@ Legacy runtime:
 - Shared Stats controls now route selected, hover, focus, disabled, shadow, and compact segmented-navigation states through the same stats theme tokens. The analysis mode rail keeps accessible `aria-pressed` buttons, icon-first compact rendering, horizontal scroll boundaries, and visible focus rings.
 - Shared Stats cards render as named analytics articles with stable height, restrained hover elevation, long-value wrapping, and protected sparkline layering so dense metric decks do not shift or overlap as labels and values change.
 - The Stats hero is a two-zone command band. Project, sprint, generated-at, freshness, and telemetry-source context sit beside compact time-window controls, custom date entry, and the analysis mode rail.
+- A lightweight workspace context strip follows the Stats hero and keeps the active mode, selected data window, freshness, resolution, and sprint scope visible without repeating the hero controls.
 - Time-window presets always stay in the hero. Choosing `Custom` reveals date inputs without applying the range; the validated `Apply` action is the only path that changes a custom range, and invalid ranges announce inline errors.
 - The analysis mode rail exposes Trend, Composition, Models, Providers, Ledgers, and System. Providers maps to the reliability workspace while keeping the user-facing label short.
 - The top summary cards change with the selected mode. Trend emphasizes tokens, active time, cost, invocations, and cache rate; Composition, Models, Reliability, Ledgers, and System use mode-specific cards for provider mix, model performance, telemetry confidence, ledger volume, and invocation health.
@@ -206,6 +207,7 @@ Legacy runtime:
 - Ledgers mode uses sticky tabbed Task Telemetry, Sprint Telemetry, and Git Telemetry with stable count badges, roving focus, search/sort controls, and progressive rendering for large result sets.
 - System mode uses a compact debugging workbench with summary strips, status distribution, invocation filters, search, status/purpose/provider/error chips, pagination controls, and a sortable invocation table.
 - The system invocation table preserves subdued status indicators, semantic column headers, task context chips, token columns, loading and empty states, and expandable transcript detail rows.
+- No-project, first-load loading, and first-load error states reuse the same Stats visual shell under the hero and context strip; loading remains a polite status and errors expose a retry action.
 - Stats data comes from `GET /api/projects/:projectId/stats`, and the System stats view additionally uses `useSystemViewData(projectId)` to fetch invocation records. Stats refresh through the normal dashboard polling/realtime path: existing snapshots remain visible while loading states mark the studio as refreshing.
 
 ### V2 project management
