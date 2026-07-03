@@ -92,6 +92,50 @@ describe("ProviderRunner", () => {
     expect(result.text).toBe("keep this line");
   });
 
+  it("persists the fresh Claude session id after missing-conversation fallback", async () => {
+    const oldNativeSessionId = "66e95743-e82e-445d-891a-ac01b27ddcb9";
+    dockerRunner.readWorkspaceFile.mockResolvedValue("");
+    dockerRunner.runProviderInDocker
+      .mockResolvedValueOnce({
+        ok: false,
+        stdout: "",
+        stderr: `[claude-code] No conversation found with session ID: ${oldNativeSessionId}`,
+        code: 1,
+        signal: null,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        stdout: "fresh response",
+        stderr: "",
+        code: 0,
+        signal: null,
+      });
+
+    const result = await runner.runProviderForText({
+      provider: "claude-code",
+      prompt: "continue planning",
+      cwd: "/repo",
+      model: "default",
+      apiKey: "key",
+      sessionId: "planning-claude-code-old",
+      continueSessionId: oldNativeSessionId,
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    const firstArgs = dockerRunner.runProviderInDocker.mock.calls[0]?.[0]?.args;
+    const secondArgs = dockerRunner.runProviderInDocker.mock.calls[1]?.[0]?.args;
+    const freshSessionFlagIndex = secondArgs?.indexOf("--session-id") ?? -1;
+    const freshSessionId = freshSessionFlagIndex >= 0 ? secondArgs?.[freshSessionFlagIndex + 1] : undefined;
+
+    expect(firstArgs).toEqual(expect.arrayContaining(["--resume", oldNativeSessionId]));
+    expect(secondArgs).not.toEqual(expect.arrayContaining(["--resume", oldNativeSessionId]));
+    expect(freshSessionId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(freshSessionId).not.toBe(oldNativeSessionId);
+    expect(result.nativeSessionId).toBe(freshSessionId);
+  });
+
   it("leaves a normal antigravity completion successful when the log has no errors", async () => {
     dockerRunner.runProviderInDocker.mockResolvedValueOnce({
       ok: true,

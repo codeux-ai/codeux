@@ -29,6 +29,8 @@ describe("PlanningAgentService", () => {
   beforeEach(() => {
     vi.spyOn(WorkspaceManager.prototype, "createSnapshotWorkspace")
       .mockResolvedValue("docker-volume://planning-test");
+    vi.spyOn(WorkspaceManager.prototype, "createOrReuseSnapshotWorkspace")
+      .mockResolvedValue("docker-volume://planning-test");
     vi.spyOn(WorkspaceManager.prototype, "removeWorktree")
       .mockResolvedValue(undefined);
     vi.spyOn(WorkspaceManager.prototype, "readWorkspaceFile")
@@ -650,10 +652,17 @@ describe("PlanningAgentService", () => {
     const continued = await service.restartInvocation(failedInvocation.id, "continue_session");
 
     expect(continued.createdTaskIds).toHaveLength(1);
+    const workspaceReuse = vi.mocked(WorkspaceManager.prototype.createOrReuseSnapshotWorkspace);
+    expect(workspaceReuse).toHaveBeenCalledWith(repoPath, expect.stringContaining(project.id));
+    expect(workspaceReuse.mock.calls[0]?.[1]).toContain(sprint.id);
+    expect(WorkspaceManager.prototype.removeWorktree).toHaveBeenCalledWith(repoPath, "docker-volume://planning-test");
     const call = vi.mocked(providerRunner.runProviderForText).mock.calls[0]?.[0];
     expect(call?.continueSessionId).toBe("native-original");
     expect(call?.sessionId).toBe("planning-claude-code-old");
     expect(call?.prompt).toContain("Continue the previous planning attempt");
+    expect(call?.prompt).toContain("If the previous provider conversation cannot be resumed");
+    expect(call?.prompt).toContain("## Original Planning Instructions");
+    expect(call?.prompt).toContain("Plan with context");
     expect(call?.prompt).toContain("Output the complete valid JSON sprint definition now");
     expect(executionRepository.getExecutionInvocation(failedInvocation.id)?.preservedAt).toEqual(expect.any(String));
   });
