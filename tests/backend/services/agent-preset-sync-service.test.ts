@@ -211,7 +211,11 @@ describe("AgentPresetSyncService", () => {
     const drifted = await syncService.listAgentPresets(project.id);
     expect(drifted[0]?.syncStatus).toBe("synced");
     expect(drifted[0]?.instructionMarkdown).toContain("Updated planning instructions");
-    expect(drifted[0]?.avatarConfig).toBeUndefined();
+    expect(drifted[0]?.avatarConfig).toMatchObject({
+      chassis: "square",
+      accent: "lavender",
+      baseColor: "ivory",
+    });
     expect(drifted[0]?.memoryTemplateOverrideEnabled).toBe(false);
   });
 

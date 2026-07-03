@@ -192,6 +192,12 @@ Legacy runtime:
 
 ## UI Sections
 
+### Overview
+- Overview metric cards use the restored `StatsCard` visual system from the operational command surface: four responsive cards with ambient bottom sparklines, stable card height, and compact detail rows for cost, invocations, active sprint, queue health, and active time.
+
+### Navigation
+- The top-nav workspace search trigger uses a more opaque glass surface in light and dark mode so it stays readable against page content while preserving the existing blur treatment.
+
 ### Stats page
 - The Stats page is available at `/stats` and is scoped to the selected project. Without a selected project, it renders the Stats shell with a polite no-project state instead of attempting to fetch telemetry.
 - Stats data comes from `GET /api/projects/:projectId/stats`; System mode additionally uses `useSystemViewData(projectId)` and invocation APIs for paginated records and transcript detail. Background refreshes keep the previous snapshot visible while the studio state changes to `Refreshing`.
@@ -210,6 +216,9 @@ Legacy runtime:
 - System filtering covers search, status, purpose, provider, error category, record mode (`All`, `Errors`, `System Msgs`), sort, page controls, clear-all, active-filter counts, and result counts. These controls wrap rather than clipping on narrow screens.
 - Loading, no-data, low-data, empty, and error states reuse the Stats shell. Loading panels use `role="status"` and error panels use `role="alert"` with retry where recovery is available.
 - For implementation details and page-level design rules, see [Stats & Analytics Design System](./design-system-stats.md). For telemetry collection semantics, see [Usage Telemetry And Stats](../architecture/usage-telemetry-and-stats.md).
+
+### Memory
+- Memory map ambient node labels are visible at the default camera zoom, while focused node cards still require the deeper selected-node zoom. This keeps the map readable immediately after load without forcing operators to zoom in.
 
 ### V2 project management
 - Interactive dashboard controls use pointer cursors consistently: enabled buttons, links, tab controls, form toggles, menu/popover triggers, DAG nodes, cards, and dismissible overlays expose a pointer affordance, while disabled controls retain `not-allowed`.
@@ -391,7 +400,8 @@ Legacy runtime:
 - The Stats page uses the same project realtime invalidation channels as the rest of the v2 dashboard, then falls back to polling so usage graphs and tables stay current during active sprint execution
 - Overview widgets and headline stat cards now read project/task data from the same project-management API surface, and task streams are filtered to the currently selected active sprint only (a frontend-only view change with no API contract change)
 - Agents page features an immersive, showcase-first layout that defaults to presenting the selected agent's 3D animated avatar, details, and route-assignment tags, rather than a raw edit form.
-- Agents are generated with a random persisted avatar on creation and can be fully customized in the dedicated edit mode.
+- Agents are generated with a random persisted avatar on creation and can be fully customized in the dedicated edit mode. Server-side sync also resolves missing avatar metadata for base roles and Project Setup Agent generated specialists, then persists the result into sqlite and mirrored markdown.
+- Agent detail cards show selected-agent usage totals from execution invocations, including total cost, tokens, run count, and completion rate alongside provider/model, MCP, and instruction metadata.
 - Edit mode exposes a new toggleable Memory Template Override control, allowing operators to explicitly provide custom memory injection instructions on a per-agent basis.
 - Edit mode now also exposes a dedicated `Manage Memory` popover for tier selection, category filtering, global and per-category minimum strength, and short/long-term memory caps. Empty category selection means all categories are included, and per-category overrides are only shown for categories currently eligible for injection.
 - The agent editor shows a compact memory summary chip under the filter trigger so operators can see the active memory scope without opening the popover.
@@ -542,6 +552,7 @@ Runtime scoping:
 - System settings own runtime, integrations, default project behavior, and MCP tool exposure
 - Project settings own inheritable execution behavior such as provider routing, git defaults, CI intelligence, sprint loop steps, CLI workflow, and skills
 - Project settings also own agent authoring behavior, including whether dashboard edits mirror agent markdown into the project directory
+- Project scope General settings expose the selected project's display name as an immediate metadata edit. Saving calls `PATCH /api/projects/:projectId` with the trimmed `name`, refreshes the project collection, and leaves the project id, settings overrides, tasks, and runtime history unchanged.
 - The `/config` page keeps the existing v2 settings shell and categories, but now binds them to real scoped settings instead of draft-only values
 - System scope only edits system-owned controls, while project scope only edits project-owned overrides for the selected project
 - The integrations view now owns provider API keys plus GitHub and GitLab tokens and GitHub workflow settings, rather than splitting those across separate categories

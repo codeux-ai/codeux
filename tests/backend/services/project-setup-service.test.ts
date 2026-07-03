@@ -208,8 +208,16 @@ describe("ProjectSetupService", () => {
 
     const presets = await agentPresetSyncService.listAgentPresets(project.id);
     const setupAgent = presets.find((preset) => preset.name === "Project Setup Agent");
+    const generatedAgent = presets.find((preset) => preset.name === "Frontend Runtime Agent");
     expect(setupAgent).toBeTruthy();
-    expect(presets.some((preset) => preset.name === "Frontend Runtime Agent")).toBe(true);
+    expect(setupAgent?.avatarConfig).toMatchObject({
+      chassis: "tall",
+      accent: "amber",
+      baseColor: "midnight",
+    });
+    expect(generatedAgent?.avatarConfig).toBeTruthy();
+    await expect(fs.readFile(path.join(repoDir, ".code-ux", "agents", "frontend_runtime_agent.md"), "utf8"))
+      .resolves.toContain("\"avatarConfig\"");
 
     const effective = settingsRepository.resolveProjectDashboardSettings(project.id).settings;
     expect(effective.agents.routing.planning.agentPresetId).toBeNull();

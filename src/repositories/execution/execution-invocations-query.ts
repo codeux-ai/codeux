@@ -22,6 +22,16 @@ import {
   computeAvailableProviders
 } from "./execution-invocations-query-analytics.js";
 
+const PROVIDER_INVOCATION_COST_CENTS_SQL = `
+      CASE
+        WHEN provider_invocations.raw_usage_json IS NOT NULL AND json_valid(provider_invocations.raw_usage_json)
+        THEN COALESCE(
+          CAST(json_extract(provider_invocations.raw_usage_json, '$.costCents') AS REAL),
+          CAST(json_extract(provider_invocations.raw_usage_json, '$.cost') AS REAL) * 100,
+          0
+        )
+        ELSE 0
+      END`;
 
 // Shared projection: invocation columns + provider usage + the sprint key /
 // task key context the dashboard renders (and links) on each invocation card.
@@ -57,6 +67,7 @@ const INVOCATION_SELECT = `
       provider_invocations.cached_input_tokens AS cached_input_tokens,
       provider_invocations.output_tokens AS output_tokens,
       provider_invocations.total_tokens AS total_tokens,
+      ${PROVIDER_INVOCATION_COST_CENTS_SQL} AS cost_cents,
       sprints.number AS sprint_number,
       sprints.name AS sprint_name,
       sprints.slug AS sprint_slug,
@@ -255,6 +266,11 @@ export function queryProjectInvocations(
     values.push(params.purpose);
   }
 
+  if (params.agentPresetId) {
+    conditions.push("execution_invocations.agent_preset_id = ?");
+    values.push(params.agentPresetId);
+  }
+
   if (params.search) {
     conditions.push("(sprints.name LIKE ? OR sprints.slug LIKE ? OR tasks.task_key LIKE ? OR tasks.title LIKE ? OR execution_invocations.model LIKE ?)");
     const searchTerm = `%${params.search}%`;
@@ -279,7 +295,7 @@ export function queryProjectInvocations(
     startedAt: "execution_invocations.started_at",
     durationMs: "provider_invocations.duration_ms",
     totalTokens: "provider_invocations.total_tokens",
-    costCents: "provider_invocations.cost_cents"
+    costCents: PROVIDER_INVOCATION_COST_CENTS_SQL
   };
 
   let orderBy = "ORDER BY execution_invocations.started_at DESC, execution_invocations.rowid DESC";
@@ -314,6 +330,7 @@ export function queryProjectInvocations(
     totalInputTokens: Number(summaryRow.totalInputTokens) || 0,
     totalOutputTokens: Number(summaryRow.totalOutputTokens) || 0,
     totalCachedTokens: Number(summaryRow.totalCachedTokens) || 0,
+    totalCostCents: Number(summaryRow.totalCostCents) || 0,
     avgDurationMs: Number(summaryRow.avgDurationMs) || 0,
     p95DurationMs,
     externalApiMetrics,
