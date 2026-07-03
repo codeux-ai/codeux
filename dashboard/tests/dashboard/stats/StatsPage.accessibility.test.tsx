@@ -308,7 +308,7 @@ describe("StatsPage accessibility", () => {
     expect(status).toHaveTextContent("Project Atlas");
   });
 
-  it("renders the hero summaries, mode navigation, and custom range validation", () => {
+  it("renders the hero context, mode navigation, and custom range validation", () => {
     render(
       <StatsPageHero
         selectedProject={{ id: "project-1", name: "Project Atlas" } as any}
@@ -322,16 +322,16 @@ describe("StatsPage accessibility", () => {
         applyCustomRange={vi.fn()}
         visualMode="trend"
         setVisualMode={vi.fn()}
-        completionConfidence="Reported"
       />
     );
 
-    expect(screen.getByText("Tokens")).toBeInTheDocument();
-    expect(screen.getByText("Active time")).toBeInTheDocument();
-    expect(screen.getByText("Invocations")).toBeInTheDocument();
-    expect(screen.getByText("Success rate")).toBeInTheDocument();
-    expect(screen.getAllByText("Models").length).toBeGreaterThan(1);
-    expect(screen.getByRole("article", { name: /Tokens: .*Mixed telemetry/i })).toBeInTheDocument();
+    const context = screen.getByLabelText("Stats project context");
+    expect(context).toHaveTextContent("Project Atlas");
+    expect(context).toHaveTextContent("#12");
+    expect(context).not.toHaveTextContent("Mixed");
+    expect(context).not.toHaveTextContent("daily · 3 buckets");
+    expect(context).not.toHaveTextContent("1 / 2 providers");
+    expect(screen.queryByLabelText("Executive summary")).not.toBeInTheDocument();
 
     const modeGroup = screen.getByRole("group", { name: "Analytics modes" });
     expect(modeGroup).toBeInTheDocument();

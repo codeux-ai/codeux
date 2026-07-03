@@ -30,12 +30,12 @@ The redesigned Stats page uses a stable top-to-bottom shell:
    - The mode rail is a wrapped segmented control with icon-first buttons and stable accessible labels: `Trend`, `Composition`, `Models`, `Providers`, `Ledgers`, and `System`.
    - The visible `Providers` label maps to the internal reliability mode. Keep user-facing copy and tests aligned if this mapping changes.
    - The rail uses `role="group"` and `aria-pressed`; it is not a tablist because mode changes replace the whole analysis workspace.
-3. KPI runway
-   - The hero KPI runway summarizes tokens, active time, invocations, success rate, models/providers, and selected range.
-   - Mode-specific top cards follow the workspace context strip. They use `StatsCard` and should put the most actionable metric first for the selected mode.
+3. Metric deck
+   - The hero remains a command header only: page title, selected project, sprint lens, time-window controls, and mode navigation.
+   - Mode-specific top cards are the single primary metric deck for the selected analysis surface. They use `StatsCard` and should put the most actionable metric first for the selected mode.
    - Cards expose title, value, and string description as the analytics article name. Long values must wrap inside stable card slots.
 4. Workspace body
-   - Mode content starts directly after the KPI deck without an extra studio header, readiness chip, or duplicated workspace context card.
+   - Mode content starts directly after the metric deck without an extra studio header, readiness chip, duplicated KPI strip, summary-card deck, or duplicated workspace context card.
    - Workspace bodies may differ substantially, but they should share the same page-scoped panel, chip, input, ledger row, focus, and motion tokens.
 5. Feedback states
    - No-project, first-load loading, first-load error, empty, refresh, and reduced-data states preserve the shell rhythm.
@@ -50,9 +50,11 @@ Mode-specific implementations live under `dashboard/src/v2/pages/stats/component
 Trend is the chart-first workspace for time-series telemetry.
 
 - Lead with throughput, runtime, cost, invocations, cache rate, and token velocity.
+- Do not render a second Trend KPI band inside the studio. The mode metric deck owns total tokens, invocations, active time, cost, and cache-rate summaries; the Trend studio starts with compact secondary signal cards and then the chart.
 - Keep chart state centralized through `use-usage-chart-state.ts`; chart filters change series visibility, not the selected time window.
 - The chart header keeps filter access and zoom reset visible near the graph title. The toolbar summarizes selected range, bucket count, resolution, and active zoom.
 - The primary plot should use a tall, viewport-bounded canvas area so the graph remains the dominant element in Trend mode.
+- Avoid visible chart-summary card decks above the plot. Keep chart summary text in the screen-reader summary and expose exact values through focused-bucket inspection.
 - Short daily windows show compact bucket labels under the overview strip so the minimap carries its own context without relying only on the main x-axis labels.
 - Series controls sit in a full-width band under the usage graph, grouped into readable categories such as totals, token details, source confidence, providers, models, purposes, and Git. Controls use `role="switch"` and `aria-checked`; at least one series remains enabled.
 - Hover, keyboard focus, minimap selection, drag zoom, and active bucket controls all update the same focused-bucket summary; avoid a second live-values panel that repeats those values. The focused-bucket card fills the height of its chart-side column, caps to the graph height, and scrolls internally when the graph is tall.
@@ -141,7 +143,7 @@ Dense analytics layouts should stay calm: restrained contrast, low-opacity fills
 
 ## Responsive Behavior
 
-- The hero uses a two-zone command band on wide screens and stacks project context, time controls, mode navigation, and KPI runway on narrow screens.
+- The hero uses a two-zone command band on wide screens and stacks project context, time controls, and mode navigation on narrow screens.
 - Fixed or sticky header-adjacent navigation must wrap before it clips. Use `min-w-0`, bounded grids, and component-local overflow only when wrapping can no longer preserve button labels.
 - Metric grids collapse from desktop multi-column layouts to two-column and single-column layouts without changing order.
 - Trend places focused-bucket and series context below the chart on narrow screens.

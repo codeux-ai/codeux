@@ -62,7 +62,6 @@ export const StatsPage: FunctionComponent = () => {
     tokenSegments,
     applyPresetWindow,
     applyCustomRange,
-    completionConfidence,
   } = useStatsPageData(selectedProject?.id || null);
 
   useLayoutEffect(() => {
@@ -201,7 +200,6 @@ export const StatsPage: FunctionComponent = () => {
           applyCustomRange={applyCustomRange}
           visualMode={visualMode}
           setVisualMode={setVisualMode}
-          completionConfidence={completionConfidence}
         />
       </section>
 

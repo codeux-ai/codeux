@@ -10,6 +10,83 @@
   padding: var(--stats-page-pad-y) var(--stats-page-pad-x) !important;
 }
 
+.pageRoot :global(.text-slate-900),
+.pageRoot :global(.text-slate-800),
+.pageRoot :global(.text-slate-700),
+.pageRoot :global(.dark\:text-white),
+.pageRoot :global(.dark\:text-slate-100),
+.pageRoot :global(.dark\:text-slate-200),
+.pageRoot :global(.dark\:text-slate-300) {
+  color: var(--stats-value-color) !important;
+}
+
+.pageRoot :global(.text-slate-600),
+.pageRoot :global(.text-slate-500),
+.pageRoot :global(.text-slate-400),
+.pageRoot :global(.dark\:text-slate-400),
+.pageRoot :global(.dark\:text-slate-500) {
+  color: var(--stats-detail-color) !important;
+}
+
+.pageRoot :global([class*="border-black/"]),
+.pageRoot :global([class*="border-white/"]),
+.pageRoot :global([class*="dark:border-white/"]),
+.pageRoot :global([class*="border-slate-"]) {
+  border-color: var(--stats-card-border) !important;
+}
+
+.pageRoot :global([class*="bg-white/"]),
+.pageRoot :global([class*="dark:bg-white/"]),
+.pageRoot :global([class*="dark:bg-void-"]),
+.pageRoot :global([class*="bg-slate-900"]),
+.pageRoot :global([class*="bg-slate-100"]),
+.pageRoot :global([class*="bg-slate-500/"]) {
+  background-color: var(--stats-surface-chip) !important;
+}
+
+.pageRoot :global([class*="bg-black/"]) {
+  background-color: var(--stats-quiet-track) !important;
+}
+
+.pageRoot :global([class*="hover:bg-black/"]):hover,
+.pageRoot :global([class*="dark:hover:bg-white/"]):hover {
+  background-color: var(--stats-surface-chip-hover) !important;
+}
+
+.pageRoot :global(.gap-6) {
+  gap: var(--stats-section-gap) !important;
+}
+
+.pageRoot :global(.gap-4) {
+  gap: 0.75rem !important;
+}
+
+.pageRoot :global(.space-y-6 > :not([hidden]) ~ :not([hidden])) {
+  --tw-space-y-reverse: 0 !important;
+  margin-top: var(--stats-section-gap) !important;
+  margin-bottom: 0 !important;
+}
+
+.pageRoot :global(.space-y-4 > :not([hidden]) ~ :not([hidden])) {
+  --tw-space-y-reverse: 0 !important;
+  margin-top: 0.75rem !important;
+  margin-bottom: 0 !important;
+}
+
+.pageRoot :global(.p-6) {
+  padding: 1rem !important;
+}
+
+.pageRoot :global(.px-6) {
+  padding-left: 1rem !important;
+  padding-right: 1rem !important;
+}
+
+.pageRoot :global(.py-6) {
+  padding-top: 1rem !important;
+  padding-bottom: 1rem !important;
+}
+
 .heroSection,
 .contextStrip,
 .metricDeckSection,
@@ -34,8 +111,7 @@
   gap: 0.875rem;
   grid-template-areas:
     "intro"
-    "controls"
-    "kpis";
+    "controls";
 }
 
 .heroIntro {
@@ -84,8 +160,7 @@
 }
 
 .heroControlEyebrow,
-.customRangeLabel,
-.heroKpiLabel {
+.customRangeLabel {
   color: var(--stats-label-color);
   font-size: 0.625rem;
   font-weight: 800;
@@ -269,60 +344,6 @@
 
 .heroViewToggle {
   width: 100%;
-}
-
-.heroKpiGrid {
-  grid-area: kpis;
-  display: grid;
-  min-width: 0;
-  gap: 0.625rem;
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.heroKpi {
-  display: flex;
-  min-width: 0;
-  min-height: 5.875rem;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 0.625rem;
-  padding: 0.75rem;
-}
-
-.heroKpiHeader {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 0.625rem;
-}
-
-.heroKpiIcon {
-  display: flex;
-  width: 2rem;
-  height: 2rem;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0.75rem;
-  background: var(--stats-accent-amber-fill);
-  color: var(--stats-accent-amber);
-}
-
-.heroKpiValue {
-  color: var(--stats-value-color);
-  font-size: 1.125rem;
-  font-weight: 900;
-  line-height: 1.15;
-  overflow-wrap: anywhere;
-}
-
-.heroKpiDetail {
-  margin-top: 0.25rem;
-  color: var(--stats-detail-color);
-  font-size: 0.6875rem;
-  font-weight: 500;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
 }
 
 .contextStrip {
@@ -587,10 +608,6 @@
     grid-column: 1 / -1;
   }
 
-  .heroKpiGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .contextFacts,
   .stateMetaGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -610,10 +627,6 @@
 @media (min-width: 1024px) {
   .heroPanel {
     padding: 1rem;
-  }
-
-  .heroKpiGrid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .contextStrip {
@@ -657,17 +670,12 @@
   .heroGrid {
     grid-template-columns: minmax(0, 1fr) minmax(22rem, 32rem);
     grid-template-areas:
-      "intro controls"
-      "kpis kpis";
+      "intro controls";
     align-items: start;
   }
 
   .heroControls {
     align-self: start;
-  }
-
-  .heroKpiGrid {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 
   .purposeCards {

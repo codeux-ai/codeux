@@ -163,7 +163,7 @@ describe('StatsPageHero', () => {
     expect(screen.getByRole('button', { name: 'Models' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Trend' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByText('Model activity, latency, cache behavior, and reliability signals.')).toBeTruthy();
-    expect(screen.getByLabelText('Executive summary')).toBeTruthy();
+    expect(screen.queryByLabelText('Executive summary')).toBeNull();
   });
 
   it('invokes preset and visual-mode callbacks from the command controls', () => {
@@ -196,7 +196,7 @@ describe('StatsPageHero', () => {
     expect(setVisualMode).toHaveBeenCalledWith('system');
   });
 
-  it('renders enriched KPI details from usage, statuses, models, sprint, and range', () => {
+  it('renders compact context details from usage, models, sprint, and range', () => {
     render(
       <StatsPageHero
         selectedProject={{ id: 'proj-1', name: 'Project 1' } as any}
@@ -222,15 +222,14 @@ describe('StatsPageHero', () => {
         applyCustomRange={vi.fn()}
         visualMode="reliability"
         setVisualMode={vi.fn()}
-        completionConfidence="Mixed reported + fallback"
       />,
     );
 
-    expect(screen.getAllByText('Daily · 7 buckets').length).toBeGreaterThan(0);
-    expect(screen.getByText('9 completed · 1 failed · 0 cancelled')).toBeTruthy();
-    expect(screen.getByText('1 providers · GPT-5')).toBeTruthy();
-    expect(screen.getByText('Mixed reported + fallback · Sprint 4')).toBeTruthy();
-    expect(screen.getByText('Custom · Sprint 4')).toBeTruthy();
+    expect(screen.getByText('#4')).toBeTruthy();
+    expect(screen.queryByText('Daily · 7 buckets')).toBeNull();
+    expect(screen.queryByText('Mixed')).toBeNull();
+    expect(screen.queryByText('1 / 1 providers')).toBeNull();
+    expect(screen.queryByLabelText('Executive summary')).toBeNull();
   });
 
   it('disables the Apply button when custom dates are missing', () => {

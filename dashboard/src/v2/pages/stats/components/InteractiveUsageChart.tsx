@@ -6,10 +6,7 @@ import type {
   ProjectExecutionStatsSnapshot,
 } from '../../../types.js';
 import {
-  formatTokens,
-  formatStatsDuration,
   formatDateTime,
-  formatCost
 } from '../stats-utils.js';
 import {
   PANEL_CLASS,
@@ -153,8 +150,6 @@ export const InteractiveUsageChart: FunctionComponent<{
   const axisLabelStep = getAxisLabelStep(stats.range);
 
   const visibleMetrics = useMemo(() => calculateChartMetrics(visibleBuckets), [visibleBuckets]);
-  const { peakTokens, peakActiveTimeMs, peakInvocations, averageTokens, totalCostUsd, invocationDensity } = visibleMetrics;
-  const invocationDensityLabel = visibleBuckets.length > 0 ? `${invocationDensity.toFixed(1)} / bucket` : "—";
   const activeSeriesLabels = useMemo(() => visibleSeries.map((series) => series.label), [visibleSeries]);
   const chartSummaryText = useMemo(
     () => describeChartMetrics(
@@ -164,14 +159,6 @@ export const InteractiveUsageChart: FunctionComponent<{
     ),
     [activeSeriesLabels, visibleMetrics, zoomLabel]
   );
-  const summaryCards = [
-    { label: 'Peak tokens', value: formatTokens(peakTokens), detail: 'highest bucket' },
-    { label: 'Peak active time', value: formatStatsDuration(peakActiveTimeMs), detail: 'highest bucket' },
-    { label: 'Average tokens', value: formatTokens(averageTokens), detail: 'per bucket' },
-    { label: 'Peak invocations', value: peakInvocations.toLocaleString(), detail: 'highest bucket' },
-    { label: 'Visible cost', value: formatCost(totalCostUsd), detail: 'visible window' },
-    { label: 'Invocation density', value: invocationDensityLabel, detail: 'visible window' },
-  ];
 
   useEffect(() => {
     const handleMouseUp = () => {
@@ -298,35 +285,6 @@ export const InteractiveUsageChart: FunctionComponent<{
             enabledSeries={enabledSeries}
             setEnabledSeries={setEnabledSeries}
           />
-        </div>
-
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_18rem] xl:items-stretch">
-          <div
-            aria-label="Usage chart summary metrics"
-            className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr))]"
-          >
-            {summaryCards.map((card) => (
-              <article
-                key={card.label}
-                data-chart-card
-                aria-label={`${card.label}: ${card.value}, ${card.detail}`}
-                className="min-w-0 rounded-[1.15rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-4 py-3"
-              >
-                <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">{card.label}</div>
-                <div className="mt-2 break-words text-lg font-black leading-tight text-[var(--stats-value-color)]">{card.value}</div>
-                <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]">{card.detail}</div>
-              </article>
-            ))}
-          </div>
-          <div className="rounded-[1.15rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-4 py-3">
-            <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">Active series</div>
-            <div className="mt-2 text-sm font-bold leading-snug text-[var(--stats-value-color)]">
-              {activeSeriesLabels.length > 0 ? activeSeriesLabels.join(", ") : "No active series"}
-            </div>
-            <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]">
-              {zoomLabel}
-            </div>
-          </div>
         </div>
 
         <div className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_20rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]">

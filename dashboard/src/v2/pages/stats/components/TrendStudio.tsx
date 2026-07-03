@@ -1,7 +1,5 @@
 import type { FunctionComponent } from "preact";
 import {
-  ArrowDownRight,
-  ArrowUpRight,
   Clock3,
   Hash,
   TimerReset,
@@ -13,55 +11,16 @@ import type {
 } from "../../../types.js";
 import {
   formatTokens,
-  formatCost,
   formatStatsDuration,
   formatPercent,
 } from "../stats-utils.js";
 import type { UsageChartState } from "../use-usage-chart-state.js";
-import { computeWindowDelta, formatDeltaPercent, type TrendDelta } from "../trend-insights.js";
 import {
   CHIP_CLASS,
   LEDGER_ROW_MODERN_CLASS,
   SUBPANEL_CLASS,
 } from "./stats-ui-primitives.js";
 import { InteractiveUsageChart } from "./InteractiveUsageChart.js";
-
-const TrendKpiTile: FunctionComponent<{
-  label: string;
-  value: string;
-  delta?: TrendDelta;
-  detail?: string;
-}> = ({ label, value, delta, detail }) => {
-  const deltaLabel = delta ? formatDeltaPercent(delta) : null;
-  const showDelta = delta && deltaLabel && deltaLabel !== "—";
-  const deltaTone = !delta || delta.direction === "flat"
-    ? "text-[var(--stats-detail-color)]"
-    : delta.direction === "up"
-      ? "text-[color:var(--stats-positive-text)]"
-      : "text-[color:var(--stats-negative-text)]";
-
-  return (
-    <div className={`${SUBPANEL_CLASS} flex min-h-[7rem] flex-col justify-between p-3.5`}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">{label}</div>
-        {showDelta ? (
-          <div className={`inline-flex items-center gap-1 rounded-full border border-[var(--stats-card-border)] bg-[color:var(--stats-surface-chip)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] ${deltaTone}`}>
-            {delta!.direction === "up" ? (
-              <ArrowUpRight className="h-3 w-3" strokeWidth={2.6} />
-            ) : delta!.direction === "down" ? (
-              <ArrowDownRight className="h-3 w-3" strokeWidth={2.6} />
-            ) : null}
-            {deltaLabel}
-          </div>
-        ) : null}
-      </div>
-      <div>
-        <div className="mt-3 break-words text-xl font-black leading-tight text-[var(--stats-value-color)]">{value}</div>
-        {detail ? <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--stats-detail-color)]">{detail}</div> : null}
-      </div>
-    </div>
-  );
-};
 
 const TrendSignalCard: FunctionComponent<{
   icon: LucideIcon;
@@ -94,12 +53,6 @@ export const TrendStudio: FunctionComponent<{
   planningUsage: _planningUsage,
   chartState,
 }) => {
-  const chartMetrics = chartState.metrics;
-  const buckets = stats.buckets || [];
-  const tokenDelta = computeWindowDelta(buckets, (bucket) => bucket.usage?.totalTokens || 0);
-  const invocationDelta = computeWindowDelta(buckets, (bucket) => bucket.usage?.invocationCount || 0);
-  const activeTimeDelta = computeWindowDelta(buckets, (bucket) => bucket.usage?.activeTimeMs || 0);
-  const cacheDenominator = stats.usage.inputTokens + stats.usage.cachedInputTokens;
   const statusCounts = stats.statusCounts;
   const finishedCount = statusCounts
     ? statusCounts.completed + statusCounts.failed + statusCounts.cancelled
@@ -114,38 +67,6 @@ export const TrendStudio: FunctionComponent<{
 
   return (
   <section className="space-y-3">
-    <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,13.5rem),1fr))]">
-      <TrendKpiTile
-        label="Total Tokens"
-        value={formatTokens(stats.usage.totalTokens)}
-        delta={tokenDelta}
-        detail="vs first half of window"
-      />
-      <TrendKpiTile
-        label="Invocations"
-        value={stats.usage.invocationCount.toLocaleString()}
-        delta={invocationDelta}
-        detail="vs first half of window"
-      />
-      <TrendKpiTile
-        label="Active Time"
-        value={formatStatsDuration(stats.usage.activeTimeMs)}
-        delta={activeTimeDelta}
-        detail="vs first half of window"
-      />
-      <TrendKpiTile
-        label="Total Cost"
-        value={stats.usage.totalCostUsd > 0 ? formatCost(stats.usage.totalCostUsd) : (stats.usage.totalTokens > 0 ? "No pricing configured" : "$0.00")}
-        detail={stats.usage.totalCostUsd > 0 && stats.usage.invocationCount > 0 ? `${formatCost(stats.usage.totalCostUsd / stats.usage.invocationCount)} per call` : "across all providers"}
-      />
-      <TrendKpiTile
-        label="Cache Hit Rate"
-        value={cacheDenominator > 0
-          ? formatPercent((stats.usage.cachedInputTokens / cacheDenominator) * 100)
-          : "—"}
-        detail={`${formatTokens(stats.usage.cachedInputTokens)} cached`}
-      />
-    </div>
     <div className="grid gap-3 sm:grid-cols-3">
       <TrendSignalCard
         icon={TimerReset}
@@ -209,21 +130,6 @@ export const TrendStudio: FunctionComponent<{
             No purpose activity is available for this range.
           </div>
         )}
-      </div>
-    </div>
-    <div className="flex flex-wrap gap-3" aria-label="Trend range metadata">
-      <div className={`self-start px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-warning-text)] ${CHIP_CLASS}`}>Trend</div>
-      <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
-        {stats.range.label}
-      </div>
-      <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
-        {stats.range.resolutionLabel}
-      </div>
-      <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
-        {stats.buckets.length} buckets
-      </div>
-      <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
-        Peak bucket cost {chartMetrics && chartMetrics.peakCostUsd > 0 ? formatCost(chartMetrics.peakCostUsd) : "—"}
       </div>
     </div>
   </section>

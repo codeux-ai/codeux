@@ -268,15 +268,13 @@ beforeEach(() => {
 });
 
 describe("StatsPage Shell", () => {
-  it("renders the hero, mode navigation, top KPI runway, and active studio with accessible names", () => {
+  it("renders the hero command header, mode navigation, metric deck, and active studio with accessible names", () => {
     render(<StatsPage />);
 
     expect(screen.getByRole("region", { name: "Statistics" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Statistics." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Stats" })).toBeInTheDocument();
     expect(screen.getByLabelText("Stats project context")).toHaveTextContent("Telemetry Redesign");
-    expect(screen.getByLabelText("Executive summary")).toBeInTheDocument();
-    expect(screen.getByRole("article", { name: /Tokens: 50\.0k\. Mixed telemetry/ })).toBeInTheDocument();
-    expect(screen.getByRole("article", { name: /Success rate: 83%/ })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Executive summary")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Composition metrics" })).toBeInTheDocument();
     expect(screen.getByRole("article", { name: /Provider Share: 78%/ })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Analysis workspace" })).not.toBeInTheDocument();
@@ -318,11 +316,11 @@ describe("StatsPage Shell", () => {
     render(<StatsPage />);
 
     expect(screen.getByRole("region", { name: "Statistics" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Statistics." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Stats" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Stats workspace context")).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("No project selected");
     expect(screen.getByText("Project · No project selected")).toBeInTheDocument();
-    expect(screen.getByText("No snapshot yet")).toBeInTheDocument();
+    expect(screen.queryByText("No snapshot yet")).not.toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Time window presets" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Analytics modes" })).toBeInTheDocument();
   });
@@ -409,7 +407,7 @@ describe("StatsPage Shell", () => {
     render(<StatsPage />);
 
     expect(gsap.fromTo).not.toHaveBeenCalled();
-    expect(screen.getByText("Statistics.")).toBeInTheDocument();
+    expect(screen.getByText("Stats")).toBeInTheDocument();
   });
 
   it("animates the shell once when reduced motion is disabled", () => {

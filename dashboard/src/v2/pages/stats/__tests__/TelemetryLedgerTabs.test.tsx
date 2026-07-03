@@ -216,7 +216,7 @@ describe("TelemetryLedgerTabs", () => {
     expect(screen.getByLabelText("Alpha migration tasks telemetry row")).toBeInTheDocument();
     expect(screen.getByLabelText("Beta repair tasks telemetry row")).toBeInTheDocument();
     expect(within(screen.getByLabelText("Alpha migration tasks telemetry row")).getByText("Leader")).toBeInTheDocument();
-    expect(within(screen.getByLabelText("Alpha migration tasks telemetry row")).getByText("$0.015")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Alpha migration tasks telemetry row")).getByText("$0.02")).toBeInTheDocument();
     expect(within(screen.getByLabelText("Alpha migration tasks telemetry row")).getByText("p50")).toBeInTheDocument();
 
     fireEvent.input(screen.getByPlaceholderText("Search tasks"), { target: { value: "beta" } });
