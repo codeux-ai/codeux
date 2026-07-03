@@ -13,10 +13,9 @@ import { executeChunkedInQuery } from "./repository-utils.js";
 import {
   buildDefaultProjectSettings,
   buildDefaultSystemSettings,
+  SettingsResolutionCache,
   resolveDashboardSettings,
-  resolveProjectSettings,
   sanitizeSystemSettings,
-  systemSettingsToDashboardSettings,
   toProjectSettingsOverride,
   toSprintSettingsOverride,
 } from "../services/settings-resolution-service.js";
@@ -25,9 +24,12 @@ import { DEFAULT_VIRTUAL_WORKER_MODELS } from "./settings-defaults.js";
 export class SettingsRepository {
   private static systemSettingsCache: SystemSettings | null = null;
   private static hasMigratedLegacySettings = false;
+  private static resolutionRevision = 0;
 
   private readonly storage: SettingsDbStorage;
   private readonly externalHints: ExternalSettingsHints | undefined;
+  private readonly resolutionCache = new SettingsResolutionCache();
+  private resolutionCacheRevision = SettingsRepository.resolutionRevision;
 
   constructor(dbPath?: string, externalHints?: ExternalSettingsHints) {
     this.storage = new SettingsDbStorage(dbPath);
@@ -63,6 +65,7 @@ export class SettingsRepository {
     const normalized = sanitizeSystemSettings(input, this.externalHints);
     this.storage.writeSystemPayload(JSON.stringify(normalized));
     SettingsRepository.systemSettingsCache = normalized;
+    this.invalidateResolutionCache();
     return normalized;
   }
 
@@ -125,11 +128,13 @@ export class SettingsRepository {
     const base = systemSettings.defaults;
     const normalized = toProjectSettingsOverride(base, patch, systemSettings.integrations, this.externalHints);
     this.storage.writeProjectPayload(projectId, JSON.stringify(normalized));
+    this.invalidateResolutionCache();
     return normalized;
   }
 
   resetProjectSettings(projectId: string): void {
     this.storage.deleteProjectPayload(projectId);
+    this.invalidateResolutionCache();
   }
 
   getSprintSettings(sprintId: string): SprintSettingsOverride {
@@ -153,17 +158,20 @@ export class SettingsRepository {
     const systemSettings = this.getSystemSettings();
     const normalized = toSprintSettingsOverride(baseProjectSettings, patch, systemSettings.integrations, this.externalHints);
     this.storage.writeSprintPayload(sprintId, JSON.stringify(normalized));
+    this.invalidateResolutionCache();
     return normalized;
   }
 
   resetSprintSettings(sprintId: string): void {
     this.storage.deleteSprintPayload(sprintId);
+    this.invalidateResolutionCache();
   }
 
   resetAllData(): void {
     this.storage.resetAllData();
     SettingsRepository.systemSettingsCache = null;
     SettingsRepository.hasMigratedLegacySettings = false;
+    this.invalidateResolutionCache();
   }
 
   createScopedResolver(): ScopedEffectiveSettingsResolver {
@@ -171,26 +179,45 @@ export class SettingsRepository {
   }
 
   resolveProjectDashboardSettings(projectId: string): EffectiveSettingsResponse {
-    return resolveDashboardSettings({
-      systemSettings: this.getSystemSettings(),
-      projectOverride: this.getProjectSettings(projectId),
-    });
+    return this.resolutionCache.getProjectDashboardSettings(
+      this.getActiveResolutionRevision(),
+      projectId,
+      () => ({
+        systemSettings: this.getSystemSettings(),
+        projectOverride: this.getProjectSettings(projectId),
+      }),
+    );
   }
 
   resolveSprintDashboardSettings(projectId: string, sprintId: string): EffectiveSettingsResponse {
-    return resolveDashboardSettings({
-      systemSettings: this.getSystemSettings(),
-      projectOverride: this.getProjectSettings(projectId),
-      sprintOverride: this.getSprintSettings(sprintId),
-    });
+    return this.resolutionCache.getSprintDashboardSettings(
+      this.getActiveResolutionRevision(),
+      projectId,
+      sprintId,
+      () => ({
+        systemSettings: this.getSystemSettings(),
+        projectOverride: this.getProjectSettings(projectId),
+        sprintOverride: this.getSprintSettings(sprintId),
+      }),
+    );
   }
 
   getProjectResolvedSettings(projectId: string): ProjectSettings {
-    return resolveProjectSettings(this.getSystemSettings(), this.getProjectSettings(projectId));
+    return this.resolutionCache.getProjectSettings(
+      this.getActiveResolutionRevision(),
+      projectId,
+      () => ({
+        systemSettings: this.getSystemSettings(),
+        projectOverride: this.getProjectSettings(projectId),
+      }),
+    );
   }
 
   getDefaultDashboardSettings(): DashboardSettings {
-    return systemSettingsToDashboardSettings(this.getSystemSettings());
+    return this.resolutionCache.getSystemDashboardSettings(
+      this.getActiveResolutionRevision(),
+      this.getSystemSettings(),
+    ).settings;
   }
 
   getOnboardingState(): OnboardingStateRecord {
@@ -216,6 +243,24 @@ export class SettingsRepository {
 
   close(): void {
     this.storage.close();
+  }
+
+  getSettingsResolutionRevision(): number {
+    return SettingsRepository.resolutionRevision;
+  }
+
+  private invalidateResolutionCache(): void {
+    SettingsRepository.resolutionRevision += 1;
+    this.resolutionCacheRevision = SettingsRepository.resolutionRevision;
+    this.resolutionCache.clear();
+  }
+
+  private getActiveResolutionRevision(): number {
+    if (this.resolutionCacheRevision !== SettingsRepository.resolutionRevision) {
+      this.resolutionCacheRevision = SettingsRepository.resolutionRevision;
+      this.resolutionCache.clear();
+    }
+    return this.resolutionCacheRevision;
   }
 
   private migrateLegacySettingsIfNeeded(): void {
@@ -323,6 +368,7 @@ export class SettingsRepository {
 
 export class ScopedEffectiveSettingsResolver {
   private readonly repo: SettingsRepository;
+  private cacheRevision = -1;
   private systemSettingsCache: SystemSettings | null = null;
   private readonly projectSettingsCache = new Map<string, ProjectSettingsOverride>();
   private readonly sprintSettingsCache = new Map<string, SprintSettingsOverride>();
@@ -334,6 +380,7 @@ export class ScopedEffectiveSettingsResolver {
   }
 
   getSystemSettings(): SystemSettings {
+    this.clearIfRevisionChanged();
     if (!this.systemSettingsCache) {
       this.systemSettingsCache = this.repo.getSystemSettings();
     }
@@ -341,6 +388,7 @@ export class ScopedEffectiveSettingsResolver {
   }
 
   getProjectSettings(projectId: string): ProjectSettingsOverride {
+    this.clearIfRevisionChanged();
     if (!this.projectSettingsCache.has(projectId)) {
       this.projectSettingsCache.set(projectId, this.repo.getProjectSettings(projectId));
     }
@@ -348,6 +396,7 @@ export class ScopedEffectiveSettingsResolver {
   }
 
   getSprintSettings(sprintId: string): SprintSettingsOverride {
+    this.clearIfRevisionChanged();
     if (!this.sprintSettingsCache.has(sprintId)) {
       this.sprintSettingsCache.set(sprintId, this.repo.getSprintSettings(sprintId));
     }
@@ -355,6 +404,7 @@ export class ScopedEffectiveSettingsResolver {
   }
 
   resolveProjectDashboardSettings(projectId: string): EffectiveSettingsResponse {
+    this.clearIfRevisionChanged();
     if (!this.projectResolvedCache.has(projectId)) {
       this.projectResolvedCache.set(
         projectId,
@@ -368,6 +418,7 @@ export class ScopedEffectiveSettingsResolver {
   }
 
   resolveSprintDashboardSettings(projectId: string, sprintId: string): EffectiveSettingsResponse {
+    this.clearIfRevisionChanged();
     const key = `${projectId}:${sprintId}`;
     if (!this.sprintResolvedCache.has(key)) {
       this.sprintResolvedCache.set(
@@ -380,6 +431,20 @@ export class ScopedEffectiveSettingsResolver {
       );
     }
     return this.sprintResolvedCache.get(key)!;
+  }
+
+  private clearIfRevisionChanged(): void {
+    const revision = this.repo.getSettingsResolutionRevision();
+    if (revision === this.cacheRevision) {
+      return;
+    }
+
+    this.cacheRevision = revision;
+    this.systemSettingsCache = null;
+    this.projectSettingsCache.clear();
+    this.sprintSettingsCache.clear();
+    this.projectResolvedCache.clear();
+    this.sprintResolvedCache.clear();
   }
 }
 

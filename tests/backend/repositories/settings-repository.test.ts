@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -452,6 +452,113 @@ describe("SettingsRepository", () => {
     expect(p2.settings.git.defaultBranch).toBe("test-branch");
     const p2Cached = resolver.resolveProjectDashboardSettings("project-2");
     expect(p2Cached).toBe(p2);
+  });
+
+  it("caches repeated project effective settings reads until project settings change", async () => {
+    const { repo } = await createRepo();
+    repo.saveProjectSettings("project-1", {
+      git: {
+        defaultBranch: "develop",
+      },
+    });
+
+    const projectLookup = vi.spyOn(repo, "getProjectSettings");
+    const first = repo.resolveProjectDashboardSettings("project-1");
+    const second = repo.resolveProjectDashboardSettings("project-1");
+
+    expect(second).toBe(first);
+    expect(projectLookup).toHaveBeenCalledTimes(1);
+    expect(second.settings.git.defaultBranch).toBe("develop");
+
+    repo.saveProjectSettings("project-1", {
+      git: {
+        defaultBranch: "release",
+      },
+    });
+
+    const afterMutation = repo.resolveProjectDashboardSettings("project-1");
+    expect(afterMutation).not.toBe(first);
+    expect(afterMutation.settings.git.defaultBranch).toBe("release");
+    expect(projectLookup).toHaveBeenCalledTimes(2);
+  });
+
+  it("invalidates cached effective settings when system defaults change", async () => {
+    const { repo } = await createRepo();
+    const system = repo.getSystemSettings();
+    repo.saveSystemSettings({
+      ...system,
+      defaults: {
+        ...system.defaults,
+        git: {
+          ...system.defaults.git,
+          defaultBranch: "develop",
+        },
+      },
+    });
+
+    const first = repo.resolveProjectDashboardSettings("project-1");
+    expect(first.settings.git.defaultBranch).toBe("develop");
+
+    const nextSystem = repo.getSystemSettings();
+    repo.saveSystemSettings({
+      ...nextSystem,
+      defaults: {
+        ...nextSystem.defaults,
+        git: {
+          ...nextSystem.defaults.git,
+          defaultBranch: "release",
+        },
+      },
+    });
+
+    const afterMutation = repo.resolveProjectDashboardSettings("project-1");
+    expect(afterMutation).not.toBe(first);
+    expect(afterMutation.settings.git.defaultBranch).toBe("release");
+  });
+
+  it("caches repeated sprint effective settings reads until sprint settings reset", async () => {
+    const { repo } = await createRepo();
+    repo.saveSprintSettings("sprint-1", repo.getProjectResolvedSettings("project-1"), {
+      sprintLoopSteps: {
+        watchLoop: false,
+      },
+    });
+
+    const projectLookup = vi.spyOn(repo, "getProjectSettings");
+    const sprintLookup = vi.spyOn(repo, "getSprintSettings");
+    const first = repo.resolveSprintDashboardSettings("project-1", "sprint-1");
+    const second = repo.resolveSprintDashboardSettings("project-1", "sprint-1");
+
+    expect(second).toBe(first);
+    expect(projectLookup).toHaveBeenCalledTimes(1);
+    expect(sprintLookup).toHaveBeenCalledTimes(1);
+    expect(second.settings.sprintLoopSteps.watchLoop).toBe(false);
+
+    repo.resetSprintSettings("sprint-1");
+
+    const afterReset = repo.resolveSprintDashboardSettings("project-1", "sprint-1");
+    expect(afterReset).not.toBe(first);
+    expect(afterReset.settings.sprintLoopSteps.watchLoop).toBe(true);
+    expect(projectLookup).toHaveBeenCalledTimes(2);
+    expect(sprintLookup).toHaveBeenCalledTimes(2);
+  });
+
+  it("invalidates scoped resolver caches after repository mutations", async () => {
+    const { repo } = await createRepo();
+    const resolver = repo.createScopedResolver();
+
+    const first = resolver.resolveProjectDashboardSettings("project-1");
+    expect(first.settings.git.defaultBranch).toBe("main");
+
+    repo.saveProjectSettings("project-1", {
+      git: {
+        defaultBranch: "develop",
+      },
+    });
+
+    const afterMutation = resolver.resolveProjectDashboardSettings("project-1");
+    expect(afterMutation).not.toBe(first);
+    expect(afterMutation.settings.git.defaultBranch).toBe("develop");
   });
 
   it("resolves default autoApprovePlan as true, and preserves explicit false", async () => {
