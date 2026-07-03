@@ -153,12 +153,21 @@ const DockerRuntimeCard: FunctionComponent<{
         mono
       />
     </Row>
-    <Row label="Cache setup as image" description="Build and reuse a derived Docker image from the base image plus setup script contents." badge={getFieldBadge("cliWorkflow.containerCacheSetupScriptImage")} last>
+    <Row label="Cache setup as image" description="Build and reuse a derived Docker image from the base image plus setup script contents." badge={getFieldBadge("cliWorkflow.containerCacheSetupScriptImage")}>
       <Toggle aria-label="Toggle setting" value={settings.cliWorkflow.containerCacheSetupScriptImage} onChange={() => update((current) => ({
         ...current,
         cliWorkflow: {
           ...current.cliWorkflow,
           containerCacheSetupScriptImage: !current.cliWorkflow.containerCacheSetupScriptImage,
+        },
+      }))} />
+    </Row>
+    <Row label="Preinstall Playwright browsers" description="Install Chromium and OS dependencies for browser checks inside coding containers." badge={getFieldBadge("cliWorkflow.containerInstallPlaywrightBrowsers")} last>
+      <Toggle aria-label="Toggle setting" value={settings.cliWorkflow.containerInstallPlaywrightBrowsers} onChange={() => update((current) => ({
+        ...current,
+        cliWorkflow: {
+          ...current.cliWorkflow,
+          containerInstallPlaywrightBrowsers: !current.cliWorkflow.containerInstallPlaywrightBrowsers,
         },
       }))} />
     </Row>

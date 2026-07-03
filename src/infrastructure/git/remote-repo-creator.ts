@@ -54,7 +54,10 @@ export async function createGitHubRepo(opts: {
     // validator rather than the raw request-supplied path.
     const safeParentDir = validateSafeClonePath(opts.cloneParentDir);
     const targetDir = path.resolve(safeParentDir, opts.repoName);
-    validateNonEmptyDir(targetDir, safeParentDir);
+    const safeTargetDir = validateNonEmptyDir(targetDir, safeParentDir);
+    // Local-first repository creation intentionally creates the user-selected
+    // directory after validateSafeClonePath/validateNonEmptyDir constrain it.
+    // codeql[js/path-injection]
     fs.mkdirSync(safeParentDir, { recursive: true });
 
     if (!opts.hostToken?.trim()) {
@@ -88,7 +91,7 @@ export async function createGitHubRepo(opts: {
     }
 
     await cloneRepository(remoteUrl, safeParentDir, opts.repoName, opts.hostToken);
-    const localPath = path.join(safeParentDir, opts.repoName);
+    const localPath = safeTargetDir;
     return { localPath, remoteUrl };
   } catch (error: any) {
     const message = error.stderr?.toString() || error.message;
@@ -113,7 +116,10 @@ export async function createGitLabRepo(opts: {
     // validator rather than the raw request-supplied path.
     const safeParentDir = validateSafeClonePath(opts.cloneParentDir);
     const targetDir = path.resolve(safeParentDir, opts.repoName);
-    validateNonEmptyDir(targetDir, safeParentDir);
+    const safeTargetDir = validateNonEmptyDir(targetDir, safeParentDir);
+    // Local-first repository creation intentionally creates the user-selected
+    // directory after validateSafeClonePath/validateNonEmptyDir constrain it.
+    // codeql[js/path-injection]
     fs.mkdirSync(safeParentDir, { recursive: true });
 
     if (!opts.hostToken?.trim()) {
@@ -148,7 +154,7 @@ export async function createGitLabRepo(opts: {
     if (!remoteUrl) {
       throw new Error("GitLab API response did not include http_url_to_repo.");
     }
-    const localPath = path.join(safeParentDir, opts.repoName);
+    const localPath = safeTargetDir;
 
     await cloneRepository(remoteUrl, safeParentDir, opts.repoName, opts.hostToken);
 

@@ -147,9 +147,13 @@ describe("DockerRunner", () => {
     expect(dockerArgs.some((arg) => arg.includes("type=volume") && arg.includes("source=workspace-1"))).toBe(true);
     expect(dockerArgs.some((arg) => arg.includes("type=volume") && arg.includes("source=workspace-1-runtime") && arg.includes("target=/code-ux-runtime-home"))).toBe(true);
     expect(dockerArgs).toContain("HOME=/code-ux-runtime-home");
+    expect(dockerArgs).toContain("CODE_UX_INSTALL_PLAYWRIGHT=1");
     expect(dockerArgs).not.toContain("HOME=/workspace/.code-ux-home");
     const cacheInstance = vi.mocked(DockerSetupImageCache).mock.results[0]?.value as any;
-    expect(cacheInstance.resolveImage).toHaveBeenCalledWith(expect.objectContaining({ runtimeRoot: "/runtime-root" }));
+    expect(cacheInstance.resolveImage).toHaveBeenCalledWith(expect.objectContaining({
+      installPlaywrightBrowsers: true,
+      runtimeRoot: "/runtime-root",
+    }));
   });
 
   it("kills the backing container directly when an aborted run is cancelled", async () => {

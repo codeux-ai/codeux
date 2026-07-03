@@ -7,6 +7,7 @@ export interface DatabaseMaintenanceResult {
   prunedTaskRuns: number;
   prunedAttentionItems: number;
   prunedRealtimeEvents: number;
+  prunedVirtualWorkerAssignments: number;
   prunedProviderActivities: number;
   prunedProviderSessions: number;
   pruningFailed: boolean;
@@ -53,6 +54,7 @@ export class DatabaseMaintenanceService {
       prunedTaskRuns: 0,
       prunedAttentionItems: 0,
       prunedRealtimeEvents: 0,
+      prunedVirtualWorkerAssignments: 0,
       prunedProviderActivities: 0,
       prunedProviderSessions: 0,
       pruningFailed: false,
@@ -68,6 +70,7 @@ export class DatabaseMaintenanceService {
         result.prunedTaskRuns = pruneResult.taskRunsDeleted;
         result.prunedAttentionItems = pruneResult.attentionItemsDeleted;
         result.prunedRealtimeEvents = pruneResult.realtimeEventsDeleted;
+        result.prunedVirtualWorkerAssignments = pruneResult.virtualWorkerAssignmentsDeleted;
         result.prunedProviderActivities = pruneResult.providerActivitiesDeleted;
         result.prunedProviderSessions = pruneResult.providerSessionsDeleted;
       } catch (error) {
@@ -104,7 +107,14 @@ export class DatabaseMaintenanceService {
     return result;
   }
 
-  private pruneData(retentionDays: number): { taskRunsDeleted: number; attentionItemsDeleted: number; realtimeEventsDeleted: number; providerActivitiesDeleted: number; providerSessionsDeleted: number; } {
+  private pruneData(retentionDays: number): {
+    taskRunsDeleted: number;
+    attentionItemsDeleted: number;
+    realtimeEventsDeleted: number;
+    virtualWorkerAssignmentsDeleted: number;
+    providerActivitiesDeleted: number;
+    providerSessionsDeleted: number;
+  } {
     const retentionMs = retentionDays * 24 * 60 * 60 * 1000;
     const thresholdDate = new Date(Date.now() - retentionMs).toISOString();
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
@@ -133,7 +143,16 @@ export class DatabaseMaintenanceService {
       WHERE created_at < ?
     `).run(oneDayAgo);
 
-    // 4. Prune session-tracking.db completed/failed sessions and their activities
+    // 4. Purge released ephemeral virtual-worker assignment history. These rows are not used
+    // for live assignment lookup and can grow quickly if startup reconciliation regresses.
+    this.deps.logger.debug("Pruning released virtual worker assignments...");
+    const virtualAssignmentsPruned = appDb.prepare(`
+      DELETE FROM project_worker_assignments
+      WHERE worker_endpoint_type = 'virtual_cli'
+        AND status = 'released'
+    `).run();
+
+    // 5. Prune session-tracking.db completed/failed sessions and their activities
     this.deps.logger.debug(`Pruning provider sessions and activities older than ${retentionDays} days...`, { thresholdDate });
     
     // First, delete activities belonging to the old sessions
@@ -154,6 +173,7 @@ export class DatabaseMaintenanceService {
       taskRunsDeleted: runPruned.changes,
       attentionItemsDeleted: attentionPruned.changes,
       realtimeEventsDeleted: eventsPruned.changes,
+      virtualWorkerAssignmentsDeleted: virtualAssignmentsPruned.changes,
       providerActivitiesDeleted: activitiesPruned.changes,
       providerSessionsDeleted: sessionsPruned.changes,
     };

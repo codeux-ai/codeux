@@ -1,6 +1,7 @@
 import express, { type Express } from "express";
 import type { Server } from "http";
 import { createServer } from "http";
+import type { Socket } from "node:net";
 import type {
   ExecutionAttentionItemSummary,
   ExecutionAssignedWorkerSummary,
@@ -296,6 +297,7 @@ export interface DashboardServerOptions {
 export interface DashboardServerHandle {
   port: number;
   server: Server;
+  close?: () => Promise<void>;
 }
 
 export const configureDashboardApp = (options: DashboardServerOptions): Logger => {
@@ -354,16 +356,39 @@ const listenDashboardServer = async (
     }
     listeningServer.listen(port, host, () => resolve(listeningServer));
   });
+  const sockets = new Set<Socket>();
+  server.on("connection", (socket: Socket) => {
+    sockets.add(socket);
+    socket.on("close", () => {
+      sockets.delete(socket);
+    });
+  });
+  const close = async (): Promise<void> => {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error && error.message !== "Server is not running.") {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+      server.closeIdleConnections?.();
+      for (const socket of sockets) {
+        socket.destroy();
+      }
+      server.closeAllConnections?.();
+    });
+  };
 
   const address = typeof server.address === "function" ? server.address() : null;
   if (!address || typeof address === "string") {
     if (port === 0) {
       throw new Error("Dashboard server did not bind to a TCP port.");
     }
-    return { port, server };
+    return { port, server, close };
   }
 
-  return { port: address.port, server };
+  return { port: address.port, server, close };
 };
 
 const bindDashboardServer = async (

@@ -3,7 +3,7 @@ import { AppDbStorage } from "./app-db-storage.js";
 import { DatabaseAdapter } from "./db/database-adapter.js";
 
 export type QaReviewTriggerType = "task_completion" | "completed_task_without_pr" | "sprint_completion";
-export type QaReviewRunStatus = "running" | "completed" | "failed" | "skipped" | "errored";
+export type QaReviewRunStatus = "running" | "completed" | "failed" | "cancelled" | "skipped" | "errored";
 export type QaReviewOutcome = "pass" | "changes_requested" | "skipped";
 
 export interface QaReviewRunRecord {

@@ -345,4 +345,37 @@ describe("SchedulerService", () => {
       vi.useRealTimers();
     }
   });
+
+  it("logs start tick failures instead of leaving an unhandled rejection", async () => {
+    let service: SchedulerService | null = null;
+    try {
+      const error = new Error("scheduler db unavailable");
+      const repo = {
+        listDueEntries: vi.fn(() => {
+          throw error;
+        }),
+        getEntry: vi.fn(),
+        markRunSucceeded: vi.fn(),
+        markRunFailed: vi.fn(),
+      };
+      const logger = createLogger();
+      service = new SchedulerService({
+        schedulerRepository: repo as any,
+        projectManagementRepository: {} as any,
+        quicksprintService: {} as any,
+        chatThreadRuntimeService: {} as any,
+        executionControlService: {} as any,
+        logger: logger as any,
+        tickIntervalMs: 1000,
+      });
+
+      service.start();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(logger.error).toHaveBeenCalledWith("Scheduler run-due tick failed", { error });
+    } finally {
+      service?.stop();
+    }
+  });
 });

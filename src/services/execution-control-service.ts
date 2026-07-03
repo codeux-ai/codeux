@@ -77,18 +77,7 @@ export class ExecutionControlService {
     this.deps.sprintOrchestrator.setConsecutiveFailures(0);
     this.reapRecomputedSprintAttention(projectId, sprintId);
 
-    void this.deps.sprintOrchestrator.execute({
-      action: "orchestrate",
-      project_id: projectId,
-      sprint_id: sprintId,
-      wait: true,
-    }).catch((error) => {
-      this.deps.logger?.error("Dashboard-triggered sprint orchestration failed", {
-        projectId,
-        sprintId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    });
+    this.dispatchSprintOrchestration(projectId, sprintId);
 
     return { ok: true };
   }
@@ -117,15 +106,40 @@ export class ExecutionControlService {
       return sprintRun;
     }
 
+    const activeRun = this.resolveBlockingSprintRun(sprintRun.projectId, sprintRun.sprintId);
+    if (activeRun && activeRun.id !== sprintRunId) {
+      const label = activeRun.status === "cancel_requested" ? "cancellation is still pending" : "another run is already active";
+      throw new Error(
+        `Sprint run ${sprintRunId} cannot be resumed because ${label} (run ${activeRun.id}, status ${activeRun.status}).`,
+      );
+    }
+
     this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_resume_requested", "user", {
       requestedBy: "dashboard",
     }, {
       sourceEventKey: `dashboard-resume:${sprintRunId}`,
     });
 
-    await this.orchestrateSprint(sprintRun.projectId, sprintRun.sprintId);
-    const activeRun = this.deps.executionRepository.findActiveSprintRun(sprintRun.projectId, sprintRun.sprintId);
-    return activeRun || this.requireSprintRun(sprintRunId);
+    const now = new Date().toISOString();
+    const resumedRun = this.deps.executionRepository.updateSprintRun(sprintRunId, {
+      status: "running",
+      startedAt: sprintRun.startedAt ?? now,
+      finishedAt: null,
+      lastHeartbeatAt: now,
+    });
+
+    this.deps.sprintOrchestrator.setConsecutiveFailures(0);
+    this.reapRecomputedSprintAttention(sprintRun.projectId, sprintRun.sprintId);
+    void this.deps.sprintOrchestrator.recoverSprintRun(sprintRunId).catch((error) => {
+      this.deps.logger?.error("Dashboard-triggered sprint resume failed", {
+        projectId: sprintRun.projectId,
+        sprintId: sprintRun.sprintId,
+        sprintRunId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+
+    return resumedRun;
   }
 
   async cancelSprintRun(sprintRunId: string): Promise<SprintRunRecord> {
@@ -585,5 +599,20 @@ export class ExecutionControlService {
     }
 
     return null;
+  }
+
+  private dispatchSprintOrchestration(projectId: string, sprintId: string): void {
+    void this.deps.sprintOrchestrator.execute({
+      action: "orchestrate",
+      project_id: projectId,
+      sprint_id: sprintId,
+      wait: true,
+    }).catch((error) => {
+      this.deps.logger?.error("Dashboard-triggered sprint orchestration failed", {
+        projectId,
+        sprintId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
   }
 }

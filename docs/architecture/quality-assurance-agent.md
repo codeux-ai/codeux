@@ -160,6 +160,7 @@ Behavior:
 - QA can choose a target task that should continue
 - QA can return structured `followUpTasks` with full task instructions so Code UX creates new pending sprint tasks automatically
 - if QA requests follow-up work and Code UX can continue that task session, sprint completion is held open
+- if sprint-completion QA targets a task that is already merged, Code UX does not reopen that settled session; it records the target for traceability and creates follow-up sprint tasks so repair work goes through a new tracked task branch
 - if QA creates follow-up tasks, sprint completion is held open until those new tasks finish and sprint QA passes on a later run
 - sprint QA runs once for the finished sprint, then only runs again after a prior `changes_requested` or failed result and meaningful sprint task state changes have occurred
 - a passing sprint QA result is final for that sprint state and is not retriggered by another orchestration cycle with no real work changes

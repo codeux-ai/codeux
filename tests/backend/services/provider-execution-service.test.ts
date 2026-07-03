@@ -4,6 +4,7 @@ import { ProviderQuotaError } from "../../../src/shared/providers/provider-error
 import type { IProviderRunner, ProviderRunResult } from "../../../src/infrastructure/providers/cli/provider-runner.js";
 import type { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
 import type { DashboardSettings } from "../../../src/contracts/app-types.js";
+import { SERVER_SHUTDOWN_STOP_REASON } from "../../../src/services/active-dispatch-registry.js";
 
 // Mock dependencies
 vi.mock("../../../src/shared/providers/provider-error-classifier.js", async (importOriginal) => {
@@ -172,6 +173,32 @@ describe("ProviderExecutionService", () => {
       },
     })).rejects.toThrow("Command spawner host exited");
 
+    expect(executionRepository.updateProviderInvocationUsage).not.toHaveBeenCalledWith(
+      "prov-inv-1",
+      expect.objectContaining({ status: "failed" }),
+    );
+  });
+
+  it("preserves Docker provider usage when server shutdown aborts the provider", async () => {
+    const controller = new AbortController();
+    providerRunner.runProvider.mockImplementation(async () => {
+      controller.abort(SERVER_SHUTDOWN_STOP_REASON);
+      throw new Error("Command aborted");
+    });
+
+    await expect(service.executeProvider({
+      ...defaultArgs,
+      signal: controller.signal,
+      workflowSettings: {
+        ...defaultArgs.workflowSettings,
+        executionMode: "DOCKER",
+      },
+    })).rejects.toThrow("Command aborted");
+
+    expect(executionRepository.updateProviderInvocationUsage).not.toHaveBeenCalledWith(
+      "prov-inv-1",
+      expect.objectContaining({ status: "cancelled" }),
+    );
     expect(executionRepository.updateProviderInvocationUsage).not.toHaveBeenCalledWith(
       "prov-inv-1",
       expect.objectContaining({ status: "failed" }),

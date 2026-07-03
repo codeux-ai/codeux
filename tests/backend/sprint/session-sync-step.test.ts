@@ -1774,6 +1774,108 @@ describe("runSessionSyncStep", () => {
     expect(executionRepository.getTaskDispatch(dispatch.id)?.errorMessage).toBe("Provider session QUOTA");
   });
 
+  it("keeps cancelled CLI sessions as cancelled dispatches while preserving retryable task runs", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-cancelled-"));
+    tempDirs.push(dir);
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "Session Sync Cancelled",
+      sourceType: "local",
+      sourceRef: "/tmp/my-repo",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      number: 1,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Cancelled retry",
+      status: "pending",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "cancelled",
+      startedAt: "2026-03-09T10:00:00.000Z",
+      finishedAt: "2026-03-09T10:02:00.000Z",
+      errorMessage: null,
+    } as any);
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "opencode",
+      mode: "docker_cli",
+      sessionId: "cli-opencode-cancelled",
+      sessionName: "sessions/cli-opencode-cancelled",
+      state: "FAILED",
+      startedAt: "2026-03-09T10:00:00.000Z",
+      finishedAt: "2026-03-09T10:02:00.000Z",
+    });
+
+    await runSessionSyncStep(
+      [{
+        id: task.taskKey,
+        record_id: task.id,
+        project_id: project.id,
+        title: task.title,
+        prompt: task.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "PENDING",
+        session_id: "cli-opencode-cancelled",
+        session_name: "sessions/cli-opencode-cancelled",
+        provider: "opencode",
+      }],
+      {
+        listSessions: vi.fn().mockResolvedValue({
+          sessions: [
+            {
+              id: "cli-opencode-cancelled",
+              name: "sessions/cli-opencode-cancelled",
+              title: "Sprint 1: [run:my-repo/s1/t01] [T01] Cancelled retry",
+              state: "CANCELLED",
+              provider: "opencode",
+            },
+          ],
+        }),
+        resolveSessionName: (session: { name?: string }) => session.name,
+        extractSessionId: (session: { id?: string }) => session.id,
+        fetchRecentActivities: vi.fn().mockResolvedValue([]),
+        isActionRequiredState: vi.fn().mockReturnValue(false),
+        projectManagementRepository: projectRepository,
+        executionRepository,
+        sprintRunId: sprintRun.id,
+        logger: { warn: vi.fn() },
+      } as any,
+      true,
+      { repoPath: "/tmp/my-repo", sprintNumber: 1 },
+    );
+
+    expect(executionRepository.getTaskRun(taskRun.id)).toMatchObject({
+      state: "FAILED",
+      sessionId: "cli-opencode-cancelled",
+    });
+    expect(executionRepository.getTaskDispatch(dispatch.id)).toMatchObject({
+      status: "cancelled",
+      errorMessage: null,
+    });
+  });
+
   it("requeues quota sessions with missing cooldown metadata even when failed-task retries are disabled", async () => {
     const subtasks: Subtask[] = [
       {

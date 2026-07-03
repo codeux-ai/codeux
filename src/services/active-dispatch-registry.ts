@@ -3,6 +3,8 @@ export interface ActiveDispatchStopResult {
   message?: string;
 }
 
+export const SERVER_SHUTDOWN_STOP_REASON = "Code UX server is shutting down.";
+
 export interface ActiveDispatchHandle {
   dispatchId: string;
   taskRunId?: string;
@@ -26,6 +28,10 @@ export class ActiveDispatchRegistry {
 
   get(dispatchId: string): ActiveDispatchHandle | null {
     return this.handles.get(dispatchId) || null;
+  }
+
+  listHandles(): ActiveDispatchHandle[] {
+    return [...this.handles.values()];
   }
 
   async requestStop(dispatchId: string, reason: string): Promise<ActiveDispatchStopResult> {

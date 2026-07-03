@@ -258,6 +258,7 @@ export class TaskService {
     dispatchId?: string,
     taskRunId?: string,
     rerunOptions?: {
+      taskRecordId?: string;
       resumeWorkspaceSessionId?: string;
       resumeWorkerBranch?: string;
       forceFreshWorkspace?: boolean;
@@ -310,6 +311,7 @@ export class TaskService {
         provider,
         providerSettingsOverride: buildProviderSettingsOverride(selectedModel, selectedProviderSettings),
         task,
+        taskRecordId: rerunOptions?.taskRecordId || task.record_id,
         repoPath,
         featureBranch: baseBranch,
         sprintNumber,

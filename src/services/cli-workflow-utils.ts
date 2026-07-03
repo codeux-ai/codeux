@@ -15,6 +15,7 @@ export const DEFAULT_CLI_WORKFLOW_SETTINGS: CliWorkflowSettings = {
   containerImage: "node:24-bookworm",
   containerSetupScriptPath: "",
   containerCacheSetupScriptImage: true,
+  containerInstallPlaywrightBrowsers: true,
   containerMountGitConfig: false,
   containerGitUserName: "Code UX",
   containerGitUserEmail: "agents@codeux.ai",

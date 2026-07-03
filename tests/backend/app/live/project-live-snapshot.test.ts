@@ -119,4 +119,24 @@ describe("getProjectLiveSnapshot", () => {
       })
     );
   });
+
+  it("keeps observability durations non-negative if the wall clock moves backwards", async () => {
+    const dateNowSpy = vi.spyOn(Date, "now")
+      .mockReturnValueOnce(10_000)
+      .mockReturnValueOnce(9_000)
+      .mockReturnValueOnce(8_000)
+      .mockReturnValueOnce(7_000)
+      .mockReturnValueOnce(6_000)
+      .mockReturnValue(5_000);
+
+    await getProjectLiveSnapshot(deps);
+
+    const [, fields] = (deps.logger.info as any).mock.calls.find(([event]: [string]) => event === "project_live_snapshot_assembled");
+    expect(fields.buildTimeMs).toBeGreaterThanOrEqual(0);
+    expect(fields.projectMgmtMs).toBeGreaterThanOrEqual(0);
+    expect(fields.runtimeMs).toBeGreaterThanOrEqual(0);
+    expect(fields.executionMs).toBeGreaterThanOrEqual(0);
+    expect(fields.gitMs).toBeGreaterThanOrEqual(0);
+    dateNowSpy.mockRestore();
+  });
 });

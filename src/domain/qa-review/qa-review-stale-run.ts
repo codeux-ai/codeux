@@ -50,11 +50,11 @@ export function resolveStaleRunningQaInvocationReason(
 export type RunningQaRunRecoveryDecision =
   | { action: "keep_running" }
   | {
-      action: "recover_as_failed";
+      action: "recover_as_cancelled";
       summaryMarkdown: string;
       finishedAt: string;
-      shouldFailExecutionInvocation: boolean;
-      shouldFailProviderInvocation: boolean;
+      shouldCancelExecutionInvocation: boolean;
+      shouldCancelProviderInvocation: boolean;
     };
 
 export interface ResolveRunningQaRunRecoveryDecisionArgs {
@@ -92,11 +92,11 @@ export function resolveRunningQaRunRecoveryDecision(
       || `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after the backing invocation ${latestInvocation.status}. Code UX will retry the review.`;
 
     return {
-      action: "recover_as_failed",
+      action: "recover_as_cancelled",
       summaryMarkdown,
       finishedAt: latestInvocation.finishedAt || now.toISOString(),
-      shouldFailExecutionInvocation: invocationStillActive,
-      shouldFailProviderInvocation: invocationStillActive && args.providerInvocation?.status === "running",
+      shouldCancelExecutionInvocation: invocationStillActive,
+      shouldCancelProviderInvocation: invocationStillActive && args.providerInvocation?.status === "running",
     };
   }
 
@@ -107,10 +107,10 @@ export function resolveRunningQaRunRecoveryDecision(
   }
 
   return {
-    action: "recover_as_failed",
+    action: "recover_as_cancelled",
     summaryMarkdown: `${RECOVERED_STALE_QA_SUMMARY_PREFIX} that never started its backing invocation. Code UX will retry the review.`,
     finishedAt: now.toISOString(),
-    shouldFailExecutionInvocation: false,
-    shouldFailProviderInvocation: false,
+    shouldCancelExecutionInvocation: false,
+    shouldCancelProviderInvocation: false,
   };
 }

@@ -1,7 +1,32 @@
 import { describe, expect, it, vi } from "vitest";
-import { CycleStateCoordinator } from "../../../../../src/domain/sprint/orchestrator/cycle-state-coordinator.js";
+import {
+  CycleStateCoordinator,
+  hasMergeStateChanges,
+} from "../../../../../src/domain/sprint/orchestrator/cycle-state-coordinator.js";
 
 describe("CycleStateCoordinator", () => {
+  describe("hasMergeStateChanges", () => {
+    it("detects merge indicator changes even when merged state is unchanged", () => {
+      const previous = new Map([
+        ["T01", { id: "T01", status: "CODING_COMPLETED", isMerged: false, mergeIndicator: "CI" }],
+      ]);
+
+      expect(hasMergeStateChanges(previous as any, [
+        { id: "T01", status: "CODING_COMPLETED", is_merged: false, merge_indicator: "MERGE_CONFLICT" },
+      ] as any)).toBe(true);
+    });
+
+    it("does not report a change when merge state and indicator are unchanged", () => {
+      const previous = new Map([
+        ["T01", { id: "T01", status: "CODING_COMPLETED", isMerged: false, mergeIndicator: "MERGE_CONFLICT" }],
+      ]);
+
+      expect(hasMergeStateChanges(previous as any, [
+        { id: "T01", status: "CODING_COMPLETED", is_merged: false, merge_indicator: "MERGE_CONFLICT" },
+      ] as any)).toBe(false);
+    });
+  });
+
   describe("syncProtocolAttentionItems", () => {
     it("batches attention items into a single openItems call", async () => {
       const deps = {

@@ -161,7 +161,7 @@ export function decideTaskStatusDerivation(
     return { status: "BLOCKED", resetRuntime: false };
   }
 
-  if (task.session_state === "FAILED" && options.retryFailed) {
+  if ((task.session_state === "FAILED" || task.session_state === "CANCELLED") && options.retryFailed) {
     const classification = classifyTaskTransition(task, subtasks, options);
     return {
       status: classification.dependenciesMet ? "PENDING" : "BLOCKED",

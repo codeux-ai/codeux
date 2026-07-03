@@ -912,6 +912,42 @@ describe("CodeUxServer", () => {
       expect(bootMcpArgs.getMissingJulesApiKeyInstruction).toBeUndefined();
     }, 30000);
 
+    it("reports ready once runtime services are bound even before a project status timestamp exists", async () => {
+      (runServer as any).runtimeStartupRecoveryService = {
+        recover: vi.fn().mockResolvedValue({
+          recoveredCliSessionIds: [],
+          reconciledLocalDispatchIds: [],
+          resumedSprintRunIds: [],
+          supersededSprintRunIds: [],
+          reconciledTerminalProviderLinkedInvocationIds: [],
+        }),
+      };
+      (runServer as any).activityCacheService = {
+        getGitStatus: vi.fn().mockResolvedValue({}),
+        getLiveActivitiesForActiveTasks: vi.fn().mockResolvedValue({})
+      };
+      vi.spyOn((runServer as any).projectRuntimeRepository, "getSelectedProjectLiveStatus").mockReturnValue({
+        subtasks: [],
+        timestamp: null,
+      });
+      vi.spyOn(runServer as any, "refreshJulesApiKey").mockImplementation(() => {});
+
+      await runServer.run();
+      (runServer as any).runtimeContext.dashboardRuntimePort = 4444;
+
+      const { bootDashboard } = await import("../../../src/app/lifecycle/dashboard-lifecycle-service.js");
+      const bootDashboardArgs = (bootDashboard as any).mock.calls.at(-1)?.[0];
+
+      expect(bootDashboardArgs.isReady()).toEqual({
+        status: "READY",
+        components: {
+          settingsDb: "UP",
+          dashboardBind: "UP",
+          mcpService: "UP",
+        },
+      });
+    }, 30000);
+
 
 
 

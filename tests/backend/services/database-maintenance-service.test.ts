@@ -110,8 +110,10 @@ describe("DatabaseMaintenanceService", () => {
     expect(result.prunedTaskRuns).toBe(1); // 1 from mockAppDb
     expect(result.prunedAttentionItems).toBe(1);
     expect(result.prunedRealtimeEvents).toBe(1);
+    expect(result.prunedVirtualWorkerAssignments).toBe(1);
     expect(result.prunedProviderActivities).toBe(2); // 2 from mockSessionDb
     expect(result.prunedProviderSessions).toBe(2);
+    expect(mockAppDb.prepare).toHaveBeenCalledWith(expect.stringContaining("DELETE FROM project_worker_assignments"));
     expect(result.vacuumFailed).toBe(false);
     expect(result.checkpointFailures).toEqual([]);
   });

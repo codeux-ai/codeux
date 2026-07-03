@@ -46,6 +46,7 @@ describe("sanitizeCliWorkflow", () => {
     expect(defaults.rateLimitRetryDelaySeconds).toBe(10);
     expect(defaults.maxRateLimitRetries).toBe(5);
     expect(defaults.containerMountGitConfig).toBe(false);
+    expect(defaults.containerInstallPlaywrightBrowsers).toBe(true);
     expect(defaults.containerGitUserName).toBe("Code UX");
     expect(defaults.containerGitUserEmail).toBe("agents@codeux.ai");
     expect(defaults.containerMountGithubAuth).toBe(false);
@@ -61,5 +62,21 @@ describe("sanitizeCliWorkflow", () => {
     });
     expect(clamped.rateLimitRetryDelaySeconds).toBe(1);
     expect(clamped.maxRateLimitRetries).toBe(1);
+  });
+
+  it("sanitizes the Playwright browser install toggle", () => {
+    const disabled = sanitizeCliWorkflow({
+      cliWorkflow: {
+        containerInstallPlaywrightBrowsers: false,
+      },
+    });
+    expect(disabled.containerInstallPlaywrightBrowsers).toBe(false);
+
+    const invalid = sanitizeCliWorkflow({
+      cliWorkflow: {
+        containerInstallPlaywrightBrowsers: "bad" as any,
+      },
+    });
+    expect(invalid.containerInstallPlaywrightBrowsers).toBe(true);
   });
 });

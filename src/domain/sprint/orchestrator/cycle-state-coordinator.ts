@@ -393,7 +393,8 @@ export function hasMergeStateChanges(previous: Map<string, TaskStateSnapshot>, s
     if (!earlier) {
       return true;
     }
-    return earlier.isMerged !== Boolean(task.is_merged);
+    return earlier.isMerged !== Boolean(task.is_merged)
+      || earlier.mergeIndicator !== task.merge_indicator;
   });
 }
 

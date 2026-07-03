@@ -36,9 +36,9 @@ export class QaReviewRecoveryService {
 
       if (latestInvocation && (latestInvocation.status === "running" || latestInvocation.status === "paused")) {
         this.deps.executionRepository.updateExecutionInvocation(latestInvocation.id, {
-          status: "failed",
+          status: "cancelled",
           finishedAt: reconciledAt,
-          errorMessage: failureReason,
+          errorMessage: null,
         });
         this.deps.executionRepository.appendExecutionInvocationMessage(latestInvocation.id, {
           role: "system",
@@ -56,14 +56,14 @@ export class QaReviewRecoveryService {
         : null;
       if (providerInvocation?.status === "running") {
         this.deps.executionRepository.updateProviderInvocationUsage(providerInvocation.id, {
-          status: "failed",
+          status: "cancelled",
           finishedAt: reconciledAt,
           durationMs: calculateInvocationDurationMs(providerInvocation, reconciledAt),
         });
       }
 
       this.deps.qaReviewRepository.updateRun(run.id, {
-        status: "failed",
+        status: "cancelled",
         summaryMarkdown: failureReason,
         finishedAt: reconciledAt,
       });

@@ -28,6 +28,11 @@ describe("SettingsPathUpdater.patchObject", () => {
     },
   );
 
+  it("rejects empty path segments", () => {
+    expect(() => SettingsPathUpdater.patchObject({}, "a..b", true)).toThrow(/Invalid path part/);
+    expect(() => SettingsPathUpdater.patchObject({}, ".a", true)).toThrow(/Invalid path part/);
+  });
+
   it("does not pollute Object.prototype via a crafted path", () => {
     expect(() => SettingsPathUpdater.patchObject({}, "__proto__.polluted", "yes")).toThrow();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

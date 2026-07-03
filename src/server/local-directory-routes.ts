@@ -6,10 +6,15 @@ import type { LocalDirectoryBrowserResponse } from "../contracts/app-types.js";
 import { asyncRoute } from "./route-utils.js";
 import { parseTrimmedString } from "./request-parsers.js";
 import { expandHomePath } from "../shared/config/home-path.js";
+import { isPathInside, type ValidatedPath } from "../utils/path-validator.js";
+
+function asValidatedPath(candidate: string): ValidatedPath {
+  return candidate as ValidatedPath;
+}
 
 function isWithinAnyRoot(candidate: string, roots: string[]): boolean {
   return roots.some((root) => {
-    return candidate === root || candidate.startsWith(root + path.sep) || candidate.startsWith(root + "/");
+    return isPathInside(root, candidate);
   });
 }
 
@@ -18,14 +23,8 @@ async function resolveAllowedRoots(): Promise<string[]> {
     os.homedir(),
     process.cwd(),
     ...(process.env.CODE_UX_DIRECTORY_BROWSER_ROOTS || "").split(",").filter(Boolean),
-  ].map(async (r) => {
-    try {
-      return await fs.realpath(r);
-    } catch {
-      return path.resolve(r);
-    }
-  });
-  return Promise.all(configuredRoots);
+  ];
+  return configuredRoots.map((root) => path.resolve(expandHomePath(root)));
 }
 
 /**
@@ -37,17 +36,25 @@ async function resolveAllowedRoots(): Promise<string[]> {
  * subsequent filesystem operations against the value that was actually checked,
  * closing the gap between the allow-list check and the FS access.
  */
-async function resolveAllowedPath(targetPath: string): Promise<string | null> {
-  let realTargetPath: string;
-  try {
-    realTargetPath = await fs.realpath(targetPath);
-  } catch (err) {
-    // If the path doesn't exist, we fall back to the resolved absolute path.
-    realTargetPath = path.resolve(targetPath);
+async function resolveAllowedPath(targetPath: string): Promise<ValidatedPath | null> {
+  const resolvedTargetPath = path.resolve(targetPath);
+  const resolvedAllowedRoots = await resolveAllowedRoots();
+  if (!isWithinAnyRoot(resolvedTargetPath, resolvedAllowedRoots)) {
+    return null;
   }
 
-  const resolvedAllowedRoots = await resolveAllowedRoots();
-  return isWithinAnyRoot(realTargetPath, resolvedAllowedRoots) ? realTargetPath : null;
+  let realTargetPath: string;
+  try {
+    // resolvedTargetPath already passed lexical containment against the allowed
+    // directory roots; this canonicalizes the same candidate for a second check.
+    // codeql[js/path-injection]
+    realTargetPath = await fs.realpath(resolvedTargetPath);
+  } catch (err) {
+    // If the path doesn't exist, we fall back to the resolved absolute path.
+    realTargetPath = resolvedTargetPath;
+  }
+
+  return isWithinAnyRoot(realTargetPath, resolvedAllowedRoots) ? asValidatedPath(realTargetPath) : null;
 }
 
 export function registerLocalDirectoryRoutes(router: Express): void {
@@ -74,6 +81,9 @@ export function registerLocalDirectoryRoutes(router: Express): void {
 
       let stat;
       try {
+        // safePath is the canonical path returned by resolveAllowedPath after
+        // lexical and realpath containment checks against allowed roots.
+        // codeql[js/path-injection]
         stat = await fs.stat(safePath);
       } catch (err: any) {
         if (err.code === "ENOENT") {
@@ -91,6 +101,9 @@ export function registerLocalDirectoryRoutes(router: Express): void {
 
       let entries;
       try {
+        // safePath is the canonical path returned by resolveAllowedPath after
+        // lexical and realpath containment checks against allowed roots.
+        // codeql[js/path-injection]
         entries = await fs.readdir(safePath, { withFileTypes: true });
       } catch (err: any) {
         res.status(403).json({ error: "Access denied" });

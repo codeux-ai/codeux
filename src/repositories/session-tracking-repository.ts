@@ -41,7 +41,7 @@ interface TrackedCliSessionRow {
   updateTime: string;
 }
 
-interface FailedCliSessionResumeTarget {
+interface CliSessionResumeTarget {
   sessionId: string;
   workerBranch: string;
 }
@@ -326,8 +326,25 @@ export class SessionTrackingRepository {
     taskId: string;
     featureBranch: string;
     repoPath: string;
-  }): FailedCliSessionResumeTarget | null {
+  }): CliSessionResumeTarget | null {
+    return this.findLatestResumableCliSessionForTask({
+      ...args,
+      states: ["FAILED"],
+    });
+  }
+
+  findLatestResumableCliSessionForTask(args: {
+    provider: Exclude<ProviderId, "jules">;
+    taskId: string;
+    featureBranch: string;
+    repoPath: string;
+    states?: string[];
+  }): CliSessionResumeTarget | null {
     const normalizedPath = path.resolve(args.repoPath).replace(/\\/g, "/");
+    const states = (args.states && args.states.length > 0)
+      ? args.states
+      : ["FAILED", "CANCELLED"];
+    const statePlaceholders = states.map(() => "?").join(", ");
     const row = this.db.prepare(`
       SELECT id, worker_branch
       FROM provider_sessions
@@ -335,7 +352,7 @@ export class SessionTrackingRepository {
         AND task_id = ?
         AND feature_branch = ?
         AND (repo_path = ? OR repo_path = ? OR repo_path = '/workspace')
-        AND state = 'FAILED'
+        AND state IN (${statePlaceholders})
         AND id LIKE 'cli-%'
         AND worker_branch IS NOT NULL
       ORDER BY create_time DESC, update_time DESC, id DESC
@@ -346,6 +363,7 @@ export class SessionTrackingRepository {
       args.featureBranch,
       args.repoPath,
       normalizedPath,
+      ...states,
     ) as { id?: string; worker_branch?: string } | undefined;
 
     if (!row?.id || !row.worker_branch) {
@@ -419,7 +437,7 @@ export class SessionTrackingRepository {
           UPDATE provider_sessions
           SET state = ?, update_time = ?
           WHERE id IN (${updatePlaceholders})
-        `).run("FAILED", now, ...chunk);
+        `).run("CANCELLED", now, ...chunk);
 
         const insertPlaceholders = chunk.map(() => "(?, ?, ?, ?, ?, ?)").join(", ");
         const insertParams = chunk.flatMap(id => [
@@ -427,7 +445,7 @@ export class SessionTrackingRepository {
           randomUUID(),
           now,
           "system",
-          "Recovered interrupted MCP process. Previous background CLI task is marked FAILED and can be retried safely.",
+          "Recovered interrupted Code UX process. Previous background CLI task is marked CANCELLED and can be retried safely.",
           JSON.stringify({ recovery: "INTERRUPTED_PROCESS" })
         ]);
         this.db.prepare(`

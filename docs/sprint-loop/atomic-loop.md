@@ -122,6 +122,7 @@ For `status` and `orchestrate`, each cycle can run:
   - commit/push branch
   - open PR back to sprint feature branch
   - track state and activity in sqlite
+- CLI task dispatch carries two task identities through the runtime: the human task key (`T01`, `T02`, ...) stays in branch names, titles, prompts, and task-run tags, while repository/execution lookups use the persisted task record id (`record_id`). Workspace resume targets, task runs, dispatches, and provider invocations must use the record id so normal planned sprint tasks can resume from the correct Docker workspace volume after cancellation or restart.
 
 5. Build protocol instructions
 - `protocol-step.ts`
@@ -152,6 +153,7 @@ When `action=orchestrate`, `wait` is true, and `watchLoop` is enabled:
 - Wait interval is 10 seconds between cycles.
 - Output interval defaults to 300 seconds and is now used only as an internal checkpoint boundary for heartbeat/lease renewal inside the same sprint run.
 - Code UX does not stop at that boundary anymore. It keeps the same sprint run alive, renews its lease/heartbeat, resets the checkpoint window, and continues watching until a real terminal condition is reached.
+- Startup recovery and dashboard **Resume** restart monitoring through the existing-run recovery path. A resumed paused run keeps its original sprint-run id, is moved back to `running`, and then starts the watch loop without creating a duplicate run. Resume is refused while another queued/running/cancel-pending run for the same sprint is active.
 - Loop exits when:
   - all tasks terminal (`COMPLETED+merged` or `FAILED`), or
   - no runnable tasks remain, or
