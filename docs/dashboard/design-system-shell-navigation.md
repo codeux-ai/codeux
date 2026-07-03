@@ -17,6 +17,7 @@ Header dropdowns, searches, and related shell controls are standardized to a sin
 - **Height Utility:** Use `h-9` or `min-h-[40px]`.
 - **Vertical Padding:** Avoid aggressive internal vertical padding inside flex items; rely on the fixed height `h-9` + `items-center` for perfect centering.
 - **Header Container Container:** The primary nav container uses `min-h-[60px]` instead of fixed `h-[60px]` to allow clustering elements to wrap on constrained viewports if needed.
+- **Global Search Trigger:** The top-nav search trigger belongs in the left header cluster beside the brand. It should use the same compact visual rhythm as project, sprint, and worker selectors, collapse toward an icon-led affordance on tight widths, and avoid forcing sibling controls to overflow.
 
 ### 3. Unified Focus Rings
 All interactive components inside the shell layer must follow exactly the same focus rules.
@@ -44,6 +45,9 @@ Stable layouts on narrow widths (especially mobile or multi-panel layouts) must 
 - The shell header owns a persistent `role="status"` live region for route changes, project and sprint loading states, selector empty states, and completed project/sprint switches. Keep this region visually hidden with `sr-only` so announcements do not add visible chrome.
 - Project and sprint selectors use a listbox contract. Triggers expose stable names, real `aria-expanded`, `aria-busy`, and `aria-controls` only while their listbox is mounted. Options use `role="option"` and update `aria-selected`; keyboard navigation supports `Enter`, `Space`, `ArrowDown`, `ArrowUp`, `Home`, `End`, and `Escape`.
 - Escape closes open selector menus and returns focus to the trigger. Disabled selector states, such as a project with no sprints, announce the empty state without opening an empty listbox.
+- Global Search uses an overlay combobox/listbox pattern. The trigger must expose a stable accessible name, opening the overlay should focus the search input and trap focus inside the surface, and closing with Escape, backdrop, or selection must restore focus to the trigger.
+- Search result focus is represented with `aria-activedescendant`, not by moving DOM focus between rows. Arrow keys move the active result, Enter selects it, Escape closes the overlay, and pointer selection must follow the same route contract as keyboard selection.
+- Result rows can include sprint keys, task ids, agent names, and preview session labels. These operational values must wrap or truncate inside the row boundary without changing overlay width, and sprint result routes must use the explicit `sprintKey` payload supplied by the search item.
 
 ### Sidebar And Dock
 
