@@ -4,7 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { CompositionStudio } from "../components/StatsShared.js";
+import { CompositionStudio } from "../components/CompositionStudio.js";
 
 expect.extend(matchers);
 

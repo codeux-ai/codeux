@@ -30,6 +30,8 @@ The redesigned Stats page follows a stable top-to-bottom rhythm:
 
 ## Visual Modes
 
+Mode-specific studio implementations are owned by dedicated component files under `dashboard/src/v2/pages/stats/components/`. Keep `StatsShared.tsx` as a compatibility barrel for shared primitives and legacy imports; new work on Trend, Composition, or Providers/Reliability should happen in the corresponding studio file.
+
 ### Trend
 
 Trend mode is the chart-first workspace for time-series telemetry.
