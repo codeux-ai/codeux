@@ -32,6 +32,32 @@ function createBuckets(count: number): ExecutionUsageBucketSummary[] {
   }));
 }
 
+function createDailyBuckets(labels: string[]): ExecutionUsageBucketSummary[] {
+  return labels.map((label, index) => ({
+    bucketStart: `2026-06-${String(index + 27).padStart(2, "0")}T00:00:00.000Z`,
+    bucketEnd: `2026-06-${String(index + 28).padStart(2, "0")}T00:00:00.000Z`,
+    label,
+    usage: {
+      invocationCount: index,
+      activeTimeMs: 0,
+      wallTimeMs: 0,
+      inputTokens: 0,
+      cachedInputTokens: 0,
+      outputTokens: 0,
+      reasoningOutputTokens: 0,
+      totalTokens: index * 100,
+      reportedInvocationCount: 0,
+      estimatedInvocationCount: 0,
+      unavailableInvocationCount: 0,
+      unsupportedInvocationCount: 0,
+      inputCostUsd: 0,
+      outputCostUsd: 0,
+      cachedInputCostUsd: 0,
+      totalCostUsd: 0,
+    },
+  }));
+}
+
 function mockBoundingRect(element: HTMLElement, width = 1000) {
   vi.spyOn(element, "getBoundingClientRect").mockReturnValue({
     x: 0,
@@ -99,5 +125,17 @@ describe("UsageChartMinimap", () => {
     expect(container.querySelector("[data-testid='usage-chart-minimap']")?.getAttribute("aria-label"))
       .toBe("Chart minimap zoom region, showing buckets 3 through 6 of 10");
     expect(container.textContent).toContain("4 of 10 buckets");
+  });
+
+  it("shows compact bucket labels for short daily windows", () => {
+    const labels = ["Jun 27", "Jun 28", "Jun 29", "Jun 30", "Jul 1", "Jul 2", "Jul 3"];
+    const { container } = render(
+      <UsageChartMinimap buckets={createDailyBuckets(labels)} zoomRange={null} onZoomChange={vi.fn()} />,
+    );
+
+    expect(container.textContent).toContain("Overview - drag to zoom, arrow keys to pan, escape to reset");
+    for (const label of labels) {
+      expect(container.textContent).toContain(label);
+    }
   });
 });

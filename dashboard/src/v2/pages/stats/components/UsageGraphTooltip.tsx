@@ -54,7 +54,7 @@ export const UsageGraphTooltip: FunctionComponent<UsageGraphTooltipProps> = ({
           <div className="mt-1 text-sm font-black text-[var(--stats-value-color)]">{visible ? formattedDate : 'Hover or focus a bucket to inspect exact values.'}</div>
         </div>
         <div className="shrink-0 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)] sm:text-right">
-          {visible ? 'Live values' : 'Idle'}
+          {visible ? 'Bucket values' : 'Idle'}
         </div>
       </div>
       <div className="mt-3 h-1 rounded-full bg-black/5 dark:bg-white/10">

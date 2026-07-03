@@ -277,10 +277,10 @@ describe("StatsPage Shell", () => {
     expect(screen.getByLabelText("Executive summary")).toBeInTheDocument();
     expect(screen.getByRole("article", { name: /Tokens: 50\.0k\. Mixed telemetry/ })).toBeInTheDocument();
     expect(screen.getByRole("article", { name: /Success rate: 83%/ })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Composition summary cards" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Composition metrics" })).toBeInTheDocument();
     expect(screen.getByRole("article", { name: /Provider Share: 78%/ })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Analysis workspace" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Stats workspace context" })).toHaveTextContent("Composition telemetry");
+    expect(screen.queryByRole("heading", { name: "Analysis workspace" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Stats workspace context" })).not.toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Analytics modes" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Studio mode controls" })).toBeInTheDocument();
     expect(screen.getByLabelText("Mock analysis studio")).toHaveTextContent("Composition analysis");
@@ -319,7 +319,7 @@ describe("StatsPage Shell", () => {
 
     expect(screen.getByRole("region", { name: "Statistics" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Statistics." })).toBeInTheDocument();
-    expect(screen.getByLabelText("Stats workspace context")).toHaveTextContent("Awaiting telemetry");
+    expect(screen.queryByLabelText("Stats workspace context")).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("No project selected");
     expect(screen.getByText("Project · No project selected")).toBeInTheDocument();
     expect(screen.getByText("No snapshot yet")).toBeInTheDocument();
@@ -344,7 +344,7 @@ describe("StatsPage Shell", () => {
     render(<StatsPage />);
 
     expect(screen.queryByText(/Loading telemetry field/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Providers summary cards" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Providers metrics" })).toBeInTheDocument();
     expect(screen.getByLabelText("Mock analysis studio")).toHaveTextContent("Reliability analysis");
     expect(screen.getAllByRole("status").some((status) => status.textContent === "Refreshing")).toBe(true);
   });
@@ -389,17 +389,17 @@ describe("StatsPage Shell", () => {
     expect(setVisualMode).toHaveBeenNthCalledWith(2, "reliability");
     expect(setVisualMode).toHaveBeenNthCalledWith(3, "system");
 
-    expect(screen.getByRole("heading", { name: "Trend summary cards" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Trend metrics" })).toBeInTheDocument();
     expect(screen.getByLabelText("Mock analysis studio")).toHaveTextContent("Trend analysis");
 
     mockStatsPageData({ visualMode: "models", setVisualMode });
     rerender(<StatsPage />);
-    expect(screen.getByRole("heading", { name: "Models summary cards" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Models metrics" })).toBeInTheDocument();
     expect(screen.getByLabelText("Mock analysis studio")).toHaveTextContent("Model performance matrix");
 
     mockStatsPageData({ visualMode: "ledgers", setVisualMode });
     rerender(<StatsPage />);
-    expect(screen.getByRole("heading", { name: "Ledgers summary cards" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Ledgers metrics" })).toBeInTheDocument();
     expect(screen.getByLabelText("Mock analysis studio")).toHaveTextContent("Task Telemetry");
   });
 

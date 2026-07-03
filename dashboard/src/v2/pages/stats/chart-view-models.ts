@@ -9,6 +9,68 @@ import {
   buildSmoothAreaPath
 } from './components/StatsShared.js';
 
+const SERIES_GROUP_ORDER = [
+  "Core",
+  "Usage",
+  "Totals",
+  "Token details",
+  "Source confidence",
+  "Providers",
+  "Provider costs",
+  "Models",
+  "Model costs",
+  "Purpose time",
+  "Purpose calls",
+  "Git",
+];
+
+function normalizeSeriesGroupLabel(grouping: string | undefined): string {
+  const rawGrouping = grouping?.trim() || "Core";
+  const normalized = rawGrouping.toLowerCase().replace(/[\s-]+/g, "_");
+
+  switch (normalized) {
+    case "core":
+      return "Core";
+    case "usage":
+      return "Usage";
+    case "totals":
+      return "Totals";
+    case "details":
+      return "Token details";
+    case "reliability":
+      return "Source confidence";
+    case "providers":
+      return "Providers";
+    case "providers_cost":
+      return "Provider costs";
+    case "models":
+      return "Models";
+    case "models_cost":
+      return "Model costs";
+    case "purposes":
+    case "purposes_time":
+      return "Purpose time";
+    case "purposes_invocations":
+      return "Purpose calls";
+    case "git":
+      return "Git";
+    default:
+      return rawGrouping;
+  }
+}
+
+function compareSeriesGroups(left: string, right: string): number {
+  const leftIndex = SERIES_GROUP_ORDER.indexOf(left);
+  const rightIndex = SERIES_GROUP_ORDER.indexOf(right);
+
+  if (leftIndex !== -1 || rightIndex !== -1) {
+    return (leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex)
+      - (rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex);
+  }
+
+  return left.localeCompare(right, undefined, { sensitivity: "base" });
+}
+
 export interface NormalizedChartSeries extends Omit<ProjectExecutionStatsChartSeries, 'formatter'> {
   accentHex: string;
   formatter: (val: number) => string | number;
@@ -91,12 +153,21 @@ export function normalizeChartSeries(
 export function groupChartSeries(
   chartSeries: ProjectExecutionStatsChartSeries[]
 ): Record<string, ProjectExecutionStatsChartSeries[]> {
-  return chartSeries.reduce((acc, s) => {
-    const grouping = s.grouping || 'Core';
-    if (!acc[grouping]) acc[grouping] = [];
-    acc[grouping].push(s);
+  const grouped = chartSeries.reduce((acc, series) => {
+    const grouping = normalizeSeriesGroupLabel(series.grouping);
+    (acc[grouping] ??= []).push(series);
     return acc;
   }, {} as Record<string, ProjectExecutionStatsChartSeries[]>);
+
+  return Object.keys(grouped)
+    .sort(compareSeriesGroups)
+    .reduce((acc, grouping) => {
+      acc[grouping] = [...grouped[grouping]!].sort((left, right) => (
+        (left.label ?? left.id).localeCompare(right.label ?? right.id, undefined, { sensitivity: "base" })
+          || left.id.localeCompare(right.id)
+      ));
+      return acc;
+    }, {} as Record<string, ProjectExecutionStatsChartSeries[]>);
 }
 
 export function calculateChartMetrics(visibleBuckets: ExecutionUsageBucketSummary[]): ChartMetrics {

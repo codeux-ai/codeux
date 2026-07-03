@@ -55,7 +55,7 @@
 }
 
 .header {
-  @apply relative z-10 mb-5 flex min-w-0 flex-wrap items-start justify-between gap-3;
+  @apply relative z-10 mb-3 flex min-w-0 flex-wrap items-start justify-between gap-2;
 }
 
 .titleGroup {
@@ -81,11 +81,11 @@
 }
 
 .valueContainer {
-  @apply relative z-10 mt-auto flex min-w-0 flex-col gap-2;
+  @apply relative z-10 mt-auto flex min-w-0 flex-col gap-1.5;
 }
 
 .valueRow {
-  @apply flex min-w-0 flex-wrap items-end justify-between gap-3;
+  @apply flex min-w-0 flex-wrap items-end justify-between gap-2;
 }
 
 .value {
@@ -102,7 +102,7 @@
 }
 
 .description {
-  @apply text-sm leading-relaxed;
+  @apply text-xs leading-snug;
   color: var(--stats-detail-color);
   overflow-wrap: anywhere;
 }

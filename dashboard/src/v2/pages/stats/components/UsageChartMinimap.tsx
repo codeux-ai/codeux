@@ -34,6 +34,7 @@ export const UsageChartMinimap: FunctionComponent<{
 
   const lastIndex = buckets.length - 1;
   const hasZoomableRange = buckets.length > 1;
+  const showBucketLabels = buckets.length > 1 && buckets.length <= 14;
 
   const indexToX = (index: number): number =>
     lastIndex <= 0
@@ -224,6 +225,15 @@ export const UsageChartMinimap: FunctionComponent<{
           </div>
         ) : null}
       </div>
+      {showBucketLabels ? (
+        <div className="mt-2 grid gap-1 text-center text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]" style={{ gridTemplateColumns: `repeat(${buckets.length}, minmax(0, 1fr))` }}>
+          {buckets.map((bucket) => (
+            <span key={bucket.bucketStart} className="min-w-0 truncate" title={bucket.label}>
+              {bucket.label}
+            </span>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 };

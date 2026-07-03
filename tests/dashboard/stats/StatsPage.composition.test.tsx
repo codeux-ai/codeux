@@ -208,9 +208,8 @@ describe("StatsPage Composition", () => {
     render(<StatsPage />);
 
     expect(screen.getByRole("region", { name: "Statistics" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Composition summary cards" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Analysis workspace" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Composition" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Composition metrics" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Analysis workspace" })).not.toBeInTheDocument();
     expect(screen.getByRole("article", { name: /Provider Share: 75%/ })).toHaveTextContent("Codex leads 2 provider rows by tokens");
     expect(screen.getByRole("article", { name: /Token Anatomy: 80\.0k/ })).toHaveTextContent("Input leads at 45%");
     expect(screen.getByRole("article", { name: /Source Mix: 85%/ })).toHaveTextContent("reported is the dominant telemetry source");
@@ -241,7 +240,6 @@ describe("StatsPage Composition", () => {
       expect(card).toHaveAccessibleName(/\S/);
     }
 
-    expect(screen.getByLabelText("Stats workspace context")).toHaveTextContent("Composition telemetry");
-    expect(screen.getAllByRole("status").some((status) => status.textContent === "Ready")).toBe(true);
+    expect(screen.queryByLabelText("Stats workspace context")).not.toBeInTheDocument();
   });
 });

@@ -368,7 +368,7 @@ Legacy runtime:
   - restrained panel surfaces for sidebar and viewer regions using shared neutral/light-dark borders and backgrounds
   - launch state card matching Browser Preview container-launch conventions (accent icon treatment, selector styling, and primary action button)
   - file browsing/diff behavior remains unchanged (`files` and `changes` modes, selected path display, side-by-side toggle, and status semantics)
-- Stats page uses the unified **Analysis Studio UX** with light/dark support and responsive behavior across screen sizes:
+- Stats page uses a flatter project analytics workspace with light/dark support and responsive behavior across screen sizes:
   - page-scoped Stats panels, chips, cards, inputs, ledgers, and focus rings come from `stats-theme.css` and the shared Stats primitives.
   - visual-mode navigation focuses the workspace on Trend, Composition, Models, Providers, Ledgers, or System.
   - Trend uses an interactive usage chart with hover and keyboard bucket inspection, minimap selection, drag zoom, graph filters, and accessible chart summaries.

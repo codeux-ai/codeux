@@ -398,7 +398,7 @@ describe("StatsPage accessibility", () => {
     expect(tokenSwitch!).toHaveAttribute("aria-checked", "true");
     expect(activeSwitch!).toHaveAttribute("aria-checked", "true");
     expect(invocationSwitch!).toHaveAttribute("aria-checked", "true");
-    expect(screen.getByRole("tooltip")).toHaveTextContent("Live values");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Bucket values");
     expect(screen.getByLabelText(/Jun 30 bucket: Tokens/i)).toBeInTheDocument();
 
     const srTable = document.querySelector("table.sr-only");

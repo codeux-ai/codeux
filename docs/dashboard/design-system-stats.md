@@ -37,9 +37,9 @@ The redesigned Stats page uses a stable top-to-bottom shell:
 4. Workspace context strip
    - The context strip repeats only the orientation facts needed while scrolling: active mode, selected window, freshness, range resolution, and sprint scope.
    - It remains present for selected-project, loading, error, empty, and low-data paths.
-5. Analysis studio
-   - Every mode starts with the shared studio header pattern: icon, eyebrow, title, short description, and `Ready`/`Refreshing`/`Waiting` status.
-   - Studio bodies may differ substantially, but they should share the same page-scoped panel, chip, input, ledger row, focus, and motion tokens.
+5. Workspace body
+   - Mode content starts directly after the KPI deck without an extra studio header, readiness chip, or duplicated workspace context card.
+   - Workspace bodies may differ substantially, but they should share the same page-scoped panel, chip, input, ledger row, focus, and motion tokens.
 6. Feedback states
    - No-project, first-load loading, first-load error, empty, refresh, and reduced-data states preserve the shell rhythm.
    - Loading states use polite status semantics. Error states use alert semantics and expose retry when recovery is available.
@@ -55,8 +55,10 @@ Trend is the chart-first workspace for time-series telemetry.
 - Lead with throughput, runtime, cost, invocations, cache rate, and token velocity.
 - Keep chart state centralized through `use-usage-chart-state.ts`; chart filters change series visibility, not the selected time window.
 - The chart header keeps filter access and zoom reset visible near the graph title. The toolbar summarizes selected range, bucket count, resolution, and active zoom.
-- Series controls use `role="switch"` and `aria-checked`; at least one series remains enabled.
-- Hover, keyboard focus, minimap selection, drag zoom, and active bucket controls all update the same focused-bucket summary.
+- The primary plot should use a tall, viewport-bounded canvas area so the graph remains the dominant element in Trend mode.
+- Short daily windows show compact bucket labels under the overview strip so the minimap carries its own context without relying only on the main x-axis labels.
+- Series controls sit in a full-width band under the usage graph, grouped into readable categories such as totals, token details, source confidence, providers, models, purposes, and Git. Controls use `role="switch"` and `aria-checked`; at least one series remains enabled.
+- Hover, keyboard focus, minimap selection, drag zoom, and active bucket controls all update the same focused-bucket summary; avoid a second live-values panel that repeats those values. The focused-bucket card should cap to the graph height and scroll internally when the graph is tall.
 - The visible SVG, readable chart summary, and screen-reader-only table must agree on peak tokens, peak active time, average tokens, invocation peak, active series, and zoom range.
 
 ### Composition
@@ -125,6 +127,8 @@ Stats copy and visuals should teach operators how trustworthy a number is withou
 
 Cost values come from snapshot cost fields and should only be presented when configured data makes them meaningful. Do not imply a free run from a zero cost when pricing may be unavailable.
 
+Cost displays use two fractional digits for scanability, rounding values such as `$55.4093` to `$55.41`.
+
 ## Primitives And Styling
 
 Use page-scoped Stats primitives instead of one-off analytics chrome:
@@ -140,7 +144,7 @@ Dense analytics layouts should stay calm: restrained contrast, low-opacity fills
 
 - The hero uses a two-zone command band on wide screens and stacks project context, time controls, mode navigation, and KPI runway on narrow screens.
 - Fixed or sticky header-adjacent navigation must wrap before it clips. Use `min-w-0`, bounded grids, and component-local overflow only when wrapping can no longer preserve button labels.
-- Metric decks collapse from desktop multi-column grids to two-column and single-column layouts without changing order.
+- Metric grids collapse from desktop multi-column layouts to two-column and single-column layouts without changing order.
 - Trend places focused-bucket and series context below the chart on narrow screens.
 - Ledgers and system rows include mobile labels when the header row is visually unavailable.
 - Tables, chart summaries, filter bars, date validation messages, pagination, and transcript panels must not create page-level horizontal scrolling.

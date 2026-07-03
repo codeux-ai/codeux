@@ -66,7 +66,9 @@ describe("TrendStudio", () => {
 
     expect(container.textContent).toContain("12.5k");
     expect(container.textContent).toContain("42");
-    expect(container.textContent).toContain("Token trend");
+    expect(container.textContent).not.toContain("Token trend");
+    expect(container.textContent).not.toContain("Invocation trend");
+    expect(container.textContent).not.toContain("Active time trend");
     expect(container.textContent).toContain("Purpose Activity");
     expect(screen.getByLabelText("Trend range metadata")).toBeInTheDocument();
   });

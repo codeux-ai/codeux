@@ -16,7 +16,6 @@ import {
   getAxisLabelStep,
   formatAxisLabel,
 } from './StatsShared.js';
-import { UsageSeriesSidebar } from './UsageSeriesSidebar.js';
 import { UsageChartMinimap } from './UsageChartMinimap.js';
 import { UsageGraphLegend } from './UsageGraphLegend.js';
 import type { UsageChartState } from '../use-usage-chart-state.js';
@@ -246,8 +245,8 @@ export const InteractiveUsageChart: FunctionComponent<{
   };
 
   return (
-    <div ref={panelRef} className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7 border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] shadow-[var(--stats-card-shadow)]`}>
-      <div className="relative flex flex-col gap-8">
+    <div ref={panelRef} className={`${PANEL_CLASS} rounded-[1.35rem] border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-3 shadow-[var(--stats-card-shadow)] md:p-4`}>
+      <div className="relative flex flex-col gap-4">
         {/* Screen reader summary */}
         <div className="sr-only" aria-live="polite" aria-atomic="true">
           <h2 id="chart-summary-heading" className="sr-only">Data Visualization for {zoomRange ? "zoomed timeframe" : stats.range.label}</h2>
@@ -304,7 +303,7 @@ export const InteractiveUsageChart: FunctionComponent<{
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_18rem] xl:items-stretch">
           <div
             aria-label="Usage chart summary metrics"
-            className="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6"
+            className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr))]"
           >
             {summaryCards.map((card) => (
               <article
@@ -330,9 +329,9 @@ export const InteractiveUsageChart: FunctionComponent<{
           </div>
         </div>
 
-        <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_20rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]">
-          <div className="flex min-w-0 flex-col gap-4">
-            <div id="usage-chart-instructions" className="flex flex-wrap items-center justify-between gap-3 rounded-[1.15rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-4 py-3">
+        <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-[minmax(0,1fr)_20rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]">
+          <div className="flex min-w-0 flex-col gap-3">
+            <div id="usage-chart-instructions" className="flex flex-wrap items-center justify-between gap-3 rounded-[1.05rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] px-3 py-2.5">
               <div className="min-w-0">
                 <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">Interactive plot</div>
                 <div className="mt-1 text-xs leading-relaxed text-[var(--stats-detail-color)]">
@@ -344,8 +343,8 @@ export const InteractiveUsageChart: FunctionComponent<{
               </div>
             </div>
 
-            <div className="rounded-[1.35rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] p-3 md:p-4">
-              <div ref={svgContainerRef} className="relative h-[22rem] w-full sm:h-[26rem] lg:h-[30rem]">
+            <div className="rounded-[1.1rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] p-2.5 md:p-3">
+              <div ref={svgContainerRef} className="relative h-[clamp(32rem,62vh,52rem)] w-full">
                 {error ? (
                   <div className="absolute inset-0 z-20 flex items-center justify-center rounded-[1.1rem] bg-[var(--stats-card-bg)]/72 backdrop-blur-sm">
                     <UsageGraphError message={error} onRetry={() => { refresh().catch(() => {}); }} />
@@ -519,8 +518,8 @@ export const InteractiveUsageChart: FunctionComponent<{
             </div>
           </div>
 
-          <aside className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-6">
-            <div className="rounded-[1.35rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] p-4">
+          <aside className="flex min-w-0 flex-col gap-3 xl:sticky xl:top-6 xl:max-h-[clamp(32rem,62vh,52rem)] xl:overflow-y-auto xl:pr-1">
+            <div className="max-h-full overflow-y-auto rounded-[1.1rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">Focused bucket</div>
@@ -575,35 +574,29 @@ export const InteractiveUsageChart: FunctionComponent<{
               </div>
             </div>
 
-            <div className="rounded-[1.35rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] p-4">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">Series switches</div>
-                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
-                  {activeSeriesCount} active
-                </div>
-              </div>
-              <UsageGraphLegend
-                seriesGroups={seriesGroups}
-                enabledSeries={enabledSeries}
-                activeSeriesCount={activeSeriesCount}
-                onToggleSeries={onToggleSeries}
-              />
-            </div>
-
-            <div className="rounded-[1.35rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] p-4">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">Live values</div>
-                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
-                  Peak {formatTokens(peakTokens)}
-                </div>
-              </div>
-              <UsageSeriesSidebar
-                series={chartData}
-                enabledSeries={enabledSeries}
-                activeIndex={activeIndex}
-              />
-            </div>
           </aside>
+        </div>
+
+        <div className="rounded-[1.1rem] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] p-3">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">Series switches</div>
+              <div className="mt-1 text-xs leading-relaxed text-[var(--stats-detail-color)]">
+                Toggle chart lines by category without leaving the usage graph.
+              </div>
+            </div>
+            <div className="rounded-full border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] px-3 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
+              {activeSeriesCount} active
+            </div>
+          </div>
+          <UsageGraphLegend
+            seriesGroups={seriesGroups}
+            enabledSeries={enabledSeries}
+            activeSeriesCount={activeSeriesCount}
+            onToggleSeries={onToggleSeries}
+            className="[grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr))]"
+            seriesGridClassName="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))]"
+          />
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 import type { FunctionComponent, ComponentChildren, ComponentType } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
-import { AlertTriangle, BarChart3, Clock3, Folder, Layers3, Loader2, RadioTower } from "lucide-preact";
+import { AlertTriangle, Folder, Loader2 } from "lucide-preact";
 import { useProjectData } from "../../context/project-data.js";
 import { useStatsPageData } from "./use-stats-page-data.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
@@ -23,34 +23,12 @@ const MODE_LABELS = {
   system: "System",
 } as const;
 
-const MODE_CONTEXT = {
-  trend: "Throughput, runtime, and cost movement.",
-  composition: "Provider, token, and purpose mix.",
-  models: "Model performance and efficiency.",
-  reliability: "Provider health and telemetry confidence.",
-  ledgers: "Task, sprint, and git records.",
-  system: "Invocation debugging and filters.",
-} as const;
-
 function getWindowLabel(window: string): string {
   if (window === "all") {
     return "All time";
   }
 
   return window;
-}
-
-function getRelativeTime(isoString: string): string {
-  const diff = Date.now() - new Date(isoString).getTime();
-  if (Number.isNaN(diff)) return "";
-  const sec = Math.floor(Math.max(0, diff) / 1000);
-  if (sec < 60) return "just now";
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min} min ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr} hr ago`;
-  const day = Math.floor(hr / 24);
-  return `${day} day${day > 1 ? "s" : ""} ago`;
 }
 
 const ContextChip: FunctionComponent<{ children: ComponentChildren }> = ({ children }) => (
@@ -111,9 +89,6 @@ export const StatsPage: FunctionComponent = () => {
     : getWindowLabel(activeQuery.window);
 
   const generatedLabel = stats?.generatedAt ? formatDateTime(stats.generatedAt) : loading ? "Loading snapshot" : "No snapshot";
-  const freshnessLabel = stats?.generatedAt ? getRelativeTime(stats.generatedAt) || "unknown" : loading ? "Refreshing" : "Awaiting telemetry";
-  const resolutionLabel = stats?.range?.resolutionLabel || (stats ? "Current range" : "Not available");
-  const sprintLabel = stats?.activeSprint ? `Sprint #${stats.activeSprint.sprintNumber ?? "?"}` : "Historical lens";
 
   const renderContextRail = () => (
     <div className={styles.stateMetaGrid}>
@@ -130,48 +105,6 @@ export const StatsPage: FunctionComponent = () => {
         Mode · {MODE_LABELS[visualMode]}
       </ContextChip>
     </div>
-  );
-
-  const renderContextStrip = () => (
-    <section
-      className={`${PANEL_CLASS} ${styles.contextStrip}`}
-      aria-label="Stats workspace context"
-      data-stats-shell-animate
-    >
-      <div className={styles.contextIntro}>
-        <div className={styles.contextIcon} aria-hidden="true">
-          <RadioTower className="h-4 w-4" strokeWidth={2.2} />
-        </div>
-        <div className="min-w-0">
-          <div className={styles.contextEyebrow}>Active workspace</div>
-          <h2 className={styles.contextTitle}>{MODE_LABELS[visualMode]} telemetry</h2>
-          <p className={styles.contextDescription}>{MODE_CONTEXT[visualMode]}</p>
-        </div>
-      </div>
-
-      <div className={styles.contextFacts} aria-label="Current telemetry window">
-        <div className={styles.contextFact}>
-          <Clock3 className="h-4 w-4" strokeWidth={2.2} aria-hidden="true" />
-          <span>Window</span>
-          <strong>{windowLabel}</strong>
-        </div>
-        <div className={styles.contextFact}>
-          <RadioTower className="h-4 w-4" strokeWidth={2.2} aria-hidden="true" />
-          <span>Freshness</span>
-          <strong>{freshnessLabel}</strong>
-        </div>
-        <div className={styles.contextFact}>
-          <Layers3 className="h-4 w-4" strokeWidth={2.2} aria-hidden="true" />
-          <span>Resolution</span>
-          <strong>{resolutionLabel}</strong>
-        </div>
-        <div className={styles.contextFact}>
-          <BarChart3 className="h-4 w-4" strokeWidth={2.2} aria-hidden="true" />
-          <span>Scope</span>
-          <strong>{sprintLabel}</strong>
-        </div>
-      </div>
-    </section>
   );
 
   const renderStatePanel = (options: {
@@ -272,8 +205,6 @@ export const StatsPage: FunctionComponent = () => {
         />
       </section>
 
-      {renderContextStrip()}
-
       {statePanel}
 
       {stats ? (
@@ -281,17 +212,8 @@ export const StatsPage: FunctionComponent = () => {
           <section
             data-stats-shell-animate
             className={styles.metricDeckSection}
-            aria-labelledby="stats-metric-deck-title"
+            aria-label={`${MODE_LABELS[visualMode]} metrics`}
           >
-            <div className={styles.sectionHeading}>
-              <div>
-                <div className={styles.sectionEyebrow}>Metric deck</div>
-                <h2 id="stats-metric-deck-title" className={styles.sectionTitle}>
-                  {MODE_LABELS[visualMode]} summary cards
-                </h2>
-              </div>
-              <div className={styles.sectionMeta}>{generatedLabel}</div>
-            </div>
             <TopCardsModeRenderer
               mode={visualMode}
               stats={stats}
@@ -301,35 +223,20 @@ export const StatsPage: FunctionComponent = () => {
             />
           </section>
 
-          <section
-            data-stats-shell-animate
-            className={styles.workspaceSection}
-            aria-labelledby="stats-active-studio-title"
-          >
-            <div className={styles.sectionHeading}>
-              <div>
-                <div className={styles.sectionEyebrow}>Active studio</div>
-                <h2 id="stats-active-studio-title" className={styles.sectionTitle}>
-                  Analysis workspace
-                </h2>
-              </div>
-              <div className={styles.sectionMeta}>{loading ? "Refreshing" : "Ready"}</div>
-            </div>
-            <AnalysisStudioSection
-              stats={stats}
-              loading={loading}
-              error={error}
-              refresh={refresh}
-              projectId={selectedProject?.id || ""}
-              planningUsage={planningUsage}
-              providerSegments={providerSegments}
-              tokenSegments={tokenSegments}
-              sourceSegments={sourceSegments}
-              visualMode={visualMode}
-              setVisualMode={setVisualMode}
-              chartState={chartState}
-            />
-          </section>
+          <AnalysisStudioSection
+            stats={stats}
+            loading={loading}
+            error={error}
+            refresh={refresh}
+            projectId={selectedProject?.id || ""}
+            planningUsage={planningUsage}
+            providerSegments={providerSegments}
+            tokenSegments={tokenSegments}
+            sourceSegments={sourceSegments}
+            visualMode={visualMode}
+            setVisualMode={setVisualMode}
+            chartState={chartState}
+          />
         </>
       ) : null}
     </PageContainer>

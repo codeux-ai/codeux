@@ -5,6 +5,7 @@ import {
   Clock3,
   Hash,
   TimerReset,
+  type LucideIcon,
 } from "lucide-preact";
 import type {
   ExecutionStatsEntitySummary,
@@ -62,26 +63,21 @@ const TrendKpiTile: FunctionComponent<{
   );
 };
 
-const TrendDeltaPill: FunctionComponent<{
+const TrendSignalCard: FunctionComponent<{
+  icon: LucideIcon;
   label: string;
-  delta: TrendDelta;
-}> = ({ label, delta }) => {
-  const deltaLabel = formatDeltaPercent(delta);
-  const Icon = delta.direction === "down" ? ArrowDownRight : ArrowUpRight;
-  const tone = delta.direction === "flat"
-    ? "text-[var(--stats-detail-color)]"
-    : delta.direction === "up"
-      ? "text-emerald-700 dark:text-emerald-300"
-      : "text-rose-700 dark:text-rose-300";
-
-  return (
-    <div className={`${CHIP_CLASS} inline-flex min-w-0 items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] ${tone}`}>
-      {delta.direction !== "flat" ? <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2.4} /> : null}
-      <span className="truncate">{label}</span>
-      <span className="text-[var(--stats-value-color)]">{deltaLabel}</span>
+  value: string;
+}> = ({ icon: Icon, label, value }) => (
+  <div className={`${SUBPANEL_CLASS} flex min-h-[4.75rem] min-w-0 items-center gap-3 p-3`}>
+    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--stats-control-radius)] border border-[var(--stats-card-border)] bg-[color:var(--fill-muted)] text-signal-500">
+      <Icon className="h-4 w-4" strokeWidth={2.2} />
     </div>
-  );
-};
+    <div className="min-w-0">
+      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">{label}</div>
+      <div className="mt-1 break-words text-lg font-black leading-tight text-[var(--stats-value-color)]">{value}</div>
+    </div>
+  </div>
+);
 
 export const TrendStudio: FunctionComponent<{
   stats: ProjectExecutionStatsSnapshot;
@@ -117,8 +113,8 @@ export const TrendStudio: FunctionComponent<{
     .sort((a, b) => (b.usage?.totalTokens || 0) - (a.usage?.totalTokens || 0));
 
   return (
-  <section className="space-y-5">
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+  <section className="space-y-3">
+    <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,13.5rem),1fr))]">
       <TrendKpiTile
         label="Total Tokens"
         value={formatTokens(stats.usage.totalTokens)}
@@ -150,26 +146,22 @@ export const TrendStudio: FunctionComponent<{
         detail={`${formatTokens(stats.usage.cachedInputTokens)} cached`}
       />
     </div>
-    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-      <div className="flex flex-wrap gap-2" aria-label="Trend deltas">
-        <TrendDeltaPill label="Token trend" delta={tokenDelta} />
-        <TrendDeltaPill label="Invocation trend" delta={invocationDelta} />
-        <TrendDeltaPill label="Active time trend" delta={activeTimeDelta} />
-      </div>
-      <div className="flex flex-wrap gap-2 lg:justify-end">
-        <div className={`${CHIP_CLASS} inline-flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]`}>
-          <TimerReset className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.2} />
-          {stats.duration && stats.duration.sampleCount > 0 ? `Median ${formatStatsDuration(stats.duration.p50Ms)}` : "No latency samples"}
-        </div>
-        <div className={`${CHIP_CLASS} inline-flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]`}>
-          <Hash className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.2} />
-          {outputVelocity}
-        </div>
-        <div className={`${CHIP_CLASS} inline-flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-detail-color)]`}>
-          <Clock3 className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.2} />
-          {finishedCount > 0 ? `${formatPercent((statusCounts!.completed / finishedCount) * 100)} success` : "No finished runs"}
-        </div>
-      </div>
+    <div className="grid gap-3 sm:grid-cols-3">
+      <TrendSignalCard
+        icon={TimerReset}
+        label="Median"
+        value={stats.duration && stats.duration.sampleCount > 0 ? formatStatsDuration(stats.duration.p50Ms) : "No samples"}
+      />
+      <TrendSignalCard
+        icon={Hash}
+        label="Velocity"
+        value={outputVelocity}
+      />
+      <TrendSignalCard
+        icon={Clock3}
+        label="Success"
+        value={finishedCount > 0 ? formatPercent((statusCounts!.completed / finishedCount) * 100) : "No runs"}
+      />
     </div>
     <InteractiveUsageChart
       stats={stats}
@@ -178,7 +170,7 @@ export const TrendStudio: FunctionComponent<{
       refresh={refresh}
       chartState={chartState}
     />
-    <div className={`${SUBPANEL_CLASS} p-4`}>
+    <div className={`${SUBPANEL_CLASS} p-3`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">Purpose Activity</div>
@@ -190,7 +182,7 @@ export const TrendStudio: FunctionComponent<{
           {stats.purposes.length} purposes
         </div>
       </div>
-      <div className="mt-4 grid gap-2">
+      <div className="mt-3 grid gap-2">
         {purposeRows.length > 0 ? purposeRows.map((purpose) => (
           <div key={purpose.id} className={`${LEDGER_ROW_MODERN_CLASS} grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center`}>
             <div className="min-w-0">

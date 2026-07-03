@@ -50,10 +50,10 @@ export const StatsMetricCard: FunctionComponent<StatsMetricCardProps> = ({
       accent={accent}
       density="compact"
       tone="muted"
-      className="min-h-[14rem] min-w-0"
+      className="min-h-[11.5rem] min-w-0"
     >
       <div
-        className="relative z-10 mt-4 min-h-[3.25rem] overflow-hidden rounded-[var(--stats-control-radius)]"
+        className="relative z-10 mt-3 min-h-[2.75rem] overflow-hidden rounded-[var(--stats-control-radius)]"
         role="img"
         aria-label={
           hasSparkline
@@ -65,12 +65,12 @@ export const StatsMetricCard: FunctionComponent<StatsMetricCardProps> = ({
           <Sparkline points={sparkline} color={accentHex} />
         ) : (
           <div
-            className="pointer-events-none h-12 rounded-[var(--stats-control-radius)] border border-dashed border-black/[0.06] bg-slate-500/[0.035] dark:border-white/[0.07] dark:bg-white/[0.025]"
+            className="pointer-events-none h-10 rounded-[var(--stats-control-radius)] border border-dashed border-black/[0.06] bg-slate-500/[0.035] dark:border-white/[0.07] dark:bg-white/[0.025]"
             aria-hidden="true"
           />
         )}
       </div>
-      <div className="relative z-10 mt-4 grid min-h-[2.5rem] min-w-0 content-end gap-2 border-t border-black/[0.06] pt-3 dark:border-white/[0.06]">
+      <div className="relative z-10 mt-3 grid min-h-[2.25rem] min-w-0 content-end gap-2 border-t border-black/[0.06] pt-2.5 dark:border-white/[0.06]">
         {(secondaryDetail || qualityHint) && (
           <div className="flex min-w-0 flex-wrap items-center gap-2 text-[10px] font-medium leading-snug text-slate-500 dark:text-slate-400">
             {secondaryDetail && <span className="min-w-0 max-w-full flex-1 basis-32 break-words">{secondaryDetail}</span>}

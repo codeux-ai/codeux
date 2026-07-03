@@ -17,6 +17,7 @@ import {
   calculateChartMetrics,
   getTooltipState,
 } from "../../../dashboard/src/v2/pages/stats/chart-view-models.js";
+import { formatCost } from "../../../dashboard/src/v2/pages/stats/stats-utils.js";
 import { useUsageChartState } from "../../../dashboard/src/v2/pages/stats/use-usage-chart-state.js";
 
 // Basic stubs
@@ -79,6 +80,33 @@ describe("Chart View Models", () => {
     const grouped = groupChartSeries(chartSeries);
     expect(grouped["G1"]?.length).toBe(2);
     expect(grouped["G2"]?.length).toBe(1);
+  });
+
+  it("groupChartSeries sorts long series lists into readable categories", () => {
+    const grouped = groupChartSeries([
+      { id: "provider_b", label: "Beta Tokens", grouping: "providers" },
+      { id: "core_output", label: "Output Tokens", grouping: "details" },
+      { id: "provider_a", label: "Alpha Tokens", grouping: "providers" },
+      { id: "purpose_calls", label: "Task Coding Calls", grouping: "purposes_invocations" },
+      { id: "core_total", label: "Total Tokens", grouping: "totals" },
+      { id: "reported", label: "Reported Usage", grouping: "reliability" },
+      { id: "git_files", label: "Files Changed", grouping: "git" },
+    ] as any);
+
+    expect(Object.keys(grouped)).toEqual([
+      "Totals",
+      "Token details",
+      "Source confidence",
+      "Providers",
+      "Purpose calls",
+      "Git",
+    ]);
+    expect(grouped["Providers"]?.map((series) => series.label)).toEqual(["Alpha Tokens", "Beta Tokens"]);
+  });
+
+  it("formats cost values with exactly two decimal places", () => {
+    expect(formatCost(55.4093)).toBe("$55.41");
+    expect(formatCost(0)).toBe("$0.00");
   });
 
   it("calculateChartMetrics calculates peak and average metrics", () => {
