@@ -618,6 +618,49 @@ describe("executePrFinalizeStage", () => {
     }));
   });
 
+  it("renders completion timing in the task PR body while the task run row is still open", async () => {
+    const ctx = createMockContext();
+    ctx.taskRunId = "tr-1";
+    ctx.settings.git.githubMode = "REMOTE";
+    vi.mocked(ctx.deps.executionRepository!.getTaskRun).mockReturnValue({
+      id: "tr-1",
+      projectId: "p-1",
+      sprintId: "sprint-1",
+      sprintRunId: "sprint-run-1",
+      taskId: "task-1",
+      dispatchId: "dispatch-1",
+      connectionId: null,
+      provider: "codex",
+      mode: "docker_cli",
+      sessionId: "test-session",
+      sessionName: null,
+      state: "RUNNING",
+      workerBranch: "worker-branch",
+      prUrl: null,
+      startedAt: "2026-07-03T02:18:16.000Z",
+      finishedAt: null,
+      durationMs: null,
+    });
+    vi.mocked(ctx.prService.resolveOrCreateFeaturePr).mockResolvedValue("https://github.com/pr/1");
+
+    await executePrFinalizeStage(ctx, { completionTimestamp: "2026-07-03T02:31:30.000Z" });
+
+    expect(ctx.prService.resolveOrCreateFeaturePr).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.stringContaining("| Finished | 2026-07-03 02:31:30 UTC |"),
+      }),
+      ctx.repoPath,
+      expect.anything(),
+    );
+    expect(ctx.prService.resolveOrCreateFeaturePr).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.stringContaining("| Duration | 13m 14s |"),
+      }),
+      ctx.repoPath,
+      expect.anything(),
+    );
+  });
+
   it("skips PR creation if autoCreatePr is false", async () => {
     const ctx = createMockContext();
     ctx.settings.git.githubMode = "REMOTE";

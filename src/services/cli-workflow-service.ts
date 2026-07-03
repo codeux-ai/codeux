@@ -365,8 +365,8 @@ export class CliWorkflowService {
         sourceEventKey: eventKey,
       }, eventKey);
       
-      const { prUrl } = await executePrFinalizeStage(ctx);
       const finishedAt = new Date().toISOString();
+      const { prUrl } = await executePrFinalizeStage(ctx, { completionTimestamp: finishedAt });
       this.updateExecutionState(args, {
         state: "COMPLETED",
         finishedAt,

@@ -101,4 +101,55 @@ describe("buildTaskPrComposerInput", () => {
     expect(input.model).toBe("google/gemma-4-26b-a4b-qat");
     expect(input.usage?.invocationCount).toBe(1);
   });
+
+  it("uses an explicit completion timestamp for PR timing before the task run is persisted complete", () => {
+    const task: Subtask = {
+      id: "T01",
+      title: "Implement rails",
+      prompt: "Build the task.",
+      depends_on: [],
+      is_independent: true,
+      status: "IN_PROGRESS",
+    };
+
+    const input = buildTaskPrComposerInput({
+      projectId: "project-1",
+      task,
+      sprint: null,
+      provider: "codex",
+      featureBranch: "feature/sprint",
+      workerBranch: "feature/sprint/T01-codex",
+      taskRun: {
+        id: "run-1",
+        projectId: "project-1",
+        sprintId: "sprint-1",
+        sprintRunId: "sprint-run-1",
+        taskId: "task-record-1",
+        dispatchId: "dispatch-1",
+        provider: "codex",
+        mode: "docker_cli",
+        connectionId: null,
+        sessionId: "session-1",
+        sessionName: null,
+        state: "RUNNING",
+        workerBranch: "feature/sprint/T01-codex",
+        prUrl: null,
+        startedAt: "2026-07-03T02:18:16.000Z",
+        finishedAt: null,
+        durationMs: null,
+      },
+      completionTimestamp: "2026-07-03T02:31:30.000Z",
+      aiProviderSettings: {
+        provider: "codex",
+        strategy: "SINGLE",
+        providers: {},
+        invocationRouting: {},
+      } as unknown as AiProviderSettings,
+      sections: allSections,
+    });
+
+    expect(input.startedAt).toBe("2026-07-03T02:18:16.000Z");
+    expect(input.finishedAt).toBe("2026-07-03T02:31:30.000Z");
+    expect(input.durationMs).toBe(13 * 60 * 1000 + 14 * 1000);
+  });
 });
