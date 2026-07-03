@@ -64,7 +64,10 @@ Models mode compares model activity and efficiency.
 Providers mode is the reliability studio.
 
 - The visible label is `Providers`; the internal mode may still be reliability-oriented.
-- Summaries should cover provider share, status distribution, latency, duration, source confidence, and error or failure pressure where data exists.
+- The studio starts with a confidence summary that separates telemetry confidence, fallback usage, failure pressure, and provider coverage before charts or row-level details.
+- Source mix must explicitly show reported, estimated, unavailable, unsupported, and unknown invocation-source counts. Estimated data should read as a usable fallback with lower precision, not as a failure state.
+- Provider reliability cards are sorted by failure/source risk first and token volume second, then surface failure counts, success rate tone, token volume, active time, duration coverage, and source confidence.
+- Empty source or provider segments should use the shared Stats panel vocabulary and explain what data is missing without inventing health, source, or volume signals.
 - Provider-derived status and latency cards must tolerate partial snapshots and fixtures, but should not fabricate health data when telemetry is missing.
 
 ### Ledgers
