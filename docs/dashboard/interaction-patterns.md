@@ -97,5 +97,6 @@ DropdownMenus and Popovers are expected to be fully keyboard accessible:
 - Dialog and destructive confirmation flows must keep focus trapped while open, expose a stable accessible name, and restore focus after close. Hold-to-confirm progress should be described with stable `aria-describedby` text instead of noisy live updates.
 - Route changes triggered by shell links, task links, Browser controls, or sprint/task selectors must leave the destination with a named page landmark. If focus is programmatically moved, use `preventScroll` where possible to avoid jumping fixed shell chrome.
 - Keyboard-only users must be able to operate Browser chrome, session rail actions, settings forms, task/sprint selectors, stats filters, command menus, and compact mobile controls without hover-only disclosure.
+- Task cards and active stream rows keep status, dependency blockers, QA review state, PR/live duration metadata, drag limitations, and inline actions readable without requiring hover. Pointer drag remains pointer-only; reduced-motion users receive static drag-disabled messaging instead of keyboard drag-and-drop.
 
 See the [Dashboard Accessibility Quality Audit](./accessibility-quality-audit.md) for verification expectations.
