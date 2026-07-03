@@ -119,9 +119,10 @@ The Memory settings panel also manages one project-scoped scheduler entry for lo
 
 ## UI Updates and Accessibility
 - The memory sidebar now starts collapsed by default and exposes a compact rail/tab so the graph canvas remains visible until the user explicitly expands it.
-- Closing the sidebar clears the current search query; Escape still clears the field while the sidebar is open, and the live announcement remains polite.
+- Expanding the sidebar opens directly to the current alive memory list for the selected tier, sprint, and agent filter set. The sidebar no longer places search in the primary browse path.
+- Closing the sidebar clears the current search query and selected memory IDs so returning to the sidebar starts from the current visible memory list. `MemorySearch.tsx` remains available as a standalone accessible search control.
 - Added keyboard-accessible clear search functionality to `MemorySearch.tsx` (supports clearing via `Escape` and a dedicated clear button with an explicit `<kbd>Esc</kbd>` visual affordance).
-- Enhanced `MemoryList.tsx` to prominently display active search result counts directly in the UI instead of relying solely on `sr-only` live regions, while keeping the list layout `min-w-0` and overflow-safe on narrow screens.
+- Enhanced `MemoryList.tsx` to prominently display visible memory counts directly in the UI instead of relying solely on `sr-only` live regions, while keeping the list layout `min-w-0` and overflow-safe on narrow screens.
 - Added per-memory selection toggles and a batch action bar to the sidebar list so users can select visible memories, clear the selection, or select all currently filtered results without touching hidden records.
 - Batch deletion requires an explicit confirmation dialog when more than one memory is selected. The delete flow is optimistic, restores any failed deletions, and reports partial failures through the memory feedback region with a retry action.
 - Selection is pruned automatically when search, tier, sprint, agent, or sidebar state changes make a memory invisible, which keeps batch actions scoped to the current visible slice of memory.
