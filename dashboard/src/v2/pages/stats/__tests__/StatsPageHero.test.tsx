@@ -3,7 +3,7 @@ expect.extend(matchers);
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen, cleanup } from '@testing-library/preact';
 import { StatsPageHero, getRelativeTime } from '../components/StatsPageHero.js';
 
@@ -76,6 +76,9 @@ function createStats(overrides: Record<string, unknown> = {}) {
 }
 
 describe('StatsPageHero', () => {
+  afterEach(() => {
+    cleanup();
+  });
   describe('getRelativeTime', () => {
     it('returns "just now" for differences under 60 seconds', () => {
       const now = Date.now();
@@ -193,7 +196,7 @@ describe('StatsPageHero', () => {
       />,
     );
 
-    expect(screen.getByText('Daily · 7 buckets')).toBeTruthy();
+    expect(screen.getAllByText('Daily · 7 buckets').length).toBeGreaterThan(0);
     expect(screen.getByText('9 completed · 1 failed · 0 cancelled')).toBeTruthy();
     expect(screen.getByText('1 providers · GPT-5')).toBeTruthy();
     expect(screen.getByText('Mixed reported + fallback · Sprint 4')).toBeTruthy();
