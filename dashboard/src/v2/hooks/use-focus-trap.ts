@@ -10,6 +10,7 @@ function getVisibleFocusableElements(container: HTMLElement): HTMLElement[] {
 
   return elements.filter((el) => {
     if (el.hasAttribute("disabled")) return false;
+    if (el.getAttribute("aria-disabled") === "true") return false;
     if (el.getAttribute("aria-hidden") === "true") return false;
     if (el.hasAttribute("inert")) return false;
 
@@ -30,6 +31,7 @@ function isUsableFocusTarget(element: HTMLElement | null): element is HTMLElemen
   if (!element) return false;
   if (!element.isConnected) return false;
   if (element.hasAttribute("disabled")) return false;
+  if (element.getAttribute("aria-disabled") === "true") return false;
   if (element.getAttribute("aria-hidden") === "true") return false;
   if (element.hasAttribute("inert")) return false;
 

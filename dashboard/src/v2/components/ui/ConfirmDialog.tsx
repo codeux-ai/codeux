@@ -11,6 +11,12 @@ import type { ConfirmDialogOptions } from "../../hooks/use-confirm-dialog.js";
 import { Loader2, AlertTriangle, CheckCircle2, CircleAlert, Info, XCircle } from "lucide-preact";
 import { Overlay } from "./Overlay.js";
 
+type DestructiveConfirmState = "idle" | "holding" | "cancelled" | "complete";
+
+function tokenSecondsToMs(seconds: number): number {
+  return seconds * 1000;
+}
+
 function DestructiveConfirmButton({
   onConfirm,
   label,
@@ -22,13 +28,15 @@ function DestructiveConfirmButton({
   className?: string;
   isLoading?: boolean;
 }) {
-  const [isHolding, setIsHolding] = useState(false);
+  const [confirmState, setConfirmState] = useState<DestructiveConfirmState>("idle");
   const [progress, setProgress] = useState(0);
   const reducedMotion = useReducedMotion();
+  const gsapTokens = useGsapInteractionTokens();
   const progressId = "destructive-confirm-progress";
 
   const holdDuration = 1000;
   const holdTimerRef = useRef<number | null>(null);
+  const cancelResetTimerRef = useRef<number | null>(null);
   const holdButtonRef = useRef<HTMLButtonElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<number | null>(null);
@@ -43,11 +51,16 @@ function DestructiveConfirmButton({
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
     }
+    if (cancelResetTimerRef.current !== null) {
+      window.clearTimeout(cancelResetTimerRef.current);
+      cancelResetTimerRef.current = null;
+    }
   }, []);
 
   const startHold = () => {
-    if (isHolding || isLoading) return;
-    setIsHolding(true);
+    if (confirmState === "holding" || isLoading) return;
+    clearTimers();
+    setConfirmState("holding");
     setProgress(0);
     if (barRef.current) {
       gsap.killTweensOf(barRef.current);
@@ -66,7 +79,12 @@ function DestructiveConfirmButton({
         if (reducedMotion) {
           barRef.current.style.width = `${newProgress}%`;
         } else {
-          gsap.to(barRef.current, { width: `${newProgress}%`, duration: 0.12, ease: "power2.out", overwrite: true });
+          gsap.to(barRef.current, {
+            width: `${newProgress}%`,
+            duration: gsapTokens.controlFeedback.duration,
+            ease: gsapTokens.controlFeedback.ease,
+            overwrite: true,
+          });
         }
       }
 
@@ -78,7 +96,7 @@ function DestructiveConfirmButton({
     animationFrameRef.current = requestAnimationFrame(updateProgress);
 
     holdTimerRef.current = window.setTimeout(() => {
-      setIsHolding(false);
+      setConfirmState("complete");
       setProgress(100);
       if (barRef.current) {
         barRef.current.style.width = '100%';
@@ -88,21 +106,33 @@ function DestructiveConfirmButton({
   };
 
   const cancelHold = () => {
-    if (isHolding) {
+    clearTimers();
+    if (confirmState === "holding") {
+      setConfirmState("cancelled");
       if (!reducedMotion && holdButtonRef.current) {
-        gsap.to(holdButtonRef.current, {
-          keyframes: [{ x: -6, duration: 0.05 }, { x: 5, duration: 0.06 }, { x: -4, duration: 0.07 }, { x: 3, duration: 0.06 }, { x: -2, duration: 0.05 }, { x: 0, duration: 0.04 }],
-          ease: "none"
-        });
+        gsap.fromTo(
+          holdButtonRef.current,
+          { x: -4 },
+          { x: 0, duration: gsapTokens.inlineValidation.duration, ease: gsapTokens.inlineValidation.ease }
+        );
       }
+      const resetDelay = tokenSecondsToMs(gsapTokens.controlFeedback.duration);
+      if (resetDelay === 0) {
+        setConfirmState("idle");
+      } else {
+        cancelResetTimerRef.current = window.setTimeout(() => {
+          setConfirmState("idle");
+          cancelResetTimerRef.current = null;
+        }, resetDelay);
+      }
+    } else if (confirmState !== "complete") {
+      setConfirmState("idle");
     }
-    setIsHolding(false);
     setProgress(0);
     if (barRef.current) {
       gsap.killTweensOf(barRef.current);
       barRef.current.style.width = '0%';
     }
-    clearTimers();
     startTimeRef.current = null;
   };
 
@@ -162,10 +192,10 @@ function DestructiveConfirmButton({
       style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
       aria-busy={isLoading ? "true" : undefined}
       disabled={isLoading}
-      aria-label={`Hold to ${label}`}
+      aria-label={isLoading ? `Completing ${label}` : `Hold to ${label}`}
       aria-describedby={progressId}
     >
-      {isHolding && (
+      {(confirmState === "holding" || confirmState === "complete") && (
         <div
           ref={barRef}
           className="absolute inset-0 bg-black/20 dark:bg-white/20 origin-left"
@@ -175,10 +205,21 @@ function DestructiveConfirmButton({
 
       <span className="relative z-10 flex items-center justify-center gap-2">
         {isLoading && <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /><span className="sr-only">Processing, please wait</span></>}
-        {isHolding ? `Hold to ${label}` : isLoading ? "Processing..." : label}
+        {isLoading ? "Completing..." : confirmState === "complete" ? "Confirmed" : confirmState === "cancelled" ? "Release canceled" : confirmState === "holding" ? `Hold to ${label}` : label}
+        {confirmState === "holding" && (
+          <span aria-hidden="true" className="tabular-nums opacity-85">
+            {Math.round(progress)}%
+          </span>
+        )}
       </span>
       <span id={progressId} className="sr-only">
-        {isHolding ? `Hold progress ${Math.round(progress)} percent. Release to cancel.` : "Hold until complete. Release before completion to cancel."}
+        {confirmState === "holding"
+          ? "Keep holding until progress completes. Release before completion to cancel."
+          : confirmState === "cancelled"
+            ? "Confirmation canceled. Hold again to confirm."
+            : confirmState === "complete"
+              ? "Confirmation completed."
+              : "Hold until complete. Release before completion to cancel."}
       </span>
     </button>
   );

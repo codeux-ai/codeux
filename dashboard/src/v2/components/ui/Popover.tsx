@@ -21,6 +21,15 @@ interface PopoverProps {
   ariaLabel?: string;
 }
 
+function assignRef<T>(ref: unknown, value: T | null): void {
+  if (!ref) return;
+  if (typeof ref === "function") {
+    ref(value);
+    return;
+  }
+  (ref as { current: T | null }).current = value;
+}
+
 export const Popover = ({
   children,
   content,
@@ -175,7 +184,7 @@ export const Popover = ({
         cloneElement(children as preact.VNode<any>, {
           "aria-haspopup": isTooltip ? ("true" as const) : ("dialog" as const),
           "aria-expanded": isOpen,
-          "aria-controls": isOpen ? popoverId : undefined,
+          "aria-controls": popoverId,
           "aria-label": (children.props as any)["aria-label"],
           disabled: (children.props as any).disabled,
           onClick: (e: MouseEvent) => {
@@ -186,44 +195,43 @@ export const Popover = ({
           },
           onKeyDown: (e: KeyboardEvent) => {
             if (e.key === 'Enter' || e.key === ' ') {
-               if (!externalTriggerRef) {
-                 e.preventDefault();
-                 if (!(children.props as any).disabled) {
-                   onOpenChange(!isOpen);
-                 }
-               }
+              e.preventDefault();
+              if (!(children.props as any).disabled) {
+                onOpenChange(!isOpen);
+              }
             }
             (children.props as any).onKeyDown?.(e);
           },
           ref: (node: any) => {
             if (externalTriggerRef) {
-              if (typeof externalTriggerRef === 'function') (externalTriggerRef as any)(node);
-              else (externalTriggerRef as any).current = node;
+              assignRef(externalTriggerRef, node);
             } else {
               (localTriggerRef as any).current = node;
             }
-            const childRef = (children as any).ref;
-            if (childRef) {
-              if (typeof childRef === 'function') childRef(node);
-              else childRef.current = node;
-            }
+            assignRef((children as any).ref, node);
           },
         })
       ) : (
       <button
         type="button"
-        ref={externalTriggerRef ? undefined : localTriggerRef}
+        ref={(node) => {
+          if (externalTriggerRef) {
+            assignRef(externalTriggerRef, node);
+          } else {
+            assignRef(localTriggerRef, node);
+          }
+        }}
         className="inline-flex cursor-pointer text-left"
         onClick={() => onOpenChange(!isOpen)}
         onKeyDown={(e) => {
-          if (!externalTriggerRef && (e.key === 'Enter' || e.key === ' ')) {
+          if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
             onOpenChange(!isOpen);
           }
         }}
         aria-haspopup={isTooltip ? "true" : "dialog"}
         aria-expanded={isOpen}
-        aria-controls={isOpen ? popoverId : undefined}
+        aria-controls={popoverId}
       >
         {children}
       </button>

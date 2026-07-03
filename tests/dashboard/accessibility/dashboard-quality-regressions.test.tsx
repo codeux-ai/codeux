@@ -78,6 +78,7 @@ import { useReducedMotion } from "../../../dashboard/src/v2/hooks/use-reduced-mo
 import { useDropdownKeyboard } from "../../../dashboard/src/v2/components/TopNav.js";
 import { ConfirmDialog } from "../../../dashboard/src/v2/components/ui/ConfirmDialog.js";
 import { FilterStrip } from "../../../dashboard/src/v2/components/ui/FilterStrip.js";
+import { Popover } from "../../../dashboard/src/v2/components/ui/Popover.js";
 import { ProviderInstanceCard } from "../../../dashboard/src/v2/components/settings/ProviderInstanceCard.js";
 import { KanbanTaskCard } from "../../../dashboard/src/v2/components/tasks/KanbanTaskCard.js";
 import { createMockTask } from "../../../dashboard/src/v2/components/tasks/__tests__/fixtures/tasks.fixture.js";
@@ -206,6 +207,23 @@ function TableHarness(): h.JSX.Element {
   );
 }
 
+function PopoverHarness(): h.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  return (
+    <Popover
+      isOpen={open}
+      onOpenChange={setOpen}
+      ariaLabel="Runtime actions"
+      triggerRef={triggerRef}
+      content={<button type="button">Popover action</button>}
+    >
+      <button ref={triggerRef} type="button">Open popover</button>
+    </Popover>
+  );
+}
+
 describe("dashboard accessibility quality regressions", () => {
   beforeEach(() => {
     cleanup();
@@ -295,11 +313,66 @@ describe("dashboard accessibility quality regressions", () => {
     expect(cancel).toHaveFocus();
 
     fireEvent.keyDown(confirm, { key: " " });
-    expect(confirm).toHaveAccessibleDescription(/Release to cancel/i);
+    expect(confirm).toHaveAccessibleDescription(/Release before completion to cancel/i);
     act(() => {
       vi.advanceTimersByTime(1000);
     });
     expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels destructive hold without confirming and describes recovery without live-region noise", async () => {
+    vi.useFakeTimers();
+    const onConfirm = vi.fn();
+
+    render(
+      <ConfirmDialog
+        isOpen
+        options={{
+          title: "Delete Runtime Data?",
+          body: "Delete cached runtime data.",
+          confirmLabel: "Delete Data",
+          destructive: true,
+        }}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    const confirm = screen.getByRole("button", { name: "Hold to Delete Data" });
+    fireEvent.pointerDown(confirm, { button: 0 });
+    expect(confirm).toHaveAccessibleDescription("Keep holding until progress completes. Release before completion to cancel.");
+
+    fireEvent.pointerUp(confirm);
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(confirm).toHaveTextContent("Release canceled");
+    expect(confirm).toHaveAccessibleDescription("Confirmation canceled. Hold again to confirm.");
+    expect(confirm.closest('[aria-live="polite"], [aria-live="assertive"]')).toBeNull();
+
+    act(() => {
+      vi.runOnlyPendingTimers();
+    });
+    expect(confirm).toHaveAccessibleDescription("Hold until complete. Release before completion to cancel.");
+  });
+
+  it("closes Popover on Escape and restores focus to the trigger", async () => {
+    const user = userEvent.setup();
+    render(<PopoverHarness />);
+
+    const trigger = screen.getByRole("button", { name: "Open popover" });
+    trigger.focus();
+    expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(trigger).toHaveAttribute("aria-controls");
+
+    await user.keyboard("{Enter}");
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("dialog", { name: "Runtime actions" })).toBeInTheDocument();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Popover action" })).toHaveFocus();
+
+    await user.keyboard("{Escape}");
+    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
 
   it("supports tablist roving focus and sortable invocation headers", async () => {
