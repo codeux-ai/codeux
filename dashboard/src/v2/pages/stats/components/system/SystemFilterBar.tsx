@@ -102,6 +102,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
               value={search}
               onInput={(event) => onSearchChange((event.currentTarget as HTMLInputElement).value)}
               placeholder="Search system stats"
+              aria-label="Search system stats"
               className={`${INPUT_CLASS} w-full pl-10 pr-10`}
             />
             {search !== "" ? (
