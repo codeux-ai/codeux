@@ -35,7 +35,11 @@ export function buildTaskBoardViewModel(options: TaskBoardViewModelOptions): Tas
     subtasks,
   } = options;
 
-  const allTasks = [...optimisticTasks, ...tasks];
+  const optimisticRecordIds = new Set(optimisticTasks.map((task) => task.recordId));
+  const allTasks = [
+    ...optimisticTasks,
+    ...tasks.filter((task) => !optimisticRecordIds.has(task.recordId)),
+  ];
   const taskLookup = new Map<string, Task>();
   for (const task of allTasks) {
     taskLookup.set(task.recordId, task);
