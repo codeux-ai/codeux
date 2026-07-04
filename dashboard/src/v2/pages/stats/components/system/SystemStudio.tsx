@@ -1,13 +1,16 @@
-import type { FunctionComponent, ComponentType, JSX } from "preact";
+import type { ComponentChild, ComponentChildren, FunctionComponent, JSX } from "preact";
 import { useMemo, useRef, useState } from "preact/hooks";
 import {
   Activity,
   Clock,
   Database,
+  AlertTriangle,
+  Inbox,
   ShieldCheck,
   Terminal,
   TrendingUp,
   Zap,
+  type LucideIcon,
 } from "lucide-preact";
 import { useSystemViewData, type SystemSummaryMetrics } from "../../../../pages/stats/hooks/use-system-view-data.js";
 import { formatStatsDuration, formatTokens } from "../../stats-utils.js";
@@ -30,26 +33,26 @@ import { InvocationsTable } from "./InvocationsTable.js";
 type SystemTab = "all" | "errors" | "system";
 
 const SystemMetricCard: FunctionComponent<{
-  icon: ComponentType<any>;
+  icon: LucideIcon;
   label: string;
   value: string;
-  detail: import("preact").ComponentChild;
+  detail: ComponentChild;
   circleClassName: string;
   valueClassName?: string;
 }> = ({ icon: Icon, label, value, detail, circleClassName, valueClassName }) => (
-  <div className={`${SUBPANEL_CLASS} flex min-h-[8rem] flex-col justify-between p-4`}>
+  <div className={`${SUBPANEL_CLASS} flex min-h-[7.5rem] flex-col justify-between p-4`}>
     <div className="flex items-start justify-between gap-3">
-      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${circleClassName}`}>
-      <Icon className="h-4 w-4" strokeWidth={2.25} />
+      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${circleClassName}`}>
+        <Icon className="h-4 w-4" strokeWidth={2.25} />
       </div>
-      <div className="text-right text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)]">
+      <div className="text-right text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">
         {label}
       </div>
     </div>
-    <div className={`mt-4 break-words text-2xl font-black tracking-tight md:text-3xl ${valueClassName || "text-[color:var(--stats-value-color)]"}`}>
+    <div className={`mt-4 break-words text-2xl font-black tracking-tight tabular-nums md:text-[1.7rem] ${valueClassName || "text-[color:var(--stats-value-color)]"}`}>
       {value}
     </div>
-    <div className="mt-1 text-[11px] font-medium text-[color:var(--stats-detail-color)]">
+    <div className="mt-1 text-[11px] font-semibold leading-snug text-[color:var(--stats-detail-color)]">
       {detail}
     </div>
   </div>
@@ -75,14 +78,15 @@ const StatusDistributionBar: FunctionComponent<{ metrics: SystemSummaryMetrics }
   }
 
   return (
-    <div className={`${SUBPANEL_CLASS} p-4`}>
+    <div className={`${SUBPANEL_CLASS} p-4`} aria-label="Status distribution">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Status Distribution</div>
+        <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">Status Distribution</div>
         <div className="flex flex-wrap items-center gap-3">
           {STATUS_BAR_SEGMENTS.filter((segment) => metrics[segment.key] > 0).map((segment) => (
             <div key={segment.key} className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-detail-color)]">
               <span className={`h-2 w-2 rounded-full ${segment.dotClassName}`} />
-              {segment.label} · {metrics[segment.key]}
+              <span>{segment.label}</span>
+              <span className="tabular-nums text-[color:var(--stats-value-color)]">{metrics[segment.key].toLocaleString()}</span>
             </div>
           ))}
         </div>
@@ -109,19 +113,88 @@ const StudioSectionHeader: FunctionComponent<{
   eyebrow: string;
   title: string;
   description?: string;
-}> = ({ eyebrow, title, description }) => (
+  action?: ComponentChild;
+}> = ({ eyebrow, title, description, action }) => (
   <div className="flex flex-wrap items-start justify-between gap-3">
-    <div>
-      <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-warning-text)] ${CHIP_CLASS}`}>
+    <div className="min-w-0 max-w-3xl">
+      <div className={`inline-flex px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)] ${CHIP_CLASS}`}>
         {eyebrow}
       </div>
-      <div className="mt-3 text-xl font-black text-[color:var(--stats-value-color)]">{title}</div>
+      <div className="mt-3 text-xl font-black tracking-tight text-[color:var(--stats-value-color)]">{title}</div>
       {description ? (
         <div className="mt-1.5 max-w-3xl text-sm leading-relaxed text-[color:var(--stats-detail-color)]">{description}</div>
       ) : null}
     </div>
+    {action ? <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{action}</div> : null}
   </div>
 );
+
+const SystemAdminSection: FunctionComponent<{
+  eyebrow: string;
+  title: string;
+  description: string;
+  action?: ComponentChild;
+  children: ComponentChildren;
+}> = ({ eyebrow, title, description, action, children }) => (
+  <section className={`${PANEL_CLASS} p-5 md:p-6`} aria-label={title}>
+    <StudioSectionHeader eyebrow={eyebrow} title={title} description={description} action={action} />
+    <div className="mt-6">{children}</div>
+  </section>
+);
+
+const SectionCount: FunctionComponent<{
+  label: string;
+  value: number;
+  tone?: keyof typeof STATUS_TONE_CLASS;
+}> = ({ label, value, tone = "neutral" }) => (
+  <div className={`inline-flex h-8 items-center gap-2 rounded-full px-3 text-[10px] font-bold uppercase tracking-[0.16em] ${STATUS_TONE_CLASS[tone]}`}>
+    <span>{label}</span>
+    <span className="tabular-nums text-[color:var(--stats-value-color)]">{value.toLocaleString()}</span>
+  </div>
+);
+
+const SystemFeedbackState: FunctionComponent<{
+  icon: LucideIcon;
+  title: string;
+  detail: string;
+  role: "status" | "alert";
+  ariaLabel: string;
+  tone?: keyof typeof STATUS_TONE_CLASS;
+}> = ({ icon: Icon, title, detail, role, ariaLabel, tone = "neutral" }) => (
+  <div
+    role={role}
+    aria-label={ariaLabel}
+    aria-live={role === "status" ? "polite" : undefined}
+    className={`${SUBPANEL_CLASS} flex min-w-0 flex-col gap-3 p-4 text-left sm:flex-row sm:items-start`}
+  >
+    <div className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--stats-chip-radius)] ${STATUS_TONE_CLASS[tone]}`}>
+      <Icon className="h-4 w-4" strokeWidth={2.2} aria-hidden="true" />
+    </div>
+    <div className="min-w-0">
+      <div className="text-sm font-bold text-[color:var(--stats-value-color)]">{title}</div>
+      <div className="mt-1 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">{detail}</div>
+    </div>
+  </div>
+);
+
+const formatExternalApiLabel = (key: string): string => key.charAt(0).toUpperCase() + key.slice(1);
+
+const formatErrorCategoryLabel = (category: string): string => {
+  if (category === "rateLimit") return "Rate Limit";
+  if (category === "apiError") return "API Error";
+  if (category === "modelError") return "Model Error";
+  return category.charAt(0).toUpperCase() + category.slice(1);
+};
+
+const getErrorCategoryTone = (category: string): string => {
+  if (category === "timeout" || category === "rateLimit") {
+    return "bg-[color:var(--stats-warning-text)]";
+  }
+  if (category === "cancelled") {
+    return "bg-[color:var(--stats-detail-color)]";
+  }
+  return "bg-[color:var(--stats-negative-text)]";
+};
 
 export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ projectId }) => {
   const {
@@ -212,8 +285,9 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
   const errorData = errorsByCategory || {
     timeout: 0, rateLimit: 0, apiError: 0, modelError: 0, cancelled: 0, other: 0
   };
-  const errorEntries = Object.entries(errorData).filter(([_, count]) => count > 0);
-  const totalErrors = errorEntries.reduce((sum, [_, count]) => sum + count, 0);
+  const errorEntries = Object.entries(errorData).filter(([, count]) => count > 0);
+  const totalErrors = errorEntries.reduce((sum, [, count]) => sum + count, 0);
+  const externalApiCallCount = Object.values(apiData).reduce((sum, metrics) => sum + metrics.calls, 0);
   const recordTabs: SystemTab[] = ["all", "errors", "system"];
   const focusRecordTab = (tab: SystemTab) => {
     setActiveTab(tab);
@@ -250,13 +324,13 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
         />
       </section>
 
-      <section className={`${PANEL_CLASS} p-5 md:p-6`}>
-        <StudioSectionHeader
-          eyebrow="Sprint Overview"
-          title="Sprint State"
-          description="Current sprint and task state stays separate from invocation metrics so active work, blocked work, and settled work can be scanned first."
-        />
-        <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-5">
+      <SystemAdminSection
+        eyebrow="Sprint Overview"
+        title="Sprint State"
+        description="Current sprint and task state stays separate from invocation metrics so active work, blocked work, and settled work can be scanned first."
+        action={<SectionCount label="Tasks" value={sprintData.totalTasks} />}
+      >
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
           <SystemMetricCard
             icon={Activity}
             label="Sprints"
@@ -268,8 +342,9 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             icon={TrendingUp}
             label="Active"
             value={sprintData.activeSprints > 0 ? sprintData.activeSprints.toLocaleString() : "0"}
-            detail={sprintData.activeSprints > 0 ? `${sprintData.runningTasks} tasks live` : <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-bold ${STATUS_TONE_CLASS.signal}`}>All settled</span>}
-            circleClassName={STATUS_TONE_CLASS.signal}
+            detail={sprintData.activeSprints > 0 ? `${sprintData.runningTasks} tasks live` : "all settled"}
+            circleClassName={sprintData.activeSprints > 0 ? STATUS_TONE_CLASS.signal : STATUS_TONE_CLASS.neutral}
+            valueClassName={sprintData.activeSprints > 0 ? "text-[color:var(--stats-signal-text)]" : undefined}
           />
           <SystemMetricCard
             icon={ShieldCheck}
@@ -293,15 +368,26 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             circleClassName={STATUS_TONE_CLASS.signal}
           />
         </div>
-      </section>
+      </SystemAdminSection>
 
-      <section className={`${PANEL_CLASS} p-5 md:p-6`}>
-        <StudioSectionHeader
-          eyebrow="Invocation Health"
-          title="Health Snapshot"
-          description="Current volume, success rate, latency, cache efficiency, and in-flight work are derived from the server-projected summary for the current filter set."
-        />
-        <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <SystemAdminSection
+        eyebrow="Invocation Health"
+        title="Health Snapshot"
+        description="Current volume, success rate, latency, cache efficiency, and in-flight work are derived from the server-projected summary for the current filter set."
+        action={<SectionCount label="Filtered" value={summaryMetrics.totalInvocations} />}
+      >
+        {summaryMetrics.totalInvocations === 0 ? (
+          <div className="mb-4">
+            <SystemFeedbackState
+              icon={Inbox}
+              title="Invocation health needs records"
+              detail="No invocation records match the current filter set, so rate and latency metrics are unavailable."
+              role="status"
+              ariaLabel="Invocation health reduced data"
+            />
+          </div>
+        ) : null}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           <SystemMetricCard
             icon={Activity}
             label="Invocations"
@@ -320,7 +406,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             icon={ShieldCheck}
             label="Success Rate"
             value={successRateLabel}
-            detail={summaryMetrics.failedCount > 0 ? `${summaryMetrics.failedCount} failed` : "no failures"}
+            detail={summaryMetrics.failedCount > 0 ? `${summaryMetrics.failedCount} failed` : summaryMetrics.totalInvocations > 0 ? "no failures in data" : "needs records"}
             circleClassName={STATUS_TONE_CLASS.positive}
             valueClassName={successTone}
           />
@@ -350,66 +436,60 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
         <div className="mt-4">
           <StatusDistributionBar metrics={summaryMetrics} />
         </div>
-      </section>
+      </SystemAdminSection>
 
-      <section className={`${PANEL_CLASS} p-5 md:p-6`}>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <StudioSectionHeader
-            eyebrow="External APIs"
-            title="External API Activity"
-            description="Git, Jules, Jira, and other integrations are isolated from the main invocation table so external traffic stays easy to audit."
-          />
-          <div className="flex flex-wrap gap-2">
-            {(Object.entries(apiData) as [keyof typeof apiData, any][]).filter(([_, metrics]) => metrics.calls > 0).map(([key, metrics]) => (
-              <div key={key} className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
-                {key.charAt(0).toUpperCase() + key.slice(1)} · {metrics.calls} calls
-              </div>
-            ))}
+      <SystemAdminSection
+        eyebrow="External APIs"
+        title="External API Activity"
+        description="Git, Jules, Jira, and other integrations are isolated from the main invocation table so external traffic stays easy to audit."
+        action={<SectionCount label="Calls" value={externalApiCallCount} />}
+      >
+        {externalApiCallCount === 0 ? (
+          <div className="mb-4">
+            <SystemFeedbackState
+              icon={Database}
+              title="No external API activity classified"
+              detail="This data set does not include classified Git, Jules, Jira, or other external API calls."
+              role="status"
+              ariaLabel="No external API activity"
+            />
           </div>
-        </div>
-        <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+        ) : null}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           {Object.entries(apiData).map(([key, metrics]) => (
             <SystemMetricCard
               key={key}
               icon={Database}
-              label={key.charAt(0).toUpperCase() + key.slice(1)}
+              label={formatExternalApiLabel(key)}
               value={metrics.calls.toLocaleString()}
-              detail={metrics.calls > 0 ? formatStatsDuration(metrics.avgDurationMs) : "No calls"}
+              detail={metrics.calls > 0 ? formatStatsDuration(metrics.avgDurationMs) : "No classified calls"}
               circleClassName={STATUS_TONE_CLASS.neutral}
             />
           ))}
         </div>
-      </section>
+      </SystemAdminSection>
 
-      <section className={`${PANEL_CLASS} p-5 md:p-6`}>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <StudioSectionHeader
-            eyebrow="Error Categories"
-            title="Error Categories"
-            description="Error classes are grouped so operators can separate transient issues from provider, model, and cancellation problems at a glance."
-          />
-          {totalErrors > 0 ? (
-            <div className={`flex h-8 items-center justify-center rounded-full px-3 text-[11px] font-bold ${STATUS_TONE_CLASS.warning}`}>
-              {totalErrors} total failures
-            </div>
-          ) : null}
-        </div>
-        <div className="mt-6">
+      <SystemAdminSection
+        eyebrow="Failure Analysis"
+        title="Error Categories"
+        description="Error classes are grouped so operators can separate transient issues from provider, model, and cancellation problems at a glance."
+        action={totalErrors > 0 ? <SectionCount label="Failures" value={totalErrors} tone="warning" /> : undefined}
+      >
+        <div>
           {errorEntries.length === 0 ? (
-            <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center py-12 text-center`}>
-              <ShieldCheck className="mb-3 h-8 w-8 text-[color:var(--stats-positive-text)] opacity-50" />
-              <div className="text-sm font-bold text-[color:var(--stats-value-color)]">No Errors Recorded</div>
-              <div className="mt-1 text-sm text-[color:var(--stats-detail-color)]">All invocations completed successfully.</div>
-            </div>
+            <SystemFeedbackState
+              icon={ShieldCheck}
+              title="No error categories classified"
+              detail="Failed or cancelled invocations with classifiable details will appear here."
+              role="status"
+              ariaLabel="No error categories"
+              tone="positive"
+            />
           ) : (
             <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
               {errorEntries.map(([category, count]) => {
-                const label = category === "rateLimit" ? "Rate Limit" : category === "apiError" ? "API Error" : category === "modelError" ? "Model Error" : category.charAt(0).toUpperCase() + category.slice(1);
-                const tone = category === "timeout" || category === "rateLimit"
-                  ? "bg-[color:var(--stats-warning-text)]"
-                  : category === "cancelled"
-                    ? "bg-[color:var(--stats-detail-color)]"
-                    : "bg-[color:var(--stats-negative-text)]";
+                const label = formatErrorCategoryLabel(category);
+                const tone = getErrorCategoryTone(category);
                 return (
                   <div key={category} className={`${SUBPANEL_CLASS} flex items-center justify-between p-4 transition-colors hover:bg-[color:var(--fill-muted-hover)]`}>
                     <div className="flex items-center gap-3">
@@ -423,63 +503,70 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             </div>
           )}
         </div>
-      </section>
+      </SystemAdminSection>
 
-      <section className={`${PANEL_CLASS} p-5 md:p-6`}>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <StudioSectionHeader
-            eyebrow="Invocation Records"
-            title="Invocation Records"
-            description="Search, server filters, record tabs, result counts, pagination, and expandable transcript detail stay in one operational record area."
-          />
-          <div className="flex flex-wrap gap-2">
-            <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
-              All · {invocations.length.toLocaleString()}
-            </div>
-            <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
-              Errors · {errorCount.toLocaleString()}
-            </div>
-            <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
-              System · {systemCount.toLocaleString()}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-6 space-y-4">
+      <SystemAdminSection
+        eyebrow="Invocation Records"
+        title="Invocation Records"
+        description="Search, server filters, record tabs, result counts, pagination, and expandable transcript detail stay in one operational record area."
+        action={(
           <div
-            className="sticky top-3 z-30 flex max-w-full flex-wrap gap-1 self-start rounded-2xl border border-[color:var(--stats-card-border)] bg-[color:var(--stats-card-bg)] p-1 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl"
-            role="group"
-            aria-label="Invocation record views"
-            onKeyDown={handleRecordViewKeyDown}
+            className="inline-flex min-h-8 items-center gap-2 rounded-[var(--stats-control-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-chip)] px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-detail-color)]"
+            aria-label={`Available invocation records: ${invocations.length.toLocaleString()}`}
           >
-            {recordTabs.map((tab) => {
-              const tabCount = tab === "all" ? invocations.length : tab === "errors" ? errorCount : systemCount;
-              const tabLabel = tab === "all" ? "All" : tab === "errors" ? "Errors" : "System Msgs";
-              return (
-              <button
-                key={tab}
-                type="button"
-                ref={(node) => {
-                  recordViewRefs.current[tab] = node;
-                }}
-                onClick={() => setActiveTab(tab)}
-                aria-pressed={activeTab === tab}
-                aria-label={`${tabLabel} invocation records, ${tabCount.toLocaleString()} ${tabCount === 1 ? "record" : "records"}`}
-                className={`inline-flex min-w-max items-center gap-2 rounded-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-all ${CONTROL_FOCUS_CLASS} ${
-                  activeTab === tab ? TAB_ACTIVE_CLASS : TAB_IDLE_CLASS
-                }`}
+            <span>Available</span>
+            <span className="inline-flex min-w-[3.25rem] justify-end font-black tabular-nums text-[color:var(--stats-value-color)]">
+              {invocations.length.toLocaleString()}
+            </span>
+          </div>
+        )}
+      >
+        <div className="space-y-4">
+          <div className={`${SUBPANEL_CLASS} p-3`}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Record Views</div>
+              <div
+                className="grid w-full grid-cols-3 gap-px overflow-hidden rounded-[var(--stats-control-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-border-hairline)] sm:w-auto"
+                role="group"
+                aria-label="Invocation record views"
+                onKeyDown={handleRecordViewKeyDown}
               >
-                {tabLabel}
-                <span className={`rounded-full px-2 py-0.5 text-[9px] font-black tabular-nums tracking-[0.12em] ${activeTab === tab ? TAB_COUNT_ACTIVE_CLASS : TAB_COUNT_IDLE_CLASS}`}>
-                  {tabCount.toLocaleString()}
-                </span>
-              </button>
-              );
-            })}
+                {recordTabs.map((tab) => {
+                  const tabCount = tab === "all" ? invocations.length : tab === "errors" ? errorCount : systemCount;
+                  const tabLabel = tab === "all" ? "All" : tab === "errors" ? "Errors" : "System Msgs";
+                  return (
+                    <button
+                      key={tab}
+                      type="button"
+                      ref={(node) => {
+                        recordViewRefs.current[tab] = node;
+                      }}
+                      onClick={() => setActiveTab(tab)}
+                      aria-pressed={activeTab === tab}
+                      aria-label={`${tabLabel} invocation records, ${tabCount.toLocaleString()} ${tabCount === 1 ? "record" : "records"}`}
+                      className={`inline-flex min-h-10 min-w-0 items-center justify-center gap-2 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] transition-[background-color,border-color,box-shadow,color] duration-200 motion-reduce:transition-none sm:min-w-[10rem] ${CONTROL_FOCUS_CLASS} ${
+                        activeTab === tab ? TAB_ACTIVE_CLASS : `border-transparent bg-[color:var(--stats-surface-subpanel)] ${TAB_IDLE_CLASS}`
+                      }`}
+                    >
+                      <span className="min-w-0 truncate">{tabLabel}</span>
+                      <span
+                        className={`inline-flex min-w-[2.5rem] justify-end rounded-full px-2 py-0.5 text-[9px] font-black tabular-nums tracking-[0.08em] ${activeTab === tab ? TAB_COUNT_ACTIVE_CLASS : TAB_COUNT_IDLE_CLASS}`}
+                        aria-hidden="true"
+                      >
+                        {tabCount.toLocaleString()}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           <div className="space-y-3">
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Filters</div>
+            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
+              <span>Filters</span>
+              <span className="h-px min-w-6 flex-1 bg-[color:var(--stats-border-hairline)]" aria-hidden="true" />
+            </div>
             <SystemFilterBar
               filters={filters}
               onFiltersChange={setFilters}
@@ -496,13 +583,21 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
           </div>
 
           {error ? (
-            <div role="alert" className={`rounded-2xl px-4 py-3 text-sm ${STATUS_TONE_CLASS.negative}`}>
-              Failed to load invocations — {error}
-            </div>
+            <SystemFeedbackState
+              icon={AlertTriangle}
+              title="Failed to load invocations"
+              detail={error}
+              role="alert"
+              ariaLabel="Invocation load failed"
+              tone="negative"
+            />
           ) : null}
 
           <div className="space-y-3">
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Invocation Ledger</div>
+            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
+              <span>Invocation Ledger</span>
+              <span className="h-px min-w-6 flex-1 bg-[color:var(--stats-border-hairline)]" aria-hidden="true" />
+            </div>
             <InvocationsTable
               invocations={tabbedInvocations}
               sort={sort}
@@ -514,7 +609,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             />
           </div>
         </div>
-      </section>
+      </SystemAdminSection>
     </div>
   );
 };

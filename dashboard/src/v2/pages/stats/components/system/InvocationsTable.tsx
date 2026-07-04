@@ -12,6 +12,8 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Inbox,
+  type LucideIcon,
 } from "lucide-preact";
 import type { ExecutionInvocationRecord } from "../../../../types.js";
 import type { SystemSort, SystemSortKey } from "../../hooks/use-system-view-data.js";
@@ -24,6 +26,7 @@ import {
   TAB_IDLE_CLASS,
   TRACK_CLASS,
   getProviderIcon,
+  SUBPANEL_CLASS,
 } from "../StatsShared.js";
 import { InvocationMessagesPanel } from "./InvocationMessagesPanel.js";
 
@@ -36,6 +39,34 @@ export interface InvocationsTableProps {
   loading?: boolean;
   error?: string | null;
 }
+
+const SystemFeedbackState: FunctionComponent<{
+  icon: LucideIcon;
+  title: string;
+  detail: string;
+  role: "status" | "alert";
+  ariaLabel: string;
+  tone?: keyof typeof STATUS_TONE_CLASS;
+  busy?: boolean;
+  children?: import("preact").ComponentChildren;
+}> = ({ icon: Icon, title, detail, role, ariaLabel, tone = "neutral", busy, children }) => (
+  <div
+    role={role}
+    aria-label={ariaLabel}
+    aria-live={role === "status" ? "polite" : undefined}
+    aria-busy={busy ? "true" : undefined}
+    className={`${SUBPANEL_CLASS} flex min-w-0 flex-col gap-4 p-4 text-left sm:flex-row sm:items-start`}
+  >
+    <div className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--stats-chip-radius)] ${STATUS_TONE_CLASS[tone]}`}>
+      <Icon className={busy ? "h-4 w-4 motion-safe:animate-spin" : "h-4 w-4"} strokeWidth={2.2} aria-hidden="true" />
+    </div>
+    <div className="min-w-0 flex-1">
+      <div className="text-sm font-bold text-[color:var(--stats-value-color)]">{title}</div>
+      <div className="mt-1 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">{detail}</div>
+      {children ? <div className="mt-4">{children}</div> : null}
+    </div>
+  </div>
+);
 
 export function useInvocationsWindow(
   invocations: ExecutionInvocationRecord[],
@@ -175,35 +206,46 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
 
   if (loading) {
     return (
-      <div role="status" aria-label="Loading invocations" className="space-y-3">
-        <span className="sr-only" aria-live="polite">Loading invocations</span>
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className={`${LEDGER_ROW_MODERN_CLASS} h-20 motion-safe:animate-pulse ${TRACK_CLASS}`} />
-        ))}
-      </div>
+      <SystemFeedbackState
+        icon={Loader2}
+        title="Loading invocation records"
+        detail="Refreshing the ledger rows and transcript expansion targets."
+        role="status"
+        ariaLabel="Loading invocation records"
+        tone="signal"
+        busy
+      >
+        <div className="space-y-2" aria-hidden="true">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className={`${SUBPANEL_CLASS} h-10 !p-0 motion-safe:animate-pulse ${TRACK_CLASS}`} />
+          ))}
+        </div>
+      </SystemFeedbackState>
     );
   }
 
   if (error) {
     return (
-      <div role="alert" className={`rounded-2xl px-4 py-4 text-sm ${STATUS_TONE_CLASS.negative}`}>
-        <div className="flex items-start gap-2">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <div className="min-w-0">
-            <div className="font-bold">Failed to load invocation records</div>
-            <div className="mt-1 break-words">{error}</div>
-          </div>
-        </div>
-      </div>
+      <SystemFeedbackState
+        icon={AlertTriangle}
+        title="Failed to load invocation records"
+        detail={error}
+        role="alert"
+        ariaLabel="Invocation records failed to load"
+        tone="negative"
+      />
     );
   }
 
   if (invocations.length === 0) {
     return (
-      <div role="status" aria-live="polite" aria-label="Empty invocations table" className="flex flex-col items-center justify-center py-20 text-[color:var(--stats-detail-color)]">
-        <AlertTriangle className="mb-4 h-10 w-10 opacity-20" />
-        <div className="text-sm font-medium">No invocations match the current filters</div>
-      </div>
+      <SystemFeedbackState
+        icon={Inbox}
+        title="No invocation records to show"
+        detail="No records match the current filters or record view."
+        role="status"
+        ariaLabel="No invocation records"
+      />
     );
   }
 
@@ -213,7 +255,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
         <caption className="sr-only">
           Invocation ledger with sortable time, token, and duration columns. Rows include status, type, model, token counts, context, and transcript expansion controls.
         </caption>
-        <thead className="sticky top-0 z-10 hidden bg-[color:var(--stats-surface-panel)] backdrop-blur-sm lg:table-header-group">
+        <thead className="sticky top-0 z-10 hidden bg-[color:var(--stats-surface-panel)] lg:table-header-group">
           <tr className="text-left text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">
             <th id="invocations-time" scope="col" aria-sort={getAriaSort("startedAt")} className="pb-2 pl-6">
               <button

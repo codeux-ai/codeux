@@ -54,7 +54,7 @@
   - [Dashboard Accessibility Quality Audit](./dashboard/accessibility-quality-audit.md)
   - [Interaction Patterns](./dashboard/interaction-patterns.md)
 - [Shared Primitive Design System](./dashboard/design-system-shared-primitives.md)
-- [Stats & Analytics Design System](./dashboard/design-system-stats.md)
+- [Stats & Analytics Design System](./dashboard/design-system-stats.md) - Warm Void analytics surfaces and System administration
 - [Dashboard Onboarding](./dashboard/onboarding.md)
 - [Project Initialization](./dashboard/project-initialization.md)
 - [Sprint Imports](./dashboard/sprint-imports.md)
