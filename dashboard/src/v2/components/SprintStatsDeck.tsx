@@ -160,22 +160,22 @@ const DeltaValue: FunctionComponent<{
 };
 
 const SummaryPill: FunctionComponent<Node> = ({ label, value, icon: Icon, accent }) => (
-  <div className="rounded-2xl border border-black/[0.05] bg-white p-5 shadow-sm dark:border-white/[0.05] dark:bg-void-900/35">
+  <div className="min-h-[7rem] rounded-2xl border border-black/[0.05] bg-white p-5 shadow-sm dark:border-white/[0.05] dark:bg-void-900/35">
     <div className={`mb-2 flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em] ${accent}`}>
       <Icon className="h-3.5 w-3.5" strokeWidth={1.8} />
-      <span>{label}</span>
+      <span className="text-balance break-words">{label}</span>
     </div>
-    <div className="font-mono text-xl font-black tracking-tighter text-slate-900 dark:text-white">
+    <div className="font-mono text-xl font-black tracking-tight text-slate-900 dark:text-white break-words">
       {value}
     </div>
   </div>
 );
 
 const CounterTile: FunctionComponent<Node & { className?: string }> = ({ label, value, icon: Icon, accent, className }) => (
-  <div className={`rounded-2xl border border-black/[0.05] bg-white p-5 shadow-sm dark:border-white/[0.05] dark:bg-void-900/35 ${className || ""}`}>
+  <div className={`min-h-[7rem] rounded-2xl border border-black/[0.05] bg-white p-5 shadow-sm dark:border-white/[0.05] dark:bg-void-900/35 ${className || ""}`}>
     <div className={`mb-2 flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em] ${accent}`}>
       <Icon className="h-3.5 w-3.5" strokeWidth={1.9} />
-      <span>{label}</span>
+      <span className="text-balance break-words">{label}</span>
     </div>
     <DeltaValue value={Number(value)} compact />
   </div>
@@ -191,10 +191,10 @@ const StageBand: FunctionComponent<{
   const share = totalSeconds > 0 ? (seconds / totalSeconds) * 100 : 0;
 
   return (
-    <div className="rounded-2xl border border-black/[0.05] bg-white p-5 shadow-sm dark:border-white/[0.05] dark:bg-void-900/35">
+    <div className="min-h-[11rem] rounded-2xl border border-black/[0.05] bg-white p-5 shadow-sm dark:border-white/[0.05] dark:bg-void-900/35">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className={`text-[9px] font-bold uppercase tracking-[0.14em] ${meta.tone}`}>{meta.label}</div>
+          <div className={`text-[9px] font-bold uppercase tracking-[0.12em] text-balance break-words ${meta.tone}`}>{meta.label}</div>
           <div className="mt-2 text-xl font-black tracking-tight text-slate-900 dark:text-white">
             {formatDurationTight(seconds)}
           </div>
@@ -280,7 +280,7 @@ export const TaskStagePills: FunctionComponent<{
         return (
           <span
             key={stage}
-            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${meta.chip} ${meta.tone} ${active ? "shadow-[0_0_0_1px_rgba(0,224,160,0.12)]" : ""}`}
+            className={`inline-flex min-h-7 items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${meta.chip} ${meta.tone} ${active ? "shadow-[0_0_0_1px_rgba(0,224,160,0.12)]" : ""}`}
           >
             <span
               className="h-1.5 w-1.5 rounded-full"
@@ -289,7 +289,7 @@ export const TaskStagePills: FunctionComponent<{
                 boxShadow: active ? `0 0 10px ${meta.accent}` : "none",
               }}
             />
-            {meta.shortLabel}
+            <span className="text-balance break-words">{meta.shortLabel}</span>
             <span className="font-mono normal-case tracking-normal text-slate-600 dark:text-slate-300">
               {formatDurationTight(timing.stageTotals[stage])}
             </span>

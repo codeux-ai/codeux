@@ -17,12 +17,12 @@ export const SectionHeader: FunctionComponent<SectionHeaderProps> = ({
     icon,
     className = "mb-16",
 }) => (
-    <div className={`flex items-end justify-between px-2 overflow-hidden ${className}`}>
+    <div className={`flex items-end justify-between overflow-hidden border-b border-[color:var(--border-hairline)] px-2 pb-4 ${className}`}>
         <div className="relative">
-            <h2 className="text-[6rem] font-black tracking-[0.2em] text-[color:var(--fill-muted-hover)] absolute -top-8 -left-3 pointer-events-none select-none font-display leading-none overflow-hidden">
+            <h2 className="pointer-events-none absolute -left-3 -top-8 overflow-hidden font-display text-[6rem] font-black leading-none tracking-[0.2em] text-[color:var(--fill-muted-hover)] select-none motion-reduce:transform-none">
                 {watermark}
             </h2>
-            <h3 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white relative z-10 flex items-center gap-2.5">
+            <h3 className="relative z-10 flex items-center gap-2.5 font-display text-xl font-bold tracking-tight text-[color:var(--text-primary)]">
                 {icon}
                 {title}
             </h3>

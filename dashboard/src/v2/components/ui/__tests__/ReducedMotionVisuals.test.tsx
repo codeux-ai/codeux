@@ -5,6 +5,8 @@ import { Sparkline } from "../Sparkline.js";
 import { WaveFluid } from "../WaveFluid.js";
 import { BorderTrace } from "../BorderTrace.js";
 import { ContainerShip } from "../PlanningShip.js";
+import { Card } from "../Card.js";
+import { EmptyState } from "../EmptyState.js";
 import * as matchers from '@testing-library/jest-dom/matchers';
 
 expect.extend(matchers);
@@ -42,5 +44,32 @@ describe("Reduced Motion Visuals", () => {
         const { container } = render(<ContainerShip accentColor="#000" isMoving={true} isDark={false} />);
         const animate = container.querySelector("animate");
         expect(animate).toBeNull();
+    });
+
+    it("Card exposes a static reduced-motion primitive surface", () => {
+        const { container } = render(<Card>Surface</Card>);
+        const card = container.firstChild as HTMLElement;
+
+        expect(card).toHaveClass("bg-[var(--surface-glass)]");
+        expect(card).toHaveClass("border-[color:var(--border-hairline)]");
+        expect(card).toHaveClass("shadow-[var(--elevation-base)]");
+        expect(card).toHaveClass("motion-reduce:transition-none");
+    });
+
+    it("EmptyState uses shared static surface and metadata classes", () => {
+        const { container, getByText } = render(
+            <EmptyState
+                icon={<span aria-hidden="true">I</span>}
+                title="Nothing queued"
+                description="Create a sprint to begin."
+            />
+        );
+        const emptyState = container.firstChild as HTMLElement;
+        const description = getByText("Create a sprint to begin.");
+
+        expect(emptyState).toHaveClass("bg-[var(--surface-glass)]");
+        expect(emptyState).toHaveClass("border-[color:var(--border-hairline)]");
+        expect(emptyState).toHaveClass("motion-reduce:transition-none");
+        expect(description).toHaveClass("text-[color:var(--text-metadata)]");
     });
 });

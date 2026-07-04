@@ -4,7 +4,6 @@ import { useRef } from "preact/hooks";
 import type { TargetedEvent } from "preact/compat";
 import gsap from "gsap";
 import { Clock, FolderGit2, GitPullRequest, Settings, Trash2 } from "lucide-preact";
-import { WaveFluid } from "../ui/WaveFluid.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
 import type { Task } from "../../types.js";
 import { PRIORITY_CFG, STATUS_CFG } from "../../lib/tasks-constants.js";
@@ -37,6 +36,7 @@ export const KanbanTaskCard: FunctionComponent<{
   const pri = PRIORITY_CFG[task.priority];
   const isReducedMotion = useReducedMotion();
   const StatusIcon = STATUS_CFG[task.status].icon;
+  const shouldTraceStatus = task.status === "in_progress" || task.status === "coding_completed" || task.status === "QA_REVIEW_FAILED";
   const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel, triggerRef } = useConfirmDialog();
 
   const [flashTriggerCount, setFlashTriggerCount] = useState(0);
@@ -100,80 +100,88 @@ export const KanbanTaskCard: FunctionComponent<{
           // Optional: Toggle accessible drag mode if implemented
         }
       }}
-      className={`kanban-card group relative flex flex-col bg-white/80 dark:bg-void-800/75 backdrop-blur-sm rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${task.isOptimistic ? "border-dashed border-2 border-slate-300 dark:border-slate-600 opacity-60 pointer-events-none" : "border border-black/[0.06] dark:border-white/[0.06]"} ${isReducedMotion ? 'kanban-card-reduced-motion' : ''} ${isDragging ? 'kanban-card--dragging ring-2 ring-signal-500' : ''}`}
+      className={`kanban-card group relative flex min-w-0 flex-col overflow-hidden rounded-[1.35rem] bg-white/[0.86] p-5 shadow-[0_2px_18px_rgba(15,23,42,0.05)] backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:bg-void-800/[0.78] dark:shadow-[0_4px_22px_rgba(0,0,0,0.22)] sm:p-6 ${task.isOptimistic ? "border-dashed border-2 border-slate-300 opacity-60 pointer-events-none dark:border-slate-600" : "border border-black/[0.06] dark:border-white/[0.06]"} ${isReducedMotion ? 'kanban-card-reduced-motion' : ''} ${isDragging ? 'kanban-card--dragging ring-2 ring-signal-500' : ''}`}
       style={{ transformStyle: "preserve-3d", willChange: "transform" }}
     >
       <span id={`task-card-kbd-${task.recordId}`} className="sr-only">
         {isReducedMotion ? "Draggable reordering is disabled in reduced motion mode." : (!onDragStart ? "Keyboard reordering is not supported. Use drag and drop to reorder." : "Draggable task. Drag and drop is pointer-only. Keyboard reordering is not supported.")}
       </span>
       <div className="absolute inset-0 pointer-events-none transition-colors duration-300 group-hover:bg-signal-500/[0.02] dark:group-hover:bg-signal-500/[0.02]" />
-      <WaveFluid accentHex={STATUS_CFG[task.status].hex} />
-      <BorderTrace accentHex={STATUS_CFG[task.status].hex} />
+      <div className="kanban-card__status-rail" style={{ backgroundColor: STATUS_CFG[task.status].hex }} aria-hidden="true" />
+      {shouldTraceStatus && !isReducedMotion && <BorderTrace accentHex={STATUS_CFG[task.status].hex} />}
 
-      <div className="flex items-center justify-between mb-3 relative z-10">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-[10px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-[0.1em]">
+      <div className="relative z-10 mb-3 flex min-w-0 items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="min-w-0 break-all font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400 dark:text-slate-500">
             {task.id.toUpperCase()}
           </span>
-          <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.1em] text-slate-400">
+          <div className={`inline-flex max-w-full items-center gap-1.5 rounded-full border border-black/[0.06] bg-black/[0.03] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] dark:border-white/[0.08] dark:bg-white/[0.03] ${STATUS_CFG[task.status].color}`}>
             <span className="sr-only">, Status: </span><span aria-live="polite" className="sr-only">Task {task.id} status is now {task.status.replace('_', ' ')}</span>
             <StatusIcon className="w-3 h-3" aria-hidden="true" style={{ color: STATUS_CFG[task.status].hex }} />
+            <span className="truncate">{STATUS_CFG[task.status].label}</span>
           </div>
         </div>
-        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-bold uppercase tracking-[0.14em] ${pri.bg} ${pri.color}`}>
+        <div className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em] ${pri.bg} ${pri.color}`}>
           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${pri.dot}`} aria-hidden="true" />
           <span className="sr-only">Priority: </span>{pri.label}
         </div>
       </div>
 
-      <h4 className={`text-[15px] font-bold tracking-tight leading-snug mb-4 relative z-10 group-hover:translate-x-0.5 transition-transform duration-300 pr-12 break-words whitespace-normal ${
+      <h4 className={`relative z-10 mb-4 break-words text-[15px] font-bold leading-snug tracking-tight transition-transform duration-300 group-hover:translate-x-0.5 ${
         task.status === "completed" ? "text-slate-400 dark:text-slate-500 line-through decoration-slate-300 dark:decoration-slate-700" : "text-slate-900 dark:text-white"
       }`}>
         {task.title}
       </h4>
 
-      <div className="relative z-10 mb-4 flex flex-wrap items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">
-        <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 min-w-0 truncate max-w-full">
-          {viewModel.executorLabel}
-        </span>
-        {agentPresetName && (
-          <span className="inline-flex items-center gap-1 rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 min-w-0 max-w-full">
-            <AgentSelectAvatarIcon avatarConfig={agentPresetAvatarConfig} seed={agentPresetName} />
-            <span className="sr-only">Agent: </span><span className="truncate min-w-0">{agentPresetName}</span>
-          </span>
-        )}
-        {sessionState && (
-          <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 min-w-0 truncate max-w-full"><span className="sr-only">Session State: </span>{sessionState}
-          </span>
-        )}
-        {sessionId && (
-          <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 font-mono min-w-0 truncate max-w-full"><span className="sr-only">Session ID: </span>{sessionId}
-          </span>
+      <div className="relative z-10 mb-4 grid min-w-0 gap-2 rounded-[1.1rem] border border-black/[0.04] bg-black/[0.018] p-3 dark:border-white/[0.05] dark:bg-white/[0.02] sm:grid-cols-2">
+        <div className="min-w-0">
+          <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">Executor</div>
+          <div className="mt-1 min-w-0 break-words text-xs font-semibold text-slate-700 dark:text-slate-200">
+            {viewModel.executorLabel}
+          </div>
+        </div>
+        <div className="min-w-0">
+          <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">Agent</div>
+          {agentPresetName ? (
+            <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200">
+              <AgentSelectAvatarIcon avatarConfig={agentPresetAvatarConfig} seed={agentPresetName} />
+              <span className="sr-only">Agent: </span>
+              <span className="min-w-0 break-words">{agentPresetName}</span>
+            </div>
+          ) : (
+            <div className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">Default</div>
+          )}
+        </div>
+        {(sessionState || sessionId) && (
+          <div className="min-w-0 sm:col-span-2">
+            <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">Session</div>
+            <div className="mt-1 flex min-w-0 flex-wrap gap-x-2 gap-y-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">
+              {sessionState && <span className="min-w-0 break-words"><span className="sr-only">Session State: </span>{sessionState}</span>}
+              {sessionId && <span className="min-w-0 break-all font-mono"><span className="sr-only">Session ID: </span>{sessionId}</span>}
+            </div>
+          </div>
         )}
       </div>
 
-      <div className="flex items-center gap-3 mt-auto relative z-10 min-w-0">
-        <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 min-w-0">
+      <div className="relative z-10 mt-auto grid min-w-0 gap-2 text-[10px] text-slate-400 dark:text-slate-500">
+        <div className="flex min-w-0 items-start gap-1.5 font-semibold">
           <FolderGit2 className="w-3 h-3 text-slate-300 dark:text-slate-600 group-hover:text-signal-500 transition-colors shrink-0" strokeWidth={2} />
-          <span className="font-mono truncate min-w-0">{task.source}</span>
+          <span className="font-mono min-w-0 break-all">{task.source}</span>
         </div>
-
-        <span className="text-slate-200 dark:text-slate-700 text-[9px] shrink-0">·</span>
-
-        <div className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-slate-500 min-w-0">
+        <div className="flex min-w-0 items-center gap-1.5">
           <div className="w-6 h-6 rounded-lg flex items-center justify-center bg-black/[0.03] dark:bg-white/[0.03] shrink-0">
             <span className="text-[9px] font-black font-display text-slate-500 dark:text-slate-400" aria-hidden="true">
               {task.assignee[0]}
             </span>
           </div>
-          <span className="sr-only">Assignee: </span><span className="font-medium truncate min-w-0">{task.assignee}</span>
+          <span className="sr-only">Assignee: </span><span className="min-w-0 break-words font-medium">{task.assignee}</span>
         </div>
       </div>
 
       <DependencyStatusIndicators indicators={dependencyIndicators} />
 
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mt-3 pt-3 border-t border-black/[0.04] dark:border-white/[0.04] relative z-10">
-        <div className="flex items-center gap-3">
+      <div className="relative z-10 mt-3 flex flex-col items-start justify-between gap-3 border-t border-black/[0.04] pt-3 dark:border-white/[0.04] sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
           <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-slate-300 dark:text-slate-600">
             <Clock className="w-3 h-3 shrink-0" strokeWidth={2} aria-hidden="true" />
             <span className="sr-only">Duration: </span>
@@ -187,7 +195,7 @@ export const KanbanTaskCard: FunctionComponent<{
               href={getSafeUrl(prUrl)}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1 text-[9px] font-mono text-signal-500 hover:text-signal-400 transition-colors"
+              className="flex min-w-0 items-center gap-1 break-all text-[9px] font-mono text-signal-500 transition-colors hover:text-signal-400"
               onClick={(e) => e.stopPropagation()}
             >
               <GitPullRequest className="w-3 h-3" strokeWidth={2} />
@@ -195,10 +203,10 @@ export const KanbanTaskCard: FunctionComponent<{
             </a>
           )}
         </div>
-        <span className="text-[9px] font-mono text-slate-300 dark:text-slate-700">{liveStartedAt ? `· ${formatTimeAgo(liveStartedAt)}` : humanizedCreatedAt}</span>
+        <span className="break-words text-[9px] font-mono text-slate-300 dark:text-slate-700">{liveStartedAt ? formatTimeAgo(liveStartedAt) : humanizedCreatedAt}</span>
       </div>
 
-      <div className="absolute top-3 right-3 flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] translate-y-[-8px] opacity-0 pointer-events-none [@media(any-pointer:coarse)]:opacity-100 [@media(any-pointer:coarse)]:pointer-events-auto [@media(any-pointer:coarse)]:translate-y-0 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus:pointer-events-auto group-focus:translate-y-0 group-focus:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 focus-within:translate-y-0 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-focus-within:translate-y-0 transition-all duration-300 ease-[cubic-bezier(0.175,0.885,0.32,1.275)] z-20">
+      <div className="kanban-card__actions absolute right-3 top-3 z-20 flex items-center gap-1 rounded-full border border-black/[0.05] bg-white/90 p-1 shadow-[0_2px_12px_rgba(0,0,0,0.06)] backdrop-blur-md transition-all duration-200 ease-out [@media(any-pointer:coarse)]:pointer-events-auto [@media(any-pointer:coarse)]:translate-y-0 [@media(any-pointer:coarse)]:opacity-100 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus:pointer-events-auto group-focus:translate-y-0 group-focus:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100 focus-within:pointer-events-auto focus-within:translate-y-0 focus-within:opacity-100 dark:border-white/[0.08] dark:bg-void-700/95 dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)]">
         <button
           type="button"
           className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 rounded-full transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"

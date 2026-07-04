@@ -39,13 +39,13 @@ export const EmptyState: FunctionComponent<EmptyStateProps> = ({
   }, [reducedMotion, durations.slow]);
 
   return (
-    <div ref={containerRef} className="flex w-full flex-col items-center justify-center p-12 text-center">
+    <div ref={containerRef} className="flex w-full flex-col items-center justify-center rounded-[var(--radius-ui)] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-12 text-center shadow-[var(--elevation-base)] backdrop-blur-2xl motion-reduce:transition-none">
       {icon && (
-        <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--surface-glass)] text-slate-500 dark:text-slate-400 shadow-[var(--elevation-base)] ring-1 ring-[color:var(--border-hairline)]">
+        <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-[var(--radius-ui)] bg-[var(--fill-muted)] text-[color:var(--text-metadata)] shadow-[var(--elevation-base)] ring-1 ring-[color:var(--border-hairline)]">
           {icon}
         </div>
       )}
-      <h3 className="mb-2 font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
+      <h3 className="mb-2 font-display text-xl font-semibold tracking-tight text-[color:var(--text-primary)]">
         {title}
       </h3>
       {description && (
@@ -54,7 +54,7 @@ export const EmptyState: FunctionComponent<EmptyStateProps> = ({
         </p>
       )}
       {(primaryAction || children) && (
-        <div className="mt-2 flex flex-col sm:flex-row items-center justify-center gap-4">
+        <div className="mt-2 flex flex-col items-center justify-center gap-4 sm:flex-row">
           {primaryAction && (
             <div className="flex-shrink-0">
               {primaryAction}
