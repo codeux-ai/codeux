@@ -106,6 +106,7 @@ export const ActionButton: FunctionComponent<{
       {busy && (
         <div className="absolute inset-0 flex items-center justify-center">
           <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2.2} />
+          <span className="sr-only">{label} in progress</span>
         </div>
       )}
     </button>

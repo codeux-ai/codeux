@@ -151,18 +151,25 @@ export const SecretInput: FunctionComponent<{
   mono?: boolean;
   disabled?: boolean;
   invalid?: boolean;
+  valid?: boolean;
   helperText?: string;
   errorText?: string;
   forceValidation?: boolean;
   "aria-label"?: string;
   "aria-description"?: string;
   "aria-describedby"?: string;
-}> = ({ value, onChange, placeholder, mono, disabled, invalid, helperText, errorText, forceValidation, "aria-label": ariaLabel, "aria-description": ariaDescription, "aria-describedby": ariaDescribedby }) => {
+}> = ({ value, onChange, placeholder, mono, disabled, invalid, valid, helperText, errorText, forceValidation, "aria-label": ariaLabel, "aria-description": ariaDescription, "aria-describedby": ariaDescribedby }) => {
+  const generatedId = useId();
   const [revealed, setRevealed] = useState(false);
   const RevealIcon = revealed ? EyeOff : Eye;
+  const showError = Boolean(errorText && (invalid || forceValidation));
+  const helperId = helperText ? `${generatedId}-helper` : undefined;
+  const errorId = errorText ? `${generatedId}-error` : undefined;
+  const validId = valid && !showError ? `${generatedId}-valid` : undefined;
+  const describedBy = [showError ? errorId : helperId, validId, ariaDescribedby].filter(Boolean).join(" ") || undefined;
 
   return (
-    <div className="relative min-w-0">
+    <div className="relative flex min-w-0 flex-col gap-1.5">
       <UiInput
         type={revealed ? "text" : "password"}
         value={value}
@@ -171,13 +178,12 @@ export const SecretInput: FunctionComponent<{
         autoComplete="off"
         autoCapitalize="off"
         spellcheck={false}
-        aria-invalid={invalid || undefined}
+        aria-invalid={showError || invalid ? "true" : undefined}
+        aria-errormessage={showError ? errorId : undefined}
         aria-label={ariaLabel}
         aria-description={ariaDescription}
-        aria-describedby={ariaDescribedby}
-        helperText={helperText}
-        errorText={errorText}
-        forceValidation={forceValidation}
+        aria-describedby={describedBy}
+        valid={valid && !showError}
         onInput={(event) => onChange((event.currentTarget as HTMLInputElement).value)}
         className={`pr-11 transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:border-signal-500/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-white/[0.05] dark:text-slate-200 aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.14)] data-[valid=true]:border-signal-500/50 data-[valid=true]:bg-signal-500/[0.02] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.15)] dark:data-[valid=true]:bg-signal-500/[0.04] ${mono ? "font-mono" : "font-sans"}`}
       />
@@ -191,6 +197,14 @@ export const SecretInput: FunctionComponent<{
       >
         <RevealIcon className="h-3.5 w-3.5" strokeWidth={2.4} />
       </button>
+      {showError ? (
+        <span id={errorId} className="text-xs font-medium text-status-red" role="alert">{errorText}</span>
+      ) : helperText ? (
+        <span id={helperId} className="text-xs font-medium text-slate-500 dark:text-slate-400">{helperText}</span>
+      ) : null}
+      {valid && !showError ? (
+        <span id={validId} className="text-xs font-semibold text-signal-700 dark:text-signal-300">Ready to save.</span>
+      ) : null}
     </div>
   );
 };
@@ -202,18 +216,20 @@ export const TextAreaInput: FunctionComponent<{
   rows?: number;
   disabled?: boolean;
   invalid?: boolean;
+  valid?: boolean;
   helperText?: string;
   errorText?: string;
   forceValidation?: boolean;
   "aria-label"?: string;
   "aria-description"?: string;
   "aria-describedby"?: string;
-}> = ({ value, onChange, placeholder, rows = 12, disabled, invalid, helperText, errorText, forceValidation, "aria-label": ariaLabel, "aria-description": ariaDescription, "aria-describedby": ariaDescribedby }) => {
+}> = ({ value, onChange, placeholder, rows = 12, disabled, invalid, valid, helperText, errorText, forceValidation, "aria-label": ariaLabel, "aria-description": ariaDescription, "aria-describedby": ariaDescribedby }) => {
   const generatedId = useId();
   const showError = Boolean(errorText && (invalid || forceValidation));
   const helperId = helperText ? `${generatedId}-helper` : undefined;
   const errorId = errorText ? `${generatedId}-error` : undefined;
-  const describedBy = [showError ? errorId : helperId, ariaDescribedby].filter(Boolean).join(" ") || undefined;
+  const validId = valid && !showError ? `${generatedId}-valid` : undefined;
+  const describedBy = [showError ? errorId : helperId, validId, ariaDescribedby].filter(Boolean).join(" ") || undefined;
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-1.5">
@@ -227,6 +243,7 @@ export const TextAreaInput: FunctionComponent<{
         aria-describedby={describedBy}
         aria-label={ariaLabel}
         aria-description={ariaDescription}
+        data-valid={valid && !showError ? "true" : undefined}
         onInput={(event) => onChange((event.currentTarget as HTMLTextAreaElement).value)}
         className="min-h-[320px] w-full rounded-[1rem] border border-[var(--border-hairline)] hover:border-[var(--border-hairline)] bg-[var(--fill-muted)] px-4 py-3 text-sm leading-relaxed text-slate-700 placeholder-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:border-signal-500/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-[var(--fill-muted)] dark:text-slate-200 aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.14)] data-[valid=true]:border-signal-500/50 data-[valid=true]:bg-signal-500/[0.02] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.15)] dark:data-[valid=true]:bg-signal-500/[0.04] "
       />
@@ -234,6 +251,9 @@ export const TextAreaInput: FunctionComponent<{
         <span id={errorId} className="text-xs font-medium text-status-red" role="alert">{errorText}</span>
       ) : helperText ? (
         <span id={helperId} className="text-xs font-medium text-slate-500 dark:text-slate-400">{helperText}</span>
+      ) : null}
+      {valid && !showError ? (
+        <span id={validId} className="text-xs font-semibold text-signal-700 dark:text-signal-300">Ready to save.</span>
       ) : null}
     </div>
   );
@@ -247,18 +267,20 @@ export const NumberInput: FunctionComponent<{
   step?: number;
   disabled?: boolean;
   invalid?: boolean;
+  valid?: boolean;
   helperText?: string;
   errorText?: string;
   forceValidation?: boolean;
   "aria-label"?: string;
   "aria-description"?: string;
   "aria-describedby"?: string;
-}> = ({ value, onChange, min, max, step = 1, disabled, invalid, helperText, errorText, forceValidation, "aria-label": ariaLabel, "aria-description": ariaDescription, "aria-describedby": ariaDescribedby }) => {
+}> = ({ value, onChange, min, max, step = 1, disabled, invalid, valid, helperText, errorText, forceValidation, "aria-label": ariaLabel, "aria-description": ariaDescription, "aria-describedby": ariaDescribedby }) => {
   const generatedId = useId();
   const showError = Boolean(errorText && (invalid || forceValidation));
   const helperId = helperText ? `${generatedId}-helper` : undefined;
   const errorId = errorText ? `${generatedId}-error` : undefined;
-  const describedBy = [showError ? errorId : helperId, ariaDescribedby].filter(Boolean).join(" ") || undefined;
+  const validId = valid && !showError ? `${generatedId}-valid` : undefined;
+  const describedBy = [showError ? errorId : helperId, validId, ariaDescribedby].filter(Boolean).join(" ") || undefined;
 
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
@@ -274,6 +296,7 @@ export const NumberInput: FunctionComponent<{
         aria-describedby={describedBy}
         aria-label={ariaLabel}
         aria-description={ariaDescription}
+        data-valid={valid && !showError ? "true" : undefined}
         onInput={(event) => onChange(Number((event.currentTarget as HTMLInputElement).value))}
         className="w-32 max-w-full rounded-[1rem] border border-[var(--border-hairline)] hover:border-[var(--border-hairline)] bg-[var(--fill-muted)] px-3.5 py-2.5 text-sm font-mono text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:border-signal-500/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-[var(--fill-muted)] dark:text-slate-200 aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.14)] data-[valid=true]:border-signal-500/50 data-[valid=true]:bg-signal-500/[0.02] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.15)] dark:data-[valid=true]:bg-signal-500/[0.04] "
       />
@@ -281,6 +304,9 @@ export const NumberInput: FunctionComponent<{
         <span id={errorId} className="text-xs font-medium text-status-red" role="alert">{errorText}</span>
       ) : helperText ? (
         <span id={helperId} className="text-xs font-medium text-slate-500 dark:text-slate-400">{helperText}</span>
+      ) : null}
+      {valid && !showError ? (
+        <span id={validId} className="text-xs font-semibold text-signal-700 dark:text-signal-300">Ready to save.</span>
       ) : null}
     </div>
   );

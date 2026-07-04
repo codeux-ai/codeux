@@ -83,7 +83,9 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
           className="mt-2 break-words text-xs leading-relaxed text-slate-500 dark:text-slate-400"
         >
           {normalizedSearch
-            ? `Showing ${filteredCategories.length} categories for "${settingsSearch.trim()}".`
+            ? filteredCategories.length > 0
+              ? `Showing ${filteredCategories.length} categories for "${settingsSearch.trim()}". Use arrow keys to move through matching categories.`
+              : `No categories match "${settingsSearch.trim()}". Clear search or try routing, provider, auth, CI, agent, or memory.`
             : "Jump directly into the area you need without digging through the full settings tree."}
         </div>
       </div>
@@ -203,7 +205,7 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
 
       {filteredCategories.length === 0 ? (
         <NoticePanel title="No matches" tone="warning">
-          Try broader terms like `routing`, `CI`, `auth`, `agent`, or `memory`.
+          Keep the search field focused, clear it with Backspace, or try broader terms like `routing`, `CI`, `auth`, `agent`, or `memory`.
         </NoticePanel>
       ) : null}
     </nav>

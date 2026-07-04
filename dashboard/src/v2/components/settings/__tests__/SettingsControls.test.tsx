@@ -17,6 +17,7 @@ import { SlidersHorizontal } from "lucide-preact";
 import type { SettingsSearchMatches } from "../../../lib/settings-search-index";
 import userEvent from "@testing-library/user-event";
 import { SettingsContentPanels } from "../SettingsContentPanels";
+import { UnsavedChangesModal } from "../../ui/UnsavedChangesModal";
 
 vi.mock("../panels/SettingsGeneralPanel", () => ({
   SettingsGeneralPanel: () => <div>General panel values stay mounted</div>,
@@ -64,6 +65,21 @@ vi.mock("../panels/SettingsGeneralPanel", () => ({
 
     expect(screen.getByText("Showing 1 categories for \"claude\".")).toBeInTheDocument();
     expect(screen.getByText("Claude Code")).toBeInTheDocument();
+  });
+
+  it("SettingsCategoryRail gives no-match recovery copy", () => {
+    render(
+      <SettingsCategoryRail
+        filteredCategories={[]}
+        activeCategory="general"
+        settingsSearch="zzzz"
+        settingsSearchMatches={{}}
+        onSwitchCategory={() => {}}
+      />
+    );
+
+    expect(screen.getByText(/No categories match "zzzz"/)).toBeInTheDocument();
+    expect(screen.getByText(/Keep the search field focused/)).toBeInTheDocument();
   });
 
   it("SettingsCategoryRail exposes pending and disabled category states with visible labels", () => {
@@ -261,6 +277,21 @@ describe("SettingsControls Accessibility", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Retry count must be at least 1.");
   });
 
+  it("NumberInput exposes positive confidence cues", () => {
+    render(
+      <NumberInput
+        value={3}
+        onChange={() => {}}
+        aria-label="Retry count"
+        valid
+      />
+    );
+
+    const input = screen.getByRole("spinbutton", { name: "Retry count" });
+    expect(input).toHaveAttribute("data-valid", "true");
+    expect(input).toHaveAccessibleDescription("Ready to save.");
+  });
+
   it("TextAreaInput passes aria-label and aria-description", () => {
     render(
       <TextAreaInput
@@ -294,6 +325,53 @@ describe("SettingsControls Accessibility", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Instruction template is required.");
   });
 
+  it("TextAreaInput exposes positive confidence cues", () => {
+    render(
+      <TextAreaInput
+        value="Use project conventions."
+        onChange={() => {}}
+        aria-label="Instruction template"
+        valid
+      />
+    );
+
+    const input = screen.getByRole("textbox", { name: "Instruction template" });
+    expect(input).toHaveAttribute("data-valid", "true");
+    expect(input).toHaveAccessibleDescription("Ready to save.");
+  });
+
+  it("UnsavedChangesModal exposes save and discard pending intent", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const onConfirm = vi.fn();
+    render(
+      <UnsavedChangesModal
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+        onSave={onSave}
+        saving
+      />
+    );
+
+    const saveButton = screen.getByRole("button", { name: /Saving/ });
+    expect(saveButton).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByText(/Discarding permanently drops/)).toBeInTheDocument();
+
+    cleanup();
+    render(
+      <UnsavedChangesModal
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+        onSave={onSave}
+      />
+    );
+
+    const discardButton = screen.getByRole("button", { name: "Discard without saving" });
+    await user.click(discardButton);
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(discardButton).toHaveAttribute("aria-busy", "true");
+  });
+
   it("SettingsContentPanels renders dirty-to-saving-to-saved feedback while keeping values mounted", async () => {
     const { rerender } = render(
       <SettingsContentPanels
@@ -321,6 +399,7 @@ describe("SettingsControls Accessibility", () => {
           error: null,
           saveMessage: null,
           loading: false,
+          resettingProject: false,
         } as any}
       />
     );
@@ -336,10 +415,30 @@ describe("SettingsControls Accessibility", () => {
           error: null,
           saveMessage: "Settings saved.",
           loading: false,
+          resettingProject: false,
         } as any}
       />
     );
     await waitFor(() => expect(screen.getByText("Settings saved.")).toBeInTheDocument());
+    expect(screen.getByText("General panel values stay mounted")).toBeInTheDocument();
+  });
+
+  it("SettingsContentPanels renders reset pending feedback while keeping values mounted", () => {
+    render(
+      <SettingsContentPanels
+        state={{
+          activeCategory: "general",
+          activeDirty: false,
+          activeSaving: false,
+          error: null,
+          saveMessage: null,
+          loading: false,
+          resettingProject: true,
+        } as any}
+      />
+    );
+
+    expect(screen.getByText("Resetting project overrides. Current values remain visible.")).toBeInTheDocument();
     expect(screen.getByText("General panel values stay mounted")).toBeInTheDocument();
   });
 });
