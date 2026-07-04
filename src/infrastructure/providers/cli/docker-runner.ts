@@ -22,7 +22,7 @@ import { DockerBootstrapBuilder } from "./docker-bootstrap-builder.js";
 import { DockerCredentialMountBuilder } from "./docker-credential-mount-builder.js";
 import { DockerSetupImageCache } from "./docker-setup-image-cache.js";
 import { resolveDockerRuntimeRoot } from "./docker-runtime-paths.js";
-import { buildRuntimeVolumeName, WorkspaceManager } from "./workspace-manager.js";
+import { buildRuntimeVolumeName, WorkspaceManager, type SnapshotCheckout } from "./workspace-manager.js";
 import { workspaceVolumeHelperPool, type WorkspaceVolumeHelperPool } from "./workspace-volume-helper.js";
 import { CONTAINER_RUNTIME_HOME, CONTAINER_WORKSPACE_ROOT } from "./provider-runtime-artifacts.js";
 import { getHomeCodeUxPath, getRepoCodeUxPath } from "../../../shared/config/code-ux-paths.js";
@@ -41,6 +41,7 @@ export interface IDockerRunner {
     cwd: string;
     repoPath: string;
     sessionId: string;
+    snapshotCheckout?: SnapshotCheckout;
     preserve?: boolean;
     reuseExisting?: boolean;
   }): Promise<{ cwd: string; cleanup: () => Promise<void> }>;
@@ -76,6 +77,7 @@ export class DockerRunner implements IDockerRunner {
     cwd: string;
     repoPath: string;
     sessionId: string;
+    snapshotCheckout?: SnapshotCheckout;
     preserve?: boolean;
     reuseExisting?: boolean;
   }): Promise<{ cwd: string; cleanup: () => Promise<void> }> {
@@ -87,8 +89,8 @@ export class DockerRunner implements IDockerRunner {
     }
 
     const workspaceRef = args.reuseExisting
-      ? await this.workspaceManager.createOrReuseSnapshotWorkspace(args.repoPath, args.sessionId)
-      : await this.workspaceManager.createSnapshotWorkspace(args.repoPath, args.sessionId);
+      ? await this.workspaceManager.createOrReuseSnapshotWorkspace(args.repoPath, args.sessionId, args.snapshotCheckout)
+      : await this.workspaceManager.createSnapshotWorkspace(args.repoPath, args.sessionId, args.snapshotCheckout);
     return {
       cwd: workspaceRef,
       cleanup: async () => {

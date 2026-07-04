@@ -6,6 +6,7 @@ import type { ExecutionRepository } from "../repositories/execution-repository.j
 import type { ManagementToolHandler } from "../mcp/management-tool-handler.js";
 import type { StructuredProviderResponseService } from "./structured-provider-response-service.js";
 import type { ProviderExecutionService } from "./provider-execution-service.js";
+import type { SnapshotCheckout } from "../infrastructure/providers/cli/workspace-manager.js";
 import { findAllJsonCandidates } from "../domain/llm/json-extraction.js";
 
 export interface ChatManagementActionServiceDeps {
@@ -90,6 +91,7 @@ export interface ProcessManagementActionArgs {
   settings: DashboardSettings;
   prompt: string;
   repoPath: string;
+  snapshotCheckout?: SnapshotCheckout;
   mcpConnection?: McpConnectionInfo | null;
   /** Per-agent MCP access for the responding agent; undefined = not agent-scoped. */
   agentMcpAccess?: AgentMcpAccessConfig | null;
@@ -223,6 +225,7 @@ export class ChatManagementActionService {
         openCodeBaselineRawUsageJson: args.openCodeBaselineRawUsageJson,
         workflowSettings: args.settings.cliWorkflow,
         repoPath: args.repoPath,
+        snapshotCheckout: args.snapshotCheckout,
         invocationId: execInvocationId,
         trackPromptInInvocation: false,
         trackAssistantInInvocation: false,
@@ -332,6 +335,7 @@ export class ChatManagementActionService {
         openCodeBaselineRawUsageJson: args.openCodeBaselineRawUsageJson,
         workflowSettings: args.settings.cliWorkflow,
         repoPath: args.repoPath,
+        snapshotCheckout: args.snapshotCheckout,
         settings: args.settings,
         providerLabel: args.provider,
         invocationId: execInvocationId,
