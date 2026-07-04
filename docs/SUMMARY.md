@@ -56,6 +56,7 @@
 - [Quicksprint Templates](./dashboard/quicksprint-templates.md)
 - [Scheduler](./dashboard/scheduler.md)
 - [Memory Architecture and Search](./dashboard/memory.md)
+- [Knowledge Dashboard](./dashboard/knowledge.md)
 - [Configuration and Storage](./settings/configuration-and-storage.md)
 - [Provider Routing](./settings/provider-routing.md)
 - [Qwen Code Integration](./settings/qwen-code-integration.md)
