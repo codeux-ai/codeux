@@ -137,6 +137,37 @@ describe("TasksPage.cards Integration", () => {
 
     // Additional dependency text verification
     expect(getByText("Foundation Setup")).toBeInTheDocument();
+    expect(getByText("View Sprint")).toBeInTheDocument();
+  });
+
+  it("renders the project scope placeholder when no project is selected", () => {
+    (useProjectData as unknown as any).mockReturnValue({
+      projects: [],
+      selectedProject: null,
+      createProject: vi.fn(),
+    });
+    (useSprints as unknown as any).mockReturnValue({
+      data: [],
+      loading: false,
+      selectedSprintId: null,
+      selectSprint: vi.fn(),
+      refetch: vi.fn(),
+    });
+    (useProjectTasks as any).mockReturnValue({
+      tasks: [],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    const { getByText } = render(
+      <ProjectDataContext.Provider value={{ projects: [], selectedProject: null } as any}>
+        <TasksPage />
+      </ProjectDataContext.Provider>
+    );
+
+    expect(getByText("Task work starts with a project.")).toBeInTheDocument();
+    expect(getByText("Add First Project")).toBeInTheDocument();
   });
 
   it("verifies optimistic task rendering and layout stability", () => {

@@ -18,6 +18,11 @@ The Live snapshot (`ProjectLiveDashboardSnapshot`) serves as the authoritative b
    Live task cards may still derive display-only task runtime fields such as the latest session id, PR URL, worker branch, and display phase from the current sprint-scoped dispatch/event history that already exists inside the same snapshot. This is a projection step inside the snapshot boundary, not a second source of truth.
    The Live runtime hook may also stabilize semantically equivalent snapshots before committing them to Preact state: top-level `updatedAt`, `status.timestamp`, and `execution.updatedAt` are treated as render metadata, unchanged execution/status sub-collections keep their prior references, and transient empty execution/status payloads for the same active project are ignored until the backend sends a semantically real change. This stabilization is strictly a render-thrash guard over complete server snapshots; it must not synthesize browser-only runtime facts or override real server state changes.
 
+## Dashboard View-Model Boundaries
+
+- The task board browser boundary is split between `dashboard/src/v2/hooks/use-tasks-page-controller.ts` and focused presentation components in `dashboard/src/v2/components/tasks/`. The hook coordinates route query handling, sprint scope selection, composer/edit state, optimistic task creation markers, and task CRUD/drag handlers, then feeds `buildTaskBoardViewModel` with committed task records plus local optimistic markers.
+- `TasksPage.tsx` remains a composition layer for the task board DOM, filters, composer, and GSAP-only visual effects. Extracted components such as `TaskScopePlaceholder`, `SprintSelector`, and `SprintProgressCard` render the view-model data without mutating live runtime snapshots or changing API contracts.
+
 ## Field Ownership & Mutation Triggers
 
 The top-level fields within `ProjectLiveDashboardSnapshot` are explicitly owned and mapped back to strict backend origins:
