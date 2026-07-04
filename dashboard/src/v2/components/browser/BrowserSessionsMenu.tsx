@@ -7,6 +7,7 @@ import { fetchPreviewSessions } from "../../lib/browser-api.js";
 import { buildPreviewUrl } from "../../lib/preview-origin.js";
 import type { SprintPreviewSession } from "../../../types.js";
 import { getSafeUrl } from "../../lib/safe-url.js";
+import { buildInteractionTransition } from "../../lib/motion/tokens.js";
 
 type InteractionState = 'closed' | 'hover' | 'open';
 
@@ -23,10 +24,14 @@ const healthLabel: Record<SprintPreviewSession["healthStatus"], string> = {
     unknown: "Health unknown",
 };
 
+const menuTransition = buildInteractionTransition("listReorder");
+const controlTransition = buildInteractionTransition("controlFeedback");
+
 export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ enabled = true }) => {
     const { selectedProject } = useProjectData();
     const [sessions, setSessions] = useState<SprintPreviewSession[]>([]);
     const [loading, setLoading] = useState(false);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [interactionState, setInteractionState] = useState<InteractionState>('closed');
     const containerRef = useRef<HTMLDivElement>(null);
     const [menuId] = useState(() => `browser-menu-${Math.random().toString(36).substr(2, 9)}`);
@@ -37,15 +42,17 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
     const loadSessions = useCallback(async () => {
         if (!selectedProject?.id) {
             setSessions([]);
+            setLoadError(null);
             return;
         }
         try {
             setLoading(true);
             const data = await fetchPreviewSessions(selectedProject.id);
             setSessions(data || []);
+            setLoadError(null);
         } catch (error) {
             console.error("Failed to fetch browser sessions:", error);
-            setSessions([]);
+            setLoadError(error instanceof Error ? error.message : "Failed to fetch browser sessions.");
         } finally {
             setLoading(false);
         }
@@ -163,6 +170,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                     ? "bg-signal-500/8 dark:bg-signal-400/10"
                     : "hover:bg-black/[0.05] dark:hover:bg-white/[0.05]"
                 }`}
+                style={{ transition: controlTransition }}
             >
                 <Compass aria-hidden="true" className={"w-4 h-4 transition-colors " + (isMenuVisible ? "text-signal-600 dark:text-signal-300" : "text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white")} strokeWidth={1.5} />
             </button>
@@ -185,7 +193,22 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                         </Link>
                     </div>
                     <div className="flex-1 min-h-0 overflow-y-auto pb-1 flex flex-col" onKeyDown={handleMenuKeyDown as any}>
-                        {loading ? (
+                        {(loading || loadError) && sessions.length > 0 && (
+                            <div
+                                className={`mx-3 mt-3 rounded-xl border px-3 py-2 text-xs font-medium ${
+                                    loadError
+                                        ? "border-status-red/25 bg-status-red/10 text-status-red"
+                                        : "border-ember-500/25 bg-ember-500/10 text-ember-700 dark:text-ember-300"
+                                }`}
+                                role={loadError ? "alert" : "status"}
+                                aria-live="polite"
+                            >
+                                {loadError
+                                    ? `Could not refresh sessions. Showing last loaded sessions. ${loadError}`
+                                    : "Refreshing sessions. Current sessions remain available."}
+                            </div>
+                        )}
+                        {loading && sessions.length === 0 ? (
                             <div className="px-4 py-8 text-center flex flex-col items-center justify-center gap-3" role="status" aria-live="polite" aria-busy={loading}>
                                 <Loader2 className="w-5 h-5 text-signal-500 animate-spin" />
                                 <p className="text-xs text-slate-500 font-medium">Discovering active sessions...</p>
@@ -245,6 +268,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                             aria-label={`Preview link unavailable for ${sprintName}`}
                                             tabIndex={-1}
                                             className={menuItemClassName}
+                                            style={{ transition: menuTransition }}
                                         >
                                             {content}
                                         </div>
@@ -261,6 +285,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                         aria-label={`Open preview session ${sprintName} in a new tab`}
                                         tabIndex={index === firstEnabledIndex ? 0 : -1}
                                         className={menuItemClassName}
+                                        style={{ transition: menuTransition }}
                                     >
                                         {content}
                                     </a>
@@ -274,6 +299,16 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                 <div>
                                     <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">No project selected</p>
                                     <p className="text-xs text-slate-500 mt-1">Select a project to view its active sessions</p>
+                                </div>
+                            </div>
+                        ) : loadError ? (
+                            <div className="px-4 py-8 text-center flex flex-col items-center justify-center gap-3" role="alert" aria-live="assertive">
+                                <div className="w-10 h-10 rounded-full bg-status-red/10 flex items-center justify-center text-status-red">
+                                    <AlertCircle className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-semibold text-status-red">Could not load sessions</p>
+                                    <p className="text-xs text-slate-500 mt-1">{loadError}</p>
                                 </div>
                             </div>
                         ) : (
