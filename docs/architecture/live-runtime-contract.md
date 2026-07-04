@@ -53,6 +53,8 @@ The top-level fields within `ProjectLiveDashboardSnapshot` are explicitly owned 
 7. **Diagnostics and Metrics:**
    For observability, the assembly path is benchmarked (e.g., `scripts/measure-live-snapshot.ts`) to track latency and payload size. These metrics guarantee that as the `ProjectLiveDashboardSnapshot` grows, the backend can continually assemble and deliver it within real-time latency budgets. To further ensure predictable latency, the snapshot projection explicitly avoids issuing empty usage and wall-time rollup queries for idle projects, preventing database query bloat during repeated live refresh cycles.
 
+   Live execution latency also depends on narrow SQLite indexes that match the snapshot hot paths. `sprint_runs` must support project/sprint/status lookup plus recency ordering for active and recent run selection. `task_dispatches` must support project-scoped expansion by `sprint_run_id` and `sprint_id` without scanning all historical dispatches. `sprint_run_events` remains scoped by `sprint_run_id` with `created_at`/`id` recency ordering while the project filter is reached through the indexed `sprint_runs` join. These indexes are intentionally composite but narrow so high-frequency execution writes do not pay for broad covering indexes.
+
 8. **Reconnect and Restart Recovery Rules:**
    When a client reconnects, it receives only replayable events for its subscribed scopes. If a client misses a non-replayable snapshot, the transport natively handles gap detection by forcing a complete snapshot reload rather than replaying outdated or heavy payloads from the SQLite event log.
 

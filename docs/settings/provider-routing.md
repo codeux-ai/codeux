@@ -23,6 +23,7 @@ Code UX now separates:
 ## Provider Runtime Artifacts
 
 Provider runtime artifacts (such as host log paths, temporary output files, and Docker paths) are owned and managed by the `provider-runtime-artifacts` module. `ProviderRunner` delegates path resolution and artifact cleanup logic to this helper to ensure safer execution boundaries and testing.
+Live provider telemetry is collected by a background watcher during CLI execution. Its initial delay and polling interval are abort-aware, so stopping a provider run or aborting the invocation does not wait for a full sleep interval before cleanup. Watcher errors stay non-fatal and are logged with rate-limited warnings containing only provider/session identifiers. Antigravity's copied telemetry database is also guarded by a cheap source signature so unchanged polls avoid repeated database resolution while still refreshing when provider streams, transcript identity, session identity, or copied DB state changes.
 
 ## Configuration Model
 

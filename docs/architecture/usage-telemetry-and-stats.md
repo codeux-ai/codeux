@@ -112,6 +112,9 @@ Code UX parses session data from two sources:
   - `reasoning` turns from `SYSTEM` source events.
 
 For Docker-backed Antigravity runs, the SQLite database is encoded to Base64 within the container first, and then decoded to a temporary file on the host before parsing to bypass Docker named volume permission issues.
+During live telemetry polling, Code UX computes a cheap source signature from the resolved Antigravity conversation id, transcript identity, accumulated provider streams, and copied temp-DB state before asking the runner to resolve the SQLite database again. If those inputs are unchanged after a successful copy, the watcher reuses the existing temp DB path for parsing and avoids repeated Docker volume reads or host file copies. If the transcript, provider streams, session identity, or copied DB state changes, the watcher refreshes the temp DB and continues emitting telemetry snapshots.
+
+The live watcher remains best-effort. Polling failures are non-fatal to the provider run, but they are logged as rate-limited warnings with provider and session identifiers so repeated telemetry collection problems are observable without exposing prompts, transcripts, token payloads, credentials, or filesystem paths.
 
 ### Jules
 
