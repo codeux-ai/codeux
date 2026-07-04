@@ -24,9 +24,10 @@ describe("TaskExecutionMeta", () => {
     expect(getByText("Jules")).toBeTruthy();
     expect(getByText("custom")).toBeTruthy();
 
-    // Check that we have 3 chips
-    const chips = container.querySelectorAll(".flex.items-center.gap-1\\.5");
+    // Check that we have 3 wrapping chips
+    const chips = container.querySelectorAll(".inline-flex.items-center.gap-1\\.5");
     expect(chips.length).toBe(3);
+    expect(chips[0]).toHaveClass("min-w-0");
 
     // Verify explicit accessible text
     expect(getByText("Duration:")).toBeTruthy();
@@ -60,6 +61,6 @@ describe("TaskExecutionMeta", () => {
 
     // The first div is the wrapper
     expect((container.firstChild as HTMLElement)?.className).toContain("my-custom-class");
-    expect((container.firstChild as HTMLElement)?.className).toContain("flex gap-2.5 items-center");
+    expect((container.firstChild as HTMLElement)?.className).toContain("flex min-w-0 flex-wrap");
   });
 });
