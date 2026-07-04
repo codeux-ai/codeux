@@ -109,7 +109,11 @@ export function getLiveActionStatusLabel(state: LiveActionState, labels: LiveAct
   return null;
 }
 
-export function getLiveActionDisplayProps(stateOrPending: LiveActionState | boolean, isDisabled: boolean) {
+export function getLiveActionDisplayProps(
+  stateOrPending: LiveActionState | boolean,
+  isDisabled: boolean,
+  disabledReason?: string | null,
+) {
   const state: LiveActionState = typeof stateOrPending === "boolean"
     ? (stateOrPending ? "pending" : (isDisabled ? "disabled" : "idle"))
     : (isDisabled ? "disabled" : stateOrPending);
@@ -118,5 +122,6 @@ export function getLiveActionDisplayProps(stateOrPending: LiveActionState | bool
     "aria-disabled": isPending || isDisabled || state === "disabled",
     "aria-busy": isPending,
     "data-action-state": state,
+    ...(disabledReason ? { "data-disabled-reason": disabledReason } : {}),
   };
 }

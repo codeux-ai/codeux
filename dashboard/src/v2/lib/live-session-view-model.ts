@@ -90,6 +90,8 @@ export interface LiveTransportBannerViewModel {
   ariaBusy: boolean;
 }
 
+const LIVE_SNAPSHOT_STALE_MS = 60_000;
+
 const EMPTY_LIVE_SESSION_STATS: DashboardStats = {
   total: 0,
   running: 0,
@@ -372,6 +374,8 @@ export function deriveLiveTransportBannerViewModel(args: {
   transportState: TransportState;
   isRecovering: boolean;
   error: string | null;
+  snapshotUpdatedAt?: string | null;
+  nowMs?: number;
 }): LiveTransportBannerViewModel | null {
   if (args.error) {
     return {
@@ -415,6 +419,46 @@ export function deriveLiveTransportBannerViewModel(args: {
       ariaLive: "polite",
       role: "status",
       ariaBusy: args.isRecovering,
+    };
+  }
+
+  if (args.transportState === "connected" && args.isRecovering) {
+    return {
+      isVisible: true,
+      title: args.snapshotUpdatedAt ? "Refreshing Live Data" : "Recovering Live Data",
+      message: args.snapshotUpdatedAt
+        ? "Keeping the current runtime snapshot visible while the live stream catches up."
+        : "Waiting for the first runtime snapshot after transport recovery.",
+      wrapperClass: "bg-signal-500/10 border-signal-500/20 text-signal-700 dark:text-signal-300",
+      iconClass: "text-signal-600 dark:text-signal-300",
+      icon: "reconnecting",
+      isUrgent: false,
+      ariaLive: "polite",
+      role: "status",
+      ariaBusy: true,
+    };
+  }
+
+  const snapshotAgeMs = args.snapshotUpdatedAt
+    ? (args.nowMs ?? Date.now()) - new Date(args.snapshotUpdatedAt).getTime()
+    : null;
+  if (
+    args.transportState === "connected"
+    && snapshotAgeMs !== null
+    && Number.isFinite(snapshotAgeMs)
+    && snapshotAgeMs > LIVE_SNAPSHOT_STALE_MS
+  ) {
+    return {
+      isVisible: true,
+      title: "Stale Data",
+      message: "Live runtime content is still visible, but the latest snapshot is more than a minute old.",
+      wrapperClass: "bg-status-amber/10 border-status-amber/20 text-status-amber",
+      iconClass: "text-status-amber",
+      icon: "reconnecting",
+      isUrgent: false,
+      ariaLive: "polite",
+      role: "status",
+      ariaBusy: false,
     };
   }
 
