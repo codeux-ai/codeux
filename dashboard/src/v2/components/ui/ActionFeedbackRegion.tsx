@@ -4,8 +4,8 @@ import { X, CheckCircle, AlertTriangle, XCircle, Loader2, RotateCcw } from "luci
 import gsap from "gsap";
 import type { ActionFeedbackStatus } from "../../hooks/use-action-feedback.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
-import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 interface ActionFeedbackRegionProps {
   status: ActionFeedbackStatus;
@@ -35,6 +35,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
   const retryRef = useRef<HTMLButtonElement>(null);
   const reducedMotion = useReducedMotion();
   const motionTokens = useGsapInteractionTokens();
+  const cssTokens = useInteractionTokens();
 
   const [isOpen, setIsOpen] = useState(false);
   const [isRendered, setIsRendered] = useState(false);
@@ -45,13 +46,16 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
 
   useLayoutEffect(() => {
     if (status !== "idle" && message) {
+      if (status !== displayedStatus) {
+        setDisplayedMessage(message);
+      }
       setDisplayedStatus(status);
       setIsRendered(true);
       setIsOpen(true);
     } else {
       setIsOpen(false);
     }
-  }, [status, message]);
+  }, [status, message, displayedStatus]);
 
   useLayoutEffect(() => {
     if (message && status !== "idle" && message !== displayedMessage && isRendered) {
@@ -84,14 +88,14 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
       if (isOpen) {
         gsap.fromTo(
           containerRef.current,
-          { y: reducedMotion ? 0 : MODAL_MOTION.feedback.yStart, opacity: 0, scale: reducedMotion ? 1 : MODAL_MOTION.feedback.scaleStart },
-          { y: MODAL_MOTION.feedback.yEnd, opacity: 1, scale: MODAL_MOTION.feedback.scaleEnd, duration: reducedMotion ? 0 : MODAL_MOTION.feedback.duration, ease: MODAL_MOTION.feedback.ease }
+          { y: reducedMotion ? 0 : 8, opacity: 0, scale: reducedMotion ? 1 : 0.98 },
+          { y: 0, opacity: 1, scale: 1, duration: motionTokens.asyncFeedback.duration, ease: motionTokens.asyncFeedback.ease }
         );
       } else {
         gsap.to(containerRef.current, {
-          y: reducedMotion ? 0 : MODAL_MOTION.feedback.yStart,
+          y: reducedMotion ? 0 : 8,
           opacity: 0,
-          scale: reducedMotion ? 1 : MODAL_MOTION.feedback.scaleStart,
+          scale: reducedMotion ? 1 : 0.98,
           duration: motionTokens.enterExit.duration,
           ease: motionTokens.enterExit.ease,
           onComplete: () => setIsRendered(false)
@@ -100,7 +104,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
     });
 
     return () => ctx.revert();
-  }, [isOpen, isRendered, reducedMotion, motionTokens.enterExit.duration, motionTokens.enterExit.ease]);
+  }, [isOpen, isRendered, reducedMotion, motionTokens.asyncFeedback.duration, motionTokens.asyncFeedback.ease, motionTokens.enterExit.duration, motionTokens.enterExit.ease]);
 
   useLayoutEffect(() => {
     if (displayedStatus === "pending" && barRef.current && progress !== undefined) {
@@ -134,7 +138,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
       tl.fromTo(
         progressRef.current,
         { width: "100%" },
-        { width: "0%", duration: autoDismissMs / 1000, ease: "linear" }
+        { width: "0%", duration: autoDismissMs / 1000, ease: motionTokens.asyncFeedback.ease }
       );
       tl.to(
         containerRef.current,
@@ -150,7 +154,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
     });
 
     return () => ctx.revert();
-  }, [isOpen, displayedStatus, displayedMessage, autoDismissMs, autoDismiss, retryAction, reducedMotion, motionTokens.enterExit.duration, motionTokens.enterExit.ease]);
+  }, [isOpen, displayedStatus, displayedMessage, autoDismissMs, autoDismiss, retryAction, reducedMotion, motionTokens.asyncFeedback.ease, motionTokens.enterExit.duration, motionTokens.enterExit.ease]);
 
   if (!isRendered || !displayedMessage) return null;
 
@@ -172,7 +176,14 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
       aria-busy={isPending ? "true" : undefined}
       className={`relative overflow-hidden flex items-start gap-3 p-3 rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.2)] border ${config.colors} bg-white dark:bg-void-800 ${className}`}
     >
-      <Icon key={displayedStatus} className={`w-5 h-5 shrink-0 ${isPending ? "motion-safe:animate-spin" : ""} motion-safe:animate-[icon-pop_var(--interaction-control-feedback-duration)_var(--interaction-control-feedback-ease)] motion-reduce:animate-none`} />
+      <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
+        <Icon
+          key={displayedStatus}
+          aria-hidden="true"
+          className={`absolute inset-0 h-5 w-5 ${isPending ? "motion-safe:animate-spin" : ""} motion-safe:animate-[icon-pop_var(--interaction-control-feedback-duration)_var(--interaction-control-feedback-ease)] motion-reduce:animate-none`}
+          style={{ animationDuration: cssTokens.controlFeedback.duration, animationTimingFunction: cssTokens.controlFeedback.ease }}
+        />
+      </span>
       <div className="flex-1 text-sm font-medium mt-0.5 relative">
         <div ref={messageRef}>
           <span className="sr-only">{statusLabel}. </span>
@@ -186,6 +197,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
             type="button"
             onClick={retryAction}
             aria-label={retryLabel || "Retry"}
+            style={{ transitionDuration: cssTokens.controlFeedback.duration, transitionTimingFunction: cssTokens.controlFeedback.ease }}
             className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md bg-white/50 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-black/40 border border-black/5 dark:border-white/5 transition-colors motion-reduce:transition-none"
           >
             <RotateCcw className="w-3.5 h-3.5" />
@@ -203,7 +215,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
             type="button"
             onClick={() => {
               if (document.activeElement === dismissBtnRef.current) {
-                const fallback = document.body;
+                const fallback = document.querySelector<HTMLElement>('[role="main"], main') || document.body;
                 if (fallback.tabIndex < 0) fallback.tabIndex = -1;
                 fallback.focus();
                 if (document.activeElement === dismissBtnRef.current) {
@@ -212,6 +224,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
               }
               onDismiss?.();
             }}
+            style={{ transitionDuration: cssTokens.controlFeedback.duration, transitionTimingFunction: cssTokens.controlFeedback.ease }}
             className="p-1 rounded-md opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 transition-colors motion-reduce:transition-none"
             aria-label="Dismiss"
           >
