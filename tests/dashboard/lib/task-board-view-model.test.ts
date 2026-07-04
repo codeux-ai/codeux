@@ -100,7 +100,11 @@ test("buildTaskBoardViewModel applies status and priority filters and column ord
 
 test("buildTaskBoardViewModel gives optimistic task precedence", () => {
   const normalTask = createMockTask("t1", { title: "Old Title", status: "pending" });
-  const optimisticTask = createMockTask("t1", { title: "New Title", status: "in_progress" });
+  const optimisticTask = createMockTask("t1", {
+    title: "New Title",
+    status: "in_progress",
+    isOptimistic: true,
+  });
 
   const vm = buildTaskBoardViewModel({
     tasks: [normalTask],
@@ -114,12 +118,23 @@ test("buildTaskBoardViewModel gives optimistic task precedence", () => {
     subtasks: [],
   });
 
-  // Map will have the last one set, which depends on order.
-  // [...optimistic, ...tasks] means normalTask overwrites optimisticTask if they share the same ID.
-  // Wait, optimistic tasks typically have the same ID.
-  // In the real implementation: `allTasks = [...optimisticTasks, ...tasks]`.
-  // Wait, if it's [...optimistic, ...normal], the map would end up with normal.
-  // Let's verify how it handles map collision.
+  expect(vm.boardState.filteredTasks).toHaveLength(1);
+  expect(vm.boardState.filteredTasks[0]).toMatchObject({
+    recordId: "t1",
+    title: "New Title",
+    status: "in_progress",
+    isOptimistic: true,
+  });
+  expect(vm.boardState.stats).toMatchObject({
+    total: 1,
+    inProgress: 1,
+  });
+  expect(vm.boardState.columns.find((column) => column.status === "pending")?.count).toBe(0);
+  expect(vm.boardState.columns.find((column) => column.status === "in_progress")?.count).toBe(1);
+
+  const taskVm = vm.taskViewModels.get("t1");
+  expect(taskVm?.task.title).toBe("New Title");
+  expect(taskVm?.task.status).toBe("in_progress");
 });
 
 test("buildTaskBoardViewModel handles empty states", () => {
@@ -138,7 +153,11 @@ test("buildTaskBoardViewModel handles empty states", () => {
   expect(vm.boardState.filteredTasks).toHaveLength(0);
   expect(vm.boardState.stats.total).toBe(0);
   expect(vm.taskViewModels.size).toBe(0);
-  expect(vm.boardState.columns).toHaveLength(3); // BOARD_LANES
+  expect(vm.boardState.columns).toEqual([
+    { status: "pending", count: 0, tasks: [] },
+    { status: "in_progress", count: 0, tasks: [] },
+    { status: "completed", count: 0, tasks: [] },
+  ]);
 });
 
 test("buildTaskBoardViewModel carries dependency blockers and live duration into card view models", () => {
