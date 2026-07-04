@@ -66,15 +66,18 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
   };
 
   return (
-    <div className="lg:sticky lg:top-16 flex flex-col gap-3 rounded-[1.75rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-3 backdrop-blur-2xl shadow-[var(--elevation-base)]">
-      <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.03] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
-        <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-600">
+    <nav
+      aria-label="Settings categories"
+      className="flex min-w-0 flex-col gap-3 rounded-[1.5rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-3 shadow-[var(--elevation-base)] backdrop-blur-2xl lg:sticky lg:top-16"
+    >
+      <div className="rounded-[1.1rem] border border-[color:var(--border-hairline)] bg-[var(--fill-muted)] px-4 py-3">
+        <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-300">
           <Layers3 className="h-3.5 w-3.5" strokeWidth={2} />
           Categories
         </div>
-        <div className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+        <div className="mt-2 min-w-0 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
           {normalizedSearch
-            ? `Showing ${filteredCategories.length} categories for “${settingsSearch.trim()}”.`
+            ? `Showing ${filteredCategories.length} categories for "${settingsSearch.trim()}".`
             : "Jump directly into the area you need without digging through the full settings tree."}
         </div>
       </div>
@@ -92,14 +95,14 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
             onClick={() => onSwitchCategory(category.id)}
             onKeyDown={(e) => handleKeyDown(e, index)}
             aria-current={isActive ? "page" : undefined}
-            className={`group relative flex w-full items-center gap-3.5 rounded-[1.1rem] px-4 py-3.5 text-left ${SHARED_INTERACTION_CLASSES} ${isDanger ? "focus-visible:ring-status-red" : ""} ${
+            className={`group relative flex w-full min-w-0 items-center gap-3 rounded-[1.05rem] border px-3.5 py-3 text-left ${SHARED_INTERACTION_CLASSES} ${isDanger ? "focus-visible:ring-status-red" : ""} ${
               isActive
                 ? isDanger
-                  ? "bg-status-red/[0.07] dark:bg-status-red/[0.08]"
-                  : "bg-signal-500/10"
-                : "hover:bg-[var(--fill-muted-hover)]"
+                  ? "border-status-red/22 bg-status-red/[0.07] dark:border-status-red/25 dark:bg-status-red/[0.08]"
+                  : "border-signal-500/20 bg-signal-500/10 dark:border-signal-400/20 dark:bg-signal-400/[0.1]"
+                : "border-transparent hover:border-[color:var(--border-hairline)] hover:bg-[var(--fill-muted-hover)]"
             } ${
-              isSearchMatch && !isActive ? (isDanger ? "ring-1 ring-status-red/30 bg-status-red/[0.03] dark:ring-status-red/40 dark:bg-status-red/[0.04]" : "ring-1 ring-signal-500/30 bg-signal-500/[0.03] dark:ring-signal-500/40 dark:bg-signal-500/[0.04]") : ""
+              isSearchMatch && !isActive ? (isDanger ? "border-status-red/20 bg-status-red/[0.035] dark:border-status-red/25 dark:bg-status-red/[0.045]" : "border-signal-500/18 bg-signal-500/[0.045] dark:border-signal-400/20 dark:bg-signal-400/[0.055]") : ""
             }`}
           >
             {isActive ? (
@@ -122,7 +125,7 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
             />
 
             <div className="min-w-0 flex-1">
-              <div className={`text-sm font-semibold transition-colors duration-200 ${
+              <div className={`min-w-0 break-words text-sm font-semibold leading-snug transition-colors duration-200 ${
                 isActive
                   ? isDanger
                     ? "text-status-red"
@@ -132,9 +135,19 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
               >
                 {category.label}
               </div>
-              <div className={`mt-0.5 truncate text-[10px] font-medium leading-tight transition-colors duration-200 ${isActive ? (isDanger ? "text-status-red/70" : "text-signal-700/70 dark:text-signal-300/70") : "text-slate-400 group-hover:text-slate-500 dark:text-slate-500 dark:group-hover:text-slate-400"}`}>
+              <div className={`mt-0.5 line-clamp-2 min-w-0 break-words text-[10px] font-medium leading-snug transition-colors duration-200 ${isActive ? (isDanger ? "text-status-red/70" : "text-signal-700/70 dark:text-signal-300/70") : "text-slate-400 group-hover:text-slate-500 dark:text-slate-500 dark:group-hover:text-slate-400"}`}>
                 {category.description}
               </div>
+              {isSearchMatch && !isActive ? (
+                <span className={`mt-2 inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.14em] ${
+                  isDanger
+                    ? "border-status-red/20 bg-status-red/[0.05] text-status-red"
+                    : "border-signal-500/20 bg-signal-500/[0.06] text-signal-700 dark:text-signal-300"
+                }`}
+                >
+                  Search match
+                </span>
+              ) : null}
             </div>
           </button>
         );
@@ -145,6 +158,6 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
           Try broader terms like `routing`, `CI`, `auth`, `agent`, or `memory`.
         </NoticePanel>
       ) : null}
-    </div>
+    </nav>
   );
 };
