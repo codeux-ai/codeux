@@ -27,12 +27,6 @@ This project is a Model Context Protocol (MCP) server with an integrated dashboa
   - Start MCP stdio transport.
   - Serve cached dashboard live activity and git status via `src/server/activity-cache-service.ts`.
 
-- Dashboard composition boundary: `src/app/dependency-factory/dashboard-factory.ts`
-- Responsibilities:
-  - Compose dashboard-facing runtime services, MCP management actions, planning, quicksprints, scheduler, and project setup.
-  - Resolve dashboard service cycles through explicit typed late-binding methods on the directly involved services.
-  - Preserve reduced-runtime behavior by keeping project setup, quicksprint, and scheduler dependencies optional at the MCP management boundary.
-
 ### 2. MCP tool handlers
 - `src/mcp/core-tool-handler.ts`
   - Handles `get_session`, listen-mode, inbox, dispatch, and attention tool calls.
@@ -54,7 +48,6 @@ This project is a Model Context Protocol (MCP) server with an integrated dashboa
 ### 5. Dashboard server and frontend
 - API host: `src/server/dashboard-server.ts`
 - Frontend app: `dashboard/src/*`
-- Service composition: `src/app/dependency-factory/dashboard-factory.ts` wires the dashboard service graph and links circular services through typed setters instead of private dependency mutation.
 
 ### 6. Data and settings repositories
 - Subtasks: `src/repositories/subtask-repository.ts`

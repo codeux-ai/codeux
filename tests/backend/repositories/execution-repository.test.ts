@@ -209,6 +209,137 @@ describe("ExecutionRepository", () => {
     expect(snapshot.recentInvocations?.some((invocation) => invocation.id === oldestActiveInvocationId)).toBe(true);
   });
 
+  it("protects selected inactive sprint execution context from project-wide recency caps", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Selected Inactive Sprint Project",
+      sourceType: "local",
+      sourceRef: "/workspace/selected-inactive-sprint",
+    });
+    const selectedSprint = projectRepository.createSprint(project.id, {
+      name: "Selected Inactive Sprint",
+      number: 1,
+    });
+    const selectedTask = projectRepository.createTask(project.id, {
+      sprintId: selectedSprint.id,
+      title: "Selected inactive task",
+      promptMarkdown: "Preserve this context.",
+    });
+    const selectedDispatchRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: selectedSprint.id,
+      status: "completed",
+    });
+    const selectedDispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: selectedSprint.id,
+      taskId: selectedTask.id,
+      sprintRunId: selectedDispatchRun.id,
+      executorType: "docker_cli",
+      status: "completed",
+      queuedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const selectedTaskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: selectedSprint.id,
+      taskId: selectedTask.id,
+      sprintRunId: selectedDispatchRun.id,
+      dispatchId: selectedDispatch.id,
+      provider: "codex",
+      mode: "docker_cli",
+      state: "COMPLETED",
+      startedAt: "2026-01-01T00:00:00.000Z",
+    });
+    executionRepository.appendTaskRunEvent(selectedTaskRun.id, "completed", "worker", {
+      message: "selected sprint event",
+    }, { createdAt: "2026-01-01T00:01:00.000Z" });
+    const selectedInvocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: selectedSprint.id,
+      taskId: selectedTask.id,
+      sprintRunId: selectedDispatchRun.id,
+      dispatchId: selectedDispatch.id,
+      taskRunId: selectedTaskRun.id,
+      type: "cli_task_coding",
+      status: "completed",
+      startedAt: "2026-01-01T00:02:00.000Z",
+    });
+
+    const selectedLatestRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: selectedSprint.id,
+      status: "completed",
+    });
+
+    for (let index = 0; index < 15; index += 1) {
+      const sprint = projectRepository.createSprint(project.id, {
+        name: `Active Sprint ${index}`,
+        number: index + 10,
+      });
+      executionRepository.createSprintRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+        status: "running",
+      });
+    }
+
+    for (let index = 0; index < 245; index += 1) {
+      const sprint = projectRepository.createSprint(project.id, {
+        name: `Recent Sprint ${index}`,
+        number: index + 100,
+      });
+      const task = projectRepository.createTask(project.id, {
+        sprintId: sprint.id,
+        title: `Recent task ${index}`,
+        promptMarkdown: "Recent work.",
+      });
+      const run = executionRepository.createSprintRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+        status: "completed",
+      });
+      const dispatch = executionRepository.createTaskDispatch({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId: run.id,
+        executorType: "docker_cli",
+        status: "completed",
+        queuedAt: `2026-02-01T00:${String(index % 60).padStart(2, "0")}:00.000Z`,
+      });
+      const taskRun = executionRepository.createTaskRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId: run.id,
+        dispatchId: dispatch.id,
+        provider: "codex",
+        mode: "docker_cli",
+        state: "COMPLETED",
+      });
+      executionRepository.appendTaskRunEvent(taskRun.id, "completed", "worker", {
+        index,
+      }, { createdAt: `2026-02-01T${String(Math.floor(index / 60)).padStart(2, "0")}:${String(index % 60).padStart(2, "0")}:00.000Z` });
+      executionRepository.createExecutionInvocation({
+        projectId: project.id,
+        sprintId: sprint.id,
+        sprintRunId: run.id,
+        type: "planning",
+        status: "completed",
+        startedAt: `2026-02-01T${String(Math.floor(index / 60)).padStart(2, "0")}:${String(index % 60).padStart(2, "0")}:30.000Z`,
+      });
+    }
+
+    const snapshot = executionRepository.getProjectExecutionSnapshot(project.id, {
+      selectedSprintId: selectedSprint.id,
+    });
+
+    expect(snapshot.sprintRuns.some((run) => run.id === selectedLatestRun.id)).toBe(true);
+    expect(snapshot.taskDispatches.some((dispatch) => dispatch.id === selectedDispatch.id)).toBe(true);
+    expect(snapshot.recentEvents.some((event) => event.taskRunId === selectedTaskRun.id)).toBe(true);
+    expect(snapshot.recentInvocations?.some((invocation) => invocation.id === selectedInvocation.id)).toBe(true);
+  });
+
   it("keeps historical execution snapshots bounded across many inactive runs and dispatches", async () => {
     const { projectRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({

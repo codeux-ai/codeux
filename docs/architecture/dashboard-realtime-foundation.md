@@ -62,20 +62,6 @@ Production refinement shipped on March 15, 2026:
 - project execution refresh no longer implies a `projects.updated` snapshot by default, which removes a major source of redundant dashboard work during active sprints
 - snapshot-based events (`project.live.updated`, `project.execution.updated`, and `overview.telemetry.updated`) are now fingerprinted; publications and sequence increments are skipped if the semantic payload (ignoring timestamps like `updatedAt`) is unchanged
 
-### Snapshot fingerprinting contract
-
-Realtime duplicate checks use deterministic semantic fingerprints instead of stringifying entire payloads. The helper is pure and side-effect free; it receives the event type and payload, removes timestamp-only fields (`updatedAt`, `timestamp`, and `lastUpdated`), and returns a compact versioned hash suitable for the in-memory duplicate cache.
-
-Event-specific semantics:
-
-- `project.live.updated` fingerprints the selected project id, selected sprint id, runtime status identity, execution state signature, git status signature, and git error. The execution signature includes sprint-run statuses, task dispatch statuses and task-run states, connection status/count fields, worker assignment status, attention item status, and a capped recent-event signature.
-- `project.execution.updated` fingerprints the same execution-state signature used inside the live snapshot, including all sprint-run, task-dispatch, connection, worker, and attention status fields plus capped recent events and invocations.
-- `project.git.updated` fingerprints git status content with timestamp-only churn removed, preserving repository mode, branch, dirty state, pull-request content, CI content, merged PR content, tracking target, and warnings.
-- `overview.telemetry.updated` fingerprints active and attention project identities, sprint run statuses, dispatch counts, intervention metadata, and capped recent event ids/statuses.
-- Unknown payload shapes use a bounded, stable traversal that hashes capped arrays, capped object keys, capped string content, structural lengths, and truncation markers. This keeps the fallback deterministic without allocating a second full JSON copy for multi-megabyte payloads.
-
-The fingerprint is only a publication suppression guard. It does not change websocket event types, scopes, replayability, throttle intervals, publication ordering, or the payload that is broadcast when a semantic change is detected.
-
 ### Dashboard websocket endpoint
 
 The dashboard server now exposes:

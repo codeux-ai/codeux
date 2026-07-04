@@ -72,7 +72,8 @@ export function queryExecutionTaskDispatches(
   db: DatabaseAdapter,
   storage: AppDbStorage,
   projectId: string,
-  expandedSprintRunIds: string[]
+  expandedSprintRunIds: string[],
+  selectedSprintId: string | null = null,
 ): ExecutionTaskDispatchSummaryRow[] {
   // Collapse to the single most-recent dispatch per task before applying the
   // status-rank ordering and cap. A task only ever has one *current* dispatch;
@@ -177,8 +178,58 @@ export function queryExecutionTaskDispatches(
     })
     : [];
 
+  const selectedSprintTaskDispatches = selectedSprintId
+    ? db.prepare(`
+    SELECT
+      td.id,
+      td.project_id,
+      td.sprint_id,
+      td.sprint_run_id,
+      s.name AS sprint_name,
+      s.number AS sprint_number,
+      td.task_id,
+      t.task_key,
+      t.title AS task_title,
+      t.status AS task_status,
+      t.is_merged AS task_is_merged,
+      t.merge_indicator AS task_merge_indicator,
+      td.status,
+      td.executor_type,
+      td.priority,
+      td.connection_id,
+      c.display_name AS connection_display_name,
+      c.role AS connection_role,
+      td.queued_at,
+      td.claimed_at,
+      td.started_at,
+      td.finished_at,
+      td.last_heartbeat_at,
+      td.error_message,
+      el.owner_key AS active_lease_owner_key,
+      el.expires_at AS active_lease_expires_at
+    FROM (
+      SELECT
+        td.*,
+        ROW_NUMBER() OVER (
+          PARTITION BY td.task_id
+          ORDER BY COALESCE(td.last_heartbeat_at, td.started_at, td.claimed_at, td.queued_at) DESC, td.id DESC
+        ) AS dispatch_rank
+      FROM task_dispatches td
+      WHERE td.project_id = ?
+        AND td.sprint_id = ?
+    ) td
+    INNER JOIN sprints s ON s.id = td.sprint_id
+    INNER JOIN tasks t ON t.id = td.task_id
+    LEFT JOIN mcp_connections c ON c.id = td.connection_id
+    LEFT JOIN execution_leases el
+      ON el.scope_type = 'task_dispatch'
+     AND el.scope_id = td.id
+    WHERE td.dispatch_rank = 1
+  `).all(projectId, selectedSprintId) as unknown as ExecutionTaskDispatchSummaryRow[]
+    : [];
+
   const taskDispatchById = new Map<string, ExecutionTaskDispatchSummaryRow>();
-  for (const row of [...expandedSprintTaskDispatches, ...recentTaskDispatches]) {
+  for (const row of [...expandedSprintTaskDispatches, ...selectedSprintTaskDispatches, ...recentTaskDispatches]) {
     taskDispatchById.set(row.id, row);
   }
 

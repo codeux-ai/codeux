@@ -200,4 +200,39 @@ describe('queryProjectExecutionSnapshot', () => {
       'xi-selected-sprint',
     ]);
   });
+
+  it('threads selectedSprintId into execution projection helpers', async () => {
+    const { queryExecutionSprintRuns } = await import('../../../../src/repositories/execution/execution-sprint-runs-query.js');
+    const { queryExecutionTaskDispatches } = await import('../../../../src/repositories/execution/execution-task-dispatches-query.js');
+    const { queryExecutionRuntimeEvents } = await import('../../../../src/repositories/execution/execution-runtime-events-query.js');
+
+    (queryExecutionSprintRuns as any).mockReturnValueOnce({
+      sprintRuns: [{ id: 'run-selected' }],
+      expandedSprintRunIds: ['run-selected'],
+    });
+
+    queryProjectExecutionSnapshot(
+      mockDb as DatabaseAdapter,
+      mockStorage,
+      'proj-1',
+      mockDeps,
+      { selectedSprintId: 'sprint-selected' },
+    );
+
+    expect(queryExecutionSprintRuns).toHaveBeenCalledWith(mockDb, 'proj-1', 'sprint-selected');
+    expect(queryExecutionTaskDispatches).toHaveBeenCalledWith(
+      mockDb,
+      mockStorage,
+      'proj-1',
+      ['run-selected'],
+      'sprint-selected',
+    );
+    expect(queryExecutionRuntimeEvents).toHaveBeenCalledWith(
+      mockDb,
+      mockStorage,
+      'proj-1',
+      ['run-selected'],
+      'sprint-selected',
+    );
+  });
 });

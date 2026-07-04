@@ -56,16 +56,17 @@ export function queryProjectExecutionSnapshot(
     WHERE id = ?
   `).get(projectId) as { id: string; name: string } | undefined;
 
-  const { sprintRuns, expandedSprintRunIds } = queryExecutionSprintRuns(db, projectId);
-  const taskDispatches = queryExecutionTaskDispatches(db, storage, projectId, expandedSprintRunIds);
-  const runtimeEvents = queryExecutionRuntimeEvents(db, storage, projectId, expandedSprintRunIds);
+  const selectedSprintId = options.selectedSprintId || null;
+  const { sprintRuns, expandedSprintRunIds } = queryExecutionSprintRuns(db, projectId, selectedSprintId);
+  const taskDispatches = queryExecutionTaskDispatches(db, storage, projectId, expandedSprintRunIds, selectedSprintId);
+  const runtimeEvents = queryExecutionRuntimeEvents(db, storage, projectId, expandedSprintRunIds, selectedSprintId);
   const recentInvocations = mergeInvocations([
     queryExecutionInvocations(db, { projectId, limit: 24 }),
     expandedSprintRunIds.length > 0
       ? queryExecutionInvocations(db, { projectId, sprintRunIds: expandedSprintRunIds, limit: null })
       : [],
-    options.selectedSprintId
-      ? queryExecutionInvocations(db, { projectId, sprintId: options.selectedSprintId, limit: null })
+    selectedSprintId
+      ? queryExecutionInvocations(db, { projectId, sprintId: selectedSprintId, limit: null })
       : [],
   ]);
 

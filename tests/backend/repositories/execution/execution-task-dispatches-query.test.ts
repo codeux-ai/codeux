@@ -168,4 +168,52 @@ describe("queryExecutionTaskDispatches latest-per-task", () => {
     expect(taskDispatches[0]?.taskRunState).toBe("COMPLETED");
     expect(taskDispatches[0]?.errorMessage ?? null).toBeNull();
   });
+
+  it("does not include dispatches from another project when selectedSprintId is stale", async () => {
+    const { executionRepository, projectRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Selected Scope Project",
+      sourceType: "local",
+      sourceRef: "/workspace/selected-scope-project",
+    });
+    const otherProject = projectRepository.createProject({
+      name: "Other Selected Scope Project",
+      sourceType: "local",
+      sourceRef: "/workspace/other-selected-scope-project",
+    });
+    const projectSprint = projectRepository.createSprint(project.id, {
+      name: "Project Sprint",
+      number: 1,
+    });
+    const otherSprint = projectRepository.createSprint(otherProject.id, {
+      name: "Other Sprint",
+      number: 2,
+    });
+    const otherTask = projectRepository.createTask(otherProject.id, {
+      sprintId: otherSprint.id,
+      title: "Other task",
+      promptMarkdown: "Do unrelated work",
+    });
+    const otherRun = executionRepository.createSprintRun({
+      projectId: otherProject.id,
+      sprintId: otherSprint.id,
+      status: "completed",
+    });
+    const otherDispatch = executionRepository.createTaskDispatch({
+      projectId: otherProject.id,
+      sprintId: otherSprint.id,
+      taskId: otherTask.id,
+      sprintRunId: otherRun.id,
+      executorType: "docker_cli",
+      status: "completed",
+      queuedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    const snapshot = executionRepository.getProjectExecutionSnapshot(project.id, {
+      selectedSprintId: otherSprint.id,
+    });
+
+    expect(snapshot.sprintRuns.some((run) => run.sprintId === projectSprint.id)).toBe(false);
+    expect(snapshot.taskDispatches.some((dispatch) => dispatch.id === otherDispatch.id)).toBe(false);
+  });
 });
