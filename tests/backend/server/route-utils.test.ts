@@ -37,6 +37,23 @@ describe("route-utils", () => {
       expect(nextSpy).not.toHaveBeenCalled();
     });
 
+    it("maps validation-shaped errors to 400 without invoking error middleware", () => {
+      const handler = () => {
+        throw Object.assign(new Error("Invalid route payload"), { name: "ValidationError" });
+      };
+      const route = syncRoute(handler);
+
+      const req = createMockRequest();
+      const { res, jsonSpy, statusSpy } = createMockResponse();
+      const nextSpy = vi.fn();
+
+      route(req, res, nextSpy);
+
+      expect(statusSpy).toHaveBeenCalledWith(400);
+      expect(jsonSpy).toHaveBeenCalledWith({ error: "Invalid route payload" });
+      expect(nextSpy).not.toHaveBeenCalled();
+    });
+
     it("handles parsing failure", () => {
       const handler = () => {
         throw new Error("Missing required field");
@@ -69,6 +86,7 @@ describe("route-utils", () => {
 
       expect(statusSpy).toHaveBeenCalledWith(500);
       expect(jsonSpy).toHaveBeenCalledWith({ error: "Internal Server Error" });
+      expect(JSON.stringify(jsonSpy.mock.calls)).not.toContain("Database explosion");
       expect(nextSpy).toHaveBeenCalledWith(unexpectedError);
     });
 
@@ -109,6 +127,23 @@ describe("route-utils", () => {
       expect(nextSpy).not.toHaveBeenCalled();
     });
 
+    it("maps not-found-shaped errors to 404 without invoking error middleware", async () => {
+      const handler = async () => {
+        throw Object.assign(new Error("Project not found"), { name: "EntityNotFoundError" });
+      };
+      const route = asyncRoute(handler);
+
+      const req = createMockRequest();
+      const { res, jsonSpy, statusSpy } = createMockResponse();
+      const nextSpy = vi.fn();
+
+      await route(req, res, nextSpy);
+
+      expect(statusSpy).toHaveBeenCalledWith(404);
+      expect(jsonSpy).toHaveBeenCalledWith({ error: "Project not found" });
+      expect(nextSpy).not.toHaveBeenCalled();
+    });
+
     it("handles unexpected async failure", async () => {
       const unexpectedError = new Error("Network timeout");
       const handler = async () => {
@@ -124,6 +159,7 @@ describe("route-utils", () => {
 
       expect(statusSpy).toHaveBeenCalledWith(500);
       expect(jsonSpy).toHaveBeenCalledWith({ error: "Internal Server Error" });
+      expect(JSON.stringify(jsonSpy.mock.calls)).not.toContain("Network timeout");
       expect(nextSpy).toHaveBeenCalledWith(unexpectedError);
     });
 
