@@ -13,7 +13,7 @@ export const MemoryDetails: FunctionComponent<{
 
     // Subscribe directly to signal for the selected node
     const selectedId = activeMemoryIdSignal.value;
-    const selectedNode = selectedId ? allNodes.find(n => n.id === selectedId) || null : null;
+    const selectedNode = selectedId ? allNodes.find(n => n.id === selectedId && n.alive) || null : null;
 
     return (
         <Inspector
