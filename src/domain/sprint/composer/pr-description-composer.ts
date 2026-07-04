@@ -87,6 +87,14 @@ export interface SprintPrSubtaskSummary {
   completed: boolean;
 }
 
+export interface SprintPrLinkedIssueSummary {
+  provider: "github" | "gitlab" | "jira";
+  issueKey?: string | null;
+  issueNumber?: number | null;
+  title: string;
+  url?: string | null;
+}
+
 export interface SprintPrComposerInput {
   sprintId: string;
   sprintNumber?: number | null;
@@ -96,6 +104,7 @@ export interface SprintPrComposerInput {
   defaultBranch: string;
   featureBranch: string;
   subtasks: SprintPrSubtaskSummary[];
+  linkedIssues?: SprintPrLinkedIssueSummary[];
   planning: { provider: string | null; model: string | null; usage: PrUsageStats | null } | null;
   aggregateUsage: PrUsageStats | null;
   startedAt: string | null;
@@ -227,11 +236,45 @@ function sprintProviderStatsLine(subtasks: SprintPrSubtaskSummary[]): string {
     .join(" · ");
 }
 
+function linkedIssueProviderLabel(provider: SprintPrLinkedIssueSummary["provider"]): string {
+  if (provider === "github") return "GitHub";
+  if (provider === "gitlab") return "GitLab";
+  return "Jira";
+}
+
+function linkedIssueReference(issue: SprintPrLinkedIssueSummary): string {
+  const explicitKey = issue.issueKey?.trim();
+  if (explicitKey) return explicitKey;
+  if (issue.issueNumber != null) {
+    if (issue.provider === "github") return `#${issue.issueNumber}`;
+    if (issue.provider === "gitlab") return `!${issue.issueNumber}`;
+    return String(issue.issueNumber);
+  }
+  return "Issue";
+}
+
+function renderLinkedIssuesBlock(issues: SprintPrLinkedIssueSummary[] | undefined): string | null {
+  const normalized = (issues || []).filter((issue) => issue.title.trim() || issue.issueKey?.trim() || issue.url?.trim());
+  if (normalized.length === 0) return null;
+
+  const lines = normalized.map((issue) => {
+    const provider = linkedIssueProviderLabel(issue.provider);
+    const reference = linkedIssueReference(issue);
+    const linkedReference = issue.url?.trim() ? `[${reference}](${issue.url.trim()})` : reference;
+    const title = issue.title.trim() || "Untitled issue";
+    return `- **${provider}** ${linkedReference}: ${title}`;
+  });
+
+  return `### 🔗 Linked Issues\n\n${lines.join("\n")}`;
+}
+
 const SPRINT_SECTION_RENDERERS: Record<SprintPrSectionKey, (input: SprintPrComposerInput) => string | null> = {
   summary: (input) => {
     const completedCount = input.subtasks.filter((t) => t.completed).length;
     const label = sprintLabel(input.sprintNumber, input.sprintName);
-    return `### 📋 Summary\n**Sprint:** ${label}   **Tasks:** ${completedCount}/${input.subtasks.length} completed`;
+    const summary = `### 📋 Summary\n**Sprint:** ${label}   **Tasks:** ${completedCount}/${input.subtasks.length} completed`;
+    const linkedIssues = renderLinkedIssuesBlock(input.linkedIssues);
+    return linkedIssues ? `${summary}\n\n${linkedIssues}` : summary;
   },
   planningModel: (input) => {
     if (!input.planning) {
