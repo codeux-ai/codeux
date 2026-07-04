@@ -291,4 +291,154 @@ describe("runtime snapshot stability", () => {
 
     expect(areExecutionSnapshotsEquivalent(previousExecution, nextExecution)).toBe(true);
   });
+
+  it("keeps unrelated execution collections stable when high-frequency event feeds change", () => {
+    const sprintRuns = [{
+      id: "run-1",
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      sprintName: "Sprint 1",
+      sprintNumber: 1,
+      status: "running",
+      triggerType: "manual",
+      triggeredBy: null,
+      executorMode: "mixed",
+      startedAt: "2026-03-26T10:00:00.000Z",
+      finishedAt: null,
+      lastHeartbeatAt: "2026-03-26T10:00:05.000Z",
+      createdAt: "2026-03-26T10:00:00.000Z",
+      activeLeaseOwnerKey: null,
+      activeLeaseExpiresAt: null,
+      humanIntervention: null,
+    }] satisfies ExecutionDashboardSnapshot["sprintRuns"];
+    const taskDispatches = [{
+      id: "dispatch-1",
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      sprintRunId: "run-1",
+      sprintName: "Sprint 1",
+      sprintNumber: 1,
+      taskId: "task-record-1",
+      taskKey: "TASK-1",
+      taskTitle: "Ship it",
+      status: "running",
+      executorType: "docker_cli",
+      priority: 10,
+      connectionId: null,
+      connectionDisplayName: null,
+      connectionRole: null,
+      taskRunId: "task-run-1",
+      taskRunState: "RUNNING",
+      provider: "codex",
+      sessionId: "session-1",
+      sessionName: "sessions/session-1",
+      workerBranch: "feature/task-1",
+      prUrl: null,
+      queuedAt: "2026-03-26T10:00:00.000Z",
+      claimedAt: "2026-03-26T10:00:01.000Z",
+      startedAt: "2026-03-26T10:00:02.000Z",
+      finishedAt: null,
+      lastHeartbeatAt: "2026-03-26T10:00:05.000Z",
+      errorMessage: null,
+      activeLeaseOwnerKey: null,
+      activeLeaseExpiresAt: null,
+    }] satisfies ExecutionDashboardSnapshot["taskDispatches"];
+    const previousExecution = createExecution({
+      sprintRuns,
+      taskDispatches,
+      recentEvents: [{
+        id: "event-1",
+        createdAt: "2026-03-26T10:00:03.000Z",
+        eventType: "dispatch_started",
+      } as ExecutionDashboardSnapshot["recentEvents"][number]],
+      recentInvocations: [{
+        id: "invocation-1",
+        status: "running",
+        updatedAt: "2026-03-26T10:00:04.000Z",
+        messageCount: 1,
+        lastMessageAt: "2026-03-26T10:00:04.000Z",
+      } as NonNullable<ExecutionDashboardSnapshot["recentInvocations"]>[number]],
+    });
+    const nextExecution = createExecution({
+      ...previousExecution,
+      sprintRuns: [{ ...sprintRuns[0] }],
+      taskDispatches: [{ ...taskDispatches[0] }],
+      recentEvents: [{
+        id: "event-2",
+        createdAt: "2026-03-26T10:00:06.000Z",
+        eventType: "provider_activity",
+      } as ExecutionDashboardSnapshot["recentEvents"][number]],
+      recentInvocations: [{
+        id: "invocation-1",
+        status: "running",
+        updatedAt: "2026-03-26T10:00:06.000Z",
+        messageCount: 2,
+        lastMessageAt: "2026-03-26T10:00:06.000Z",
+      } as NonNullable<ExecutionDashboardSnapshot["recentInvocations"]>[number]],
+      updatedAt: "2026-03-26T10:00:06.000Z",
+    });
+
+    const stabilized = stabilizeExecutionSnapshot(previousExecution, nextExecution);
+
+    expect(stabilized).not.toBe(nextExecution);
+    expect(stabilized.sprintRuns).toBe(previousExecution.sprintRuns);
+    expect(stabilized.taskDispatches).toBe(previousExecution.taskDispatches);
+    expect(stabilized.connections).toBe(previousExecution.connections);
+    expect(stabilized.attentionItems).toBe(previousExecution.attentionItems);
+    expect(stabilized.recentEvents).toBe(nextExecution.recentEvents);
+    expect(stabilized.recentInvocations).toBe(nextExecution.recentInvocations);
+  });
+
+  it("does not stabilize meaningful task execution changes", () => {
+    const previousDispatch = {
+      id: "dispatch-1",
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      sprintRunId: "run-1",
+      sprintName: "Sprint 1",
+      sprintNumber: 1,
+      taskId: "task-record-1",
+      taskKey: "TASK-1",
+      taskTitle: "Ship it",
+      status: "running",
+      executorType: "docker_cli",
+      priority: 10,
+      connectionId: null,
+      connectionDisplayName: null,
+      connectionRole: null,
+      taskRunId: "task-run-1",
+      taskRunState: "RUNNING",
+      provider: "codex",
+      sessionId: "session-1",
+      sessionName: "sessions/session-1",
+      workerBranch: "feature/task-1",
+      prUrl: null,
+      queuedAt: "2026-03-26T10:00:00.000Z",
+      claimedAt: "2026-03-26T10:00:01.000Z",
+      startedAt: "2026-03-26T10:00:02.000Z",
+      finishedAt: null,
+      lastHeartbeatAt: "2026-03-26T10:00:05.000Z",
+      errorMessage: null,
+      activeLeaseOwnerKey: null,
+      activeLeaseExpiresAt: null,
+    } satisfies ExecutionDashboardSnapshot["taskDispatches"][number];
+    const previousExecution = createExecution({
+      taskDispatches: [previousDispatch],
+    });
+    const nextExecution = createExecution({
+      ...previousExecution,
+      taskDispatches: [{
+        ...previousDispatch,
+        status: "failed",
+        taskRunState: "FAILED",
+        finishedAt: "2026-03-26T10:00:10.000Z",
+        errorMessage: "CI failed",
+      }],
+    });
+
+    const stabilized = stabilizeExecutionSnapshot(previousExecution, nextExecution);
+
+    expect(stabilized.taskDispatches).toBe(nextExecution.taskDispatches);
+    expect(areExecutionSnapshotsEquivalent(previousExecution, nextExecution)).toBe(false);
+  });
 });
