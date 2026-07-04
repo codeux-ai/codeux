@@ -11,6 +11,10 @@ export interface SelectOption {
   value: string;
   label: string;
   icon?: ComponentChildren | (() => ComponentChildren);
+  description?: ComponentChildren;
+  meta?: ComponentChildren;
+  disabled?: boolean;
+  unavailableReason?: ComponentChildren;
 }
 
 interface AvantgardeSelectProps {
@@ -288,6 +292,8 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
     return [...matches, { value: trimmed, label: `Use "${trimmed}"` }];
   }, [options, searchable, allowCustomValue, filter, maxVisibleOptions]);
 
+  const enabledFilteredOptions = filteredOptions.filter((option) => !option.disabled);
+
   const onKeyDown = (e: KeyboardEvent) => {
     if (!open) return;
     // Don't intercept space if we are in the search input
@@ -306,22 +312,34 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
       focusWithoutScroll(triggerRef.current);
       return;
     }
-    if (!filteredOptions.length) return;
+    if (!enabledFilteredOptions.length) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIndex(prev => (prev + 1) % filteredOptions.length);
+      setActiveIndex(prev => {
+        for (let offset = 1; offset <= filteredOptions.length; offset += 1) {
+          const next = (prev + offset + filteredOptions.length) % filteredOptions.length;
+          if (!filteredOptions[next]?.disabled) return next;
+        }
+        return prev;
+      });
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setActiveIndex(prev => (prev - 1 + filteredOptions.length) % filteredOptions.length);
+      setActiveIndex(prev => {
+        for (let offset = 1; offset <= filteredOptions.length; offset += 1) {
+          const next = (prev - offset + filteredOptions.length) % filteredOptions.length;
+          if (!filteredOptions[next]?.disabled) return next;
+        }
+        return prev;
+      });
     } else if (e.key === "Home") {
       e.preventDefault();
-      setActiveIndex(0);
+      setActiveIndex(filteredOptions.findIndex((option) => !option.disabled));
     } else if (e.key === "End") {
       e.preventDefault();
-      setActiveIndex(filteredOptions.length - 1);
+      setActiveIndex(Math.max(0, filteredOptions.map((option, index) => option.disabled ? -1 : index).filter((index) => index >= 0).pop() ?? 0));
     } else if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      if (activeIndex >= 0 && activeIndex < filteredOptions.length) {
+      if (activeIndex >= 0 && activeIndex < filteredOptions.length && !filteredOptions[activeIndex].disabled) {
         onChange(filteredOptions[activeIndex].value);
         setOpen(false);
         focusWithoutScroll(triggerRef.current);
@@ -351,24 +369,24 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
 
   const triggerClass =
     variant === "compact"
-      ? `flex w-full items-center justify-between gap-2 bg-transparent py-1 text-[11px] font-bold uppercase tracking-[0.14em] outline-none focus-visible:ring-2 focus-visible:ring-signal-500/20 ${
+      ? `flex min-h-8 w-full min-w-0 items-center justify-between gap-2 bg-transparent py-1 text-[11px] font-bold uppercase tracking-[0.14em] outline-none focus-visible:ring-2 focus-visible:ring-signal-500/20 ${
           disabled
             ? "cursor-not-allowed text-slate-400"
             : "cursor-pointer text-signal-600 hover:text-signal-500 dark:text-signal-300 dark:hover:text-signal-200"
         }`
       : variant === "card"
-        ? `flex w-full items-center justify-between gap-2 rounded-[1.2rem] border bg-white/66 px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] outline-none focus:border-signal-500/30 focus-visible:ring-2 focus-visible:ring-signal-500/20 ${
+        ? `flex min-h-10 w-full min-w-0 items-center justify-between gap-2 rounded-[var(--radius-ui)] border bg-[var(--fill-muted)] px-3.5 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] outline-none focus:border-signal-500/40 focus-visible:ring-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
             disabled
-              ? "cursor-not-allowed border-black/[0.06] text-slate-400 opacity-60"
-              : `cursor-pointer text-signal-600 dark:bg-white/[0.02] dark:text-signal-300 ${open ? 'border-signal-500/30 dark:border-signal-500/30' : 'border-black/[0.06] hover:border-black/[0.1] dark:border-white/[0.06] dark:hover:border-white/[0.1]'}`
+              ? "cursor-not-allowed border-[color:var(--border-hairline)] text-slate-400 opacity-60"
+              : `cursor-pointer text-signal-600 dark:text-signal-300 ${open ? 'border-signal-500/40' : 'border-[color:var(--border-hairline)] hover:border-black/[0.1] hover:bg-[var(--fill-muted-hover)] dark:hover:border-white/[0.12]'}`
           }`
-        : `flex w-full items-center justify-between gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm font-medium outline-none focus:border-signal-500/30 focus-visible:ring-2 focus-visible:ring-signal-500/20 ${
+        : `flex min-h-10 w-full min-w-0 items-center justify-between gap-2.5 rounded-[var(--radius-ui)] border px-3.5 py-2.5 text-sm font-medium leading-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] outline-none focus:border-signal-500/40 focus-visible:ring-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
             disabled
-              ? "cursor-not-allowed border-black/[0.04] bg-black/[0.02] text-slate-400 opacity-60 dark:border-white/[0.04] dark:bg-white/[0.02]"
-              : `cursor-pointer bg-white/52 text-slate-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_10px_24px_rgba(15,23,42,0.04)] backdrop-blur-xl dark:bg-white/[0.045] dark:text-slate-100 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_10px_24px_rgba(0,0,0,0.18)] ${open ? 'border-signal-500/30 dark:border-signal-500/30' : 'border-black/[0.06] hover:border-black/[0.12] dark:border-white/[0.06] dark:hover:border-white/[0.12]'}`
+              ? "cursor-not-allowed border-[color:var(--border-hairline)] bg-[var(--fill-muted)] text-slate-400 opacity-60"
+              : `cursor-pointer bg-[var(--fill-muted)] text-slate-800 backdrop-blur-xl hover:bg-[var(--fill-muted-hover)] dark:text-slate-100 ${open ? 'border-signal-500/40' : 'border-[color:var(--border-hairline)] hover:border-black/[0.1] dark:hover:border-white/[0.12]'}`
           }`;
 
-  const finalTriggerClass = `${triggerClass} ${invalid ? '!border-ember-500 !text-ember-600 dark:!border-ember-500 dark:!text-ember-400' : ''} ${invalid && !reducedMotion ? 'animate-form-shake' : ''}`;
+  const finalTriggerClass = `${triggerClass} ${invalid ? '!border-status-red/60 !bg-status-red/[0.04] !text-status-red shadow-[0_0_0_1px_rgba(211,47,47,0.16)]' : ''} ${invalid && !reducedMotion ? 'animate-form-shake' : ''}`;
 
   const panel = isRendered && position
     ? createPortal(
@@ -381,7 +399,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
             width: `${position.width}px`,
             zIndex: 9999,
           }}
-          className={`overflow-hidden rounded-2xl border border-black/[0.06] bg-white/[0.97] shadow-[0_20px_40px_rgba(0,0,0,0.12),0_0_0_1px_rgba(0,0,0,0.03)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/[0.97] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4),0_0_0_1px_rgba(255,255,255,0.04)] ${
+          className={`overflow-hidden rounded-[var(--radius-ui)] border border-[color:var(--border-hairline)] bg-white/[0.97] shadow-[var(--elevation-floating)] backdrop-blur-2xl dark:bg-void-800/[0.97] ${
             position.direction === "up" ? "origin-bottom" : "origin-top"
           }`}
         >
@@ -406,7 +424,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
                     setActiveIndex(0);
                   }}
                   onKeyDown={onKeyDown as any}
-                  className="w-full px-3 py-1.5 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-signal-500/30 text-slate-700 dark:text-slate-200"
+                className="min-h-9 w-full rounded-[var(--radius-ui)] border border-[color:var(--border-hairline)] bg-[var(--fill-muted)] px-3 py-1.5 text-sm text-slate-700 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-[var(--accent-focus-ring)] dark:text-slate-200"
                   ref={searchInputRef}
                 />
               </div>
@@ -414,29 +432,45 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
             {filteredOptions.map((option, idx) => {
               const isSelected = option.value === value;
               const isFocused = idx === activeIndex;
+              const isUnavailable = !!option.disabled;
               return (
                 <button
                   key={option.value}
                   id={`select-option-${option.value.replace(/\W/g, '-')}`}
                   role="option"
                   aria-selected={isSelected}
+                  aria-disabled={isUnavailable}
                   type="button"
                   ref={isFocused ? activeOptionRef : null}
                   onClick={() => {
+                    if (isUnavailable) return;
                     onChange(option.value);
                     setOpen(false);
                     focusWithoutScroll(triggerRef.current);
                   }}
-                  className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors ${
-                    isFocused ? "bg-signal-500/10 shadow-[inset_2px_0_0_0_var(--color-signal-500)] text-signal-600 dark:text-signal-300 z-10 relative" : ""
+                  className={`flex min-h-11 w-full min-w-0 items-start gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors ${
+                    isUnavailable ? "cursor-not-allowed opacity-55" : "cursor-pointer"
+                  } ${
+                    isFocused && !isUnavailable ? "bg-signal-500/10 shadow-[inset_2px_0_0_0_var(--color-signal-500)] text-signal-600 dark:text-signal-300 z-10 relative" : ""
                   }${
                     isSelected
-                      ? "bg-signal-50/50 dark:bg-signal-900/20 font-semibold text-signal-700 dark:text-signal-300"
-                      : "text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-void-700"
+                      ? "bg-signal-500/[0.08] font-semibold text-signal-700 dark:text-signal-300"
+                      : "text-slate-700 hover:bg-black/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.05]"
                   }`}
                 >
-                  {option.icon && <span className="flex-shrink-0">{renderOptionIcon(option.icon)}</span>}
-                  <span className="truncate">{option.label}</span>
+                  {option.icon && <span className="mt-0.5 flex-shrink-0">{renderOptionIcon(option.icon)}</span>}
+                  <span className="min-w-0 flex-1">
+                    <span className="block min-w-0 break-words leading-5">{option.label}</span>
+                    {option.description ? (
+                      <span className="mt-0.5 block min-w-0 break-words text-xs font-medium leading-relaxed text-[var(--text-metadata)]">{option.description}</span>
+                    ) : null}
+                    {option.meta || option.unavailableReason ? (
+                      <span className={`mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold leading-4 ${option.unavailableReason ? "text-status-red" : "text-[var(--text-metadata)]"}`}>
+                        {option.meta}
+                        {option.unavailableReason ? <span>{option.unavailableReason}</span> : null}
+                      </span>
+                    ) : null}
+                  </span>
                   {isSelected && (
                     <Check className="ml-auto h-3.5 w-3.5 flex-shrink-0 text-signal-500" strokeWidth={2.5} />
                   )}
@@ -479,7 +513,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
         aria-required={ariaRequired}
       >
         {selected?.icon ? <span className="flex-shrink-0">{renderOptionIcon(selected.icon)}</span> : null}
-        <span className="truncate">{selected?.label || placeholder}</span>
+        <span className="min-w-0 flex-1 truncate text-left">{selected?.label || placeholder}</span>
         <ChevronDown
           style={{ transitionProperty: "transform", transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
           className={`h-3.5 w-3.5 flex-shrink-0 text-slate-400 transition-transform  ${open ? "rotate-180" : ""}`}

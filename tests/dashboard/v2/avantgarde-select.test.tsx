@@ -132,7 +132,7 @@ describe("AvantgardeSelect", () => {
     expect(container.querySelector(".bg-transparent")).not.toBeNull();
 
     rerender(<AvantgardeSelect value="1" onChange={() => {}} options={options} variant="card" />);
-    expect(container.querySelector(".rounded-\\[1\\.2rem\\]")).not.toBeNull();
+    expect(container.querySelector(".rounded-\\[var\\(--radius-ui\\)\\]")).not.toBeNull();
   });
 
   it("handles boundary ancestor for positioning", () => {

@@ -13,6 +13,13 @@ export interface FieldWrapperProps {
   valid?: boolean;
 }
 
+const FIELD_LABEL_CLASS =
+  "flex min-w-0 items-start gap-1 break-words text-[13px] font-semibold leading-5 text-slate-700 dark:text-slate-200";
+const FIELD_META_CLASS =
+  "min-w-0 break-words text-xs font-medium leading-relaxed text-[var(--text-metadata)]";
+const FIELD_ERROR_CLASS =
+  "min-w-0 break-words text-xs font-semibold leading-relaxed text-status-red";
+
 export function FieldWrapper({ label, error, children, htmlFor, required, helperTextId, helperText, forceTouch, valid }: FieldWrapperProps) {
   const [shake, setShake] = useState(false);
   const [touched, setTouched] = useState(false);
@@ -122,17 +129,17 @@ export function FieldWrapper({ label, error, children, htmlFor, required, helper
   });
 
   return (
-    <div class="flex flex-col mb-4">
-      <label htmlFor={inputId} class="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 flex gap-1">
+    <div class="mb-4 flex min-w-0 flex-col gap-1.5">
+      <label htmlFor={inputId} class={FIELD_LABEL_CLASS}>
         {label}
-        {required && <span class="text-status-red" aria-hidden="true">*</span>}
+        {required && <span class="mt-px shrink-0 text-status-red" aria-hidden="true">*</span>}
         {required && <span class="sr-only">(Required)</span>}
       </label>
       <div
         class={`
-          relative rounded-md
+          relative min-w-0 rounded-[var(--radius-ui)]
           ${shake && showError ? 'motion-safe:animate-form-shake' : ''}
-          ${showError ? 'ring-1 ring-status-red transition-shadow duration-200 ease-in-out' : 'transition-shadow duration-200 ease-in-out'}
+          ${showError ? 'ring-1 ring-status-red/40 transition-shadow duration-200 ease-in-out' : 'transition-shadow duration-200 ease-in-out'}
         `}
       >
         <div class={`
@@ -150,7 +157,7 @@ export function FieldWrapper({ label, error, children, htmlFor, required, helper
             aria-hidden={isVisible}
             class={`
               col-start-1 row-start-1
-              text-xs text-slate-500 dark:text-slate-400
+              ${FIELD_META_CLASS}
               ${isVisible
                 ? 'opacity-0 pointer-events-none'
                 : 'opacity-100 visible'}
@@ -163,7 +170,7 @@ export function FieldWrapper({ label, error, children, htmlFor, required, helper
           id={errorId}
           role="alert"
           aria-hidden={!isVisible}
-          class={`col-start-1 row-start-1 text-xs font-medium text-status-red ${
+          class={`col-start-1 row-start-1 ${FIELD_ERROR_CLASS} ${
             isAnimatingIn ? 'motion-safe:animate-form-slide-down' : ''
           } ${
             isFadingOut ? 'fading transition-opacity duration-150 opacity-0' : 'opacity-100'

@@ -34,6 +34,40 @@ export function useModelCatalog(): ModelCatalogEntry[] {
 
 export const modelsDevLogoUrl = (providerId: string): string => `https://models.dev/logos/${providerId}.svg`;
 
+function formatCompactNumber(value: number): string {
+  if (value >= 1_000_000) return `${Number((value / 1_000_000).toFixed(1))}M`;
+  if (value >= 1_000) return `${Number((value / 1_000).toFixed(1))}K`;
+  return String(value);
+}
+
+function formatUsdPerMillion(value: number): string {
+  if (!Number.isFinite(value)) return "";
+  if (value === 0) return "$0";
+  if (value < 0.01) return `$${value.toFixed(4)}`;
+  if (value < 1) return `$${value.toFixed(2)}`;
+  return `$${Number(value.toFixed(2))}`;
+}
+
+function renderModelMeta(entry: ModelCatalogEntry) {
+  const meta: string[] = [entry.providerName];
+  if (entry.contextLimit) {
+    meta.push(`${formatCompactNumber(entry.contextLimit)} ctx`);
+  }
+  if (entry.cost) {
+    meta.push(`${formatUsdPerMillion(entry.cost.inputTokens)} in / ${formatUsdPerMillion(entry.cost.outputTokens)} out`);
+  }
+  if (entry.reasoning) meta.push("Reasoning");
+  if (entry.toolCall) meta.push("Tools");
+
+  return (
+    <>
+      {meta.map((item) => (
+        <span key={item}>{item}</span>
+      ))}
+    </>
+  );
+}
+
 /**
  * models.dev catalogues ~147 "providers", but most are gateways/resellers/regional mirrors
  * (OpenRouter, Vercel AI Gateway, Databricks, GitLab Duo, dozens of proxy/aggregator brands)
@@ -95,7 +129,9 @@ export const ModelCombobox: FunctionComponent<{
       catalogOptions.push({
         value: entry.modelId,
         label: entry.modelName,
-        icon: providerId ? (
+        description: entry.modelId,
+        meta: renderModelMeta(entry),
+        icon: (
           <ProviderBrandIcon
             id={entry.providerId}
             src={modelsDevLogoUrl(entry.providerId)}
@@ -103,18 +139,23 @@ export const ModelCombobox: FunctionComponent<{
             className="h-4 w-4 rounded-[0.35rem]"
             imageClassName="h-2.5 w-2.5"
           />
-        ) : undefined,
+        ),
       });
     }
     const trimmedValue = value.trim();
     if (trimmedValue && !catalogOptions.some((option) => option.value === trimmedValue)) {
-      catalogOptions.unshift({ value: trimmedValue, label: trimmedValue });
+      catalogOptions.unshift({
+        value: trimmedValue,
+        label: trimmedValue,
+        description: providerId ? "Custom model for the selected provider" : "Custom model identifier",
+        meta: <span className="font-mono">{trimmedValue}</span>,
+      });
     }
     return catalogOptions;
   }, [catalog, value, providerId]);
 
   return (
-    <div className="min-w-[220px]">
+    <div className="min-w-0 md:min-w-[220px]">
       <AvantgardeSelect
         value={value}
         onChange={onChange}

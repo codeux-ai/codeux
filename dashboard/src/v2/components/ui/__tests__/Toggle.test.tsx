@@ -17,6 +17,9 @@ test('renders as a switch and announces state correctly', () => {
     const toggle = screen.getByRole('switch', { name: 'Enable Feature X' });
     expect(toggle).toBeInTheDocument();
     expect(toggle).toHaveAttribute('aria-checked', 'true');
+    expect(toggle.className).toContain('h-7');
+    expect(toggle.className).toContain('w-12');
+    expect(toggle.className).toContain('focus-visible:ring-[var(--accent-focus-ring)]');
 
     fireEvent.click(toggle);
     expect(onChange).toHaveBeenCalledWith(false);

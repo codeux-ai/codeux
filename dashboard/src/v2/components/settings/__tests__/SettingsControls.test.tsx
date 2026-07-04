@@ -7,7 +7,7 @@ import { render, screen, cleanup } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
 import { BranchNameSchemeEditor } from "../BranchNameSchemeEditor";
 import { SprintKeyEditor } from "../SprintKeyEditor";
-import { Row, TextInput, NumberInput, TextAreaInput } from "../SettingsFormFields";
+import { Row, SelectInput, TextInput, NumberInput, TextAreaInput, Toggle } from "../SettingsFormFields";
 
 
 import { SettingsCategoryRail } from "../SettingsCategoryRail";
@@ -190,5 +190,41 @@ describe("SettingsControls Accessibility", () => {
     const input = screen.getByRole("textbox");
     expect(input).toHaveAttribute("aria-label", "Textarea Label");
     expect(input).toHaveAttribute("aria-description", "Textarea Description");
+  });
+
+  it("renders settings rows and child controls with stable responsive control sizing", () => {
+    render(
+      <Row
+        label="A very long inherited setting label that should wrap without shrinking controls"
+        description="A long helper description should stay readable and keep the control hit target stable."
+        badge="Project override"
+      >
+        <TextInput value="long-value" onChange={() => {}} aria-label="Wrapped setting" />
+      </Row>
+    );
+
+    const input = screen.getByRole("textbox", { name: "Wrapped setting" });
+    const row = screen.getByText(/A very long inherited setting label/).closest(".group");
+    expect(row?.className).toContain("md:flex-row");
+    expect(input.className).toContain("min-w-0");
+    expect(input.className).toContain("w-full");
+    expect(screen.getByText("Project override")).toBeInTheDocument();
+  });
+
+  it("reuses shared select and toggle semantics inside settings controls", () => {
+    render(
+      <div>
+        <SelectInput
+          value="a"
+          onChange={() => {}}
+          aria-label="Settings select"
+          options={[{ value: "a", label: "Alpha" }]}
+        />
+        <Toggle value={false} onChange={() => {}} aria-label="Settings toggle" />
+      </div>
+    );
+
+    expect(screen.getByRole("button", { name: "Settings select" })).toHaveAttribute("aria-haspopup", "listbox");
+    expect(screen.getByRole("switch", { name: "Settings toggle" })).toHaveAttribute("aria-checked", "false");
   });
 });

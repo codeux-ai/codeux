@@ -25,6 +25,9 @@ interface MultiSelectProps {
   onBlur?: (e: FocusEvent) => void;
 }
 
+const MULTI_SELECT_SHELL_CLASS =
+  "flex min-h-10 w-full min-w-0 flex-wrap items-center gap-1.5 rounded-[var(--radius-ui)] border border-[color:var(--border-hairline)] bg-[var(--fill-muted)] px-3 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] transition-all hover:border-black/[0.1] hover:bg-[var(--fill-muted-hover)] focus-within:border-signal-500/50 focus-within:ring-2 focus-within:ring-[var(--accent-focus-ring)] focus-within:ring-offset-2 focus-within:ring-offset-white dark:hover:border-white/[0.12] dark:focus-within:ring-offset-void-900";
+
 export const MultiSelect: FunctionComponent<MultiSelectProps> = ({
   id,
   options = [],
@@ -180,9 +183,9 @@ export const MultiSelect: FunctionComponent<MultiSelectProps> = ({
   };
 
   return (
-    <div className={`relative ${className}`} ref={containerRef}>
+    <div className={`relative min-w-0 ${className}`} ref={containerRef}>
       <div
-        className={`flex min-h-10 w-full flex-wrap items-center gap-1.5 rounded-[0.95rem] border border-black/[0.06] bg-transparent px-3 py-1.5 transition-colors focus-within:border-signal-500 dark:border-white/[0.07] ${ariaInvalid === 'true' || ariaInvalid === true ? 'border-status-red' : ''}`}
+        className={`${MULTI_SELECT_SHELL_CLASS} ${ariaInvalid === 'true' || ariaInvalid === true ? '!border-status-red/60 bg-status-red/[0.04] shadow-[0_0_0_1px_rgba(211,47,47,0.16)]' : ''}`}
         onClick={() => {
           inputRef.current?.focus();
           setIsOpen(true);
@@ -194,9 +197,9 @@ export const MultiSelect: FunctionComponent<MultiSelectProps> = ({
           return (
             <span
               key={tag}
-              className="flex items-center gap-1 rounded-full bg-slate-900/[0.06] px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-white/[0.08] dark:text-slate-300"
+              className="inline-flex max-w-full items-center gap-1 rounded-full border border-black/[0.06] bg-white/70 px-2 py-0.5 text-[11px] font-semibold leading-5 text-slate-700 dark:border-white/[0.08] dark:bg-white/[0.08] dark:text-slate-300"
             >
-              {label}
+              <span className="min-w-0 truncate">{label}</span>
               <button
                 type="button"
                 style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
@@ -204,7 +207,7 @@ export const MultiSelect: FunctionComponent<MultiSelectProps> = ({
                   e.stopPropagation();
                   removeTag(tag);
                 }}
-                className="hover:text-status-red focus:outline-none"
+                className="shrink-0 rounded-full hover:text-status-red focus:outline-none focus-visible:ring-2 focus-visible:ring-status-red/30"
                 aria-label={`Remove ${label}`}
               >
                 <X className="h-3 w-3" strokeWidth={2.5} />
@@ -232,7 +235,7 @@ export const MultiSelect: FunctionComponent<MultiSelectProps> = ({
           onKeyDown={handleInputKeyDown}
           onBlur={handleBlur}
           placeholder={value.length === 0 ? placeholder : ""}
-          className="min-w-[60px] flex-1 bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200"
+          className="min-h-7 min-w-[7rem] flex-1 bg-transparent text-sm leading-5 text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100"
         />
       </div>
 
@@ -242,7 +245,7 @@ export const MultiSelect: FunctionComponent<MultiSelectProps> = ({
           role="listbox"
           ref={listboxRef}
           onKeyDown={handleListboxKeyDown}
-          className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-black/[0.08] bg-white py-1 shadow-lg dark:border-white/[0.08] dark:bg-void-800"
+          className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-[var(--radius-ui)] border border-[color:var(--border-hairline)] bg-white py-1.5 shadow-[var(--elevation-floating)] dark:bg-void-800"
         >
           {filteredOptions.map((option) => {
             const isSelected = value.includes(option.value);
@@ -253,7 +256,7 @@ export const MultiSelect: FunctionComponent<MultiSelectProps> = ({
                 style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
                 aria-selected={isSelected}
                 tabIndex={-1}
-                className={`flex cursor-pointer items-center px-3 py-2 text-xs hover:bg-black/[0.04] dark:hover:bg-white/[0.05] focus:bg-black/[0.04] dark:focus:bg-white/[0.05] focus:ring-1 focus:ring-inset focus:ring-signal-500/50 outline-none ${
+                className={`flex min-h-9 cursor-pointer items-center gap-2 px-3 py-2 text-sm leading-5 hover:bg-black/[0.04] dark:hover:bg-white/[0.05] focus:bg-black/[0.04] dark:focus:bg-white/[0.05] focus:ring-1 focus:ring-inset focus:ring-signal-500/50 outline-none ${
                   isSelected ? "bg-signal-500/10 text-signal-700 dark:text-signal-400" : "text-slate-700 dark:text-slate-300"
                 }`}
                 onMouseDown={(e) => {
@@ -269,9 +272,9 @@ export const MultiSelect: FunctionComponent<MultiSelectProps> = ({
                   checked={isSelected}
                   readOnly
                   tabIndex={-1}
-                  className="mr-2 h-3 w-3 rounded border-slate-300 text-signal-500 focus:ring-signal-500 dark:border-white/[0.18] dark:bg-transparent pointer-events-none"
+                  className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-signal-500 focus:ring-signal-500 dark:border-white/[0.18] dark:bg-transparent pointer-events-none"
                 />
-                {option.label}
+                <span className="min-w-0 break-words">{option.label}</span>
               </div>
             );
           })}

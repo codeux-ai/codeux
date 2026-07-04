@@ -44,12 +44,12 @@ export const Toggle: FunctionComponent<ToggleProps> = ({ value, onChange, danger
       role="switch"
       onClick={() => onChange(!value)}
       disabled={disabled}
-      className={`group relative h-7 w-12 shrink-0 overflow-hidden rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus-visible:ring-[var(--color-accent-primary)] disabled:cursor-not-allowed disabled:opacity-50 motion-safe:enabled:active:scale-[0.98] enabled:active:brightness-95 dark:enabled:active:brightness-110 ${
+      className={`group relative h-7 w-12 shrink-0 overflow-hidden rounded-full border shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus-visible:ring-[var(--accent-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60 motion-safe:enabled:active:scale-[0.98] enabled:active:brightness-95 dark:enabled:active:brightness-110 ${
         value
           ? danger
-            ? "border-status-red/40 bg-status-red shadow-[0_0_16px_rgba(227,0,15,0.24)] enabled:hover:bg-status-red/90"
-            : "border-signal-500/40 bg-signal-500 shadow-[0_0_16px_rgba(0,224,160,0.22)] enabled:hover:bg-signal-500/90"
-          : "border-black/[0.12] bg-black/[0.08] enabled:hover:bg-black/[0.12] enabled:hover:border-black/[0.16] dark:border-white/[0.12] dark:bg-white/[0.08] dark:enabled:hover:bg-white/[0.12] dark:enabled:hover:border-white/[0.16]"
+            ? "border-status-red/45 bg-status-red shadow-[0_0_0_1px_rgba(227,0,15,0.12),0_0_16px_rgba(227,0,15,0.22)] enabled:hover:bg-status-red/90"
+            : "border-signal-500/45 bg-signal-500 shadow-[0_0_0_1px_rgba(0,224,160,0.12),0_0_16px_rgba(0,224,160,0.2)] enabled:hover:bg-signal-500/90"
+          : "border-[color:var(--border-hairline)] bg-[var(--fill-muted)] enabled:hover:border-black/[0.16] enabled:hover:bg-[var(--fill-muted-hover)] dark:enabled:hover:border-white/[0.16]"
       } ${className}`}
       aria-checked={value}
       aria-pressed={"aria-pressed" in props ? props["aria-pressed"] : undefined}
