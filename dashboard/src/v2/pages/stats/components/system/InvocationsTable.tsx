@@ -92,6 +92,7 @@ export function useInvocationsWindow(
 
   return {
     visibleInvocations,
+    visibleCount,
     hasMore: visibleCount < invocations.length,
     revealMore: () => setVisibleCount((c: number) => c + (typeof initialWindow === "number" ? initialWindow : 20)),
   };
@@ -110,7 +111,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
     ? null
     : invocations.find((invocation) => invocation.id === expandedId) ?? null;
 
-  const { visibleInvocations, hasMore, revealMore } = useInvocationsWindow(invocations, expandedId);
+  const { visibleInvocations, visibleCount, hasMore, revealMore } = useInvocationsWindow(invocations, expandedId);
 
   const handleSort = (key: SystemSortKey) => {
     if (sort.key === key) {
@@ -204,7 +205,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
   const cellClass = "block min-w-0 break-words px-3 py-2 align-middle [overflow-wrap:anywhere] lg:table-cell lg:px-2 lg:py-3";
   const mobileLabelClass = "mb-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)] lg:hidden";
 
-  if (loading) {
+  if (loading && invocations.length === 0) {
     return (
       <SystemFeedbackState
         icon={Loader2}
@@ -251,6 +252,15 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
 
   return (
     <div className="min-w-0 overflow-visible">
+      {loading ? (
+        <div role="status" aria-live="polite" aria-atomic="true" className={`${SUBPANEL_CLASS} mb-3 flex items-center gap-2 p-3 text-[11px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-detail-color)]`}>
+          <Loader2 className="h-3.5 w-3.5 text-[color:var(--stats-signal-text)] motion-safe:animate-spin" aria-hidden="true" />
+          Updating invocation records. Showing cached rows while the latest ledger loads.
+        </div>
+      ) : null}
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        Showing {Math.min(visibleCount, invocations.length).toLocaleString()} of {invocations.length.toLocaleString()} invocation records.
+      </div>
       <table className="block w-full border-separate border-spacing-y-2 lg:table">
         <caption className="sr-only">
           Invocation ledger with sortable time, token, and duration columns. Rows include status, type, model, token counts, context, and transcript expansion controls.
@@ -443,6 +453,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
           <button
             type="button"
             onClick={revealMore}
+            aria-label={`Show more invocations, currently showing ${Math.min(visibleCount, invocations.length).toLocaleString()} of ${invocations.length.toLocaleString()}`}
             className="rounded-full bg-[color:var(--stats-surface-chip)] px-4 py-2 text-xs font-bold text-[color:var(--stats-detail-color)] transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--stats-focus-ring)]"
           >
             Show more invocations

@@ -329,6 +329,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
               onChange={setVisualMode}
               ariaLabel="Analytics modes"
               className={styles.heroViewToggle}
+              controlsId="stats-analysis-panel"
             />
           </div>
         </div>

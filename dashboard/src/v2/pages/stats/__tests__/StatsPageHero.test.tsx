@@ -168,6 +168,7 @@ describe('StatsPageHero', () => {
 
     expect(screen.getByRole('group', { name: 'Analytics modes' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Models' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Models' })).toHaveAttribute('aria-controls', 'stats-analysis-panel');
     expect(screen.getByRole('button', { name: 'Trend' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByText('Model activity, latency, cache behavior, and reliability signals.')).toBeTruthy();
     expect(screen.queryByLabelText('Executive summary')).toBeNull();

@@ -198,7 +198,8 @@ export const ViewToggle: FunctionComponent<{
   onChange: (value: StatsVisualMode) => void;
   ariaLabel?: string;
   className?: string;
-}> = ({ value, onChange, ariaLabel = "Analytics modes", className = "" }) => {
+  controlsId?: string;
+}> = ({ value, onChange, ariaLabel = "Analytics modes", className = "", controlsId }) => {
   const buttonRefs = useRef<Partial<Record<StatsVisualMode, HTMLButtonElement | null>>>({});
   const modes: Array<{ id: StatsVisualMode; label: string; accessibleLabel: string; icon: LucideIcon }> = [
     { id: "trend", label: "Trend", accessibleLabel: "Trend", icon: BarChart3 },
@@ -262,6 +263,7 @@ export const ViewToggle: FunctionComponent<{
             }}
             onClick={() => onChange(mode.id)}
             aria-pressed={selected}
+            aria-controls={controlsId}
             aria-label={mode.accessibleLabel}
             title={mode.label}
             className={`${CONTROL_BASE_CLASS} min-h-10 min-w-10 flex-[1_1_calc(33.333%-0.25rem)] gap-2 px-2 py-2 sm:min-w-[7rem] sm:flex-[1_1_auto] sm:px-4 ${
@@ -698,11 +700,14 @@ export const SortButton: FunctionComponent<{
   active: boolean;
   direction?: "asc" | "desc" | null;
   onClick: () => void;
-}> = ({ label, active, direction = null, onClick }) => (
+}> = ({ label, active, direction = null, onClick }) => {
+  const directionLabel = active && direction ? `, sorted ${direction === "asc" ? "ascending" : "descending"}` : ", not sorted";
+  return (
   <button
     type="button"
     onClick={onClick}
     aria-pressed={active}
+    aria-label={`${label}${directionLabel}`}
     className={`${CONTROL_BASE_CLASS} gap-1 px-3 py-2 text-[10px] tracking-[0.16em] ${
       active
         ? CONTROL_ACTIVE_STRONG_CLASS
@@ -712,8 +717,10 @@ export const SortButton: FunctionComponent<{
     {label}
     {active && direction ? (
       direction === "desc"
-        ? <ArrowDown className="h-3 w-3" strokeWidth={2.6} />
-        : <ArrowUp className="h-3 w-3" strokeWidth={2.6} />
+        ? <ArrowDown className="h-3 w-3" strokeWidth={2.6} aria-hidden="true" />
+        : <ArrowUp className="h-3 w-3" strokeWidth={2.6} aria-hidden="true" />
     ) : null}
+    <span className="sr-only">{directionLabel}</span>
   </button>
-);
+  );
+};

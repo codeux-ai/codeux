@@ -178,12 +178,15 @@ describe("SchedulerPage", () => {
     const quicksprintTab = screen.getByRole("button", { name: /quicksprint/i });
     fireEvent.click(quicksprintTab);
 
+    expect(quicksprintTab).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("Task count")).toBeInTheDocument();
 
     // Switch to Chat message target
     const chatTab = screen.getByRole("button", { name: /chat message/i });
     fireEvent.click(chatTab);
 
+    expect(chatTab).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(/Selected schedule target: Chat/)).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/Ask the chat agent to check status/i)).toBeInTheDocument();
   });
 
@@ -234,12 +237,50 @@ describe("SchedulerPage", () => {
       expect(screen.getByText("Calendar view")).toBeInTheDocument();
     });
 
-    const dayViewToggle = screen.getByRole("button", { name: /24 hours/i });
+    const dayViewToggle = screen.getByRole("tab", { name: /24 hours/i });
     fireEvent.click(dayViewToggle);
 
     expect(screen.getByText("24 hour view")).toBeInTheDocument();
+    expect(dayViewToggle).toHaveAttribute("role", "tab");
+    expect(dayViewToggle).toHaveAttribute("aria-selected", "true");
+    expect(dayViewToggle).toHaveAttribute("aria-controls", "scheduler-view-panel");
+    expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", "scheduler-view-tab-day");
     expect(dayViewToggle.className).toContain("bg-signal-500");
     expect(dayViewToggle.className).toContain("text-void-900");
+  });
+
+  it("keeps cached schedule content visible during refresh", async () => {
+    const mockSchedule = {
+      entries: [],
+      occurrences: [
+        {
+          id: "occurrence-cached",
+          entryId: "entry-1",
+          title: "Cached Run",
+          targetType: "sprint",
+          startsAt: new Date().toISOString(),
+        },
+      ],
+    };
+    let resolveRefresh: ((value: any) => void) | null = null;
+    vi.mocked(fetchProjectSchedule)
+      .mockResolvedValueOnce(mockSchedule as any)
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveRefresh = resolve;
+      }) as any);
+
+    renderSchedulerPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Cached Run")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
+
+    expect(await screen.findByText(/Updating schedule\. Showing cached 1 visible occurrences/)).toBeInTheDocument();
+    expect(screen.getByText("Cached Run")).toBeInTheDocument();
+
+    resolveRefresh?.(mockSchedule);
   });
 
   it("handles scheduled entry toggle pause/resume and delete", async () => {
