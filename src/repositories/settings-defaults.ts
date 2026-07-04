@@ -422,7 +422,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   dbPruningEnabled: true,
   dbRetentionDays: 14,
   appearance: {
-    navigationMode: "DOCK",
+    navigationMode: "SIDEBAR",
     theme: "SYSTEM",
     reducedMotion: "AUTO",
     backgroundMode: "ANIMATED",

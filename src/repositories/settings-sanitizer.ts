@@ -314,7 +314,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     ? appearanceInput.zoomLevel
     : DEFAULT_DASHBOARD_SETTINGS.appearance.zoomLevel;
   const appearance = {
-    navigationMode: appearanceInput.navigationMode === "SIDEBAR" ? "SIDEBAR" : "DOCK" as "DOCK" | "SIDEBAR",
+    navigationMode: appearanceInput.navigationMode === "DOCK" ? "DOCK" : "SIDEBAR" as "DOCK" | "SIDEBAR",
     theme: appearanceInput.theme === "LIGHT" || appearanceInput.theme === "DARK" ? appearanceInput.theme : "SYSTEM" as "LIGHT" | "DARK" | "SYSTEM",
     reducedMotion: appearanceInput.reducedMotion === "REDUCE" || appearanceInput.reducedMotion === "NONE" ? appearanceInput.reducedMotion : "AUTO" as "AUTO" | "REDUCE" | "NONE",
     backgroundMode: appearanceInput.backgroundMode === "STATIC" ? "STATIC" : "ANIMATED" as "ANIMATED" | "STATIC",
