@@ -43,6 +43,18 @@ pnpm run test:backend:coverage
 pnpm run ci
 ```
 
+- Run repository quality guardrails
+```bash
+pnpm run quality:guardrails
+```
+  - The guardrail uses `scripts/quality-guardrails-baseline.json` to ratchet oversized production files and broad `any` patterns in `src/` and `dashboard/src/`.
+  - Current known oversized files and broad `any` usage pass at or below their baseline values. A failure means a production file grew beyond its recorded line count, a new production file exceeded the configured line threshold, or a broad `any` count increased.
+  - After an approved refactor reduces or reclassifies counts, intentionally rewrite the baseline with:
+```bash
+CODEUX_GUARDRAIL_UPDATE_BASELINE=1 pnpm run quality:guardrails
+```
+  - Review and commit the baseline diff only when it reflects the approved change. Do not use the update mode to hide unrelated drift.
+
 - Run Playwright E2E browser tests
 ```bash
 pnpm exec playwright test

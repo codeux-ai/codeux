@@ -3,6 +3,7 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { runSessionSyncStep } from "../../../src/sprint/steps/session-sync-step.js";
+import { DEFAULT_ACTIVITY_FETCH_TIMEOUT_MS } from "../../../src/domain/sprint/session-sync/bounded-activity-fetch.js";
 import type { Subtask } from "../../../src/contracts/app-types.js";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
@@ -11,6 +12,7 @@ import { ExecutionRepository } from "../../../src/repositories/execution-reposit
 const tempDirs: string[] = [];
 
 afterEach(async () => {
+  vi.useRealTimers();
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
@@ -534,6 +536,65 @@ describe("runSessionSyncStep", () => {
 
     expect(fetchRecentActivities).toHaveBeenCalledTimes(6);
     expect(maxConcurrentFetches).toBeLessThanOrEqual(5);
+  });
+
+  it("treats activity fetch timeouts as non-fatal empty activity lists", async () => {
+    vi.useFakeTimers();
+
+    const subtasks: Subtask[] = [
+      {
+        id: "task-timeout",
+        title: "Task Timeout",
+        prompt: "",
+        depends_on: [],
+        is_independent: true,
+        status: "PENDING",
+      },
+    ];
+
+    const fetchRecentActivities = vi.fn().mockImplementation(async () => new Promise(() => {}));
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn().mockReturnThis(),
+    };
+
+    const resultPromise = runSessionSyncStep(
+      subtasks,
+      {
+        listSessions: vi.fn().mockResolvedValue({
+          sessions: [
+            {
+              id: "session-timeout",
+              name: "sessions/session-timeout",
+              title: "Sprint 3: [run:my-repo/s3/task-timeout] [task-timeout] Task Timeout",
+              state: "RUNNING",
+            },
+          ],
+        }),
+        resolveSessionName: (session: { name?: string }) => session.name,
+        extractSessionId: (session: { id?: string }) => session.id,
+        fetchRecentActivities,
+        isActionRequiredState: vi.fn().mockReturnValue(false),
+        logger,
+      },
+      false,
+      { repoPath: "/tmp/my-repo", sprintNumber: 3 },
+    );
+
+    await vi.advanceTimersByTimeAsync(DEFAULT_ACTIVITY_FETCH_TIMEOUT_MS);
+    const result = await resultPromise;
+
+    expect(fetchRecentActivities).toHaveBeenCalledWith("sessions/session-timeout", 5);
+    expect(result.subtasks[0]?.status).toBe("RUNNING");
+    expect(result.subtasks[0]?.activities).toEqual([]);
+    expect(logger.warn).toHaveBeenCalledWith("Timed out fetching activities for session", {
+      sessionName: "sessions/session-timeout",
+      timeoutMs: DEFAULT_ACTIVITY_FETCH_TIMEOUT_MS,
+      fetchPhase: "session_sync_step",
+    });
   });
 
   it("fully clears stale runtime state before retrying a failed session", async () => {

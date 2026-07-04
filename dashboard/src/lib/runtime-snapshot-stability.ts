@@ -1,4 +1,5 @@
 import type { DashboardStatus, ExecutionDashboardSnapshot, Subtask } from "../types.js";
+import { isDeepEqual } from "../v2/lib/resource-equality.js";
 
 const ACTIVE_SPRINT_RUN_STATUSES = new Set([
   "queued",
@@ -192,6 +193,33 @@ function areListsEquivalent<T>(
   return true;
 }
 
+function areObjectsEquivalentIgnoringKey<T extends object>(left: T, right: T, ignoredKey: keyof T): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  const leftKeys = Object.keys(left) as Array<keyof T>;
+  const rightKeys = Object.keys(right) as Array<keyof T>;
+  const hasOwn = Object.prototype.hasOwnProperty;
+
+  for (const key of leftKeys) {
+    if (key === ignoredKey) {
+      continue;
+    }
+    if (!hasOwn.call(right, key) || !isDeepEqual(left[key], right[key])) {
+      return false;
+    }
+  }
+
+  for (const key of rightKeys) {
+    if (key !== ignoredKey && !hasOwn.call(left, key)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 /**
  * Returns `previous` when it is element-wise equivalent to `next`, so that
  * unchanged sub-collections keep a stable reference. This is what stops the
@@ -222,6 +250,10 @@ export function areExecutionSnapshotsEquivalent(
     && left.primaryAssignedWorker?.workerEndpointId === right.primaryAssignedWorker?.workerEndpointId
     && left.overflowAssignedWorkers.length === right.overflowAssignedWorkers.length
   );
+}
+
+export function areStatusSnapshotsEquivalent(left: DashboardStatus, right: DashboardStatus): boolean {
+  return areObjectsEquivalentIgnoringKey(left, right, "timestamp");
 }
 
 export function stabilizeExecutionSnapshot(

@@ -156,6 +156,7 @@ export function useTasksPageController({ reducedMotion }: UseTasksPageController
   }, [locationSearch, loading, tasks]);
 
   const { boardState, taskViewModels } = useMemo(() => {
+    const now = Date.now();
     return buildTaskBoardViewModel({
       tasks,
       optimisticTasks,
@@ -166,6 +167,7 @@ export function useTasksPageController({ reducedMotion }: UseTasksPageController
       taskDispatches: execution.taskDispatches,
       recentEvents: execution.recentEvents,
       subtasks: status.subtasks ?? [],
+      now,
     });
   }, [
     tasks,

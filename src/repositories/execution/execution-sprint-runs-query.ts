@@ -34,7 +34,8 @@ const SPRINT_RUN_ORDER = `
 
 export function queryExecutionSprintRuns(
   db: DatabaseAdapter,
-  projectId: string
+  projectId: string,
+  selectedSprintId: string | null = null,
 ): { sprintRuns: ExecutionSprintRunSummaryRow[], expandedSprintRunIds: string[] } {
   const statusPlaceholders = EXPANDED_RUN_STATUSES.map(() => "?").join(", ");
   const activeSprintRuns = db.prepare(`
@@ -57,7 +58,26 @@ export function queryExecutionSprintRuns(
     `).all(projectId, ...EXPANDED_RUN_STATUSES, inactiveLimit) as unknown as ExecutionSprintRunSummaryRow[]
     : [];
 
-  const sprintRuns = [...activeSprintRuns, ...inactiveSprintRuns];
+  const selectedSprintRun = selectedSprintId
+    ? db.prepare(`
+      SELECT${SPRINT_RUN_SELECT}
+      ${SPRINT_RUN_FROM}
+      WHERE sr.project_id = ?
+        AND sr.sprint_id = ?
+      ORDER BY COALESCE(sr.last_heartbeat_at, sr.updated_at, sr.created_at) DESC, sr.id DESC
+      LIMIT 1
+    `).get(projectId, selectedSprintId) as unknown as ExecutionSprintRunSummaryRow | undefined
+    : undefined;
+
+  const sprintRunById = new Map<string, ExecutionSprintRunSummaryRow>();
+  for (const row of [...activeSprintRuns, ...inactiveSprintRuns]) {
+    sprintRunById.set(row.id, row);
+  }
+  if (selectedSprintRun) {
+    sprintRunById.set(selectedSprintRun.id, selectedSprintRun);
+  }
+
+  const sprintRuns = [...sprintRunById.values()];
 
   const expandedSprintRunIds = sprintRuns
     .filter((row) => EXPANDED_RUN_STATUSES.includes(row.status))
@@ -65,6 +85,9 @@ export function queryExecutionSprintRuns(
 
   if (expandedSprintRunIds.length === 0 && sprintRuns[0]?.id) {
     expandedSprintRunIds.push(sprintRuns[0].id);
+  }
+  if (selectedSprintRun && !expandedSprintRunIds.includes(selectedSprintRun.id)) {
+    expandedSprintRunIds.push(selectedSprintRun.id);
   }
 
   return { sprintRuns, expandedSprintRunIds };

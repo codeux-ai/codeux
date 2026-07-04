@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import { buildTaskBoardViewModel } from "../../../dashboard/src/v2/lib/tasks/task-board-view-model.js";
 import type { Task } from "../../../dashboard/src/v2/types.js";
+import type { ExecutionTaskDispatchSummary } from "../../../dashboard/src/types.js";
 
 function createMockTask(id: string, overrides: Partial<Task> = {}): Task {
   return {
@@ -27,8 +28,9 @@ function createMockTask(id: string, overrides: Partial<Task> = {}): Task {
 }
 
 test("buildTaskBoardViewModel combines optimistic and normal tasks, filters, and builds view models", () => {
-  const normalTask = createMockTask("t1", { status: "pending" });
-  const optimisticTask = createMockTask("t2", { status: "in_progress" });
+  const now = new Date("2024-01-01T12:00:00Z").getTime();
+  const normalTask = createMockTask("t1", { status: "pending", createdAt: "2024-01-01T11:00:00Z" });
+  const optimisticTask = createMockTask("t2", { status: "in_progress", createdAt: "2024-01-01T11:30:00Z" });
 
   const vm = buildTaskBoardViewModel({
     tasks: [normalTask],
@@ -40,6 +42,7 @@ test("buildTaskBoardViewModel combines optimistic and normal tasks, filters, and
     taskDispatches: [],
     recentEvents: [],
     subtasks: [],
+    now,
   });
 
   expect(vm.boardState.filteredTasks).toHaveLength(2);
@@ -50,6 +53,8 @@ test("buildTaskBoardViewModel combines optimistic and normal tasks, filters, and
 
   const vm1 = vm.taskViewModels.get("t1");
   expect(vm1?.task.id).toBe("t1");
+  expect(vm1?.humanizedCreatedAt).toBe("1h ago");
+  expect(vm.taskViewModels.get("t2")?.humanizedCreatedAt).toBe("30m ago");
 });
 
 test("buildTaskBoardViewModel applies sprint scope correctly", () => {
@@ -67,6 +72,7 @@ test("buildTaskBoardViewModel applies sprint scope correctly", () => {
     taskDispatches: [d1, d2],
     recentEvents: [],
     subtasks: [{ id: "t1", record_id: "t1", title: "", sprint_id: "sprint-1", execution_id: "", session_id: "" }],
+    now: new Date("2024-01-01T12:00:00Z").getTime(),
   });
 
   const vm1 = vm.taskViewModels.get("t1");
@@ -90,6 +96,7 @@ test("buildTaskBoardViewModel applies status and priority filters and column ord
     taskDispatches: [],
     recentEvents: [],
     subtasks: [],
+    now: new Date("2024-01-01T12:00:00Z").getTime(),
   });
 
   expect(vm.boardState.filteredTasks).toHaveLength(1);
@@ -111,6 +118,7 @@ test("buildTaskBoardViewModel gives optimistic task precedence", () => {
     taskDispatches: [],
     recentEvents: [],
     subtasks: [],
+    now: new Date("2024-01-01T12:00:00Z").getTime(),
   });
 
   // Map will have the last one set, which depends on order.
@@ -132,10 +140,79 @@ test("buildTaskBoardViewModel handles empty states", () => {
     taskDispatches: [],
     recentEvents: [],
     subtasks: [],
+    now: new Date("2024-01-01T12:00:00Z").getTime(),
   });
 
   expect(vm.boardState.filteredTasks).toHaveLength(0);
   expect(vm.boardState.stats.total).toBe(0);
   expect(vm.taskViewModels.size).toBe(0);
   expect(vm.boardState.columns).toHaveLength(3); // BOARD_LANES
+});
+
+test("buildTaskBoardViewModel builds card view models only for rendered column tasks", () => {
+  const tasks = [
+    createMockTask("visible-1", { status: "pending" }),
+    createMockTask("visible-2", { status: "in_progress" }),
+    createMockTask("hidden-window", { status: "completed" }),
+    createMockTask("hidden-filter", { status: "pending", priority: "low" }),
+  ];
+
+  const vm = buildTaskBoardViewModel({
+    tasks,
+    optimisticTasks: [],
+    statusFilter: "all",
+    priorityFilter: "medium",
+    listWindow: 2,
+    taskScopeSprintId: null,
+    taskDispatches: [],
+    recentEvents: [],
+    subtasks: [],
+    now: new Date("2024-01-01T12:00:00Z").getTime(),
+  });
+
+  expect(vm.boardState.filteredTasks.map((task) => task.recordId)).toEqual([
+    "visible-1",
+    "visible-2",
+    "hidden-window",
+  ]);
+  expect(vm.boardState.visibleTasks.map((task) => task.recordId)).toEqual(["visible-1", "visible-2"]);
+  expect([...vm.taskViewModels.keys()]).toEqual(["visible-1", "visible-2"]);
+  expect(vm.taskViewModels.has("hidden-window")).toBe(false);
+  expect(vm.taskViewModels.has("hidden-filter")).toBe(false);
+});
+
+test("buildTaskBoardViewModel resolves visible task dependency indicators from hidden tasks", () => {
+  const hiddenDependency = createMockTask("hidden-dep", {
+    status: "completed",
+    priority: "low",
+    title: "Hidden Dependency",
+  });
+  const visibleTask = createMockTask("visible-task", {
+    status: "pending",
+    priority: "medium",
+    dependsOnTaskIds: ["hidden-dep"],
+  });
+
+  const vm = buildTaskBoardViewModel({
+    tasks: [visibleTask, hiddenDependency],
+    optimisticTasks: [],
+    statusFilter: "all",
+    priorityFilter: "medium",
+    listWindow: 50,
+    taskScopeSprintId: null,
+    taskDispatches: [],
+    recentEvents: [],
+    subtasks: [],
+    now: new Date("2024-01-01T12:00:00Z").getTime(),
+  });
+
+  expect([...vm.taskViewModels.keys()]).toEqual(["visible-task"]);
+  expect(vm.taskViewModels.get("visible-task")?.dependencyIndicators).toEqual([
+    {
+      recordId: "hidden-dep",
+      id: "hidden-dep",
+      title: "Hidden Dependency",
+      status: "completed",
+    },
+  ]);
 });

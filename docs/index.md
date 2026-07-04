@@ -65,6 +65,7 @@ Use this page as the main entrypoint.
 41. [Dashboard Resource Layer](./architecture/dashboard-resource-layer.md)
 42. [Dashboard Onboarding](./dashboard/onboarding.md)
 43. [Electron Desktop App](./deployment/electron-desktop.md)
+44. [Quality Guardrails](./architecture/quality-guardrails.md)
 
 ### Path 3: MCP integrator (tool contracts and runtime expectations)
 1. [Quickstart](./getting-started/quickstart.md)
@@ -109,6 +110,7 @@ Use this page as the main entrypoint.
 - [Agent Knowledge Base](./architecture/agent-knowledge-base.md)
 - [Memory Claims and Evidence](./architecture/memory-claims.md)
 - [Quality Assurance Agent](./architecture/quality-assurance-agent.md)
+- [Quality Guardrails](./architecture/quality-guardrails.md)
 - [Live Connections Runtime Surface](./architecture/live-connections-runtime-surface.md)
 - [Postgres Migration Plan](./architecture/postgres-migration-plan.md)
 - [Connection And Listener Foundation Reset](./architecture/connection-and-listener-foundation-reset.md)

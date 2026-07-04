@@ -15,6 +15,7 @@ export interface TaskBoardViewModelOptions {
   taskDispatches: ExecutionTaskDispatchSummary[];
   recentEvents: ExecutionRuntimeEventSummary[];
   subtasks: Subtask[];
+  now?: number;
 }
 
 export interface TaskBoardViewModel {
@@ -33,6 +34,7 @@ export function buildTaskBoardViewModel(options: TaskBoardViewModelOptions): Tas
     taskDispatches,
     recentEvents,
     subtasks,
+    now = Date.now(),
   } = options;
 
   const allTasks = [...optimisticTasks, ...tasks];
@@ -54,10 +56,10 @@ export function buildTaskBoardViewModel(options: TaskBoardViewModelOptions): Tas
   const liveEnrichmentMap = buildLiveTaskEnrichmentMap(subtasks, scopedDispatches, scopedEvents);
 
   const taskViewModels = new Map<string, TaskCardViewModel>();
-  for (const task of allTasks) {
+  for (const task of boardState.columns.flatMap((column) => column.tasks)) {
     taskViewModels.set(
       task.recordId,
-      buildTaskCardViewModel(task, taskLookup, liveEnrichmentMap.get(task.recordId))
+      buildTaskCardViewModel(task, taskLookup, liveEnrichmentMap.get(task.recordId), now)
     );
   }
 

@@ -168,6 +168,8 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureUniqueIndex(db, "idx_sprint_linked_issues_unique", "sprint_linked_issues", "sprint_id, provider, host_domain, repository, issue_number");
   ensureIndex(db, "idx_sprint_linked_issues_sprint", "sprint_linked_issues", "project_id, sprint_id, close_state");
   ensureIndex(db, "idx_sprint_runs_project_sprint", "sprint_runs", "project_id, sprint_id, created_at DESC");
+  ensureIndex(db, "idx_sprint_runs_project_sprint_status_created", "sprint_runs", "project_id, sprint_id, status, created_at DESC");
+  ensureIndex(db, "idx_sprint_runs_project_status_updated", "sprint_runs", "project_id, status, updated_at DESC, created_at DESC");
   ensureIndex(db, "idx_tasks_project_sprint_sort", "tasks", "project_id, sprint_id, sort_order ASC, created_at ASC, task_key ASC");
   ensureIndex(db, "idx_task_runs_project_started", "task_runs", "project_id, started_at DESC");
   ensureIndex(db, "idx_task_runs_dispatch", "task_runs", "dispatch_id");
@@ -189,6 +191,8 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_qa_review_runs_run_status", "qa_review_runs", "status, started_at DESC");
   ensureIndex(db, "idx_task_dispatches_sprint_run", "task_dispatches", "sprint_run_id, status, queued_at ASC");
   ensureIndex(db, "idx_task_dispatches_project_status", "task_dispatches", "project_id, status, priority DESC, queued_at ASC");
+  ensureIndex(db, "idx_task_dispatches_project_sprint_run", "task_dispatches", "project_id, sprint_run_id");
+  ensureIndex(db, "idx_task_dispatches_project_sprint", "task_dispatches", "project_id, sprint_id");
   ensureIndex(db, "idx_task_dispatches_task", "task_dispatches", "task_id, created_at DESC");
   ensureIndex(db, "idx_execution_leases_scope", "execution_leases", "scope_type, scope_id");
   ensureIndex(db, "idx_task_run_events_task_run_created", "task_run_events", "task_run_id, created_at DESC");
@@ -211,6 +215,7 @@ export function runMigrations(db: DatabaseAdapter): void {
       AND EXISTS (SELECT 1 FROM task_runs tr WHERE tr.id = task_run_events.task_run_id)
   `);
   ensureIndex(db, "idx_sprint_run_events_sprint_run_created", "sprint_run_events", "sprint_run_id, created_at DESC");
+  ensureIndex(db, "idx_sprint_run_events_sprint_run_created_id", "sprint_run_events", "sprint_run_id, created_at DESC, id DESC");
   ensureUniqueIndex(db, "idx_sprint_run_events_source_event", "sprint_run_events", "sprint_run_id, source_event_key");
   ensureIndex(db, "idx_execution_invocations_project_started", "execution_invocations", "project_id, started_at DESC");
   ensureIndex(db, "idx_execution_invocations_sprint_started", "execution_invocations", "sprint_id, started_at DESC");

@@ -183,7 +183,6 @@ export const TasksPage: FunctionComponent = () => {
         }
       );
     });
-
     clearResolvedTaskId();
     return () => ctx.revert();
   }, [clearResolvedTaskId, resolvedTaskId, tasks]);

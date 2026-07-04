@@ -1,8 +1,9 @@
 import * as os from "os";
 import * as path from "path";
 import * as fs from "fs/promises";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { CliWorkflowSettings } from "../../../contracts/app-types.js";
+import { createLogger, type Logger } from "../../../shared/logging/logger.js";
 import { CliProviderId } from "./provider-command-specs.js";
 import {
   collectProviderUsageTelemetry,
@@ -31,22 +32,80 @@ export interface TelemetryWatcherOptions {
   parseAntigravityConversationId: (logPath: string) => Promise<string | null>;
   readAntigravityTranscript: (resolvedSessionId: string) => Promise<string | null>;
   resolveAntigravityDatabase: (resolvedSessionId: string, destPath: string) => Promise<boolean | string | null>;
+  logger?: Pick<Logger, "warn">;
+}
+
+const WATCHER_INITIAL_DELAY_MS = 1000;
+const WATCHER_POLL_INTERVAL_MS = 1500;
+const WATCHER_WARNING_INTERVAL_MS = 30_000;
+
+async function abortableDelay(ms: number, signals: (AbortSignal | undefined)[]): Promise<boolean> {
+  const activeSignals = signals.filter((signal): signal is AbortSignal => Boolean(signal));
+  if (activeSignals.some((signal) => signal.aborted)) {
+    return false;
+  }
+
+  return new Promise((resolve) => {
+    let timeout: NodeJS.Timeout | null = setTimeout(() => {
+      timeout = null;
+      cleanup();
+      resolve(true);
+    }, ms);
+
+    const abort = () => {
+      if (timeout) {
+        clearTimeout(timeout);
+        timeout = null;
+      }
+      cleanup();
+      resolve(false);
+    };
+
+    const cleanup = () => {
+      for (const signal of activeSignals) {
+        signal.removeEventListener("abort", abort);
+      }
+    };
+
+    for (const signal of activeSignals) {
+      signal.addEventListener("abort", abort, { once: true });
+    }
+  });
+}
+
+function fingerprintText(value: string | null): string {
+  if (!value) {
+    return "empty";
+  }
+  return `${value.length}:${createHash("sha256").update(value).digest("hex")}`;
 }
 
 export class ProviderTelemetryWatcher {
   private active = false;
   private promise: Promise<void> | null = null;
   private tempDbPath: string | null = null;
+  private stopController = new AbortController();
+  private logger: Pick<Logger, "warn">;
+  private lastWarningMs: number | null = null;
+  private suppressedWarningCount = 0;
+  private lastResolvedAntigravityDbSignature: string | null = null;
+  private hasResolvedAntigravityDb = false;
 
-  constructor(private readonly opts: TelemetryWatcherOptions) {}
+  constructor(private readonly opts: TelemetryWatcherOptions) {
+    this.logger = opts.logger ?? createLogger({ bindings: { component: "ProviderTelemetryWatcher" } });
+  }
 
   start() {
+    if (this.stopController.signal.aborted) {
+      this.stopController = new AbortController();
+    }
     this.active = true;
     this.promise = this.loop();
   }
 
   async stop() {
     this.active = false;
+    this.stopController.abort();
     if (this.promise) {
       await this.promise.catch(() => undefined);
     }
@@ -56,7 +115,10 @@ export class ProviderTelemetryWatcher {
   }
 
   private async loop() {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const delaySignals = [this.stopController.signal, this.opts.signal];
+    if (!await abortableDelay(WATCHER_INITIAL_DELAY_MS, delaySignals)) {
+      return;
+    }
     while (this.active && !this.opts.signal?.aborted) {
       try {
         let claudeSessionJsonl: string | null = null;
@@ -81,7 +143,14 @@ export class ProviderTelemetryWatcher {
               const safeSession = resolvedNativeSessionId.replace(/[^A-Za-z0-9_-]/g, "_");
               this.tempDbPath = path.join(os.tmpdir(), `agy-temp-watcher-${safeSession}-${randomUUID()}.db`);
             }
-            await this.opts.resolveAntigravityDatabase(resolvedNativeSessionId, this.tempDbPath);
+            const dbSourceSignature = await this.buildAntigravityDbSourceSignature(resolvedNativeSessionId, antigravityTranscriptJsonl);
+            if (!this.hasResolvedAntigravityDb || this.lastResolvedAntigravityDbSignature !== dbSourceSignature) {
+              const resolvedDb = await this.opts.resolveAntigravityDatabase(resolvedNativeSessionId, this.tempDbPath);
+              if (resolvedDb) {
+                this.hasResolvedAntigravityDb = true;
+                this.lastResolvedAntigravityDbSignature = await this.buildAntigravityDbSourceSignature(resolvedNativeSessionId, antigravityTranscriptJsonl);
+              }
+            }
           }
         }
 
@@ -108,9 +177,54 @@ export class ProviderTelemetryWatcher {
           this.opts.onTelemetry(telemetry);
         }
       } catch (err) {
-        // Swallow background watcher errors
+        this.warnPollingError(err);
       }
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      if (!await abortableDelay(WATCHER_POLL_INTERVAL_MS, delaySignals)) {
+        return;
+      }
     }
+  }
+
+  private async buildAntigravityDbSourceSignature(resolvedNativeSessionId: string, transcriptJsonl: string | null): Promise<string> {
+    return JSON.stringify({
+      nativeSessionId: resolvedNativeSessionId,
+      logPath: this.opts.antigravityLogPath ?? null,
+      transcript: fingerprintText(transcriptJsonl),
+      stdout: fingerprintText(this.opts.getAccumulatedRawStdout()),
+      stderr: fingerprintText(this.opts.getAccumulatedStderr()),
+      tempDb: await this.getTempDbMetadataSignature(),
+    });
+  }
+
+  private async getTempDbMetadataSignature(): Promise<string> {
+    if (!this.tempDbPath) {
+      return "none";
+    }
+    try {
+      const stat = await fs.stat(this.tempDbPath);
+      return `${stat.size}:${Math.trunc(stat.mtimeMs)}`;
+    } catch {
+      return "missing";
+    }
+  }
+
+  private warnPollingError(err: unknown): void {
+    const now = Date.now();
+    if (this.lastWarningMs !== null && now - this.lastWarningMs < WATCHER_WARNING_INTERVAL_MS) {
+      this.suppressedWarningCount++;
+      return;
+    }
+
+    const errorName = err instanceof Error ? err.name : typeof err;
+    this.logger.warn("Provider telemetry watcher polling failed", {
+      provider: this.opts.provider,
+      sessionId: this.opts.sessionId,
+      nativeSessionId: this.opts.nativeSessionId,
+      errorName,
+      suppressedPollingErrors: this.suppressedWarningCount,
+      logPurpose: "invocation",
+    });
+    this.lastWarningMs = now;
+    this.suppressedWarningCount = 0;
   }
 }
