@@ -110,10 +110,14 @@ describe("SprintActions", () => {
     expect(result.result).toEqual(mockSprint);
   });
 
-  it("returns a clear validation error when sprint create has no title", async () => {
-    await expect(sprintActions.handleSprintAction(makeArgs("create", { projectId: "p1" })))
-      .rejects.toThrow("name or title is required");
-    expect(projectRepo.createSprint).not.toHaveBeenCalled();
+  it("allows sprint creation without a title", async () => {
+    const mockSprint = { id: "s1", name: "Untitled sprint 1" };
+    vi.mocked(projectRepo.createSprint).mockReturnValue(mockSprint as any);
+
+    const result = await sprintActions.handleSprintAction(makeArgs("create", { projectId: "p1" }));
+
+    expect(projectRepo.createSprint).toHaveBeenCalledWith("p1", {});
+    expect(result.result).toEqual(mockSprint);
   });
 
   it("rejects blank required strings before repository calls", async () => {
