@@ -16,30 +16,30 @@
   overflow: hidden;
   max-height: inherit;
   border-radius: 1.75rem;
-  border: 1px solid var(--border-hairline);
-  background-color: var(--surface-glass);
-  box-shadow: var(--elevation-floating);
-  backdrop-filter: blur(24px);
+  border: 1px solid var(--stats-card-border);
+  background-color: var(--stats-panel-bg);
+  box-shadow: var(--stats-floating-shadow);
+  backdrop-filter: blur(16px);
 }
 
 :global(.dark) .content {
-  border: 1px solid var(--border-hairline);
-  background-color: var(--surface-glass);
-  box-shadow: var(--elevation-floating);
+  border: 1px solid var(--stats-card-border);
+  background-color: var(--stats-panel-bg);
+  box-shadow: var(--stats-floating-shadow);
 }
 
 .header {
   padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  border-bottom: 1px solid var(--stats-divider);
 }
 
 :global(.dark) .header {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--stats-divider);
 }
 
 .section {
   padding: 1.5rem;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  border-bottom: 1px solid var(--stats-divider);
 }
 
 .section:last-child {
@@ -47,7 +47,7 @@
 }
 
 :global(.dark) .section {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--stats-divider);
 }
 
 .label {
@@ -56,7 +56,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.16em;
-  color: #94a3b8; /* slate-400 */
+  color: var(--stats-label-color);
   margin-bottom: 1rem;
 }
 

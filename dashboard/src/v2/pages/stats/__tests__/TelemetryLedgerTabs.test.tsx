@@ -26,6 +26,7 @@ describe("TelemetryLedgerTabs Accessibility", () => {
 
     const tablist = screen.getByRole("tablist", { name: "Telemetry ledgers" });
     expect(tablist).toBeInTheDocument();
+    expect(tablist.className).toContain("bg-[var(--stats-chip-bg)]");
 
     const tabs = screen.getAllByRole("tab");
     expect(tabs.length).toBeGreaterThan(0);

@@ -29,13 +29,13 @@ const SystemMetricCard: FunctionComponent<{
     <div className={`mb-4 flex h-10 w-10 items-center justify-center rounded-2xl ${circleClassName}`}>
       <Icon className="h-4 w-4" strokeWidth={2.25} />
     </div>
-    <div className={`text-3xl font-black tracking-tight ${valueClassName || "text-slate-900 dark:text-white"}`}>
+    <div className={`text-3xl font-black tracking-tight ${valueClassName || "text-[var(--stats-value-color)]"}`}>
       {value}
     </div>
-    <div className="mt-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
+    <div className="mt-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">
       {label}
     </div>
-    <div className="mt-1 text-[11px] font-medium text-slate-400 dark:text-slate-500">
+    <div className="mt-1 text-[11px] font-medium text-[var(--stats-detail-color)]">
       {detail}
     </div>
   </div>
@@ -63,17 +63,17 @@ const StatusDistributionBar: FunctionComponent<{ metrics: SystemSummaryMetrics }
   return (
     <div className={`${SUBPANEL_CLASS} p-4`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Status Distribution</div>
+        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">Status Distribution</div>
         <div className="flex flex-wrap items-center gap-3">
           {STATUS_BAR_SEGMENTS.filter((segment) => metrics[segment.key] > 0).map((segment) => (
-            <div key={segment.key} className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+            <div key={segment.key} className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
               <span className={`h-2 w-2 rounded-full ${segment.dotClassName}`} />
               {segment.label} · {metrics[segment.key]}
             </div>
           ))}
         </div>
       </div>
-      <div className="mt-3 flex h-2.5 w-full overflow-hidden rounded-full bg-black/[0.05] dark:bg-white/[0.05]">
+      <div className="mt-3 flex h-2.5 w-full overflow-hidden rounded-full bg-[var(--stats-muted-track)]">
         {STATUS_BAR_SEGMENTS.map((segment) => {
           const count = metrics[segment.key];
           if (count === 0) return null;
@@ -144,7 +144,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
     ? `${Math.round(summaryMetrics.successRate * 100)}%`
     : "—";
   const successTone = summaryMetrics.successRate === null
-    ? "text-slate-900 dark:text-white"
+    ? "text-[var(--stats-value-color)]"
     : summaryMetrics.successRate >= 0.95
       ? "text-emerald-600 dark:text-emerald-400"
       : summaryMetrics.successRate >= 0.8
@@ -183,7 +183,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
           <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-500 ${CHIP_CLASS}`}>
             Sprint Overview
           </div>
-          <div className="text-xl font-black text-slate-900 dark:text-white">Active State</div>
+          <div className="text-xl font-black text-[var(--stats-value-color)]">Active State</div>
         </div>
         <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           <SystemMetricCard
@@ -223,7 +223,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             Status Distribution
           </div>
           <div className="flex items-center gap-2">
-            <div className="text-xl font-black text-slate-900 dark:text-white">Invocations</div>
+            <div className="text-xl font-black text-[var(--stats-value-color)]">Invocations</div>
             {summaryMetrics.runningCount > 0 && (
               <div className="h-2 w-2 animate-pulse rounded-full bg-blue-400" />
             )}
@@ -284,7 +284,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-500 ${CHIP_CLASS}`}>
               Error Log
             </div>
-            <div className="text-xl font-black text-slate-900 dark:text-white">Failure Analysis</div>
+            <div className="text-xl font-black text-[var(--stats-value-color)]">Failure Analysis</div>
           </div>
           {totalErrors > 0 && (
             <div className="flex h-8 items-center justify-center rounded-full border-2 border-amber-500/30 bg-amber-500/10 px-3 text-[11px] font-bold text-amber-600 dark:text-amber-400">
@@ -295,8 +295,8 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
         {errorEntries.length === 0 ? (
           <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center py-12 text-center`}>
             <ShieldCheck className="mb-3 h-8 w-8 text-emerald-500/50" />
-            <div className="text-sm font-bold text-slate-900 dark:text-white">No Errors Recorded</div>
-            <div className="mt-1 text-sm text-slate-500">All invocations completed successfully.</div>
+            <div className="text-sm font-bold text-[var(--stats-value-color)]">No Errors Recorded</div>
+            <div className="mt-1 text-sm text-[var(--stats-detail-color)]">All invocations completed successfully.</div>
           </div>
         ) : (
           <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
@@ -304,12 +304,12 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
               const label = category === "rateLimit" ? "Rate Limit" : category === "apiError" ? "API Error" : category === "modelError" ? "Model Error" : category.charAt(0).toUpperCase() + category.slice(1);
               const tone = category === "timeout" ? "bg-amber-500" : category === "rateLimit" ? "bg-orange-500" : category === "cancelled" ? "bg-slate-400" : "bg-red-500";
               return (
-                <div key={category} className={`${SUBPANEL_CLASS} flex items-center justify-between p-4 hover:bg-[color:var(--fill-muted-hover)] transition-colors`}>
+                <div key={category} className={`${SUBPANEL_CLASS} flex items-center justify-between p-4 transition-colors hover:bg-[var(--stats-row-hover-bg)]`}>
                   <div className="flex items-center gap-3">
                     <div className={`h-2.5 w-2.5 rounded-full ${tone}`} />
-                    <div className="text-sm font-bold text-slate-900 dark:text-white">{label}</div>
+                    <div className="text-sm font-bold text-[var(--stats-value-color)]">{label}</div>
                   </div>
-                  <div className="text-lg font-black tracking-tight text-slate-900 dark:text-white">{count}</div>
+                  <div className="text-lg font-black tracking-tight text-[var(--stats-value-color)]">{count}</div>
                 </div>
               );
             })}
@@ -323,11 +323,11 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-500 ${CHIP_CLASS}`}>
               Invocations
             </div>
-            <div className="text-xl font-black text-slate-900 dark:text-white">Detailed Log</div>
+            <div className="text-xl font-black text-[var(--stats-value-color)]">Detailed Log</div>
           </div>
           <div className="flex flex-wrap gap-2">
             {(Object.entries(apiData) as [keyof typeof apiData, any][]).filter(([_, metrics]) => metrics.calls > 0).map(([key, metrics]) => (
-              <div key={key} className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ${CHIP_CLASS}`}>
+              <div key={key} className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] ${CHIP_CLASS}`}>
                 {key.charAt(0).toUpperCase() + key.slice(1)} · {metrics.calls} calls
               </div>
             ))}
@@ -335,7 +335,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
         </div>
 
         <div className="space-y-4">
-          <div className="flex gap-1 rounded-2xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-1 self-start">
+          <div className="flex self-start gap-1 rounded-2xl border border-[var(--stats-card-border)] bg-[var(--stats-chip-bg)] p-1 shadow-[var(--stats-card-shadow)]">
             {(["all", "errors", "system"] as SystemTab[]).map((tab) => (
               <button
                 key={tab}
@@ -343,8 +343,8 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
                 onClick={() => setActiveTab(tab)}
                 className={`rounded-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-all ${
                   activeTab === tab
-                    ? "bg-amber-500 text-white shadow-sm ring-2 ring-amber-500/30"
-                    : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                    ? "bg-amber-500 text-white shadow-[var(--stats-card-shadow)]"
+                    : "text-[var(--stats-detail-color)] hover:bg-[var(--stats-row-hover-bg)] hover:text-[var(--stats-value-color)]"
                 }`}
               >
                 {tab === "all" ? "All" : tab === "errors" ? "Errors" : "System Msgs"}

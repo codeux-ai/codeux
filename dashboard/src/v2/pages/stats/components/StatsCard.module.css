@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 .card {
-  @apply relative overflow-hidden flex flex-col justify-between motion-safe:transition-all duration-300;
+  @apply relative overflow-hidden flex flex-col justify-between motion-safe:transition-colors duration-200;
   background: var(--stats-card-bg);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -12,7 +12,7 @@
 }
 
 .card:hover {
-  @apply -translate-y-0.5;
+  background: var(--stats-row-hover-bg);
   box-shadow: var(--elevation-raised);
 }
 
@@ -47,7 +47,7 @@
 }
 
 .value {
-  @apply text-[2.25rem] font-semibold font-mono tracking-tighter leading-none;
+  @apply text-[2.25rem] font-black font-mono tracking-tight leading-none;
   color: var(--stats-value-color);
 }
 
@@ -70,7 +70,7 @@
 }
 
 .card:hover .tint {
-  @apply opacity-[0.03];
+  @apply opacity-[0.025];
 }
 
 /* Variants */

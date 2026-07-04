@@ -88,14 +88,14 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
         <div className={`${styles.header} flex items-center justify-between`}>
           <div aria-live="polite" className="sr-only">Showing {activeSeriesCount} filter{activeSeriesCount !== 1 ? 's' : ''}</div>
           <div className="flex items-center gap-3">
-            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-900 dark:text-white">
+            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--stats-value-color)]">
               Graph Filters
             </span>
             {activeSeriesCount > 0 && (
               <button
                 type="button"
                 onClick={() => setEnabledSeries({})}
-                className="text-xs text-slate-400 transition-colors hover:text-amber-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 rounded"
+                className="rounded text-xs text-[var(--stats-detail-color)] transition-colors hover:text-amber-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)]"
               >
                 Reset filters
               </button>
@@ -106,7 +106,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Close graph filters"
-            className="rounded-full p-1 text-slate-400 hover:bg-black/[0.05] hover:text-slate-600 dark:hover:bg-white/[0.05] dark:hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900"
+            className="rounded-full p-1 text-[var(--stats-detail-color)] hover:bg-[var(--stats-row-hover-bg)] hover:text-[var(--stats-value-color)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)]"
           >
             <X className="h-4 w-4" />
           </button>
@@ -142,7 +142,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
 
                   return (
                     <div key={groupKey} className="flex flex-col">
-                      <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 mt-3 mb-1 px-1">
+                      <div className="mb-1 mt-3 px-1 text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">
                         {groupLabel}
                       </div>
                       <div className="flex flex-col gap-2">
@@ -163,7 +163,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
                               className={`flex items-center justify-between rounded-xl border px-3 py-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 ${
                                 active
                                   ? 'border-amber-500/28 bg-amber-500/12 text-amber-700 dark:text-amber-300'
-                                  : 'border-black/[0.05] bg-transparent text-slate-500 hover:border-black/[0.1] dark:border-white/[0.05] dark:text-slate-400'
+                                  : 'border-[var(--stats-card-border)] bg-[var(--stats-subpanel-bg)] text-[var(--stats-detail-color)] hover:bg-[var(--stats-row-hover-bg)] hover:text-[var(--stats-value-color)]'
                               } ${disabled ? 'cursor-not-allowed opacity-60' : ''}`}
                             >
                               <div className="flex items-center gap-2">
