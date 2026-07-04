@@ -9,6 +9,7 @@ The Tasks page and Kanban board should feel like a 'Refined Production Board'. I
 *   **Headers:** Lane headers should establish hierarchy using `font-display` for main titles and monospace text (`font-mono`) for metadata (like counts or tags).
 *   **Counts:** Use restrained chips for counts (e.g., `bg-black/[0.03] dark:bg-white/[0.03]`) rather than bold solid colors, unless indicating a critical bottleneck.
 *   **Empty States:** Empty lanes should be visually quiet, with dotted borders or subtle backgrounds to indicate they are active but empty, avoiding heavy text.
+*   **Drop Behavior:** Pointer drops are status transitions only. Dropping a card onto another visible lane resolves to that lane's default persisted status (`pending`, `in_progress`, or `completed`), while same-lane drops are no-ops because task ordering is not persisted by the task API.
 
 ## 2. Kanban Cards
 *   **Structure:** Cards must have consistent internal spacing. Align title, priority, status, dependency, execution metadata, assignee/agent, and progress information cleanly.
