@@ -48,7 +48,7 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
       <div
         role="tablist"
         aria-label="Telemetry ledgers"
-        className="flex gap-1 self-start max-w-full overflow-x-auto rounded-2xl border border-black/[0.05] bg-white/68 p-1 dark:border-white/[0.05] dark:bg-void-900/35"
+        className="flex max-w-full gap-1 self-start overflow-x-auto rounded-2xl border border-[var(--stats-card-border)] bg-[var(--stats-chip-bg)] p-1 shadow-[var(--stats-card-shadow)]"
         onKeyDown={(e) => {
           if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
             e.preventDefault();
@@ -79,8 +79,8 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
               onClick={() => setActiveTab(tab.id)}
               className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 ${
                 isActive
-                  ? "bg-slate-900 text-white shadow-sm dark:bg-white dark:text-void-900"
-                  : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                  ? "bg-amber-500 text-white shadow-[var(--stats-card-shadow)]"
+                  : "text-[var(--stats-detail-color)] hover:bg-[var(--stats-row-hover-bg)] hover:text-[var(--stats-value-color)]"
               }`}
             >
               <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
@@ -88,8 +88,8 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
               {tab.badge !== null ? (
                 <span className={`px-2 py-0.5 text-[9px] font-black tracking-wider ${CHIP_CLASS} ${
                   isActive
-                    ? "bg-white/20 text-white dark:bg-void-900/15 dark:text-void-900"
-                    : "text-slate-500 dark:text-slate-400"
+                    ? "bg-white/20 text-white"
+                    : "text-[var(--stats-detail-color)]"
                 }`}>
                   {tab.badge}
                 </span>

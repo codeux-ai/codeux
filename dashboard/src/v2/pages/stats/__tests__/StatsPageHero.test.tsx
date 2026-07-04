@@ -68,6 +68,7 @@ describe('StatsPageHero', () => {
     expect(ledgersButton.compareDocumentPosition(systemButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(container.querySelectorAll('input[type="date"]').length).toBe(2);
     expect(screen.getByRole('button', { name: 'Apply' })).toBeTruthy();
+    expect(container.innerHTML).toContain("bg-[var(--stats-chip-bg)]");
   });
 
   it('disables the Apply button when custom dates are missing', () => {

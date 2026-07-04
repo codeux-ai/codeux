@@ -187,7 +187,8 @@ describe("InvocationsTable", () => {
   });
 
   it("renders empty state", () => {
-    const { getByText } = render(<Harness invocations={[]} />);
+    const { getByText, getByRole } = render(<Harness invocations={[]} />);
     expect(getByText("No invocations match the current filters")).toBeTruthy();
+    expect(getByRole("status").className).toContain("bg-[var(--stats-subpanel-bg)]");
   });
 });

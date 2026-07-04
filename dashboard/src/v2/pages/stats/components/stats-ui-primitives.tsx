@@ -64,12 +64,12 @@ export interface ChartZoomRange {
   end: number;
 }
 
-export const PANEL_CLASS = "relative overflow-hidden rounded-[1.9rem] border border-black/[0.06] bg-white/80 p-6 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]";
-export const SUBPANEL_CLASS = "rounded-[1.45rem] border border-black/[0.05] bg-white/68 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.045)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35 dark:shadow-[0_12px_28px_rgba(0,0,0,0.2)]";
-export const CHIP_CLASS = "rounded-full border border-black/[0.06] bg-white/70 shadow-[0_1px_3px_rgba(0,0,0,0.04)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/55 dark:shadow-[0_1px_3px_rgba(0,0,0,0.18)]";
-export const INPUT_CLASS = "h-11 rounded-2xl border border-black/[0.06] bg-white/72 px-4 text-sm text-slate-700 outline-none transition-colors focus:border-signal-500 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-200";
-export const LEDGER_ROW_CLASS = "group rounded-[1.5rem] border border-black/[0.05] bg-white/68 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.045)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-amber-500/30 hover:shadow-[0_18px_48px_rgba(255,184,0,0.14)] dark:border-white/[0.05] dark:bg-void-900/35 dark:shadow-[0_12px_28px_rgba(0,0,0,0.2)] dark:hover:bg-void-900/45";
-export const LEDGER_ROW_MODERN_CLASS = "group relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/80 p-6 shadow-[0_8px_32px_rgba(15,23,42,0.05)] backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:border-amber-500/30 hover:shadow-[0_18px_48px_rgba(255,184,0,0.14)] dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_12px_32px_rgba(0,0,0,0.25)] dark:hover:border-amber-500/40 dark:hover:bg-void-800/80";
+export const PANEL_CLASS = "relative overflow-hidden rounded-[var(--stats-panel-radius)] border border-[var(--stats-card-border)] bg-[var(--stats-panel-bg)] p-6 shadow-[var(--stats-card-shadow)] backdrop-blur-sm";
+export const SUBPANEL_CLASS = "rounded-[var(--stats-subpanel-radius)] border border-[var(--stats-card-border)] bg-[var(--stats-subpanel-bg)] p-4 shadow-[var(--stats-card-shadow)] backdrop-blur-sm";
+export const CHIP_CLASS = "rounded-[var(--stats-chip-radius)] border border-[var(--stats-card-border)] bg-[var(--stats-chip-bg)] shadow-[var(--stats-card-shadow)] backdrop-blur-sm";
+export const INPUT_CLASS = "h-11 rounded-2xl border border-[var(--stats-card-border)] bg-[var(--stats-input-bg)] px-4 text-sm text-[var(--stats-value-color)] outline-none transition-colors placeholder:text-[var(--stats-detail-color)] focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)]";
+export const LEDGER_ROW_CLASS = "group rounded-[1.5rem] border border-[var(--stats-card-border)] bg-[var(--stats-subpanel-bg)] p-4 shadow-[var(--stats-card-shadow)] backdrop-blur-sm transition-colors duration-200 hover:bg-[var(--stats-row-hover-bg)]";
+export const LEDGER_ROW_MODERN_CLASS = "group relative overflow-hidden rounded-[1.5rem] border border-[var(--stats-card-border)] bg-[var(--stats-subpanel-bg)] p-6 shadow-[var(--stats-card-shadow)] backdrop-blur-sm transition-colors duration-200 hover:bg-[var(--stats-row-hover-bg)]";
 
 export const CHART_SERIES: ChartSeriesDefinition[] = [
   {
@@ -159,7 +159,7 @@ export const RangeToggle: FunctionComponent<{
       <button
         type="button"
         onClick={onApplyCustom}
-        className="inline-flex h-11 items-center justify-center rounded-2xl bg-white/78 px-4 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-700 shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-transform hover:-translate-y-0.5 dark:bg-white dark:text-void-900"
+        className="inline-flex h-11 items-center justify-center rounded-2xl border border-[var(--stats-card-border)] bg-[var(--stats-chip-bg)] px-4 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--stats-value-color)] shadow-[var(--stats-card-shadow)] transition-colors hover:bg-[color:var(--fill-muted-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)]"
       >
         Apply
       </button>
@@ -226,7 +226,7 @@ export const SignalMetricCard: FunctionComponent<{
     accent={accentHex === "#00E0A0" ? "signal" : accentHex === "#FFB800" ? "amber" : "cyan"}
   >
     <Sparkline points={sparkline} color={accentHex} />
-    <div className="mt-4 flex flex-col gap-1 border-t border-black/[0.06] pt-4 dark:border-white/[0.06]">
+    <div className="mt-4 flex flex-col gap-1 border-t border-[var(--stats-divider)] pt-4">
       <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
         {detail}
       </div>
@@ -240,7 +240,7 @@ export const TokenChip: FunctionComponent<{
   value: number | string;
   tone: string;
 }> = ({ icon: Icon, label, value, tone }) => (
-  <div className={`group relative inline-flex items-center gap-2 overflow-hidden rounded-[14px] border px-3 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_2px_8px_rgba(0,0,0,0.04)] backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.8),0_4px_12px_rgba(0,0,0,0.08)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_4px_12px_rgba(0,0,0,0.2)] ${tone}`}>
+  <div className={`group relative inline-flex items-center gap-2 overflow-hidden rounded-[14px] border px-3 py-1.5 shadow-[var(--stats-card-shadow)] backdrop-blur-sm transition-colors duration-200 hover:bg-[var(--stats-row-hover-bg)] ${tone}`}>
     <div className="relative flex items-center gap-1.5 opacity-80 transition-opacity group-hover:opacity-100">
       <Icon className="h-3.5 w-3.5" strokeWidth={2.5} />
       <span className="text-[10px] font-bold uppercase tracking-[0.16em]">{label}</span>
@@ -317,7 +317,7 @@ export const SeriesLegendButton: FunctionComponent<{
     className={`rounded-[1.25rem] border px-4 py-3 text-left transition-all ${
       active
         ? `${SUBPANEL_CLASS} border-signal-500/18`
-        : "rounded-[1.25rem] border border-black/[0.05] bg-white/60 px-4 py-3 text-left opacity-72 backdrop-blur-xl hover:opacity-100 dark:border-white/[0.05] dark:bg-void-900/30"
+        : "rounded-[1.25rem] border border-[var(--stats-card-border)] bg-[var(--stats-subpanel-bg)] px-4 py-3 text-left opacity-72 backdrop-blur-sm hover:bg-[var(--stats-row-hover-bg)] hover:opacity-100"
     } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
   >
     <div className="flex items-center gap-3">
@@ -380,7 +380,7 @@ export const DonutCard: FunctionComponent<{
 
   return (
     <div ref={cardRef} className={`${PANEL_CLASS} h-full p-6`}>
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.08] to-transparent dark:via-white/[0.14]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[var(--stats-divider)]" />
       <div className="relative flex h-full flex-col gap-6">
         <div>
           <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">{eyebrow}</div>
@@ -432,7 +432,7 @@ export const DonutCard: FunctionComponent<{
                   );
                 })}
               </svg>
-              <div className="pointer-events-none absolute inset-[24%] rounded-full border border-black/[0.05] bg-white/88 shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/88 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_12px_28px_rgba(0,0,0,0.28)]" />
+              <div className="pointer-events-none absolute inset-[24%] rounded-full border border-[var(--stats-card-border)] bg-[var(--stats-panel-bg)] shadow-[var(--stats-card-shadow)] backdrop-blur-sm" />
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                 <div className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">
                   {activeSegment ? formatTokens(activeSegment.value) : centerValue}
@@ -448,7 +448,7 @@ export const DonutCard: FunctionComponent<{
           </div>
           <div className="space-y-3">
             {segments.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-8 text-center text-sm text-slate-400 dark:border-white/[0.08]">
+              <div className="rounded-2xl border border-dashed border-[var(--stats-card-border)] bg-[var(--stats-subpanel-bg)] px-4 py-8 text-center text-sm text-[var(--stats-detail-color)]">
                 No telemetry landed in this composition yet.
               </div>
             ) : slices.map((segment, index) => {
@@ -511,8 +511,8 @@ export const PurposeRibbon: FunctionComponent<{
           accent={config.accent}
         >
           <div className="mt-4 flex flex-wrap gap-2">
-            <TokenChip icon={ArrowDownRight} label="In" value={purpose.usage.inputTokens} tone="border-black/[0.06] bg-white/72 text-slate-600 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300" />
-            <TokenChip icon={ArrowUpRight} label="Out" value={purpose.usage.outputTokens} tone="border-black/[0.06] bg-white/72 text-slate-600 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300" />
+            <TokenChip icon={ArrowDownRight} label="In" value={purpose.usage.inputTokens} tone="border-[var(--stats-card-border)] bg-[var(--stats-chip-bg)] text-[var(--stats-detail-color)]" />
+            <TokenChip icon={ArrowUpRight} label="Out" value={purpose.usage.outputTokens} tone="border-[var(--stats-card-border)] bg-[var(--stats-chip-bg)] text-[var(--stats-detail-color)]" />
           </div>
         </StatsCard>
       );
@@ -527,7 +527,7 @@ export const StudioHeader: FunctionComponent<{
   description: string;
 }> = ({ icon: Icon, eyebrow, title, description }) => (
   <div className="max-w-3xl">
-    <div className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/72 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300">
+    <div className={`inline-flex items-center gap-2 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-detail-color)] ${CHIP_CLASS}`}>
       <Icon className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.2} />
       {eyebrow}
     </div>

@@ -22,14 +22,14 @@ const HeroKpi: FunctionComponent<{
   label: string;
   value: string;
   valueClassName?: string;
-}> = ({ icon: Icon, label, value, valueClassName = "text-slate-900 dark:text-white" }) => (
-  <div className="flex items-center gap-3 rounded-2xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] px-4 py-3 backdrop-blur-xl">
-    <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-signal-500/10 text-signal-600 dark:text-signal-400">
+}> = ({ icon: Icon, label, value, valueClassName = "text-[var(--stats-value-color)]" }) => (
+  <div className="flex items-center gap-3 rounded-2xl border border-[var(--stats-card-border)] bg-[var(--stats-subpanel-bg)] px-4 py-3 shadow-[var(--stats-card-shadow)] backdrop-blur-sm">
+    <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--stats-card-border)] bg-[var(--stats-chip-bg)] text-signal-600 dark:text-signal-400">
       <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
     </div>
     <div className="min-w-0">
       <div className={`truncate text-base font-black leading-tight ${valueClassName}`}>{value}</div>
-      <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">{label}</div>
+      <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">{label}</div>
     </div>
   </div>
 );
@@ -101,7 +101,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
     ? stats.statusCounts.completed + stats.statusCounts.failed + stats.statusCounts.cancelled
     : 0;
 
-  let successRateColor = "text-slate-900 dark:text-white";
+  let successRateColor = "text-[var(--stats-value-color)]";
   let successRateString = "—";
   if (stats?.statusCounts && finishedCount > 0) {
     const rate = Math.round((stats.statusCounts.completed / finishedCount) * 100);
@@ -126,23 +126,23 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
             subtitle={MODE_DESCRIPTIONS[visualMode]}
           />
           <div className="mt-6 flex flex-wrap gap-3">
-            <div className={`px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+            <div className={`px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] ${CHIP_CLASS}`}>
               {selectedProject?.name || "No project selected"}
             </div>
-            <div className={`px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+            <div className={`px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] ${CHIP_CLASS}`}>
               {stats?.activeSprint ? `Live sprint ${stats.activeSprint.sprintNumber ?? "?"}` : "Historical lens"}
             </div>
-            <div className={`px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+            <div className={`px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] ${CHIP_CLASS}`}>
               Generated {stats ? formatDateTime(stats.generatedAt) : "--"}
             </div>
             {stats ? (
-              <div className={`px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+              <div className={`px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] ${CHIP_CLASS}`}>
                 {stats.range.resolutionLabel}
               </div>
             ) : null}
           </div>
           {stats?.generatedAt ? (
-            <div className="mt-3 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+            <div className="mt-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-label-color)]">
               Updated {getRelativeTime(stats.generatedAt)}
             </div>
           ) : null}
@@ -174,7 +174,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                   className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.2em] transition-all border border-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] ${
                     isActive
                       ? "bg-amber-500/15 border-amber-500/30 text-amber-700 dark:text-amber-300"
-                      : "text-slate-500 hover:bg-[color:var(--fill-muted)] hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                      : "text-[var(--stats-detail-color)] hover:bg-[color:var(--fill-muted)] hover:text-[var(--stats-value-color)]"
                   }`}
                 >
                   {window === "all" ? "All time" : window}
@@ -214,7 +214,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                   onClick={handleApplyCustom}
                   disabled={!customFrom || !customTo}
                   aria-disabled={!customFrom || !customTo ? "true" : undefined}
-                  className="inline-flex h-10 items-center justify-center rounded-2xl bg-slate-900 px-4 text-[11px] font-bold uppercase tracking-[0.2em] text-white shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-transform hover:-translate-y-0.5 dark:bg-white dark:text-void-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="inline-flex h-10 items-center justify-center rounded-2xl border border-[var(--stats-card-border)] bg-[var(--stats-chip-bg)] px-4 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--stats-value-color)] shadow-[var(--stats-card-shadow)] transition-colors hover:bg-[color:var(--fill-muted-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Apply
                 </button>

@@ -3,11 +3,23 @@
     /* Layout Tokens */
     --stats-card-radius: 1.5rem;
     --stats-card-padding: 1.5rem;
+    --stats-panel-radius: 1.9rem;
+    --stats-subpanel-radius: 1.45rem;
+    --stats-chip-radius: 999px;
     
     /* Surface Tokens (Light Mode) */
-    --stats-card-bg: var(--surface-glass);
+    --stats-panel-bg: var(--surface-glass);
+    --stats-subpanel-bg: color-mix(in srgb, var(--surface-glass) 86%, transparent);
+    --stats-chip-bg: color-mix(in srgb, var(--surface-glass) 88%, transparent);
+    --stats-input-bg: color-mix(in srgb, var(--surface-glass) 92%, transparent);
+    --stats-card-bg: var(--stats-panel-bg);
     --stats-card-border: var(--border-hairline);
     --stats-card-shadow: var(--elevation-base);
+    --stats-floating-shadow: var(--elevation-floating);
+    --stats-row-hover-bg: var(--fill-muted-hover);
+    --stats-divider: var(--border-hairline);
+    --stats-grid-line: color-mix(in srgb, var(--text-metadata) 18%, transparent);
+    --stats-muted-track: color-mix(in srgb, var(--text-metadata) 14%, transparent);
     
     /* Accent Tokens */
     --stats-accent-signal: #00E0A0;
@@ -18,8 +30,9 @@
     
     /* Typography Tokens */
     --stats-label-color: var(--text-metadata);
-    --stats-value-color: #0F172A; /* slate-900 */
+    --stats-value-color: var(--text-primary);
     --stats-detail-color: var(--text-metadata);
+    --stats-meta-color: var(--text-metadata);
     
     /* Motion Tokens */
     --stats-motion-standard: 300ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -28,13 +41,22 @@
 
   .dark {
     /* Surface Tokens (Dark Mode) */
-    --stats-card-bg: var(--surface-glass);
+    --stats-panel-bg: var(--surface-glass);
+    --stats-subpanel-bg: color-mix(in srgb, var(--surface-glass) 88%, transparent);
+    --stats-chip-bg: color-mix(in srgb, var(--surface-glass) 90%, transparent);
+    --stats-input-bg: color-mix(in srgb, var(--surface-glass) 92%, transparent);
+    --stats-card-bg: var(--stats-panel-bg);
     --stats-card-border: var(--border-hairline);
     --stats-card-shadow: var(--elevation-base);
+    --stats-floating-shadow: var(--elevation-floating);
+    --stats-row-hover-bg: var(--fill-muted-hover);
+    --stats-divider: var(--border-hairline);
+    --stats-grid-line: color-mix(in srgb, var(--text-metadata) 22%, transparent);
+    --stats-muted-track: color-mix(in srgb, var(--text-metadata) 16%, transparent);
     
     /* Typography Tokens (Dark Mode) */
     --stats-label-color: var(--text-metadata);
-    --stats-value-color: #FFFFFF;
+    --stats-value-color: var(--text-primary);
     --stats-detail-color: var(--text-metadata);
   }
 }
