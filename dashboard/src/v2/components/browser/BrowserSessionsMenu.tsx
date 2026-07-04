@@ -123,11 +123,11 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
         return session.containerAppPort ? `:${session.containerAppPort} ➔ pending` : "port pending";
     };
 
-    const statusTone: Record<SprintPreviewSession["status"], string> = {
-        starting: "border-ember-500/25 bg-ember-500/10 text-ember-600 dark:text-ember-400",
-        running: "border-signal-500/25 bg-signal-500/10 text-signal-600 dark:text-signal-400",
-        stopped: "border-slate-400/25 bg-slate-500/10 text-slate-600 dark:border-slate-500/35 dark:text-slate-300",
-        error: "border-status-red/25 bg-status-red/10 text-status-red",
+    const statusColors: Record<SprintPreviewSession["status"], string> = {
+        starting: "bg-ember-500",
+        running: "bg-signal-500",
+        stopped: "bg-slate-500",
+        error: "bg-status-red",
     };
 
     if (!enabled) {
@@ -152,16 +152,13 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                 aria-expanded={isMenuVisible}
                 aria-controls={isMenuVisible ? menuId : undefined}
                 aria-label={`Browser Sessions: ${sessions.length} active`}
-                className={`relative flex h-11 w-11 items-center justify-center rounded-xl transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 ${
+                className={`relative w-11 h-11 flex items-center justify-center rounded-xl transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 ${
                     isMenuVisible
-                    ? "bg-signal-500/10 text-signal-600 dark:bg-signal-400/10 dark:text-signal-300"
+                    ? "bg-signal-500/8 dark:bg-signal-400/10"
                     : "hover:bg-black/[0.05] dark:hover:bg-white/[0.05]"
                 }`}
             >
                 <Compass aria-hidden="true" className={"w-4 h-4 transition-colors " + (isMenuVisible ? "text-signal-600 dark:text-signal-300" : "text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white")} strokeWidth={1.5} />
-                {sessions.length > 0 && (
-                    <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-signal-500 shadow-[0_0_10px_rgba(0,224,160,0.5)]" aria-hidden="true" />
-                )}
             </button>
 
             {isMenuVisible && (
@@ -169,23 +166,23 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                     role="menu"
                     id={menuId}
                     aria-label="Active Browser Sessions"
-                    className="fixed inset-x-4 top-[72px] z-50 mt-2 flex max-h-[calc(100dvh-5rem)] w-auto max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-black/[0.06] bg-white/95 shadow-[0_20px_40px_rgba(0,0,0,0.12)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/95 dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] md:inset-auto md:absolute md:right-0 md:top-full md:w-80"
+                    className="fixed inset-x-4 top-[72px] md:inset-auto md:absolute md:top-full md:right-0 mt-2 w-72 max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-5rem)] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50 flex flex-col"
                 >
-                    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-black/[0.06] bg-black/[0.02] px-3 py-2 dark:border-white/[0.06] dark:bg-white/[0.02]">
+                    <div className="px-3 py-2 flex justify-between items-center shrink-0 border-b border-black/[0.06] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02]">
                         <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Active Sessions</span>
                         <Link
                             to="/browser"
                             onClick={() => setInteractionState('closed')}
-                            className="rounded-md px-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 hover:text-signal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:text-signal-500 dark:hover:text-signal-400"
+                            className="text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 hover:text-signal-700 dark:text-signal-500 dark:hover:text-signal-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-md px-1"
                         >
                             Open App
                         </Link>
                     </div>
-                    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-1" onKeyDown={handleMenuKeyDown as any}>
+                    <div className="flex-1 min-h-0 overflow-y-auto pb-1 flex flex-col" onKeyDown={handleMenuKeyDown as any}>
                         {loading ? (
-                            <div className="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center" aria-busy={loading}>
-                                <Loader2 className="h-5 w-5 animate-spin text-signal-500" />
-                                <p className="text-xs font-medium text-slate-500">Discovering active sessions...</p>
+                            <div className="px-4 py-8 text-center flex flex-col items-center justify-center gap-3" aria-busy={loading}>
+                                <Loader2 className="w-5 h-5 text-signal-500 animate-spin" />
+                                <p className="text-xs text-slate-500 font-medium">Discovering active sessions...</p>
                             </div>
                         ) : sessions.length > 0 ? (
                             sessions.map((session, index) => (
@@ -196,31 +193,32 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                     rel="noopener noreferrer"
                                     role="menuitem"
                                     tabIndex={index === 0 ? 0 : -1}
-                                    className="group flex w-full min-w-0 flex-col gap-2 border-b border-black/[0.04] px-3 py-3 text-left transition-colors last:border-0 hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.04] dark:hover:bg-white/[0.04]"
+                                    className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex flex-col gap-1.5 px-3 py-3 text-left transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.04] group border-b border-black/[0.04] dark:border-white/[0.04] last:border-0"
                                 >
-                                    <div className="flex min-w-0 items-start justify-between gap-2">
-                                        <div className="flex min-w-0 flex-col gap-1.5">
-                                            <div className={`flex w-fit shrink-0 items-center gap-1.5 rounded-md border px-1.5 py-0.5 ${statusTone[session.status]}`}>
-                                                {session.status === 'starting' ? <Loader2 className="h-3 w-3 animate-spin" /> : session.status === 'running' ? <Play className="h-3 w-3" fill="currentColor" /> : session.status === 'error' ? <AlertCircle className="h-3 w-3" /> : <Square className="h-3 w-3" fill="currentColor" />}
-                                                <span className="text-[9px] font-bold uppercase tracking-[0.1em]">{session.status}</span>
+                                    <div className="flex flex-wrap items-center justify-between min-w-0 w-full gap-2">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <div className="flex items-center gap-1.5 shrink-0 bg-black/[0.04] dark:bg-white/[0.04] px-1.5 py-0.5 rounded-md">
+                                                <div className={`w-1.5 h-1.5 rounded-full ${statusColors[session.status] || "bg-slate-400"} hidden`} />
+                                                {session.status === 'starting' ? <Loader2 className="w-3 h-3 animate-spin text-ember-500" /> : session.status === 'running' ? <Play className="w-3 h-3 text-signal-500" fill="currentColor" /> : session.status === 'error' ? <AlertCircle className="w-3 h-3 text-status-red" /> : <Square className="w-3 h-3 text-slate-500" fill="currentColor" />}
+                                                <span className="text-[9px] font-bold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">{session.status}</span>
                                             </div>
-                                            <span className="min-w-0 break-words text-sm font-semibold leading-5 text-slate-700 transition-colors line-clamp-2 group-hover:text-slate-900 dark:text-slate-200 dark:group-hover:text-white">
+                                            <span className="text-sm font-semibold truncate text-slate-700 dark:text-slate-200 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">
                                                 {session.sprintName || "Unknown Sprint"}
                                             </span>
                                         </div>
-                                        <ExternalLink aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-slate-400 transition-colors group-hover:text-signal-500" />
+                                        <ExternalLink aria-hidden="true" className="w-3.5 h-3.5 shrink-0 text-slate-400 group-hover:text-signal-500 transition-colors" />
                                     </div>
-                                    <div className="flex min-w-0 items-center pl-1">
-                                        <span className="break-all font-mono text-[10px] text-slate-500 dark:text-slate-400">
+                                    <div className="flex items-center pl-1 min-w-0">
+                                        <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 truncate">
                                             {formatPort(session)}
                                         </span>
                                     </div>
                                 </a>
                             ))
                         ) : !selectedProject ? (
-                            <div className="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400 dark:bg-void-700">
-                                    <FolderArchive className="h-5 w-5" />
+                            <div className="px-4 py-8 text-center flex flex-col items-center justify-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-void-700 flex items-center justify-center text-slate-400">
+                                    <FolderArchive className="w-5 h-5" />
                                 </div>
                                 <div>
                                     <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">No project selected</p>
@@ -228,9 +226,9 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                 </div>
                             </div>
                         ) : (
-                            <div className="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400 dark:bg-void-700">
-                                    <ServerOff className="h-5 w-5" />
+                            <div className="px-4 py-8 text-center flex flex-col items-center justify-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-void-700 flex items-center justify-center text-slate-400">
+                                    <ServerOff className="w-5 h-5" />
                                 </div>
                                 <div>
                                     <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">No active sessions</p>

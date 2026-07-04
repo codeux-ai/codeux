@@ -308,13 +308,6 @@ export const GuidedDashboardTour: FunctionComponent = () => {
   }, [activeIndex]);
 
   useEffect(() => {
-    if (!open || !targetReady) {
-      return;
-    }
-    cardRef.current?.focus();
-  }, [open, activeIndex, targetReady]);
-
-  useEffect(() => {
     if (!open || paused || reducedMotion || availableSteps.length <= 1) {
       return;
     }
@@ -447,12 +440,11 @@ export const GuidedDashboardTour: FunctionComponent = () => {
       <div
         ref={cardRef}
         role="dialog"
-        tabIndex={-1}
         aria-live="polite"
         aria-label={`${activeStep.title} guided tour step`}
         onMouseEnter={() => setPaused(true)}
         onMouseLeave={() => setPaused(false)}
-        className="dashboard-scrollbar pointer-events-auto absolute max-h-[min(82vh,430px)] overflow-y-auto rounded-[1.75rem] border border-white/12 bg-void-950/90 p-5 text-white shadow-[0_34px_90px_rgba(0,0,0,0.46)] outline-none backdrop-blur-2xl focus-visible:ring-2 focus-visible:ring-signal-500/60"
+        className="pointer-events-auto absolute overflow-hidden rounded-[1.75rem] border border-white/12 bg-void-950/88 p-5 text-white shadow-[0_34px_90px_rgba(0,0,0,0.46)] backdrop-blur-2xl"
         style={{
           left: `${geometry.card.left}px`,
           top: `${geometry.card.top}px`,

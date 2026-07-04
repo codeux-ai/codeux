@@ -69,7 +69,7 @@ const StatTile: FunctionComponent<{
   accent?: boolean;
   rawIcon?: boolean;
 }> = ({ label, value, iconNode, accent, rawIcon }) => (
-  <div className="flex items-center gap-3 rounded-2xl border border-black/[0.05] bg-white/42 p-3.5 shadow-[0_2px_14px_rgba(0,0,0,0.025)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-white/[0.025]">
+  <div className="flex items-center gap-3 rounded-2xl border border-black/[0.05] bg-white/40 p-3.5 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02]">
     {rawIcon ? (
       <span className="shrink-0">{iconNode}</span>
     ) : (
@@ -127,11 +127,11 @@ const AgentKnowledgeSummary: FunctionComponent<{ preset: AgentPreset }> = ({ pre
 const SectionHeader: FunctionComponent<{
   icon: typeof FileText;
   title: string;
-  tone?: "signal" | "slate";
+  tone?: "signal" | "violet";
   action?: preact.ComponentChildren;
 }> = ({ icon: Icon, title, tone = "signal", action }) => {
-  const toneCls = tone === "slate"
-    ? "text-slate-500 dark:text-slate-400"
+  const toneCls = tone === "violet"
+    ? "text-violet-600 dark:text-violet-400"
     : "text-signal-600 dark:text-signal-500";
   return (
     <div className="flex items-center justify-between gap-3">
@@ -193,11 +193,10 @@ export const AgentPresetDetailPanel: FunctionComponent<{
   return (
     <div
       ref={panelRef}
-      className="group relative flex flex-col overflow-hidden rounded-[1.9rem] border border-black/[0.06] bg-white/68 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/58 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]"
+      className="group relative flex flex-col overflow-hidden rounded-[1.9rem] border border-black/[0.06] bg-white/70 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]"
     >
       <WaveFluid accentHex={accentHex} />
       <BorderTrace accentHex={accentHex} />
-      <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/80 to-transparent dark:via-white/10" />
 
       <div className="relative z-10 flex flex-col gap-6 p-6 md:p-8">
         {/* ── Profile hero: portrait + identity ── */}
@@ -216,7 +215,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
 
           {/* Identity */}
           <div className="flex min-w-0 flex-1 flex-col gap-4">
-            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="flex items-start justify-between gap-4">
               <div className="flex min-w-0 flex-col gap-2.5">
                 <span className="inline-flex w-fit items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">
                   <span className="relative flex h-1.5 w-1.5">
@@ -237,7 +236,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
               <button
                 type="button"
                 onClick={onEdit}
-                className="inline-flex w-fit shrink-0 items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-sm font-bold text-slate-900 shadow-lg shadow-signal-500/15 transition-all hover:scale-[1.03] hover:bg-signal-400 hover:shadow-signal-500/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-void-900"
+                className="inline-flex shrink-0 items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-sm font-bold text-slate-900 shadow-lg shadow-signal-500/15 transition-all hover:scale-[1.03] hover:bg-signal-400 hover:shadow-signal-500/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-void-900"
               >
                 <Edit2 className="h-4 w-4" strokeWidth={2.5} />
                 Edit
@@ -382,22 +381,22 @@ export const AgentPresetDetailPanel: FunctionComponent<{
             <SectionHeader
               icon={BrainCircuit}
               title="Memory Template Override"
-              tone="slate"
+              tone="violet"
               action={(
-                <span className="inline-flex items-center gap-1 rounded-md border border-black/[0.06] bg-white/60 px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400">
+                <span className="inline-flex items-center gap-1 rounded-md border border-violet-500/20 bg-violet-500/[0.06] px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-violet-600 dark:text-violet-400">
                   ~{formatTokenCount(memoryTokens)} tok
                 </span>
               )}
             />
             <div
-              className={`rounded-2xl border border-black/[0.05] bg-white/40 p-5 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02] ${MARKDOWN_PROSE_CLASS}`}
+              className={`rounded-2xl border border-violet-500/15 bg-violet-500/[0.04] p-5 backdrop-blur-md dark:border-violet-500/15 dark:bg-violet-500/[0.06] ${MARKDOWN_PROSE_CLASS}`}
               dangerouslySetInnerHTML={{ __html: renderMarkdown(memoryExpanded ? preset.memoryTemplateMarkdown : memoryView.excerpt) }}
             />
             {memoryView.truncated && (
               <button
                 type="button"
                 onClick={() => setMemoryExpanded((v) => !v)}
-                className="inline-flex w-fit items-center gap-1.5 rounded-full border border-black/[0.06] bg-white/60 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 backdrop-blur-md transition-colors hover:bg-white hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
+                className="inline-flex w-fit items-center gap-1.5 rounded-full border border-violet-500/15 bg-violet-500/[0.06] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-violet-600 transition-colors hover:bg-violet-500/[0.12] dark:text-violet-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/30"
                 aria-expanded={memoryExpanded}
               >
                 {memoryExpanded ? (

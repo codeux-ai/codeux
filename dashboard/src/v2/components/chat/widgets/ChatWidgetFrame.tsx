@@ -31,7 +31,7 @@ export const ChatWidgetFrame: FunctionComponent<ChatWidgetFrameProps> = ({
   };
 
   const getContainerStyles = (): string => {
-    const base = "relative rounded-[1.15rem] bg-white/62 dark:bg-white/[0.035] backdrop-blur-xl border shadow-[0_10px_26px_rgba(15,23,42,0.045)] dark:shadow-[0_12px_34px_rgba(0,0,0,0.18)] transition-all duration-300";
+    const base = "relative rounded-2xl bg-slate-50/50 dark:bg-white/[0.02] backdrop-blur-xl border transition-all duration-300";
 
     if (status === "queued") {
       return `${base} border-dashed border-black/[0.08] dark:border-white/[0.08]`;
@@ -51,11 +51,11 @@ export const ChatWidgetFrame: FunctionComponent<ChatWidgetFrameProps> = ({
       aria-label={`Widget: ${status}`}
     >
       {header && (
-        <div class="min-w-0 px-4 py-2.5 border-b border-black/[0.04] dark:border-white/[0.04] flex items-center justify-between gap-3 text-[12px] font-medium text-slate-700 dark:text-slate-300">
+        <div class="px-4 py-2.5 border-b border-black/[0.04] dark:border-white/[0.04] flex items-center justify-between text-[12px] font-medium text-slate-700 dark:text-slate-300">
           {header}
         </div>
       )}
-      <div class="px-4 py-3 text-sm text-slate-700 dark:text-slate-300 min-w-0 [overflow-wrap:anywhere]">
+      <div class="px-4 py-3 text-sm text-slate-700 dark:text-slate-300 min-w-0 overflow-wrap-anywhere">
         {children}
       </div>
       {footer && (

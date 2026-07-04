@@ -5,8 +5,6 @@ import { ChevronDown, Workflow } from "lucide-preact";
 import { RuntimeEventFeed } from "./RuntimeEventFeed.js";
 import { useExecutionTimeline } from "../../hooks/ExecutionTimelineContext.js";
 import type { ExecutionSprintRunSummary } from "../../types.js";
-import { WaveFluid } from "./ui/WaveFluid.js";
-import { BorderTrace } from "./ui/BorderTrace.js";
 
 interface ExecutionTimelineProps {
   activeSprintRuns?: ExecutionSprintRunSummary[];
@@ -33,10 +31,7 @@ export const ExecutionTimeline: FunctionComponent<ExecutionTimelineProps> = memo
   }, [execution, resolvedActiveSprintRuns.length]);
 
   return (
-    <div className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/70 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]" role="region" aria-label="Runtime Timeline">
-      <WaveFluid accentHex="#00E0A0" />
-      <BorderTrace accentHex="#00E0A0" />
-
+    <div className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800" role="region" aria-label="Runtime Timeline">
       {collapsible ? (
         <button
           type="button"

@@ -100,16 +100,15 @@ export const AgentKnowledgePanel: FunctionComponent<{
 
   if (loading) {
     return (
-      <div role="status" aria-live="polite" className="flex items-center justify-center gap-2 rounded-2xl border border-black/[0.05] bg-white/35 py-8 text-[12px] font-bold uppercase tracking-[0.14em] text-slate-400 backdrop-blur-xl dark:border-white/[0.05] dark:bg-white/[0.02] dark:text-slate-500">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        Loading knowledge
+      <div className="flex items-center justify-center py-8 text-slate-400">
+        <Loader2 className="h-5 w-5 animate-spin" />
       </div>
     );
   }
 
   if (documents.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-black/[0.08] bg-white/30 px-6 py-10 text-center backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.02]">
+      <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-black/[0.08] px-6 py-10 text-center dark:border-white/[0.08]">
         <Library className="h-7 w-7 text-slate-300 dark:text-slate-600" strokeWidth={1.8} />
         <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">The knowledge library is empty.</p>
         <a href="/knowledge" className="inline-flex items-center gap-1.5 text-[12px] font-bold text-signal-600 hover:underline dark:text-signal-400">
@@ -134,7 +133,7 @@ export const AgentKnowledgePanel: FunctionComponent<{
             value={query}
             onInput={(event) => setQuery(event.currentTarget.value)}
             placeholder="Search knowledge"
-            className="w-full rounded-xl border border-black/[0.06] bg-white/55 py-2 pl-8 pr-3 text-[12px] font-medium text-slate-700 outline-none transition-colors placeholder:text-slate-400 focus:border-signal-500/40 focus:ring-4 focus:ring-signal-500/10 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:ring-signal-500/15"
+            className="w-full rounded-xl border border-black/[0.06] bg-white/50 py-2 pl-8 pr-3 text-[12px] font-medium text-slate-700 outline-none transition-colors placeholder:text-slate-400 focus:border-signal-500/40 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-200 dark:placeholder:text-slate-500"
           />
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
@@ -159,7 +158,7 @@ export const AgentKnowledgePanel: FunctionComponent<{
         </div>
       </div>
 
-      {error && <p role="alert" className="rounded-xl border border-status-red/20 bg-status-red/[0.06] px-3 py-2 text-[12px] font-medium text-status-red">{error}</p>}
+      {error && <p className="text-[12px] text-status-red">{error}</p>}
 
       <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto pr-1">
         {filteredDocuments.length === 0 ? (
@@ -175,7 +174,7 @@ export const AgentKnowledgePanel: FunctionComponent<{
               type="button"
               disabled={disabled || savingId !== null}
               onClick={() => toggle(doc.id)}
-              className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left shadow-[0_1px_10px_rgba(0,0,0,0.02)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:opacity-60 ${
+              className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors disabled:opacity-60 ${
                 isSelected
                   ? "border-signal-500/30 bg-signal-500/[0.07]"
                   : "border-black/[0.06] bg-white/40 hover:bg-white/70 dark:border-white/[0.06] dark:bg-white/[0.02] dark:hover:bg-white/[0.05]"

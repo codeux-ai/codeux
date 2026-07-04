@@ -147,8 +147,7 @@ const SectionCard: FunctionComponent<{
   className?: string;
   children: preact.ComponentChildren;
 }> = ({ icon: Icon, eyebrow, title, action, className = "", children }) => (
-  <section className={`relative flex flex-col gap-5 overflow-hidden rounded-[1.6rem] border border-black/[0.05] bg-white/42 p-6 shadow-[0_2px_18px_rgba(0,0,0,0.025)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-white/[0.025] ${className}`}>
-    <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-white/80 to-transparent dark:via-white/10" />
+  <section className={`relative flex flex-col gap-5 rounded-[1.6rem] border border-black/[0.05] bg-white/40 p-6 backdrop-blur-xl dark:border-white/[0.05] dark:bg-white/[0.025] ${className}`}>
     <header className="flex items-start justify-between gap-3 border-b border-black/[0.04] pb-4 dark:border-white/[0.04]">
       <div className="flex items-center gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-signal-500/10 text-signal-600 ring-1 ring-inset ring-signal-500/15 dark:bg-signal-500/15 dark:text-signal-400">
@@ -420,13 +419,12 @@ export const AgentPresetEditorPanel: FunctionComponent<{
         onSubmit={handleSubmit}
         noValidate
         aria-label={`Edit ${preset.name}`}
-        className="relative flex flex-col overflow-hidden rounded-[1.9rem] border border-black/[0.06] bg-white/68 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/58 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]"
+        className="relative flex flex-col overflow-hidden rounded-[1.9rem] border border-black/[0.06] bg-white/70 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]"
       >
         <BorderTrace accentHex={accentHex} />
-        <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/80 to-transparent dark:via-white/10" />
 
         {/* ── Sticky header ── */}
-        <div className="sticky top-0 z-20 flex flex-col gap-4 border-b border-black/[0.05] bg-white/78 px-6 py-5 backdrop-blur-2xl md:flex-row md:items-center md:justify-between md:px-8 md:py-6 dark:border-white/[0.05] dark:bg-void-800/72">
+        <div className="sticky top-0 z-20 flex flex-col gap-4 border-b border-black/[0.05] bg-white/75 px-6 py-5 backdrop-blur-2xl md:flex-row md:items-center md:justify-between md:px-8 md:py-6 dark:border-white/[0.05] dark:bg-void-800/70">
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
             <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">
               <Sparkles className="h-3 w-3" strokeWidth={2.4} />
@@ -609,9 +607,9 @@ export const AgentPresetEditorPanel: FunctionComponent<{
               </FieldShell>
 
               {/* Memory override */}
-              <div className="flex flex-col gap-4 rounded-2xl border border-black/[0.05] bg-white/35 p-5 shadow-[0_2px_14px_rgba(0,0,0,0.025)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-white/[0.02]">
+              <div className="flex flex-col gap-4 rounded-2xl border border-black/[0.05] bg-white/30 p-5 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02]">
                 <div className="flex items-start gap-4">
-                  <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-signal-500/10 text-signal-600 dark:bg-signal-500/15 dark:text-signal-400">
+                  <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400">
                     <BrainCircuit className="h-4 w-4" strokeWidth={2.2} />
                   </span>
                   <div className="flex-1">
@@ -772,7 +770,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
           {/* Row 3 — routing + connected tools */}
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             <SectionCard icon={Route} eyebrow="Routing" title="Provider & Model">
-              <div className="rounded-2xl border border-black/[0.05] bg-white/35 p-5 shadow-[0_2px_14px_rgba(0,0,0,0.025)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-white/[0.02]">
+              <div className="rounded-2xl border border-black/[0.05] bg-white/30 p-5 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02]">
                 <div className="flex items-start gap-4">
                   <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-black/[0.04] text-slate-500 dark:bg-white/[0.04] dark:text-slate-300">
                     <Route className="h-4 w-4" strokeWidth={2.2} />
@@ -838,7 +836,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
               </div>
             </SectionCard>
             <SectionCard icon={Plug} eyebrow="Tools" title="Connected MCPs">
-              <div className="rounded-2xl border border-black/[0.05] bg-white/35 p-5 shadow-[0_2px_14px_rgba(0,0,0,0.025)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-white/[0.02]">
+              <div className="rounded-2xl border border-black/[0.05] bg-white/30 p-5 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02]">
                 <div className="flex items-start gap-4">
                   <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-black/[0.04] text-slate-500 dark:bg-white/[0.04] dark:text-slate-300">
                     <Plug className="h-4 w-4" strokeWidth={2.2} />

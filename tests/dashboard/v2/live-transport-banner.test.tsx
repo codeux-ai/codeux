@@ -50,6 +50,7 @@ describe("LiveTransportBanner", () => {
     );
     expect(screen.getByText("Connection Error")).toBeInTheDocument();
     expect(screen.getByText("Unable to connect to Orchestrator API")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveAttribute("aria-live", "assertive");
   });
 
   it("renders Reconnecting when transportState is reconnecting", () => {
@@ -62,6 +63,7 @@ describe("LiveTransportBanner", () => {
       />
     );
     expect(screen.getByText("Reconnecting")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
   });
 
   it("renders nothing while recovering (transient state must not flash/shift layout)", () => {

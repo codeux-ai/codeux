@@ -88,7 +88,7 @@ export const InvocationListCard: FunctionComponent<{
   };
 
   return (
-  <div className="space-y-2.5">
+  <div className="space-y-3">
     {/* List toolbar — toggle the per-card stat tables on/off */}
     <div className="flex items-center justify-end px-1">
       <button
@@ -163,7 +163,7 @@ export const InvocationListCard: FunctionComponent<{
       const stretchLast = cells.length % 2 === 1 && !cells[lastIndex].full;
 
       return (
-        <div key={invocation.id} className="group relative overflow-hidden rounded-[1.25rem]">
+        <div key={invocation.id} className="group relative overflow-hidden rounded-3xl">
           {/* Rendered as a clickable div (not a button) so the sprint/task links
               below can be real anchors without nesting interactive elements. */}
           <div
@@ -182,18 +182,14 @@ export const InvocationListCard: FunctionComponent<{
               transitionDuration: interactionTokens.controlFeedback.duration,
               transitionTimingFunction: interactionTokens.controlFeedback.ease,
             }}
-            className={`w-full cursor-pointer rounded-[1.25rem] border p-4 text-left
-              bg-white/64 dark:bg-white/[0.035] backdrop-blur-2xl
-              shadow-[0_10px_28px_rgba(15,23,42,0.045)] dark:shadow-[0_12px_34px_rgba(0,0,0,0.18)]
+            className={`w-full cursor-pointer rounded-[1.5rem] p-4 text-left
+              bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl
+              shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]
               ${isOptimistic ? "opacity-70" : ""}
               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500
               ${isSelected
-                ? "border-signal-500/55 bg-signal-500/[0.065] shadow-[0_14px_34px_rgba(0,224,160,0.10)] border-l-[3px] border-l-signal-500"
-                : invocation.status === "failed"
-                  ? "border-status-red/26 bg-status-red/[0.035] border-l-[3px] border-l-status-red"
-                  : isRunning || isOptimistic
-                    ? "border-signal-500/24 bg-signal-500/[0.045] border-l-[3px] border-l-signal-500"
-                    : "border-black/[0.06] dark:border-white/[0.06] border-l-[3px] border-l-transparent hover:border-slate-300 dark:hover:border-white/[0.14]"
+                ? "bg-signal-500/[0.05] border border-black/[0.06] dark:border-white/[0.06] border-l-[3px] border-l-signal-500"
+                : "bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] border-l-[3px] border-l-transparent hover:border-slate-300 dark:hover:border-white/[0.12]"
               }`}
           >
             <WaveFluid accentHex={accentHex} isActive={isRunning} />
@@ -201,7 +197,7 @@ export const InvocationListCard: FunctionComponent<{
 
             <div className="relative z-10">
               {/* Header: icon + purpose/model, plus relative time */}
-              <div className="flex min-w-0 items-start gap-3">
+              <div className="flex items-start gap-3">
                 <div
                   className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
                   style={{ backgroundColor: `${accentHex}14` }}
@@ -217,16 +213,16 @@ export const InvocationListCard: FunctionComponent<{
                   <h3 className="truncate font-display text-[15px] font-bold leading-tight tracking-tight text-slate-900 dark:text-white">
                     {formatInvocationPurpose(invocation.type)}
                   </h3>
-                  <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                  <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
                     {isOptimistic && <Loader2 className="h-3 w-3 animate-spin" />}
-                    <span className="min-w-0 truncate font-medium">
+                    <span className="truncate font-medium">
                       {invocation.provider || "—"}
                       {invocation.model ? <span className="text-slate-400 dark:text-slate-500"> · {invocation.model}</span> : null}
                     </span>
                     {agentPreset && (
                       <>
                         <span className="text-slate-300 dark:text-slate-600">·</span>
-                        <span className="min-w-0 truncate font-medium">{agentPreset.name}</span>
+                        <span className="truncate font-medium">{agentPreset.name}</span>
                       </>
                     )}
                   </div>
@@ -253,7 +249,7 @@ export const InvocationListCard: FunctionComponent<{
                 }}
               >
                 <div className="overflow-hidden min-h-0">
-                  <div className={`mt-3 grid grid-cols-2 overflow-hidden rounded-xl border border-black/[0.05] bg-black/[0.018] dark:border-white/[0.06] dark:bg-white/[0.025] ${!showStats ? "invisible" : ""}`}>
+                  <div className={`mt-3 grid grid-cols-2 overflow-hidden rounded-xl border border-black/[0.05] bg-black/[0.015] dark:border-white/[0.06] dark:bg-white/[0.02] ${!showStats ? "invisible" : ""}`}>
                     {cells.map((cell, idx) => {
                       const full = cell.full || (stretchLast && idx === lastIndex);
                       return (
@@ -278,7 +274,7 @@ export const InvocationListCard: FunctionComponent<{
               </div>
 
               {/* Invocation id — tiny, bottom-right */}
-              <div className="mt-2 truncate text-right font-mono text-[10px] text-slate-300 dark:text-slate-600">
+              <div className="mt-2 text-right font-mono text-[10px] text-slate-300 dark:text-slate-600">
                 {invocation.id}
               </div>
             </div>

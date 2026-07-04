@@ -51,33 +51,6 @@ describe("PreviewSessionSlider", () => {
     expect(screen.getAllByText("Open Link")).toHaveLength(2);
   });
 
-  it("shows session status chips for active runtime states", () => {
-    render(
-      <PreviewSessionSlider
-        sessions={[
-          {
-            id: "slider-sess-error",
-            projectId: "p1",
-            sprintId: "s1",
-            sprintName: "Runtime Error Sprint",
-            status: "error",
-            healthStatus: "unreachable",
-            containerAppPort: 3000,
-            hostPort: null,
-            createdAt: "",
-            updatedAt: "",
-          } as any,
-        ]}
-        selectedSessionId="slider-sess-error"
-        onSelectSession={vi.fn()}
-        onRemoveSession={vi.fn()}
-      />
-    );
-
-    expect(screen.getByText("error")).toBeInTheDocument();
-    expect(screen.getByText(":3000 -> pending")).toBeInTheDocument();
-  });
-
   it("calls onSelectSession when a card is clicked", () => {
     const onSelect = vi.fn();
     render(
@@ -170,37 +143,6 @@ describe("PreviewWindowChrome", () => {
     expect(container.innerHTML).not.toContain("#f7f3ea");
     expect(container.querySelector(".dark\\:bg-void-900\\/55")).toBeInTheDocument();
     expect(container.querySelector(".bg-slate-100\\/70")).toBeInTheDocument();
-  });
-
-  it("renders a no-preview empty state when no session is selected", () => {
-    render(
-      <PreviewWindowChrome {...defaultProps} session={null}>
-        <div data-testid="test-child-empty" />
-      </PreviewWindowChrome>
-    );
-
-    expect(screen.getByText("No preview active")).toBeInTheDocument();
-    expect(screen.getByText("No preview session selected")).toBeInTheDocument();
-    expect(screen.queryByTestId("test-child-empty")).not.toBeInTheDocument();
-  });
-
-  it("keeps disabled navigation descriptions while a session is starting", () => {
-    render(
-      <PreviewWindowChrome
-        {...defaultProps}
-        session={{ ...session, status: "starting" }}
-        navigationEnabled={false}
-      >
-        <div data-testid="test-child-disabled" />
-      </PreviewWindowChrome>
-    );
-
-    expect(screen.getByTitle("Back navigation requires a running container")).toBeDisabled();
-    expect(screen.getByTitle("Back navigation requires a running container")).toHaveAttribute("aria-busy", "true");
-    expect(screen.getByTitle("Forward navigation requires a running container")).toBeDisabled();
-    expect(screen.getByTitle("Reload requires a running container")).toBeDisabled();
-    expect(screen.getByLabelText("Preview address")).toHaveAttribute("title", "Address entry requires a running container");
-    expect(screen.getByLabelText("Preview address")).toBeDisabled();
   });
 
   it("toggles fullscreen mode", async () => {

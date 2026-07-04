@@ -48,7 +48,7 @@ const RuntimeEventFeed: FunctionComponent<{ events?: ExecutionRuntimeEventSummar
 
     if (!events || events.length === 0) {
         return (
-            <div className="flex flex-col items-center justify-center py-12 text-slate-400 dark:text-slate-600 rounded-xl border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800">
+            <div className="flex flex-col items-center justify-center rounded-xl border border-black/[0.04] bg-black/[0.015] py-12 text-slate-400 dark:border-white/[0.04] dark:bg-white/[0.015] dark:text-slate-600">
                 <Activity className="w-8 h-8 mb-3 opacity-40 text-signal-500" strokeWidth={1.5} />
                 <p className="text-sm font-bold tracking-tight text-slate-600 dark:text-slate-400">No runtime events yet</p>
                 <p className="text-xs mt-1 font-mono opacity-80">Listening for execution activity...</p>
@@ -57,14 +57,14 @@ const RuntimeEventFeed: FunctionComponent<{ events?: ExecutionRuntimeEventSummar
     }
 
     return (
-        <div ref={feedRef} className="max-h-[50dvh] sm:max-h-64 overflow-y-auto pr-2 dashboard-scrollbar space-y-1" aria-live="polite" role="log" aria-label="Runtime feed">
+        <div ref={feedRef} className="max-h-[50dvh] space-y-2 overflow-y-auto pr-1 dashboard-scrollbar sm:max-h-64" aria-live="polite" role="log" aria-label="Runtime feed">
             {events.map((event) => {
                 const cfg = getOriginatorCfg(event.originator || "system");
                 const isError = event.eventType.toLowerCase().includes("error") || event.eventType.toLowerCase().includes("fail");
                 return (
-                    <div key={event.id} className={`flex gap-3 border-l-2 ${isError ? 'border-status-red' : cfg.border} ${isError ? 'bg-status-red/[0.04]' : ''} pl-3 py-2 group/entry hover:bg-black/[0.02] dark:hover:bg-white/[0.02] rounded-r-lg transition-colors duration-200`}>
+                    <div key={event.id} className={`group/entry rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] bg-black/[0.015] p-3 pl-3 transition-colors hover:border-signal-500/25 hover:bg-signal-500/[0.035] dark:border-white/[0.04] dark:bg-white/[0.015] ${isError ? 'border-l-status-red bg-status-red/[0.04]' : cfg.border}`}>
                         <div className="flex-grow min-w-0">
-                            <div className="flex items-center gap-2 mb-0.5">
+                            <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                                 <span className={`text-[9px] font-bold uppercase tracking-[0.14em] ${isError ? 'text-status-red' : cfg.text}`}>
                                     {cfg.label}
                                 </span>
@@ -75,7 +75,7 @@ const RuntimeEventFeed: FunctionComponent<{ events?: ExecutionRuntimeEventSummar
                                     {formatTime(event.createdAt)}
                                 </span>
                             </div>
-                            <div className="text-[12px] text-slate-600 dark:text-slate-400 leading-relaxed font-mono line-clamp-2 group-hover/entry:line-clamp-none transition-all cursor-default break-words">
+                            <div className="line-clamp-2 cursor-default break-words font-mono text-[12px] leading-relaxed text-slate-600 transition-all group-hover/entry:line-clamp-none dark:text-slate-400">
                                 {getExecutionEventText(event)}
                             </div>
                         </div>

@@ -60,7 +60,6 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
   const createdAtLabel = formatChatTime(message.createdAt);
 
   const displayDeliveryStatus = resolveDisplayDeliveryStatus(message, allMessages);
-  const deliveryStatusLabel = displayDeliveryStatus.charAt(0).toUpperCase() + displayDeliveryStatus.slice(1);
 
   const opacityClass = (fromDashboard && (displayDeliveryStatus === "pending" || displayDeliveryStatus === "failed"))
     ? "opacity-60"
@@ -71,7 +70,7 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
       <span className="sr-only">
         From {senderName} at {createdAtLabel}. Status: {displayDeliveryStatus}.
       </span>
-      <div className={`flex max-w-[760px] items-start gap-3 w-full min-w-0 ${fromDashboard ? "flex-row-reverse" : "flex-row"}`}>
+      <div className={`flex max-w-[760px] items-start gap-3 w-full ${fromDashboard ? "flex-row-reverse" : "flex-row"}`}>
         <div className="mt-1 shrink-0 w-8 h-8 flex items-center justify-center">
           <ChatAvatar
             role={role}
@@ -81,24 +80,24 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
           />
         </div>
 
-        <article className={`flex flex-col min-w-0 w-full max-w-[calc(100%-3rem)] rounded-[1.35rem] border backdrop-blur-xl p-4 shadow-[0_12px_34px_rgba(15,23,42,0.06)] dark:shadow-[0_14px_42px_rgba(0,0,0,0.22)] ${
+        <div className={`flex flex-col min-w-0 w-full max-w-[calc(100%-3rem)] rounded-2xl border backdrop-blur-md p-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] ${
           fromDashboard
-            ? "rounded-tr-md border-signal-500/22 bg-signal-500/[0.075] dark:bg-signal-500/[0.095]"
-            : message.authorType === "system"
-              ? "rounded-tl-md border-dashed border-status-amber/25 bg-status-amber/[0.045] dark:bg-status-amber/[0.06]"
-              : "rounded-tl-md border-black/[0.06] bg-white/72 dark:border-white/[0.08] dark:bg-white/[0.045]"
+            ? "rounded-tr-sm border-signal-500/20 bg-signal-500/[0.08] dark:bg-signal-500/[0.1]"
+            : "rounded-tl-sm border-slate-200/60 dark:border-white/10 bg-slate-100/80 dark:bg-white/5"
         }`}>
-          <header className={`mb-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 dark:text-slate-400 ${fromDashboard ? "justify-end flex-row-reverse" : "justify-start"}`}>
-            <span className="min-w-0 truncate font-semibold text-slate-900 dark:text-slate-200">{senderName}</span>
+          {/* Header Row */}
+          <div className={`flex items-center gap-2 mb-1.5 text-xs text-slate-500 dark:text-slate-400 ${fromDashboard ? "justify-end flex-row-reverse" : "justify-start"}`}>
+            <span className="font-semibold text-slate-900 dark:text-slate-300">{senderName}</span>
             {providerLabel && (
-              <span className="inline-block max-w-[14rem] truncate rounded-md bg-black/[0.045] px-1.5 py-0.5 font-mono text-[10px] text-slate-500 dark:bg-black/20 dark:text-slate-300">
+              <span className="px-1.5 py-0.5 rounded-sm bg-slate-200 text-slate-600 dark:bg-black/20 dark:text-slate-300 truncate max-w-[150px] inline-block">
                 {providerLabel}
               </span>
             )}
-            {createdAtLabel && <time dateTime={message.createdAt} className="font-mono text-[10px] text-slate-400 dark:text-slate-500">{createdAtLabel}</time>}
-          </header>
+            {createdAtLabel && <span>{createdAtLabel}</span>}
+          </div>
 
-          <div className="prose prose-sm max-w-none min-w-0 text-[14px] leading-7 text-slate-800 [overflow-wrap:anywhere] dark:text-slate-200 prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:break-words prose-code:text-inherit prose-pre:max-w-full prose-pre:overflow-x-auto prose-pre:whitespace-pre"
+          {/* Message Body */}
+          <div className="prose prose-sm max-w-none text-[14px] leading-7 text-slate-800 dark:text-slate-200 prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit prose-pre:overflow-x-auto break-words overflow-wrap-anywhere min-w-0"
             dangerouslySetInnerHTML={{ __html: renderMarkdown(message.bodyMarkdown) }}
           />
 
@@ -110,7 +109,7 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
           )}
 
           {fromDashboard && (
-             <div aria-label={`Delivery status: ${deliveryStatusLabel}`} className="mt-2 flex items-center justify-end gap-1.5 text-[10px] font-mono">
+             <div className="mt-2 flex items-center justify-end gap-1.5 text-[10px] font-mono">
                {displayDeliveryStatus === "pending" && (
                  <>
                    <Loader2 className="h-3 w-3 animate-spin text-slate-400" />
@@ -137,7 +136,7 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
                )}
              </div>
           )}
-        </article>
+        </div>
       </div>
     </div>
   );

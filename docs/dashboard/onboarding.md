@@ -10,8 +10,6 @@ The browser-local key `codeux:onboarding-complete:v1` is still written for compa
 
 The onboarding shell uses the same animated dashboard background and modal motion system as the Import and Add Project overlays. Onboarding forces the shared background into its dark palette and applies quieter color grading so the setup UI remains legible while still feeling integrated with the app. The shell is viewport-bounded, with the step body owning its own scrollbar for long provider configuration forms.
 
-The first-run presentation follows the Warm Void dashboard language: warm charcoal side panels, cream/glass setup surfaces, Signal Jade for active or selected state, and restrained semantic color only for blocked readiness or error states. Step navigation distinguishes current, completed, and pending steps with text labels, icon treatments, and accessible `aria-current="step"` state. Mobile layouts use a compact progress rail in the header because the full sidebar is hidden.
-
 ## Component Structure
 
 The onboarding UI is orchestrated by `OnboardingExperience.tsx`, which delegates rendering logic to individual step components under `dashboard/src/v2/components/onboarding/`:
@@ -64,14 +62,12 @@ The flow currently contains six steps:
    - Detects local provider auth directories.
    - Lets operators choose multiple providers to activate, including Jules API-key based usage.
    - Shows provider identities with vendored, pinned Lobe Icons SVG logos for the integration catalog.
-   - Provider option cards expose `aria-pressed`, a selected badge, credential state chips, wrapped helper text, and wrapped auth paths so long provider names or paths remain readable on narrow screens.
 4. Provider Setup
    - Provides a named-instance workspace for every selected provider.
    - Supports adding and removing multiple credential instances per provider.
    - Supports API keys, local auth-copy paths, and enablement per instance.
    - Supports Qwen modes for local auth, API-key/model-provider config, Alibaba Coding Plan, and custom endpoint details.
    - Supports OpenCode modes for local auth, provider keys, and custom OpenAI-compatible endpoint details.
-   - Provider setup groups detected credential state, helper text, and add-instance actions in a consistent header before rendering shared provider instance forms.
 5. Automation
    - Configures system defaults for automation level, feature PR automerge, main PR automerge, plan approval, and memory.
    - Controls virtual-worker resolution for main and feature merge conflicts.
@@ -123,4 +119,5 @@ The guide covers:
 - Active Sessions: preview containers and browser sessions
 - Each navigation destination: Chat, Overview, Sprints, Tasks, Agents, Stats, Memory, Knowledge, Browser, Live, and Settings/Config
 
-The tour card includes previous/next controls, a hide action, the current step count, and an auto-advance progress bar. When a target is visible, keyboard focus moves to the active tour dialog so screen-reader and keyboard users receive the same guided context as pointer users. The card is viewport-constrained and scrollable for long copy on small screens. Hidden state is stored in the browser under `codeux:dashboard-tour-hidden:v1`.
+The tour card includes previous/next controls, a hide action, the current step count, and an auto-advance progress bar. Hidden state is stored in the browser under `codeux:dashboard-tour-hidden:v1`.
+p count, and an auto-advance progress bar. Hidden state is stored in the browser under `codeux:dashboard-tour-hidden:v1`.

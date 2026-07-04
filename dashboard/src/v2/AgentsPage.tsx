@@ -16,6 +16,8 @@ import {
 } from "./lib/agent-preset-api.js";
 import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
 import { generateRandomAgentAvatar } from "./lib/agent-avatar.js";
+import { WaveFluid } from "./components/ui/WaveFluid.js";
+import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { AgentsHero } from "./components/agents/AgentsHero.js";
 import { AgentPresetShowcaseCard } from "./components/agents/AgentPresetShowcaseCard.js";
 import { AgentPresetDetailPanel } from "./components/agents/AgentPresetDetailPanel.js";
@@ -43,8 +45,7 @@ const accentTone: Record<RosterStatProps["accent"], { dot: string; text: string;
 const RosterStat: FunctionComponent<RosterStatProps> = ({ label, value, accent, icon: Icon }) => {
   const tone = accentTone[accent];
   return (
-    <div className="group relative overflow-hidden rounded-[1.6rem] border border-black/[0.06] bg-white/65 p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl transition-all hover:-translate-y-0.5 hover:bg-white/80 hover:shadow-[0_14px_34px_rgba(15,23,42,0.07)] dark:border-white/[0.06] dark:bg-void-800/55 dark:hover:bg-void-800/70 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-      <div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-white/70 to-transparent opacity-70 dark:via-white/10" />
+    <div className="group relative overflow-hidden rounded-[1.6rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_32px_rgba(0,0,0,0.06)] dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
       <div className="flex items-center justify-between">
         <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
           {label}
@@ -63,44 +64,6 @@ const RosterStat: FunctionComponent<RosterStatProps> = ({ label, value, accent, 
 
 const normalizeAgentName = (value: string): string => (
   value.trim().replace(/[_-]+/g, " ").replace(/\s+/g, " ").toLowerCase()
-);
-
-const StudioEmptyState: FunctionComponent<{
-  icon: typeof Bot;
-  eyebrow: string;
-  title: string;
-  body: string;
-  action?: preact.ComponentChildren;
-}> = ({ icon: Icon, eyebrow, title, body, action }) => (
-  <div className="relative flex min-h-[320px] flex-col items-center justify-center gap-3 overflow-hidden rounded-[1.9rem] border border-dashed border-black/[0.08] bg-white/45 px-8 py-16 text-center shadow-[0_2px_20px_rgba(0,0,0,0.035)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/45 dark:shadow-[0_4px_24px_rgba(0,0,0,0.18)]">
-    <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-white/80 to-transparent dark:via-white/10" />
-    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-signal-500/10 text-signal-600 shadow-sm ring-1 ring-slate-900/5 dark:bg-signal-500/15 dark:text-signal-400 dark:ring-white/[0.06]">
-      <Icon className="h-8 w-8" strokeWidth={1.4} />
-    </div>
-    <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">
-      {eyebrow}
-    </span>
-    <h3 className="font-display text-xl font-black tracking-tight text-slate-900 dark:text-white">{title}</h3>
-    <p className="max-w-sm text-sm leading-relaxed text-slate-500 dark:text-slate-400">{body}</p>
-    {action && <div className="mt-4">{action}</div>}
-  </div>
-);
-
-const StudioLoadingState: FunctionComponent = () => (
-  <div className="relative flex min-h-[320px] flex-col gap-5 overflow-hidden rounded-[1.9rem] border border-black/[0.06] bg-white/55 p-6 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/50">
-    <div className="flex items-center gap-3">
-      <div className="h-12 w-12 animate-pulse rounded-2xl bg-signal-500/10 dark:bg-signal-500/15" />
-      <div className="flex flex-1 flex-col gap-2">
-        <div className="h-3 w-32 animate-pulse rounded-full bg-black/[0.06] dark:bg-white/[0.07]" />
-        <div className="h-5 w-48 animate-pulse rounded-full bg-black/[0.08] dark:bg-white/[0.09]" />
-      </div>
-    </div>
-    <div className="grid gap-3 md:grid-cols-2">
-      {[0, 1, 2, 3].map((item) => (
-        <div key={item} className="h-24 animate-pulse rounded-2xl border border-black/[0.04] bg-white/35 dark:border-white/[0.05] dark:bg-white/[0.025]" />
-      ))}
-    </div>
-  </div>
 );
 
 
@@ -385,18 +348,14 @@ export const AgentsPage: FunctionComponent = () => {
 
       {/* Error */}
       {(error || effectiveSettingsError) && (
-        <div role="alert" className="flex items-start gap-3 rounded-[1.35rem] border border-status-red/25 bg-status-red/[0.07] px-5 py-4 text-sm font-medium text-status-red shadow-[0_10px_28px_rgba(227,0,15,0.06)] backdrop-blur-2xl">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.4} />
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.16em]">Repository sync needs attention</div>
-            <div className="mt-1 leading-relaxed">{error || effectiveSettingsError}</div>
-          </div>
+        <div className="rounded-2xl border border-status-red/30 bg-status-red/[0.08] px-5 py-4 text-sm font-medium text-status-red backdrop-blur-md shadow-[0_0_20px_rgba(255,0,0,0.05)]">
+          {error || effectiveSettingsError}
         </div>
       )}
 
       {/* Info banner */}
       {selectedProject && (
-        <div className="flex items-start gap-3 rounded-[1.35rem] border border-black/[0.05] bg-white/45 px-5 py-3.5 text-[13px] leading-relaxed text-slate-500 shadow-[0_2px_18px_rgba(0,0,0,0.025)] backdrop-blur-2xl dark:border-white/[0.05] dark:bg-white/[0.025] dark:text-slate-400">
+        <div className="flex items-start gap-3 rounded-2xl border border-black/[0.05] bg-white/40 px-5 py-3.5 text-[13px] leading-relaxed text-slate-500 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02] dark:text-slate-400">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" strokeWidth={2} />
           {projectFileSavingEnabled
             ? "Markdown mirroring enabled — saving writes a companion file under .code-ux/agents."
@@ -411,27 +370,27 @@ export const AgentsPage: FunctionComponent = () => {
 
       {/* Content */}
       {!selectedProject ? (
-        <StudioEmptyState
-          icon={Bot}
-          eyebrow="No project selected"
-          title="Pick A Project To Begin"
-          body="Choose a project from the top navigation and your roster of agents, instruction files, and repository sync state will load here."
-        />
-      ) : loading && presets.length === 0 && instructionFiles.length === 0 ? (
-        <StudioLoadingState />
+        <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-[1.9rem] border border-dashed border-black/[0.08] bg-white/40 px-8 py-16 text-center backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/40">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-signal-500/10 text-signal-600 shadow-sm ring-1 ring-slate-900/5 dark:bg-signal-500/15 dark:text-signal-400 dark:ring-white/[0.06]">
+            <Bot className="h-8 w-8 text-signal-600 dark:text-signal-400" strokeWidth={1.2} />
+          </div>
+          <h3 className="mb-2 font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">Pick A Project To Begin</h3>
+          <p className="max-w-sm text-sm leading-relaxed text-slate-500 dark:text-slate-400">Choose a project from the top navigation and your roster of agents will load here.</p>
+        </div>
       ) : presets.length === 0 && instructionFiles.length === 0 && !loading ? (
-        <StudioEmptyState
-          icon={Bot}
-          eyebrow="Empty roster"
-          title="The Workshop Is Quiet"
-          body="Spin up your first specialist with a name, avatar, routing defaults, memory settings, and operator-grade system instructions."
-          action={
+        <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-[1.9rem] border border-dashed border-black/[0.08] bg-white/40 px-8 py-16 text-center backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/40">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-signal-500/10 text-signal-600 shadow-sm ring-1 ring-slate-900/5 dark:bg-signal-500/15 dark:text-signal-400 dark:ring-white/[0.06]">
+            <Bot className="h-8 w-8 text-signal-600 dark:text-signal-400" strokeWidth={1.2} />
+          </div>
+          <h3 className="mb-2 font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">The Workshop Is Quiet</h3>
+          <p className="max-w-sm text-sm leading-relaxed text-slate-500 dark:text-slate-400">Spin up your first specialist. Give it a name, a personality, an avatar — and operator-grade system instructions.</p>
+          <div className="mt-4">
             <button type="button" onClick={() => void handleCreate()} className="group inline-flex items-center gap-2 rounded-full bg-signal-500 px-6 py-3 text-sm font-bold text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:scale-[1.03] hover:bg-signal-400 hover:shadow-[0_0_32px_rgba(0,224,160,0.36)] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2">
               <Plus className="h-4.5 w-4.5 transition-transform group-hover:rotate-90" strokeWidth={2.5} />
               Create First Agent
             </button>
-          }
-        />
+          </div>
+        </div>
       ) : presets.length > 0 || instructionFiles.length > 0 ? (
         <div className="relative flex flex-col-reverse gap-6 xl:flex-row xl:items-start">
           {/* Sidebar rail */}
@@ -464,7 +423,7 @@ export const AgentsPage: FunctionComponent = () => {
                 <button
                   type="button"
                   onClick={() => void handleCreate()}
-                  className="group flex items-center gap-3 rounded-[1.4rem] border border-dashed border-signal-500/25 bg-white/45 px-5 py-4 text-left shadow-[0_2px_18px_rgba(0,0,0,0.025)] backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:border-signal-500/40 hover:bg-signal-500/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-signal-500/25 dark:bg-void-800/35"
+                  className="group flex items-center gap-3 rounded-[1.4rem] border border-dashed border-signal-500/25 bg-white/40 px-5 py-4 text-left transition-all hover:-translate-y-0.5 hover:border-signal-500/40 hover:bg-signal-500/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-signal-500/25 dark:bg-void-800/30"
                 >
                   <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-signal-500/10 text-signal-600 dark:bg-signal-500/15 dark:text-signal-400">
                     <Plus className="h-5 w-5 transition-transform group-hover:rotate-90" strokeWidth={2.4} />
@@ -532,12 +491,14 @@ export const AgentsPage: FunctionComponent = () => {
                 />
               )
             ) : (
-              <StudioEmptyState
-                icon={Bot}
-                eyebrow="Studio ready"
-                title="Choose A Surface"
-                body="Select an agent or instruction file from the roster to review identity, runtime metadata, memory settings, and repository-backed instructions."
-              />
+              <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-[1.9rem] border border-dashed border-black/[0.08] bg-white/40 px-8 py-16 text-center backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/40">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-signal-500/10 text-signal-600 dark:bg-signal-500/15 dark:text-signal-400">
+                  <Bot className="h-7 w-7" strokeWidth={1.6} />
+                </div>
+                <p className="max-w-xs text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                  Select an agent or an instruction file from the left to view and edit it.
+                </p>
+              </div>
             )}
           </div>
         </div>

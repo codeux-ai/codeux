@@ -194,9 +194,9 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                                         className={`rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] bg-black/[0.015] p-3 pl-3 transition-colors hover:border-signal-500/25 hover:bg-signal-500/[0.035] dark:border-white/[0.04] dark:bg-white/[0.015] ${statusRailTone(connection.status)}`}
                                     >
                                         <div className="flex items-start justify-between gap-3 min-w-0">
-                                            <div className="min-w-0">
-                                                <div className="flex flex-wrap items-center gap-2">
-                                                    <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                                <div className="min-w-0">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                    <span className="min-w-0 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
                                                         {connection.displayName}
                                                     </span>
                                                     <span className="rounded-md border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
@@ -209,19 +209,19 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                                                     )}
                                                 </div>
                                                 <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
-                                                    <span>{connection.transport}</span>
+                                                    <span className="break-words">{connection.transport}</span>
                                                     {connection.model && (
                                                         <>
                                                             <span>·</span>
-                                                            <span>{connection.model}</span>
+                                                            <span className="break-words">{connection.model}</span>
                                                         </>
                                                     )}
                                                     <span>·</span>
-                                                    <span className="truncate">{connection.connectionKey}</span>
+                                                    <span className="break-all">{connection.connectionKey}</span>
                                                 </div>
                                                 {(connection.machineName || connection.platform || connection.arch || connection.localExecutionRuntime) && (
                                                     <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
-                                                        {connection.machineName && <span>{connection.machineName}</span>}
+                                                        {connection.machineName && <span className="break-all">{connection.machineName}</span>}
                                                         {connection.platform && (
                                                             <>
                                                                 <span>·</span>
@@ -237,7 +237,7 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                                                         {connection.localExecutionRuntime && (
                                                             <>
                                                                 <span>·</span>
-                                                                <span>{connection.localExecutionRuntime}</span>
+                                                                <span className="break-words">{connection.localExecutionRuntime}</span>
                                                             </>
                                                         )}
                                                     </div>
@@ -283,7 +283,7 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                                                     </div>
                                                 )}
                                                 {connection.instruction && (
-                                                    <p className="line-clamp-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                                                    <p className="line-clamp-2 break-words text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
                                                         {connection.instruction}
                                                     </p>
                                                 )}
@@ -462,10 +462,10 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                         <div key={run.id} className={`rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] bg-black/[0.015] p-3 pl-3 transition-colors hover:border-signal-500/25 hover:bg-signal-500/[0.035] dark:border-white/[0.04] dark:bg-white/[0.015] ${statusRailTone(run.status)}`}>
                                             <div className="flex items-center justify-between gap-3 min-w-0">
                                                 <div className="min-w-0">
-                                                    <div className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                                    <div className="break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
                                                         {run.sprintName}{run.sprintNumber != null ? ` · Sprint ${run.sprintNumber}` : ""}
                                                     </div>
-                                                    <div className="mt-1 text-[10px] font-mono text-slate-400">
+                                                    <div className="mt-1 break-words text-[10px] font-mono text-slate-400">
                                                         {EXECUTOR_LABELS[run.executorMode] || run.executorMode} · {run.triggerType}
                                                         {run.triggeredBy ? ` · ${run.triggeredBy}` : ""}
                                                     </div>
@@ -475,7 +475,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                         {run.status}
                                                     </div>
                                                     {run.activeLeaseOwnerKey && (
-                                                        <div className="mt-1 text-[10px] font-mono text-slate-400">
+                                                        <div className="mt-1 break-all text-[10px] font-mono text-slate-400">
                                                             lease {run.activeLeaseOwnerKey}
                                                         </div>
                                                     )}
@@ -554,17 +554,17 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                                     ? "Stopped automatically"
                                                                     : "Human intervention needed"}
                                                             </div>
-                                                            <div className="mt-1 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                                            <div className="mt-1 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
                                                                 {run.humanIntervention.title}
                                                             </div>
                                                         </div>
                                                         <HumanInterventionBadge summary={run.humanIntervention} label="Details" compact align="right" />
                                                     </div>
-                                                    <p className="mt-2 text-[12px] leading-relaxed text-slate-600 dark:text-slate-300">
+                                                    <p className="mt-2 break-words text-[12px] leading-relaxed text-slate-600 dark:text-slate-300">
                                                         {run.humanIntervention.reason}
                                                     </p>
                                                     {!(run.humanIntervention.ownerType === "system" || run.humanIntervention.ownerType === "worker") && (
-                                                        <p className="mt-2 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
+                                                        <p className="mt-2 break-words text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
                                                             {run.humanIntervention.instructions}
                                                         </p>
                                                     )}
@@ -594,17 +594,17 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                             <div key={dispatch.id} className={`rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] bg-black/[0.015] p-3 pl-3 transition-colors hover:border-signal-500/25 hover:bg-signal-500/[0.035] dark:border-white/[0.04] dark:bg-white/[0.015] ${statusRailTone(activeCap ? "PENDING" : dispatch.status)}`}>
                                                 <div className="flex items-start justify-between gap-3 min-w-0">
                                                     <div className="min-w-0">
-                                                        <div className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                                        <div className="break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
                                                             {dispatch.taskKey} · {dispatch.taskTitle}
                                                         </div>
                                                         <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
-                                                            <span>{dispatch.sprintName}</span>
+                                                            <span className="break-words">{dispatch.sprintName}</span>
                                                             <span>·</span>
                                                             <span>{EXECUTOR_LABELS[dispatch.executorType] || dispatch.executorType}</span>
                                                             {dispatch.connectionDisplayName && (
                                                                 <>
                                                                     <span>·</span>
-                                                                    <span className="inline-flex items-center gap-1">
+                                                                    <span className="inline-flex min-w-0 items-center gap-1 break-words">
                                                                         <Bot className="h-3 w-3" strokeWidth={2} />
                                                                         {dispatch.connectionDisplayName}
                                                                     </span>

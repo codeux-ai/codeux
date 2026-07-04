@@ -19,7 +19,7 @@ vi.mock("@tanstack/react-router", () => ({
 
 // Mock OnboardingIntro to fire callbacks immediately via microtask,
 // avoiding dependency on GSAP timers in JSDOM (which caused CI timeouts).
-vi.mock("gsap", () => ({ default: { set: vi.fn(), to: vi.fn(), fromTo: vi.fn(), killTweensOf: vi.fn(), timeline: vi.fn(() => ({ to: vi.fn() })), context: (cb: any) => { cb(); return { revert: vi.fn() }; } } }));
+vi.mock("gsap", () => ({ default: { set: vi.fn(), to: vi.fn(), fromTo: vi.fn(), timeline: vi.fn(() => ({ to: vi.fn() })), context: (cb: any) => { cb(); return { revert: vi.fn() }; } } }));
 vi.mock("../../../dashboard/src/v2/components/onboarding/OnboardingIntro.js", () => ({
   OnboardingIntro: ({ onExitStart, onComplete }: { onExitStart?: () => void; onComplete?: () => void }) => {
     queueMicrotask(() => onExitStart?.());
@@ -107,24 +107,6 @@ describe("GuidedDashboardTour integration", () => {
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(queryByRole("dialog")).toBeNull();
   });
-
-  it("focuses the active tour callout when a target is available", async () => {
-    const target = document.createElement("button");
-    target.setAttribute("data-tour-id", "project-selector");
-    target.textContent = "Project selector";
-    Object.defineProperty(target, "getBoundingClientRect", {
-      value: () => ({ top: 80, left: 80, width: 180, height: 44, bottom: 124, right: 260, x: 80, y: 80, toJSON: () => ({}) }),
-    });
-    document.body.appendChild(target);
-
-    render(<GuidedDashboardTour />);
-    window.dispatchEvent(new CustomEvent(DASHBOARD_TOUR_START_EVENT));
-
-    const dialog = await screen.findByRole("dialog", { name: "Projects guided tour step" });
-    await waitFor(() => expect(document.activeElement).toBe(dialog));
-
-    target.remove();
-  });
 });
 
 describe("OnboardingExperience integration", () => {
@@ -161,81 +143,10 @@ describe("OnboardingExperience integration", () => {
 
     const activeStepBtn = await screen.findByRole("button", { name: /Installation/i, current: "step" });
     expect(activeStepBtn).not.toBeNull();
-    expect(activeStepBtn.textContent).toContain("Current");
 
     const readinessRegion = await screen.findAllByText("Blocked");
     expect(readinessRegion.length).toBeGreaterThan(0);
     expect(readinessRegion[0]!.getAttribute("aria-live")).toBe("polite");
-  });
-
-  it("shows selected provider card state without changing provider semantics", async () => {
-    const defaultSettings = cloneDefaultSettings();
-    const systemSettings = {
-      runtime: {
-        dashboardPort: defaultSettings.dashboardPort,
-        consoleLogLevel: defaultSettings.consoleLogLevel,
-        debugLogFileLevel: defaultSettings.debugLogFileLevel,
-        consoleLogMode: defaultSettings.consoleLogMode,
-      },
-      integrations: {
-        providers: {},
-        julesApiKey: "",
-        geminiApiKey: "",
-        codexApiKey: "",
-        claudeCodeApiKey: "",
-        githubToken: "",
-      },
-      defaults: defaultSettings,
-    };
-    vi.mocked(settingsApi.fetchSystemSettings).mockResolvedValue(systemSettings as any);
-
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      const url = typeof input === "string" ? input : input.url;
-      if (url.endsWith("/api/user/onboarding")) {
-        return new Response(JSON.stringify({ completed: false, onboardingCompletedAt: null }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-      if (url.endsWith("/api/onboarding/readiness")) {
-        return new Response(
-          JSON.stringify({
-            checkedAt: "2026-06-01T00:00:00.000Z",
-            cluster: { status: "ready", label: "Healthy", detail: "Runtime environment is ready." },
-            dependencies: [],
-            providers: [
-              {
-                provider: "codex",
-                available: false,
-                authPath: "/Users/example/.codex/sessions/with/a/very/long/path/that/should/wrap",
-                detectedFiles: [],
-                description: "Codex credentials were not detected.",
-              },
-            ],
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        );
-      }
-      return new Response(JSON.stringify({}), { status: 404 });
-    });
-
-    render(<OnboardingExperience />);
-
-    const nextButton = await screen.findByRole("button", { name: "Next" });
-    await userEvent.click(nextButton);
-    await userEvent.click(screen.getByRole("button", { name: "Next" }));
-
-    const providerCard = await waitFor(() => {
-      const card = document.querySelector('button[aria-pressed="false"]');
-      expect(card).not.toBeNull();
-      return card as HTMLButtonElement;
-    });
-
-    await userEvent.click(providerCard);
-
-    expect(providerCard.getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getAllByText("Selected").length).toBeGreaterThan(0);
-    expect(screen.getByText("/Users/example/.codex/sessions/with/a/very/long/path/that/should/wrap")).not.toBeNull();
   });
 
   it("toggles Git onboarding between remote and local modes", async () => {

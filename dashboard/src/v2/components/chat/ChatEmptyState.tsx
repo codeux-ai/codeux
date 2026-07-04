@@ -47,16 +47,21 @@ export const EmptyChat: FunctionComponent<{
   const Icon = config.icon;
 
   return (
-    <div className="relative flex h-full min-h-[24rem] items-center justify-center overflow-hidden rounded-[1.75rem] border border-black/[0.07] bg-white/82 p-8 text-center shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/78 dark:shadow-[0_22px_70px_rgba(0,0,0,0.28)]">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-signal-500/30 to-transparent" />
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(0,224,160,0.07),transparent_38%)] dark:bg-[linear-gradient(180deg,rgba(0,224,160,0.08),transparent_42%)]" />
-      <div className="pointer-events-none absolute left-8 top-8 hidden rounded-full border border-black/[0.06] bg-white/70 px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 shadow-sm backdrop-blur-xl dark:border-white/[0.06] dark:bg-white/[0.04] sm:flex">
+    <div className="relative flex h-full min-h-[24rem] items-center justify-center overflow-hidden rounded-3xl border border-black/[0.06] bg-white/82 p-8 text-center shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_55%_at_50%_45%,rgba(0,224,160,0.08),transparent_62%)] dark:bg-[radial-gradient(ellipse_70%_55%_at_50%_45%,rgba(0,224,160,0.11),transparent_62%)]" />
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div className="h-44 w-44 rounded-full border border-signal-500/16 animate-[ping_4.8s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
+        <div className="absolute h-72 w-72 rounded-full border border-signal-500/10 animate-[ping_7.2s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
+        <div className="absolute h-[26rem] w-[26rem] rounded-full border border-ember-500/10 animate-[ping_9.6s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
+      </div>
+      <div className="pointer-events-none absolute left-8 top-8 hidden rounded-full border border-black/[0.06] bg-white/65 px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.04] sm:flex">
         Queue idle
       </div>
 
       <div className="relative z-10 w-full max-w-xl">
-        <div className="relative mx-auto mb-7 flex h-[4.5rem] w-[4.5rem] items-center justify-center">
-          <div className="absolute inset-0 rounded-[1.35rem] border border-signal-500/18 bg-signal-500/[0.08] shadow-[0_18px_40px_rgba(0,224,160,0.12)] backdrop-blur-xl dark:bg-white/[0.05]" />
+        <div className="relative mx-auto mb-7 flex h-20 w-20 items-center justify-center">
+          <div className="absolute inset-0 rounded-3xl bg-signal-500/12 blur-[18px] animate-pulse" />
+          <div className="absolute inset-2 rounded-2xl border border-signal-500/20 bg-white/80 shadow-[0_18px_40px_rgba(0,224,160,0.12)] backdrop-blur-xl dark:bg-white/[0.06]" />
           <Icon className={`relative h-8 w-8 ${config.accentClass}`} strokeWidth={1.6} />
         </div>
 
@@ -76,7 +81,7 @@ export const EmptyChat: FunctionComponent<{
             { label: "Routing", value: "queued" },
             { label: "History", value: "clean" },
           ].map((item) => (
-            <div key={item.label} className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-4 py-3 text-left dark:border-white/[0.06] dark:bg-white/[0.035]">
+            <div key={item.label} className="rounded-2xl border border-black/[0.06] bg-black/[0.025] px-4 py-3 text-left dark:border-white/[0.06] dark:bg-white/[0.035]">
               <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">{item.label}</div>
               <div className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-slate-700 dark:text-slate-200">{item.value}</div>
             </div>
@@ -96,15 +101,15 @@ export const ChatRailPlaceholder: FunctionComponent<{
   const interactionTokens = useInteractionTokens();
 
   return (
-  <div className="relative flex min-h-[22rem] flex-col justify-between overflow-hidden rounded-[1.25rem] border border-dashed border-signal-500/22 bg-black/[0.025] p-5 dark:bg-white/[0.03]">
-    <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-signal-500/35 to-transparent" />
+  <div className="relative flex min-h-[22rem] flex-col justify-between overflow-hidden rounded-[1.5rem] border border-dashed border-signal-500/20 bg-black/[0.025] p-5 dark:bg-white/[0.03]">
+    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_55%_at_50%_0%,rgba(0,224,160,0.12),transparent_62%)]" />
     <div className="relative z-10 space-y-3">
       {[
         { width: "w-4/5", delay: "" },
         { width: "w-2/3", delay: "[animation-delay:160ms]" },
         { width: "w-5/6", delay: "[animation-delay:320ms]" },
       ].map((item, index) => (
-        <div key={index} className="rounded-xl border border-black/[0.05] bg-white/70 p-3 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.035]">
+        <div key={index} className="rounded-xl border border-white/60 bg-white/70 p-3 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.035]">
           <div className="flex items-center gap-3">
             <div className={`h-9 w-9 rounded-xl bg-signal-500/10 ${item.delay} animate-pulse`} />
             <div className="min-w-0 flex-1 space-y-2">
@@ -117,7 +122,7 @@ export const ChatRailPlaceholder: FunctionComponent<{
     </div>
 
     <div className="relative z-10 mt-6">
-      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-[1rem] border border-signal-500/20 bg-signal-500/10 text-signal-500 shadow-[0_0_28px_rgba(0,224,160,0.14)]">
+      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-signal-500/20 bg-signal-500/10 text-signal-500 shadow-[0_0_28px_rgba(0,224,160,0.14)]">
         <Sparkles className="h-5 w-5" strokeWidth={1.7} />
       </div>
       <div className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</div>
@@ -147,7 +152,7 @@ export const ChatRailPlaceholder: FunctionComponent<{
 };
 
 export const LoadingChat: FunctionComponent<{ label: string }> = ({ label }) => (
-  <div className="flex h-full min-h-0 items-center justify-center rounded-[1.75rem] border border-dashed border-black/[0.07] bg-white/72 p-8 text-center shadow-[0_18px_50px_rgba(15,23,42,0.06)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/70 dark:shadow-[0_22px_70px_rgba(0,0,0,0.24)]">
+  <div className="flex h-full min-h-0 items-center justify-center rounded-3xl border border-dashed border-black/[0.06] bg-white/70 p-8 text-center shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
     <div className="space-y-4">
       <div className="mx-auto flex items-center justify-center gap-1.5">
         <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-signal-500" />

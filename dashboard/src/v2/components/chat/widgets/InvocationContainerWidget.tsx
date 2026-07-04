@@ -15,7 +15,7 @@ export const InvocationContainerWidget: FunctionComponent<InvocationContainerWid
   if (containerPhase === "starting") {
     return (
       <div
-        class="flex min-w-0 items-center gap-3 rounded-[1.1rem] border border-black/[0.05] bg-white/62 px-4 py-3 shadow-[0_10px_26px_rgba(15,23,42,0.045)] backdrop-blur-xl transition-all duration-300 dark:border-white/[0.06] dark:bg-white/[0.035] dark:shadow-[0_12px_34px_rgba(0,0,0,0.18)]"
+        class="flex items-center gap-3 rounded-xl transition-all duration-300 bg-black/[0.02] dark:bg-white/[0.02] px-4 py-3"
         role="status"
         aria-label="Initializing container"
       >
@@ -33,14 +33,14 @@ export const InvocationContainerWidget: FunctionComponent<InvocationContainerWid
   if (containerPhase === "working") {
     return (
       <div
-        class="flex min-w-0 items-center gap-3 rounded-[1.1rem] border border-black/[0.05] bg-white/62 px-4 py-3 shadow-[0_10px_26px_rgba(15,23,42,0.045)] backdrop-blur-xl transition-all duration-300 dark:border-white/[0.06] dark:bg-white/[0.035] dark:shadow-[0_12px_34px_rgba(0,0,0,0.18)]"
+        class="flex items-center gap-3 rounded-xl transition-all duration-300 bg-black/[0.02] dark:bg-white/[0.02] px-4 py-3"
         role="status"
         aria-label="Container working"
       >
         <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-signal-500/[0.08]">
           <Terminal size={16} class="text-signal-600 dark:text-signal-400" />
         </div>
-        <div class="flex min-w-0 items-center gap-2">
+        <div class="flex items-center gap-2">
           <span class="text-[12px] font-medium text-slate-600 dark:text-slate-300">
             Working
           </span>
@@ -50,7 +50,7 @@ export const InvocationContainerWidget: FunctionComponent<InvocationContainerWid
             <span class="h-1 w-1 rounded-full bg-signal-500/60 motion-safe:animate-bounce [animation-delay:240ms]" />
           </span>
           {providerName && (
-            <span class="min-w-0 truncate text-[11px] text-slate-400 dark:text-slate-500">
+            <span class="text-[11px] text-slate-400 dark:text-slate-500">
               via {providerName}
             </span>
           )}
@@ -62,19 +62,19 @@ export const InvocationContainerWidget: FunctionComponent<InvocationContainerWid
   if (containerPhase === "completed") {
     return (
       <div
-        class="flex min-w-0 items-center gap-3 rounded-[1.1rem] border border-black/[0.05] bg-white/62 px-4 py-3 shadow-[0_10px_26px_rgba(15,23,42,0.045)] backdrop-blur-xl transition-all duration-300 dark:border-white/[0.06] dark:bg-white/[0.035] dark:shadow-[0_12px_34px_rgba(0,0,0,0.18)]"
+        class="flex items-center gap-3 rounded-xl transition-all duration-300 bg-black/[0.02] dark:bg-white/[0.02] px-4 py-3"
         role="status"
         aria-label="Container completed"
       >
         <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-status-green/[0.08]">
           <CheckCircle2 size={16} class="text-status-green" />
         </div>
-        <div class="flex min-w-0 items-center gap-2">
+        <div class="flex items-center gap-2">
           <span class="text-[12px] font-medium text-slate-600 dark:text-slate-300">
             Completed
           </span>
           {agentName && (
-            <span class="min-w-0 truncate text-[11px] text-slate-400 dark:text-slate-500">
+            <span class="text-[11px] text-slate-400 dark:text-slate-500">
               by {agentName}
             </span>
           )}
@@ -86,7 +86,7 @@ export const InvocationContainerWidget: FunctionComponent<InvocationContainerWid
   // failed
   return (
     <div
-      class="flex min-w-0 items-center gap-3 rounded-[1.1rem] border border-black/[0.05] bg-white/62 px-4 py-3 shadow-[0_10px_26px_rgba(15,23,42,0.045)] backdrop-blur-xl transition-all duration-300 dark:border-white/[0.06] dark:bg-white/[0.035] dark:shadow-[0_12px_34px_rgba(0,0,0,0.18)]"
+      class="flex items-center gap-3 rounded-xl transition-all duration-300 bg-black/[0.02] dark:bg-white/[0.02] px-4 py-3"
       role="status"
       aria-label="Container failed"
     >

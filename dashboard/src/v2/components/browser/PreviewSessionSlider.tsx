@@ -1,6 +1,6 @@
 import type { FunctionComponent } from "preact";
 import { useRef } from "preact/hooks";
-import { ChevronLeft, ChevronRight, ExternalLink, Globe, Trash2, Loader2, CheckCircle2, AlertCircle, Play, Square } from "lucide-preact";
+import { ChevronLeft, ChevronRight, ExternalLink, Globe, Trash2, Loader2, CheckCircle2 } from "lucide-preact";
 import type { SprintPreviewSession } from "../../../types.js";
 import { buildPreviewOrigin } from "../../lib/preview-origin.js";
 import { getSafeUrl } from "../../lib/safe-url.js";
@@ -24,19 +24,6 @@ const healthTone: Record<SprintPreviewSession["healthStatus"], string> = {
   healthy: "text-signal-500",
   unreachable: "text-status-red",
   unknown: "text-slate-400",
-};
-
-const renderStatusIcon = (status: SprintPreviewSession["status"]) => {
-  if (status === "starting") {
-    return <Loader2 className="h-2.5 w-2.5 animate-spin" strokeWidth={2.5} />;
-  }
-  if (status === "running") {
-    return <Play className="h-2.5 w-2.5" fill="currentColor" strokeWidth={2.5} />;
-  }
-  if (status === "error") {
-    return <AlertCircle className="h-2.5 w-2.5" strokeWidth={2.5} />;
-  }
-  return <Square className="h-2.5 w-2.5" fill="currentColor" strokeWidth={2.5} />;
 };
 
 const formatPortMapping = (session: SprintPreviewSession): string => {
@@ -126,31 +113,31 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
               <button
                 type="button"
                 onClick={() => onSelectSession(session.id)}
-                className="w-full min-w-0 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
+                className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-lg"
               >
-                <div className="mb-3 flex min-w-0 items-start justify-between gap-3">
-                  <span className="min-w-0 overflow-hidden break-words text-sm font-semibold leading-5 text-slate-900 line-clamp-2 dark:text-white">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <span className="truncate text-sm font-semibold text-slate-900 dark:text-white">
                     {session.sprintName}
                   </span>
                   <span
-                    className={`flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] ${
+                    className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] flex items-center gap-1.5 ${
                       statusTone[session.status]
                     }`}
                   >
-                    {renderStatusIcon(session.status)}
+                    {session.status === 'starting' && <Loader2 className="w-2.5 h-2.5 animate-spin" />}
                     {session.status}
                   </span>
                 </div>
 
-                <div className="flex min-w-0 items-center gap-2 text-[11px] text-slate-600 dark:text-slate-400">
+                <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-400">
                   <Globe
-                    className={`h-3.5 w-3.5 shrink-0 ${healthTone[session.healthStatus]}`}
+                    className={`h-3.5 w-3.5 ${healthTone[session.healthStatus]}`}
                     strokeWidth={2}
                   />
-                  <span className="min-w-0 break-all font-mono">{formatPortMapping(session)}</span>
+                  <span>{formatPortMapping(session)}</span>
                 </div>
 
-                <div className="mt-1 break-all font-mono text-[11px] text-slate-500 dark:text-slate-500">
+                <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-500">
                   {session.hostPort ? `127.0.0.1:${session.hostPort}` : "waiting for routed port"}
                 </div>
               </button>
@@ -164,10 +151,10 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
                       onRemoveSession(session.id);
                     }
                   }}
-                  className={`inline-flex h-8 min-w-0 items-center justify-center gap-1.5 rounded-xl border px-3 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red/50 ${
+                  className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border px-3 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red/50 ${
                     removing
                     ? "border-status-red/15 text-status-red cursor-not-allowed disabled:opacity-50"
-                    : "border-status-red/15 text-status-red hover:-translate-y-px hover:border-status-red/30 hover:bg-status-red/10"
+                    : "border-status-red/15 text-status-red hover:border-status-red/30 hover:bg-status-red/8"
                   }`}
                   title="Remove preview container"
 
@@ -176,20 +163,20 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
                   aria-disabled={removing}
                   aria-busy={removing}
                 >
-                  {removing ? <Loader2 className="h-3 w-3 shrink-0 animate-spin" strokeWidth={2.5} /> : <Trash2 className="h-3 w-3 shrink-0" strokeWidth={2.5} />}
-                  <span className="truncate">{removing ? "Removing..." : "Remove"}</span>
+                  {removing ? <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} /> : <Trash2 className="h-3 w-3" strokeWidth={2.5} />}
+                  {removing ? "Removing..." : "Remove"}
                 </button>
                 <a
                   href={canOpen ? getSafeUrl(origin) : undefined}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={`inline-flex h-8 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-black/[0.08] bg-white/60 px-3 text-[11px] font-semibold text-slate-600 transition hover:-translate-y-px hover:border-black/[0.16] hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/50 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white ${!canOpen ? "pointer-events-none opacity-50" : ""}`}
+                  className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border border-black/[0.08] px-3 text-[11px] font-semibold text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/50 ${!canOpen ? "pointer-events-none opacity-50" : ""}`}
                   title="Open isolated preview in a new tab"
                   onClick={(e) => e.stopPropagation()}
                   aria-disabled={!canOpen}
                 >
-                  <ExternalLink className="h-3 w-3 shrink-0" strokeWidth={2.5} />
-                  <span className="truncate">Open Link</span>
+                  <ExternalLink className="h-3 w-3" strokeWidth={2.5} />
+                  Open Link
                 </a>
               </div>
             </div>

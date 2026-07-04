@@ -37,19 +37,6 @@ const statusTone: Record<SprintPreviewSession["status"], string> = {
   error: "border-status-red/30 bg-status-red/10 text-status-red",
 };
 
-const renderStatusIcon = (status: SprintPreviewSession["status"]) => {
-  if (status === "starting") {
-    return <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} />;
-  }
-  if (status === "running") {
-    return <Play className="h-3 w-3" fill="currentColor" strokeWidth={2.5} />;
-  }
-  if (status === "error") {
-    return <AlertCircle className="h-3 w-3" strokeWidth={2.5} />;
-  }
-  return <Square className="h-3 w-3" fill="currentColor" strokeWidth={2.5} />;
-};
-
 export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = ({
   session,
   onNavigateBack,
@@ -65,22 +52,10 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
 
   if (!session) {
     return (
-      <div className="overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/72 shadow-[0_24px_72px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/55 dark:shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
-        <div className="flex items-center justify-between gap-3 border-b border-black/[0.06] bg-white/72 px-4 py-3 dark:border-white/[0.06] dark:bg-void-900/55">
-          <div className="flex items-center gap-2" aria-hidden="true">
-            <span className="h-3 w-3 rounded-full bg-slate-300 dark:bg-slate-700" />
-            <span className="h-3 w-3 rounded-full bg-slate-300 dark:bg-slate-700" />
-            <span className="h-3 w-3 rounded-full bg-slate-300 dark:bg-slate-700" />
-          </div>
-          <div className="min-w-0 flex-1 rounded-2xl border border-black/[0.06] bg-slate-100/80 px-4 py-2 font-mono text-xs text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-500">
-            No preview session selected
-          </div>
-        </div>
+      <div className="overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/72 shadow-[0_24px_72px_rgba(15,23,42,0.08)] dark:border-white/[0.06] dark:bg-void-900/55 dark:shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
         <div className="relative h-[calc(100vh-23rem)] min-h-[540px] bg-slate-100/70 dark:bg-void-950">
           <div className="flex h-full flex-col items-center justify-center px-8 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-3xl border border-signal-500/20 bg-signal-500/[0.08] text-signal-600 dark:text-signal-300">
-              <Compass className="h-7 w-7" strokeWidth={1.6} />
-            </div>
+            <Compass className="h-12 w-12 text-slate-300 dark:text-slate-600" strokeWidth={1.5} />
             <h2 className="mt-4 text-xl font-semibold text-slate-800 dark:text-slate-100">No preview active</h2>
             <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500 dark:text-slate-400">
               Start a sprint preview to build the selected sprint into its own isolated container and browse it directly from the dashboard.
@@ -99,18 +74,18 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
     <div className={isFullscreen ? "fixed inset-0 z-50 flex flex-col bg-white dark:bg-[#04070b]" : ""}>
       {/* Minimized state presentation */}
       {isMinimized && !isFullscreen && !isClosed && (
-        <div className="mb-5 flex items-center justify-between gap-4 rounded-[1.5rem] border border-black/[0.06] bg-white/72 p-4 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
-          <div className="flex min-w-0 items-center gap-4">
+        <div className="mb-5 flex items-center justify-between rounded-2xl border border-black/[0.06] bg-white/72 p-4 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+          <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <div className="h-2.5 w-2.5 rounded-full bg-status-red/80" />
               <div className="h-2.5 w-2.5 rounded-full bg-amber-400/80" />
               <div className="h-2.5 w-2.5 rounded-full bg-signal-500/90" />
             </div>
-            <span className="min-w-0 truncate text-sm font-semibold text-slate-700 dark:text-slate-300">
+            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
               {session.sprintName}
             </span>
-            <div className={`flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] ${statusTone[session.status]}`}>
-              {renderStatusIcon(session.status)}
+            <div className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] flex items-center gap-1.5 ${statusTone[session.status]}`}>
+              {session.status === 'starting' ? <Loader2 className="w-3 h-3 animate-spin" /> : session.status === 'running' ? <Play className="w-3 h-3" fill="currentColor" /> : session.status === 'error' ? <AlertCircle className="w-3 h-3" /> : <Square className="w-3 h-3" fill="currentColor" />}
               {session.status}
             </div>
           </div>
@@ -129,7 +104,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
       {isClosed && !isFullscreen && !isMinimized && (
         <div className="mb-5 overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/72 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
           <div className="relative flex h-[calc(100vh-23rem)] min-h-[540px] flex-col items-center justify-center bg-slate-100/70 px-8 text-center dark:bg-void-950">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-black/[0.08] bg-white/80 dark:border-white/[0.08] dark:bg-white/[0.04]">
+            <div className="h-12 w-12 rounded-full border border-black/[0.08] flex items-center justify-center mb-4 dark:border-white/[0.08]">
               <X className="h-5 w-5 text-slate-400" strokeWidth={2} />
             </div>
             <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100">Window Closed</h2>
@@ -139,7 +114,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             <button
               type="button"
               onClick={() => setWindowState("normal")}
-              className="mt-6 inline-flex h-10 items-center justify-center rounded-2xl border border-black/[0.08] bg-white/75 px-4 text-sm font-semibold text-slate-700 transition hover:-translate-y-px hover:border-black/[0.16] hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
+              className="mt-6 inline-flex h-10 items-center justify-center rounded-2xl border border-black/[0.08] px-4 text-sm font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
             >
               Reopen Window
             </button>
@@ -164,7 +139,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
                 type="button"
                 title="Close window"
                 onClick={() => setWindowState("closed")}
-              className="group flex h-3.5 w-3.5 items-center justify-center rounded-full bg-status-red/80 transition hover:bg-status-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red/50"
+              className="group flex h-3 w-3 items-center justify-center rounded-full bg-status-red/80 transition hover:bg-status-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red/50"
             >
               <X className="h-2 w-2 text-red-900 opacity-0 group-hover:opacity-100" strokeWidth={3} />
             </button>
@@ -172,7 +147,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
               type="button"
               title="Minimize window"
               onClick={() => setWindowState("minimized")}
-              className="group flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-400/80 transition hover:bg-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50"
+              className="group flex h-3 w-3 items-center justify-center rounded-full bg-amber-400/80 transition hover:bg-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50"
             >
               <Minus className="h-2 w-2 text-amber-900 opacity-0 group-hover:opacity-100" strokeWidth={3} />
             </button>
@@ -180,7 +155,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
               type="button"
               title={isFullscreen ? "Restore window" : "Maximize window"}
               onClick={() => setWindowState(isFullscreen ? "normal" : "fullscreen")}
-              className="group flex h-3.5 w-3.5 items-center justify-center rounded-full bg-signal-500/90 transition hover:bg-signal-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
+              className="group flex h-3 w-3 items-center justify-center rounded-full bg-signal-500/90 transition hover:bg-signal-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
             >
               {isFullscreen ? (
                 <Minimize2 className="h-2 w-2 text-green-900 opacity-0 group-hover:opacity-100" strokeWidth={3} />
@@ -189,8 +164,8 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
               )}
             </button>
           </div>
-          <div className={`flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${statusTone[session.status]}`}>
-            {renderStatusIcon(session.status)}
+          <div className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] flex items-center gap-1.5 ${statusTone[session.status]}`}>
+            {session.status === 'starting' ? <Loader2 className="w-3 h-3 animate-spin" /> : session.status === 'running' ? <Play className="w-3 h-3" fill="currentColor" /> : session.status === 'error' ? <AlertCircle className="w-3 h-3" /> : <Square className="w-3 h-3" fill="currentColor" />}
             {session.status}
           </div>
         </div>
@@ -202,7 +177,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             aria-disabled={!navigationEnabled}
             aria-busy={!navigationEnabled && session?.status === 'starting'}
             title={navigationEnabled ? "Go back" : "Back navigation requires a running container"}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-black/[0.08] bg-white/70 text-slate-600 transition hover:-translate-y-px hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
           >
             <ChevronLeft className="h-4 w-4" strokeWidth={2.2} />
           </button>
@@ -213,7 +188,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             aria-disabled={!navigationEnabled}
             aria-busy={!navigationEnabled && session?.status === 'starting'}
             title={navigationEnabled ? "Go forward" : "Forward navigation requires a running container"}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-black/[0.08] bg-white/70 text-slate-600 transition hover:-translate-y-px hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
           >
             <ChevronRight className="h-4 w-4" strokeWidth={2.2} />
           </button>
@@ -224,12 +199,12 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             aria-disabled={!navigationEnabled}
             aria-busy={!navigationEnabled && session?.status === 'starting'}
             title={navigationEnabled ? "Reload preview" : "Reload requires a running container"}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-black/[0.08] bg-white/70 text-slate-600 transition hover:-translate-y-px hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
           >
             <RefreshCw className="h-4 w-4" strokeWidth={2.2} />
           </button>
           <form
-            className="flex min-w-[14rem] flex-1 items-center"
+            className="flex min-w-0 flex-1 items-center"
             onSubmit={(event) => {
               event.preventDefault();
               onAddressSubmit(addressValue);
@@ -239,12 +214,11 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
               value={addressValue}
               onInput={(event) => onAddressChange((event.currentTarget as HTMLInputElement).value)}
               disabled={!navigationEnabled}
-              aria-disabled={!navigationEnabled}
-              aria-busy={!navigationEnabled && session?.status === 'starting'}
+            aria-disabled={!navigationEnabled}
+            aria-busy={!navigationEnabled && session?.status === 'starting'}
               title={navigationEnabled ? "Preview address" : "Address entry requires a running container"}
               placeholder={navigationEnabled ? "Enter path..." : "Container not running..."}
-              aria-label="Preview address"
-              className="h-10 w-full min-w-0 rounded-2xl border border-black/[0.08] bg-white/80 px-4 font-mono text-sm text-slate-800 outline-none transition focus:border-signal-500/40 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-100"
+              className="h-10 w-full rounded-2xl border border-black/[0.08] bg-white/80 px-4 font-mono text-sm text-slate-800 outline-none transition focus:border-signal-500/40 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-100"
             />
           </form>
         </div>

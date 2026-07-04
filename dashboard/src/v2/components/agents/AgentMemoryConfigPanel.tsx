@@ -150,9 +150,8 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
   };
 
   return (
-    <div className="relative flex max-h-[min(78vh,560px)] w-[min(440px,92vw)] flex-col overflow-hidden rounded-[1.9rem] border border-black/[0.06] bg-white/68 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/58 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-      <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-white/80 to-transparent dark:via-white/10" />
-      <div className="flex items-start justify-between gap-4 border-b border-black/[0.05] bg-white/78 px-5 py-4 backdrop-blur-2xl dark:border-white/[0.05] dark:bg-void-800/72">
+    <div className="flex max-h-[min(78vh,560px)] w-[min(440px,92vw)] flex-col overflow-hidden rounded-[1.9rem] border border-black/[0.06] bg-white/70 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+      <div className="flex items-start justify-between gap-4 border-b border-black/[0.05] bg-white/75 px-5 py-4 backdrop-blur-2xl dark:border-white/[0.05] dark:bg-void-800/70">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-signal-500/10 text-signal-600 dark:bg-signal-500/15 dark:text-signal-400">
             <BrainCircuit className="h-5 w-5" strokeWidth={2.2} />
@@ -189,7 +188,7 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-5">
-        <section className="rounded-2xl border border-black/[0.05] bg-white/38 p-4 shadow-[0_2px_14px_rgba(0,0,0,0.025)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-white/[0.02]">
+        <section className="rounded-2xl border border-black/[0.05] bg-white/35 p-4 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02]">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
@@ -223,7 +222,7 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
           </div>
         </section>
 
-        <section className="rounded-2xl border border-black/[0.05] bg-white/38 p-4 shadow-[0_2px_14px_rgba(0,0,0,0.025)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-white/[0.02]">
+        <section className="rounded-2xl border border-black/[0.05] bg-white/35 p-4 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02]">
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
               <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
@@ -270,7 +269,7 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
           </div>
         </section>
 
-        <section className="rounded-2xl border border-black/[0.05] bg-white/38 p-4 shadow-[0_2px_14px_rgba(0,0,0,0.025)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-white/[0.02]">
+        <section className="rounded-2xl border border-black/[0.05] bg-white/35 p-4 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02]">
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
               <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
@@ -361,7 +360,7 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
           </div>
         </section>
 
-        <section className="rounded-2xl border border-black/[0.05] bg-white/38 p-4 shadow-[0_2px_14px_rgba(0,0,0,0.025)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-white/[0.02]">
+        <section className="rounded-2xl border border-black/[0.05] bg-white/35 p-4 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02]">
           <div className="mb-3">
             <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
               Max Memories

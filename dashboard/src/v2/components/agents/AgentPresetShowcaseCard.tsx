@@ -43,11 +43,10 @@ export const AgentPresetShowcaseCard: FunctionComponent<{
       ref={cardRef}
       type="button"
       onClick={onClick}
-      aria-label={`Select agent preset ${preset.name}. ${routeTags.length > 0 ? `Routes: ${routeTags.join(", ")}. ` : "No assigned routes. "}Sync status: ${badge.label}.`}
-      className={`group relative flex w-full overflow-hidden rounded-[1.45rem] border text-left shadow-[0_2px_18px_rgba(0,0,0,0.035)] backdrop-blur-xl transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${
+      className={`group relative flex w-full overflow-hidden rounded-[1.4rem] border text-left backdrop-blur-xl transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${
         isSelected
           ? "border-signal-500/40 bg-white/85 shadow-[0_8px_32px_rgba(0,224,160,0.12)] dark:border-signal-500/40 dark:bg-void-800/75 dark:shadow-[0_8px_32px_rgba(0,224,160,0.10)]"
-          : "border-black/[0.06] bg-white/55 hover:-translate-y-0.5 hover:border-signal-500/25 hover:bg-white/78 hover:shadow-[0_10px_26px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-void-800/40 dark:hover:border-signal-500/25 dark:hover:bg-void-800/60 dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.25)]"
+          : "border-black/[0.06] bg-white/55 hover:-translate-y-0.5 hover:border-signal-500/30 hover:bg-white/80 hover:shadow-[0_8px_24px_rgba(0,224,160,0.06)] dark:border-white/[0.06] dark:bg-void-800/40 dark:hover:border-signal-500/30 dark:hover:bg-void-800/60 dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.25)]"
       }`}
     >
       {/* Left accent strip */}
@@ -56,12 +55,10 @@ export const AgentPresetShowcaseCard: FunctionComponent<{
         style={{ backgroundColor: accentHex }}
       />
 
-      <div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-white/80 to-transparent opacity-60 dark:via-white/10" />
-
       <div className="relative z-10 flex w-full items-center gap-4 px-5 py-4">
         {/* SVG Avatar thumbnail — no WebGL */}
         <div
-            className={`relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl ring-1 ring-inset ring-black/[0.04] transition-shadow duration-300 dark:ring-white/[0.06] ${
+          className={`relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl transition-shadow duration-300 ${
             isSelected ? "shadow-[0_0_16px_rgba(0,224,160,0.12)]" : ""
           }`}
           style={{ background: `linear-gradient(135deg, ${accentHex}12, ${accentHex}06)` }}
@@ -75,7 +72,7 @@ export const AgentPresetShowcaseCard: FunctionComponent<{
 
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <h3
-            className={`truncate font-display text-[15px] font-black tracking-tight transition-colors ${
+            className={`font-display text-[15px] font-bold tracking-tight transition-colors ${
               isSelected
                 ? "text-slate-900 dark:text-white"
                 : "text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white"
