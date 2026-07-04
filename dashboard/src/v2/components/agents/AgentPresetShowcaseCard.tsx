@@ -5,6 +5,7 @@ import { ChevronRight, AlertTriangle } from "lucide-preact";
 import type { AgentPreset } from "../../types.js";
 import { AgentAvatarSvg } from "./AgentAvatarSvg.js";
 import { getAccentHex } from "../../lib/agent-avatar.js";
+import { INTERACTION_CSS_VARIABLES } from "../../lib/motion/tokens.js";
 
 const syncBadge = (preset: AgentPreset) => {
   switch (preset.syncStatus) {
@@ -48,6 +49,10 @@ export const AgentPresetShowcaseCard: FunctionComponent<{
           ? "border-signal-500/40 bg-white/85 shadow-[0_8px_32px_rgba(0,224,160,0.12)] dark:border-signal-500/40 dark:bg-void-800/75 dark:shadow-[0_8px_32px_rgba(0,224,160,0.10)]"
           : "border-black/[0.06] bg-white/55 hover:-translate-y-0.5 hover:border-signal-500/30 hover:bg-white/80 hover:shadow-[0_8px_24px_rgba(0,224,160,0.06)] dark:border-white/[0.06] dark:bg-void-800/40 dark:hover:border-signal-500/30 dark:hover:bg-void-800/60 dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.25)]"
       }`}
+      style={{
+        transitionDuration: INTERACTION_CSS_VARIABLES.selectionMovement.duration,
+        transitionTimingFunction: INTERACTION_CSS_VARIABLES.selectionMovement.ease,
+      }}
     >
       {/* Left accent strip */}
       <div
@@ -97,6 +102,11 @@ export const AgentPresetShowcaseCard: FunctionComponent<{
               {badge.icon && <AlertTriangle className="h-2.5 w-2.5" strokeWidth={2.5} />}
               {badge.label}
             </span>
+            {isSelected && (
+              <span className="inline-flex items-center rounded-md border border-signal-500/25 bg-signal-500/[0.08] px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.1em] text-signal-600 dark:text-signal-400">
+                Selected
+              </span>
+            )}
           </div>
         </div>
 

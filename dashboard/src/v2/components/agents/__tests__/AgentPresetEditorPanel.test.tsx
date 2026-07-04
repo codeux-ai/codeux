@@ -28,7 +28,15 @@ vi.mock("gsap", () => ({
 }));
 
 vi.mock("../AgentAvatarStage.js", () => ({
-  AgentAvatarStage: () => <div data-testid="avatar-stage" />,
+  AgentAvatarStage: ({ onRandomize }: { onRandomize?: () => void }) => (
+    <div data-testid="avatar-stage">
+      {onRandomize && (
+        <button type="button" onClick={onRandomize}>
+          Randomize appearance
+        </button>
+      )}
+    </div>
+  ),
 }));
 
 vi.mock("../AgentAvatarCustomizer.js", () => ({
@@ -205,13 +213,35 @@ describe("AgentPresetEditorPanel", () => {
     expect(await screen.findByText("Fix errors to save")).toBeInTheDocument();
   });
 
+  it("focuses the first invalid required field on submit and shows retry guidance", async () => {
+    render(<AgentPresetEditorPanel preset={makePreset()} saving={false} onSave={vi.fn()} onCancel={vi.fn()} />);
+
+    const nameInput = screen.getByLabelText(/Agent Name/);
+    fireEvent.input(nameInput, { target: { value: "" } });
+    fireEvent.submit(screen.getByRole("form", { name: /Edit Planning Agent/ }));
+
+    expect(await screen.findByText("Fix the highlighted fields, then retry Save Agent.")).toBeInTheDocument();
+    expect(nameInput).toHaveFocus();
+  });
+
+  it("shows stable pending feedback when saving changed preset fields", async () => {
+    const onSave = vi.fn();
+    render(<AgentPresetEditorPanel preset={makePreset()} saving={false} onSave={onSave} onCancel={vi.fn()} />);
+
+    fireEvent.input(screen.getByLabelText(/Agent Name/), { target: { value: "Planning Lead" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Agent" }));
+
+    expect(screen.getByText("Saving agent changes...")).toBeInTheDocument();
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
   it("provides visual and accessible feedback when randomize is clicked", async () => {
     render(<AgentPresetEditorPanel preset={makePreset()} saving={false} onSave={vi.fn()} onCancel={vi.fn()} />);
 
     const randomizeBtn = screen.getByRole("button", { name: /Randomize/i });
     fireEvent.click(randomizeBtn);
 
-    expect(await screen.findByText("Avatar randomized")).toBeInTheDocument();
+    expect(await screen.findByText("Avatar randomized. Save Agent to keep the new appearance.")).toBeInTheDocument();
   });
 
   it("shows the active memory summary, opens the memory popover, and persists the selected config", async () => {

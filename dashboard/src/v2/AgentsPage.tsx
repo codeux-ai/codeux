@@ -77,6 +77,11 @@ type PushAgentResult = {
   pullRequestUrl?: string;
 };
 
+type PageActionFeedback = {
+  tone: "pending" | "success" | "error";
+  message: string;
+  retry?: () => void;
+} | null;
 
 /* ── Main Page ── */
 export const AgentsPage: FunctionComponent = () => {
@@ -96,6 +101,7 @@ export const AgentsPage: FunctionComponent = () => {
   const [pushMode, setPushMode] = useState<PushAgentMode>("commit_only");
   const [pushBranchName, setPushBranchName] = useState("");
   const [pushResult, setPushResult] = useState<PushAgentResult | null>(null);
+  const [actionFeedback, setActionFeedback] = useState<PageActionFeedback>(null);
   const [projectFileSavingEnabled, setProjectFileSavingEnabled] = useState(true);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [selectedAgentUsage, setSelectedAgentUsage] = useState<AgentUsageSummary | null>(null);
@@ -222,6 +228,7 @@ export const AgentsPage: FunctionComponent = () => {
   const handleCreate = async (): Promise<void> => {
     if (!selectedProject) return;
     try {
+      setActionFeedback({ tone: "pending", message: "Creating agent preset..." });
       const created = await createAgentPreset(selectedProject.id, {
         name: `Agent ${presets.length + 1}`,
         instructionMarkdown: "",
@@ -232,19 +239,26 @@ export const AgentsPage: FunctionComponent = () => {
       setSelectedPresetId(created.id);
       setIsEditing(true);
       setError(null);
+      setActionFeedback({ tone: "success", message: "Agent preset created. Complete the required fields, then save." });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      setError(message);
+      setActionFeedback({ tone: "error", message: `Agent creation failed: ${message}`, retry: () => void handleCreate() });
     }
   };
 
   const handleImport = async (presetId: string): Promise<void> => {
     setImportingId(presetId);
+    setActionFeedback({ tone: "pending", message: "Importing preset from markdown..." });
     try {
       const updated = await importAgentPresetFromMarkdown(presetId);
       setPresets((cur) => cur.map((p) => (p.id === updated.id ? updated : p)));
       setError(null);
+      setActionFeedback({ tone: "success", message: "Agent preset imported from markdown." });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      setError(message);
+      setActionFeedback({ tone: "error", message: `Import failed: ${message}`, retry: () => void handleImport(presetId) });
     } finally {
       setImportingId(null);
     }
@@ -253,11 +267,15 @@ export const AgentsPage: FunctionComponent = () => {
   const handleSyncAll = async (): Promise<void> => {
     if (!selectedProject) return;
     setSyncingAll(true);
+    setActionFeedback({ tone: "pending", message: "Syncing all agent presets from markdown..." });
     try {
       setPresets(await syncAllAgentPresetsFromMarkdown(selectedProject.id));
       setError(null);
+      setActionFeedback({ tone: "success", message: "Agent presets synced from markdown." });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      setError(message);
+      setActionFeedback({ tone: "error", message: `Sync failed: ${message}`, retry: () => void handleSyncAll() });
     } finally {
       setSyncingAll(false);
     }
@@ -321,13 +339,17 @@ export const AgentsPage: FunctionComponent = () => {
 
   const handleSave = async (presetId: string, next: Parameters<typeof updateAgentPreset>[1]): Promise<void> => {
     setSavingId(presetId);
+    setActionFeedback({ tone: "pending", message: "Saving agent preset..." });
     try {
       const updated = await updateAgentPreset(presetId, next);
       setPresets((cur) => cur.map((p) => (p.id === updated.id ? updated : p)));
       setIsEditing(false);
       setError(null);
+      setActionFeedback({ tone: "success", message: "Agent preset saved." });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      setError(message);
+      setActionFeedback({ tone: "error", message: `Save failed: ${message}`, retry: () => void handleSave(presetId, next) });
     } finally {
       setSavingId(null);
     }
@@ -335,6 +357,7 @@ export const AgentsPage: FunctionComponent = () => {
 
   const handleDelete = async (presetId: string): Promise<void> => {
     setDeletingId(presetId);
+    setActionFeedback({ tone: "pending", message: "Deleting agent preset..." });
     try {
       await deleteAgentPreset(presetId);
       setPresets((cur) => {
@@ -346,8 +369,11 @@ export const AgentsPage: FunctionComponent = () => {
         return next;
       });
       setError(null);
+      setActionFeedback({ tone: "success", message: "Agent preset deleted." });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      setError(message);
+      setActionFeedback({ tone: "error", message: `Delete failed: ${message}`, retry: () => void handleDelete(presetId) });
     } finally {
       setDeletingId(null);
     }
@@ -659,6 +685,31 @@ export const AgentsPage: FunctionComponent = () => {
             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.2} />
             <div className="min-w-0">{pushFeedback}</div>
           </div>
+        </div>
+      )}
+
+      {actionFeedback && (
+        <div
+          role={actionFeedback.tone === "error" ? "alert" : "status"}
+          aria-live="polite"
+          className={`flex min-h-[3rem] items-center justify-between gap-3 rounded-2xl border px-5 py-3 text-sm font-medium backdrop-blur-md ${
+            actionFeedback.tone === "error"
+              ? "border-status-red/30 bg-status-red/[0.08] text-status-red"
+              : actionFeedback.tone === "pending"
+                ? "border-signal-500/25 bg-signal-500/[0.08] text-signal-700 dark:text-signal-300"
+                : "border-status-green/20 bg-status-green/[0.08] text-status-green"
+          }`}
+        >
+          <span>{actionFeedback.message}</span>
+          {actionFeedback.retry && (
+            <button
+              type="button"
+              onClick={actionFeedback.retry}
+              className="rounded-full border border-current/25 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors hover:bg-current/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-current/30"
+            >
+              Retry
+            </button>
+          )}
         </div>
       )}
 
