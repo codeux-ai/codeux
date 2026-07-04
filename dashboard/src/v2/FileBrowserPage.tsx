@@ -306,7 +306,7 @@ export const FileBrowserPage: FunctionComponent = () => {
     <PageContainer aria-label="File Browser" padding="workbench" className="min-h-full" data-testid="file-browser-page-root">
       <PageHeader
         data-testid="file-browser-page-header"
-        className="mb-6"
+        className="mb-5"
         icon={FolderTree}
         eyebrow="Sprint File Browser"
         title="Browse & Diff the Sprint Branch"
@@ -315,7 +315,8 @@ export const FileBrowserPage: FunctionComponent = () => {
           <button
             type="button"
             onClick={() => void refresh()}
-            class="inline-flex h-11 items-center gap-2 rounded-2xl border border-black/[0.08] bg-white/78 px-4 text-sm font-semibold text-slate-700 shadow-[0_10px_24px_rgba(15,23,42,0.05)] backdrop-blur-md transition hover:-translate-y-px hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
+            aria-label="Refresh file browser sessions"
+            class="inline-flex h-10 items-center gap-2 rounded-xl border border-black/[0.08] bg-white/78 px-3.5 text-sm font-semibold text-slate-700 shadow-[0_10px_24px_rgba(15,23,42,0.05)] backdrop-blur-md transition hover:-translate-y-px hover:border-black/[0.16] hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
           >
             <RefreshCw class={`h-4 w-4 ${loading ? "animate-spin" : ""}`} strokeWidth={2} />
             Refresh
@@ -330,22 +331,22 @@ export const FileBrowserPage: FunctionComponent = () => {
       )}
 
       {/* Control bar */}
-      <div class="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-[1.5rem] border border-black/[0.06] bg-white/74 px-4 py-3 shadow-[0_12px_30px_rgba(15,23,42,0.05)] backdrop-blur-md dark:border-white/[0.07] dark:bg-void-900/42">
-        <div class="flex flex-wrap items-center gap-3">
+      <div class="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-2xl border border-black/[0.06] bg-white/78 px-4 py-3 shadow-[0_12px_30px_rgba(15,23,42,0.05)] backdrop-blur-md dark:border-white/[0.07] dark:bg-void-900/52" aria-label="File browser session controls">
+        <div class="flex min-w-0 flex-1 flex-wrap items-center gap-3">
           {statusPill && (
             <span class="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-black/[0.02] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] dark:border-white/[0.08] dark:bg-white/[0.03]">
               <span class={`h-2 w-2 rounded-full ${statusPill.dot}`} />
               <span class={statusPill.text}>{statusPill.label}</span>
             </span>
           )}
-          <span class="min-w-0 flex-1 inline-flex items-center gap-1.5 text-[12px] font-medium text-slate-500 dark:text-slate-400">
+          <span class="inline-flex min-w-0 flex-1 items-center gap-1.5 text-[12px] font-medium text-slate-500 dark:text-slate-400">
             <Server class="shrink-0 h-3.5 w-3.5" strokeWidth={2} />
-            <span class="truncate">{sessionSprintName || selectedSprint?.name || "No sprint"}</span>
+            <span class="min-w-0 break-words">{sessionSprintName || selectedSprint?.name || "No sprint"}</span>
           </span>
           {selectedSession?.featureBranch && (
-            <span class="min-w-0 flex-1 inline-flex items-center gap-1.5 rounded-lg border border-black/[0.06] bg-white/75 px-2 py-1 font-mono text-[11px] text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300">
+            <span class="inline-flex min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-black/[0.06] bg-white/75 px-2 py-1 font-mono text-[11px] text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300">
               <GitBranch class="shrink-0 h-3 w-3 text-signal-600 dark:text-signal-400" strokeWidth={2.2} />
-              <span class="truncate">{selectedSession.featureBranch}</span>
+              <span class="min-w-0 break-all">{selectedSession.featureBranch}</span>
             </span>
           )}
         </div>
@@ -356,6 +357,7 @@ export const FileBrowserPage: FunctionComponent = () => {
             <button
               type="button"
               onClick={() => setMode("files")}
+              aria-pressed={mode === "files"}
               class={`inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition ${
                 mode === "files"
                   ? "bg-signal-500/14 text-signal-700 dark:text-signal-300"
@@ -368,6 +370,7 @@ export const FileBrowserPage: FunctionComponent = () => {
             <button
               type="button"
               onClick={() => setMode("changes")}
+              aria-pressed={mode === "changes"}
               class={`inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition ${
                 mode === "changes"
                   ? "bg-signal-500/14 text-signal-700 dark:text-signal-300"
@@ -388,7 +391,8 @@ export const FileBrowserPage: FunctionComponent = () => {
             type="button"
             onClick={handleRebuild}
             disabled={!selectedSession || actionPending}
-            class="inline-flex h-9 items-center gap-2 rounded-xl border border-black/[0.08] bg-white/75 px-3 text-xs font-semibold text-slate-700 transition hover:-translate-y-px hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:border-black/[0.06] disabled:bg-black/[0.03] disabled:text-slate-400 disabled:opacity-100 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:bg-white/[0.02] dark:disabled:text-slate-500"
+            aria-label="Rebuild file browser snapshot"
+            class="inline-flex h-9 items-center gap-2 rounded-xl border border-black/[0.08] bg-white/75 px-3 text-xs font-semibold text-slate-700 transition hover:-translate-y-px hover:border-black/[0.16] hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 disabled:cursor-not-allowed disabled:border-black/[0.06] disabled:bg-black/[0.03] disabled:text-slate-400 disabled:opacity-100 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:bg-white/[0.02] dark:disabled:text-slate-500"
           >
             <RotateCcw class={`h-3.5 w-3.5 ${actionPending ? "animate-spin" : ""}`} strokeWidth={2} />
             Rebuild
@@ -397,7 +401,8 @@ export const FileBrowserPage: FunctionComponent = () => {
             type="button"
             onClick={handleStop}
             disabled={!selectedSession || actionPending}
-            class="inline-flex h-9 items-center gap-2 rounded-xl border border-black/[0.08] bg-white/75 px-3 text-xs font-semibold text-slate-700 transition hover:-translate-y-px hover:border-status-red/35 hover:text-status-red disabled:cursor-not-allowed disabled:border-black/[0.06] disabled:bg-black/[0.03] disabled:text-slate-400 disabled:opacity-100 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200 dark:disabled:bg-white/[0.02] dark:disabled:text-slate-500"
+            aria-label="Stop file browser snapshot"
+            class="inline-flex h-9 items-center gap-2 rounded-xl border border-black/[0.08] bg-white/75 px-3 text-xs font-semibold text-slate-700 transition hover:-translate-y-px hover:border-status-red/35 hover:text-status-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 disabled:cursor-not-allowed disabled:border-black/[0.06] disabled:bg-black/[0.03] disabled:text-slate-400 disabled:opacity-100 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200 dark:disabled:bg-white/[0.02] dark:disabled:text-slate-500"
           >
             <Square class="h-3.5 w-3.5" strokeWidth={2} />
             Stop
@@ -415,12 +420,12 @@ export const FileBrowserPage: FunctionComponent = () => {
           lastError={selectedSession?.status === "error" ? selectedSession.lastError : null}
         />
       ) : (
-        <div class="flex flex-col gap-5 lg:grid lg:h-[calc(100vh-340px)] lg:grid-cols-[340px_minmax(0,1fr)]" data-testid="file-browser-main-tool-panel">
+        <div class="flex min-w-0 flex-col gap-4 lg:grid lg:h-[calc(100vh-330px)] lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]" data-testid="file-browser-main-tool-panel">
           {/* Sidebar panel */}
-          <div class="flex h-[400px] min-h-0 flex-col overflow-hidden rounded-[1.5rem] border border-black/[0.06] bg-white/74 shadow-[0_12px_30px_rgba(15,23,42,0.05)] backdrop-blur-md lg:h-auto dark:border-white/[0.07] dark:bg-void-900/42">
+          <section class="flex h-[400px] min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-black/[0.06] bg-white/78 shadow-[0_12px_30px_rgba(15,23,42,0.05)] backdrop-blur-md lg:h-auto dark:border-white/[0.07] dark:bg-void-900/52" aria-label={mode === "files" ? "File tree panel" : "Changed files panel"}>
             {mode === "files" ? (
               <>
-                <div class="border-b border-black/[0.05] p-3 dark:border-white/[0.05]">
+                <div class="border-b border-black/[0.06] p-3 dark:border-white/[0.06]">
                   <div class="flex items-center gap-2 rounded-xl border border-black/[0.08] bg-black/[0.02] px-3 dark:border-white/[0.08] dark:bg-white/[0.03]">
                     <Search class="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
                     <input
@@ -428,13 +433,14 @@ export const FileBrowserPage: FunctionComponent = () => {
                       value={treeSearch}
                       onInput={(event) => setTreeSearch((event.currentTarget as HTMLInputElement).value)}
                       placeholder="Filter files…"
-                      class="h-9 flex-1 bg-transparent text-[13px] text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200"
+                      aria-label="Filter file tree"
+                      class="h-9 min-w-0 flex-1 bg-transparent text-[13px] text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200"
                     />
                   </div>
                 </div>
-                <div class="min-h-0 flex-1 p-2">
+                <div class="min-h-0 min-w-0 flex-1 p-2">
                   {treeLoading ? (
-                    <div class="flex h-full items-center justify-center gap-2 text-sm text-slate-500">
+                    <div class="flex h-full items-center justify-center gap-2 p-6 text-center text-sm text-slate-500" role="status" aria-live="polite">
                       <Loader2 class="h-4 w-4 animate-spin text-signal-500" strokeWidth={2} />
                       Indexing files…
                     </div>
@@ -446,7 +452,7 @@ export const FileBrowserPage: FunctionComponent = () => {
                       searchTerm={treeSearch}
                     />
                   ) : (
-                    <div class="flex h-full items-center justify-center p-6 text-center text-sm text-slate-500">
+                    <div class="flex h-full items-center justify-center p-6 text-center text-sm leading-6 text-slate-500" role="status" aria-label="File tree empty state">
                       No files found in this snapshot.
                     </div>
                   )}
@@ -459,15 +465,15 @@ export const FileBrowserPage: FunctionComponent = () => {
               </>
             ) : (
               <>
-                <div class="flex items-center justify-between border-b border-black/[0.05] px-4 py-3 dark:border-white/[0.05]">
+                <div class="flex items-center justify-between border-b border-black/[0.06] px-4 py-3 dark:border-white/[0.06]">
                   <div class="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
                     Changed files
                   </div>
                   {changesLoading && <Loader2 class="h-3.5 w-3.5 animate-spin text-signal-500" strokeWidth={2} />}
                 </div>
-                <div class="min-h-0 flex-1">
+                <div class="min-h-0 min-w-0 flex-1">
                   {changes && !changes.available ? (
-                    <div class="flex h-full items-center justify-center p-6 text-center text-sm text-slate-500">
+                    <div class="flex h-full items-center justify-center p-6 text-center text-sm leading-6 text-slate-500" role="status" aria-label="Diff unavailable state">
                       {changes.reason || "Diff unavailable for this sprint."}
                     </div>
                   ) : (
@@ -485,12 +491,12 @@ export const FileBrowserPage: FunctionComponent = () => {
                 )}
               </>
             )}
-          </div>
+          </section>
 
           {/* Viewer panel */}
-          <div class="flex h-[600px] min-h-0 flex-col overflow-hidden rounded-[1.5rem] border border-black/[0.06] bg-white/74 shadow-[0_12px_30px_rgba(15,23,42,0.05)] backdrop-blur-md lg:h-auto dark:border-white/[0.07] dark:bg-void-900/46">
-            <div class="flex items-center justify-between gap-3 border-b border-black/[0.05] px-4 py-2.5 dark:border-white/[0.06]">
-              <div class="min-w-0 flex-1 truncate font-mono text-[12px] text-slate-500 dark:text-slate-400">
+          <section class="flex h-[600px] min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-black/[0.06] bg-white/78 shadow-[0_12px_30px_rgba(15,23,42,0.05)] backdrop-blur-md lg:h-auto dark:border-white/[0.07] dark:bg-void-900/52" aria-label={mode === "files" ? "File viewer panel" : "Diff viewer panel"}>
+            <div class="flex min-w-0 items-start justify-between gap-3 border-b border-black/[0.06] px-4 py-2.5 dark:border-white/[0.06]">
+              <div class="min-w-0 flex-1 break-all font-mono text-[12px] leading-5 text-slate-500 dark:text-slate-400" aria-label="Selected file path">
                 {mode === "files"
                   ? selectedFilePath || "No file selected"
                   : selectedChangePath || "No file selected"}
@@ -499,7 +505,8 @@ export const FileBrowserPage: FunctionComponent = () => {
                 <button
                   type="button"
                   onClick={() => setSideBySide((value) => !value)}
-                  class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-black/[0.08] bg-white/75 px-2.5 text-[11px] font-semibold text-slate-600 transition hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
+                  aria-label={sideBySide ? "Switch to inline diff" : "Switch to side-by-side diff"}
+                  class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-black/[0.08] bg-white/75 px-2.5 text-[11px] font-semibold text-slate-600 transition hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
                   title={sideBySide ? "Switch to inline diff" : "Switch to side-by-side diff"}
                 >
                   {sideBySide ? <Columns2 class="h-3.5 w-3.5" strokeWidth={2} /> : <Rows2 class="h-3.5 w-3.5" strokeWidth={2} />}
@@ -514,7 +521,7 @@ export const FileBrowserPage: FunctionComponent = () => {
                 <DiffViewer diff={diff} loading={diffLoading} error={diffError} isDark={isDark} sideBySide={sideBySide} />
               )}
             </div>
-          </div>
+          </section>
         </div>
       )}
     </PageContainer>
