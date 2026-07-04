@@ -45,6 +45,8 @@ Project creation can also include:
 
 `ProjectSetupService` ensures a project-local `Project Setup Agent`, routes the request through the virtual provider planning path, asks for strict JSON, and applies the returned artifacts itself. This keeps the result stable when provider execution runs in Docker snapshots.
 
+For Docker or remote provider execution, setup runs against the current remote default-branch snapshot for the project. Code UX resolves the project's saved default branch first, then the dashboard default, then `main`, and prepares the provider workspace from that branch so setup suggestions reflect the latest upstream baseline rather than an older local checkout state.
+
 The dashboard uses background mode for user-triggered setup. The endpoint returns `202` with the created `invocationId` immediately, then the setup run continues server-side. The project card shows an `Initializing` state with the invocation short id, and toast notifications link directly to `/chat?mode=invocations&invocation=<id>` for live tracking and completion review.
 
 ## Generated Artifacts
