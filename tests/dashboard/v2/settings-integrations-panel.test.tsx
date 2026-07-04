@@ -480,10 +480,10 @@ describe("SettingsIntegrationsPanel", () => {
       });
 
       rerender(<SettingsIntegrationsPanel state={stateLocal as any} />);
-      const inputs = container.querySelectorAll("input");
-      const baseUrlInput = Array.from(inputs).find((inp) => inp.value === "");
-      expect(baseUrlInput).toBeDefined();
-      expect(baseUrlInput?.disabled).toBe(true);
+      const disabledReason = await screen.findByText(/Custom endpoint fields are disabled while local auth is selected/i);
+      const baseUrlInput = screen.getByLabelText("Codex Primary custom base URL");
+      expect(baseUrlInput.getAttribute("aria-disabled")).toBe("true");
+      expect(baseUrlInput.getAttribute("aria-describedby")).toContain(disabledReason.id);
     });
 
     it("clears API key and disables base URL / model fields when switching Claude Code to Local Copy", async () => {
