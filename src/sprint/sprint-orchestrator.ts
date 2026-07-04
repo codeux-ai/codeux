@@ -5,7 +5,7 @@ import {
   DEFAULT_CI_INTELLIGENCE_SETTINGS,
   DEFAULT_SPRINT_LOOP_STEP_SETTINGS,
 } from "./sprint-orchestrator-defaults.js";
-import { prepareBranchForOrchestration, runBranchPreflightStep } from "./steps/branch-preflight-step.js";
+import { prepareBranchForOrchestration, resolveUniqueSprintBranchName, runBranchPreflightStep } from "./steps/branch-preflight-step.js";
 import { fetchOriginIfAvailable } from "../services/git-branch-sync-service.js";
 import type { SprintAgentArgs } from "./sprint-types.js";
 import type {
@@ -521,7 +521,7 @@ export class SprintOrchestrator {
     const repoPath = executionContext.repoPath;
     const planningTarget = `${executionContext.project.name} / ${executionContext.sprint.name}`;
     const sprintScopeKey = `${executionContext.project.id}:${executionContext.sprint.id}`;
-    const defaultFeatureBranch = executionContext.featureBranch;
+    let defaultFeatureBranch = executionContext.featureBranch;
     const defaultBranch = executionContext.defaultBranch;
     // Use the project/sprint-scoped git mode (LOCAL vs REMOTE) - `this.deps.settings`
     // is the global snapshot and never carries a top-level `githubMode`, so reading it
@@ -569,6 +569,24 @@ export class SprintOrchestrator {
             defaultBranch,
             error: message,
           });
+        }
+      }
+
+      const shouldAllocateFreshBranchName = args.action === "orchestrate"
+        && !args.feature_branch?.trim()
+        && !executionContext.sprint.featureBranch?.trim();
+      if (shouldAllocateFreshBranchName) {
+        const allocatedBranch = await resolveUniqueSprintBranchName(repoPath, defaultFeatureBranch, gitAuthOptions);
+        if (allocatedBranch !== defaultFeatureBranch) {
+          this.deps.logger.info("Allocated unique sprint feature branch because the generated branch already exists.", {
+            projectId: executionContext.project.id,
+            sprintId: executionContext.sprint.id,
+            repoPath,
+            generatedFeatureBranch: defaultFeatureBranch,
+            allocatedFeatureBranch: allocatedBranch,
+          });
+          defaultFeatureBranch = allocatedBranch;
+          executionContext.featureBranch = allocatedBranch;
         }
       }
 

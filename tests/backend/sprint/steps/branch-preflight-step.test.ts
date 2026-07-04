@@ -1,6 +1,6 @@
 import * as fs from "fs/promises";
 import { commandRunner } from "../../../../src/shared/subprocess/command-runner.js";
-import { prepareBranchForOrchestration, runBranchPreflightStep } from "../../../../src/sprint/steps/branch-preflight-step.js";
+import { prepareBranchForOrchestration, resolveUniqueSprintBranchName, runBranchPreflightStep } from "../../../../src/sprint/steps/branch-preflight-step.js";
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { SprintOrchestrator } from "../../../../src/sprint/sprint-orchestrator.js";
 import { buildMockSettings } from "../../../builders/settings-builder.js";
@@ -438,5 +438,55 @@ describe("runBranchPreflightStep (Async)", () => {
       baseCommitSha: null,
     });
     expect(commandRunner.run).toHaveBeenCalledWith("git", ["branch", "--track", "feature/sprint1", "origin/feature/sprint1"], { cwd: "/valid-repo" });
+  });
+
+  it("returns the generated branch when no local or remote branch exists", async () => {
+    vi.mocked(commandRunner.run)
+      // resolveUniqueSprintBranchName -> fetch origin
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      // candidate -> local missing
+      .mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "" })
+      // candidate -> remote missing
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" });
+
+    const branch = await resolveUniqueSprintBranchName("/valid-repo", "feature/sprint-122-implementation");
+
+    expect(branch).toBe("feature/sprint-122-implementation");
+  });
+
+  it("appends a numeric suffix when the generated branch exists locally", async () => {
+    vi.mocked(commandRunner.run)
+      // resolveUniqueSprintBranchName -> fetch origin
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      // candidate -> local exists
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      // candidate -> remote missing
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      // suffix -1 -> local missing
+      .mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "" })
+      // suffix -1 -> remote missing
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" });
+
+    const branch = await resolveUniqueSprintBranchName("/valid-repo", "feature/sprint-122-implementation");
+
+    expect(branch).toBe("feature/sprint-122-implementation-1");
+  });
+
+  it("appends a numeric suffix when the generated branch exists on origin", async () => {
+    vi.mocked(commandRunner.run)
+      // resolveUniqueSprintBranchName -> fetch origin
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      // candidate -> local missing
+      .mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "" })
+      // candidate -> remote exists
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "hash refs/heads/feature/sprint-122-implementation\n", stderr: "" })
+      // suffix -1 -> local missing
+      .mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "" })
+      // suffix -1 -> remote missing
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" });
+
+    const branch = await resolveUniqueSprintBranchName("/valid-repo", "feature/sprint-122-implementation");
+
+    expect(branch).toBe("feature/sprint-122-implementation-1");
   });
 });
