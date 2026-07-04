@@ -72,6 +72,7 @@ describe("ProviderTelemetryWatcher", () => {
   });
 
   it("skips expensive reads when source metadata is unchanged after a successful emission", async () => {
+    vi.useFakeTimers();
     const controller = new AbortController();
     const opts = {
       provider: "codex" as const,
@@ -99,8 +100,8 @@ describe("ProviderTelemetryWatcher", () => {
     const watcher = new ProviderTelemetryWatcher(opts as any);
     watcher.start();
 
-    await new Promise(r => setTimeout(r, 1200));
-    await new Promise(r => setTimeout(r, 1700));
+    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(1500);
 
     expect(opts.getCodexLatestSessionJsonMetadata).toHaveBeenCalledTimes(2);
     expect(opts.readCodexLatestSessionJson).toHaveBeenCalledTimes(1);
@@ -112,6 +113,8 @@ describe("ProviderTelemetryWatcher", () => {
   });
 
   it("does not reject when a polling read fails", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
     let callCount = 0;
     const opts = {
       provider: "codex" as const,
@@ -120,6 +123,7 @@ describe("ProviderTelemetryWatcher", () => {
       cwd: "/cwd",
       startedMs: 123,
       workflowSettings: { executionMode: "HOST" as const },
+      signal: controller.signal,
       getAccumulatedRawStdout: () => "",
       getAccumulatedStderr: () => "",
       nativeSessionId: "native-1",
@@ -141,15 +145,16 @@ describe("ProviderTelemetryWatcher", () => {
     const watcher = new ProviderTelemetryWatcher(opts as any);
     watcher.start();
 
-    // allow event loop to run
-    await new Promise(r => setTimeout(r, 1500));
+    await vi.advanceTimersByTimeAsync(1000);
 
     expect(callCount).toBeGreaterThan(0);
     expect(opts.onTelemetry).not.toHaveBeenCalled(); // due to mocked collector dependency or empty
+    controller.abort();
     await watcher.stop();
   });
 
   it("logs repeated read failures with provider and session context without failing the watcher", async () => {
+    vi.useFakeTimers();
     const controller = new AbortController();
     const logger = { warn: vi.fn() };
     const opts = {
@@ -178,8 +183,8 @@ describe("ProviderTelemetryWatcher", () => {
     const watcher = new ProviderTelemetryWatcher(opts as any);
     watcher.start();
 
-    await new Promise(r => setTimeout(r, 1200));
-    await new Promise(r => setTimeout(r, 1700));
+    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(1500);
 
     expect(opts.readCodexLatestSessionJson).toHaveBeenCalledTimes(2);
     expect(logger.warn).toHaveBeenCalledWith("Provider telemetry watcher read failed", expect.objectContaining({
@@ -299,6 +304,8 @@ describe("ProviderTelemetryWatcher", () => {
   });
 
   it("forwards collected telemetry, including structured conversation turns, to the callback", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
     vi.mocked(collectProviderUsageTelemetry).mockResolvedValue({
       inputTokens: 2,
       cachedInputTokens: 0,
@@ -324,6 +331,7 @@ describe("ProviderTelemetryWatcher", () => {
       cwd: "/cwd",
       startedMs: 123,
       workflowSettings: { executionMode: "HOST" as const },
+      signal: controller.signal,
       getAccumulatedRawStdout: () => "",
       getAccumulatedStderr: () => "",
       nativeSessionId: "native-1",
@@ -349,7 +357,7 @@ describe("ProviderTelemetryWatcher", () => {
     const watcher = new ProviderTelemetryWatcher(opts as any);
     watcher.start();
 
-    await new Promise((r) => setTimeout(r, 1300));
+    await vi.advanceTimersByTimeAsync(1000);
 
     expect(opts.onTelemetry).toHaveBeenCalledWith(expect.objectContaining({
       transcriptText: "final answer OPENAI_API_KEY=[REDACTED]",
@@ -359,6 +367,7 @@ describe("ProviderTelemetryWatcher", () => {
         expect.objectContaining({ kind: "tool_result", toolOutput: "file contents [REDACTED]" }),
       ]),
     }));
+    controller.abort();
     await watcher.stop();
   });
 });
