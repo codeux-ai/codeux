@@ -140,11 +140,15 @@ describe("ProviderRunner", () => {
 
   it("records a Docker workspace mount failure through a deterministic Docker stub without invoking Docker", async () => {
     const onActivity = vi.fn();
-    dockerRunner.ensureWorkspace.mockResolvedValueOnce({ cwd: "/workspace", cleanup: vi.fn() });
+    const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "codeux-provider-workspace-"));
+    const cleanup = vi.fn(async () => {
+      await fs.rm(workspaceDir, { recursive: true, force: true });
+    });
+    dockerRunner.ensureWorkspace.mockResolvedValueOnce({ cwd: workspaceDir, cleanup });
     dockerRunner.runProviderInDocker.mockResolvedValueOnce({
       ok: false,
       stdout: "",
-      stderr: 'docker: invalid mount config for type "bind": bind source path does not exist: /workspace',
+      stderr: `docker: invalid mount config for type "bind": bind source path does not exist: ${workspaceDir}`,
       code: 125,
       signal: null,
     });
@@ -152,21 +156,22 @@ describe("ProviderRunner", () => {
     const result = await runner.runProvider({
       provider: "gemini",
       prompt: "hello",
-      cwd: "/workspace",
+      cwd: workspaceDir,
       model: "gemini-2.5-pro",
       apiKey: "key",
       sessionId: "session-1",
       workflowSettings: { executionMode: "DOCKER" } as any,
-      repoPath: "/workspace",
+      repoPath: workspaceDir,
       onActivity,
     });
 
     expect(result.ok).toBe(false);
     expect(dockerRunner.runProviderInDocker).toHaveBeenCalledTimes(1);
     expect(onActivity).toHaveBeenCalledWith(
-      "Docker could not mount workspace path (/workspace) even though it exists locally. Path visibility mismatch.",
+      `Docker could not mount workspace path (${workspaceDir}) even though it exists locally. Path visibility mismatch.`,
       "provider",
     );
+    expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
   it("falls back to sanitized stderr when a text run has no transcript artifact", async () => {
