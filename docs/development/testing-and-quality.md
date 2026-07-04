@@ -28,7 +28,7 @@ pnpm run test:backend
 pnpm run test:dashboard
 ```
 
-- Run coverage report (verifies 80% global thresholds)
+- Run coverage report (verifies configured global thresholds and focused file gates)
 ```bash
 pnpm run test:coverage
 ```
@@ -72,6 +72,11 @@ pnpm run typecheck:dashboard
 ```
 
 ## Test Coverage Areas
+
+### Coverage Guardrails
+- `tests/backend/config/vitest-coverage-config.test.ts` imports the exported Vitest config and verifies coverage settings as data, without executing Vitest from inside the test.
+- Backend source coverage must keep `src/**/*.ts` included, must keep generated/runtime entrypoint exclusions explicit, and must not count dashboard-only files unless the include scope is intentionally expanded later.
+- Global coverage thresholds must stay at or above the configured minimums in `vitest.config.ts`, and `src/server/activity-cache-service.ts` must keep at least an 80% line threshold.
 
 ### Backend
 - Sprint orchestration behavior
