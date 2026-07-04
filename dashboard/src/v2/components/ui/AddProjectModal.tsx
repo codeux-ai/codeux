@@ -377,13 +377,12 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
             >
                 {/* ── Left decorative panel ── */}
                 <div className="relative hidden sm:flex w-52 shrink-0 bg-void-900 dark:bg-void-950 flex-col justify-between p-8 overflow-hidden">
-                    <span className="absolute -top-2 -left-4 text-[7.5rem] font-black text-white/[0.035] font-display leading-none pointer-events-none select-none tracking-tighter">
+                    <span className="absolute -top-2 -left-4 text-[6.5rem] font-black text-white/[0.028] font-display leading-none pointer-events-none select-none tracking-tighter">
                         ADD
                     </span>
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <div className="w-44 h-44 bg-ember-500/[0.08] animate-organic" style={{ borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%' }} />
-                        <div className="absolute w-32 h-32 bg-ember-500/[0.12] animate-organic-reverse" style={{ borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%' }} />
-                        <div className="absolute w-20 h-20 bg-ember-500/[0.18] animate-organic" style={{ borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%' }} />
+                        <div className="w-44 h-44 rounded-full bg-ember-500/[0.07] blur-3xl" />
+                        <div className="absolute w-28 h-28 rounded-full border border-ember-500/[0.16]" />
                     </div>
                     <div className="relative z-10 flex items-center gap-2 text-ember-500 font-mono font-bold text-[10px] tracking-[0.2em] uppercase">
                         <FolderOpen className="w-3.5 h-3.5" strokeWidth={2.5} />
@@ -592,7 +591,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
 
                             {sourceType !== 'new_project' && (
                                 <>
-                                    <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.08] dark:bg-white/[0.035]">
+                                    <div className="rounded-[1.25rem] border border-black/[0.06] bg-white/55 p-4 shadow-[0_1px_10px_rgba(0,0,0,0.025)] dark:border-white/[0.08] dark:bg-white/[0.035]">
                                         <label className="flex cursor-pointer items-start gap-3">
                                             <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-lg border transition-all ${
                                                 initializeProject
@@ -611,9 +610,9 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                 className="sr-only"
                                             />
                                             <span className="min-w-0">
-                                                <span className="flex items-center gap-2 text-sm font-black text-slate-900 dark:text-white">
+                                                <span className="flex min-w-0 items-center gap-2 text-sm font-black text-slate-900 dark:text-white">
                                                     <Sparkles className="h-4 w-4 text-ember-500" />
-                                                    Initialize with Project Setup Agent
+                                                    <span className="min-w-0">Initialize with Project Setup Agent</span>
                                                 </span>
                                                 <span className="mt-1 block text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
                                                     Research the codebase after creation and generate project-specific agents, routing, quicksprints, preview startup, and basic CI.
@@ -623,13 +622,13 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                     </div>
 
                                     {showSetupOptions && (
-                                        <div className="rounded-[1.35rem] border border-black/[0.06] dark:border-white/[0.08] p-4 bg-transparent">
+                                        <div className="rounded-[1.35rem] border border-black/[0.06] bg-white/55 p-4 shadow-[0_1px_10px_rgba(0,0,0,0.025)] dark:border-white/[0.08] dark:bg-white/[0.035]">
                                             <div className="mb-3 flex items-center justify-between gap-4">
-                                                <div>
+                                                <div className="min-w-0">
                                                     <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-ember-600 dark:text-ember-400">
                                                         Setup Scope
                                                     </div>
-                                                    <div className="mt-1 text-sm font-black text-slate-900 dark:text-white">
+                                                    <div className="mt-1 truncate text-sm font-black text-slate-900 dark:text-white">
                                                         Choose project assets
                                                     </div>
                                                 </div>
@@ -660,8 +659,8 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                                 <Icon className="h-4 w-4" />
                                                             </span>
                                                             <span className="min-w-0 flex-1">
-                                                                <span className="flex items-center gap-1.5 text-xs font-black uppercase tracking-[0.12em]">
-                                                                    {label}
+                                                                <span className="flex min-w-0 items-center gap-1.5 text-xs font-black uppercase tracking-[0.12em]">
+                                                                    <span className="truncate">{label}</span>
                                                                     {key === "previewScript" && (
                                                                         <Info 
                                                                             className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 cursor-help" 
