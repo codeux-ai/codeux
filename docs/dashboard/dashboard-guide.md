@@ -582,7 +582,7 @@ Runtime scoping:
   - `Retry on rate limit`
   - `Rate limit retry delay`
 - The settings surface is regrouped into smaller operational cards so GitHub integration, provider credentials, merge gates, loop control, and execution runtime are separated cleanly
-- Danger Zone now supports project deletion in project scope and full database reset in system scope
+- Danger Zone now supports confirmed project override reset and project deletion in project scope, plus full database reset in system scope
 - Project saves operate on the effective form but persist only sparse diffs relative to the current system defaults
 - Sprint settings are sparse overrides applied from the sprint page through the live override modal, which renders the same `ProjectSettingsEditor` in `sprint` scope, loads effective settings with per-field source metadata, and persists only the delta relative to resolved project defaults; a `Reset` action clears all sprint overrides back to inherited values
 - Effective settings APIs expose per-field source metadata so the UI can show inherited vs overridden values
