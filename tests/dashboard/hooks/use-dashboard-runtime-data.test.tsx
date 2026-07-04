@@ -37,6 +37,7 @@ describe("useDashboardRuntimeData", () => {
     cleanup();
     vi.clearAllMocks();
     vi.mocked(api.fetchLivePayload).mockResolvedValue(mockPayload as any);
+    vi.mocked(api.getCachedLivePayload).mockReturnValue(null);
   });
 
   it("handles initial load and sets transport state based on realtime callback", async () => {
@@ -121,5 +122,25 @@ describe("useDashboardRuntimeData", () => {
     // Validates the fallback strategy triggered the REST fetch properly
     expect(api.fetchLivePayload).toHaveBeenCalledTimes(2);
     expect(result.current.snapshotUpdatedAt).toBe("2025-01-01T00:00:00Z");
+  });
+
+  it("does not initialize from cached data with a conflicting selected sprint", () => {
+    vi.mocked(api.getCachedLivePayload).mockReturnValue(mockPayload as any);
+
+    const { result } = renderHook(() => useDashboardRuntimeData("p1", true, { selectedSprintId: "s2" }));
+
+    expect(api.getCachedLivePayload).toHaveBeenCalledWith("p1", { selectedSprintId: "s2" });
+    expect(result.current.selectedSprintId).toBe("s2");
+    expect(result.current.snapshotUpdatedAt).toBeNull();
+    expect(result.current.status.timestamp).toBeNull();
+  });
+
+  it("does not initialize from cached data with a conflicting project", () => {
+    vi.mocked(api.getCachedLivePayload).mockReturnValue({ ...mockPayload, projectId: "p2" } as any);
+
+    const { result } = renderHook(() => useDashboardRuntimeData("p1"));
+
+    expect(result.current.snapshotUpdatedAt).toBeNull();
+    expect(result.current.status.timestamp).toBeNull();
   });
 });

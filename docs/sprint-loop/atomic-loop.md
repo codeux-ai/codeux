@@ -102,6 +102,7 @@ For `status` and `orchestrate`, each cycle can run:
 - `session-sync-step.ts`
 - Session-sync activity fetch planning is delegated to `src/domain/sprint/session-sync/activity-fetch-plan.ts` to make decisions testable.
 - Session activity fetching uses a bounded concurrency worker pool to prevent overloading the backend, preserving isolated failures per-session.
+- Each session-sync cycle keeps a cycle-local metadata cache keyed by normalized session id/name. The cache resolves session identity, latest task-run ownership, provider/mode ownership, and local terminal state once per session for that cycle only, so activity planning and task sync share the same safety decisions without repeated repository lookups.
 - Sync source is provider-agnostic:
   - Jules API sessions (when available)
   - locally tracked CLI sessions (`gemini`/`codex`)
@@ -155,7 +156,8 @@ When `action=orchestrate`, `wait` is true, and `watchLoop` is enabled:
 - Output interval defaults to 300 seconds and is now used only as an internal checkpoint boundary for heartbeat/lease renewal inside the same sprint run.
 - Code UX does not stop at that boundary anymore. It keeps the same sprint run alive, renews its lease/heartbeat, resets the checkpoint window, and continues watching until a real terminal condition is reached.
 - Startup recovery and dashboard **Resume** restart monitoring through the existing-run recovery path. A resumed paused run keeps its original sprint-run id, is moved back to `running`, and then starts the watch loop without creating a duplicate run. Resume is refused while another queued/running/cancel-pending run for the same sprint is active.
-- Live CLI telemetry stays enabled during watch mode, including transcript parsing and token accounting. To keep high-concurrency sprints responsive, each provider watcher fingerprints its current stdout/stderr and provider log sources, skips parse/token work when the sources are unchanged, reuses Codex tokenizer encodings and recent token counts, and only persists provider usage rows when token/transcript state changes.
+- Live CLI telemetry stays enabled during watch mode, including transcript parsing and token accounting. To keep high-concurrency sprints responsive, each provider watcher fingerprints its current stdout/stderr and provider log sources, uses cheap file/source metadata before reading full provider transcripts when available, skips provider-specific read and parse/token work when the sources are unchanged, reuses Codex tokenizer encodings and recent token counts, and only persists provider usage rows when token/transcript state changes.
+- Provider telemetry watchers are best-effort and never fail the provider run. Repeated watcher read or parse failures are logged as throttled runtime warnings with provider, Code UX session id, native session id when known, and failure count, without including prompts, transcripts, raw streams, or credentials.
 - Dashboard live snapshots are optimized for high sprint concurrency: selected-sprint checks use targeted project/sprint lookups instead of hydrating every sprint, recent provider activities are cached until the project's latest provider activity event changes, and provider activity event reads use partial sqlite indexes for the activity-only paths.
 - Preview reconciliation also avoids full project execution snapshots in the common running-session path. It queries running sprint runs directly and memoizes that result while reconciling preview sessions and auto-starting previews.
 - Loop exits when:

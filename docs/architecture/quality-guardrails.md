@@ -13,10 +13,35 @@ The script is deterministic, uses only Node built-ins, and does not read build o
 ## What It Checks
 
 - Blocking: backup and reject artifacts such as `.orig`, `.rej`, `.bak`, and editor `~` files under source and documentation roots.
+- Blocking: placeholder dependency wiring in `src/app/dependency-factory/**/*.ts`, including empty-object casts such as `{} as any`, `{} as unknown`, double casts through `any` or `unknown`, and empty objects cast directly to service-like dependency types.
+- Blocking: replayable persistence regressions for heavy dashboard snapshot events. The realtime event repository must only insert replayable events into `dashboard_realtime_events`, and snapshot publish tasks for `project.live.updated`, `project.execution.updated`, `project.runtime_status.updated`, `projects.updated`, and `overview.telemetry.updated` must publish with `replayable: false`.
+- Blocking: duplicate adjacent optimistic task insertion calls in `dashboard/src/v2/TasksPage.tsx` or the task board action helper. New task creation should insert one optimistic record and remove it after the confirmed refresh.
 - Advisory: production TypeScript or TSX files above the configured line threshold.
 - Advisory: broad `any` patterns such as `: any`, `as any`, `Array<any>`, and `Record<..., any>`.
 
-The script exits nonzero only for high-confidence stale artifacts. Oversized files and existing broad `any` usage are reported as hotspots so maintainers can improve them during nearby work without breaking CI on accepted legacy debt.
+The script exits nonzero for high-confidence stale artifacts and the blocking regression patterns above. Oversized files and existing broad `any` usage are reported as hotspots so maintainers can improve them during nearby work without breaking CI on accepted legacy debt.
+
+## Regression Rationale
+
+Dependency factory wiring is allowed to use the typed `LateBoundDependency<T>` holder when construction order requires a synchronous link after related services are created. Empty-object casts hide missing links until runtime and can bypass the explicit "not linked" errors that late-bound holders provide.
+
+Dashboard snapshot events are intentionally non-replayable because their payloads are large and quickly superseded by a fresh snapshot. Persisting those payloads in SQLite recreates the write-amplification problem that the realtime sequence watermark design removed.
+
+The Tasks page uses optimistic records to make task creation feel immediate before the backend confirms and refreshes the board. A duplicated adjacent insertion shows the same optimistic task twice and is easy to reintroduce during local edits, so the guardrail blocks that narrow pattern without scanning unrelated state updates.
+
+## Manual Regression Checks
+
+There is no dedicated Vitest harness for `scripts/check-quality-guardrails.mjs` today. When changing the script, verify it directly:
+
+```bash
+pnpm run quality:guardrails
+```
+
+For targeted manual failure checks, temporarily introduce one of these local-only changes and confirm the command exits nonzero with the file, pattern, and remediation in the output, then remove the change:
+
+- Add `const placeholder = {} as any;` to a file under `src/app/dependency-factory/`.
+- Remove `replayable: false` from the `buildPublishTask` call to `publishRawEvent` in `src/services/dashboard-realtime-service.ts`.
+- Duplicate the adjacent `setOptimisticTasks((prev) => [optimisticTask, ...prev]);` create path call in `dashboard/src/v2/TasksPage.tsx`.
 
 ## Thresholds
 

@@ -4,6 +4,7 @@ import { fetchSprints, selectSprint as apiSelectSprint } from "../v2/lib/project
 import { toSprintViewModel } from "../v2/lib/view-models.js";
 import { areSprintCollectionsEqual, resolveSelectedSprint } from "../v2/lib/sprint-scope.js";
 import { useRealtimeResource } from "./use-realtime-resource.js";
+import { invalidateLivePayloadCache } from "../lib/api/dashboard-api.js";
 
 interface UseSprintsResult {
   data: Sprint[];
@@ -120,6 +121,9 @@ export function useSprints(projectId: string | null): UseSprintsResult {
       const nextSelectedSprintId = await apiSelectSprint(projectId, sprintId);
       updateDataLocally((current) => {
         if (!current) return current;
+        if (current.selectedSprintId !== nextSelectedSprintId) {
+          invalidateLivePayloadCache(projectId);
+        }
         const nextCollection = { ...current, selectedSprintId: nextSelectedSprintId };
         sprintResourceState.cache.set(projectId, nextCollection);
         return nextCollection;

@@ -28,26 +28,47 @@ export function deriveTaskBoardState(
   priorityFilter: "all" | TaskPriority,
   listWindow: ListWindowOption
 ): TaskBoardState {
-  const filteredTasks = tasks.filter((task) => {
-    if (statusFilter !== "all" && getTaskLane(task.status) !== statusFilter) return false;
-    if (priorityFilter !== "all" && task.priority !== priorityFilter) return false;
-    return true;
-  });
+  const filteredTasks: Task[] = [];
+  const laneCounts = new Map<TaskStatus, number>(BOARD_LANES.map((lane) => [lane, 0]));
+  const visibleTasksByLane = new Map<TaskStatus, Task[]>(BOARD_LANES.map((lane) => [lane, []]));
+  const stats = {
+    total: 0,
+    inProgress: 0,
+    completed: 0,
+    critical: 0,
+  };
+
+  for (const task of tasks) {
+    const lane = getTaskLane(task.status);
+    if (statusFilter !== "all" && lane !== statusFilter) continue;
+    if (priorityFilter !== "all" && task.priority !== priorityFilter) continue;
+
+    filteredTasks.push(task);
+    stats.total += 1;
+    laneCounts.set(lane, (laneCounts.get(lane) ?? 0) + 1);
+
+    if (lane === "in_progress") {
+      stats.inProgress += 1;
+    }
+    if (lane === "completed") {
+      stats.completed += 1;
+    }
+    if (task.priority === "critical") {
+      stats.critical += 1;
+    }
+  }
 
   const resolvedWindow = resolveListWindow(listWindow, filteredTasks.length);
   const visibleTasks = filteredTasks.slice(0, resolvedWindow);
 
-  const stats = {
-    total: filteredTasks.length,
-    inProgress: filteredTasks.filter((task) => getTaskLane(task.status) === "in_progress").length,
-    completed: filteredTasks.filter((task) => getTaskLane(task.status) === "completed").length,
-    critical: filteredTasks.filter((task) => task.priority === "critical").length,
-  };
+  for (const task of visibleTasks) {
+    visibleTasksByLane.get(getTaskLane(task.status))?.push(task);
+  }
 
   const allColumns = BOARD_LANES.map((lane) => ({
     status: lane,
-    count: filteredTasks.filter((task) => getTaskLane(task.status) === lane).length,
-    tasks: visibleTasks.filter((task) => getTaskLane(task.status) === lane),
+    count: laneCounts.get(lane) ?? 0,
+    tasks: visibleTasksByLane.get(lane) ?? [],
   }));
 
   const columns = statusFilter !== "all"

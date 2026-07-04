@@ -50,35 +50,44 @@ test("deriveTaskBoardState: applies status and priority filters", () => {
 });
 
 test("deriveTaskBoardState: applies list window and caps visible tasks but retains counts in stats and column headers", () => {
-  const tasks = Array.from({ length: 30 }, (_, i) => createTask(`${i}`, "pending", "low"));
+  const tasks = [
+    ...Array.from({ length: 30 }, (_, i) => createTask(`pending-${i}`, "pending", "low")),
+    ...Array.from({ length: 4 }, (_, i) => createTask(`done-${i}`, "completed", "critical")),
+  ];
 
   const state = deriveTaskBoardState(tasks, "all", "all", 20);
-  expect(state.filteredTasks.length).toBe(30);
+  expect(state.filteredTasks.length).toBe(34);
   expect(state.visibleTasks.length).toBe(20);
 
-  expect(state.stats.total).toBe(30);
+  expect(state.stats.total).toBe(34);
+  expect(state.stats.completed).toBe(4);
+  expect(state.stats.critical).toBe(4);
 
   const pendingColumn = state.columns.find(c => c.status === "pending")!;
+  const completedColumn = state.columns.find(c => c.status === "completed")!;
   expect(pendingColumn.count).toBe(30);
   expect(pendingColumn.tasks.length).toBe(20);
+  expect(completedColumn.count).toBe(4);
+  expect(completedColumn.tasks.length).toBe(0);
 });
 
-test("deriveTaskBoardState: handles coding_completed correctly inside in_progress lane", () => {
+test("deriveTaskBoardState: handles mapped statuses correctly inside in_progress lane", () => {
   const tasks = [
     createTask("1", "coding_completed", "critical"),
     createTask("2", "in_progress", "high"),
     createTask("3", "pending", "low"),
     createTask("4", "completed", "low"),
+    createTask("5", "QA_REVIEW_FAILED", "medium"),
   ];
 
   const state1 = deriveTaskBoardState(tasks, "all", "all", "All");
 
   // Total filtered and stats total
-  expect(state1.filteredTasks.length).toBe(4);
-  expect(state1.stats.total).toBe(4);
+  expect(state1.filteredTasks.length).toBe(5);
+  expect(state1.stats.total).toBe(5);
 
   // Stats
-  expect(state1.stats.inProgress).toBe(2); // 1 in_progress + 1 coding_completed
+  expect(state1.stats.inProgress).toBe(3);
   expect(state1.stats.completed).toBe(1);
   expect(state1.stats.critical).toBe(1);
 
@@ -87,9 +96,10 @@ test("deriveTaskBoardState: handles coding_completed correctly inside in_progres
 
   const inProgressCol = state1.columns.find(c => c.status === "in_progress");
   expect(inProgressCol).toBeDefined();
-  expect(inProgressCol!.count).toBe(2);
+  expect(inProgressCol!.count).toBe(3);
   expect(inProgressCol!.tasks.map(t => t.status)).toContain("in_progress");
   expect(inProgressCol!.tasks.map(t => t.status)).toContain("coding_completed");
+  expect(inProgressCol!.tasks.map(t => t.status)).toContain("QA_REVIEW_FAILED");
 });
 
 test("deriveTaskBoardState: handles filtered status view when filtering by all", () => {
@@ -109,13 +119,33 @@ test("deriveTaskBoardState: filtered views - filtering by in_progress shows both
     createTask("1", "coding_completed", "critical"),
     createTask("2", "in_progress", "high"),
     createTask("3", "pending", "low"),
+    createTask("4", "QA_REVIEW_FAILED", "medium"),
   ];
 
   const state = deriveTaskBoardState(tasks, "in_progress", "all", "All");
 
-  expect(state.filteredTasks.length).toBe(2);
+  expect(state.filteredTasks.length).toBe(3);
   const inProgressCol = state.columns.find(c => c.status === "in_progress")!;
-  expect(inProgressCol.count).toBe(2);
+  expect(inProgressCol.count).toBe(3);
+  expect(inProgressCol.tasks.map((task) => task.id)).toEqual(["1", "2", "4"]);
+});
+
+test("deriveTaskBoardState: keeps empty columns stable for empty all-status boards", () => {
+  const state = deriveTaskBoardState([], "all", "all", "All");
+
+  expect(state.filteredTasks).toEqual([]);
+  expect(state.visibleTasks).toEqual([]);
+  expect(state.stats).toEqual({
+    total: 0,
+    inProgress: 0,
+    completed: 0,
+    critical: 0,
+  });
+  expect(state.columns).toEqual([
+    { status: "pending", count: 0, tasks: [] },
+    { status: "in_progress", count: 0, tasks: [] },
+    { status: "completed", count: 0, tasks: [] },
+  ]);
 });
 
 test("getTaskLane: correctly maps statuses to lanes", () => {

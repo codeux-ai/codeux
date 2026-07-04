@@ -10,6 +10,7 @@ import type { JulesApiClient } from "../integrations/jules-api-client.js";
 import type { ActiveDispatchRegistry } from "./active-dispatch-registry.js";
 import type { Logger } from "../shared/logging/logger.js";
 import type { ProjectAttentionType } from "../contracts/project-attention-types.js";
+import { resolveLateBoundDependency, type LateBoundOrValue } from "../shared/late-bound-dependency.js";
 
 const RECOMPUTED_SPRINT_ATTENTION_TYPES: ProjectAttentionType[] = [
   "manual_attention",
@@ -29,7 +30,7 @@ interface ExecutionControlServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
   executionRepository: ExecutionRepository;
   projectAttentionService: ProjectAttentionService;
-  taskRerunService: TaskRerunService;
+  taskRerunService: LateBoundOrValue<TaskRerunService>;
   sprintOrchestrator: SprintOrchestrator;
   julesApi: JulesApiClient;
   activeDispatchRegistry: ActiveDispatchRegistry;
@@ -436,7 +437,7 @@ export class ExecutionControlService {
 
     this.deps.projectAttentionService.resolveItemsForDispatch(dispatchId, "dispatch_retry_requested");
 
-    return await this.deps.taskRerunService.rerunTask(task.id);
+    return await resolveLateBoundDependency(this.deps.taskRerunService).rerunTask(task.id);
   }
 
   private cancelDispatchInternal(dispatch: TaskDispatchRecord, now: string, message: string): TaskDispatchRecord {

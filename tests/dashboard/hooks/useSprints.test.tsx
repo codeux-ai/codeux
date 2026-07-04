@@ -1,12 +1,13 @@
 /**
  * @vitest-environment happy-dom
  */
-import { renderHook, waitFor } from "@testing-library/preact";
+import { act, renderHook, waitFor } from "@testing-library/preact";
 import { h } from "preact";
 import { render, screen } from "@testing-library/preact";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { useSprints } from "../../../dashboard/src/hooks/useSprints.js";
 import { fetchSprints, selectSprint } from "../../../dashboard/src/v2/lib/project-api.js";
+import { invalidateLivePayloadCache } from "../../../dashboard/src/lib/api/dashboard-api.js";
 
 vi.mock("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js", () => ({
   subscribeToDashboardRealtime: vi.fn(() => vi.fn()),
@@ -15,6 +16,10 @@ vi.mock("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js", () =
 vi.mock("../../../dashboard/src/v2/lib/project-api.js", () => ({
   fetchSprints: vi.fn(),
   selectSprint: vi.fn(),
+}));
+
+vi.mock("../../../dashboard/src/lib/api/dashboard-api.js", () => ({
+  invalidateLivePayloadCache: vi.fn(),
 }));
 
 const makeCollection = () => ({
@@ -45,6 +50,7 @@ describe("useSprints", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(selectSprint).mockResolvedValue(null);
+    vi.mocked(invalidateLivePayloadCache).mockReturnValue(undefined);
   });
 
   it("does not enter a cache-driven refetch loop after the first sprint load", async () => {
@@ -120,5 +126,23 @@ describe("useSprints", () => {
     });
 
     expect(fetchSprints).toHaveBeenCalledTimes(2);
+  });
+
+  it("invalidates the live payload cache when selected sprint changes", async () => {
+    const projectId = `project-${crypto.randomUUID()}`;
+    vi.mocked(fetchSprints).mockResolvedValue(makeCollection() as any);
+    vi.mocked(selectSprint).mockResolvedValue("sprint-1");
+
+    const { result } = renderHook(() => useSprints(projectId));
+
+    await waitFor(() => {
+      expect(result.current.data).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.selectSprint("sprint-1");
+    });
+
+    expect(invalidateLivePayloadCache).toHaveBeenCalledWith(projectId);
   });
 });
