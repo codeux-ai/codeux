@@ -133,7 +133,7 @@ export const InvocationListCard: FunctionComponent<{
           label: "Status",
           value: (
             <span className={`flex items-center gap-1.5 ${ss.text}`}>
-              <span className={`inline-block h-1.5 w-1.5 rounded-full ${ss.dot} ${isRunning ? "animate-pulse" : ""}`} />
+              <span className={`inline-block h-1.5 w-1.5 rounded-full ${ss.dot} ${isRunning ? "animate-pulse motion-reduce:animate-none motion-reduce:ring-2 motion-reduce:ring-signal-500/40" : ""}`} />
               <span aria-live="polite" className={`capitalize ${isOptimistic ? "opacity-70 text-slate-500" : ""}`}>{isOptimistic ? "Pending" : invocation.status}</span>
             </span>
           ),
@@ -214,7 +214,7 @@ export const InvocationListCard: FunctionComponent<{
                     {formatInvocationPurpose(invocation.type)}
                   </h3>
                   <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-                    {isOptimistic && <Loader2 className="h-3 w-3 animate-spin" />}
+                    {isOptimistic && <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />}
                     <span className="truncate font-medium">
                       {invocation.provider || "—"}
                       {invocation.model ? <span className="text-slate-400 dark:text-slate-500"> · {invocation.model}</span> : null}

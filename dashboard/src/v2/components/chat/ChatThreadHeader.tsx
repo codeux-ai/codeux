@@ -94,10 +94,11 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
                   transitionDuration: interactionTokens.controlFeedback.duration,
                   transitionTimingFunction: interactionTokens.controlFeedback.ease,
                 }}
+                aria-label={isCancelling ? "Cancelling..." : "Cancel Request"}
                 className={`inline-flex min-w-[160px] justify-center items-center gap-1.5 rounded-full border border-status-red/30 bg-status-red/[0.06] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-status-red hover:bg-status-red/[0.12] dark:border-status-red/30 dark:bg-status-red/[0.08] dark:hover:bg-status-red/[0.16] ${isCancelling ? 'cursor-wait opacity-70' : ''}`}
                 title="Cancel Request"
               >
-                <XCircle className={`h-3.5 w-3.5 ${isCancelling ? "animate-pulse text-status-red" : ""}`} />
+                <XCircle className={`h-3.5 w-3.5 ${isCancelling ? "animate-pulse text-status-red motion-reduce:animate-none" : ""}`} />
                 {isCancelling ? "Cancelling..." : "Cancel Request"}
               </button>
             )}
@@ -107,6 +108,7 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
                 onClick={onCompact}
                 disabled={isCompacting}
                 aria-busy={isCompacting}
+                aria-label={isCompacting ? "Compacting conversation" : "Compact"}
                 style={{
                   transitionProperty: "color, background-color, border-color, text-decoration-color, fill, stroke",
                   transitionDuration: interactionTokens.controlFeedback.duration,
@@ -115,7 +117,7 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
                 className={`inline-flex min-w-[160px] justify-center items-center gap-1.5 rounded-full border border-black/[0.08] bg-white/70 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 hover:bg-black/[0.03] hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white ${isCompacting ? 'cursor-wait opacity-70' : ''}`}
                 title="Compact Conversation"
               >
-                <Zap className={`h-3.5 w-3.5 ${isCompacting ? "animate-pulse text-signal-500" : ""}`} />
+                <Zap className={`h-3.5 w-3.5 ${isCompacting ? "animate-pulse text-signal-500 motion-reduce:animate-none" : ""}`} />
                 {isCompacting ? "Compacting session..." : "Compact"}
               </button>
             )}
