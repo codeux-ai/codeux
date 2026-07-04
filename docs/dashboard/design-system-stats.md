@@ -118,7 +118,7 @@ System is the invocation workbench.
 - `SystemFilterBar` groups search, status, purpose, provider, error-category, clear-all, active-filter count, result count, and pagination controls into responsive panels.
 - Invocation tables preserve semantic headers with `scope="col"` and per-cell header relationships while allowing mobile rows to expose dense labels.
 - Expand controls name the target invocation, point at the transcript panel, and remain keyboard-accessible.
-- Transcript detail surfaces role, created time, token totals, optional message metadata, errors, and long content with safe wrapping.
+- Transcript detail surfaces role, created time, token totals, optional message metadata, errors, and long content with safe wrapping. The expanded transcript panel uses the shared Warm Void Stats primitives for its header, compact invocation summary row, status chips, role records, copy control, loading, empty, and error states.
 - Transcript loading uses `aria-busy` on the transcript region and polite loading status. Transcript errors use alert semantics and keep the expand control keyboard-accessible for recovery.
 
 ## Telemetry Semantics
