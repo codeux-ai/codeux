@@ -10,7 +10,6 @@ import type {
   PlanningOverrides,
 } from "../contracts/project-management-types.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
-import { isGeneratedSprintName } from "../repositories/project-management-repository.js";
 import type { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
@@ -366,7 +365,7 @@ export class PlanningAgentService {
       codingAgentRoster,
       sprintNumber: sprint.number,
       sprintName: sprint.name,
-      canSetSprintTitle: isGeneratedSprintName(sprint.name),
+      canSetSprintTitle: sprint.isGeneratedName,
       goal: sprint.goal,
       memoryContext,
       learningsInstruction,
@@ -447,7 +446,7 @@ export class PlanningAgentService {
 
     const sprintUpdate: { name?: string; goal?: string } = {};
     const plannedTitle = payload.title?.trim();
-    if (plannedTitle && isGeneratedSprintName(sprint.name)) {
+    if (plannedTitle && sprint.isGeneratedName) {
       sprintUpdate.name = plannedTitle;
     }
     if (payload.goal && payload.goal.trim() && payload.goal.trim() !== sprint.goal.trim()) {

@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS sprints (
         number INTEGER,
         slug TEXT NOT NULL,
         name TEXT NOT NULL,
+        is_generated_name INTEGER NOT NULL DEFAULT 0,
         original_prompt TEXT,
         goal TEXT,
         status TEXT NOT NULL DEFAULT 'idle',

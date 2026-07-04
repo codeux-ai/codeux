@@ -52,6 +52,10 @@ describe("ProjectManagementRepository", () => {
       name: "Custom sprint title",
       goal: "Plan with a user title",
     });
+    const customPlaceholder = repository.createSprint(project.id, {
+      name: "Untitled sprint 1",
+      goal: "Plan with a user title that resembles a generated placeholder",
+    });
 
     expect(sprint1.name).toBe(createGeneratedSprintName(1));
     expect(sprint1.slug).toBe("untitled-sprint-1");
@@ -63,6 +67,9 @@ describe("ProjectManagementRepository", () => {
     expect(custom.name).toBe("Custom sprint title");
     expect(custom.slug).toBe("custom-sprint-title");
     expect(custom.isGeneratedName).toBe(false);
+    expect(customPlaceholder.name).toBe("Untitled sprint 1");
+    expect(customPlaceholder.isGeneratedName).toBe(false);
+    expect(isGeneratedSprintName(customPlaceholder.name)).toBe(true);
   });
 
   it("updates a project and sprint gracefully with empty or partial inputs", async () => {
