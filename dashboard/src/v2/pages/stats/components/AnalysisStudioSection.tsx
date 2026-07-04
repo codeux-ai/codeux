@@ -62,7 +62,19 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
   );
 
   return (
-    <div key={visualMode} className="animate-in fade-in duration-200 motion-reduce:animate-none">
+    <div
+      key={visualMode}
+      id="stats-analysis-panel"
+      role="region"
+      aria-label="Stats analysis panel"
+      aria-busy={loading ? "true" : undefined}
+      className="animate-in fade-in duration-200 motion-reduce:animate-none"
+    >
+      {loading && stats ? (
+        <div role="status" aria-live="polite" aria-atomic="true" className="mb-3 rounded-[var(--stats-chip-radius)] border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-chip)] px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-detail-color)]">
+          Updating analytics from cached data. Current values remain visible while the latest snapshot loads.
+        </div>
+      ) : null}
       {visualMode === "trend" ? (
         stats ? (
           <TrendStudio
