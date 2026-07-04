@@ -49,8 +49,10 @@ pnpm exec playwright test
 ```
 
 GitHub Actions optimization notes:
-- The CI pipeline is split into three parallel, concurrent jobs: `Typecheck & Lint`, `Unit & Integration Tests`, and `Playwright E2E Tests` for maximum speed and fast feedback.
-- Restores and saves Vite, Vitest, and TypeScript compiler increment caches across runs.
+- The main CI workflow keeps typecheck, backend coverage, dashboard tests, and security audit jobs separate for fast feedback.
+- The Playwright workflow stays separate from the main CI workflow, runs for pushes and pull requests targeting `dev` or `main`, and cancels superseded runs for the same branch or PR.
+- Workflow hygiene is guarded by `tests/backend/repository-hygiene.test.ts`, which asserts pinned pnpm and Node versions, frozen lockfile installs, security audit coverage, CI script order, and Playwright E2E isolation.
+- Restores and saves Vite, Vitest, and TypeScript compiler increment caches across runs where applicable.
 - Caches Playwright browser binaries (`~/.cache/ms-playwright`) to avoid downloading browsers on every run, dramatically reducing E2E setup time.
 - Uses `fullyParallel` execution in `playwright.config.ts` on CI to harness all available CPU cores.
 - Seamlessly integrates browser-level E2E tests for WebGL visual rendering, failure fallbacks, and mobile/desktop responsive layout breakpoints, removing mock-heavy DOM stubs from Unit tests.
