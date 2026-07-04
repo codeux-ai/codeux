@@ -345,6 +345,11 @@ describe('StatsPage visual tests', () => {
 
     render(<StatsPage />);
 
+    expect(screen.getAllByLabelText('Stats command controls').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByLabelText('Stats active lens')).toHaveTextContent('Composition');
+    expect(screen.getByLabelText('Stats project context')).toHaveTextContent('Project');
+    expect(screen.getByRole('group', { name: 'Time window presets' })).toBeTruthy();
+
     const modeGroup = screen.getByRole('group', { name: 'Analytics modes' });
     const expectedModes = [
       ['Trend', 'false'],

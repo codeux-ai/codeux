@@ -103,9 +103,10 @@ describe("InvocationMessagesPanel", () => {
       })),
     ]);
 
-    render(<InvocationMessagesPanel invocation={createInvocation()} />);
+    const { container } = render(<InvocationMessagesPanel invocation={createInvocation()} />);
 
     expect(screen.getByRole("region", { name: "Invocation inv-1 message transcript" }).getAttribute("aria-busy")).toBe("true");
+    expect((container as HTMLElement).querySelector('[class*="backdrop-blur"]')).toBeNull();
     expect(screen.getByRole("status", { name: "Loading transcript messages" })).toBeTruthy();
     expect(screen.getByText("Fetching the recorded message list for this invocation.")).toBeTruthy();
 
@@ -172,5 +173,51 @@ describe("InvocationMessagesPanel", () => {
     expect(screen.getByText("Error Summary")).toBeTruthy();
     fireEvent.click(screen.getByText("Error Summary"));
     expect(screen.getByText(/Provider failed/).textContent).toContain("with quota error");
+  });
+
+  it("keeps long transcript model, error, metadata, and message content visible with wrapping-safe structure", async () => {
+    const longModel = "gemini-provider/super-long-model-identifier-with-routing-suffix-and-context-window-2026-07-04";
+    const longError = "Provider failed with a very long operational error that should remain visible inside the transcript error summary without requiring hover text.";
+    const longContent = "Assistant message with a very long task and provider diagnostic string TASK-LONG-OPERATIONAL-IDENTIFIER-2026-07-04 provider_with_unusually_long_gateway_identifier model_route_suffix_alpha_beta_gamma.";
+
+    mockedFetchInvocationMessages.mockResolvedValue([
+      createMessage({
+        id: "msg-long",
+        role: "assistant",
+        contentMarkdown: longContent,
+        metadata: {
+          kind: "completion-with-long-operational-label",
+          totalTokens: "1200",
+        },
+      }),
+    ]);
+
+    const { container } = render(
+      <InvocationMessagesPanel invocation={createInvocation({
+        model: longModel,
+        lastErrorMessage: longError,
+      })} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(longModel)).toBeTruthy();
+    });
+
+    expect(screen.getByText(longError)).toBeTruthy();
+    expect(screen.getByText(longContent)).toBeTruthy();
+    expect(screen.getByText("completion-with-long-operational-label")).toBeTruthy();
+    expect(screen.getByText("1.2k tokens")).toBeTruthy();
+
+    const root = container as HTMLElement;
+    const transcript = screen.getByRole("region", { name: "Invocation inv-1 message transcript" });
+    const message = screen.getByRole("article", { name: "assistant message 1" });
+    const content = screen.getByText(longContent);
+    expect(root.querySelector('[class*="backdrop-blur"]')).toBeNull();
+    expect(transcript.className).toContain("min-w-0");
+    expect(transcript.className).toContain("max-w-full");
+    expect(message.className).toContain("break-words");
+    expect(message.className).toContain("[overflow-wrap:anywhere]");
+    expect(content.className).toContain("whitespace-pre-wrap");
+    expect(content.className).toContain("[overflow-wrap:anywhere]");
   });
 });

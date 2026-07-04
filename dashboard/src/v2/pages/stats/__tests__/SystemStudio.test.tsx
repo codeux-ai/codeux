@@ -98,6 +98,7 @@ describe("SystemStudio", () => {
       expect(screen.getByText("System Operations")).toBeTruthy();
     });
 
+    expect(container.querySelector('[class*="backdrop-blur"]')).toBeNull();
     expect(screen.getByRole("button", { name: /^All/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^Errors/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^System Msgs/ })).toBeTruthy();
@@ -139,6 +140,12 @@ describe("SystemStudio", () => {
     const recordsSection = screen.getByRole("region", { name: "Invocation Records" });
     expect(within(recordsSection).getByText("Available")).toBeTruthy();
     expect(within(recordsSection).getByLabelText("Available invocation records: 2")).toBeTruthy();
+    expect(within(recordsSection).getByRole("group", { name: "Status filters" })).toBeTruthy();
+    expect(within(recordsSection).getByRole("group", { name: "Purposes filters" })).toBeTruthy();
+    expect(within(recordsSection).getByRole("group", { name: "Providers filters" })).toBeTruthy();
+    expect(within(recordsSection).getByRole("group", { name: "Error Category filters" })).toBeTruthy();
+    expect(within(recordsSection).getByRole("columnheader", { name: /Model/i })).toBeTruthy();
+    expect(within(recordsSection).getByRole("columnheader", { name: /Expand/i })).toBeTruthy();
 
     const recordViewGroup = within(recordsSection).getByRole("group", { name: "Invocation record views" });
     const allRecordsButton = within(recordViewGroup).getByRole("button", { name: "All invocation records, 2 records" });
