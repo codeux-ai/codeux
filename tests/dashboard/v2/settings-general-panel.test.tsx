@@ -83,6 +83,7 @@ describe("SettingsGeneralPanel", () => {
 
     const saveButton = screen.getByRole("button", { name: "Save Name" });
     expect(saveButton).toBeDisabled();
+    expect(saveButton).toHaveAttribute("title", "Enter a project name before saving.");
     expect(updateProject).not.toHaveBeenCalled();
   });
 });
