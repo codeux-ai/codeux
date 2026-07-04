@@ -74,6 +74,7 @@ export function createDashboardDependencies(
   });
   const executionInvocationControlService = new ExecutionInvocationControlService({
     executionRepository,
+    projectManagementRepository,
     activeDispatchRegistry,
     logger: logger.child({ component: "execution-invocation-control-service" }),
   });

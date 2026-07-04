@@ -28,6 +28,7 @@ import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 import { ProviderLogo } from "./components/ui/ProviderLogo.js";
 import { AgentAvatarSvg } from "./components/agents/AgentAvatarSvg.js";
 import { generateRandomAgentAvatar } from "./lib/agent-avatar.js";
+import { formatInvocationRetryAt } from "./lib/invocation-retry-time.js";
 import type { ExecutionInvocationRecord } from "./types.js";
 import { cancelExecutionInvocation, restartExecutionInvocation, type InvocationRestartMode } from "./lib/invocation-api.js";
 import { useActionFeedback } from "./hooks/use-action-feedback.js";
@@ -454,6 +455,7 @@ export const ChatPage: FunctionComponent = () => {
       : null;
     const headerDuration = inv ? formatInvocationDuration(inv.startedAt || inv.createdAt, inv.finishedAt) : null;
     const headerTotalTokens = inv ? (inv.totalTokens ?? ((inv.inputTokens ?? 0) + (inv.outputTokens ?? 0))) : 0;
+    const retryAtLabel = formatInvocationRetryAt(inv?.lastRetryAfterIso);
     const headerStats: Array<{ label: string; value: ComponentChildren; tone?: string }> = [];
     if (inv && headerStatus) {
       headerStats.push({
@@ -602,7 +604,7 @@ export const ChatPage: FunctionComponent = () => {
               {selectedInvocation?.lastErrorMessage && (
                 <div className="mt-3 max-w-2xl text-sm leading-relaxed text-status-amber">
                   {selectedInvocation.lastErrorMessage}
-                  {selectedInvocation.lastRetryAfterIso && ` Retry at ${selectedInvocation.lastRetryAfterIso}.`}
+                  {retryAtLabel && ` Retry at ${retryAtLabel}.`}
                 </div>
               )}
 

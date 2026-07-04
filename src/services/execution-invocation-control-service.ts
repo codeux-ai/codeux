@@ -1,4 +1,5 @@
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
+import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { ActiveDispatchRegistry } from "./active-dispatch-registry.js";
 import { runCommandStrict } from "./cli-process-runner.js";
 import type { Logger } from "../shared/logging/logger.js";
@@ -13,6 +14,7 @@ export interface CancelExecutionInvocationResult {
 
 interface ExecutionInvocationControlServiceDeps {
   executionRepository: ExecutionRepository;
+  projectManagementRepository: ProjectManagementRepository;
   activeDispatchRegistry: ActiveDispatchRegistry;
   logger?: Logger;
 }
@@ -66,6 +68,8 @@ export class ExecutionInvocationControlService {
       });
     }
 
+    this.closeTaskRuntimeForRetry(invocation, finishedAt);
+
     this.deps.executionRepository.updateExecutionInvocation(invocation.id, {
       status: "cancelled",
       finishedAt,
@@ -89,6 +93,54 @@ export class ExecutionInvocationControlService {
       invocationId,
       stoppedContainerIds,
     };
+  }
+
+  private closeTaskRuntimeForRetry(invocation: ExecutionInvocationRecord, finishedAt: string): void {
+    const taskRun = invocation.taskRunId
+      ? this.deps.executionRepository.getTaskRun(invocation.taskRunId)
+      : null;
+    const dispatch = invocation.dispatchId
+      ? this.deps.executionRepository.getTaskDispatch(invocation.dispatchId)
+      : null;
+
+    if (!taskRun && !dispatch) {
+      return;
+    }
+
+    if (dispatch) {
+      this.deps.executionRepository.releaseLease("task_dispatch", dispatch.id);
+      this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
+        connectionId: null,
+        status: "cancelled",
+        finishedAt,
+        lastHeartbeatAt: finishedAt,
+        errorMessage: CANCEL_MESSAGE,
+      });
+    }
+
+    if (taskRun) {
+      this.deps.executionRepository.updateTaskRun(taskRun.id, {
+        connectionId: null,
+        state: "BLOCKED",
+        finishedAt,
+        durationMs: calculateDurationMs(taskRun.startedAt, finishedAt),
+      });
+      this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "dispatch_cancelled", "user", {
+        dispatchId: dispatch?.id ?? invocation.dispatchId ?? null,
+        requestedBy: "dashboard",
+        reason: CANCEL_MESSAGE,
+        source: "invocation_cancel",
+      }, {
+        sourceEventKey: `dashboard-invocation-cancel:${invocation.id}`,
+      });
+    }
+
+    const taskId = dispatch?.taskId || taskRun?.taskId || invocation.taskId;
+    if (taskId) {
+      this.deps.projectManagementRepository.updateTask(taskId, {
+        status: "pending",
+      });
+    }
   }
 
   private async requestActiveDispatchStop(invocation: ExecutionInvocationRecord): Promise<void> {
