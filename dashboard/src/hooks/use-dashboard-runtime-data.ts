@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "preact/hooks";
 import { isDeepEqual } from "../v2/lib/resource-equality.js";
 import { computeStats, processDashboardTasks } from "../lib/status.js";
-import { fetchLivePayload, getCachedLivePayload } from "../lib/api/dashboard-api.js";
+import { fetchLivePayload, getCachedLivePayload, type LivePayloadCacheOptions } from "../lib/api/dashboard-api.js";
 import type {
   DashboardStatus,
   ExecutionDashboardSnapshot,
@@ -53,21 +53,72 @@ export interface UseDashboardRuntimeDataResult {
   tasksWithLiveActivities: DashboardStatus["subtasks"];
 }
 
-export const useDashboardRuntimeData = (projectIdHint: string | null = null, enabled = true): UseDashboardRuntimeDataResult => {
+interface DashboardRuntimeDataScope {
+  selectedSprintId?: string | null;
+}
+
+const normalizeScopeId = (value?: string | null): string | null => {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : null;
+};
+
+const hasSelectedSprintScope = (scope?: DashboardRuntimeDataScope): boolean => (
+  !!scope && Object.prototype.hasOwnProperty.call(scope, "selectedSprintId")
+);
+
+const isSnapshotInRuntimeScope = (
+  snapshot: ProjectLiveDashboardSnapshot,
+  projectIdHint: string | null,
+  scope?: DashboardRuntimeDataScope,
+): boolean => {
+  const expectedProjectId = normalizeScopeId(projectIdHint);
+  const payloadProjectId = normalizeScopeId(snapshot.projectId || snapshot.status.project_id || snapshot.execution.projectId);
+  if (expectedProjectId && payloadProjectId && expectedProjectId !== payloadProjectId) {
+    return false;
+  }
+  if (!hasSelectedSprintScope(scope)) {
+    return true;
+  }
+  return normalizeScopeId(snapshot.selectedSprintId) === normalizeScopeId(scope?.selectedSprintId);
+};
+
+const getEmptySnapshot = (
+  projectIdHint: string | null,
+  scope?: DashboardRuntimeDataScope,
+): ProjectLiveDashboardSnapshot => ({
+  ...EMPTY_LIVE_SNAPSHOT,
+  projectId: projectIdHint,
+  selectedSprintId: hasSelectedSprintScope(scope) ? scope?.selectedSprintId ?? null : null,
+});
+
+export const useDashboardRuntimeData = (
+  projectIdHint: string | null = null,
+  enabled = true,
+  scope?: DashboardRuntimeDataScope,
+): UseDashboardRuntimeDataResult => {
+  const selectedSprintScopeKnown = hasSelectedSprintScope(scope);
+  const selectedSprintScopeId = selectedSprintScopeKnown ? scope?.selectedSprintId ?? null : null;
+  const runtimeScope = useMemo<DashboardRuntimeDataScope | undefined>(() => (
+    selectedSprintScopeKnown ? { selectedSprintId: selectedSprintScopeId } : undefined
+  ), [selectedSprintScopeId, selectedSprintScopeKnown]);
+  const cacheOptions = useMemo<LivePayloadCacheOptions | undefined>(() => (
+    selectedSprintScopeKnown ? { selectedSprintId: selectedSprintScopeId } : undefined
+  ), [selectedSprintScopeId, selectedSprintScopeKnown]);
+
   const fetchResource = useCallback(async (signal?: AbortSignal) => {
     if (!enabled) {
-      return {
-        ...EMPTY_LIVE_SNAPSHOT,
-        projectId: projectIdHint,
-      };
+      return getEmptySnapshot(projectIdHint, runtimeScope);
     }
     try {
       // API currently doesn't accept signal, but could be added
-      return await fetchLivePayload(projectIdHint);
+      const snapshot = await fetchLivePayload(projectIdHint, cacheOptions);
+      return isSnapshotInRuntimeScope(snapshot, projectIdHint, runtimeScope)
+        ? snapshot
+        : getEmptySnapshot(projectIdHint, runtimeScope);
     } catch (err) {
       throw new Error("Unable to connect to Orchestrator API");
     }
-  }, [enabled, projectIdHint]);
+  }, [cacheOptions, enabled, projectIdHint, runtimeScope]);
 
   // Use deep equality, ignoring metadata timestamps that cause unnecessary re-renders
   const isEqual = useCallback((prev: ProjectLiveDashboardSnapshot, next: ProjectLiveDashboardSnapshot) => {
@@ -91,11 +142,14 @@ export const useDashboardRuntimeData = (projectIdHint: string | null = null, ena
 
   const activeProjectId = projectIdHint || fetchedProjectId;
 
-  const cachedData = getCachedLivePayload(projectIdHint);
-  const initialData = useMemo(() => cachedData || {
-    ...EMPTY_LIVE_SNAPSHOT,
-    projectId: projectIdHint,
-  }, [projectIdHint, cachedData]);
+  const cachedData = getCachedLivePayload(projectIdHint, cacheOptions);
+  const scopedCachedData = cachedData && isSnapshotInRuntimeScope(cachedData, projectIdHint, runtimeScope)
+    ? cachedData
+    : null;
+  const initialData = useMemo(
+    () => scopedCachedData || getEmptySnapshot(projectIdHint, runtimeScope),
+    [projectIdHint, runtimeScope, scopedCachedData],
+  );
 
   const {
     data: finalSnapshot,
@@ -115,7 +169,7 @@ export const useDashboardRuntimeData = (projectIdHint: string | null = null, ena
       eventType: "project.live.updated",
       updateDirectlyFromEvent: true,
     } : undefined,
-    isAlreadyLoaded: !enabled || !!cachedData,
+    isAlreadyLoaded: !enabled || !!scopedCachedData,
   });
 
   const { tasksWithLiveActivities, stats } = useMemo(() => {

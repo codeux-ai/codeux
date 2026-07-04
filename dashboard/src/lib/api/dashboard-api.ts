@@ -24,60 +24,169 @@ export const fetchExecutionSnapshot = async (): Promise<ExecutionDashboardSnapsh
 const MAX_CACHE_SIZE = 5;
 const livePayloadCache = new Map<string, RuntimeDashboardPayload>();
 const livePayloadInflight = new Map<string, Promise<RuntimeDashboardPayload>>();
+const livePayloadProjectIndex = new Map<string, string>();
 
-const updateLruCache = (key: string, resolved: RuntimeDashboardPayload) => {
+export interface LivePayloadCacheOptions {
+  selectedSprintId?: string | null;
+  scopeKey?: string | null;
+}
+
+const normalizeScopePart = (value?: string | null): string | null => {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : null;
+};
+
+const getProjectCacheKey = (projectId?: string | null): string => normalizeScopePart(projectId) || "default";
+
+const deleteProjectIndexEntriesForKey = (cacheKey: string): void => {
+  for (const [projectKey, indexedKey] of Array.from(livePayloadProjectIndex.entries())) {
+    if (indexedKey === cacheKey) {
+      livePayloadProjectIndex.delete(projectKey);
+    }
+  }
+};
+
+const getLatestProjectScopedCacheKey = (projectKey: string): string | null => {
+  const indexedKey = livePayloadProjectIndex.get(projectKey);
+  if (indexedKey && livePayloadCache.has(indexedKey)) {
+    return indexedKey;
+  }
+  const latestKey = Array.from(livePayloadCache.keys())
+    .reverse()
+    .find((key) => key === projectKey || key.startsWith(`${projectKey}::`)) || null;
+  if (latestKey) {
+    livePayloadProjectIndex.set(projectKey, latestKey);
+  } else {
+    livePayloadProjectIndex.delete(projectKey);
+  }
+  return latestKey;
+};
+
+const hasSelectedSprintScope = (options?: LivePayloadCacheOptions): boolean => (
+  !!options && Object.prototype.hasOwnProperty.call(options, "selectedSprintId")
+);
+
+const getLivePayloadCacheKey = (
+  projectId?: string | null,
+  options?: LivePayloadCacheOptions,
+  payload?: RuntimeDashboardPayload,
+): string => {
+  const projectKey = getProjectCacheKey(projectId || payload?.projectId || payload?.status.project_id || null);
+  const explicitScopeKey = normalizeScopePart(options?.scopeKey);
+  if (explicitScopeKey) {
+    return `${projectKey}::scope:${explicitScopeKey}`;
+  }
+  if (hasSelectedSprintScope(options)) {
+    return `${projectKey}::sprint:${normalizeScopePart(options?.selectedSprintId) || "none"}`;
+  }
+  if (payload) {
+    return `${projectKey}::sprint:${normalizeScopePart(payload.selectedSprintId) || "none"}`;
+  }
+  return projectKey;
+};
+
+const isPayloadInScope = (
+  payload: RuntimeDashboardPayload,
+  projectId?: string | null,
+  options?: LivePayloadCacheOptions,
+): boolean => {
+  const expectedProjectId = normalizeScopePart(projectId);
+  const payloadProjectId = normalizeScopePart(payload.projectId || payload.status.project_id || payload.execution.projectId);
+  if (expectedProjectId && payloadProjectId && expectedProjectId !== payloadProjectId) {
+    return false;
+  }
+  if (!hasSelectedSprintScope(options)) {
+    return true;
+  }
+  return normalizeScopePart(payload.selectedSprintId) === normalizeScopePart(options?.selectedSprintId);
+};
+
+const updateLruCache = (key: string, resolved: RuntimeDashboardPayload, requestProjectId?: string | null) => {
   if (livePayloadCache.has(key)) {
     livePayloadCache.delete(key);
   } else if (livePayloadCache.size >= MAX_CACHE_SIZE) {
     const firstKey = livePayloadCache.keys().next().value;
     if (firstKey !== undefined) {
       livePayloadCache.delete(firstKey);
+      deleteProjectIndexEntriesForKey(firstKey);
     }
   }
   livePayloadCache.set(key, resolved);
+  livePayloadProjectIndex.set(getProjectCacheKey(resolved.projectId || resolved.status.project_id || resolved.execution.projectId), key);
+  livePayloadProjectIndex.set(getProjectCacheKey(requestProjectId), key);
 };
 
 export const clearLivePayloadCacheForTests = (): void => {
   livePayloadCache.clear();
   livePayloadInflight.clear();
+  livePayloadProjectIndex.clear();
   overviewTelemetryInflight = null;
   onboardingReadinessInflight = null;
 };
 
 export const invalidateLivePayloadCache = (projectId?: string | null): void => {
-  const key = projectId?.trim() || "default";
-  livePayloadCache.delete(key);
+  const projectKey = getProjectCacheKey(projectId);
+  const indexedKey = getLatestProjectScopedCacheKey(projectKey);
+  for (const key of Array.from(livePayloadCache.keys())) {
+    if (key === projectKey || key === indexedKey || key.startsWith(`${projectKey}::`)) {
+      livePayloadCache.delete(key);
+      deleteProjectIndexEntriesForKey(key);
+    }
+  }
+  for (const key of Array.from(livePayloadInflight.keys())) {
+    if (key === projectKey || key === indexedKey || key.startsWith(`${projectKey}::`)) {
+      livePayloadInflight.delete(key);
+    }
+  }
+  livePayloadProjectIndex.delete(projectKey);
 };
 
-export const getCachedLivePayload = (projectId?: string | null): RuntimeDashboardPayload | null => {
-  const key = projectId?.trim() || "default";
+export const getCachedLivePayload = (
+  projectId?: string | null,
+  options?: LivePayloadCacheOptions,
+): RuntimeDashboardPayload | null => {
+  const projectKey = getProjectCacheKey(projectId);
+  const key = hasSelectedSprintScope(options) || normalizeScopePart(options?.scopeKey)
+    ? getLivePayloadCacheKey(projectId, options)
+    : livePayloadCache.has(projectKey)
+      ? projectKey
+      : getLatestProjectScopedCacheKey(projectKey) || projectKey;
   if (!livePayloadCache.has(key)) return null;
   const val = livePayloadCache.get(key)!;
+  if (!isPayloadInScope(val, projectId, options)) {
+    return null;
+  }
   // Update LRU position on access
   livePayloadCache.delete(key);
   livePayloadCache.set(key, val);
   return val;
 };
 
-export const fetchRuntimeDashboardPayload = async (projectId?: string | null): Promise<RuntimeDashboardPayload> => {
-  return fetchLivePayload(projectId);
+export const fetchRuntimeDashboardPayload = async (
+  projectId?: string | null,
+  options?: LivePayloadCacheOptions,
+): Promise<RuntimeDashboardPayload> => {
+  return fetchLivePayload(projectId, options);
 };
 
 /** Single HTTP call returning both status + execution — used for fast initial load. */
-export const fetchLivePayload = async (projectId?: string | null): Promise<RuntimeDashboardPayload> => {
-  const key = projectId?.trim() || "default";
-  let request = livePayloadInflight.get(key);
+export const fetchLivePayload = async (
+  projectId?: string | null,
+  options?: LivePayloadCacheOptions,
+): Promise<RuntimeDashboardPayload> => {
+  const requestKey = getLivePayloadCacheKey(projectId, options);
+  let request = livePayloadInflight.get(requestKey);
   if (!request) {
     const query = typeof projectId === "string" && projectId.trim().length > 0
       ? `?projectId=${encodeURIComponent(projectId.trim())}`
       : "";
     request = fetchJson<RuntimeDashboardPayload>(`/api/live${query}`).finally(() => {
-      livePayloadInflight.delete(key);
+      livePayloadInflight.delete(requestKey);
     });
-    livePayloadInflight.set(key, request);
+    livePayloadInflight.set(requestKey, request);
   }
   const resolved = await request;
-  updateLruCache(key, resolved);
+  updateLruCache(getLivePayloadCacheKey(projectId, options, resolved), resolved, projectId);
   return resolved;
 };
 

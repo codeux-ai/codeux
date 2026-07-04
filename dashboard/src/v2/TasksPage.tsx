@@ -489,9 +489,17 @@ export const TasksPage: FunctionComponent = () => {
   const boardRef = useRef<HTMLDivElement>(null);
   const { projects, selectedProject, createProject } = useProjectData();
   const projectId = selectedProject?.id || null;
+  const {
+    data: sprints,
+    loading: sprintsLoading,
+    selectedSprintId,
+    selectSprint,
+    refetch: refreshSprints,
+  } = useSprints(selectedProject?.id || null);
   const { execution, status } = useDashboardRuntimeData(
     projectId,
     !!selectedProject,
+    { selectedSprintId },
   );
   const settings = useProjectEffectiveSettings(projectId);
   const sprintKeyPrefix = settings.data?.settings?.git?.sprintKeyPrefix || "SPR";
@@ -504,13 +512,6 @@ export const TasksPage: FunctionComponent = () => {
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [projectId]);
-  const {
-    data: sprints,
-    loading: sprintsLoading,
-    selectedSprintId,
-    selectSprint,
-    refetch: refreshSprints,
-  } = useSprints(selectedProject?.id || null);
   const locationSearch = useRouterState({ select: (state) => state.location.searchStr });
   const initialSprint = useMemo(() => {
     const params = new URLSearchParams(locationSearch);

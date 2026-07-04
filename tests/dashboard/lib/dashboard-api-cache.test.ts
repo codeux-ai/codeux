@@ -11,7 +11,13 @@ describe("Dashboard API Cache", () => {
   beforeEach(() => {
     clearLivePayloadCacheForTests();
     vi.spyOn(fetchJsonModule, "fetchJson").mockImplementation(async (url) => {
-      return { projectId: url.includes("projectId=p") ? url.split("projectId=")[1] : "default" } as any;
+      const projectId = url.includes("projectId=p") ? url.split("projectId=")[1] : "default";
+      return {
+        projectId,
+        selectedSprintId: projectId === "p1" ? "s1" : null,
+        status: { project_id: projectId, subtasks: [], timestamp: null },
+        execution: { projectId },
+      } as any;
     });
   });
 
@@ -27,7 +33,21 @@ describe("Dashboard API Cache", () => {
     expect(fetchJsonModule.fetchJson).toHaveBeenCalledTimes(1);
 
     const cached = getCachedLivePayload("p1");
-    expect(cached).toEqual({ projectId: "p1" });
+    expect(cached?.projectId).toBe("p1");
+    expect(cached?.selectedSprintId).toBe("s1");
+  });
+
+  it("should use project cache fallback when no sprint scope is known", async () => {
+    await fetchLivePayload("p1");
+
+    expect(getCachedLivePayload("p1")?.selectedSprintId).toBe("s1");
+  });
+
+  it("should miss project cache entries when the requested sprint scope differs", async () => {
+    await fetchLivePayload("p1");
+
+    expect(getCachedLivePayload("p1", { selectedSprintId: "s1" })?.projectId).toBe("p1");
+    expect(getCachedLivePayload("p1", { selectedSprintId: "s2" })).toBeNull();
   });
 
   it("should evict oldest entry when bounded LRU limit is exceeded", async () => {
