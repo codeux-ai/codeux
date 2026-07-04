@@ -34,6 +34,7 @@
 - [Agent Knowledge Base](./architecture/agent-knowledge-base.md)
 - [Memory Claims and Evidence](./architecture/memory-claims.md)
 - [Quality Assurance Agent](./architecture/quality-assurance-agent.md)
+- [Quality Guardrails](./architecture/quality-guardrails.md)
 - [Live Connections Runtime Surface](./architecture/live-connections-runtime-surface.md)
 - [Postgres Migration Plan](./architecture/postgres-migration-plan.md)
 - [Connection And Listener Foundation Reset](./architecture/connection-and-listener-foundation-reset.md)
