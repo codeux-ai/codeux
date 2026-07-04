@@ -13,7 +13,7 @@ Use this page as the main entrypoint.
 4. [Dashboard Accessibility Patterns](./dashboard/dashboard-guide.md#accessibility-patterns)
 4.1. [Interaction Patterns](./dashboard/interaction-patterns.md)
 4.2. [Dashboard Accessibility Quality Audit](./dashboard/accessibility-quality-audit.md)
-4.3. [Stats & Analytics Design System](./dashboard/design-system-stats.md)
+4.3. [Stats & Analytics Design System](./dashboard/design-system-stats.md) - Warm Void analytics surfaces and System administration
 5. [Sprint Imports](./dashboard/sprint-imports.md)
 5. [Project Initialization](./dashboard/project-initialization.md)
 6. [Quicksprint Templates](./dashboard/quicksprint-templates.md)
@@ -132,7 +132,7 @@ Use this page as the main entrypoint.
 - [Dashboard Accessibility Patterns](./dashboard/dashboard-guide.md#accessibility-patterns)
 - [Dashboard Accessibility Quality Audit](./dashboard/accessibility-quality-audit.md)
 - [Interaction Patterns](./dashboard/interaction-patterns.md)
-- [Stats & Analytics Design System](./dashboard/design-system-stats.md)
+- [Stats & Analytics Design System](./dashboard/design-system-stats.md) - Warm Void analytics surfaces and System administration
 - [Dashboard Onboarding](./dashboard/onboarding.md)
 - [Project Initialization](./dashboard/project-initialization.md)
 - [Sprint Imports](./dashboard/sprint-imports.md)

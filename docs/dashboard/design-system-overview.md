@@ -27,6 +27,6 @@ The overview page acts as a centralized "Polished Operational Command Surface." 
 - Loading metric decks use polite `role="status"` with `aria-busy`; loaded metric groups use named `region` containers. Avoid announcing decorative counters or background animation as separate content.
 - Overview telemetry distinguishes urgency: loading, empty, pending, running, and timeline updates are polite, while project/transport failures that block trust in the telemetry rail are alerts. Timeline feeds use a named `role="log"` so updates are discoverable without replacing the whole page context.
 - Dense runtime labels such as project names, sprint keys, provider/model labels, branch names, workflow names, and event snippets must wrap inside their cards or rails. Do not rely on hover-only truncation for operational values.
-- The Warm Void visual language remains restrained: neutral glass surfaces for structure, Signal Jade for primary active/focus/running signals, and Ember/status tones only for intervention, warning, error, and destructive states.
+- The Warm Void visual language remains restrained: neutral glass surfaces for Overview structure, Signal Jade for primary active/focus/running signals, and Ember/status tones only for intervention, warning, error, and destructive states. Stats uses a stricter solid-surface Warm Void variant for dense analytics and System administration; see [Stats & Analytics Design System](./design-system-stats.md).
 
 For repeatable page-level checks, use the [Dashboard Accessibility Quality Audit](./accessibility-quality-audit.md).
