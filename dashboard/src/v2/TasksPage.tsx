@@ -33,7 +33,7 @@ import { useProjectData } from "./context/project-data.js";
 import { useSprints } from "../hooks/useSprints.js";
 import { useProjectTasks } from "./hooks/use-project-tasks.js";
 import { createTask, deleteTask, updateTask } from "./lib/project-api.js";
-import { deriveTaskBoardState, getTaskLane } from "./lib/task-board-state.js";
+import { deriveTaskBoardState } from "./lib/task-board-state.js";
 import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "./lib/list-window.js";
 import { ListWindowSelector } from "./components/ui/ListWindowSelector.js";
 import { SkeletonCard, SkeletonLoader } from "./components/layout/SkeletonLoader.js";
@@ -49,6 +49,7 @@ import type { AgentPreset } from "./types.js";
 import { STATUS_CFG } from "./lib/tasks-constants.js";
 import { buildTaskCardViewModel } from "./lib/tasks/task-card-view-model.js";
 import { buildTaskBoardViewModel } from "./lib/tasks/task-board-view-model.js";
+import { resolveTaskDropStatus } from "./lib/tasks/task-board-actions.js";
 import { useDashboardRuntimeData } from "../hooks/use-dashboard-runtime-data.js";
 import { buildLiveTaskEnrichmentMap } from "./lib/tasks/live-task-enrichment.js";
 import { useReducedMotion } from "./hooks/use-reduced-motion.js";
@@ -802,36 +803,15 @@ export const TasksPage: FunctionComponent = () => {
     setDropTargetContext({ status, index });
   }, []);
 
-  const handleDrop = useCallback(async (status: TaskStatus, insertIndex: number, e: DragEvent) => {
+  const handleDrop = useCallback(async (status: TaskStatus, e: DragEvent) => {
     e.preventDefault();
     if (!draggedTaskId) return;
 
     const draggedTask = tasks.find(t => t.recordId === draggedTaskId);
     if (!draggedTask) return;
 
-    // We don't have sortOrder on Task currently, but we might just update the status for now
-    // Actually, in the task board state it usually filters by getTaskLane(task.status).
-    // Let's just update the status if it changed lane, and for reordering, update sorting if we had it.
-    // For now we will just use updateTask(task.id, { status })
-    // If the dropped column is 'completed', and original isn't... etc.
-    const newStatus = status === "in_progress" && draggedTask.status !== "coding_completed" && draggedTask.status !== "QA_REVIEW_FAILED"
-      ? "in_progress"
-      : status === "pending" ? "pending" : status === "completed" ? "completed" : draggedTask.status;
-
-    // Actually, let's just forcefully set the status to the column's default status if we moved between columns.
-    const laneMap: Record<string, TaskStatus> = {
-      pending: "pending",
-      in_progress: "in_progress",
-      completed: "completed"
-    };
-
-    // Even if it's the same lane, we should allow it.
-    // However, updating the order within the same column via updateTask might not be fully supported by the API yet if it lacks an 'order' field.
-    // Assuming we want to optimistically update or at least support cross-status drops in the same lane.
-    if (getTaskLane(draggedTask.status) !== status) {
-      const targetStatus = laneMap[status] || draggedTask.status;
-
-      // Optimistic update
+    const targetStatus = resolveTaskDropStatus(draggedTask.status, status);
+    if (targetStatus) {
       const updatedTask = { ...draggedTask, status: targetStatus };
       setOptimisticTasks(prev => {
         const filtered = prev.filter(t => t.recordId !== updatedTask.recordId);
@@ -843,23 +823,6 @@ export const TasksPage: FunctionComponent = () => {
         await refreshTasks();
       } finally {
         setOptimisticTasks(prev => prev.filter(t => t.recordId !== updatedTask.recordId));
-      }
-    } else {
-      // Logic for reordering within the same lane
-      const targetStatus = laneMap[status] || draggedTask.status;
-      if (draggedTask.status !== targetStatus) {
-        const updatedTask = { ...draggedTask, status: targetStatus };
-        setOptimisticTasks(prev => {
-          const filtered = prev.filter(t => t.recordId !== updatedTask.recordId);
-          // Insert at the new index position? For now, we are just appending it at the top as an optimistic update
-          return [updatedTask, ...filtered];
-        });
-        try {
-          await updateTask(draggedTask.recordId, { status: targetStatus });
-          await refreshTasks();
-        } finally {
-          setOptimisticTasks(prev => prev.filter(t => t.recordId !== updatedTask.recordId));
-        }
       }
     }
     setDraggedTaskId(null);
@@ -1078,7 +1041,7 @@ export const TasksPage: FunctionComponent = () => {
               <div
               className={`flex-1 grid grid-cols-1 grid-rows-1 p-4 rounded-[1.5rem] min-h-[200px] bg-black/[0.015] dark:bg-white/[0.015] border relative transition-colors duration-300 ${dropTargetContext?.status === status ? "border-signal-500/50 bg-signal-500/5" : "border-black/[0.03] dark:border-white/[0.03]"}`}
               onDragOver={(e) => handleDragOver(status, columnTasks.length, e)}
-              onDrop={(e) => handleDrop(status, columnTasks.length, e)}
+              onDrop={(e) => handleDrop(status, e)}
             >
                 {showSkeletons && (
                   <div role="status" aria-live="polite" className="sr-only">
@@ -1119,7 +1082,7 @@ export const TasksPage: FunctionComponent = () => {
                         className="task-card-entry"
                         data-task-id={task.recordId}
                         onDragOver={(e) => { e.stopPropagation(); handleDragOver(status, index, e); }}
-                        onDrop={(e) => { e.stopPropagation(); handleDrop(status, index, e); }}
+                        onDrop={(e) => { e.stopPropagation(); handleDrop(status, e); }}
                       >
                           <KanbanTaskCard
                             viewModel={viewModel}
