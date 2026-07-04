@@ -58,6 +58,12 @@ interface ProjectSetupServiceDeps {
 
 type ProjectSetupProviderConfig = ReturnType<ProjectSetupService["resolveProvider"]>;
 
+const resolveEffectiveDefaultBranch = (project: ProjectSummary, settings: DashboardSettings): string => (
+  project.defaultBranch?.trim()
+  || settings.git.defaultBranch?.trim()
+  || "main"
+);
+
 interface PreparedProjectSetupRun {
   project: ProjectSummary;
   options: ProjectSetupOptions;
@@ -238,6 +244,11 @@ export class ProjectSetupService {
     try {
       signal?.throwIfAborted();
       const sessionId = `project-setup-${providerConfig.provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+      const workflowSettings = {
+        ...DEFAULT_CLI_WORKFLOW_SETTINGS,
+        ...settings.cliWorkflow,
+      };
+      const defaultBranch = resolveEffectiveDefaultBranch(project, settings);
       const result = await this.providerExecutionService.executeProvider({
         projectId,
         purpose: "planning",
@@ -269,10 +280,10 @@ export class ProjectSetupService {
         customModel: providerConfig.customModel,
         sessionId,
         workspaceSessionId: `${projectId}-project-setup`,
-        workflowSettings: {
-          ...DEFAULT_CLI_WORKFLOW_SETTINGS,
-          ...settings.cliWorkflow,
-        },
+        workflowSettings,
+        snapshotCheckout: workflowSettings.executionMode === "DOCKER"
+          ? { branch: defaultBranch }
+          : undefined,
         githubToken: settings.git.githubToken,
         signal,
         expectTextOutput: true,

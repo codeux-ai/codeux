@@ -205,6 +205,48 @@ describe("settings view model source helpers", () => {
     ]));
   });
 
+  it("adds configured Codex and Claude custom endpoint models to instance model options", () => {
+    const systemSettings = {
+      integrations: {
+        providers: {
+          "codex-local": {
+            provider: "codex",
+            name: "Codex Local",
+            apiKey: "mykey",
+            mountAuth: false,
+            authPath: "",
+            customBaseUrl: "http://127.0.0.1:11434/v1",
+            customModel: "openai/gpt-oss-local",
+          },
+          "claude-local": {
+            provider: "claude-code",
+            name: "Claude Local",
+            apiKey: "mykey",
+            mountAuth: false,
+            authPath: "",
+            customBaseUrl: "http://127.0.0.1:11434/v1",
+            customModel: "anthropic/claude-local",
+          },
+        },
+      },
+    } as SystemSettings;
+
+    expect(getProviderInstanceModelOptions(
+      "codex-local",
+      { provider: "codex", model: "gpt-5.5" },
+      systemSettings,
+    )).toEqual(expect.arrayContaining([
+      { value: "openai/gpt-oss-local", label: "openai/gpt-oss-local (configured)" },
+    ]));
+    expect(getProviderInstanceModelOptions(
+      "claude-local",
+      { provider: "claude-code", model: "default" },
+      systemSettings,
+    )).toEqual(expect.arrayContaining([
+      { value: "anthropic/claude-local", label: "anthropic/claude-local (configured)" },
+    ]));
+  });
+
   it("prefills new Qwen and OpenCode custom endpoint settings for local Ollama", () => {
     expect(createSystemProviderDraft("qwen-code", "Qwen Ollama")).toMatchObject({
       apiKey: "",
@@ -500,6 +542,170 @@ describe("provider display metadata helpers", () => {
 
     expect(metadata?.effectiveModel).toBe("gpt-5.5");
     expect(getDefaultModelOptionLabel(metadata)).toBe("Default Model (gpt-5.5)");
+  });
+
+  it("displays Codex custom endpoint models instead of catalog defaults", () => {
+    const systemSettings = {
+      integrations: {
+        providers: {
+          "codex-local": {
+            provider: "codex",
+            name: "Codex Local",
+            apiKey: "key",
+            mountAuth: false,
+            authPath: "",
+            customBaseUrl: "http://127.0.0.1:11434/v1",
+            customModel: "openai/gpt-oss-local",
+          },
+        },
+      },
+      defaults: {
+        aiProvider: {
+          providers: {
+            "codex-local": {
+              provider: "codex",
+              name: "Codex Local",
+              enabled: true,
+              model: "gpt-5.5",
+              weight: 50,
+              thinkingMode: "HIGH",
+            },
+          },
+        },
+      },
+    } as SystemSettings;
+
+    const metadata = getProviderDisplayMetadata(systemSettings, "codex-local");
+
+    expect(metadata?.effectiveModel).toBe("openai/gpt-oss-local");
+    expect(getDefaultModelOptionLabel(metadata)).toBe("Default Model (openai/gpt-oss-local)");
+  });
+
+  it("displays Claude custom endpoint models instead of default", () => {
+    const systemSettings = {
+      integrations: {
+        providers: {
+          "claude-local": {
+            provider: "claude-code",
+            name: "Claude Local",
+            apiKey: "key",
+            mountAuth: false,
+            authPath: "",
+            customBaseUrl: "http://127.0.0.1:11434/v1",
+            customModel: "anthropic/claude-local",
+          },
+        },
+      },
+      defaults: {
+        aiProvider: {
+          providers: {
+            "claude-local": {
+              provider: "claude-code",
+              name: "Claude Local",
+              enabled: true,
+              model: "default",
+              weight: 50,
+              thinkingMode: "HIGH",
+            },
+          },
+        },
+      },
+    } as SystemSettings;
+
+    const metadata = getProviderDisplayMetadata(systemSettings, "claude-local");
+
+    expect(metadata?.effectiveModel).toBe("anthropic/claude-local");
+    expect(getDefaultModelOptionLabel(metadata)).toBe("Default Model (anthropic/claude-local)");
+  });
+
+  it("ignores stale custom model fields for mounted local-auth providers", () => {
+    const systemSettings = {
+      integrations: {
+        providers: {
+          "codex-mounted": {
+            provider: "codex",
+            name: "Codex Mounted",
+            apiKey: "",
+            authType: "localAuth",
+            mountAuth: true,
+            authPath: "~/.codex",
+            customBaseUrl: "http://127.0.0.1:11434/v1",
+            customModel: "openai/stale-local",
+          },
+        },
+      },
+      defaults: {
+        aiProvider: {
+          providers: {
+            "codex-mounted": {
+              provider: "codex",
+              name: "Codex Mounted",
+              enabled: true,
+              model: "gpt-5.5",
+              weight: 50,
+              thinkingMode: "HIGH",
+            },
+          },
+        },
+      },
+    } as SystemSettings;
+
+    const metadata = getProviderDisplayMetadata(systemSettings, "codex-mounted");
+
+    expect(metadata?.effectiveModel).toBe("gpt-5.5");
+  });
+
+  it("displays Qwen and OpenCode configured custom endpoint models", () => {
+    const systemSettings = {
+      integrations: {
+        providers: {
+          "qwen-ollama": {
+            provider: "qwen-code",
+            name: "Qwen Ollama",
+            apiKey: "key",
+            mountAuth: false,
+            authPath: "",
+            qwenAuthMode: "MODEL_PROVIDER",
+            qwenModelId: "glm-4.7-flash",
+          },
+          "opencode-ollama": {
+            provider: "opencode",
+            name: "OpenCode Ollama",
+            apiKey: "key",
+            mountAuth: false,
+            authPath: "",
+            openCodeAuthMode: "CUSTOM_PROVIDER",
+            openCodeProviderId: "ollama",
+            openCodeModelId: "glm-4.7-flash",
+          },
+        },
+      },
+      defaults: {
+        aiProvider: {
+          providers: {
+            "qwen-ollama": {
+              provider: "qwen-code",
+              name: "Qwen Ollama",
+              enabled: true,
+              model: "custom/model",
+              weight: 50,
+              thinkingMode: "HIGH",
+            },
+            "opencode-ollama": {
+              provider: "opencode",
+              name: "OpenCode Ollama",
+              enabled: true,
+              model: "custom/model",
+              weight: 50,
+              thinkingMode: "HIGH",
+            },
+          },
+        },
+      },
+    } as SystemSettings;
+
+    expect(getProviderDisplayMetadata(systemSettings, "qwen-ollama")?.effectiveModel).toBe("glm-4.7-flash");
+    expect(getProviderDisplayMetadata(systemSettings, "opencode-ollama")?.effectiveModel).toBe("ollama/glm-4.7-flash");
   });
 });
 

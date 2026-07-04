@@ -69,6 +69,15 @@ interface InFlightChatTurn {
   latestMessage: ConversationMessageRecord;
 }
 
+const resolveEffectiveDefaultBranch = (
+  project: { defaultBranch?: string | null },
+  settings: DashboardSettings,
+): string => (
+  project.defaultBranch?.trim()
+  || settings.git?.defaultBranch?.trim()
+  || "main"
+);
+
 export class ChatThreadRuntimeService {
   private readonly inFlightTurns = new Map<string, InFlightChatTurn>();
 
@@ -339,6 +348,10 @@ export class ChatThreadRuntimeService {
     const apiKey = route.apiKey!;
     const thinkingMode = route.thinkingMode;
     const dashboardSettings = this.deps.getDashboardSettings({ projectId });
+    const defaultBranch = resolveEffectiveDefaultBranch(project, dashboardSettings);
+    const snapshotCheckout = dashboardSettings.cliWorkflow.executionMode === "DOCKER"
+      ? { branch: defaultBranch }
+      : undefined;
 
     const runtimeState = thread.runtimeState || {};
     const pendingAction = runtimeState.pendingManagementAction;
@@ -476,6 +489,7 @@ export class ChatThreadRuntimeService {
       settings: dashboardSettings,
       prompt: finalPrompt,
       repoPath: project.baseDir,
+      snapshotCheckout,
       mcpConnection,
       agentMcpAccess: respondingAgent.mcpAccess ?? null,
       mcpAgentId: respondingAgent.id,
@@ -570,6 +584,8 @@ export class ChatThreadRuntimeService {
     const thinkingMode = route.thinkingMode;
     const dashboardSettings = this.deps.getDashboardSettings({ projectId });
     const workflowSettings = dashboardSettings.cliWorkflow;
+    const project = this.deps.projectManagementRepository.getProject(projectId);
+    const defaultBranch = resolveEffectiveDefaultBranch(project ?? {}, dashboardSettings);
     const githubToken = this.deps.getGithubToken();
     const workerAgent = typeof this.deps.agentPresetSyncService.resolveTargetedCodingAgent === "function"
       ? await this.deps.agentPresetSyncService.resolveTargetedCodingAgent(
@@ -628,6 +644,9 @@ export class ChatThreadRuntimeService {
         sessionId: `${thread.id}:compaction`,
         workflowSettings,
         repoPath,
+        snapshotCheckout: workflowSettings.executionMode === "DOCKER"
+          ? { branch: defaultBranch }
+          : undefined,
         githubToken,
         continueSessionId: null,
         onActivity: (desc, originator) => {

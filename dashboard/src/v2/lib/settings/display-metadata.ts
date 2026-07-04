@@ -11,7 +11,7 @@ import {
   DEFAULT_PROVIDER_SETTINGS,
   VIRTUAL_WORKER_PROVIDERS,
 } from "../../../../../src/repositories/settings-defaults.js";
-import { AI_MODEL_CATALOG } from "./model-options.js";
+import { AI_MODEL_CATALOG, getConfiguredProviderModel } from "./model-options.js";
 import {
   getSystemIntegrationProviders,
   inferProviderTypeFromConfigId,
@@ -44,12 +44,17 @@ const isProviderInstanceAvailableForDisplay = (provider: SystemProviderCredentia
   provider.apiKey.trim().length > 0 || (provider.provider !== "jules" && provider.mountAuth)
 );
 
-const resolveProviderDisplayModel = (
+export const resolveProviderDisplayModel = (
   provider: ProviderId,
   baseModel: string | null | undefined,
   workerModel?: string | null,
+  systemProvider?: SystemProviderCredentialSettings | null,
 ): string => {
   const fallbackModel = baseModel?.trim() || DEFAULT_PROVIDER_SETTINGS[provider].model;
+  const configuredModel = getConfiguredProviderModel(provider, systemProvider, fallbackModel);
+  if (configuredModel) {
+    return configuredModel;
+  }
   if (provider === "jules") {
     return fallbackModel;
   }
@@ -81,7 +86,7 @@ export const getProviderDisplayMetadata = (
     provider,
     displayLabel,
     iconProviderId: provider,
-    effectiveModel: resolveProviderDisplayModel(provider, projectProvider?.model, workerModel),
+    effectiveModel: resolveProviderDisplayModel(provider, projectProvider?.model, workerModel, systemProvider),
   };
 };
 

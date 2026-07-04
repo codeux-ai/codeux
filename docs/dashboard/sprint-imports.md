@@ -20,6 +20,8 @@ goal:
 Stabilize the dashboard runtime, reduce noisy retries, and verify health endpoints.
 ```
 
+The sprint title is optional when creating a sprint from the dashboard, MCP, quicksprint, or import flows. If the title is omitted, Code UX stores a deterministic placeholder and the Planning agent may replace it with a generated title after it returns a structured plan. A custom user-supplied title is preserved during planning and replanning.
+
 Task bundles use file markers. Each marker becomes one task, preserving order and dependency keys:
 
 ```md
@@ -57,6 +59,8 @@ For local projects, the dashboard reads the repository's `remote.origin.url` fro
 Imported issues appear in the sprint composer under the Sprint Prompt field as linked issue cards. Each card shows the provider, repository or Jira project key, issue key, title, state, labels, assignees, source link, conversation-included state, and a remove control for pruning imported scope before submission. The import view includes an `Append Conversation` toggle on each issue card. When enabled, the sprint prompt receives the full issue body plus issue comments or notes; when disabled, it receives the full issue body without the conversation.
 
 When the sprint is submitted, selected issues are persisted as linked sprint issue records and the sprint prompt receives a structured `Linked Issues` markdown section. Each imported issue is appended with source metadata, labels, assignees, author and timestamps when available, the complete issue body, and the selected conversation context. This gives the Planning agent and task agents the actual issue text instead of only a remote link.
+
+Sprint completion PR descriptions also summarize persisted linked issues in the summary section so the final PR body references the source work being completed. Jira tickets render by their issue key and stored Jira URL, while GitHub and GitLab issues render by their issue key or number and stored issue URL. Sprints without linked issues omit that PR section entirely.
 
 Special imported tasks selected from the same import flows appear in their own composer tray instead of the linked-issue markdown section. Security and quality selections still come from issue search results, but they are created as imported sprint tasks so they bypass planning prose and land directly on the sprint. Merge-conflict and failed-CI selections are also created directly as sprint tasks, using the imported-task endpoint, so they attach to the sprint immediately without being folded into the planning prompt. The composer shows the task kind, source, priority, and removal controls so operators can review remediation work before the sprint is created or updated.
 

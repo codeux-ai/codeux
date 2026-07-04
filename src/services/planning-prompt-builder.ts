@@ -22,6 +22,7 @@ export interface PlanPromptArgs {
   codingAgentRoster?: AgentPresetRecord[];
   sprintNumber: number | null;
   sprintName: string;
+  canSetSprintTitle?: boolean;
   goal: string;
   memoryContext?: string;
   learningsInstruction?: string;
@@ -86,6 +87,7 @@ export function buildPlanPrompt(args: PlanPromptArgs): string {
     `Project: ${args.projectName}`,
     `Sprint: ${args.sprintNumber ? `SPR-${args.sprintNumber}` : args.sprintName}`,
     `Sprint Name: ${args.sprintName}`,
+    `Sprint Title Status: ${args.canSetSprintTitle ? "unset/generated; you may provide a concise title" : "custom user title; do not rename it"}`,
     "",
     "## Sprint Goal",
     args.goal.trim() || "No sprint goal provided.",
@@ -114,6 +116,9 @@ export function buildPlanPrompt(args: PlanPromptArgs): string {
     "## Output Rules",
     "- Return JSON only.",
     "- Return one top-level object with `goal` and `tasks`.",
+    ...(args.canSetSprintTitle
+      ? ["- You may include top-level `title` with a concise sprint title of 3 to 8 words if it clarifies an unset/generated sprint title."]
+      : ["- Do not include top-level `title`; the user already provided a custom sprint title."]),
     "- Return one ordered `tasks` array for the full DAG.",
     "- Do not wrap the JSON in prose.",
     "",
@@ -182,8 +187,8 @@ export function buildPlanPrompt(args: PlanPromptArgs): string {
     "## Required Output",
     "Return JSON only with this exact shape and no surrounding commentary:",
     codingAgents.length > 0
-      ? '{"goal":"Optional refined sprint goal","tasks":[{"key":"T01","title":"Task title","description":"Short intent","promptMarkdown":"## Objective\\n...\\n\\n## Scope\\n- ...\\n\\n## Implementation Requirements\\n1. ...\\n\\n## Constraints\\n- ...\\n\\n## Verification\\n- ...","priority":"medium","executorType":"auto","agentPresetId":"agent-preset-id","dependsOn":[]}]}'
-      : '{"goal":"Optional refined sprint goal","tasks":[{"key":"T01","title":"Task title","description":"Short intent","promptMarkdown":"## Objective\\n...\\n\\n## Scope\\n- ...\\n\\n## Implementation Requirements\\n1. ...\\n\\n## Constraints\\n- ...\\n\\n## Verification\\n- ...","priority":"medium","executorType":"auto","dependsOn":[]}]}',
+      ? `${args.canSetSprintTitle ? '{"title":"Optional concise sprint title",' : "{"}"goal":"Optional refined sprint goal","tasks":[{"key":"T01","title":"Task title","description":"Short intent","promptMarkdown":"## Objective\\n...\\n\\n## Scope\\n- ...\\n\\n## Implementation Requirements\\n1. ...\\n\\n## Constraints\\n- ...\\n\\n## Verification\\n- ...","priority":"medium","executorType":"auto","agentPresetId":"agent-preset-id","dependsOn":[]}]}`
+      : `${args.canSetSprintTitle ? '{"title":"Optional concise sprint title",' : "{"}"goal":"Optional refined sprint goal","tasks":[{"key":"T01","title":"Task title","description":"Short intent","promptMarkdown":"## Objective\\n...\\n\\n## Scope\\n- ...\\n\\n## Implementation Requirements\\n1. ...\\n\\n## Constraints\\n- ...\\n\\n## Verification\\n- ...","priority":"medium","executorType":"auto","dependsOn":[]}]}`
   ];
 
   if (args.learningsInstruction) {

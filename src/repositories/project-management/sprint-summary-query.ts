@@ -33,6 +33,7 @@ export const sprintSummaryQuery = {
         s.number,
         s.slug,
         s.name,
+        s.is_generated_name,
         s.original_prompt,
         s.goal,
         s.status,

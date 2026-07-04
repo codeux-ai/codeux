@@ -91,6 +91,7 @@ If `action=plan`:
 - Creates subtask directory if missing.
 - Optionally injects `sprint_agent_guide.md`.
 - Returns templated planning instructions.
+- Planning may apply a provider-suggested sprint title only when the sprint was explicitly stored as generated/auto-named at creation time. Placeholder-looking custom titles such as `Untitled sprint 1` are treated as user titles and are not writable by planning.
 
 ### 4. Orchestration cycle
 For `status` and `orchestrate`, each cycle can run:
