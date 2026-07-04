@@ -36,10 +36,10 @@ export const UsageGraphTooltip: FunctionComponent<UsageGraphTooltipProps> = ({
     <div
       role="tooltip"
       id="usage-chart-tooltip"
-      className="pointer-events-none absolute top-3 z-50 w-64 max-w-[calc(100vw-2rem)] text-wrap break-words -translate-x-1/2 rounded-[1.25rem] border border-[var(--stats-card-border)] border-t-2 border-t-amber-500/60 bg-[var(--stats-card-bg)] px-5 py-4 shadow-[var(--stats-card-shadow)] backdrop-blur-2xl transition-all duration-200"
+      className="pointer-events-none absolute top-3 z-50 w-64 max-w-[calc(100vw-2rem)] -translate-x-1/2 text-wrap break-words rounded-[1.25rem] border border-[var(--stats-card-border)] border-t-2 border-t-amber-500/60 bg-[var(--stats-panel-bg)] px-5 py-4 shadow-[var(--stats-floating-shadow)] backdrop-blur-sm transition-all duration-200"
       style={{ left: `${Math.min(92, Math.max(8, left))}%` }}
     >
-      <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{label}</div>
+      <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-label-color)]">{label}</div>
       <div className="mt-2 text-sm font-black text-[var(--stats-value-color)]">{formattedDate}</div>
       <div className="mt-4 space-y-2.5">
         {activeSeries.map((series) => (

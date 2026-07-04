@@ -4,9 +4,9 @@
 
 .purposeSection {
   border: 1px solid var(--stats-card-border);
-  background: var(--stats-card-bg);
+  background: var(--stats-panel-bg);
   box-shadow: var(--stats-card-shadow);
-  border-radius: 2rem;
+  border-radius: var(--stats-panel-radius);
   padding: 1.5rem;
 }
 
@@ -18,7 +18,7 @@
   font-size: 1.5rem;
   line-height: 1.2;
   font-weight: 900;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   color: var(--stats-value-color);
 }
 

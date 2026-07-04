@@ -42,12 +42,12 @@ const LedgerSummaryTile: FunctionComponent<{
   detail: string;
 }> = ({ icon: Icon, label, value, detail }) => (
   <div className={`${SUBPANEL_CLASS} p-4`}>
-    <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+    <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-label-color)]">
       <Icon className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.2} />
       {label}
     </div>
-    <div className="mt-2 text-xl font-black tracking-tight text-slate-900 dark:text-white">{value}</div>
-    <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{detail}</div>
+    <div className="mt-2 text-xl font-black tracking-tight text-[var(--stats-value-color)]">{value}</div>
+    <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">{detail}</div>
   </div>
 );
 
@@ -150,13 +150,13 @@ export const TelemetryLedger: FunctionComponent<{
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">{eyebrow}</div>
-            <div className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</div>
-            <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">{eyebrow}</div>
+            <div className="mt-2 text-2xl font-black tracking-tight text-[var(--stats-value-color)]">{title}</div>
+            <div className="mt-2 text-sm text-[var(--stats-detail-color)]">
               Search, sort, and compare {kindLabel} by recency, tokens, active time, and directional token flow.
             </div>
           </div>
-          <div className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+          <div className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] ${CHIP_CLASS}`}>
             {filteredItems.length} {kindLabel}
           </div>
         </div>
@@ -194,7 +194,7 @@ export const TelemetryLedger: FunctionComponent<{
 
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
           <div className="relative">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" strokeWidth={2} />
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--stats-detail-color)]" strokeWidth={2} />
             <input
               type="text"
               value={query}
@@ -226,7 +226,7 @@ export const TelemetryLedger: FunctionComponent<{
         </div>
 
         {filteredItems.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-12 text-center text-sm text-slate-400 dark:border-white/[0.08]">
+          <div className="rounded-2xl border border-dashed border-[var(--stats-card-border)] bg-[var(--stats-subpanel-bg)] px-4 py-12 text-center text-sm text-[var(--stats-detail-color)]">
             {emptyLabel}
           </div>
         ) : (
@@ -241,13 +241,13 @@ export const TelemetryLedger: FunctionComponent<{
                     <div className="flex flex-col gap-4">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex min-w-0 items-start gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] text-xs font-black text-slate-900 shadow-sm backdrop-blur-xl dark:text-white">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--stats-card-border)] bg-[var(--stats-chip-bg)] text-xs font-black text-[var(--stats-value-color)] shadow-[var(--stats-card-shadow)] backdrop-blur-sm">
                             {index + 1}
                           </div>
                           <div className="min-w-0">
-                            <div className="truncate text-base font-black tracking-tight text-slate-900 dark:text-white">{item.label}</div>
+                            <div className="truncate text-base font-black tracking-tight text-[var(--stats-value-color)]">{item.label}</div>
                             {kindLabel === "sprints" ? (
-                              <div className="text-[10px] text-slate-400">
+                              <div className="text-[10px] text-[var(--stats-detail-color)]">
                                 {formatTokens(item.usage.totalTokens / Math.max(1, item.usage.invocationCount))}/call
                               </div>
                             ) : null}
@@ -269,7 +269,7 @@ export const TelemetryLedger: FunctionComponent<{
                                 </span>
                               ) : null}
                               {item.secondaryLabel ? (
-                                <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+                                <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)] ${CHIP_CLASS}`}>
                                   {item.secondaryLabel}
                                 </span>
                               ) : null}
@@ -283,32 +283,32 @@ export const TelemetryLedger: FunctionComponent<{
                         </div>
                         <div className="hidden shrink-0 grid-cols-3 gap-6 text-right lg:grid">
                           <div>
-                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Tokens</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatTokens(item.usage.totalTokens)}</div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">Tokens</div>
+                            <div className="mt-1 text-lg font-black tracking-tight text-[var(--stats-value-color)]">{formatTokens(item.usage.totalTokens)}</div>
                           </div>
                           <div>
-                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Active</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatStatsDuration(item.usage.activeTimeMs)}</div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">Active</div>
+                            <div className="mt-1 text-lg font-black tracking-tight text-[var(--stats-value-color)]">{formatStatsDuration(item.usage.activeTimeMs)}</div>
                           </div>
                           <div>
-                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Calls</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{item.usage.invocationCount.toLocaleString()}</div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">Calls</div>
+                            <div className="mt-1 text-lg font-black tracking-tight text-[var(--stats-value-color)]">{item.usage.invocationCount.toLocaleString()}</div>
                           </div>
                         </div>
                       </div>
 
                       <div className="grid grid-cols-3 gap-4 lg:hidden">
                         <div>
-                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Tokens</div>
-                          <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatTokens(item.usage.totalTokens)}</div>
+                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">Tokens</div>
+                          <div className="mt-1 text-lg font-black tracking-tight text-[var(--stats-value-color)]">{formatTokens(item.usage.totalTokens)}</div>
                         </div>
                         <div>
-                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Active</div>
-                          <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatStatsDuration(item.usage.activeTimeMs)}</div>
+                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">Active</div>
+                          <div className="mt-1 text-lg font-black tracking-tight text-[var(--stats-value-color)]">{formatStatsDuration(item.usage.activeTimeMs)}</div>
                         </div>
                         <div>
-                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Calls</div>
-                          <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{item.usage.invocationCount.toLocaleString()}</div>
+                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">Calls</div>
+                          <div className="mt-1 text-lg font-black tracking-tight text-[var(--stats-value-color)]">{item.usage.invocationCount.toLocaleString()}</div>
                         </div>
                       </div>
 
@@ -320,7 +320,7 @@ export const TelemetryLedger: FunctionComponent<{
                           reasoning={item.usage.reasoningOutputTokens}
                           total={item.usage.totalTokens}
                         />
-                        <div className="h-1 rounded-full bg-black/[0.04] dark:bg-white/[0.05]">
+                        <div className="h-1 rounded-full bg-[var(--stats-muted-track)]">
                           <div
                             className="h-1 rounded-full bg-signal-500/60 transition-all duration-500"
                             style={{ width: `${Math.min(100, Math.max(shareOfLeader > 0 ? 3 : 0, shareOfLeader))}%` }}
@@ -333,7 +333,7 @@ export const TelemetryLedger: FunctionComponent<{
                             <TokenChip icon={ArrowUpRight} label="Out" value={item.usage.outputTokens} tone="border-amber-500/16 bg-amber-500/8 text-amber-600 dark:text-amber-400" />
                             <TokenChip icon={Brain} label="Reason" value={item.usage.reasoningOutputTokens} tone="border-rose-500/16 bg-rose-500/8 text-rose-600 dark:text-rose-400" />
                           </div>
-                          <div className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                          <div className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)]">
                             <span>{formatPercent(shareOfTotal)} of volume</span>
                             <span className="hidden sm:inline">{formatDateTime(item.lastActivityAt)}</span>
                           </div>
@@ -344,7 +344,7 @@ export const TelemetryLedger: FunctionComponent<{
                 );
               })}
               {visibleItems.length < filteredItems.length ? (
-                <div ref={sentinelRef} className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-4 text-center text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:border-white/[0.08]">
+                <div ref={sentinelRef} className="rounded-2xl border border-dashed border-[var(--stats-card-border)] bg-[var(--stats-subpanel-bg)] px-4 py-4 text-center text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)]">
                   Loading more telemetry lanes...
                 </div>
               ) : null}

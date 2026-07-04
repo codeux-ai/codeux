@@ -47,6 +47,7 @@ describe("SystemFilterBar", () => {
 
     const runningButton = getByRole("button", { name: "Running" });
     expect(runningButton.className).not.toContain("border-blue-500/40");
+    expect(runningButton.className).toContain("text-[var(--stats-detail-color)]");
 
     expect(getByRole("group", { name: "Status filters" })).toBeTruthy();
 

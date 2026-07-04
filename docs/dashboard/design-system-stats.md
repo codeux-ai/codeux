@@ -16,10 +16,11 @@ The goal is to maintain a unified "polished operational command surface" that fe
 
 Analytics components draw from `stats-theme.css`, which maps specifically back to the global semantic design language:
 
-*   **Surfaces (`--stats-card-bg`)**: Uses `var(--surface-glass)` to seamlessly blend with the dashboard background, respecting light/dark mode.
+*   **Surfaces (`--stats-panel-bg`, `--stats-subpanel-bg`, `--stats-chip-bg`, `--stats-input-bg`)**: Use the Warm Void surface stack for panels, nested chart/table cards, metadata chips, and form controls. Panels should not invent white/slate glass backgrounds outside these tokens.
 *   **Borders (`--stats-card-border`)**: Uses `var(--border-hairline)` to create structure without overwhelming the data.
-*   **Shadows (`--stats-card-shadow`)**: Standardized to `var(--elevation-base)` for typical cards and `var(--elevation-raised)` for interactive/hover states.
-*   **Typography (`--stats-label-color`, `--stats-detail-color`)**: Maps to `var(--text-metadata)` to enforce consistent low-contrast metric headers and captions.
+*   **Shadows (`--stats-card-shadow`, `--stats-floating-shadow`)**: Standardized to `var(--elevation-base)` for normal analytics surfaces and `var(--elevation-floating)` for tooltips and menus.
+*   **Typography (`--stats-label-color`, `--stats-detail-color`, `--stats-value-color`)**: Labels and supporting metadata map to `var(--text-metadata)` while metric values map to the global primary text token.
+*   **Quiet chrome (`--stats-row-hover-bg`, `--stats-divider`, `--stats-muted-track`, `--stats-grid-line`)**: Rows, dividers, minimap tracks, and chart grid lines use neutral Warm Void tokens so only data series and status colors carry saturated accents.
 
 ## Component Specific Rules
 
@@ -27,15 +28,20 @@ Analytics components draw from `stats-theme.css`, which maps specifically back t
 *   Follow the standard global Card rules: no hardcoded CSS box shadows in hover effects.
 *   Use `var(--elevation-raised)` when a card is hovered.
 *   Remove heavily animated effects (like fluid waves or tracing borders) if they conflict with the goal of a calm, professional analytics environment. Let the metrics do the talking.
+*   Metric values are the strongest hierarchy inside cards. Labels and descriptions remain metadata-weight, and accent color should appear on icons, data dots, or semantic status only.
 
 ### Charts & Controls
-*   **Chart Backgrounds**: Should remain subtle (e.g., `bg-[var(--stats-card-bg)]`), avoiding faux-gradients or distracting "glassy" layers over the plot area.
-*   **Tooltips & Menus**: Float above the chart using `var(--surface-glass)` and `var(--elevation-floating)`.
+*   **Chart Backgrounds**: Should remain subtle (e.g., `bg-[var(--stats-panel-bg)]` or `bg-[var(--stats-subpanel-bg)]`), avoiding faux-gradients or distracting "glassy" layers over the plot area.
+*   **Legends**: Series controls are visible, keyboard reachable, and exposed as switch-style controls. Preserve each data series color in dots/lines, but keep legend pill chrome neutral unless selected.
+*   **Tooltips & Menus**: Float above the chart using `var(--stats-panel-bg)` and `var(--stats-floating-shadow)`.
 *   **Controls**: Use standard semantic focus rings (`var(--accent-focus-ring)`) rather than custom rings per button.
+*   **Minimaps and Empty States**: Overview strips, loading states, empty states, and error states should be framed as subpanels with tokenized dashed borders, muted copy, and accessible status/alert roles.
 
 ### Ledgers & Tables (Telemetry & System)
 *   **Row Interactions**: Rows must rely on global `var(--fill-muted-hover)` patterns rather than arbitrary hardcoded highlights.
 *   **Status Indicators**: Status chips (Completed, Running, Failed, Cancelled) should be distinct and legible, but avoid visually competing with actual data or error states.
+*   **Tabs & Filters**: Ledger tabs, system filters, and sort controls use `--stats-chip-bg` plus hairline borders. Active filters may use semantic status or data colors, while inactive filters stay neutral.
+*   **Tables**: Sticky headers, loading skeletons, empty states, and expanded rows remain within the same panel/subpanel hierarchy as metric cards. Token columns can retain data colors for input, cached, output, and total distinction.
 
 ### Accessibility Rules
 *   **Charts**: Chart regions must provide accessible names, descriptions, and keyboard-reachable summaries. Provide data-table or text alternatives for usage trends. For SVG sparklines or micro-charts, avoid hiding them completely with `aria-hidden="true"`. Instead, set `role="img"` and provide an `aria-label` that describes the overall computed trend (e.g., 'increasing', 'decreasing', or 'stable'). When composing dense metric cards with multiple visual elements (labels, values, trends), apply `aria-hidden="true"` to the internal visual components and provide a single coherent `aria-label` on the parent container to prevent fragmented screen reader announcements.

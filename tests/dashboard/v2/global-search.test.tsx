@@ -122,7 +122,7 @@ describe("Global Search", () => {
 
         it("shows loading state when isLoading is true", () => {
             render(<SearchOverlay isOpen={true} onClose={vi.fn()} searchQuery="test" onSearchChange={vi.fn()} results={{sprints:[], tasks:[], agents:[], containers:[]}} isLoading={true} />);
-            const spinner = document.querySelector(".animate-spin");
+            const spinner = document.querySelector('[class*="animate-spin"]');
             expect(spinner).toBeInTheDocument();
         });
 
@@ -148,7 +148,7 @@ describe("Global Search", () => {
 
             const link = screen.getByRole("option");
             expect(link).toHaveAttribute("aria-selected", "true");
-            expect(link).toHaveClass("bg-signal-500/8"); // Custom active class in implementation
+            expect(link).toHaveClass("bg-signal-500/10"); // Custom active class in implementation
             expect(screen.getByText("SPR-1")).toBeInTheDocument();
             expect(screen.getByText("Test Sprint")).toBeInTheDocument();
         });

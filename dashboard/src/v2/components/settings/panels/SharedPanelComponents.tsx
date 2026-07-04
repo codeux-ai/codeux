@@ -11,29 +11,29 @@ export const SectionCard: FunctionComponent<{
   icon?: ComponentChildren;
   actions?: ComponentChildren;
 }> = ({ title, children, danger, badge, icon, actions }) => (
-  <section className={`relative overflow-hidden rounded-[1.75rem] border p-5 shadow-[var(--elevation-base)] backdrop-blur-sm ${
+  <section className={`relative overflow-hidden rounded-[1.5rem] border p-5 shadow-[var(--elevation-base)] backdrop-blur-sm ${
     danger
       ? "border-status-red/20 bg-status-red/[0.03] dark:border-status-red/20 dark:bg-status-red/[0.04]"
       : "border-[color:var(--border-hairline)] bg-[var(--surface-glass)]"
   }`}>
     <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/35 to-transparent" />
 
-    <div className="mb-4 flex items-center justify-between gap-3">
-      <div className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] ${danger ? "text-status-red/80" : "text-slate-500 dark:text-slate-300"}`}>
+    <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-3">
+      <div className={`flex min-w-0 items-center gap-2 text-[10px] font-bold uppercase leading-snug tracking-[0.2em] ${danger ? "text-status-red/80" : "text-slate-500 dark:text-slate-300"}`}>
         {icon ? <span className="inline-flex h-3.5 w-3.5 items-center justify-center [&_svg]:h-3.5 [&_svg]:w-3.5" aria-hidden>{icon}</span> : null}
-        <h3>{title}</h3>
+        <h3 className="min-w-0 break-words">{title}</h3>
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2">
         {actions ? actions : null}
         {badge ? (
-          <span className="rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-3 py-1 text-[9px] font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-300">
+          <span className="max-w-full rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-3 py-1 text-[9px] font-bold uppercase leading-snug tracking-[0.2em] text-signal-600 dark:text-signal-300">
             {badge}
           </span>
         ) : null}
       </div>
     </div>
 
-    <div className="flex flex-col gap-3">
+    <div className="flex min-w-0 flex-col gap-3">
       {children}
     </div>
   </section>
@@ -51,16 +51,16 @@ export const IntegrationConfigRow: FunctionComponent<{
     className={`flex items-center justify-between gap-6 py-4.5 ${!last ? "border-b border-black/[0.05] dark:border-white/[0.04]" : ""}`}
     style={{ paddingTop: "1.125rem", paddingBottom: "1.125rem" }}
   >
-    <div>
-      <div className="flex items-center gap-2">
-        <div className="text-sm font-bold text-slate-800 dark:text-slate-100">{label}</div>
+    <div className="min-w-0">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="min-w-0 break-words text-sm font-bold text-slate-800 dark:text-slate-100">{label}</div>
         {active ? (
           <span className="rounded-full border border-signal-500/25 bg-signal-500/10 px-2.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.16em] text-signal-600 dark:border-signal-400/25 dark:bg-signal-400/10 dark:text-signal-300">
             Active
           </span>
         ) : null}
       </div>
-      <div className="mt-1 max-w-sm text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+      <div className="mt-1 max-w-sm break-words text-xs leading-relaxed text-slate-500 dark:text-slate-400">
         {description}
       </div>
     </div>
@@ -119,26 +119,26 @@ export const Card: FunctionComponent<{ title: string; description: string; badge
   const isInherited = badge === "Inherited";
 
   return (
-    <section className={`rounded-[2rem] border transition-colors duration-300 p-6 shadow-[var(--elevation-base)] backdrop-blur-sm ${
+    <section className={`rounded-[1.5rem] border p-5 shadow-[var(--elevation-base)] backdrop-blur-sm transition-colors duration-300 ${
       isOverridden
         ? "border-amber-500/20 bg-amber-500/[0.03] dark:border-amber-500/20 dark:bg-amber-500/[0.02]"
         : isMixed
           ? "border-sky-500/20 bg-sky-500/[0.02] dark:border-sky-500/20 dark:bg-sky-500/[0.02]"
           : "border-[color:var(--border-hairline)] bg-[var(--surface-glass)]"
     }`}>
-      <div className={`mb-5 flex flex-wrap items-start justify-between gap-3 border-b pb-4 transition-colors duration-300 ${
+      <div className={`mb-4 flex min-w-0 flex-wrap items-start justify-between gap-3 border-b pb-4 transition-colors duration-300 ${
         isOverridden
           ? "border-amber-500/10 dark:border-amber-500/10"
           : isMixed
             ? "border-sky-500/10 dark:border-sky-500/10"
             : "border-[color:var(--border-hairline)]"
       }`}>
-        <div>
-          <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</h3>
-          <p className="mt-1 max-w-2xl text-sm font-medium text-slate-500 dark:text-slate-400">{description}</p>
+        <div className="min-w-0">
+          <h3 className="break-words font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</h3>
+          <p className="mt-1 max-w-2xl break-words text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">{description}</p>
         </div>
         {badge ? (
-          <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors duration-300 ${
+          <span className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold uppercase leading-snug tracking-[0.14em] transition-colors duration-300 ${
             isOverridden
               ? "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:border-amber-400/25 dark:bg-amber-400/10 dark:text-amber-400"
               : isMixed
@@ -152,13 +152,13 @@ export const Card: FunctionComponent<{ title: string; description: string; badge
           </span>
         ) : null}
       </div>
-      <div className="space-y-4">{children}</div>
+      <div className="space-y-3">{children}</div>
     </section>
   );
 };
 
 export const OverrideBadge: FunctionComponent<{ label: string; contextLabel?: string; onReset?: () => void }> = ({ label, contextLabel, onReset }) => (
-  <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/14 dark:text-amber-200">
+  <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-0.5 text-[9px] font-bold uppercase leading-snug tracking-[0.14em] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/14 dark:text-amber-200">
     <span className="h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-300" />
     {label}
     {onReset && label === "Project override" ? (

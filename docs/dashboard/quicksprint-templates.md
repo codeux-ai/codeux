@@ -61,6 +61,12 @@ Current built-in purpose set:
 
 That purpose selector is intentionally future-facing. Additional built-in sets can be added later for other language and product families without redesigning the Quicksprint browse flow.
 
+The dashboard presents browse, edit, and execute states as one quick planning workflow:
+- Browse cards use glass surfaces with explicit template actions, category chips, default subtask counts, and predictable wrapping for long template names, categories, and descriptions.
+- The editor keeps template metadata, category styling, agent preset selection, default task count, and prompt body in matching glass sections. Required template name and prompt/preset validation is surfaced inline and through accessible error state.
+- The execution view carries the selected template metadata forward, distinguishes route-locked model controls from available overrides, exposes the combined prompt preview without changing prompt composition, and announces pending plan/start execution state.
+- Loading and empty browse states use status regions so screen readers receive useful feedback while preserving the compact Quicksprint surface.
+
 ## Built-In Templates
 
 The current `Fullstack JS App` purpose set ships with six built-ins:

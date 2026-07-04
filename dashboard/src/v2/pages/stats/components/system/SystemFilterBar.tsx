@@ -44,7 +44,7 @@ function buildChipClass(active: boolean, activeClass: string): string {
   return [
     CHIP_CLASS,
     "inline-flex items-center gap-2 px-3.5 py-2 text-[11px] font-bold uppercase tracking-[0.16em] transition-all motion-safe:active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900",
-    active ? activeClass : "text-slate-500 hover:bg-black/[0.05] hover:border-black/[0.1] hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/[0.05] dark:hover:text-white",
+    active ? activeClass : "text-[var(--stats-detail-color)] hover:bg-[var(--stats-row-hover-bg)] hover:text-[var(--stats-value-color)]",
   ].join(" ");
 }
 
@@ -66,7 +66,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
   return (
     <div className={`${SUBPANEL_CLASS} flex flex-nowrap items-center gap-3 p-3 overflow-x-auto whitespace-nowrap scrollbar-hide min-w-0`}>
       <div className="relative min-w-0 w-full lg:flex-1 lg:basis-[18rem]">
-        <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" strokeWidth={2} />
+        <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--stats-detail-color)]" strokeWidth={2} />
         <input
           type="search"
           value={search}
@@ -79,7 +79,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
             type="button"
             onClick={() => onSearchChange("")}
             aria-label="Clear search"
-            className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-700 dark:hover:bg-white/[0.06] dark:hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900"
+            className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-[var(--stats-detail-color)] transition-colors hover:bg-[var(--stats-row-hover-bg)] hover:text-[var(--stats-value-color)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)]"
           >
             <X className="h-4 w-4" />
           </button>
@@ -87,7 +87,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
       </div>
 
       <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Status filters">
-        <div className={`inline-flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
+        <div className={`inline-flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-detail-color)] ${CHIP_CLASS}`}>
           <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={2.2} />
           Status
         </div>
@@ -109,7 +109,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
 
       {availablePurposes.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Purposes filters">
-          <div className={`px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
+          <div className={`px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-detail-color)] ${CHIP_CLASS}`}>
             Purposes
           </div>
           {availablePurposes.map((purpose) => {
@@ -131,7 +131,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
 
       {availableProviders.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Providers filters">
-          <div className={`px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
+          <div className={`px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-detail-color)] ${CHIP_CLASS}`}>
             Providers
           </div>
           {availableProviders.map((provider) => {
@@ -142,7 +142,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
                 type="button"
                 aria-pressed={active}
                 onClick={() => onFiltersChange({ ...filters, provider: toggleValue(filters.provider, provider) })}
-                className={buildChipClass(active, "border-indigo-500/40 bg-indigo-500/15 text-indigo-300")}
+                className={buildChipClass(active, "border-cyan-500/35 bg-cyan-500/12 text-cyan-700 dark:text-cyan-300")}
               >
                 {formatChipLabel(provider)}
               </button>
@@ -152,7 +152,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Error Category filters">
-        <div className={`inline-flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
+        <div className={`inline-flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--stats-detail-color)] ${CHIP_CLASS}`}>
           Error Category
         </div>
         {["timeout", "rateLimit", "apiError", "modelError", "cancelled"].map((errorCat) => {
@@ -179,32 +179,32 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
               onFiltersChange({ status: [], purpose: [], provider: [], errorCategories: [] });
               onSearchChange("");
             }}
-            className="text-xs text-slate-400 hover:text-slate-700"
+            className="text-xs text-[var(--stats-detail-color)] hover:text-[var(--stats-value-color)]"
           >
             Clear all
           </button>
         ) : null}
-        <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
+        <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)]">
           Showing {filteredCount} {page !== undefined ? `of ${totalCount}` : `of ${totalCount}`}
         </div>
         {page !== undefined && onPageChange && (
-          <div className="flex items-center gap-2 border-l border-slate-200 pl-4 dark:border-white/10">
+          <div className="flex items-center gap-2 border-l border-[var(--stats-divider)] pl-4">
             <button
               type="button"
               disabled={page === 0}
               onClick={() => onPageChange(page - 1)}
-              className="text-xs font-bold text-slate-500 hover:text-slate-700 disabled:opacity-50 dark:text-slate-400 dark:hover:text-slate-300"
+              className="text-xs font-bold text-[var(--stats-detail-color)] hover:text-[var(--stats-value-color)] disabled:opacity-50"
             >
               Prev
             </button>
-            <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
+            <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)]">
               Page {page + 1}
             </span>
             <button
               type="button"
               disabled={!hasMore}
               onClick={() => onPageChange(page + 1)}
-              className="text-xs font-bold text-slate-500 hover:text-slate-700 disabled:opacity-50 dark:text-slate-400 dark:hover:text-slate-300"
+              className="text-xs font-bold text-[var(--stats-detail-color)] hover:text-[var(--stats-value-color)] disabled:opacity-50"
             >
               Next
             </button>

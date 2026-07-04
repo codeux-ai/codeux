@@ -34,6 +34,9 @@ const inferRepository = (project: ProjectSummary): string => {
   return "";
 };
 
+const IMPORT_FIELD_CLASS = "h-12 min-w-0 rounded-[1.1rem] border border-black/[0.07] bg-white/62 px-4 text-sm text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:border-signal-500 focus:ring-4 focus:ring-signal-500/12 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-200 dark:placeholder:text-slate-600";
+const IMPORT_CARD_BASE = "group rounded-[1.25rem] border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-signal-500/15";
+
 export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalProps> = ({
   project,
   onClose,
@@ -140,7 +143,7 @@ export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalPro
 
   return (
     <div className="fixed inset-0 z-[230] flex items-center justify-center bg-black/55 px-4 py-6 backdrop-blur-xl dark:bg-black/75">
-      <div className="flex max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-[2.25rem] border border-white/70 bg-white shadow-[0_48px_120px_rgba(15,23,42,0.28)] dark:border-white/[0.08] dark:bg-void-800 dark:shadow-[0_48px_120px_rgba(0,0,0,0.72)]">
+      <div className="flex max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-[1.75rem] border border-white/70 bg-white shadow-[0_48px_120px_rgba(15,23,42,0.28)] dark:border-white/[0.08] dark:bg-void-800 dark:shadow-[0_48px_120px_rgba(0,0,0,0.72)]" role="dialog" aria-modal="true" aria-labelledby="issue-import-title">
         <aside className="relative hidden w-72 shrink-0 flex-col justify-between overflow-hidden bg-slate-950 p-7 text-white lg:flex">
           <span className="pointer-events-none absolute -left-5 -top-3 select-none font-display text-[7.4rem] font-black leading-none tracking-tighter text-white/[0.035]">
             LINK
@@ -172,9 +175,9 @@ export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalPro
               <Filter className="h-3.5 w-3.5" strokeWidth={2.2} />
               Backlog Import
             </div>
-            <h2 className="mt-6 font-display text-4xl font-black leading-[0.95] tracking-tight">
-              Select Issues.
-            </h2>
+              <h2 className="mt-6 font-display text-4xl font-black leading-[0.95] tracking-tight">
+                Select Issues.
+              </h2>
             <p className="mt-4 text-sm leading-relaxed text-white/52">
               Search the repository backlog, select one or many issues, then link them into the sprint composer.
             </p>
@@ -185,9 +188,9 @@ export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalPro
               ["Repository", repository || "not set"],
               ["Selected", String(selectedIssues.length)],
             ].map(([label, value]) => (
-              <div key={label} className="rounded-[1.1rem] border border-white/10 bg-white/[0.04] p-4">
+              <div key={label} className="rounded-[1rem] border border-white/10 bg-white/[0.04] p-3.5">
                 <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/34">{label}</div>
-                <div className="mt-1 truncate text-xs font-bold text-white">{value}</div>
+                <div className="mt-1 break-words text-xs font-bold text-white [overflow-wrap:anywhere]">{value}</div>
               </div>
             ))}
           </div>
@@ -199,7 +202,7 @@ export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalPro
               <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-300">
                 GitHub / GitLab Issues
               </div>
-              <h2 className="mt-2 font-display text-3xl font-black leading-none text-slate-900 dark:text-white">
+              <h2 id="issue-import-title" className="mt-2 font-display text-3xl font-black leading-none text-slate-900 dark:text-white">
                 Import Backlog Scope
               </h2>
             </div>
@@ -235,27 +238,30 @@ export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalPro
               })}
             </div>
             <input
+              aria-label="Repository"
               value={repository}
               onInput={(event) => setRepository((event.target as HTMLInputElement).value)}
               placeholder="owner/repository"
-              className="h-12 rounded-[1.1rem] border border-black/[0.07] bg-black/[0.025] px-4 text-sm font-semibold text-slate-700 outline-none transition-colors focus:border-signal-500 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-200"
+              className={`${IMPORT_FIELD_CLASS} font-semibold [overflow-wrap:anywhere]`}
             />
             <div className="relative">
               <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
+                aria-label="Search issues"
                 value={search}
                 onInput={(event) => setSearch((event.target as HTMLInputElement).value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") void runSearch();
                 }}
                 placeholder="Search title or body"
-                className="h-12 w-full rounded-[1.1rem] border border-black/[0.07] bg-black/[0.025] pl-11 pr-4 text-sm text-slate-700 outline-none transition-colors focus:border-signal-500 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-200"
+                className={`${IMPORT_FIELD_CLASS} w-full pl-11 pr-4`}
               />
             </div>
             <select
+              aria-label="Issue state"
               value={state}
               onChange={(event) => setState((event.target as HTMLSelectElement).value as "open" | "closed" | "all")}
-              className="h-12 rounded-[1.1rem] border border-black/[0.07] bg-black/[0.025] px-3 text-xs font-bold uppercase tracking-[0.12em] text-slate-500 outline-none focus:border-signal-500 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-300"
+              className="h-12 rounded-[1.1rem] border border-black/[0.07] bg-white/62 px-3 text-xs font-bold uppercase tracking-[0.12em] text-slate-500 outline-none focus:border-signal-500 focus:ring-4 focus:ring-signal-500/12 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-300"
             >
               <option value="open">Open</option>
               <option value="closed">Closed</option>
@@ -281,7 +287,7 @@ export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalPro
 
           <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-7">
             {error && (
-              <div className="mb-4 rounded-[1.1rem] border border-status-red/20 bg-status-red/[0.08] px-4 py-3 text-sm font-semibold text-status-red">
+              <div className="mb-4 rounded-[1.1rem] border border-status-red/20 bg-status-red/[0.08] px-4 py-3 text-sm font-semibold text-status-red" role="alert">
                 {error}
               </div>
             )}
@@ -292,8 +298,9 @@ export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalPro
                 ))}
               </div>
             ) : issues.length === 0 ? (
-              <div className="rounded-[1.5rem] border border-dashed border-black/[0.1] p-10 text-center text-sm font-semibold text-slate-400 dark:border-white/[0.1]">
-                No issues found for the current filters.
+              <div className="flex min-h-56 flex-col items-center justify-center rounded-[1.35rem] border border-dashed border-black/[0.1] bg-black/[0.015] p-10 text-center text-sm font-semibold text-slate-400 dark:border-white/[0.1] dark:bg-white/[0.02]" role="status">
+                <Search className="mb-3 h-7 w-7 text-slate-300 dark:text-slate-600" strokeWidth={1.8} />
+                <span>No issues found for the current filters.</span>
               </div>
             ) : (
               <div className="grid gap-3">
@@ -305,9 +312,10 @@ export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalPro
                       key={issueKey(issue)}
                       type="button"
                       onClick={() => toggleIssue(issue)}
-                      className={`group rounded-[1.35rem] border p-4 text-left transition-all ${
+                      aria-pressed={selected}
+                      className={`${IMPORT_CARD_BASE} ${
                         selected
-                          ? "border-signal-500/35 bg-signal-500/[0.08] shadow-[0_14px_32px_rgba(0,224,160,0.08)]"
+                          ? "border-signal-500/40 bg-signal-500/[0.095] shadow-[0_14px_32px_rgba(0,224,160,0.1)]"
                           : "border-black/[0.06] bg-black/[0.02] hover:-translate-y-0.5 hover:border-black/[0.12] hover:bg-white/82 dark:border-white/[0.07] dark:bg-white/[0.03] dark:hover:border-white/[0.14] dark:hover:bg-white/[0.055]"
                       }`}
                     >
@@ -318,11 +326,11 @@ export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalPro
                           {selected ? <Check className="h-4 w-4" strokeWidth={2.5} /> : <ProviderIcon className="h-4 w-4" strokeWidth={2.1} />}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                            <span>{issue.repository}</span>
+                          <div className="flex min-w-0 flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                            <span className="max-w-full break-words [overflow-wrap:anywhere]">{issue.repository}</span>
                             <span className="text-signal-600 dark:text-signal-300">{issue.issueKey}</span>
                           </div>
-                          <div className="mt-1 text-sm font-black leading-snug text-slate-900 dark:text-white">
+                          <div className="mt-1 break-words text-sm font-black leading-snug text-slate-900 [overflow-wrap:anywhere] dark:text-white">
                             {issue.title}
                           </div>
                           {issue.bodyPreview && (
@@ -334,7 +342,7 @@ export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalPro
                             {(issue.labels || []).slice(0, 6).map((label) => (
                               <span key={label} className="inline-flex max-w-full items-center gap-1 rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-slate-500 ring-1 ring-black/[0.05] dark:bg-white/[0.06] dark:text-slate-300 dark:ring-white/[0.06]">
                                 <Tag className="h-3 w-3 shrink-0" strokeWidth={2} />
-                                <span className="truncate">{label}</span>
+                                <span className="min-w-0 break-words [overflow-wrap:anywhere]">{label}</span>
                               </span>
                             ))}
                           </div>
@@ -346,6 +354,7 @@ export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalPro
                               type="checkbox"
                               checked={!conversationDisabledKeys.has(issueKey(issue))}
                               onChange={() => toggleConversation(issue)}
+                              aria-label={`Append conversation for ${issue.issueKey}`}
                               className="h-3.5 w-3.5 rounded border-slate-300 text-signal-500 focus:ring-signal-500 dark:border-white/[0.18] dark:bg-transparent"
                             />
                             <MessageSquare className="h-3.5 w-3.5" strokeWidth={2.1} />
@@ -358,7 +367,7 @@ export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalPro
                           rel="noopener noreferrer"
                           onClick={(event) => event.stopPropagation()}
                           className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-900 dark:hover:bg-white/[0.06] dark:hover:text-white"
-                          aria-label={`Open ${issue.title}`}
+                          aria-label={`Open ${issue.issueKey} source issue`}
                         >
                           <ExternalLink className="h-4 w-4" strokeWidth={2.1} />
                         </a>
@@ -371,7 +380,7 @@ export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalPro
           </div>
 
           <footer className="flex flex-col gap-3 border-t border-black/[0.06] p-5 dark:border-white/[0.06] sm:flex-row sm:items-center sm:justify-between sm:p-7">
-            <div className="text-xs font-semibold text-slate-400">
+            <div className="text-xs font-semibold text-slate-400" aria-live="polite">
               {selectedIssues.length} selected issue{selectedIssues.length === 1 ? "" : "s"} will be linked to the sprint.
             </div>
             <div className="flex items-center justify-end gap-3">

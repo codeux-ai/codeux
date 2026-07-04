@@ -29,35 +29,35 @@ export const NoticePanel: FunctionComponent<{
     return () => ctx.revert();
   }, [reducedMotion]);
 
-  let toneClass = "border-black/[0.06] bg-black/[0.03] text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300";
+  let toneClass = "border-[color:var(--border-hairline)] bg-[var(--fill-muted)] text-slate-600 dark:text-slate-300";
   let Icon = null;
 
   if (tone === "warning") {
-    toneClass = "bg-status-amber/10 text-status-amber border-status-amber/20";
+    toneClass = "border-status-amber/20 bg-status-amber/10 text-status-amber";
     Icon = AlertTriangle;
   } else if (tone === "success") {
-    toneClass = "bg-status-green/10 text-status-green border-status-green/20";
+    toneClass = "border-status-green/20 bg-status-green/10 text-status-green";
     Icon = CheckCircle;
   } else if (tone === "error") {
-    toneClass = "bg-status-red/10 text-status-red border-status-red/20";
+    toneClass = "border-status-red/20 bg-status-red/10 text-status-red";
     Icon = XCircle;
   } else if (tone === "pending") {
-    toneClass = "bg-signal-500/10 text-signal-700 border-signal-500/20 dark:text-signal-400";
+    toneClass = "border-signal-500/20 bg-signal-500/10 text-signal-700 dark:text-signal-400";
     Icon = Loader2;
   }
 
   return (
     <div
       ref={containerRef}
-      className={`rounded-[1.35rem] border px-5 py-4 ${toneClass}`}
+      className={`rounded-[1.15rem] border px-4 py-3 shadow-[var(--elevation-base)] ${toneClass}`}
       role={tone === "error" || tone === "warning" ? "alert" : "status"}
       aria-live={tone === "error" || tone === "warning" ? "assertive" : "polite"}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         {Icon ? <Icon className={`h-4 w-4 shrink-0 ${tone === "pending" ? "animate-spin" : ""} motion-safe:animate-[icon-pop_0.18s_ease-out]`} /> : null}
-        <div className="text-[11px] font-bold uppercase tracking-[0.16em]">{title}</div>
+        <div className="min-w-0 text-[11px] font-bold uppercase leading-snug tracking-[0.16em]">{title}</div>
       </div>
-      <div className="mt-2 text-sm font-medium leading-relaxed">{children}</div>
+      <div className="mt-2 min-w-0 text-sm font-medium leading-relaxed">{children}</div>
     </div>
   );
 };
@@ -69,12 +69,12 @@ export const ActionButton: FunctionComponent<{
   busy?: boolean;
   disabled?: boolean;
 }> = ({ label, onClick, tone = "secondary", busy = false, disabled = false }) => {
-  let toneClass = "border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white";
+  let toneClass = "border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] text-slate-600 shadow-[var(--elevation-base)] hover:text-slate-900 dark:text-slate-300 dark:hover:text-white";
 
   if (tone === "primary") {
     toneClass = "bg-slate-900 text-white shadow-[var(--elevation-raised)] hover:bg-slate-700 dark:bg-white dark:text-void-900 dark:hover:bg-slate-100";
   } else if (tone === "danger") {
-    toneClass = "border border-status-red/30 bg-status-red/[0.06] text-status-red hover:bg-status-red/[0.12]";
+    toneClass = "border border-status-red/30 bg-status-red text-white shadow-[var(--elevation-raised)] hover:bg-status-red/90";
   } else if (tone === "success") {
     toneClass = "bg-status-green text-white shadow-[var(--elevation-raised)]";
   } else if (tone === "warning") {
@@ -94,9 +94,9 @@ export const ActionButton: FunctionComponent<{
       disabled={disabled}
       aria-disabled={disabled || busy}
       aria-busy={busy}
-      className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-bold relative overflow-hidden ${SHARED_INTERACTION_CLASSES} ${toneClass}`}
+      className={`relative inline-flex min-h-9 max-w-full items-center justify-center gap-2 overflow-hidden rounded-xl px-4 py-2 text-xs font-bold ${SHARED_INTERACTION_CLASSES} ${toneClass}`}
     >
-      <div className={`flex items-center justify-center gap-2 transition-opacity duration-200 ${busy ? "opacity-0" : "opacity-100"}`}>
+      <div className={`flex min-w-0 items-center justify-center gap-2 transition-opacity duration-200 ${busy ? "opacity-0" : "opacity-100"}`}>
         {label}
       </div>
       {busy && (
@@ -117,7 +117,7 @@ export const SettingsHeader: FunctionComponent<{
   actions?: ComponentChildren;
 }> = ({ icon: Icon, eyebrow, title, description, actions }) => (
   <div className="flex flex-wrap items-start justify-between gap-5 border-b border-[color:var(--border-hairline)] px-7 py-6">
-    <div>
+    <div className="min-w-0">
       <div className="flex items-center gap-2.5 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
         <Icon className="h-3.5 w-3.5" strokeWidth={2.3} />
         {eyebrow}

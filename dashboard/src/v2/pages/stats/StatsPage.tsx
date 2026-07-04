@@ -13,6 +13,7 @@ import { PageContainer } from "../../components/layout/PageContainer.js";
 import { EmptyState } from "../../components/ui/EmptyState.js";
 import { PANEL_CLASS } from "./components/stats-ui-primitives.js";
 import styles from "./StatsPage.module.css";
+import "./styles/stats-theme.css";
 
 export const StatsPage: FunctionComponent = () => {
   const rootRef = useRef<HTMLElement>(null);

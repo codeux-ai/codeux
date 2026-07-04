@@ -74,6 +74,10 @@ describe("SchedulerPage", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    vi.mocked(fetchSprints).mockResolvedValue({ sprints: [] } as any);
+    vi.mocked(fetchQuicksprintTemplates).mockResolvedValue([] as any);
+    vi.mocked(fetchProjectSchedule).mockResolvedValue({ entries: [], occurrences: [] } as any);
+    vi.mocked(subscribeToDashboardRealtime).mockReturnValue(vi.fn());
   });
 
   it("renders project placeholder when no project is selected", () => {
@@ -137,17 +141,17 @@ describe("SchedulerPage", () => {
     expect(screen.getByTestId("scheduler-primary-header")).toBeInTheDocument();
     const calendarPanel = screen.getByTestId("scheduler-calendar-panel");
     const formPanel = screen.getByTestId("scheduler-form-panel");
-    expect(calendarPanel.className).toContain("bg-white/70");
-    expect(calendarPanel.className).toContain("dark:bg-void-800/60");
-    expect(formPanel.className).toContain("bg-white/70");
-    expect(formPanel.className).toContain("dark:bg-void-800/60");
+    expect(calendarPanel.className).toContain("bg-white/72");
+    expect(calendarPanel.className).toContain("dark:bg-void-800/62");
+    expect(formPanel.className).toContain("bg-white/72");
+    expect(formPanel.className).toContain("dark:bg-void-800/62");
 
     expect(screen.getByRole("heading", { level: 1, name: /Schedule Events/i })).toBeInTheDocument();
 
     // Verify stats
     expect(screen.getByText("Active entries")).toBeInTheDocument();
     expect(screen.getByText("Repeating")).toBeInTheDocument();
-    expect(screen.getByText("Next run")).toBeInTheDocument();
+    expect(screen.getAllByText("Next run").length).toBeGreaterThan(0);
 
     // Verify add entry aside and tabs
     expect(screen.getByText("Add entry")).toBeInTheDocument();
@@ -194,12 +198,76 @@ describe("SchedulerPage", () => {
       expect(screen.getByText("Calendar view")).toBeInTheDocument();
     });
 
-    const dayViewToggle = screen.getByRole("button", { name: /24 hours/i });
+    const dayViewToggle = screen.getByRole("tab", { name: /24 hour view/i });
     fireEvent.click(dayViewToggle);
 
     expect(screen.getByText("24 hour view")).toBeInTheDocument();
     expect(dayViewToggle.className).toContain("bg-signal-500");
     expect(dayViewToggle.className).toContain("text-void-900");
+  });
+
+  it("renders loading and empty scheduler states with accessible status labels", async () => {
+    let resolveSchedule: (value: any) => void = () => {};
+    vi.mocked(fetchProjectSchedule).mockReturnValue(new Promise((resolve) => {
+      resolveSchedule = resolve;
+    }) as any);
+
+    renderSchedulerPage();
+
+    expect(screen.getByRole("status", { name: "Loading scheduler" })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Loading scheduled entries" })).toBeInTheDocument();
+
+    resolveSchedule({ entries: [], occurrences: [] });
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { level: 4, name: "No scheduled entries yet" })).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Create a sprint, quicksprint, chat, or memory remediation entry/i)).toBeInTheDocument();
+    expect(screen.getByText(/0 visible occurrences/i)).toBeInTheDocument();
+  });
+
+  it("shows schedule metadata, errors, and disables completed entry pause controls", async () => {
+    const mockSprints = [
+      { id: "sprint-1", name: "A Very Long Sprint Name For Scheduler Metadata", status: "active" },
+    ];
+    const mockSchedule = {
+      entries: [
+        {
+          id: "entry-completed",
+          projectId: "proj-1",
+          title: "Completed Automation With A Long Descriptive Name",
+          targetType: "sprint",
+          status: "completed",
+          scheduledFor: "2026-06-01T12:00:00.000Z",
+          timezone: "UTC",
+          sprintTarget: { sprintId: "sprint-1" },
+          recurrence: { frequency: "daily", interval: 2, endMode: "after_count", count: 3 },
+          nextRunAt: null,
+          lastRunAt: "2026-06-02T12:00:00.000Z",
+          runCount: 3,
+          lastError: "Provider could not start the requested run.",
+        },
+      ],
+      occurrences: [],
+    };
+
+    vi.mocked(fetchSprints).mockResolvedValue({ sprints: mockSprints } as any);
+    vi.mocked(fetchProjectSchedule).mockResolvedValue(mockSchedule as any);
+
+    renderSchedulerPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Completed Automation With A Long Descriptive Name")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Cadence")).toBeInTheDocument();
+    expect(screen.getByText("Every 2 daily, 3 runs")).toBeInTheDocument();
+    expect(screen.getAllByText("Next run").length).toBeGreaterThan(0);
+    expect(screen.getByText("Not scheduled")).toBeInTheDocument();
+    expect(screen.getByText("Last run")).toBeInTheDocument();
+    expect(screen.getByText(/Sprint: A Very Long Sprint Name/i)).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Provider could not start the requested run.");
+    expect(screen.getByRole("button", { name: /pause schedule entry/i })).toBeDisabled();
   });
 
   it("handles scheduled entry toggle pause/resume and delete", async () => {

@@ -180,21 +180,21 @@ const TaskInvocationRow: FunctionComponent<{ invocation: ExecutionInvocationReco
     const statusText = INVOCATION_STATUS_TEXT[invocation.status] || "text-slate-500";
 
     return (
-        <div className="rounded-xl border border-black/[0.04] bg-white/60 p-3 dark:border-white/[0.05] dark:bg-void-900/25">
+        <div className="rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] bg-black/[0.015] p-3 pl-3 dark:border-white/[0.05] dark:bg-white/[0.015]" style={{ borderLeftColor: INVOCATION_STATUS_TEXT[invocation.status]?.includes("red") ? "#E3000F" : invocation.status === "running" ? "#00E0A0" : invocation.status === "completed" ? "#00AB84" : invocation.status === "paused" ? "#F59E0B" : undefined }}>
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                     <div className="flex min-w-0 items-center gap-2">
                         <span className={`h-2 w-2 shrink-0 rounded-full ${statusDot} ${invocation.status === "running" ? "animate-pulse" : ""}`} />
-                        <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        <span className="min-w-0 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
                             {purposeLabel}
                         </span>
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
-                        <span>{invocation.provider || "provider pending"}</span>
+                        <span className="break-words">{invocation.provider || "provider pending"}</span>
                         <span>·</span>
-                        <span>{invocation.model || "model pending"}</span>
+                        <span className="break-words">{invocation.model || "model pending"}</span>
                         <span>·</span>
-                        <span>{shortenInvocationId(invocation.id)}</span>
+                        <span className="break-all">{shortenInvocationId(invocation.id)}</span>
                     </div>
                 </div>
                 <div className="shrink-0 text-right">
@@ -234,7 +234,7 @@ const TaskInvocationRow: FunctionComponent<{ invocation: ExecutionInvocationReco
             </div>
 
             {invocation.lastErrorMessage && (
-                <p className="mt-2 line-clamp-2 text-[11px] leading-relaxed text-status-red">
+                <p className="mt-2 line-clamp-2 break-words text-[11px] leading-relaxed text-status-red">
                     {invocation.lastErrorMessage}
                 </p>
             )}
@@ -408,10 +408,11 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
             className="group relative overflow-hidden focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-signal-500 focus-visible:ring-offset-4 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800
                        bg-white dark:bg-void-800
 
-                       border border-black/[0.08] dark:border-white/[0.08]
+                       border border-l-2 border-black/[0.08] dark:border-white/[0.08]
                        rounded-[1.75rem] p-7
                        shadow-sm
                        transition-[border-color] duration-300"
+            style={{ borderLeftColor: cfg.hex }}
         >
 
 
@@ -449,7 +450,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                         </div>
 
                         <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 mb-1.5">
+                            <div className="mb-1.5 flex flex-wrap items-center gap-2">
                                 <span className="font-mono text-[10px] font-bold px-2.5 py-0.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.04] text-slate-400">
                                     #{task.id}
                                 </span>
@@ -467,7 +468,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                                     <SprintReviewBadge summary={task.latestReview} compact showCompactLabel align="right" />
                                 )}
                             </div>
-                            <h3 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white leading-snug">
+                            <h3 className="break-words text-lg font-bold leading-snug tracking-tight text-slate-900 dark:text-white">
                                 {task.title}
                             </h3>
                         </div>
@@ -478,13 +479,13 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                         {agentPreset && (
                             <div className="flex items-center gap-1.5">
                                 <AgentSelectAvatarIcon avatarConfig={agentPreset.avatarConfig} seed={agentPreset.name} />
-                                <span className="text-[9px] font-mono font-bold uppercase tracking-[0.1em] text-slate-400 dark:text-slate-500 max-w-[80px] truncate">
+                                <span className="max-w-[10rem] break-words text-[9px] font-mono font-bold uppercase tracking-[0.1em] text-slate-400 dark:text-slate-500 sm:max-w-[12rem]">
                                     {agentPreset.name}
                                 </span>
                             </div>
                         )}
                         {task.provider && (
-                            <span className="text-[9px] font-mono font-bold uppercase tracking-[0.1em] text-slate-300 dark:text-slate-600">
+                            <span className="max-w-[12rem] break-words text-[9px] font-mono font-bold uppercase tracking-[0.1em] text-slate-300 dark:text-slate-600">
                                 {task.provider}
                             </span>
                         )}
@@ -493,7 +494,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                             dispatchTiming={dispatchTiming}
                         />
                         {(hasEventFeed || task.session_id || task.session_name) && (
-                            <span className="text-[9px] font-mono text-slate-400 dark:text-slate-600 max-w-[100px] truncate" title={sessionLabel}>
+                            <span className="max-w-[12rem] break-all text-[9px] font-mono text-slate-400 dark:text-slate-600" title={sessionLabel}>
                                 {sessionLabel.substring(0, 16)}
                             </span>
                         )}

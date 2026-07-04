@@ -56,7 +56,7 @@ export const PillChoiceGroup: FunctionComponent<{
               active ? "opacity-100 transform-none" : "opacity-0 -translate-x-full"
             }`}
           />
-          <div className="min-w-0 break-words text-[11px] font-bold uppercase tracking-[0.14em]">{option.label}</div>
+          <div className="min-w-0 break-words text-[11px] font-bold uppercase leading-snug tracking-[0.14em]">{option.label}</div>
           {option.hint ? (
             <div className={`mt-1 min-w-0 break-words text-[11px] leading-relaxed transition-colors duration-200 ${active ? "text-signal-600/80 dark:text-signal-300/80" : "text-slate-400 dark:text-slate-500"}`}>
               {option.hint}
@@ -140,7 +140,7 @@ export const NumberInput: FunctionComponent<{
     aria-label={ariaLabel}
     aria-description={ariaDescription}
     onInput={(event) => onChange(Number((event.currentTarget as HTMLInputElement).value))}
-    className="min-h-10 w-32 min-w-0 rounded-[var(--radius-ui)] border border-[var(--border-hairline)] bg-[var(--fill-muted)] px-3.5 py-2.5 text-sm font-mono leading-5 text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-black/[0.1] hover:bg-[var(--fill-muted-hover)] focus:border-signal-500/40 focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.06] dark:bg-[var(--fill-muted)] dark:text-slate-200 dark:hover:border-white/[0.12] dark:focus-visible:ring-offset-void-900 aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.16)] data-[valid=true]:border-signal-500/50 data-[valid=true]:bg-signal-500/[0.025] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.16)] dark:data-[valid=true]:bg-signal-500/[0.04] "
+    className="min-h-10 w-full min-w-0 sm:w-32 rounded-[var(--radius-ui)] border border-[var(--border-hairline)] bg-[var(--fill-muted)] px-3.5 py-2.5 text-sm font-mono leading-5 text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-black/[0.1] hover:bg-[var(--fill-muted-hover)] focus:border-signal-500/40 focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.06] dark:bg-[var(--fill-muted)] dark:text-slate-200 dark:hover:border-white/[0.12] dark:focus-visible:ring-offset-void-900 aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.16)] data-[valid=true]:border-signal-500/50 data-[valid=true]:bg-signal-500/[0.025] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.16)] dark:data-[valid=true]:bg-signal-500/[0.04]"
   />
 );
 
@@ -175,16 +175,16 @@ export const Row: FunctionComponent<{
   onReset?: () => void;
 }> = ({ label, description, children, last, badge, info, onReset }) => (
   <div
-    className={`group flex flex-col gap-4 rounded-[1.35rem] border border-[color:var(--border-hairline)] hover:border-[color:var(--border-hairline)] bg-[var(--fill-muted)] hover:bg-[var(--fill-muted-hover)] px-4 py-4 md:flex-row md:items-start md:justify-between transition-colors duration-200 ${!last ? "" : ""}`}
+    className={`group flex min-w-0 flex-col gap-4 rounded-[1.1rem] border border-[color:var(--border-hairline)] bg-[var(--fill-muted)] px-4 py-4 transition-colors duration-200 hover:border-[color:var(--border-hairline)] hover:bg-[var(--fill-muted-hover)] md:flex-row md:items-start md:justify-between ${!last ? "" : ""}`}
   >
     <div className="min-w-0 flex-1">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1.5">
-          <div className="text-sm font-semibold leading-snug text-slate-800 group-hover:text-slate-900 dark:text-slate-100 dark:group-hover:text-white transition-colors duration-200">{label}</div>
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <div className="min-w-0 break-words text-sm font-semibold leading-snug text-slate-800 transition-colors duration-200 group-hover:text-slate-900 dark:text-slate-100 dark:group-hover:text-white">{label}</div>
           {info ? info : null}
         </div>
         {badge && typeof badge === "string" ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/14 dark:text-amber-200">
+          <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-0.5 text-[9px] font-bold uppercase leading-snug tracking-[0.14em] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/14 dark:text-amber-200">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-300" />
             {badge}
             {onReset && badge === "Project override" ? (
@@ -208,7 +208,7 @@ export const Row: FunctionComponent<{
         ) : badge}
       </div>
       {description ? (
-        <div className="mt-0.5 text-xs font-medium leading-relaxed text-slate-400 group-hover:text-slate-500 dark:text-slate-500 dark:group-hover:text-slate-400 transition-colors duration-200">{description}</div>
+        <div className="mt-1 break-words text-xs font-medium leading-relaxed text-slate-400 transition-colors duration-200 group-hover:text-slate-500 dark:text-slate-500 dark:group-hover:text-slate-400">{description}</div>
       ) : null}
     </div>
     <div className="w-full min-w-0 shrink-0 md:w-auto md:max-w-[34rem] lg:max-w-none">
@@ -223,18 +223,18 @@ export const Card: FunctionComponent<{ title: string; description: string; badge
   badge,
   children,
 }) => (
-  <section className="rounded-[2rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-6 shadow-[var(--elevation-base)] backdrop-blur-2xl">
-    <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-[color:var(--border-hairline)] pb-4">
-      <div>
-        <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</h3>
-        <p className="mt-1 max-w-2xl text-sm font-medium text-slate-500 dark:text-slate-400">{description}</p>
+  <section className="rounded-[1.5rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-5 shadow-[var(--elevation-base)] backdrop-blur-2xl">
+    <div className="mb-4 flex min-w-0 flex-wrap items-start justify-between gap-3 border-b border-[color:var(--border-hairline)] pb-4">
+      <div className="min-w-0">
+        <h3 className="break-words font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</h3>
+        <p className="mt-1 max-w-2xl break-words text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">{description}</p>
       </div>
       {badge ? (
-        <span className="rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-300">
+        <span className="max-w-full rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-3 py-1 text-[10px] font-bold uppercase leading-snug tracking-[0.14em] text-signal-600 dark:text-signal-300">
           {badge}
         </span>
       ) : null}
     </div>
-    <div className="space-y-4">{children}</div>
+    <div className="space-y-3">{children}</div>
   </section>
 );

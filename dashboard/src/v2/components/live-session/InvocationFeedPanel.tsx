@@ -71,16 +71,16 @@ const InvocationFeedRow: FunctionComponent<{
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
             <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${dotClass} ${invocation.status === "running" ? "animate-pulse" : ""}`} />
-            <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
+            <span className="min-w-0 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
               {purposeLabel}
             </span>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
-            <span>{providerLabel}</span>
+            <span className="break-words">{providerLabel}</span>
             <span>·</span>
-            <span>{modelLabel}</span>
+            <span className="break-words">{modelLabel}</span>
             <span>·</span>
-            <span>{shortenRuntimeId(invocation.id)}</span>
+            <span className="break-all">{shortenRuntimeId(invocation.id)}</span>
           </div>
         </div>
         <div className="shrink-0 text-right">
@@ -121,7 +121,7 @@ const InvocationFeedRow: FunctionComponent<{
       </div>
 
       {invocation.lastErrorMessage && (
-        <p className="mt-2 line-clamp-2 text-[11px] leading-relaxed text-status-red">
+        <p className="mt-2 line-clamp-2 break-words text-[11px] leading-relaxed text-status-red">
           {invocation.lastErrorMessage}
         </p>
       )}

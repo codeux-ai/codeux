@@ -1,6 +1,6 @@
 import { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
-import { X } from "lucide-react";
+import { X } from "lucide-preact";
 import gsap from "gsap";
 import type { MemNode, Edge } from "../../lib/memory-graph.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
@@ -8,15 +8,24 @@ import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 const CAT: Record<string, { label: string; hex: string; r: number; g: number; b: number }> = {
-    architecture: { label: "Architecture", hex: "#00E0A0", r: 0,   g: 224, b: 160 },
-    codebase:     { label: "Codebase",     hex: "#FFB800", r: 255, g: 184, b: 0   },
-    context:      { label: "Context",      hex: "#8B5CF6", r: 139, g: 92,  b: 246 },
+    architecture: { label: "Architecture", hex: "#00C8A0", r: 0, g: 200, b: 160 },
+    codebase:     { label: "Codebase",     hex: "#F59E0B", r: 245, g: 158, b: 11 },
+    context:      { label: "Context",      hex: "#8B5CF6", r: 139, g: 92, b: 246 },
     preferences:  { label: "Preferences",  hex: "#94A3B8", r: 148, g: 163, b: 184 },
-    patterns:     { label: "Patterns",     hex: "#F59E0B", r: 245, g: 158, b: 11  },
-    decision:     { label: "Decision",     hex: "#64748B", r: 100, g: 116, b: 139 },
-    error:        { label: "Error",        hex: "#F43F5E", r: 244, g: 63,  b: 94  },
-    learning:     { label: "Learning",     hex: "#33FFB8", r: 51,  g: 255, b: 184 },
+    patterns:     { label: "Patterns",     hex: "#38BDF8", r: 56, g: 189, b: 248 },
+    decision:     { label: "Decision",     hex: "#14B8A6", r: 20, g: 184, b: 166 },
+    error:        { label: "Error",        hex: "#F43F5E", r: 244, g: 63, b: 94 },
+    learning:     { label: "Learning",     hex: "#A3E635", r: 163, g: 230, b: 53 },
 };
+
+const MetadataItem: FunctionComponent<{ label: string; value: string; title?: string }> = ({ label, value, title }) => (
+    <div className="min-w-0 rounded-lg border border-black/[0.06] bg-black/[0.025] px-3 py-2 dark:border-white/[0.07] dark:bg-white/[0.035]">
+        <dt className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{label}</dt>
+        <dd title={title ?? value} className="mt-1 truncate font-mono text-[11px] font-semibold text-slate-700 dark:text-slate-200">
+            {value}
+        </dd>
+    </div>
+);
 
 export const Inspector: FunctionComponent<{
     node: MemNode | null;
@@ -63,6 +72,7 @@ export const Inspector: FunctionComponent<{
     };
 
     const cat = node ? (CAT[node.category] || CAT.context) : CAT.architecture;
+    const strengthPercent = node ? Math.round(node.strength * 100) : 0;
     const nodeIdx = node ? allNodes.findIndex(n => n.id === node.id) : -1;
     const connected = node ? edges
         .filter(e => e.a === nodeIdx || e.b === nodeIdx)
@@ -75,11 +85,11 @@ export const Inspector: FunctionComponent<{
 
     return (
         <div
-            className="absolute right-0 top-0 bottom-0 w-full lg:w-[300px] z-30
-                       bg-white/80 dark:bg-void-800/80 backdrop-blur-3xl
-                       border-l border-black/[0.06] dark:border-white/[0.06]
+            className="absolute right-0 top-0 bottom-0 w-full lg:w-[360px] z-30
+                       bg-white/90 dark:bg-void-800/90 backdrop-blur-3xl
+                       border-l border-black/[0.08] dark:border-white/[0.08]
                        shadow-[-20px_0_60px_rgba(0,0,0,0.08)] dark:shadow-[-20px_0_60px_rgba(0,0,0,0.4)]
-                       p-6 flex flex-col gap-4 overflow-y-auto dashboard-scrollbar
+                       p-5 flex flex-col gap-4 overflow-y-auto dashboard-scrollbar
                        transition-transform duration-500"
             style={{
                 transform: `translateX(${node ? "0" : "100%"})`,
@@ -88,53 +98,77 @@ export const Inspector: FunctionComponent<{
             }}
         >
             <button onClick={onClose}
-                className="absolute top-4 right-4 w-7 h-7 rounded-full flex items-center justify-center
+                aria-label="Close memory inspector"
+                className="absolute top-4 right-4 w-8 h-8 rounded-lg flex items-center justify-center
                            bg-black/[0.04] dark:bg-white/[0.04] hover:bg-black/[0.08] dark:hover:bg-white/[0.08]
-                           transition-colors duration-200">
+                           transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900">
                 <X className="w-3.5 h-3.5 text-slate-500" strokeWidth={2} />
             </button>
             {node && (
                 <div ref={contentRef} className="flex flex-col gap-4 h-full will-change-[opacity,transform]">
-                    <div className="flex items-center gap-2 pt-1">
-                        <div className="w-2.5 h-2.5 rounded-full" style={{ background: cat.hex, boxShadow: `0 0 10px ${cat.hex}` }} />
-                        <span className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono" style={{ color: cat.hex }}>
-                            {cat.label}
-                        </span>
-                        <span className="text-[9px] font-mono text-slate-400 ml-auto px-2 py-0.5 rounded-full bg-black/[0.04] dark:bg-white/[0.04]">
-                            {node.scope}
-                        </span>
+                    <div className="pr-9">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Memory inspector</p>
+                        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
+                            <span
+                                className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em]"
+                                style={{
+                                    color: cat.hex,
+                                    borderColor: `rgba(${cat.r}, ${cat.g}, ${cat.b}, 0.28)`,
+                                    backgroundColor: `rgba(${cat.r}, ${cat.g}, ${cat.b}, 0.09)`,
+                                }}
+                            >
+                                <span className="h-1.5 w-1.5 rounded-full" style={{ background: cat.hex }} />
+                                {cat.label}
+                            </span>
+                            <span className="rounded-md border border-black/[0.06] bg-black/[0.03] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400">
+                                {node.scope}
+                            </span>
+                        </div>
                     </div>
-                    <p className="text-[13px] text-slate-700 dark:text-slate-300 font-medium leading-relaxed break-words whitespace-pre-wrap">
-                        {node.content}
-                    </p>
-                    <div className="flex flex-col gap-3 pt-3 border-t border-black/[0.06] dark:border-white/[0.06]">
-                        <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Strength</span>
-                            <div className="flex items-center gap-2">
-                                <div className="w-20 h-1.5 rounded-full bg-black/[0.06] dark:bg-white/[0.06] overflow-hidden">
-                                    <div className="h-full rounded-full transition-all duration-700"
-                                        style={{ width: `${node.strength * 100}%`, background: cat.hex }} />
-                                </div>
-                                <span className="text-[10px] font-mono text-slate-400">{Math.round(node.strength * 100)}%</span>
+
+                    <section aria-labelledby="memory-inspector-content" className="rounded-lg border border-black/[0.06] bg-white/70 p-4 dark:border-white/[0.07] dark:bg-void-800/55">
+                        <h3 id="memory-inspector-content" className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Content</h3>
+                        <p className="mt-2 max-h-56 overflow-y-auto whitespace-pre-wrap break-words pr-1 text-[13px] font-medium leading-relaxed text-slate-700 dashboard-scrollbar dark:text-slate-300">
+                            {node.content}
+                        </p>
+                    </section>
+
+                    <section aria-labelledby="memory-inspector-metadata" className="flex flex-col gap-3">
+                        <h3 id="memory-inspector-metadata" className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Metadata</h3>
+                        <dl className="grid grid-cols-2 gap-2">
+                            <MetadataItem label="Category" value={cat.label} />
+                            <MetadataItem label="Scope" value={node.scope} />
+                            <MetadataItem label="Strength" value={`${strengthPercent}%`} />
+                            <MetadataItem label="Memory ID" value={`${node.id.slice(0, 8)}...`} title={node.id} />
+                        </dl>
+                        <div className="rounded-lg border border-black/[0.06] bg-black/[0.025] p-3 dark:border-white/[0.07] dark:bg-white/[0.035]">
+                            <div className="flex items-center justify-between gap-3">
+                                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Strength signal</span>
+                                <span className="font-mono text-[11px] font-semibold text-slate-600 dark:text-slate-300">{strengthPercent}%</span>
+                            </div>
+                            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.06]">
+                                <div className="h-full rounded-full transition-all duration-700" style={{ width: `${strengthPercent}%`, background: cat.hex }} />
                             </div>
                         </div>
-                        <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">ID</span>
-                            <span className="text-[11px] font-mono text-slate-400">{node.id.slice(0, 8)}…</span>
-                        </div>
-                    </div>
-                    {connected.length > 0 && (
-                        <div className="flex flex-col gap-2 pt-3 border-t border-black/[0.06] dark:border-white/[0.06]">
-                            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                                Synapses ({connected.length})
+                    </section>
+
+                    <section aria-labelledby="memory-inspector-related" className="flex flex-col gap-2 border-t border-black/[0.06] pt-3 dark:border-white/[0.06]">
+                        <div className="flex items-center justify-between gap-3">
+                            <h3 id="memory-inspector-related" className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                                Related memories
+                            </h3>
+                            <span className="rounded-md bg-black/[0.04] px-2 py-1 font-mono text-[10px] text-slate-500 dark:bg-white/[0.05] dark:text-slate-400">
+                                {connected.length}
                             </span>
-                            {connected.slice(0, 8).map(({ node: cn, similarity }) => (
-                                <div key={cn.id} className="flex items-start gap-2 py-1">
-                                    <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
+                        </div>
+                        {connected.length > 0 ? (
+                            connected.slice(0, 8).map(({ node: cn, similarity }) => (
+                                <div key={cn.id} className="flex items-start gap-2 rounded-lg border border-black/[0.05] bg-black/[0.02] px-3 py-2 dark:border-white/[0.06] dark:bg-white/[0.03]">
+                                    <div className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full"
                                         style={{ background: (CAT[cn.category] || CAT.context).hex }} />
                                     <span className="sr-only">{(CAT[cn.category] || CAT.context).label}</span>
                                     <div className="flex-1 min-w-0 break-words">
-                                        <span className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 font-medium">
+                                        <span className="line-clamp-2 text-[11px] font-medium leading-relaxed text-slate-600 dark:text-slate-400">
                                             {cn.content}
                                         </span>
                                     </div>
@@ -143,14 +177,21 @@ export const Inspector: FunctionComponent<{
                                         {Math.round(similarity * 100)}%
                                     </span>
                                 </div>
-                            ))}
-                        </div>
-                    )}
+                            ))
+                        ) : (
+                            <p className="rounded-lg border border-dashed border-black/[0.08] bg-black/[0.02] px-3 py-4 text-center text-[12px] font-medium text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.02]">
+                                No related memories in the current graph view.
+                            </p>
+                        )}
+                    </section>
                     {lobotomize && (
-                        <>
+                        <section aria-label="Destructive memory actions" className="mt-auto rounded-lg border border-status-red/25 bg-status-red/[0.06] p-3">
+                            <p className="mb-3 text-[11px] font-medium leading-relaxed text-status-red">
+                                Delete mode is active. This removes the selected memory after confirmation.
+                            </p>
                             <button onClick={handleDeleteClick}
                                 ref={triggerRef as any}
-                                className="mt-auto flex items-center justify-center gap-2 w-full py-3 rounded-xl
+                                className="flex w-full items-center justify-center gap-2 rounded-lg py-3
                                            bg-status-red text-white font-bold text-xs cursor-pointer
                                            shadow-[0_0_20px_rgba(227,0,15,0.3)] hover:bg-status-red/90 hover:shadow-[0_0_30px_rgba(227,0,15,0.5)]
                                            transition-[background-color,box-shadow,color] duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900">
@@ -163,7 +204,7 @@ export const Inspector: FunctionComponent<{
                                 onConfirm={handleConfirm}
                                 onCancel={handleCancel}
                             />
-                        </>
+                        </section>
                     )}
                 </div>
             )}

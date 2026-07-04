@@ -66,7 +66,7 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
   let icon = <WifiOff className="w-5 h-5 shrink-0" />;
   let title = "Disconnected";
   let message = "Lost connection to the live stream. Retrying...";
-  let wrapperClass = "bg-status-red/10 border-status-red/20 text-status-red";
+  let wrapperClass = "border-status-red/20 border-l-status-red bg-white text-status-red dark:bg-void-800";
   let iconClass = "text-status-red";
   let isUrgent = true;
 
@@ -74,14 +74,14 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
     icon = <Zap className="w-5 h-5 shrink-0" />;
     title = "Connection Error";
     message = error;
-    wrapperClass = "bg-status-red/10 border-status-red/20 text-status-red";
+    wrapperClass = "border-status-red/20 border-l-status-red bg-white text-status-red dark:bg-void-800";
     iconClass = "text-status-red";
     isUrgent = true;
   } else if (transportState === "reconnecting") {
     icon = <RefreshCcw className="w-5 h-5 shrink-0 motion-safe:animate-spin" />;
     title = "Reconnecting";
     message = "Attempting to restore connection...";
-    wrapperClass = "bg-status-amber/10 border-status-amber/20 text-status-amber";
+    wrapperClass = "border-status-amber/20 border-l-status-amber bg-white text-status-amber dark:bg-void-800";
     iconClass = "text-status-amber";
     isUrgent = false;
   }
@@ -89,7 +89,7 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
   return (
     <div
       ref={containerRef}
-      className={shouldRender ? `flex flex-col sm:flex-row sm:items-center gap-4 rounded-2xl border backdrop-blur-md overflow-hidden ${wrapperClass}` : "overflow-hidden hidden"}
+      className={shouldRender ? `flex flex-col gap-4 overflow-hidden rounded-2xl border border-l-2 p-4 shadow-sm sm:flex-row sm:items-center ${wrapperClass}` : "overflow-hidden hidden"}
       role={isUrgent ? "alert" : "status"}
       aria-live={isUrgent ? "assertive" : "polite"}
       aria-atomic="true"
@@ -98,7 +98,7 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
     >
       {shouldRender && (
         <>
-          <div className={`flex items-center justify-center ${iconClass}`}>
+          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-black/[0.03] dark:bg-white/[0.04] ${iconClass}`}>
             {icon}
           </div>
           <div className="flex flex-col min-w-0">

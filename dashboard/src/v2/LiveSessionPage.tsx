@@ -2,12 +2,7 @@ import type { FunctionComponent } from "preact";
 import { lazy, Suspense } from "preact/compat";
 import { useLayoutEffect, useRef, useState, useEffect, useMemo } from "preact/hooks";
 import gsap from "gsap";
-import {
-    Zap, Clock, CheckCircle2, XCircle,
-    ChevronDown, Radio,
-    Play, RotateCcw, Bot, Workflow, PauseCircle,
-    Ship, BarChart3,
-} from "lucide-preact";
+import { Play } from "lucide-preact";
 import { SprintStatsDeck, useLiveTaskTimingSummaries } from "./components/SprintStatsDeck.js";
 
 
@@ -451,7 +446,7 @@ export const LiveSessionPage: FunctionComponent = () => {
 
 
     return (
-        <PageContainer aria-label="Live Session" className="gap-16">
+        <PageContainer aria-label="Live Session" className="gap-8 md:gap-10">
             <h1 className="sr-only">Live Session</h1>
             <ConfirmDialog isOpen={isConfirmOpen} options={confirmOptions} onConfirm={handleConfirm} onCancel={handleCancel} />
             <LiveTransportBanner
@@ -510,51 +505,53 @@ export const LiveSessionPage: FunctionComponent = () => {
             <SectionDivider label="Task Pipeline" />
 
             {/* ── Filter Strip ────────────────────────────────────────── */}
-            <div className="flex flex-wrap gap-1 p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl w-fit" role="tablist" aria-label="Task status filters">
-                {TASK_FILTERS.map((filter, index) => (
-                    <button
-                        key={filter}
-                        role="tab"
-                        aria-selected={activeFilter === filter}
-                        tabIndex={activeFilter === filter ? 0 : -1}
-                        onClick={() => setFilter(filter)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-                                e.preventDefault();
-                                const nextFilter = TASK_FILTERS[(index + 1) % TASK_FILTERS.length];
-                                setFilter(nextFilter);
-                                const nextTab = e.currentTarget.parentElement?.children[(index + 1) % TASK_FILTERS.length] as HTMLElement;
-                                nextTab?.focus();
-                            } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-                                e.preventDefault();
-                                const prevIndex = index - 1 < 0 ? TASK_FILTERS.length - 1 : index - 1;
-                                const prevFilter = TASK_FILTERS[prevIndex];
-                                setFilter(prevFilter);
-                                const prevTab = e.currentTarget.parentElement?.children[prevIndex] as HTMLElement;
-                                prevTab?.focus();
-                            }
-                        }}
-                        className={`text-xs font-semibold tracking-wide px-4 py-1.5 rounded-lg
-                                   transition-all duration-200 flex items-center gap-2
-                                   ${activeFilter === filter
-                                       ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)]"
-                                       : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                                   }`}
-                    >
-                        {filter}
-                        <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded-md
-                            ${activeFilter === filter
-                                ? "bg-signal-500/[0.12] text-signal-600 dark:text-signal-400"
-                                : "bg-black/[0.06] dark:bg-white/[0.06] text-slate-400"
-                            }`}>
-                            {taskCounts[filter]}
-                        </span>
-                    </button>
-                ))}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Task Pipeline</div>
+                <div className="flex w-full flex-wrap gap-1 rounded-xl border border-black/[0.06] bg-white p-1 shadow-sm dark:border-white/[0.08] dark:bg-void-800 sm:w-fit" role="tablist" aria-label="Task status filters">
+                    {TASK_FILTERS.map((filter, index) => (
+                        <button
+                            key={filter}
+                            role="tab"
+                            aria-selected={activeFilter === filter}
+                            tabIndex={activeFilter === filter ? 0 : -1}
+                            onClick={() => setFilter(filter)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                                    e.preventDefault();
+                                    const nextFilter = TASK_FILTERS[(index + 1) % TASK_FILTERS.length];
+                                    setFilter(nextFilter);
+                                    const nextTab = e.currentTarget.parentElement?.children[(index + 1) % TASK_FILTERS.length] as HTMLElement;
+                                    nextTab?.focus();
+                                } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                                    e.preventDefault();
+                                    const prevIndex = index - 1 < 0 ? TASK_FILTERS.length - 1 : index - 1;
+                                    const prevFilter = TASK_FILTERS[prevIndex];
+                                    setFilter(prevFilter);
+                                    const prevTab = e.currentTarget.parentElement?.children[prevIndex] as HTMLElement;
+                                    prevTab?.focus();
+                                }
+                            }}
+                            className={`flex min-h-[36px] items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold tracking-wide transition-colors duration-200
+                                       ${activeFilter === filter
+                                           ? "bg-black/[0.04] text-slate-900 dark:bg-white/[0.06] dark:text-white"
+                                           : "text-slate-500 hover:bg-black/[0.025] hover:text-slate-700 dark:text-slate-500 dark:hover:bg-white/[0.035] dark:hover:text-slate-300"
+                                       }`}
+                        >
+                            {filter}
+                            <span className={`rounded-md px-1.5 py-0.5 font-mono text-[9px]
+                                ${activeFilter === filter
+                                    ? "bg-signal-500/[0.12] text-signal-600 dark:text-signal-400"
+                                    : "bg-black/[0.06] text-slate-400 dark:bg-white/[0.06]"
+                                }`}>
+                                {taskCounts[filter]}
+                            </span>
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {/* ── Main Content Grid ───────────────────────────────────── */}
-            <div ref={contentRef} className="grid grid-cols-1 xl:grid-cols-12 gap-6 md:gap-10 xl:gap-16">
+            <div ref={contentRef} className="grid grid-cols-1 gap-5 md:gap-6 xl:grid-cols-12">
 
                 {/* Task cards */}
                 <div className="xl:col-span-8 flex flex-col gap-5 min-w-0">
@@ -569,7 +566,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                                 : "Launch a sprint to activate live task telemetry, protocol output, and runtime activity for this project."}
                         />
                     ) : taskCardItems.length === 0 ? (
-                        <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border-2 border-dashed border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] p-16 text-center">
+                        <div className="group relative overflow-hidden rounded-2xl border border-dashed border-black/[0.08] bg-white p-10 text-center shadow-sm dark:border-white/[0.08] dark:bg-void-800">
                             <div className="relative z-10">
                                 <Play className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-4" strokeWidth={1} />
                                 <p className="text-sm text-slate-400 dark:text-slate-600 font-medium">

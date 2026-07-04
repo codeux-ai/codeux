@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { h } from "preact";
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
 import { BranchNameSchemeEditor } from "../BranchNameSchemeEditor";
@@ -15,6 +15,10 @@ import { ActionButton, NoticePanel } from "../SettingsSurface";
 import { OverrideBadge } from "../panels/SharedPanelComponents";
 import { SlidersHorizontal } from "lucide-preact";
 import userEvent from "@testing-library/user-event";
+
+afterEach(() => {
+  cleanup();
+});
 
   it("SettingsCategoryRail renders categories with proper aria-current semantics", () => {
     const mockCategories = [
@@ -30,6 +34,48 @@ import userEvent from "@testing-library/user-event";
     );
     const btn = screen.getByRole("button", { name: /General/ });
     expect(btn).toHaveAttribute("aria-current", "page");
+  });
+
+  it("SettingsCategoryRail exposes category navigation and restrained search match affordances", () => {
+    const mockCategories = [
+      { id: "general" as const, num: "01", label: "General", icon: SlidersHorizontal, description: "Scope defaults" },
+      { id: "integrations" as const, num: "09", label: "Integrations", icon: SlidersHorizontal, description: "Provider auth credentials" },
+    ];
+    render(
+      <SettingsCategoryRail
+        filteredCategories={mockCategories}
+        activeCategory="general"
+        settingsSearch="auth"
+        onSwitchCategory={() => {}}
+      />
+    );
+
+    expect(screen.getByRole("navigation", { name: "Settings categories" })).toBeInTheDocument();
+    expect(screen.getByText("Search match")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Integrations/ }).className).toContain("border-signal");
+  });
+
+  it("SettingsCategoryRail supports arrow-key category switching", async () => {
+    const user = userEvent.setup();
+    const onSwitchCategory = vi.fn();
+    const mockCategories = [
+      { id: "general" as const, num: "01", label: "General", icon: SlidersHorizontal, description: "Scope defaults" },
+      { id: "appearance" as const, num: "02", label: "Appearance", icon: SlidersHorizontal, description: "Theme controls" },
+    ];
+    render(
+      <SettingsCategoryRail
+        filteredCategories={mockCategories}
+        activeCategory="general"
+        settingsSearch=""
+        onSwitchCategory={onSwitchCategory}
+      />
+    );
+
+    screen.getByRole("button", { name: /General/ }).focus();
+    await user.keyboard("{ArrowDown}");
+
+    expect(onSwitchCategory).toHaveBeenCalledWith("appearance");
+    expect(screen.getByRole("button", { name: /Appearance/ })).toHaveFocus();
   });
 
   it("ActionButton provides busy state feedback", () => {
@@ -58,6 +104,20 @@ import userEvent from "@testing-library/user-event";
     render(<ActionButton label="Wipe" onClick={() => {}} tone="danger" />);
     const btn = screen.getByRole("button", { name: "Wipe" });
     expect(btn.className).toContain("status-red");
+    expect(btn.className).toContain("text-white");
+  });
+
+  it("Settings Row keeps long labels, descriptions, badges, and controls contained", () => {
+    const longText = "This setting name includes a very long provider and project identifier that should wrap without shifting the panel layout";
+    const { container } = render(
+      <Row label={longText} description={longText} badge="Project override">
+        <TextInput value="very-long-provider-name-with-extra-context" onChange={() => {}} />
+      </Row>
+    );
+
+    expect(screen.getAllByText(longText)[0]).toHaveClass("break-words");
+    expect(screen.getByText("Project override")).toHaveClass("max-w-full");
+    expect(container.firstElementChild).toHaveClass("min-w-0");
   });
 
 

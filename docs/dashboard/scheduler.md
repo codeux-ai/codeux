@@ -11,6 +11,11 @@ The page has two schedule surfaces:
 - `Calendar` shows recurring entries on every visible day, not only on the original entry date.
 - `24 Hours` shows the selected day as an hour-by-hour timeline.
 
+The route uses the standard v2 dashboard shell:
+- `PageContainer` and `PageHeader` provide the same page rhythm as the primary dashboard routes.
+- The summary cards, schedule form, calendar, and entry ledger use Warm Void glass surfaces with compact metadata typography.
+- Loading states show skeleton schedule surfaces, and the empty entry ledger explains which automation types can be created without hiding the form.
+
 Operators can create entries for:
 - Sprints whose status is not `completed`.
 - Built-in or custom quicksprint templates available to the selected project.
@@ -20,6 +25,15 @@ Operators can create entries for:
 The Memory settings panel can also manage one project-scoped long-term remediation entry. That entry is marked with `memoryRemediationTarget.source = "memory_settings"` so the settings shortcut does not overwrite manually created Scheduler page remediation entries.
 
 Scheduler target selectors, recurrence indicators, and repeating-count summary icons use the dashboard signal jade palette for interactive accents. Sprint and next-run status tones remain differentiated with their existing ember/status colors.
+
+Scheduled entry rows expose the operational fields operators need for dense scanning:
+- target type and lifecycle status
+- schedule title and project/sprint/template/chat/memory scope
+- cadence summary
+- next run and last run timestamps
+- run count and last error, when present
+
+Completed and cancelled entries keep their pause/resume controls disabled while edit and delete controls remain keyboard accessible. Calendar and 24-hour view controls use explicit accessible labels, and status/feedback messages are announced through live regions.
 
 Repeating entries support:
 - no recurrence

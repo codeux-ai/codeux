@@ -21,11 +21,11 @@ export interface ButtonProps extends ComponentProps<"button"> {
 }
 
 const VARIANTS = {
-  primary: "bg-slate-900 text-white shadow-[var(--elevation-raised)] hover:bg-black dark:bg-white dark:text-void-900 dark:hover:bg-slate-100",
-  secondary: "border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] text-slate-600 hover:text-slate-900 hover:bg-[var(--surface-glass-hover)] dark:text-slate-300 dark:hover:text-white",
+  primary: "border border-signal-600/30 bg-signal-600 text-white shadow-[var(--elevation-raised)] hover:border-signal-700/50 hover:bg-signal-700 dark:border-signal-500/30 dark:bg-signal-500 dark:text-void-950 dark:hover:border-signal-400/50 dark:hover:bg-signal-400 aria-disabled:shadow-none",
+  secondary: "border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] text-[color:var(--text-secondary)] shadow-[var(--elevation-base)] hover:bg-[var(--surface-glass-hover)] hover:text-[color:var(--text-primary)] hover:shadow-[var(--elevation-raised)]",
   danger: "border border-status-red/30 bg-status-red/[0.06] text-status-red hover:bg-status-red/[0.12]",
-  ghost: "bg-transparent text-slate-600 hover:text-slate-900 hover:bg-[var(--fill-muted-hover)] dark:hover:text-slate-300",
-  signal: "bg-signal-500 hover:bg-signal-400 text-void-900 shadow-[var(--elevation-raised)] aria-disabled:shadow-none",
+  ghost: "border border-transparent bg-transparent text-[color:var(--text-metadata)] hover:bg-[var(--fill-muted-hover)] hover:text-[color:var(--text-primary)]",
+  signal: "border border-signal-500/30 bg-signal-500 text-void-950 shadow-[var(--elevation-raised)] hover:border-signal-400/50 hover:bg-signal-400 aria-disabled:shadow-none",
 };
 
 const SIZES = {
@@ -188,11 +188,11 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
     [onClick, isPending, setPending, setSuccess, setError]
   );
 
-  const baseClasses = `group/btn inline-flex items-center justify-center gap-2 font-bold ${SHARED_INTERACTION_CLASSES}`;
+  const baseClasses = `group/btn inline-flex min-w-0 items-center justify-center gap-2 font-bold ${SHARED_INTERACTION_CLASSES}`;
   const variantClasses = VARIANTS[variant];
   const sizeClasses = SIZES[size];
 
-    let overrideClasses = "";
+  let overrideClasses = "";
   if (isSuccess) overrideClasses = "!bg-status-green !text-white !border-status-green ring-2 ring-status-green ring-offset-2 ring-offset-white dark:ring-offset-void-900";
   else if (isError) overrideClasses = "!bg-status-red !text-white !border-transparent";
   if (isPending) overrideClasses += " pointer-events-none";
@@ -209,7 +209,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
       className={`${baseClasses} ${variantClasses} ${sizeClasses} ${overrideClasses} relative overflow-hidden ${className}`}
     >
 
-      <div ref={contentRef} className={`flex items-center justify-center gap-2`}>
+      <div ref={contentRef} className="flex min-w-0 items-center justify-center gap-2">
         {(Icon || isSuccess || isError) && (
           <div ref={iconContainerRef} className="relative flex items-center justify-center w-4 h-4 shrink-0">
             <div data-active={!isPending && !isSuccess && !isError} className={`absolute inset-0 flex items-center justify-center transition-all  ${isPending || isSuccess || isError ? "scale-0 opacity-0 pointer-events-none" : "scale-100 opacity-100"}`}
@@ -226,8 +226,8 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
             </div>
           </div>
         )}
-        <div className="relative flex items-center justify-center">
-          <span ref={labelRef} className="flex items-center justify-center gap-2" style={{ opacity: isPending ? 0 : 1 }}>{children}</span>
+        <div className="relative flex min-w-0 items-center justify-center">
+          <span ref={labelRef} className="flex min-w-0 items-center justify-center gap-2 truncate" style={{ opacity: isPending ? 0 : 1 }}>{children}</span>
           <div ref={spinnerRef} className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ opacity: isPending ? 1 : 0, transform: isPending ? "scale(1)" : "scale(0.7)" }}>
             <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
           </div>

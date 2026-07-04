@@ -32,7 +32,7 @@ export function Table({ children, className = "", caption, ariaLabel, ariaLabell
 export function TableHeader({ children }: { children: ComponentChildren }) {
   return (
     <thead className="sr-only lg:not-sr-only lg:table-header-group" role="rowgroup">
-      <tr className="text-[color:var(--text-metadata)] text-xs font-medium">
+      <tr className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--text-metadata)]">
         {children}
       </tr>
     </thead>
@@ -80,7 +80,7 @@ export function TableBody({ children }: { children: ComponentChildren }) {
 
 export function TableRow({ children, className = "", selected, onClick, style }: { children: ComponentChildren; className?: string; selected?: boolean; onClick?: (e: MouseEvent) => void; style?: import("preact").JSX.CSSProperties }) {
   const tokens = useInteractionTokens();
-  const selectedClass = selected ? "bg-signal-500/5 ring-2 ring-inset ring-signal-500/30" : "";
+  const selectedClass = selected ? "bg-signal-500/5 ring-2 ring-inset ring-signal-500/30" : "bg-[var(--surface-glass)]";
   const cursorClass = onClick ? "cursor-pointer" : "";
   return (
     <tr
@@ -88,7 +88,7 @@ export function TableRow({ children, className = "", selected, onClick, style }:
       onClick={onClick as any}
       aria-selected={selected}
       role="row"
-      className={`group mb-3 block overflow-hidden rounded-[1.5rem] border shadow-[var(--elevation-base)] backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:shadow-[var(--elevation-raised)] focus-within:ring-2 focus-within:ring-signal-500/20 lg:table-row lg:overflow-visible lg:rounded-none lg:border-0 lg:shadow-none lg:hover:bg-[var(--fill-muted-hover)] lg:transition-colors ${cursorClass} ${selectedClass} ${className}`}
+      className={`group mb-3 block overflow-hidden rounded-[var(--radius-ui)] border border-[color:var(--border-hairline)] shadow-[var(--elevation-base)] backdrop-blur-2xl transition-[background-color,border-color,box-shadow,transform] hover:-translate-y-0.5 hover:bg-[var(--surface-glass-hover)] hover:shadow-[var(--elevation-raised)] focus-within:ring-2 focus-within:ring-[color:var(--accent-focus-ring)] motion-reduce:transition-none motion-reduce:hover:translate-y-0 lg:table-row lg:overflow-visible lg:rounded-none lg:border-0 lg:bg-transparent lg:shadow-none lg:hover:bg-[var(--fill-muted-hover)] lg:hover:shadow-none lg:transition-colors ${cursorClass} ${selectedClass} ${className}`}
       style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease, ...(typeof style === "object" ? style : {}) }}
     >
       {children}
@@ -113,17 +113,17 @@ export function TableCell({ children, className = "", isFirst, isLast, isHeader,
   const alignClass = align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left";
 
   if (isHeader) {
-    const roundedClass = isFirst ? "rounded-l-2xl border-l" : isLast ? "rounded-r-2xl border-r pr-6" : "";
+    const roundedClass = isFirst ? "rounded-l-[var(--radius-ui)] border-l" : isLast ? "rounded-r-[var(--radius-ui)] border-r pr-6" : "";
     const plClass = isFirst ? "pl-6" : "";
     return (
       <th scope="col" aria-sort={ariaSort}
-        className={`border-y border-[color:var(--border-hairline)] bg-[var(--surface-glass)] px-4 py-2 ${alignClass} ${roundedClass} ${plClass} ${className}`}
+        className={`border-y border-[color:var(--border-hairline)] bg-[var(--surface-glass)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--text-metadata)] ${alignClass} ${roundedClass} ${plClass} ${className}`}
       >
         {onSort ? (
           <button
             type="button"
             onClick={onSort}
-            className="inline-flex items-center gap-1 w-full text-inherit font-inherit text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-md bg-transparent border-0 p-0 cursor-pointer"
+            className="inline-flex w-full items-center gap-1 rounded-[var(--radius-ui)] border-0 bg-transparent p-0 text-inherit font-inherit text-xs font-semibold uppercase tracking-[0.12em] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)]"
           >
             {children}
           </button>
@@ -134,15 +134,15 @@ export function TableCell({ children, className = "", isFirst, isLast, isHeader,
     );
   }
 
-  const roundedClass = isFirst ? "lg:rounded-l-[1.5rem] lg:border-l lg:pl-6" : isLast ? "lg:rounded-r-[1.5rem] lg:border-r lg:pr-6" : "";
+  const roundedClass = isFirst ? "lg:rounded-l-[var(--radius-ui)] lg:border-l lg:pl-6" : isLast ? "lg:rounded-r-[var(--radius-ui)] lg:border-r lg:pr-6" : "";
   return (
     <td
       colSpan={colSpan}
-      className={`flex flex-wrap items-start gap-x-2 border-b border-white/[0.04] px-4 py-2 last:border-b-0 align-middle min-w-0 break-words lg:table-cell lg:border-y lg:px-4 lg:py-3 ${alignClass} ${roundedClass} ${className}`}
+      className={`flex min-w-0 flex-wrap items-start gap-x-2 break-words border-b border-[color:var(--border-hairline)] px-4 py-2 align-middle last:border-b-0 lg:table-cell lg:border-y lg:px-4 lg:py-3 ${alignClass} ${roundedClass} ${className}`}
       role="cell"
     >
       {mobileLabel && (
-        <span className="inline-flex text-xs font-medium text-muted-foreground mr-2 lg:hidden" aria-hidden>
+        <span className="mr-2 inline-flex text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--text-metadata)] lg:hidden" aria-hidden>
           {mobileLabel}
         </span>
       )}

@@ -96,8 +96,12 @@ describe("KanbanTaskCard Integration", () => {
     // Title and IDs
     expect(getByText("Implement new feature")).toBeInTheDocument();
     expect(getByText("TASK-123")).toBeInTheDocument();
+    expect(getByText("In Progress")).toBeInTheDocument();
+    expect(getByText("High")).toBeInTheDocument();
 
-    // Telemetry fields from TaskExecutionMeta
+    // Telemetry zones
+    expect(getByText("Executor")).toBeInTheDocument();
+    expect(getByText("Agent")).toBeInTheDocument();
     expect(getByText("10m ago")).toBeInTheDocument(); // humanizedCreatedAt
     expect(getByText("Jules")).toBeInTheDocument(); // executorLabel
 
@@ -188,12 +192,41 @@ describe("KanbanTaskCard Integration", () => {
 
     expect(getByText("abc123")).toBeInTheDocument();
     expect(getByText("ACTIVE")).toBeInTheDocument();
+    expect(getByText("Session")).toBeInTheDocument();
     expect(getByText("4m 12s")).toBeInTheDocument();
 
     // Test that the PR link anchor tag exists by checking for "PR"
     const prLink = getByText("PR").closest('a');
     expect(prLink).toBeInTheDocument();
     expect(prLink).toHaveAttribute("href", "https://github.com/org/repo/pull/42");
+  });
+
+  it("wraps long operational metadata without dropping critical details", () => {
+    const longViewModel: TaskCardViewModel = {
+      ...mockLiveViewModel,
+      task: {
+        ...mockLiveViewModel.task,
+        title: "Implement dashboard/card/metadata/rendering/with/a/very/long/source/path/and/session/detail",
+        source: "packages/dashboard/src/v2/components/tasks/very/deep/source/path/with-many-segments.tsx",
+        assignee: "Principal Implementation Agent With A Long Display Name",
+      } as any,
+      sessionId: "session_1234567890abcdef1234567890abcdef",
+    };
+
+    const { getByText } = render(
+      <KanbanTaskCard
+        viewModel={longViewModel}
+        agentPresetName="Long Running Local Codex Implementation Preset"
+        onEdit={onEdit}
+        onDelete={onDelete}
+      />
+    );
+
+    expect(getByText(longViewModel.task.title)).toHaveClass("break-words");
+    expect(getByText(longViewModel.task.source)).toHaveClass("break-all");
+    expect(getByText("session_1234567890abcdef1234567890abcdef")).toHaveClass("break-all");
+    expect(getByText("Principal Implementation Agent With A Long Display Name")).toHaveClass("break-words");
+    expect(getByText("Long Running Local Codex Implementation Preset")).toHaveClass("break-words");
   });
 
   it("provides accessible interaction targets and structure", async () => {
@@ -227,6 +260,7 @@ describe("KanbanTaskCard Integration", () => {
     }
 
     const actionsContainer = editBtn.parentElement;
+    expect(actionsContainer).toHaveClass("kanban-card__actions");
     expect(actionsContainer).toHaveClass("group-focus:opacity-100");
 
     // Simulate delete click to ensure confirm dialog is requested
@@ -281,6 +315,7 @@ describe("KanbanTaskCard Integration", () => {
 
     const card = container.querySelector(".kanban-card");
     expect(card).toHaveAttribute("draggable", "false");
+    expect(container.querySelector(".kanban-card__status-rail")).toBeInTheDocument();
 
     // Simulate drag start
     if (card) {
@@ -294,6 +329,20 @@ describe("KanbanTaskCard Integration", () => {
     // Verify screen-reader text is updated
     const srText = getByText("Draggable reordering is disabled in reduced motion mode.");
     expect(srText).toBeInTheDocument();
+  });
+
+  it("applies the focused drag visual state without changing card content", () => {
+    const { container, getByText } = render(
+      <KanbanTaskCard
+        viewModel={mockViewModel}
+        onEdit={onEdit}
+        onDelete={onDelete}
+        isDragging
+      />
+    );
+
+    expect(container.querySelector(".kanban-card")).toHaveClass("kanban-card--dragging");
+    expect(getByText("Implement new feature")).toBeInTheDocument();
   });
 
   it("ensures dependency indicators have clear screen-reader support", () => {
@@ -324,7 +373,7 @@ describe("KanbanTaskCard Integration", () => {
   it("provides accurate drag-and-drop screen-reader guidance", async () => {
     const { useReducedMotion } = await import("../../../hooks/use-reduced-motion.js");
     vi.mocked(useReducedMotion).mockReturnValue(false);
-    const { getByText } = render(<KanbanTaskCard viewModel={mockViewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    const { getByText } = render(<KanbanTaskCard viewModel={mockViewModel} onEdit={vi.fn()} onDelete={vi.fn()} onDragStart={vi.fn()} />);
     const kbdGuidance = document.getElementById(`task-card-kbd-${mockViewModel.task.recordId}`);
     expect(kbdGuidance).toBeInTheDocument();
     expect(kbdGuidance).toHaveTextContent(/Draggable task. Drag and drop is pointer-only. Keyboard reordering is not supported/i);
@@ -360,12 +409,12 @@ describe("KanbanTaskCard Integration", () => {
 
     const title = container.querySelector("h4");
     expect(title).toHaveClass("break-words");
-    expect(title).toHaveClass("pr-12");
+    expect(title).toHaveClass("mb-4");
 
-    const sourceSpan = container.querySelector('.font-mono.truncate');
+    const sourceSpan = container.querySelector('.font-mono.break-all');
     expect(sourceSpan).toHaveClass('min-w-0');
 
-    const actionsContainer = container.querySelector('.absolute.top-3.right-3');
+    const actionsContainer = container.querySelector('.kanban-card__actions');
     expect(actionsContainer).toHaveClass('[@media(any-pointer:coarse)]:opacity-100');
   });
 

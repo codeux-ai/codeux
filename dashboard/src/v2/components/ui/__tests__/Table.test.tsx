@@ -76,6 +76,7 @@ describe("Table component", () => {
     const mobileLabel = screen.getByText("Mobile Label 1");
     expect(mobileLabel).toBeInTheDocument();
     expect(mobileLabel).toHaveClass("lg:hidden");
+    expect(mobileLabel).toHaveClass("text-[color:var(--text-metadata)]", "uppercase");
     expect(cells[0]).toHaveTextContent("Data 1");
   });
 
@@ -139,9 +140,11 @@ describe("Table component", () => {
 
     const header = screen.getByRole("columnheader", { name: "Sortable Header" });
     expect(header).toHaveAttribute("aria-sort", "ascending");
+    expect(header).toHaveClass("bg-[var(--surface-glass)]", "border-[color:var(--border-hairline)]", "text-[color:var(--text-metadata)]");
 
     const button = screen.getByRole("button", { name: "Sortable Header" });
     expect(button).toBeInTheDocument();
+    expect(button).toHaveClass("focus-visible:ring-[color:var(--accent-focus-ring)]");
 
     button.click();
     expect(handleSort).toHaveBeenCalledTimes(1);
@@ -165,5 +168,25 @@ describe("Table component", () => {
 
     const innerContainer = cell.querySelector("div");
     expect(innerContainer).toHaveClass("break-words", "min-w-0", "flex-1", "lg:contents");
+  });
+
+  it("applies shared glass, hairline, elevation, and reduced-motion-safe row classes", () => {
+    render(
+      <Table>
+        <TableBody>
+          <TableRow>
+            <TableCell>Data</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    );
+
+    const row = screen.getByRole("row");
+    expect(row).toHaveClass("rounded-[var(--radius-ui)]");
+    expect(row).toHaveClass("border-[color:var(--border-hairline)]");
+    expect(row).toHaveClass("bg-[var(--surface-glass)]");
+    expect(row).toHaveClass("shadow-[var(--elevation-base)]");
+    expect(row).toHaveClass("focus-within:ring-[color:var(--accent-focus-ring)]");
+    expect(row).toHaveClass("motion-reduce:transition-none", "motion-reduce:hover:translate-y-0");
   });
 });

@@ -29,14 +29,14 @@ interface Pulse { edgeIdx: number; progress: number; speed: number }
 /* ─── Config ─────────────────────────────────────────────────────────────── */
 
 const CAT: Record<string, { label: string; hex: string; r: number; g: number; b: number }> = {
-    architecture: { label: "Architecture", hex: "#00E0A0", r: 0,   g: 224, b: 160 },
-    codebase:     { label: "Codebase",     hex: "#FFB800", r: 255, g: 184, b: 0   },
-    context:      { label: "Context",      hex: "#8B5CF6", r: 139, g: 92,  b: 246 },
+    architecture: { label: "Architecture", hex: "#00C8A0", r: 0, g: 200, b: 160 },
+    codebase:     { label: "Codebase",     hex: "#F59E0B", r: 245, g: 158, b: 11 },
+    context:      { label: "Context",      hex: "#8B5CF6", r: 139, g: 92, b: 246 },
     preferences:  { label: "Preferences",  hex: "#94A3B8", r: 148, g: 163, b: 184 },
-    patterns:     { label: "Patterns",     hex: "#F59E0B", r: 245, g: 158, b: 11  },
-    decision:     { label: "Decision",     hex: "#64748B", r: 100, g: 116, b: 139 },
-    error:        { label: "Error",        hex: "#F43F5E", r: 244, g: 63,  b: 94  },
-    learning:     { label: "Learning",     hex: "#33FFB8", r: 51,  g: 255, b: 184 },
+    patterns:     { label: "Patterns",     hex: "#38BDF8", r: 56, g: 189, b: 248 },
+    decision:     { label: "Decision",     hex: "#14B8A6", r: 20, g: 184, b: 166 },
+    error:        { label: "Error",        hex: "#F43F5E", r: 244, g: 63, b: 94 },
+    learning:     { label: "Learning",     hex: "#A3E635", r: 163, g: 230, b: 53 },
 };
 
 type MemTier = "short_term" | "long_term";
@@ -716,6 +716,9 @@ export const MemoryPage: FunctionComponent = () => {
         }
     }, []);
 
+    const graphEdgeCount = graphData?.graph.edges.length ?? 0;
+    const sparseGraph = !loading && memoryCount > 0 && graphEdgeCount === 0;
+
     /* ─── Render ──────────────────────────────────────────────────────── */
     return (
         <PageContainer aria-label="Memory" padding="section" className="gap-8">
@@ -748,21 +751,26 @@ export const MemoryPage: FunctionComponent = () => {
 
             {/* ── Model Management ────────────────────────────────────── */}
             {showModels && (
-                <section aria-labelledby="embedding-model-catalog-title" className="space-y-3">
+                <section aria-labelledby="embedding-model-catalog-title" className="space-y-4 rounded-lg border border-black/[0.08] bg-white/60 p-4 shadow-[0_6px_24px_rgba(15,23,42,0.05)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-void-800/45 dark:shadow-[0_6px_24px_rgba(0,0,0,0.22)]">
                     <div className="flex flex-wrap items-end justify-between gap-2">
                         <div>
                             <h2 id="embedding-model-catalog-title" className="text-sm font-bold text-slate-800 dark:text-white">
                                 Embedding model catalog
                             </h2>
-                            <p className="text-[11px] text-slate-500">
-                                Download compatible ONNX models for local memory search.
+                            <p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-slate-500">
+                                Download compatible ONNX models, activate one for semantic search, and re-embed stale memories when dimensions change.
                             </p>
                         </div>
-                        {models.length > 0 && (
-                            <span className="text-[10px] font-mono text-slate-400">
+                        <div className="flex flex-wrap items-center gap-2">
+                            {stats.activeModel && (
+                                <span className="rounded-md bg-signal-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-500">
+                                    Active model
+                                </span>
+                            )}
+                            <span className="rounded-md bg-black/[0.04] px-2.5 py-1 text-[10px] font-mono text-slate-500 dark:bg-white/[0.05] dark:text-slate-400">
                                 {models.length} available
                             </span>
-                        )}
+                        </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {models.map((model: EmbeddingModelWithStatus) => (
@@ -775,9 +783,11 @@ export const MemoryPage: FunctionComponent = () => {
                                 staleCount={stats.staleEmbeddings} />
                         ))}
                         {models.length === 0 && (
-                            <p className="text-sm text-slate-400 font-medium col-span-2 text-center py-8">
-                                Loading embedding models…
-                            </p>
+                            <div className="col-span-2 rounded-lg border border-dashed border-black/[0.08] bg-black/[0.02] px-4 py-8 text-center dark:border-white/[0.08] dark:bg-white/[0.02]">
+                                <Loader2 className="mx-auto mb-3 h-5 w-5 animate-spin text-signal-500/60" strokeWidth={1.8} />
+                                <p className="text-sm font-bold text-slate-500 dark:text-slate-300">Loading embedding models</p>
+                                <p className="mt-1 text-xs text-slate-400">The catalog will appear here when model metadata is available.</p>
+                            </div>
                         )}
                     </div>
                 </section>
@@ -798,7 +808,7 @@ export const MemoryPage: FunctionComponent = () => {
                         </p>
                     </div>
                     <button onClick={handleReembed}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[11px] font-bold shrink-0
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[11px] font-bold shrink-0
                                    bg-amber-500 text-white hover:bg-amber-600
                                    transition-colors duration-200 shadow-[0_2px_8px_rgba(245,158,11,0.25)]">
                         <RefreshCw className="w-3 h-3" strokeWidth={2.5} />
@@ -900,13 +910,22 @@ export const MemoryPage: FunctionComponent = () => {
 
                 {/* Empty state */}
                 {!loading && memoryCount === 0 && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 pointer-events-none z-20">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 pointer-events-none z-20 px-6 text-center">
                         <Brain className="w-12 h-12 text-signal-500/20" strokeWidth={1.5} />
                         <p className="text-lg font-black font-display tracking-tight text-slate-400/60">
-                            No memories yet
+                            No memories in this view
                         </p>
-                        <p className="text-xs font-mono text-slate-400/50">
-                            Memories will appear here as sprints capture them, or add one manually.
+                        <p className="max-w-sm text-xs font-mono leading-relaxed text-slate-400/60">
+                            Captured memories, manual notes, and filtered scope results will appear as graph nodes here.
+                        </p>
+                    </div>
+                )}
+
+                {sparseGraph && (
+                    <div className="absolute left-1/2 top-5 z-20 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 rounded-lg border border-black/[0.08] bg-white/80 px-4 py-3 text-center shadow-[0_6px_24px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/80 dark:shadow-[0_6px_24px_rgba(0,0,0,0.28)]">
+                        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-300">Sparse graph</p>
+                        <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                            Memories are present, but this scope has no similarity edges yet.
                         </p>
                     </div>
                 )}
@@ -940,15 +959,18 @@ export const MemoryPage: FunctionComponent = () => {
                     const total = records.filter((r: MemoryRecord) => r.category === key).length;
                     return (
                         <div key={key}
-                            className="relative overflow-hidden flex flex-col gap-2 p-4 rounded-[1.25rem]
-                                       bg-white/60 dark:bg-void-800/50 backdrop-blur-xl
-                                       border border-black/[0.06] dark:border-white/[0.06]
-                                       shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.2)]">
+                            className="relative overflow-hidden flex flex-col gap-2 p-4 rounded-lg
+                                       bg-white/70 dark:bg-void-800/55 backdrop-blur-xl
+                                       border border-black/[0.08] dark:border-white/[0.08]
+                                       shadow-[0_4px_18px_rgba(15,23,42,0.05)] dark:shadow-[0_4px_18px_rgba(0,0,0,0.22)]">
                             <div className="flex items-center justify-between">
-                                <div className="w-2 h-2 rounded-full" style={{ background: cfg.hex, boxShadow: `0 0 8px ${cfg.hex}` }} />
-                                <span className="text-[9px] font-mono text-slate-400">{alive}/{total}</span>
+                                <span
+                                    className="h-2 w-2 rounded-full"
+                                    style={{ background: cfg.hex, boxShadow: `0 0 8px rgba(${cfg.r}, ${cfg.g}, ${cfg.b}, 0.35)` }}
+                                />
+                                <span className="rounded-md bg-black/[0.04] px-1.5 py-0.5 text-[9px] font-mono text-slate-500 dark:bg-white/[0.05] dark:text-slate-400">{alive}/{total}</span>
                             </div>
-                            <span className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: cfg.hex }}>
+                            <span className="truncate text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300">
                                 {cfg.label}
                             </span>
                             <div className="h-0.5 w-full bg-black/[0.06] dark:bg-white/[0.06] rounded-full overflow-hidden">

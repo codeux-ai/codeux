@@ -62,18 +62,18 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
 }) => {
   const renderEmptyState = (mode: StatsVisualMode) => (
     <div role="status" aria-live="polite" className={`${PANEL_CLASS} flex flex-col items-center justify-center py-20 text-center`}>
-      <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-[1.25rem] border border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+      <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-[1.25rem] border border-[var(--stats-card-border)] bg-[var(--stats-subpanel-bg)] text-amber-600 shadow-[var(--stats-card-shadow)] dark:text-amber-400">
         <Layers3 className="h-8 w-8" strokeWidth={2} />
       </div>
-      <div className="text-base font-bold text-slate-900 dark:text-white">Waiting for Telemetry</div>
-      <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">{STUDIO_EMPTY_MESSAGES[mode]}</div>
+      <div className="text-base font-bold text-[var(--stats-value-color)]">Waiting for Telemetry</div>
+      <div className="mt-2 text-sm text-[var(--stats-detail-color)]">{STUDIO_EMPTY_MESSAGES[mode]}</div>
     </div>
   );
 
   return (
     <div key={visualMode} className="animate-in fade-in duration-200">
       <div className="mb-6">
-        <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-600 dark:text-amber-400">
+        <div className="inline-flex items-center gap-2 rounded-full border border-[var(--stats-card-border)] bg-[var(--stats-chip-bg)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-detail-color)] shadow-[var(--stats-card-shadow)]">
           <Layers3 className="h-3 w-3" strokeWidth={2.5} />
           {STUDIO_SUBTITLES[visualMode]}
         </div>

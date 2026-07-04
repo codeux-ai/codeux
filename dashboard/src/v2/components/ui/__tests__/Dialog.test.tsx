@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { h } from "preact";
-import { render, screen, cleanup } from "@testing-library/preact";
+import { fireEvent, render, screen, cleanup } from "@testing-library/preact";
 import { Dialog } from "../Dialog.js";
-import { expect, test, describe, afterEach } from "vitest";
+import { expect, test, describe, afterEach, vi } from "vitest";
 
 describe("Dialog and Modal", () => {
   afterEach(() => {
@@ -38,5 +38,17 @@ describe("Dialog and Modal", () => {
     );
     const dialog = screen.getByRole("dialog");
     expect(dialog.hasAttribute("aria-describedby")).toBe(false);
+  });
+
+  test("dismisses with Escape through the focus trap", () => {
+    const onClose = vi.fn();
+    render(
+      <Dialog isOpen={true} onClose={onClose}>
+        <button>Focusable action</button>
+      </Dialog>
+    );
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

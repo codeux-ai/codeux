@@ -121,7 +121,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
         );
       case "cancelled":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border border-black/[0.06] bg-[color:var(--surface-glass)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 dark:border-white/[0.06]`}>
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border border-[var(--stats-card-border)] bg-[var(--stats-chip-bg)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--stats-detail-color)]`}>
             <div className="h-2 w-2 rounded-full bg-slate-500" />
             <MinusCircle className="h-3 w-3" />
             Cancelled
@@ -137,7 +137,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
         );
       default:
         return (
-          <div className={`${CHIP_CLASS} px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400`}>
+          <div className={`${CHIP_CLASS} px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--stats-detail-color)]`}>
             {status}
           </div>
         );
@@ -149,7 +149,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
       <div role="status" aria-label="Loading invocations" className="space-y-3">
         <span className="sr-only" aria-live="polite">Loading invocations</span>
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className={`${LEDGER_ROW_MODERN_CLASS} h-20 motion-safe:animate-pulse bg-slate-100/50 dark:bg-white/5`} />
+          <div key={i} className={`${LEDGER_ROW_MODERN_CLASS} h-20 bg-[var(--stats-subpanel-bg)] motion-safe:animate-pulse`} />
         ))}
       </div>
     );
@@ -157,7 +157,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
 
   if (invocations.length === 0) {
     return (
-      <div role="status" aria-live="polite" aria-label="Empty invocations table" className="flex flex-col items-center justify-center py-20 text-slate-500">
+      <div role="status" aria-live="polite" aria-label="Empty invocations table" className="flex flex-col items-center justify-center rounded-[var(--stats-subpanel-radius)] border border-dashed border-[var(--stats-card-border)] bg-[var(--stats-subpanel-bg)] py-20 text-[var(--stats-detail-color)]">
         <AlertTriangle className="mb-4 h-10 w-10 opacity-20" />
         <div className="text-sm font-medium">No invocations match the current filters</div>
       </div>
@@ -167,13 +167,13 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-separate border-spacing-y-2 block lg:table">
-        <thead className="sticky top-0 z-10 bg-white/90 backdrop-blur-sm dark:bg-void-900/80 hidden lg:table-header-group">
-          <tr className="text-left text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+        <thead className="sticky top-0 z-10 hidden bg-[var(--stats-panel-bg)] backdrop-blur-sm lg:table-header-group">
+          <tr className="text-left text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">
             <th scope="col" className="pb-2 pl-6">
               <button
                 type="button"
                 onClick={() => handleSort("startedAt")}
-                className="flex items-center hover:text-slate-900 dark:hover:text-white"
+                className="flex items-center hover:text-[var(--stats-value-color)]"
               >
                 Time {renderSortIcon("startedAt")}
               </button>
@@ -185,7 +185,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               <button
                 type="button"
                 onClick={() => handleSort("inputTokens")}
-                className="flex items-center hover:text-slate-900 dark:hover:text-white"
+                className="flex items-center hover:text-[var(--stats-value-color)]"
               >
                 In {renderSortIcon("inputTokens")}
               </button>
@@ -194,7 +194,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               <button
                 type="button"
                 onClick={() => handleSort("outputTokens")}
-                className="flex items-center hover:text-slate-900 dark:hover:text-white"
+                className="flex items-center hover:text-[var(--stats-value-color)]"
               >
                 Out {renderSortIcon("outputTokens")}
               </button>
@@ -204,7 +204,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               <button
                 type="button"
                 onClick={() => handleSort("totalTokens")}
-                className="flex items-center hover:text-slate-900 dark:hover:text-white"
+                className="flex items-center hover:text-[var(--stats-value-color)]"
               >
                 Total {renderSortIcon("totalTokens")}
               </button>
@@ -213,7 +213,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               <button
                 type="button"
                 onClick={() => handleSort("durationMs")}
-                className="flex items-center hover:text-slate-900 dark:hover:text-white"
+                className="flex items-center hover:text-[var(--stats-value-color)]"
               >
                 Avg Duration {renderSortIcon("durationMs")}
               </button>
@@ -240,8 +240,8 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                         <div className="flex items-center justify-between lg:contents">
                           {/* Time */}
                           <div>
-                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Time</div>
-                            <div className="text-[11px] font-mono text-slate-400">
+                            <div className="mb-1 text-[9px] font-bold uppercase text-[var(--stats-label-color)] lg:hidden">Time</div>
+                            <div className="text-[11px] font-mono text-[var(--stats-detail-color)]">
 
                             {formatDateTime(invocation.startedAt)}
 
@@ -253,8 +253,8 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                               type="button"
                               onClick={() => onRowExpand(isExpanded ? null : invocation.id)}
                               aria-label={isExpanded ? `Collapse invocation ${invocation.id}` : `Expand invocation ${invocation.id}`}
-                              className={`rounded-full p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 hover:bg-black/[0.04] dark:hover:bg-white/5 ${
-                                isExpanded ? "text-signal-500" : "text-slate-400"
+                              className={`rounded-full p-2 transition-colors hover:bg-[var(--stats-row-hover-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] ${
+                                isExpanded ? "text-signal-500" : "text-[var(--stats-detail-color)]"
                               }`}
                             >
                               {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
@@ -266,14 +266,14 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                         <div className="flex items-center gap-2 lg:contents">
                           {/* Status */}
                           <div>
-                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Status</div>
+                            <div className="mb-1 text-[9px] font-bold uppercase text-[var(--stats-label-color)] lg:hidden">Status</div>
                             {renderStatusChip(invocation.status)}
                           </div>
 
                         {/* Type */}
                           <div className="flex flex-col min-w-0">
-                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Type</div>
-                            <div className={`${CHIP_CLASS} w-max px-2 py-0.5 text-[10px] font-medium text-slate-500`}>
+                            <div className="mb-1 text-[9px] font-bold uppercase text-[var(--stats-label-color)] lg:hidden">Type</div>
+                            <div className={`${CHIP_CLASS} w-max px-2 py-0.5 text-[10px] font-medium text-[var(--stats-detail-color)]`}>
                               {invocation.type?.replace(/_/g, " ") || "unknown"}
                             </div>
                           </div>
@@ -283,8 +283,8 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between lg:contents">
                           {/* Model */}
                           <div>
-                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Model</div>
-                            <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300 min-w-0">
+                            <div className="mb-1 text-[9px] font-bold uppercase text-[var(--stats-label-color)] lg:hidden">Model</div>
+                            <div className="flex min-w-0 items-center gap-2 text-[11px] text-[var(--stats-detail-color)]">
 
                             <div className={`rounded-lg p-1.5 ${providerBg} ${providerText}`}>
                               <ProviderIcon className="h-3 w-3" strokeWidth={2.5} />
@@ -294,10 +294,10 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                           </div>
 
                         {/* Token Stats Row */}
-                        <div className="grid grid-cols-4 gap-2 rounded-lg border border-slate-200/60 bg-slate-50 p-2 dark:border-white/5 dark:bg-white/[0.02] lg:contents lg:border-0 lg:bg-transparent lg:p-0">
+                        <div className="grid grid-cols-4 gap-2 rounded-lg border border-[var(--stats-card-border)] bg-[var(--stats-subpanel-bg)] p-2 lg:contents lg:border-0 lg:bg-transparent lg:p-0">
                           {/* In Tokens */}
                           <div>
-                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">In</div>
+                            <div className="mb-1 text-[9px] font-bold uppercase text-[var(--stats-label-color)] lg:hidden">In</div>
                             <div className="text-[11px] text-blue-600 dark:text-blue-400">
 
                           {formatTokens(invocation.inputTokens ?? 0)}
@@ -306,7 +306,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
 
                         {/* Out Tokens */}
                           <div>
-                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Out</div>
+                            <div className="mb-1 text-[9px] font-bold uppercase text-[var(--stats-label-color)] lg:hidden">Out</div>
                             <div className="text-[11px] text-emerald-600 dark:text-emerald-400">
 
                           {formatTokens(invocation.outputTokens ?? 0)}
@@ -315,8 +315,8 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
 
                         {/* Cached Tokens */}
                           <div>
-                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Cached</div>
-                            <div className="text-[11px] text-purple-600 dark:text-purple-400">
+                            <div className="mb-1 text-[9px] font-bold uppercase text-[var(--stats-label-color)] lg:hidden">Cached</div>
+                            <div className="text-[11px] text-cyan-600 dark:text-cyan-400">
 
                           {formatTokens(invocation.cachedInputTokens ?? 0)}
                         </div>
@@ -324,8 +324,8 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
 
                         {/* Total Tokens */}
                           <div>
-                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Total</div>
-                            <div className="text-[11px] font-bold text-slate-900 dark:text-white">
+                            <div className="mb-1 text-[9px] font-bold uppercase text-[var(--stats-label-color)] lg:hidden">Total</div>
+                            <div className="text-[11px] font-bold text-[var(--stats-value-color)]">
 
                           {formatTokens(invocation.totalTokens ?? 0)}
                         </div>
@@ -334,8 +334,8 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
 
                         {/* Duration */}
                           <div>
-                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Duration</div>
-                            <div className={`text-[11px] ${invocation.finishedAt ? "text-slate-600 dark:text-slate-300" : "text-blue-600 dark:text-blue-400"}`}>
+                            <div className="mb-1 text-[9px] font-bold uppercase text-[var(--stats-label-color)] lg:hidden">Duration</div>
+                            <div className={`text-[11px] ${invocation.finishedAt ? "text-[var(--stats-detail-color)]" : "text-blue-600 dark:text-blue-400"}`}>
 
                             {duration}
                             </div>
@@ -344,17 +344,17 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
 
                         {/* Context Chips */}
                         <div className="flex flex-col gap-1 lg:contents">
-                          <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Context</div>
+                          <div className="mb-1 text-[9px] font-bold uppercase text-[var(--stats-label-color)] lg:hidden">Context</div>
                           <div className="flex flex-wrap gap-1">
                           {(invocation.sprintNumber !== null || invocation.taskKey !== null) && (
                             <>
                               {invocation.sprintNumber !== null && (
-                                <div className={`${CHIP_CLASS} px-1.5 py-0.5 text-[9px] font-bold text-slate-400`}>
+                                <div className={`${CHIP_CLASS} px-1.5 py-0.5 text-[9px] font-bold text-[var(--stats-detail-color)]`}>
                                   S{invocation.sprintNumber}
                                 </div>
                               )}
                               {invocation.taskKey !== null && (
-                                <div className={`${CHIP_CLASS} px-1.5 py-0.5 text-[9px] font-bold text-slate-400`}>
+                                <div className={`${CHIP_CLASS} px-1.5 py-0.5 text-[9px] font-bold text-[var(--stats-detail-color)]`}>
                                   {invocation.taskKey}
                                 </div>
                               )}
@@ -370,8 +370,8 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                             type="button"
                             onClick={() => onRowExpand(isExpanded ? null : invocation.id)}
                             aria-label={isExpanded ? `Collapse invocation ${invocation.id}` : `Expand invocation ${invocation.id}`}
-                            className={`rounded-full p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 hover:bg-black/[0.04] dark:hover:bg-white/5 ${
-                              isExpanded ? "text-signal-500" : "text-slate-400"
+                            className={`rounded-full p-2 transition-colors hover:bg-[var(--stats-row-hover-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] ${
+                              isExpanded ? "text-signal-500" : "text-[var(--stats-detail-color)]"
                             }`}
                           >
                             {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
@@ -410,7 +410,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
           <button
             type="button"
             onClick={revealMore}
-            className="rounded-full bg-slate-100 px-4 py-2 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-200 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
+            className="rounded-full border border-[var(--stats-card-border)] bg-[var(--stats-chip-bg)] px-4 py-2 text-xs font-bold text-[var(--stats-detail-color)] transition-colors hover:bg-[var(--stats-row-hover-bg)] hover:text-[var(--stats-value-color)]"
           >
             Show more invocations
           </button>

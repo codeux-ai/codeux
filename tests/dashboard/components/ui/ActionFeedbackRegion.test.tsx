@@ -27,7 +27,7 @@ describe("ActionFeedbackRegion", () => {
     );
     const element = getByRole("status");
     expect(element).toBeInTheDocument();
-    expect(element.getAttribute("aria-live")).toBe("off");
+    expect(element.getAttribute("aria-live")).toBe("polite");
     expect(element.getAttribute("aria-atomic")).toBe("true");
     expect(element.textContent).toContain("Success message");
   });

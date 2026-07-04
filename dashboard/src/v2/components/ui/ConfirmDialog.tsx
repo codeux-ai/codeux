@@ -317,24 +317,24 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
         aria-describedby={body ? "confirm-dialog-body" : undefined}
-        className="my-auto w-full max-w-[28rem] overflow-hidden rounded-[1.5rem] border border-black/[0.08] bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)] outline-none dark:border-white/[0.08] dark:bg-void-800 dark:shadow-[0_28px_90px_rgba(0,0,0,0.56)]"
+        className="my-auto w-full max-w-[28rem] overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)] outline-none dark:border-white/[0.08] dark:bg-void-800 dark:shadow-[0_28px_90px_rgba(0,0,0,0.56)]"
       >
-        <div className={`border-b p-5 ${toneStyles.panel}`}>
+        <div className={`border-b p-4 sm:p-5 ${toneStyles.panel}`}>
           <div className="flex items-start gap-4">
-            <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${toneStyles.ring}`}>
+            <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ${toneStyles.ring}`}>
               <ToneIcon className="h-5 w-5" strokeWidth={1.8} />
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">Confirm Runtime Action</p>
-              <h2 id="confirm-dialog-title" className="mt-1 text-lg font-black leading-tight tracking-tight text-void-900 dark:text-slate-50">
+              <h2 id="confirm-dialog-title" className="mt-1 break-words text-lg font-black leading-tight tracking-tight text-void-900 dark:text-slate-50">
                 {title}
               </h2>
             </div>
           </div>
         </div>
-        <div className="p-5 pt-4">
+        <div className="p-4 pt-4 sm:p-5 sm:pt-4">
           {body && (
-            <p id="confirm-dialog-body" className="text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-200">
+            <p id="confirm-dialog-body" className="break-words text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-200">
               {body}
             </p>
           )}
@@ -346,12 +346,12 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
             </div>
           )}
         </div>
-        <div className="flex flex-col-reverse gap-2 border-t border-black/[0.06] bg-void-50/80 p-4 dark:border-white/[0.08] dark:bg-white/[0.04] sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+        <div className="flex flex-col-reverse gap-2 border-t border-black/[0.06] bg-void-50/80 p-4 dark:border-white/[0.08] dark:bg-white/[0.04] sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-3">
           <button
             type="button"
             onClick={() => handleClose(onCancel)}
             disabled={isProcessing}
-            className="inline-flex min-h-10 items-center justify-center rounded-xl border border-black/[0.08] bg-white px-4 py-2 text-sm font-bold text-slate-600 transition-all duration-200 hover:bg-black/[0.035] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-safe:active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.14] dark:bg-white/[0.08] dark:text-slate-100 dark:hover:bg-white/[0.12]"
+            className="inline-flex min-h-10 w-full items-center justify-center rounded-xl border border-black/[0.08] bg-white px-4 py-2 text-sm font-bold text-slate-600 transition-all duration-200 hover:bg-black/[0.035] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-safe:active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.14] dark:bg-white/[0.08] dark:text-slate-100 dark:hover:bg-white/[0.12] sm:w-auto"
           >
             {cancelLabel}
           </button>
@@ -360,7 +360,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
               onConfirm={() => handleClose(onConfirm)}
               label={confirmLabel}
               isLoading={isProcessing}
-              className={`inline-flex min-h-10 items-center justify-center rounded-xl px-4 py-2 text-sm font-black transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${toneStyles.confirm}`}
+              className={`inline-flex min-h-10 w-full items-center justify-center rounded-xl px-4 py-2 text-sm font-black transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto ${toneStyles.confirm}`}
             />
           ) : (
             <button
@@ -368,7 +368,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
               onClick={() => handleClose(onConfirm)}
               disabled={isProcessing}
               aria-busy={isProcessing}
-              className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-black transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-safe:active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${toneStyles.confirm} ${confirmFlash ? '!bg-status-green !text-white !border-transparent' : ''}`}
+              className={`inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-black transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-safe:active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto ${toneStyles.confirm} ${confirmFlash ? '!bg-status-green !text-white !border-transparent' : ''}`}
             >
               {isProcessing && <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /><span className="sr-only">Processing, please wait</span></>}
               {isProcessing ? "Processing..." : confirmLabel}

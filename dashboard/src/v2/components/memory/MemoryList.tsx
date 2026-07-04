@@ -122,11 +122,15 @@ export const MemoryList: FunctionComponent<{
 
     if (renderedNodes.length === 0) {
         const isEmpty = nodes.length === 0;
-        const message = isEmpty ? "No memories exist" : "No memories match your search or filters";
+        const message = isEmpty ? "No memories in this view" : "No memories match your search or filters";
+        const description = isEmpty
+            ? "Captured or manually added memories will appear here with matching graph nodes."
+            : "Try a broader search term or switch memory scope filters.";
         return (
-            <div className="flex flex-col items-center justify-center p-8 text-center text-slate-400">
+            <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-slate-400">
                 <div className="sr-only" aria-live="polite" aria-atomic="true">{message}</div>
-                <p className="text-sm font-medium">{message}</p>
+                <p className="text-sm font-bold text-slate-500 dark:text-slate-300">{message}</p>
+                <p className="max-w-[16rem] text-xs leading-relaxed text-slate-400">{description}</p>
             </div>
         );
     }
@@ -140,7 +144,7 @@ export const MemoryList: FunctionComponent<{
             </div>
             <div className="sticky top-0 z-10 w-full flex flex-col gap-2">
                 {searchQuerySignal.value && (
-                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400 px-2 py-1 bg-black/[0.02] dark:bg-white/[0.02] rounded-lg inline-block self-start border border-black/[0.04] dark:border-white/[0.04]">
+                    <div className="inline-block self-start rounded-lg border border-black/[0.06] bg-white/70 px-2 py-1 text-xs font-medium text-slate-500 dark:border-white/[0.07] dark:bg-white/[0.04] dark:text-slate-400">
                         Showing {renderedNodes.length} result{renderedNodes.length !== 1 ? 's' : ''}
                     </div>
                 )}

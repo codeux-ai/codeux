@@ -73,7 +73,7 @@ const AttentionLedgerRow = memo(({ item, snapshot, onClaimAttentionItem, onResol
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 pl-1.5">
                     <div className="flex flex-wrap items-center gap-2">
-                        <span className="min-w-0 max-w-full truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        <span className="min-w-0 max-w-full break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
                             {item.title}
                         </span>
                         <span className={`rounded-md border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${
@@ -92,7 +92,7 @@ const AttentionLedgerRow = memo(({ item, snapshot, onClaimAttentionItem, onResol
                         <span className="text-slate-300 dark:text-slate-700">/</span>
                         <span>{ATTENTION_OWNER_LABELS[item.ownerType] || item.ownerType}</span>
                         <span className="text-slate-300 dark:text-slate-700">/</span>
-                        <span>{assignedWorkerLabel}</span>
+                        <span className="break-all">{assignedWorkerLabel}</span>
                         {shortenRuntimeId(item.taskId) && (
                             <>
                                 <span className="text-slate-300 dark:text-slate-700">/</span>
@@ -113,7 +113,7 @@ const AttentionLedgerRow = memo(({ item, snapshot, onClaimAttentionItem, onResol
             </div>
 
             <div
-                className={`mt-2 line-clamp-2 text-[11px] leading-relaxed text-slate-500 prose-p:my-0 dark:text-slate-400 ${MARKDOWN_PROSE_CLASS}`}
+                className={`mt-2 line-clamp-2 break-words text-[11px] leading-relaxed text-slate-500 prose-p:my-0 dark:text-slate-400 ${MARKDOWN_PROSE_CLASS}`}
                 dangerouslySetInnerHTML={{ __html: renderMarkdown(item.summaryMarkdown || "No summary provided.") }}
             />
 
@@ -340,7 +340,7 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
                                         <div
                                             key={item.id}
                                             role="listitem"
-                                            className="group/row relative overflow-hidden rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 transition-colors hover:border-status-amber/25 hover:bg-status-amber/[0.035] dark:border-white/[0.04] dark:bg-white/[0.015]"
+                                            className="group/row relative overflow-hidden rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] bg-black/[0.015] p-3 pl-3 transition-colors hover:border-status-amber/25 hover:bg-status-amber/[0.035] dark:border-white/[0.04] dark:bg-white/[0.015]"
                                         >
                                             <div className={`absolute inset-y-0 left-0 w-0.5 ${
                                                 item.severity === "critical" || item.severity === "high"
@@ -352,7 +352,7 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0 pl-1.5">
                                                     <div className="flex flex-wrap items-center gap-2">
-                                                        <span className="min-w-0 max-w-full truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                                        <span className="min-w-0 max-w-full break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
                                                             {item.title}
                                                         </span>
                                                         <span className={`rounded-md border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${
@@ -371,7 +371,7 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
                                                         <span className="text-slate-300 dark:text-slate-700">/</span>
                                                         <span>{ATTENTION_OWNER_LABELS[item.ownerType] || item.ownerType}</span>
                                                         <span className="text-slate-300 dark:text-slate-700">/</span>
-                                                        <span>{assignedWorkerLabel}</span>
+                                                        <span className="break-all">{assignedWorkerLabel}</span>
                                                         {shortenRuntimeId(item.taskId) && (
                                                             <>
                                                                 <span className="text-slate-300 dark:text-slate-700">/</span>
@@ -392,7 +392,7 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
                                             </div>
 
                                             <div
-                                                className={`mt-2 line-clamp-2 text-[11px] leading-relaxed text-slate-500 prose-p:my-0 dark:text-slate-400 ${MARKDOWN_PROSE_CLASS}`}
+                                                className={`mt-2 line-clamp-2 break-words text-[11px] leading-relaxed text-slate-500 prose-p:my-0 dark:text-slate-400 ${MARKDOWN_PROSE_CLASS}`}
                                                 dangerouslySetInnerHTML={{ __html: renderMarkdown(item.summaryMarkdown || "No summary provided.") }}
                                             />
 

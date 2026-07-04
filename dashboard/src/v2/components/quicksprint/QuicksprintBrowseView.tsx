@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
-import { Search, Compass, X, Sparkles, Plus, Zap } from "lucide-preact";
+import { X, Plus, Zap, FolderOpen } from "lucide-preact";
 import type { QuicksprintTemplateRecord } from "../../../../../src/contracts/quicksprint-types.js";
-import { TemplateCard } from "./quicksprint-shared.js";
+import { QUICKSPRINT_GLASS_SURFACE, TemplateCard } from "./quicksprint-shared.js";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import type { BuiltinPurposeOption } from "../../lib/quicksprint-panel-state.js";
 
@@ -45,7 +45,7 @@ export const QuicksprintBrowseView: FunctionComponent<{
                   <h2 className="font-display text-[2rem] font-black leading-none tracking-tight text-slate-900 dark:text-white sm:text-[2.35rem]">
                     Launch A Quicksprint.
                   </h2>
-                  <p className="max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400 sm:text-[15px]">
+                  <p className="max-w-2xl break-words text-sm leading-relaxed text-slate-500 [overflow-wrap:anywhere] dark:text-slate-400 sm:text-[15px]">
                     Browse purpose-specific default templates or launch your own reusable custom flows to spin up a focused sprint fast.
                   </p>
                 </div>
@@ -61,7 +61,7 @@ export const QuicksprintBrowseView: FunctionComponent<{
             </div>
 
             {loading ? (
-              <div className="flex items-center justify-center py-20">
+              <div className="flex items-center justify-center py-20" role="status" aria-label="Loading quicksprint templates">
                 <div className="h-8 w-8 animate-spin rounded-full border-2 border-ember-500 border-t-transparent" />
               </div>
             ) : (
@@ -75,7 +75,7 @@ export const QuicksprintBrowseView: FunctionComponent<{
                         Built-in templates are organized by purpose so the catalog can expand into additional language and product families over time.
                       </p>
                     </div>
-                    <div className="w-full max-w-sm rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
+                    <div className={`w-full max-w-sm p-4 ${QUICKSPRINT_GLASS_SURFACE}`}>
                       <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Purpose</div>
                       <div className="mt-2">
                         <AvantgardeSelect
@@ -93,15 +93,22 @@ export const QuicksprintBrowseView: FunctionComponent<{
                     </div>
                   </div>
                   {activeBuiltinPurpose?.description && (
-                    <p className="mt-4 max-w-3xl text-xs leading-relaxed text-slate-400 dark:text-slate-500">
+                    <p className="mt-4 max-w-3xl break-words text-xs leading-relaxed text-slate-400 [overflow-wrap:anywhere] dark:text-slate-500">
                       {activeBuiltinPurpose.description}
                     </p>
                   )}
-                  <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                    {visibleBuiltinTemplates.map((t) => (
-                      <TemplateCard key={t.id} template={t} onSelect={() => handleSelectTemplate(t)} />
-                    ))}
-                  </div>
+                  {visibleBuiltinTemplates.length === 0 ? (
+                    <div className={`mt-5 flex min-h-40 flex-col items-center justify-center p-8 text-center ${QUICKSPRINT_GLASS_SURFACE}`} role="status">
+                      <FolderOpen className="h-7 w-7 text-ember-500" strokeWidth={1.8} />
+                      <div className="mt-3 text-sm font-bold text-slate-600 dark:text-slate-300">No default templates in this purpose.</div>
+                    </div>
+                  ) : (
+                    <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                      {visibleBuiltinTemplates.map((t) => (
+                        <TemplateCard key={t.id} template={t} onSelect={() => handleSelectTemplate(t)} />
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Custom templates */}
@@ -111,6 +118,7 @@ export const QuicksprintBrowseView: FunctionComponent<{
                     <button
                       onClick={() => openEditor(null)}
                       className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-ember-500/20 bg-ember-500/[0.06] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-ember-600 transition-colors hover:bg-ember-500/[0.12] dark:text-ember-400"
+                      aria-label="Create new quicksprint template"
                     >
                       <Plus className="h-3 w-3" strokeWidth={2.5} />
                       New Template
@@ -120,7 +128,8 @@ export const QuicksprintBrowseView: FunctionComponent<{
                   {customTemplates.length === 0 ? (
                     <button
                       onClick={() => openEditor(null)}
-                      className="w-full rounded-[1.4rem] border border-dashed border-black/[0.08] bg-black/[0.015] p-8 text-center transition-colors hover:border-ember-500/30 hover:bg-ember-500/[0.03] dark:border-white/[0.06] dark:bg-white/[0.02] dark:hover:border-ember-500/30"
+                      className="w-full rounded-[1.4rem] border border-dashed border-black/[0.1] bg-white/45 p-8 text-center backdrop-blur-xl transition-colors hover:border-ember-500/30 hover:bg-ember-500/[0.03] dark:border-white/[0.08] dark:bg-white/[0.025] dark:hover:border-ember-500/30"
+                      aria-label="Create your first custom quicksprint template"
                     >
                       <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-ember-500/10">
                         <Plus className="h-5 w-5 text-ember-500" />

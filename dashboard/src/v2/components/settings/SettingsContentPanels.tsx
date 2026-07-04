@@ -16,31 +16,45 @@ export const SettingsContentPanels: FunctionComponent<{
   state: SettingsPageState;
 }> = ({ state }) => {
   const { activeCategory } = state;
+  let panel = null;
 
   switch (activeCategory) {
     case "general":
-      return <SettingsGeneralPanel state={state} />;
+      panel = <SettingsGeneralPanel state={state} />;
+      break;
     case "appearance":
-      return <SettingsAppearancePanel state={state} />;
+      panel = <SettingsAppearancePanel state={state} />;
+      break;
     case "models":
-      return <SettingsModelsPanel state={state} />;
+      panel = <SettingsModelsPanel state={state} />;
+      break;
     case "modelPricing":
-      return <SettingsModelPricingPanel state={state} />;
+      panel = <SettingsModelPricingPanel state={state} />;
+      break;
     case "sprint":
-      return <SettingsSprintPanel state={state} />;
+      panel = <SettingsSprintPanel state={state} />;
+      break;
     case "browser":
-      return <SettingsBrowserPanel state={state} />;
+      panel = <SettingsBrowserPanel state={state} />;
+      break;
     case "agents":
-      return <SettingsAgentsPanel state={state} />;
+      panel = <SettingsAgentsPanel state={state} />;
+      break;
     case "memory":
-      return <SettingsMemoryPanel state={state} />;
+      panel = <SettingsMemoryPanel state={state} />;
+      break;
     case "integrations":
-      return <SettingsIntegrationsPanel state={state} />;
+      panel = <SettingsIntegrationsPanel state={state} />;
+      break;
     case "mcp":
-      return <SettingsMcpPanel state={state} />;
+      panel = <SettingsMcpPanel state={state} />;
+      break;
     case "danger":
-      return <SettingsDangerPanel state={state} />;
+      panel = <SettingsDangerPanel state={state} />;
+      break;
     default:
       return null;
   }
+
+  return <div className="flex min-w-0 flex-col gap-4">{panel}</div>;
 };

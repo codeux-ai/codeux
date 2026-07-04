@@ -51,3 +51,42 @@ test('renders custom icon', () => {
     const svg = btn.querySelector('svg');
     expect(svg).toBeInTheDocument();
 });
+
+test('keeps action variants tokenized and visually distinct', () => {
+    render(
+        <ProjectDataProvider>
+            <Button variant="primary">Primary</Button>
+            <Button variant="signal">Signal</Button>
+            <Button variant="secondary">Secondary</Button>
+            <Button variant="danger">Delete</Button>
+        </ProjectDataProvider>
+    );
+
+    const primary = screen.getByRole('button', { name: /Primary/i });
+    const signal = screen.getByRole('button', { name: /Signal/i });
+    const secondary = screen.getByRole('button', { name: /Secondary/i });
+    const danger = screen.getByRole('button', { name: /Delete/i });
+
+    expect(primary).toHaveClass('bg-signal-600', 'text-white', 'shadow-[var(--elevation-raised)]');
+    expect(primary.className).not.toContain('bg-slate-900');
+    expect(primary.className).not.toContain('hover:bg-black');
+    expect(signal).toHaveClass('bg-signal-500', 'text-void-950');
+    expect(secondary).toHaveClass('bg-[var(--surface-glass)]', 'border-[color:var(--border-hairline)]');
+    expect(danger).toHaveClass('bg-status-red/[0.06]', 'text-status-red');
+});
+
+test('keeps icon and label alignment stable for dynamic states', () => {
+    render(
+        <ProjectDataProvider>
+            <Button icon={Check} pending>Aligned button label</Button>
+        </ProjectDataProvider>
+    );
+
+    const btn = screen.getByRole('button', { name: /Aligned button label/i });
+    const label = btn.querySelector('span');
+    const iconSlot = btn.querySelector('[data-active]');
+
+    expect(btn).toHaveClass('min-w-0');
+    expect(label).toHaveClass('truncate', 'min-w-0');
+    expect(iconSlot?.parentElement).toHaveClass('shrink-0');
+});

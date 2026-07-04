@@ -31,6 +31,7 @@ import {
   calculateHoverRect,
 } from '../chart-view-models.js';
 import { UsageGraphHeader } from './UsageGraphHeader.js';
+import { UsageGraphLegend } from './UsageGraphLegend.js';
 import { UsageFilterMenu } from './UsageFilterMenu.js';
 import { useUsageFilters } from '../hooks/useUsageFilters.js';
 import { h } from 'preact';
@@ -239,7 +240,7 @@ export const InteractiveUsageChart: FunctionComponent<{
   };
 
   return (
-    <div ref={panelRef} className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7 border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] shadow-[var(--stats-card-shadow)]`}>
+    <div ref={panelRef} className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7`}>
       <div className="relative flex flex-col gap-8">
         {/* Screen reader summary */}
         <div className="sr-only" aria-live="polite" aria-atomic="true">
@@ -389,7 +390,14 @@ export const InteractiveUsageChart: FunctionComponent<{
                   <UsageGraphEmpty />
                 </div>
               ) : (
-                <svg role="img" aria-labelledby="chart-summary-heading" viewBox={`0 0 ${width} ${height}`} className={`absolute inset-0 h-full w-full overflow-visible transition-opacity duration-300 motion-reduce:transition-none ${loading ? "opacity-60 pointer-events-none" : "opacity-100"}`}>
+                <>
+                <UsageGraphLegend
+                  seriesGroups={seriesGroups}
+                  enabledSeries={enabledSeries}
+                  activeSeriesCount={activeSeriesCount}
+                  onToggleSeries={onToggleSeries}
+                />
+                <svg role="img" aria-labelledby="chart-summary-heading" viewBox={`0 0 ${width} ${height}`} className={`absolute inset-0 h-full w-full overflow-visible pt-24 transition-opacity duration-300 motion-reduce:transition-none ${loading ? "opacity-60 pointer-events-none" : "opacity-100"}`}>
                   <defs>
                     {chartData.map((series) => (
                       <linearGradient key={`fill-${series.id}`} id={`stats-area-${series.id}`} x1="0" x2="0" y1="0" y2="1">
@@ -405,8 +413,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                       x2={width - padding}
                       y1={padding + ((height - padding * 2) / 4) * index}
                       y2={padding + ((height - padding * 2) / 4) * index}
-                      stroke="currentColor"
-                      strokeOpacity="0.08"
+                      stroke="var(--stats-grid-line)"
                     />
                   ))}
                   {selectionBounds && xPositions.length > 0 ? (
@@ -420,8 +427,8 @@ export const InteractiveUsageChart: FunctionComponent<{
                       )}
                       height={height - padding * 2}
                       rx="18"
-                      fill="rgba(0,224,160,0.08)"
-                      stroke="rgba(0,224,160,0.4)"
+                      fill="color-mix(in srgb, var(--stats-accent-signal) 10%, transparent)"
+                      stroke="color-mix(in srgb, var(--stats-accent-signal) 44%, transparent)"
                       strokeDasharray="8 8"
                     />
                   ) : null}
@@ -442,7 +449,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                         strokeWidth={series.id === "tokens" ? "4.2" : "3.1"}
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        className="drop-shadow-[0_4px_12px_rgba(0,0,0,0.12)]"
+                        className="drop-shadow-[0_2px_8px_rgba(0,0,0,0.08)]"
                       />
                     </g>
                   ))}
@@ -452,8 +459,8 @@ export const InteractiveUsageChart: FunctionComponent<{
                       x2={xPositions[hoveredIndex]}
                       y1={padding}
                       y2={height - padding}
-                      stroke="currentColor"
-                      strokeOpacity="0.18"
+                      stroke="var(--stats-detail-color)"
+                      strokeOpacity="0.34"
                       strokeDasharray="6 8"
                     />
                   ) : null}
@@ -479,7 +486,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                     return (
                       <rect
                         key={`hover-${index}`}
-                        tabIndex={-1}
+                        tabIndex={0}
                         x={startX}
                         y={padding}
                         width={rectWidth}
@@ -529,6 +536,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                     ) : null
                   ))}
                 </svg>
+                </>
               )}
             </div>
             {buckets.length > 1 ? (

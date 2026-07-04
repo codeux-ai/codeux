@@ -179,6 +179,8 @@ describe("UsageChartAccessibility", () => {
   it("marks legend and filter controls as toggle buttons", () => {
     render(<Wrapper />);
 
+    expect(screen.getByRole("switch", { name: /Tokens/i })).toHaveAttribute("aria-checked", "true");
+
     // Test the filter button
     const filtersButton = screen.getByRole("button", { name: /Filters/i });
     expect(filtersButton).toHaveAttribute('aria-expanded', 'false');
