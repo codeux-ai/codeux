@@ -8,7 +8,7 @@ import { usePreviewSessions } from "../../hooks/use-preview-sessions.js";
 import type { SprintPreviewSession } from "../../../types.js";
 import type { Task, Source, Sprint, AgentPreset } from "../../types.js";
 import { fetchAgentPresets } from "../../lib/agent-preset-api.js";
-import { GSAP_INTERACTION_TOKENS, useGsapDurations } from "../../lib/motion/constants.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { formatSprintDisplay, formatSprintTitle } from "../../lib/format-sprint.js";
 import { formatSprintKey } from "../../lib/sprint-ledger-state.js";
 
@@ -28,7 +28,8 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
     const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
     const [agentPresets, setAgentPresets] = useState<AgentPreset[]>([]);
 
-    const durations = useGsapDurations();
+    const gsapTokens = useGsapInteractionTokens();
+    const searchDebounceMs = Math.round(gsapTokens.controlFeedback.duration * 1000);
     const { tasks } = useProjectTasks(projectId, selectedProject ? [selectedProject] : [], sprints, null, {
         enabled: isSearchOpen,
     });
@@ -43,9 +44,9 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
     }, [isSearchOpen, selectedProject?.id]);
 
     useEffect(() => {
-        const timer = setTimeout(() => setDebouncedQuery(searchQuery), 200);
+        const timer = window.setTimeout(() => setDebouncedQuery(searchQuery), searchDebounceMs);
         return () => clearTimeout(timer);
-    }, [searchQuery]);
+    }, [searchQuery, searchDebounceMs]);
 
     useEffect(() => {
         const handleCmdK = (e: KeyboardEvent) => {
@@ -66,8 +67,8 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
         if (!searchBarContainerRef.current) return;
         gsap.to(searchBarContainerRef.current, {
             scale: 1,
-            duration: durations.base,
-            ease: GSAP_INTERACTION_TOKENS.controlFeedback.ease,
+            duration: gsapTokens.controlFeedback.duration,
+            ease: gsapTokens.controlFeedback.ease,
             boxShadow: "0 10px 30px rgba(0,0,0,0.08), 0 0 0 2px rgba(0,224,160,0.24)",
             overwrite: "auto"
         });
@@ -77,8 +78,8 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
         if (!searchBarContainerRef.current || isSearchOpen) return;
         gsap.to(searchBarContainerRef.current, {
             scale: 1,
-            duration: durations.base,
-            ease: GSAP_INTERACTION_TOKENS.controlFeedback.ease,
+            duration: gsapTokens.controlFeedback.duration,
+            ease: gsapTokens.controlFeedback.ease,
             boxShadow: "0 0 0 0px rgba(0,224,160,0)",
             overwrite: "auto"
         });
@@ -90,7 +91,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
         } else {
             handleSearchEnter();
         }
-    }, [isSearchOpen]);
+    }, [isSearchOpen, gsapTokens.controlFeedback.duration, gsapTokens.controlFeedback.ease]);
 
     const searchResults = useMemo(() => {
         if (!debouncedQuery.trim()) {

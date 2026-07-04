@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState, useLayoutEffect } from "preact/hooks";
 import gsap from "gsap";
 import { Search, X, Layers, Activity, Cpu, Box, Inbox, Loader2, FileX, ArrowDownUp, CornerDownLeft, Sparkles } from "lucide-preact";
 import { useNavigate, Link } from "@tanstack/react-router";
@@ -129,7 +129,10 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
         { id: 'containers', title: 'Preview Containers', icon: Box, items: results?.containers || [] }
     ];
 
-    const allItems: CategorizedSearchItem[] = CATEGORIES.flatMap(c => c.items?.map(item => ({ ...item, category: c.id } as CategorizedSearchItem)));
+    const allItems: CategorizedSearchItem[] = useMemo(
+        () => CATEGORIES.flatMap(c => c.items?.map(item => ({ ...item, category: c.id } as CategorizedSearchItem))),
+        [results?.sprints, results?.tasks, results?.agents, results?.containers]
+    );
     const activeItem = focusedIndex >= 0 ? allItems[focusedIndex] : undefined;
     const activeDescendantId = activeItem && !isResultInactive(activeItem) ? `search-result-${activeItem.id}` : undefined;
     const hasResults = allItems.length > 0;
