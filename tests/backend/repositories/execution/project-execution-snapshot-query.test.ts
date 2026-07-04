@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import * as fs from "fs/promises";
+import * as os from "os";
+import * as path from "path";
 import { queryProjectExecutionSnapshot } from '../../../../src/repositories/execution/project-execution-snapshot-query.js';
 import { DatabaseAdapter } from '../../../../src/repositories/db/database-adapter.js';
 import { AppDbStorage } from '../../../../src/repositories/app-db-storage.js';
+import { APP_DB_SCHEMA_TABLES } from '../../../../src/repositories/db/app-db-schema.js';
+import { SqliteDatabaseAdapter } from '../../../../src/repositories/db/sqlite-database-adapter.js';
 
 vi.mock('../../../../src/repositories/execution/execution-sprint-runs-query.js', () => ({
   queryExecutionSprintRuns: vi.fn(() => ({ sprintRuns: [], expandedSprintRunIds: [] }))
@@ -28,6 +33,24 @@ vi.mock('../../../../src/repositories/execution/execution-read-model-mappers.js'
   mapExecutionRuntimeEventSummaryRow: vi.fn((row) => row)
 }));
 
+const LIVE_SNAPSHOT_INDEX_COLUMNS = new Map<string, string[]>([
+  ["idx_sprint_runs_project_sprint_status_created", ["project_id", "sprint_id", "status", "created_at"]],
+  ["idx_sprint_runs_project_status_updated", ["project_id", "status", "updated_at", "created_at"]],
+  ["idx_task_dispatches_project_sprint_run", ["project_id", "sprint_run_id"]],
+  ["idx_task_dispatches_project_sprint", ["project_id", "sprint_id"]],
+  ["idx_sprint_run_events_sprint_run_created_id", ["sprint_run_id", "created_at", "id"]],
+]);
+
+function indexColumns(db: DatabaseAdapter, indexName: string): string[] {
+  const rows = db.prepare(`PRAGMA index_info(${indexName})`).all() as Array<{ name: string }>;
+  return rows.map((row) => row.name);
+}
+
+function indexSql(db: DatabaseAdapter, indexName: string): string | undefined {
+  const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?").get(indexName) as { sql?: string } | undefined;
+  return row?.sql;
+}
+
 describe('queryProjectExecutionSnapshot', () => {
   let mockDb: any;
   let mockStorage: any;
@@ -47,6 +70,25 @@ describe('queryProjectExecutionSnapshot', () => {
       getUsageTotalsByTaskIds: vi.fn(() => new Map()),
       getUsageTotalsBySprintRunIds: vi.fn(() => new Map())
     };
+  });
+
+  it('creates live execution snapshot indexes in fresh databases', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-snapshot-schema-"));
+    const adapter = new SqliteDatabaseAdapter(path.join(dir, "app.db"));
+
+    try {
+      adapter.exec(APP_DB_SCHEMA_TABLES);
+
+      for (const [indexName, columns] of LIVE_SNAPSHOT_INDEX_COLUMNS) {
+        expect(indexColumns(adapter, indexName)).toEqual(columns);
+      }
+      expect(indexSql(adapter, "idx_sprint_runs_project_sprint_status_created")).toContain("created_at DESC");
+      expect(indexSql(adapter, "idx_sprint_runs_project_status_updated")).toContain("updated_at DESC");
+      expect(indexSql(adapter, "idx_sprint_run_events_sprint_run_created_id")).toContain("id DESC");
+    } finally {
+      adapter.close();
+      await fs.rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('should call deps with deduplicated sprintRunIds and taskIds', async () => {
