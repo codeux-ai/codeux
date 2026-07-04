@@ -127,12 +127,13 @@ export const InstructionFileEditorPanel: FunctionComponent<{
   return (
     <div
       ref={panelRef}
-      className="group relative flex flex-col overflow-hidden rounded-[1.9rem] border border-black/[0.06] bg-white/70 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]"
+      className="group relative flex flex-col overflow-hidden rounded-[1.9rem] border border-black/[0.06] bg-white/68 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/58 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]"
     >
       <BorderTrace accentHex={accentHex} />
+      <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/80 to-transparent dark:via-white/10" />
 
       {/* ── Sticky header ── */}
-      <div className="sticky top-0 z-20 flex flex-col gap-4 border-b border-black/[0.05] bg-white/75 px-6 py-5 backdrop-blur-2xl md:flex-row md:items-center md:justify-between md:px-8 md:py-6 dark:border-white/[0.05] dark:bg-void-800/70">
+      <div className="sticky top-0 z-20 flex flex-col gap-4 border-b border-black/[0.05] bg-white/78 px-6 py-5 backdrop-blur-2xl md:flex-row md:items-center md:justify-between md:px-8 md:py-6 dark:border-white/[0.05] dark:bg-void-800/72">
         <div className="flex min-w-0 items-center gap-3.5">
           <div
             className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl"
@@ -164,9 +165,9 @@ export const InstructionFileEditorPanel: FunctionComponent<{
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           {/* Write / Preview segmented toggle */}
-          <div className="flex items-center gap-1 rounded-full border border-black/[0.06] bg-white/50 p-1 dark:border-white/[0.06] dark:bg-white/[0.03]">
+          <div className="flex items-center gap-1 rounded-full border border-black/[0.06] bg-white/50 p-1 dark:border-white/[0.06] dark:bg-white/[0.03]" aria-label="Instruction editor mode">
             {(["write", "preview"] as const).map((value) => {
               const active = mode === value;
               const Icon = value === "write" ? PenLine : Eye;
@@ -223,7 +224,7 @@ export const InstructionFileEditorPanel: FunctionComponent<{
       {/* ── Body ── */}
       <div className="relative z-10 flex flex-col gap-3 p-6 md:p-8">
         {error && (
-          <div className="flex items-center gap-2 rounded-2xl border border-status-red/20 bg-status-red/[0.06] px-4 py-3 text-[13px] font-medium text-status-red backdrop-blur-md">
+          <div role="alert" className="flex items-center gap-2 rounded-2xl border border-status-red/20 bg-status-red/[0.06] px-4 py-3 text-[13px] font-medium text-status-red backdrop-blur-md">
             <AlertCircle className="h-4 w-4 shrink-0" strokeWidth={2.4} />
             {error}
           </div>
@@ -246,7 +247,21 @@ export const InstructionFileEditorPanel: FunctionComponent<{
         </div>
 
         {loading ? (
-          <div className="h-[60vh] min-h-[420px] animate-pulse rounded-2xl border border-black/[0.05] bg-white/40 dark:border-white/[0.05] dark:bg-white/[0.02]" />
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex h-[60vh] min-h-[420px] flex-col gap-4 rounded-2xl border border-black/[0.05] bg-white/40 p-5 dark:border-white/[0.05] dark:bg-white/[0.02]"
+          >
+            <span className="sr-only">Loading instruction file</span>
+            <div className="h-4 w-52 animate-pulse rounded-full bg-black/[0.07] dark:bg-white/[0.08]" />
+            <div className="h-3 w-3/4 animate-pulse rounded-full bg-black/[0.05] dark:bg-white/[0.06]" />
+            <div className="h-3 w-2/3 animate-pulse rounded-full bg-black/[0.05] dark:bg-white/[0.06]" />
+            <div className="mt-4 flex flex-1 flex-col gap-3">
+              {[0, 1, 2, 3, 4].map((row) => (
+                <div key={row} className="h-3 animate-pulse rounded-full bg-black/[0.04] dark:bg-white/[0.05]" />
+              ))}
+            </div>
+          </div>
         ) : mode === "write" ? (
           <div className="relative">
             <textarea

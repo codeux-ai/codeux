@@ -52,6 +52,8 @@ describe("AgentMemoryConfigPanel", () => {
   test("renders the expected controls and shows all categories when the filter is empty", () => {
     renderHarness();
 
+    expect(screen.getByText("Agents & Memory")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Memory Injection" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Short Term" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Both" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Long Term" })).toBeInTheDocument();

@@ -205,13 +205,13 @@ describe("AgentPresetEditorPanel", () => {
     expect(await screen.findByText("Fix errors to save")).toBeInTheDocument();
   });
 
-  it("provides visual and accessible feedback when randomize is clicked", async () => {
+  it("renders the avatar identity and appearance studio sections", async () => {
     render(<AgentPresetEditorPanel preset={makePreset()} saving={false} onSave={vi.fn()} onCancel={vi.fn()} />);
 
-    const randomizeBtn = screen.getByRole("button", { name: /Randomize/i });
-    fireEvent.click(randomizeBtn);
-
-    expect(await screen.findByText("Avatar randomized")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Identity" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Customize" })).toBeInTheDocument();
+    expect(screen.getByTestId("avatar-stage")).toBeInTheDocument();
+    expect(screen.getByTestId("avatar-customizer")).toBeInTheDocument();
   });
 
   it("shows the active memory summary, opens the memory popover, and persists the selected config", async () => {
