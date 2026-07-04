@@ -138,6 +138,30 @@ describe("runStatusDerivationStep", () => {
     expect(result[2].status).toBe("QUOTA");
   });
 
+  it("requeues a quota task when the provider session was cancelled", () => {
+    const subtasks: Subtask[] = [
+      {
+        id: "task-1",
+        title: "Task 1",
+        prompt: "",
+        depends_on: [],
+        is_independent: true,
+        is_merged: false,
+        status: "QUOTA",
+        session_state: "CANCELLED",
+        session_id: "quota-session",
+        session_name: "sessions/quota-session",
+        provider: "antigravity",
+      },
+    ];
+    const result = runStatusDerivationStep(subtasks, { retryFailed: true, isActionRequiredState });
+    expect(result[0].status).toBe("PENDING");
+    expect(result[0].session_id).toBeUndefined();
+    expect(result[0].session_name).toBeUndefined();
+    expect(result[0].session_state).toBeUndefined();
+    expect(result[0].provider).toBe("antigravity");
+  });
+
   it("handles mixed valid and blocked states correctly", () => {
     const subtasks: Subtask[] = [
       { id: "task-1", title: "Task 1", prompt: "", depends_on: [], is_independent: true, is_merged: true, status: "COMPLETED" },

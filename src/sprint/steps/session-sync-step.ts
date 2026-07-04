@@ -904,7 +904,7 @@ export const runSessionSyncStep = async (
       continue;
     }
 
-    if (match.state === "FAILED") {
+    if (match.state === "FAILED" || match.state === "CANCELLED") {
       if (retryFailed) {
         applyPendingTaskRuntimeReset(task, {
           preserveProvider: true,
