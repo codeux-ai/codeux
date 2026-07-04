@@ -5,6 +5,7 @@ import { h, Fragment } from "preact";
 /** @jsxFrag Fragment */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/preact";
+import userEvent from "@testing-library/user-event";
 import * as matchers from "@testing-library/jest-dom/matchers";
 expect.extend(matchers);
 
@@ -280,5 +281,25 @@ const baseProps: any = {
         expect(sprintRegion).toBeInTheDocument();
         expect(sprintRegion).toHaveTextContent("Running");
         expect(screen.getByRole("progressbar", { name: /Sprint One progress/i })).toHaveAttribute("aria-valuenow", "42");
+    });
+
+    it("activates active-stream filter tabs from the keyboard without animation-only feedback", async () => {
+        const user = userEvent.setup();
+        render(<ProjectDataProvider initialData={null as any}><TasksList pageData={pageData} /></ProjectDataProvider>);
+
+        const completedTab = screen.getByRole("tab", { name: "Completed" });
+        completedTab.focus();
+        await user.keyboard("[Space]");
+
+        expect(completedTab).toHaveAttribute("aria-selected", "true");
+        expect(screen.getByText("No Active Streams")).toBeInTheDocument();
+
+        const allTasksTab = screen.getByRole("tab", { name: "All Tasks" });
+        allTasksTab.focus();
+        await user.keyboard("[Enter]");
+
+        expect(allTasksTab).toHaveAttribute("aria-selected", "true");
+        expect(screen.getByText("Test Task")).toBeInTheDocument();
+        expect(screen.getByRole("region", { name: "Active stream tasks" })).toBeVisible();
     });
 });
