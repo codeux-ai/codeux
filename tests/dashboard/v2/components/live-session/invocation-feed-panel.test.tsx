@@ -115,13 +115,17 @@ describe("InvocationFeedPanel", () => {
     render(<InvocationFeedPanel />);
 
     expect(screen.getByText("Invocation Feed")).toBeInTheDocument();
+    expect(screen.getByText("3 total")).toBeInTheDocument();
     expect(screen.getByText("1 live")).toBeInTheDocument();
+    expect(screen.getByText("1 done")).toBeInTheDocument();
+    expect(screen.getByText("1 failed")).toBeInTheDocument();
     expect(screen.getByText("Running")).toBeInTheDocument();
     expect(screen.getByText("Failed")).toBeInTheDocument();
     expect(screen.getByText("Task Coding")).toBeInTheDocument();
     expect(screen.getByText("QA Review")).toBeInTheDocument();
     expect(screen.getByText("Provider timed out")).toBeInTheDocument();
     expect(screen.getByText("1 invocation failed. Open the transcript for details.")).toHaveAttribute("role", "alert");
+    expect(screen.getAllByText("3 invocations shown: 0 new or queued, 1 running, 1 completed, 1 failed.").length).toBeGreaterThan(0);
     expect(screen.getByText("Invocation status: running.")).toBeInTheDocument();
     expect(document.querySelector(".motion-reduce\\:ring-2")).toBeInTheDocument();
 
@@ -188,6 +192,7 @@ describe("InvocationFeedPanel", () => {
 
     expect(gsap.fromTo).not.toHaveBeenCalled();
     expect(screen.getByText("completed")).toBeInTheDocument();
+    expect(document.querySelector(".motion-reduce\\:ring-status-green\\/25")).toBeInTheDocument();
     vi.runOnlyPendingTimers();
     vi.useRealTimers();
   });
@@ -211,6 +216,6 @@ describe("InvocationFeedPanel", () => {
 
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(document.activeElement).toBe(toggle);
-    expect(screen.getByRole("status")).toHaveTextContent("Invocation feed is current.");
+    expect(screen.getByText("Invocation feed is current.")).toHaveAttribute("role", "status");
   });
 });

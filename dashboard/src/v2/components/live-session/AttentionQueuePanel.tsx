@@ -1,12 +1,44 @@
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
-import { useMemo } from "preact/hooks";
+import { useId, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import gsap from "gsap";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
 import { AttentionLedger } from "../AttentionLedger.js";
-import { AlertTriangle, CheckCircle2 } from "lucide-preact";
+import { AlertTriangle, CheckCircle2, ChevronDown } from "lucide-preact";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 
-export const AttentionQueuePanel: FunctionComponent = memo(() => {
+export const AttentionQueuePanel: FunctionComponent<{
+    collapsible?: boolean;
+    defaultOpen?: boolean;
+}> = memo(({
+    collapsible = false,
+    defaultOpen = true,
+}) => {
     const { execution } = useExecutionTimeline();
+    const [openState, setOpenState] = useState(defaultOpen);
+    const contentId = useId();
+    const contentRef = useRef<HTMLDivElement>(null);
+    const isReducedMotion = useReducedMotion();
+    const motionTokens = useGsapInteractionTokens();
+
+    useLayoutEffect(() => {
+        if (!contentRef.current || !collapsible) return;
+        if (isReducedMotion) {
+            gsap.set(contentRef.current, { height: openState ? "auto" : 0, overflow: "hidden" });
+        } else {
+            gsap.killTweensOf(contentRef.current);
+            gsap.to(contentRef.current, {
+                height: openState ? "auto" : 0,
+                duration: motionTokens.expansionCollapse.duration,
+                ease: motionTokens.expansionCollapse.ease,
+                overwrite: "auto",
+                onComplete: () => {
+                    if (openState && contentRef.current) gsap.set(contentRef.current, { height: "auto" });
+                },
+            });
+        }
+    }, [collapsible, isReducedMotion, motionTokens.expansionCollapse.duration, motionTokens.expansionCollapse.ease, openState]);
 
     const { total, open, claimed, resolved, dismissed } = useMemo(() => {
         const items = execution?.attentionItems || [];
@@ -18,6 +50,7 @@ export const AttentionQueuePanel: FunctionComponent = memo(() => {
             dismissed: items.filter(i => i.status === "dismissed" || i.status === "expired").length,
         };
     }, [execution?.attentionItems]);
+    const summary = `${total} attention item${total === 1 ? "" : "s"}: ${open} open, ${claimed} claimed, ${resolved} resolved, ${dismissed} cleared.`;
 
     if (!execution) {
         return (
@@ -27,10 +60,22 @@ export const AttentionQueuePanel: FunctionComponent = memo(() => {
         );
     }
 
-    // When there are no attention items ever
-    if (total === 0) {
-        return (
-            <div role="status" aria-live="polite" aria-atomic="true" className="rounded-[1.75rem] border border-black/[0.08] bg-white p-5 shadow-sm dark:border-white/[0.08] dark:bg-void-800">
+    const header = (
+        <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+            <AlertTriangle className="h-4 w-4 text-status-amber" strokeWidth={1.7} aria-hidden="true" />
+            <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Attention Queue</span>
+            <div className="flex flex-wrap items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em]">
+                <span className="rounded-md bg-status-amber/10 px-2 py-0.5 font-mono text-status-amber">open {open}</span>
+                <span className="rounded-md bg-signal-500/10 px-2 py-0.5 font-mono text-signal-500">claimed {claimed}</span>
+                <span className="rounded-md bg-status-green/10 px-2 py-0.5 font-mono text-status-green">resolved {resolved}</span>
+                <span className="rounded-md bg-black/[0.03] px-2 py-0.5 font-mono text-slate-500 dark:bg-white/[0.04] dark:text-slate-400">cleared {dismissed}</span>
+            </div>
+            <span className="sr-only">{summary}</span>
+        </div>
+    );
+
+    const content = total === 0 ? (
+        <div role="status" aria-live="polite" aria-atomic="true">
                 <div className="flex items-start gap-3 rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] border-l-status-green bg-black/[0.015] p-3 dark:border-white/[0.04] dark:bg-white/[0.015]">
                     <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-status-green" strokeWidth={1.7} aria-hidden="true" />
                     <div>
@@ -38,13 +83,9 @@ export const AttentionQueuePanel: FunctionComponent = memo(() => {
                         <p className="mt-1 text-[11px] font-mono leading-relaxed text-slate-400 dark:text-slate-500">All tasks and workers are proceeding normally.</p>
                     </div>
                 </div>
-            </div>
-        );
-    }
-
-    // Wrap the Ledger and potentially show summary stats
-    return (
-        <div role="region" aria-label="Attention queue status" aria-busy={claimed > 0 ? "true" : undefined} className="flex flex-col gap-3">
+        </div>
+    ) : (
+        <>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                  {[
                     { label: "Open", value: open, color: "text-status-amber" },
@@ -65,6 +106,42 @@ export const AttentionQueuePanel: FunctionComponent = memo(() => {
                 </div>
             )}
             <AttentionLedger collapsible defaultOpen />
+        </>
+    );
+
+    return (
+        <div role="region" aria-label="Attention queue status" aria-busy={claimed > 0 ? "true" : undefined} className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800">
+            {collapsible ? (
+                <button
+                    type="button"
+                    aria-expanded={openState}
+                    aria-controls={contentId}
+                    onClick={() => setOpenState((current) => !current)}
+                    className="relative z-10 flex w-full items-center justify-between gap-4 p-5 text-left transition-colors duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] hover:bg-black/[0.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:hover:bg-white/[0.01] dark:focus-visible:ring-offset-void-800"
+                >
+                    {header}
+                    <ChevronDown
+                        className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-[var(--interaction-expansion-collapse-duration)] ease-[var(--interaction-expansion-collapse-ease)] ${openState ? "rotate-0" : "-rotate-90"}`}
+                        strokeWidth={2}
+                        aria-hidden="true"
+                    />
+                </button>
+            ) : (
+                <div className="relative z-10 flex items-center justify-between gap-4 p-5">
+                    {header}
+                </div>
+            )}
+            <div
+                className={collapsible ? `collapsible-section ${openState ? "open" : ""}` : ""}
+                id={contentId}
+                aria-hidden={collapsible && !openState ? "true" : undefined}
+            >
+                <div ref={contentRef} className={collapsible ? "collapsible-content overflow-hidden" : ""}>
+                    <div className="relative z-10 flex flex-col gap-3 px-5 pb-5 pt-0">
+                        {content}
+                    </div>
+                </div>
+            </div>
         </div>
     );
 });

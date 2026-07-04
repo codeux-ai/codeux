@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { deriveLiveSessionRuntimeState, resolveLiveSessionSprintScopeId, getPendingActionState, getLiveActionDisplayProps } from "../../../dashboard/src/v2/lib/live-session-runtime.js";
+import {
+  deriveLiveSessionRuntimeState,
+  resolveLiveSessionSprintScopeId,
+  getPendingActionState,
+  getLiveActionDisplayProps,
+  getLiveActionDisabledReason,
+} from "../../../dashboard/src/v2/lib/live-session-runtime.js";
 import type { DashboardStatus, ExecutionDashboardSnapshot } from "../../../dashboard/src/types.js";
 
 function createStatus(overrides: Partial<DashboardStatus> = {}): DashboardStatus {
@@ -385,6 +391,15 @@ describe("live session runtime state", () => {
         "data-action-state": "disabled",
         "data-disabled-reason": "Task is already complete.",
       });
+    });
+
+    it("getLiveActionDisabledReason explains pending and disabled suppression", () => {
+      const labels = { idle: "Retry", pending: "Retrying", disabled: "Retry unavailable" };
+
+      expect(getLiveActionDisabledReason("pending", labels)).toBe("Retrying is already in progress.");
+      expect(getLiveActionDisabledReason("disabled", labels, "Dispatch is already running.")).toBe("Dispatch is already running.");
+      expect(getLiveActionDisabledReason("disabled", labels)).toBe("Retry unavailable");
+      expect(getLiveActionDisabledReason("idle", labels)).toBeNull();
     });
   });
 

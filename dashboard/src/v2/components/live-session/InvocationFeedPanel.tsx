@@ -12,11 +12,11 @@ import { formatInvocationDuration, formatInvocationPurpose, InvocationContextChi
 import { statusRailTone, statusTone, shortenRuntimeId } from "./ExecutionRuntimePanel.js";
 
 const INVOCATION_STATUS_DOT: Record<string, string> = {
-  running: "bg-signal-500 shadow-[0_0_8px_rgba(0,224,160,0.55)]",
-  completed: "bg-status-green",
-  failed: "bg-status-red shadow-[0_0_8px_rgba(227,0,15,0.35)]",
+  running: "bg-signal-500 shadow-[0_0_8px_rgba(0,224,160,0.35)] motion-reduce:ring-2 motion-reduce:ring-signal-500/30 motion-reduce:shadow-none",
+  completed: "bg-status-green motion-reduce:ring-2 motion-reduce:ring-status-green/25",
+  failed: "bg-status-red shadow-[0_0_8px_rgba(227,0,15,0.25)] motion-reduce:ring-2 motion-reduce:ring-status-red/25 motion-reduce:shadow-none",
   cancelled: "bg-slate-400",
-  paused: "bg-status-amber shadow-[0_0_8px_rgba(245,158,11,0.35)]",
+  paused: "bg-status-amber shadow-[0_0_8px_rgba(245,158,11,0.25)] motion-reduce:ring-2 motion-reduce:ring-status-amber/25 motion-reduce:shadow-none",
 };
 
 const buildInvocationHref = (invocationId: string): string => (
@@ -41,14 +41,14 @@ const InvocationFeedRow: FunctionComponent<{
     if (prevStatusRef.current !== invocation.status) {
       if (isReducedMotion) {
         const el = rowRef.current;
-        el.classList.add("bg-signal-500/10", "border-signal-500/20");
+        el.classList.add("bg-signal-500/8", "border-signal-500/25");
         setTimeout(() => {
-          if (el) el.classList.remove("bg-signal-500/10", "border-signal-500/20");
+          if (el) el.classList.remove("bg-signal-500/8", "border-signal-500/25");
         }, Math.max(motionTokens.controlFeedback.duration * 1000, 1));
       } else {
         gsap.killTweensOf(rowRef.current);
         gsap.fromTo(rowRef.current,
-          { backgroundColor: "rgba(0, 224, 160, 0.15)", borderColor: "rgba(0, 224, 160, 0.3)" },
+          { backgroundColor: "rgba(0, 224, 160, 0.08)", borderColor: "rgba(0, 224, 160, 0.25)" },
           { backgroundColor: "rgba(0, 0, 0, 0.015)", borderColor: "rgba(0, 0, 0, 0.04)", duration: motionTokens.controlFeedback.duration * 2, ease: motionTokens.controlFeedback.ease, overwrite: "auto", clearProps: "backgroundColor,borderColor" }
         );
       }
@@ -70,7 +70,7 @@ const InvocationFeedRow: FunctionComponent<{
       <div className="flex items-start justify-between gap-3 min-w-0">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
-            <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${dotClass} ${invocation.status === "running" ? "motion-safe:animate-pulse motion-reduce:ring-2 motion-reduce:ring-signal-500/25" : ""}`} aria-hidden="true" />
+            <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${dotClass} ${invocation.status === "running" ? "motion-safe:animate-pulse" : ""}`} aria-hidden="true" />
             <span className="sr-only">Invocation status: {invocation.status}.</span>
             <span className="min-w-0 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
               {purposeLabel}
@@ -183,6 +183,11 @@ export const InvocationFeedPanel: FunctionComponent<{
     () => invocations.filter((invocation) => invocation.status === "completed").length,
     [invocations],
   );
+  const newCount = useMemo(
+    () => invocations.filter((invocation) => invocation.status !== "running" && invocation.status !== "completed" && invocation.status !== "failed").length,
+    [invocations],
+  );
+  const invocationSummary = `${invocations.length} invocation${invocations.length === 1 ? "" : "s"} shown: ${newCount} new or queued, ${runningCount} running, ${completedCount} completed, ${failedCount} failed.`;
 
   if (!snapshot) {
     return (
@@ -196,16 +201,19 @@ export const InvocationFeedPanel: FunctionComponent<{
     <div className="flex flex-wrap items-center gap-2.5">
       <Cpu className="h-4 w-4 text-signal-500" strokeWidth={1.5} aria-hidden="true" />
       <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Invocation Feed</span>
-      {runningCount > 0 && (
-        <span className="rounded-md bg-signal-500/10 px-2 py-0.5 text-[9px] font-mono font-bold text-signal-500">
-          {runningCount} live
-        </span>
-      )}
-      {failedCount > 0 && (
-        <span className="rounded-md bg-status-red/10 px-2 py-0.5 text-[9px] font-mono font-bold text-status-red">
-          {failedCount} failed
-        </span>
-      )}
+      <span className="rounded-md bg-black/[0.03] px-2 py-0.5 text-[9px] font-mono font-bold text-slate-500 dark:bg-white/[0.04] dark:text-slate-400">
+        {invocations.length} total
+      </span>
+      <span className="rounded-md bg-signal-500/10 px-2 py-0.5 text-[9px] font-mono font-bold text-signal-500">
+        {runningCount} live
+      </span>
+      <span className="rounded-md bg-status-green/10 px-2 py-0.5 text-[9px] font-mono font-bold text-status-green">
+        {completedCount} done
+      </span>
+      <span className="rounded-md bg-status-red/10 px-2 py-0.5 text-[9px] font-mono font-bold text-status-red">
+        {failedCount} failed
+      </span>
+      <span className="sr-only">{invocationSummary}</span>
     </div>
   );
 
@@ -221,7 +229,7 @@ export const InvocationFeedPanel: FunctionComponent<{
         >
           {header}
           <ChevronDown
-            className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-[var(--interaction-enter-exit-duration)] ${open ? "rotate-0" : "-rotate-90"}`}
+            className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-[var(--interaction-expansion-collapse-duration)] ease-[var(--interaction-expansion-collapse-ease)] ${open ? "rotate-0" : "-rotate-90"}`}
             strokeWidth={2}
             aria-hidden="true"
           />
@@ -258,12 +266,15 @@ export const InvocationFeedPanel: FunctionComponent<{
               </p>
             ) : (
               <>
-                <p role={failedCount > 0 ? "alert" : "status"} aria-live={failedCount > 0 ? "assertive" : "polite"} className="mb-2 text-[10px] font-mono text-slate-400 dark:text-slate-500">
+                <p role={failedCount > 0 ? "alert" : "status"} aria-live={failedCount > 0 ? "assertive" : "polite"} aria-atomic="true" className="mb-2 text-[10px] font-mono text-slate-400 dark:text-slate-500">
                   {failedCount > 0
                     ? `${failedCount} invocation${failedCount === 1 ? "" : "s"} failed. Open the transcript for details.`
                     : runningCount > 0
                       ? `${runningCount} invocation${runningCount === 1 ? "" : "s"} running.`
                       : "Invocation feed is current."}
+                </p>
+                <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+                  {invocationSummary}
                 </p>
                 <div
                   role="log"
