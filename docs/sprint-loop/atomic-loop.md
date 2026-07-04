@@ -210,6 +210,9 @@ For `action=status`:
 - If `waitForJulesCiAutofix` is enabled and feature PR checks fail, the sprint loop notifies the Jules session with failed-check context, matched failed run ids/URLs, failed job names, and failed-job log excerpts (when available), then keeps the task in work state.
 - CI autofix retries are capped by `julesCiAutofixMaxRetries`; once exhausted, the task is escalated as intervention-needed with exact task id, PR URL, failed check names, failed run summary, and failed job names (focus: fix CI before merge).
 - Worker-owned CI autofix attempts are de-duplicated across watch-loop cycles. While a matching `ci_fix_required` attention item is still open or claimed, Code UX treats that attempt as in-flight, keeps the task in `RUNNING`, and does not consume another retry until the worker attempt resolves.
+- Watch-loop regression coverage now locks the idempotency contract for repeated cycles over the same sprint state: no duplicate task dispatch, QA review, CI autofix worker attention, or attention item should be created while the prior cycle's work remains active.
+- Provider failures are evaluated before stale PR/session artifacts can settle a task. A failed or cancelled provider session with old PR metadata is reset to retryable `PENDING` when dependencies are satisfied, or `BLOCKED` when dependency policy requires waiting.
+- Task QA gate states remain fail-closed at the merge boundary. `changes_requested`, stale/running QA, and exhausted review budget states keep the task in `CODING_COMPLETED` with `QA_PENDING` at the feature PR gate and must not auto-merge or start a new worker branch unless a later rerun/reset produces fresh code-complete work.
 
 ## Files and Data Used
 
