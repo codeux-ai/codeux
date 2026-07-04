@@ -191,7 +191,7 @@ describe("ProjectsPage", () => {
     const headerContainer = container.querySelector("header");
     expect(headerContainer).toBeInTheDocument();
     expect(headerContainer?.className).toContain("flex-col");
-    expect(headerContainer?.className).toContain("sm:flex-row");
+    expect(headerContainer?.className).toContain("md:flex-row");
   });
 
   it("wraps filter controls and card actions on narrow screens", () => {
