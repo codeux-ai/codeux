@@ -9,30 +9,60 @@ import type { BuiltinPurposeOption } from "../../lib/quicksprint-panel-state.js"
 const RAIL_SCROLL_STEP_RATIO = 0.88;
 const RAIL_MIN_SCROLL_STEP = 320;
 const RAIL_ROWS = 2;
+const WHEEL_LINE_HEIGHT = 16;
 
-const WHEEL_DELTA_LINE_HEIGHT = 16;
-
-function getVerticalWheelDelta(event: WheelEvent): number {
+function normalizeWheelDeltaY(event: WheelEvent, fallbackPageHeight: number): number {
   if (event.deltaMode === 1) {
-    return event.deltaY * WHEEL_DELTA_LINE_HEIGHT;
+    return event.deltaY * WHEEL_LINE_HEIGHT;
   }
   if (event.deltaMode === 2) {
-    return event.deltaY * window.innerHeight;
+    return event.deltaY * fallbackPageHeight;
   }
   return event.deltaY;
 }
 
-function findVerticalScrollParent(element: HTMLElement): HTMLElement | null {
-  let parent = element.parentElement;
-  while (parent) {
-    const style = window.getComputedStyle(parent);
-    const canScrollY = /(auto|scroll|overlay)/.test(style.overflowY);
-    if (canScrollY && parent.scrollHeight > parent.clientHeight) {
-      return parent;
-    }
-    parent = parent.parentElement;
+function isVerticalScrollContainer(element: HTMLElement): boolean {
+  if (element.scrollHeight <= element.clientHeight) {
+    return false;
   }
+
+  const overflowY = window.getComputedStyle(element).overflowY;
+  return overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay";
+}
+
+function canScrollVertically(element: HTMLElement, deltaY: number): boolean {
+  const maxScrollTop = Math.max(element.scrollHeight - element.clientHeight, 0);
+  if (deltaY < 0) {
+    return element.scrollTop > 0;
+  }
+  return element.scrollTop < maxScrollTop - 1;
+}
+
+function findVerticalScrollTarget(start: HTMLElement, deltaY: number): HTMLElement | null {
+  let current = start.parentElement;
+  while (current) {
+    if (isVerticalScrollContainer(current) && canScrollVertically(current, deltaY)) {
+      return current;
+    }
+    current = current.parentElement;
+  }
+
+  const documentScroller = document.scrollingElement;
+  if (
+    documentScroller instanceof HTMLElement
+    && documentScroller.scrollHeight > documentScroller.clientHeight
+    && canScrollVertically(documentScroller, deltaY)
+  ) {
+    return documentScroller;
+  }
+
   return null;
+}
+
+function scrollElementByDeltaY(element: HTMLElement, deltaY: number): void {
+  const maxScrollTop = Math.max(element.scrollHeight - element.clientHeight, 0);
+  const nextScrollTop = Math.min(maxScrollTop, Math.max(0, element.scrollTop + deltaY));
+  element.scrollTop = nextScrollTop;
 }
 
 type TemplateRailProps = {
@@ -135,8 +165,7 @@ const TemplateRail: FunctionComponent<TemplateRailProps> = ({
   }, [scrollByDirection]);
 
   const onRailWheel = useCallback((event: WheelEvent) => {
-    const verticalDelta = getVerticalWheelDelta(event);
-    if (event.shiftKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY) || verticalDelta === 0) {
+    if (event.ctrlKey || event.shiftKey || event.deltaY === 0 || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) {
       return;
     }
 
@@ -145,13 +174,14 @@ const TemplateRail: FunctionComponent<TemplateRailProps> = ({
       return;
     }
 
-    const scrollParent = findVerticalScrollParent(rail);
-    event.preventDefault();
-    if (scrollParent) {
-      scrollParent.scrollBy({ top: verticalDelta, behavior: "auto" });
+    const deltaY = normalizeWheelDeltaY(event, rail.clientHeight || window.innerHeight);
+    const target = findVerticalScrollTarget(rail, deltaY);
+    if (!target) {
       return;
     }
-    window.scrollBy({ top: verticalDelta, behavior: "auto" });
+
+    event.preventDefault();
+    scrollElementByDeltaY(target, deltaY);
   }, []);
 
   useEffect(() => {
@@ -196,7 +226,7 @@ const TemplateRail: FunctionComponent<TemplateRailProps> = ({
         aria-label={ariaLabel}
         onKeyDown={onRailKeyDown}
         data-qs-template-rail={railId}
-        className="dashboard-scrollbar grid max-w-full grid-flow-col grid-rows-2 gap-4 overflow-x-auto overflow-y-visible pb-4 pr-2 outline-none scrollbar-hide scroll-smooth auto-cols-[minmax(19rem,calc(100vw-4rem))] sm:auto-cols-[21rem] lg:auto-cols-[22rem]"
+        className="dashboard-scrollbar grid max-w-full grid-flow-col grid-rows-2 gap-4 overflow-x-auto overflow-y-visible overscroll-x-contain pb-4 pr-2 outline-none scrollbar-hide touch-auto scroll-smooth auto-cols-[minmax(19rem,calc(100vw-4rem))] sm:auto-cols-[21rem] lg:auto-cols-[22rem]"
       >
         {templates.map((template) => (
           <TemplateCard
