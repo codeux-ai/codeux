@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import type { ExecutionInvocationRecord } from "../../../types.js";
 import { fetchInvocationMessages, fetchProjectInvocations } from "../../../lib/invocation-api.js";
 import { SystemStudio } from "../components/system/SystemStudio.js";
@@ -115,6 +115,30 @@ describe("SystemStudio", () => {
     expect(container.textContent).toContain("Filters");
     expect(container.textContent).toContain("Invocation Records");
     expect(container.textContent).toContain("Invocation Ledger");
+
+    const sprintSection = screen.getByRole("region", { name: "Sprint State" });
+    expect(within(sprintSection).getByText("Sprint Overview")).toBeTruthy();
+    expect(within(sprintSection).getAllByText("Tasks").length).toBeGreaterThan(0);
+
+    const healthSection = screen.getByRole("region", { name: "Health Snapshot" });
+    expect(within(healthSection).getByText("Filtered")).toBeTruthy();
+    expect(within(healthSection).getByText("0%")).toBeTruthy();
+    expect(container.querySelector('[title="Running: 1"]')).toBeTruthy();
+    expect(container.querySelector('[title="Failed: 1"]')).toBeTruthy();
+
+    const externalApiSection = screen.getByRole("region", { name: "External API Activity" });
+    expect(within(externalApiSection).getByText("Calls")).toBeTruthy();
+    expect(within(externalApiSection).getByText("Other")).toBeTruthy();
+    expect(within(externalApiSection).getByText("9m 0s")).toBeTruthy();
+
+    const errorSection = screen.getByRole("region", { name: "Error Categories" });
+    expect(within(errorSection).getByText("Failure Analysis")).toBeTruthy();
+    expect(within(errorSection).getByText("Failures")).toBeTruthy();
+    expect(within(errorSection).getByText("Rate Limit")).toBeTruthy();
+
+    const recordsSection = screen.getByRole("region", { name: "Invocation Records" });
+    expect(within(recordsSection).getByText("Available")).toBeTruthy();
+    expect(within(recordsSection).getByRole("button", { name: /^All/ })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /^Errors/ }));
 
