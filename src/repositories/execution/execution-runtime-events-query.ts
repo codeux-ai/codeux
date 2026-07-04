@@ -23,7 +23,8 @@ export function queryExecutionRuntimeEvents(
   db: DatabaseAdapter,
   storage: AppDbStorage,
   projectId: string,
-  expandedSprintRunIds: string[]
+  expandedSprintRunIds: string[],
+  selectedSprintId: string | null = null,
 ): ExecutionRuntimeEventSummaryRow[] {
   // Each side is ordered+capped on its own index first (task_run_events via
   // idx_task_run_events_project_created, sprint_run_events via the sprint-run join) so neither input
@@ -172,13 +173,125 @@ export function queryExecutionRuntimeEvents(
     })
     : [];
 
+  const selectedSprintEvents = selectedSprintId
+    ? db.prepare(`
+    SELECT *
+    FROM (
+      SELECT *
+      FROM (
+        SELECT
+          tre.id,
+          'task_run' AS scope_type,
+          tre.task_run_id,
+          tr.sprint_run_id,
+          tr.dispatch_id,
+          tre.project_id,
+          tr.sprint_id,
+          s.name AS sprint_name,
+          s.number AS sprint_number,
+          sr.status AS sprint_run_status,
+          tr.task_id,
+          t.task_key,
+          t.title AS task_title,
+          tr.state AS task_run_state,
+          tre.event_type,
+          tre.originator,
+          tre.source_event_key,
+          tr.provider,
+          tr.session_id,
+          tr.session_name,
+          tr.worker_branch,
+          tr.pr_url,
+          tr.connection_id,
+          c.display_name AS connection_display_name,
+          c.role AS connection_role,
+          tre.created_at,
+          tre.payload_json
+        FROM task_run_events tre
+        INNER JOIN task_runs tr ON tr.id = tre.task_run_id
+        INNER JOIN sprints s ON s.id = tr.sprint_id
+        INNER JOIN tasks t ON t.id = tr.task_id
+        LEFT JOIN sprint_runs sr ON sr.id = tr.sprint_run_id
+        LEFT JOIN mcp_connections c ON c.id = tr.connection_id
+        WHERE tre.project_id = ?
+          AND tr.project_id = ?
+          AND tr.sprint_id = ?
+          AND tre.event_type != 'status_sync'
+        ORDER BY tre.created_at DESC, tre.id DESC
+        LIMIT 240
+      )
+
+      UNION ALL
+
+      SELECT *
+      FROM (
+        SELECT
+          sre.id,
+          'sprint_run' AS scope_type,
+          NULL AS task_run_id,
+          sre.sprint_run_id,
+          NULL AS dispatch_id,
+          sr.project_id,
+          sr.sprint_id,
+          s.name AS sprint_name,
+          s.number AS sprint_number,
+          sr.status AS sprint_run_status,
+          NULL AS task_id,
+          NULL AS task_key,
+          NULL AS task_title,
+          NULL AS task_run_state,
+          sre.event_type,
+          sre.originator,
+          sre.source_event_key,
+          NULL AS provider,
+          NULL AS session_id,
+          NULL AS session_name,
+          NULL AS worker_branch,
+          NULL AS pr_url,
+          NULL AS connection_id,
+          NULL AS connection_display_name,
+          NULL AS connection_role,
+          sre.created_at,
+          sre.payload_json
+        FROM sprint_run_events sre
+        INNER JOIN sprint_runs sr ON sr.id = sre.sprint_run_id
+        INNER JOIN sprints s ON s.id = sr.sprint_id
+        WHERE sr.project_id = ?
+          AND sr.sprint_id = ?
+        ORDER BY sre.created_at DESC, sre.id DESC
+        LIMIT 240
+      )
+    )
+    ORDER BY created_at DESC, id DESC
+    LIMIT 240
+  `).all(projectId, projectId, selectedSprintId, projectId, selectedSprintId) as unknown as ExecutionRuntimeEventSummaryRow[]
+    : [];
+
   const recentEventById = new Map<string, ExecutionRuntimeEventSummaryRow>();
-  for (const row of [...expandedSprintTaskEvents, ...recentEvents]) {
+  for (const row of [...expandedSprintTaskEvents, ...recentEvents, ...selectedSprintEvents]) {
     recentEventById.set(row.id, row);
   }
-  return [...recentEventById.values()]
+  const sortedEvents = [...recentEventById.values()]
     .sort((left, right) => {
       return right.created_at.localeCompare(left.created_at) || right.id.localeCompare(left.id);
-    })
-    .slice(0, MAX_RUNTIME_EVENTS);
+    });
+
+  if (!selectedSprintId) {
+    return sortedEvents.slice(0, MAX_RUNTIME_EVENTS);
+  }
+
+  const selectedEventIds = new Set(selectedSprintEvents.map((row) => row.id));
+  const protectedEvents: ExecutionRuntimeEventSummaryRow[] = [];
+  const cappedGlobalEvents: ExecutionRuntimeEventSummaryRow[] = [];
+  for (const row of sortedEvents) {
+    if (selectedEventIds.has(row.id)) {
+      protectedEvents.push(row);
+    } else if (cappedGlobalEvents.length < MAX_RUNTIME_EVENTS) {
+      cappedGlobalEvents.push(row);
+    }
+  }
+
+  return [...protectedEvents, ...cappedGlobalEvents].sort((left, right) => {
+    return right.created_at.localeCompare(left.created_at) || right.id.localeCompare(left.id);
+  });
 }
