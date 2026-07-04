@@ -459,11 +459,11 @@ describe("dashboard accessibility quality regressions", () => {
     const table = render(
       <InvocationsTable invocations={[]} sort={{ key: "startedAt", dir: "desc" }} onSortChange={vi.fn()} expandedId={null} onRowExpand={vi.fn()} loading />,
     );
-    expect(screen.getByRole("status", { name: "Loading invocations" })).toHaveTextContent("Loading invocations");
+    expect(screen.getByRole("status", { name: "Loading invocation records" })).toHaveTextContent("Loading invocation records");
     table.rerender(
       <InvocationsTable invocations={[]} sort={{ key: "startedAt", dir: "desc" }} onSortChange={vi.fn()} expandedId={null} onRowExpand={vi.fn()} />,
     );
-    expect(screen.getByRole("status", { name: "Empty invocations table" })).toHaveTextContent("No invocations match");
+    expect(screen.getByRole("status", { name: "No invocation records" })).toHaveTextContent("No invocation records to show");
     table.rerender(
       <InvocationsTable invocations={[]} sort={{ key: "startedAt", dir: "desc" }} onSortChange={vi.fn()} expandedId={null} onRowExpand={vi.fn()} error="network down" />,
     );
