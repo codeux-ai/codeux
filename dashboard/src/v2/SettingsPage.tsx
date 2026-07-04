@@ -2,7 +2,7 @@ import type { FunctionComponent } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { Check, Compass, RefreshCw, Search, Settings, Zap } from "lucide-preact";
-import { ActionButton, NoticePanel } from "./components/settings/SettingsSurface.js";
+import { NoticePanel } from "./components/settings/SettingsSurface.js";
 import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 import { useSettingsPageState } from "./hooks/use-settings-page-state.js";
 import { SettingsCategoryRail, CATEGORIES } from "./components/settings/SettingsCategoryRail.js";
@@ -35,9 +35,7 @@ export const SettingsPage: FunctionComponent = () => {
     activeSaving,
     loading,
     saveMessage,
-    resettingProject,
     handleSave,
-    handleResetProject,
     showUnsavedModal,
     confirmDiscard,
     cancelDiscard,
@@ -223,15 +221,6 @@ export const SettingsPage: FunctionComponent = () => {
             ))}
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            {activeScope === "project" ? (
-              <ActionButton
-                label="Reset Project"
-                onClick={() => void handleResetProject()}
-                tone="danger"
-                busy={resettingProject}
-                disabled={!selectedProject}
-              />
-            ) : null}
             <button
               type="button"
               onClick={() => void handleSave()}
