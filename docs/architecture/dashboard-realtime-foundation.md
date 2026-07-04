@@ -80,6 +80,14 @@ Production refinement shipped on March 15, 2026:
 - project execution refresh no longer implies a `projects.updated` snapshot by default, which removes a major source of redundant dashboard work during active sprints
 - snapshot-based events (`project.live.updated`, `project.execution.updated`, and `overview.telemetry.updated`) are now fingerprinted; publications and sequence increments are skipped if the semantic payload (ignoring timestamps like `updatedAt`) is unchanged
 
+July 4, 2026 refinement:
+
+- `project.live.updated` and `project.execution.updated` use a two-tier deduplication strategy. Known live/execution snapshot shapes first build a lightweight semantic signature from stable summary fields instead of serializing the full payload.
+- The live snapshot signature includes project id, selected sprint id, runtime status identity, execution identity, git status summary, and git error state. Runtime status identity includes project/sprint ids, sprint number, repository/branch fields, subtask count, and subtask ids/status/session/provider/merge/intervention markers while ignoring fetch timestamps.
+- The execution snapshot signature includes project id/name, collection lengths, sprint run ids/statuses/heartbeat/lease/finish/intervention markers, dispatch ids/statuses/task run/provider/session/branch/PR/heartbeat/lease/error markers, connection ids/statuses/heartbeat/counts, assigned worker ids/statuses, attention item ids/types/severity/owner/status/claim/resolve markers, runtime event tail identities, and recent invocation tail identities.
+- The optimized path still ignores volatile `updatedAt` and status `timestamp` churn, so timestamp-only reassembly does not broadcast or append a non-replayable marker. Meaningful sprint run, dispatch, attention, runtime event, or invocation changes still publish.
+- Unknown payload shapes, and known event types whose snapshot shape is incomplete, still fall back to the existing normalized full-payload fingerprint. Replayable raw events published through `publishRawEvent` are unchanged and are not deduplicated by snapshot signatures.
+
 ### Dashboard websocket endpoint
 
 The dashboard server now exposes:
