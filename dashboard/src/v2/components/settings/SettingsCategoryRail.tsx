@@ -8,6 +8,7 @@ import {
 } from "../../lib/settings-search-index.js";
 import { NoticePanel } from "./SettingsSurface.js";
 import { SHARED_INTERACTION_CLASSES } from "../ui/Button.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 import { AlertTriangle, Bot, BrainCircuit, Compass, Cpu, Monitor, Plug, Server, Settings, SlidersHorizontal, Target } from "lucide-preact";
 
@@ -30,6 +31,8 @@ export interface SettingsCategoryRailProps {
   settingsSearch: string;
   settingsSearchMatches: SettingsSearchMatches;
   onSwitchCategory: (categoryId: CategoryId) => void;
+  pendingCategory?: CategoryId | null;
+  disabledCategoryReason?: string | null;
 }
 
 export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> = ({
@@ -38,9 +41,16 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
   settingsSearch,
   settingsSearchMatches,
   onSwitchCategory,
+  pendingCategory = null,
+  disabledCategoryReason = null,
 }) => {
   const normalizedSearch = settingsSearch.trim().toLowerCase();
   const buttonsRef = useRef<(HTMLButtonElement | null)[]>([]);
+  const tokens = useInteractionTokens();
+  const selectionTransitionStyle = {
+    transitionDuration: tokens.selectionMovement.duration,
+    transitionTimingFunction: tokens.selectionMovement.ease,
+  };
 
   const handleKeyDown = (e: KeyboardEvent, index: number) => {
     if (e.key === "ArrowDown") {
@@ -83,16 +93,23 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
         const isDanger = category.danger;
         const matchPreview = getSettingsSearchMatchPreview(settingsSearchMatches[category.id], 2);
         const isSearchMatch = Boolean(normalizedSearch && matchPreview.length > 0);
+        const isPending = pendingCategory === category.id;
+        const disabled = Boolean(disabledCategoryReason);
 
         return (
           <button
             key={category.id}
             type="button"
             ref={el => { buttonsRef.current[index] = el; }}
+            disabled={disabled}
             onClick={() => onSwitchCategory(category.id)}
             onKeyDown={(e) => handleKeyDown(e, index)}
             aria-current={isActive ? "page" : undefined}
-            className={`group relative flex w-full items-center gap-3.5 rounded-[1.1rem] px-4 py-3.5 text-left ${SHARED_INTERACTION_CLASSES} ${isDanger ? "focus-visible:ring-status-red" : ""} ${
+            aria-disabled={disabled}
+            aria-busy={isPending ? "true" : undefined}
+            title={disabled && disabledCategoryReason ? disabledCategoryReason : undefined}
+            style={selectionTransitionStyle}
+            className={`group relative flex w-full min-w-0 items-center gap-3.5 rounded-[1.1rem] px-4 py-3.5 text-left transition-[background-color,border-color,box-shadow,color,transform] motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-60 ${SHARED_INTERACTION_CLASSES} ${isDanger ? "focus-visible:ring-status-red" : ""} ${
               isActive
                 ? isDanger
                   ? "bg-status-red/[0.07] dark:bg-status-red/[0.08]"
@@ -106,12 +123,15 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
               <div className={`absolute left-0 top-3 bottom-3 w-[3px] rounded-r-full ${isDanger ? "bg-status-red" : "bg-signal-500 dark:bg-signal-400"}`} />
             ) : null}
 
-            <span className={`w-5 shrink-0 text-right font-mono text-[9px] font-bold transition-colors duration-200 ${isActive ? (isDanger ? "text-status-red/60" : "text-signal-600/60 dark:text-signal-400/60") : "text-slate-300 dark:text-slate-600"}`}>
+            <span
+              className={`w-5 shrink-0 text-right font-mono text-[9px] font-bold transition-colors ${isActive ? (isDanger ? "text-status-red/60" : "text-signal-600/60 dark:text-signal-400/60") : "text-slate-300 dark:text-slate-600"}`}
+              style={selectionTransitionStyle}
+            >
               {category.num}
             </span>
 
             <category.icon
-              className={`h-4 w-4 shrink-0 transition-colors duration-200 ${
+              className={`h-4 w-4 shrink-0 transition-colors ${
                 isActive
                   ? isDanger
                     ? "text-status-red"
@@ -119,20 +139,28 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
                   : "text-slate-400 group-hover:text-slate-600 dark:text-slate-500 dark:group-hover:text-slate-300"
               }`}
               strokeWidth={1.75}
+              style={selectionTransitionStyle}
             />
 
             <div className="min-w-0 flex-1">
-              <div className={`text-sm font-semibold transition-colors duration-200 ${
+              <div
+                className={`text-sm font-semibold transition-colors ${
                 isActive
                   ? isDanger
                     ? "text-status-red"
                     : "text-signal-700 dark:text-signal-300"
                   : "text-slate-700 group-hover:text-slate-900 dark:text-slate-300 dark:group-hover:text-slate-100"
               }`}
+                style={selectionTransitionStyle}
               >
-                {category.label}
+              {category.label}
+                {isActive ? <span className="sr-only">, selected</span> : null}
+                {isPending ? <span className="sr-only">, pending</span> : null}
               </div>
-              <div className={`mt-0.5 break-words text-[10px] font-medium leading-tight transition-colors duration-200 ${isActive ? (isDanger ? "text-status-red/70" : "text-signal-700/70 dark:text-signal-300/70") : "text-slate-400 group-hover:text-slate-500 dark:text-slate-500 dark:group-hover:text-slate-400"}`}>
+              <div
+                className={`mt-0.5 break-words text-[10px] font-medium leading-tight transition-colors ${isActive ? (isDanger ? "text-status-red/70" : "text-signal-700/70 dark:text-signal-300/70") : "text-slate-400 group-hover:text-slate-500 dark:text-slate-500 dark:group-hover:text-slate-400"}`}
+                style={selectionTransitionStyle}
+              >
                 {category.description}
               </div>
               {isSearchMatch ? (
@@ -147,6 +175,27 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
                   ))}
                 </div>
               ) : null}
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {isActive ? (
+                  <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${
+                    isDanger
+                      ? "border-status-red/20 bg-status-red/[0.06] text-status-red"
+                      : "border-signal-500/20 bg-signal-500/[0.08] text-signal-700 dark:text-signal-300"
+                  }`}>
+                    Selected
+                  </span>
+                ) : null}
+                {isPending ? (
+                  <span className="rounded-full border border-status-amber/25 bg-status-amber/[0.08] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-amber">
+                    Pending
+                  </span>
+                ) : null}
+                {disabled && disabledCategoryReason ? (
+                  <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400">
+                    Disabled
+                  </span>
+                ) : null}
+              </div>
             </div>
           </button>
         );

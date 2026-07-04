@@ -10,11 +10,14 @@ import { SettingsMemoryPanel } from "./panels/SettingsMemoryPanel.js";
 import { SettingsIntegrationsPanel } from "./panels/SettingsIntegrationsPanel.js";
 import { SettingsMcpPanel } from "./panels/SettingsMcpPanel.js";
 import { SettingsDangerPanel } from "./panels/SettingsDangerPanel.js";
+import { ActionFeedbackRegion } from "../ui/ActionFeedbackRegion.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 export const SettingsContentPanels: FunctionComponent<{
   state: SettingsPageState;
 }> = ({ state }) => {
   const { activeCategory, activeDirty, activeSaving, error, saveMessage, loading } = state;
+  const tokens = useInteractionTokens();
 
   const panelStatus = error
     ? `Settings blocked: ${error}`
@@ -58,7 +61,22 @@ export const SettingsContentPanels: FunctionComponent<{
       <div role={error ? "alert" : "status"} aria-live={error ? "assertive" : "polite"} aria-atomic="true" className="sr-only">
         {panelStatus}
       </div>
-      {renderPanel()}
+      <ActionFeedbackRegion
+        status={error ? "error" : loading || activeSaving ? "pending" : saveMessage ? "success" : activeDirty ? "warning" : "idle"}
+        message={error || (loading ? "Loading settings without clearing current values..." : activeSaving ? "Saving settings. Current values remain visible." : saveMessage || (activeDirty ? "You have unsaved changes in this settings scope." : null))}
+        autoDismiss={false}
+      />
+      <div
+        key={activeCategory}
+        data-active-category={activeCategory}
+        className="mt-3 motion-safe:animate-form-slide-down motion-reduce:animate-none"
+        style={{
+          transitionDuration: tokens.enterExit.duration,
+          transitionTimingFunction: tokens.enterExit.ease,
+        }}
+      >
+        {renderPanel()}
+      </div>
     </div>
   );
 };

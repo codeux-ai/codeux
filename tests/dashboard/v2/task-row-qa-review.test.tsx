@@ -107,7 +107,7 @@ describe("TaskRow QA review indicator", () => {
     fireEvent.click(screen.getByRole("button", { name: /Delete task T1: Reviewed task/i }));
 
     expect(await screen.findByRole("dialog", { name: "Delete Task" })).toBeInTheDocument();
-    expect(screen.getByText(/Are you sure you want to delete "Reviewed task"/i)).toBeInTheDocument();
+    expect(screen.getByText(/Delete "Reviewed task"\? This removes the task card and cannot be undone/i)).toBeInTheDocument();
     expect(onDelete).not.toHaveBeenCalled();
   });
 
@@ -126,7 +126,7 @@ describe("TaskRow QA review indicator", () => {
 
     render(<KanbanTaskCard viewModel={viewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
 
-    expect(screen.getByText("Blocked by 1 dependency")).toBeVisible();
+    expect(screen.getByText("Blocked: 1 dependency needs completion")).toBeVisible();
     expect(screen.getByText("Drag disabled: reduced motion")).toBeVisible();
     expect(screen.getByLabelText(/^Task T1: Reviewed task/i)).toHaveAttribute("draggable", "false");
   });

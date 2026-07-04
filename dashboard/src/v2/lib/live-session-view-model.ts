@@ -79,7 +79,7 @@ export interface LiveSessionTaskCardStateInput {
 
 export interface LiveTransportBannerViewModel {
   isVisible: boolean;
-  title: "Connection Error" | "Disconnected" | "Reconnecting" | "Refreshing Live Data" | "Stale Data";
+  title: "Connection Error" | "Disconnected" | "Reconnecting" | "Refreshing Live Data" | "Recovering Live Data" | "Stale Data";
   message: string;
   wrapperClass: string;
   iconClass: string;

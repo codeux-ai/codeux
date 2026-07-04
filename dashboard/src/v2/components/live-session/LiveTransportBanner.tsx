@@ -4,8 +4,8 @@ import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import { Zap, RefreshCcw, WifiOff } from "lucide-preact";
 import gsap from "gsap";
 import type { TransportState } from "../../../lib/realtime/dashboard-realtime-client.js";
-import { useReducedMotion, useResolvedMotionDuration } from "../../hooks/use-reduced-motion.js";
-import { INTERACTION_TOKENS } from "../../lib/motion/tokens.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import {
   deriveLiveTransportBannerViewModel,
   type LiveTransportBannerViewModel,
@@ -30,7 +30,7 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const isReducedMotion = useReducedMotion();
-  const enterDuration = useResolvedMotionDuration(parseFloat(INTERACTION_TOKENS.enterExit.duration) / 1000);
+  const motionTokens = useGsapInteractionTokens();
   const [shouldRender, setShouldRender] = useState(false);
   const derivedBannerState = deriveLiveTransportBannerViewModel({ transportState, isRecovering, error });
   const snapshotAgeMs = snapshotUpdatedAt ? Date.now() - new Date(snapshotUpdatedAt).getTime() : null;
@@ -56,11 +56,12 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
     !derivedBannerState
     && transportState === "connected"
     && isRecovering
-    && snapshotUpdatedAt
   ) ? {
     isVisible: true,
-    title: "Refreshing Live Data",
-    message: "Keeping the current runtime snapshot visible while the live stream catches up.",
+    title: snapshotUpdatedAt ? "Refreshing Live Data" : "Recovering Live Data",
+    message: snapshotUpdatedAt
+      ? "Keeping the current runtime snapshot visible while the live stream catches up."
+      : "Waiting for the first runtime snapshot after transport recovery.",
     wrapperClass: "bg-signal-500/10 border-signal-500/20 text-signal-700 dark:text-signal-300",
     iconClass: "text-signal-600 dark:text-signal-300",
     icon: "reconnecting",
@@ -88,7 +89,7 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
         gsap.killTweensOf(containerRef.current);
         gsap.fromTo(containerRef.current,
           { height: 0, opacity: 0, marginBottom: 0, padding: 0 },
-          { height: "auto", opacity: 1, marginBottom: 24, padding: "16px 20px", duration: enterDuration, ease: INTERACTION_TOKENS.enterExit.ease, overwrite: "auto" }
+          { height: "auto", opacity: 1, marginBottom: 24, padding: "16px 20px", duration: motionTokens.enterExit.duration, ease: motionTokens.enterExit.ease, overwrite: "auto" }
         );
       }
     } else if (!isVisible && shouldRender) {
@@ -101,14 +102,14 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
           opacity: 0,
           marginBottom: 0,
           padding: 0,
-          duration: enterDuration,
-          ease: INTERACTION_TOKENS.enterExit.ease,
+          duration: motionTokens.enterExit.duration,
+          ease: motionTokens.enterExit.ease,
           overwrite: "auto",
           onComplete: () => setShouldRender(false)
         });
       }
     }
-  }, [isVisible, shouldRender, isReducedMotion, enterDuration]);
+  }, [isVisible, shouldRender, isReducedMotion, motionTokens.enterExit.duration, motionTokens.enterExit.ease]);
 
   const icon = bannerState?.icon === "error"
     ? <Zap className="w-5 h-5 shrink-0" aria-hidden="true" />

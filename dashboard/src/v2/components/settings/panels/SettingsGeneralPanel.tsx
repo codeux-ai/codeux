@@ -2,6 +2,7 @@ import type { FunctionComponent, ComponentChildren } from "preact";
 import { useEffect, useMemo, useState } from "preact/hooks";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
 import { ActionButton, NoticePanel } from "../SettingsSurface.js";
+import { ActionFeedbackRegion } from "../../ui/ActionFeedbackRegion.js";
 import { NumberInput, Row, Toggle, TextInput, PillChoiceGroup } from "../SettingsFormFields.js";
 import type { ProjectSettings } from "../../../../../../src/contracts/settings-scope-types.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
@@ -31,6 +32,13 @@ const ProjectContextCard: FunctionComponent<{
   const isInvalidProjectName = trimmedProjectName.length === 0;
   const isDirtyProjectName = trimmedProjectName !== projectName.trim();
   const isSavingProjectName = saveState === "saving";
+  const saveDisabledReason = isSavingProjectName
+    ? "Project name is saving."
+    : isInvalidProjectName
+      ? "Enter a project name before saving."
+      : !isDirtyProjectName
+        ? "No project name changes to save."
+        : undefined;
   const sourceTypeLabel = useMemo(() => sourceType === "git" ? "Git repository" : "Local workspace", [sourceType]);
 
   const saveProjectName = async (): Promise<void> => {
@@ -79,6 +87,9 @@ const ProjectContextCard: FunctionComponent<{
                   setSaveMessage(null);
                 }}
                 invalid={saveState === "error" && isInvalidProjectName}
+                helperText="The project id, settings, tasks, and runtime history stay unchanged."
+                errorText={isInvalidProjectName ? "Project name cannot be empty." : undefined}
+                forceValidation={saveState === "error"}
                 disabled={isSavingProjectName}
                 aria-label="Project name"
               />
@@ -89,27 +100,22 @@ const ProjectContextCard: FunctionComponent<{
                 tone="primary"
                 busy={isSavingProjectName}
                 disabled={!isDirtyProjectName || isInvalidProjectName}
+                disabledReason={saveDisabledReason}
                 onClick={() => { void saveProjectName(); }}
               />
               <ActionButton
                 label="Reset"
                 disabled={!isDirtyProjectName || isSavingProjectName}
+                disabledReason={isSavingProjectName ? "Project name is saving." : "No project name changes to reset."}
                 onClick={resetProjectName}
               />
             </div>
           </div>
-          {saveMessage ? (
-            <div
-              role={saveState === "error" ? "alert" : "status"}
-              className={`text-xs font-semibold ${
-                saveState === "error"
-                  ? "text-status-red"
-                  : "text-signal-700 dark:text-signal-300"
-              }`}
-            >
-              {saveMessage}
-            </div>
-          ) : null}
+          <ActionFeedbackRegion
+            status={saveState === "error" ? "error" : saveState === "saving" ? "pending" : saveState === "saved" ? "success" : isDirtyProjectName ? "warning" : "idle"}
+            message={saveMessage || (saveState === "saving" ? "Saving project name..." : isDirtyProjectName ? "Project name has unsaved changes." : null)}
+            autoDismiss={false}
+          />
         </div>
       </Row>
       <Row label="Project id" description="Stable identifier used by the API and runtime.">

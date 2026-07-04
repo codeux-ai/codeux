@@ -47,6 +47,21 @@ Use the standard interaction definitions when designing animations:
    - *Use Case:* Slower, deliberate reveal of asynchronous operation results, progress bars, toast entrance, `ActionFeedbackRegion`, planning progress, preview operation feedback, and live/runtime notifications.
    - *Pacing:* Slow and linear to ensure visibility.
 
+## Implemented Surface Contracts
+
+Current refined dashboard surfaces use the interaction contracts as follows:
+
+| Surface | Motion contracts | State communication |
+| --- | --- | --- |
+| Shared primitives (`Button`, `Select`, `DropdownMenu`, `ConfirmDialog`, `ActionFeedbackRegion`) | `controlFeedback`, `enterExit`, `expansionCollapse`, `inlineValidation`, `asyncFeedback` | Native `disabled` where possible; normalized `aria-disabled`; fixed feedback icon slots; `aria-busy` on pending controls or regions; status/alert live regions for async results. |
+| Quicksprint panel | `enterExit`, `listReveal`, `selectionMovement`, `expansionCollapse`, `controlFeedback` | Phase changes announce through a polite status region, configure headings receive focus with `preventScroll`, busy planning disables conflicting controls, and cancel/status copy remains visible under reduced motion. |
+| Sprint ledger | `controlFeedback`, `selectionMovement`, `listReorder`, `expansionCollapse` | Sort/filter/selection/bulk states announce politely; selected and pending rows retain static badges; bulk delete uses `ConfirmDialog`; focus returns to the delete trigger or the ledger fallback. |
+| Task cards and active streams | `controlFeedback`, `listReorder` | Status, blockers, QA review, PR/live metadata, edit/delete actions, and drag limitations are visible without hover-only disclosure; reduced motion disables pointer drag and exposes static drag-disabled copy. |
+| Settings workspace | `controlFeedback`, `selectionMovement`, `enterExit`, `inlineValidation`, `asyncFeedback` | Category changes expose selected/pending/disabled labels, settings saves use active-panel `aria-busy` plus `ActionFeedbackRegion`, and fields preserve current values during loading or saving. |
+| Browser, file, and diff workbench | `controlFeedback`, `enterExit`, `asyncFeedback` | Loading, empty, unavailable, and error states use status or alert regions; address/session controls stay keyboard reachable and keep disabled styling tied to a visible structural control. |
+| Live runtime | `controlFeedback`, `enterExit`, `expansionCollapse`, `selectionMovement`, `listReveal`, `listReorder`, `asyncFeedback` | Stale/recovering/refreshing states keep cached runtime data visible with polite live regions; disconnected transport and blocking errors are assertive; pending runtime actions keep focus stable. |
+| Global search | `enterExit`, `listReveal`, `controlFeedback`, `selectionMovement` | The input remains the combobox focus owner with `aria-activedescendant`; stale results remain available with `aria-busy`; active rows are scrolled within the result container only. |
+
 ## Accessibility & Async Feedback
 
 When announcing asynchronous feedback (e.g., via Toasts, ActionFeedbackRegion, or NotificationPanel), motion is secondary to screen reader announcements.
@@ -57,6 +72,10 @@ When announcing asynchronous feedback (e.g., via Toasts, ActionFeedbackRegion, o
 - `ActionFeedbackRegion` announces pending states politely, exposes pending progress with `aria-busy`, announces blocking errors assertively, and leaves success states with `aria-live="off"` after the pending announcement. Error feedback persists until dismissed or cleared; do not auto-dismiss a blocking error.
 - Toasts use `asyncFeedback` for entrance, `enterExit` for dismissal, and `listReorder` when the non-error stack compacts. Non-error toast overflow may dismiss older items, but error toasts remain in the dedicated error stack until the user or caller removes them.
 - Cancellation that the operator requested, such as sprint planning cancellation, is warning feedback rather than error feedback. Keep it visible until the operator dismisses it or starts another action.
+- Stale-data and background-refresh states must preserve the last useful content when cached data exists. Use a polite status message, `aria-busy` on the updating region when applicable, and visible copy such as "Refreshing", "Updating", or "Stale Data" rather than replacing the surface with a spinner-only state.
+- Pending actions must suppress duplicate activation and expose the blocked reason through visible status text, `title`, or `aria-describedby`. Do not rely on click-time announcements from disabled controls.
+- Destructive confirmations must use a named dialog, focus trap, explicit confirm/cancel controls, and progress semantics for hold-to-confirm. Reduced motion may remove progress animation timing, but visible percent text, progressbar attributes, and cancellation copy remain required.
+- No critical action or state may be disclosed by hover alone. Hover-revealed affordances must also be reachable by keyboard focus, or the action must remain persistently visible.
 
 ## Shared Control States
 
@@ -89,6 +108,8 @@ All standard overlays (Dialog, DropdownMenu, Popover, Tooltip, ConfirmDialog) ad
 4. **Focus Trapping:** Active focus traps must gracefully handle empty containers or containers with dynamically hidden content. If no valid focusable descendants exist, the container itself receives focus. Traps must filter out hidden, disabled, inert, or `aria-hidden="true"` elements when calculating focus boundaries. Furthermore, if the original trigger is removed from the DOM, focus safely falls back to the document body.
 5. **Scroll Management:** When native `element.scrollIntoView()` triggers unwanted whole-page layout shifts or window bouncing in nested `overflow-y-auto` panels, replace it by calculating bounding client rects (`element.getBoundingClientRect()`) against the container and adjusting `container.scrollTop` manually.
 
+Global search follows the same overlay rules. Its open/close GSAP timeline uses `enterExit`, `listReveal`, and `controlFeedback` interaction tokens; the result list keeps stale matches visible during background refresh with `aria-busy`, a polite live status, and visual dimming. Arrow-key navigation updates the combobox `aria-activedescendant` only when a real option exists and keeps the active row visible by adjusting the overlay result scroller, not the page scroll position.
+
 ## Menu & Popover Keyboard Expectations
 DropdownMenus and Popovers are expected to be fully keyboard accessible:
 - Triggers cloned into these components preserve caller's `ref`, `onClick`, `onKeyDown`, `aria-label`, and disabled behavior while augmenting `aria-haspopup`, `aria-expanded`, and `aria-controls`.
@@ -104,5 +125,6 @@ DropdownMenus and Popovers are expected to be fully keyboard accessible:
 - Route changes triggered by shell links, task links, Browser controls, or sprint/task selectors must leave the destination with a named page landmark. If focus is programmatically moved, use `preventScroll` where possible to avoid jumping fixed shell chrome.
 - Keyboard-only users must be able to operate Browser chrome, session rail actions, settings forms, task/sprint selectors, stats filters, command menus, and compact mobile controls without hover-only disclosure.
 - Task cards and active stream rows keep status, dependency blockers, QA review state, PR/live duration metadata, drag limitations, and inline actions readable without requiring hover. Pointer drag remains pointer-only; reduced-motion users receive static drag-disabled messaging instead of keyboard drag-and-drop.
+- Kanban task cards keep Edit/Delete actions persistently reachable with fixed hit targets. Dependency chips distinguish blocked, resolved, in-progress, QA-failed, and unknown dependencies inline; task cards also expose PR pending/ready, live runtime, QA review, optimistic saving, focus, pressed, dragging, and reduced-motion states through static text, borders, badges, and accessible labels.
 
 See the [Dashboard Accessibility Quality Audit](./accessibility-quality-audit.md) for verification expectations.

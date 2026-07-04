@@ -56,3 +56,43 @@ test('button keeps locked width during success feedback', () => {
 
     expect(getByRole('button').style.width).toBe('150px');
 });
+
+test('button keeps locked width when feedback swaps from pending to success', () => {
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 150 });
+
+    const { getByRole, rerender } = render(
+        <Button isLoading={false}>Save settings</Button>
+    );
+
+    expect(getByRole('button').style.width).toBe('');
+
+    rerender(
+        <Button isLoading>Save settings</Button>
+    );
+    expect(getByRole('button')).toHaveAttribute('aria-busy', 'true');
+    expect(getByRole('button').style.width).toBe('150px');
+
+    rerender(
+        <Button success>Save settings</Button>
+    );
+    expect(getByRole('button')).not.toHaveAttribute('aria-busy', 'true');
+    expect(getByRole('button').style.width).toBe('150px');
+});
+
+test('button keeps the same locked width across pending and success feedback', () => {
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 150 });
+
+    const { getByRole, rerender } = render(
+        <Button>Deploy</Button>
+    );
+
+    expect(getByRole('button').style.width).toBe('');
+
+    rerender(<Button pending>Deploy</Button>);
+    expect(getByRole('button')).toHaveAttribute('aria-busy', 'true');
+    expect(getByRole('button').style.width).toBe('150px');
+
+    rerender(<Button success>Deploy</Button>);
+    expect(getByRole('button')).not.toHaveAttribute('aria-busy', 'true');
+    expect(getByRole('button').style.width).toBe('150px');
+});
