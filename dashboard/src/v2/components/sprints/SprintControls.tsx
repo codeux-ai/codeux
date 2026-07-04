@@ -21,6 +21,19 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
   sprintName = "sprint",
 }) => {
   const canPauseResume = isActive || isPaused;
+  const pauseResumeLabel = isPaused ? "Resume" : "Pause";
+  const startStopLabel = isActive ? "Stop" : "Start";
+  const busyLabel = isPauseResumePending
+    ? `${pauseResumeLabel} pending`
+    : isStartStopPending
+      ? `${startStopLabel} pending`
+      : null;
+  const disabledReason = isPauseResumePending || isStartStopPending
+    ? "Wait for the current sprint action to finish."
+    : !canPauseResume
+      ? "Pause is available after the sprint starts."
+      : null;
+  const reasonId = `sprint-controls-${sprintName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-reason`;
 
   return (
     <>
@@ -29,15 +42,17 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
         onClick={onPauseResume}
         aria-label={
           isPauseResumePending
-            ? (isPaused ? "Resuming..." : "Pausing...")
+            ? `${pauseResumeLabel} ${sprintName} is pending`
             : isPaused
               ? `Resume ${sprintName}`
               : `Pause ${sprintName}`
         }
+        aria-busy={isPauseResumePending ? "true" : undefined}
+        aria-describedby={disabledReason ? reasonId : undefined}
         disabled={!canPauseResume || isPauseResumePending || isStartStopPending}
         title={
           isPauseResumePending || isStartStopPending
-            ? "Wait for the current action to finish"
+            ? "Wait for the current sprint action to finish"
             : !canPauseResume
               ? "Sprint must be running to pause"
               : isPaused
@@ -50,14 +65,16 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
             : "border-status-amber/25 bg-status-amber/10 text-status-amber hover:bg-status-amber/15"
         } disabled:cursor-not-allowed disabled:opacity-50`}
       >
-        {isPauseResumePending ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.2} />
+        <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+          {isPauseResumePending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" strokeWidth={2.2} />
         ) : isPaused ? (
           <Play className="h-3.5 w-3.5" fill="currentColor" />
         ) : (
           <Pause className="h-3.5 w-3.5" fill="currentColor" />
-        )}
-        {isPauseResumePending ? (isPaused ? "Resuming..." : "Pausing...") : (isPaused ? "Resume" : "Pause")}
+          )}
+        </span>
+        <span className="inline-flex min-w-[3.75rem] justify-center">{pauseResumeLabel}</span>
       </button>
 
       <button
@@ -65,15 +82,17 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
         onClick={onStartStop}
         aria-label={
           isStartStopPending
-            ? (isActive ? "Stopping..." : "Starting...")
+            ? `${startStopLabel} ${sprintName} is pending`
             : isActive
               ? `Stop ${sprintName}`
               : `Start ${sprintName}`
         }
+        aria-busy={isStartStopPending ? "true" : undefined}
+        aria-describedby={disabledReason ? reasonId : undefined}
         disabled={isStartStopPending || isPauseResumePending}
         title={
           isStartStopPending || isPauseResumePending
-            ? "Wait for the current action to finish"
+            ? "Wait for the current sprint action to finish"
             : isActive
               ? "Stop sprint execution"
               : "Start sprint execution"
@@ -84,15 +103,25 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
             : "border-signal-500/20 bg-signal-500/[0.08] text-signal-600 hover:bg-signal-500/[0.12] dark:text-signal-300"
         } disabled:cursor-not-allowed disabled:opacity-50`}
       >
-        {isStartStopPending ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.2} />
+        <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+          {isStartStopPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" strokeWidth={2.2} />
         ) : isActive ? (
           <Square className="h-3.5 w-3.5" fill="currentColor" />
         ) : (
           <Play className="h-3.5 w-3.5" fill="currentColor" />
-        )}
-        {isStartStopPending ? (isActive ? "Stopping..." : "Starting...") : (isActive ? "Stop" : "Start")}
+          )}
+        </span>
+        <span className="inline-flex min-w-[3.75rem] justify-center">{startStopLabel}</span>
       </button>
+      <span
+        id={reasonId}
+        role={busyLabel ? "status" : undefined}
+        aria-live="polite"
+        className={`basis-full text-left text-[11px] font-bold leading-4 ${busyLabel ? "text-signal-600 dark:text-signal-300" : "text-slate-500 dark:text-slate-400"}`}
+      >
+        {busyLabel ? `${busyLabel}. Wait for the current sprint action to finish.` : disabledReason ?? "\u00a0"}
+      </span>
     </>
   );
 };
