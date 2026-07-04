@@ -26,6 +26,7 @@ vi.mock("../../../dashboard/src/v2/lib/motion/constants.js", () => ({
   useGsapInteractionTokens: () => ({
     enterExit: { duration: 0, ease: "power2.out" },
     listReveal: { duration: 0, ease: "power2.out" },
+    listReorder: { duration: 0, ease: "power2.out" },
   }),
 }));
 
@@ -115,7 +116,7 @@ describe("NotificationPanel", () => {
       />,
     );
 
-    const retry = screen.getByRole("button", { name: "Retry for Startup checks blocked" });
+    const retry = screen.getByRole("button", { name: "Retry Startup checks blocked" });
     retry.focus();
     fireEvent.click(retry);
 

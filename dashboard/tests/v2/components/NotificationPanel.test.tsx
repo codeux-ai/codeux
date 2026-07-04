@@ -20,6 +20,7 @@ vi.mock("gsap", () => ({
 }));
 
 vi.mock("../../../src/v2/hooks/use-reduced-motion.js", () => ({
+  useResolvedMotionDuration: () => 0,
   useReducedMotion: () => true,
 }));
 
@@ -58,11 +59,11 @@ describe("NotificationPanel", () => {
     );
 
     expect(screen.getByLabelText("Notifications Panel")).toBeInTheDocument();
-    expect(screen.getByText("1 unread notification")).toBeInTheDocument();
+    expect(screen.getByText(/1\s+unread notification/)).toBeInTheDocument();
     expect(screen.getByText("Cluster not ready")).toBeInTheDocument();
     expect(screen.queryByText("Deployment successful")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Open onboarding" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open onboarding Cluster not ready" }));
     expect(markRead).toHaveBeenCalledWith("startup-cluster-not-ready");
     expect(action).toHaveBeenCalledTimes(1);
 
@@ -102,7 +103,7 @@ describe("NotificationPanel", () => {
       />,
     );
 
-    const actionBtn = screen.getByRole("button", { name: "Open onboarding" });
+    const actionBtn = screen.getByRole("button", { name: "Open onboarding Cluster not ready" });
     actionBtn.focus();
     expect(document.activeElement).toBe(actionBtn);
 

@@ -197,6 +197,10 @@ Legacy runtime:
 
 ### Navigation
 - The top-nav workspace search trigger uses a more opaque glass surface in light and dark mode so it stays readable against page content while preserving the existing blur treatment.
+- The notification panel announces refresh, mark-read, dismiss, and action outcomes through polite live regions. Refresh and mark-all-read controls expose pending state with `aria-busy`, disabled controls include visible reasons, and every repeated row action includes the notification title in its accessible name.
+- Notification rows include textual read/unread state in addition to the severity accent rail. Initial rows use the `listReveal` motion contract, read/dismiss compaction uses `listReorder`, and reduced-motion users receive immediate static state changes without transitional movement.
+- Critical notifications are rendered ahead of non-critical items so scroll overflow cannot push blocking startup issues behind lower-priority messages. They remain visible until the notification source clears or the user explicitly dismisses a dismissible critical item.
+- Action and dismiss clicks return focus to the notification panel after the row state changes, giving keyboard users a stable fallback when an item leaves the list.
 
 ### Stats page
 - The Stats page is available at `/stats` and is scoped to the selected project. Without a selected project, it renders the Stats shell with a polite no-project state instead of attempting to fetch telemetry.
