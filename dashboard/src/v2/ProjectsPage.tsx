@@ -63,6 +63,13 @@ const statusSpine: Record<SourceStatus, string> = {
 
 type ProjectMetaIcon = any;
 
+const statusSpineLabel: Record<SourceStatus, string> = {
+    running:      "Running project",
+    failed:       "Failed project",
+    intervention: "Project needs review",
+    idle:         "Idle project",
+};
+
 /* ─── Project Card ──────────────────────────────────────────────────────── */
 
 /** One manifest row — label, dotted leader, value (editorial / invoice aesthetic). */
@@ -73,15 +80,14 @@ const MetaRow: FunctionComponent<{
     isEmpty: boolean;
     mono?: boolean;
 }> = ({ icon: Icon, label, value, isEmpty, mono }) => (
-    <div className="flex items-baseline gap-2 min-w-0">
-        <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
+    <div className="grid min-w-0 grid-cols-[minmax(4.75rem,auto)_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1 sm:grid-cols-[minmax(5rem,auto)_minmax(0,1fr)]">
+        <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.13em] text-slate-400 dark:text-slate-500">
             <Icon className="h-3 w-3 shrink-0 -translate-y-px" strokeWidth={2.4} aria-hidden="true" />
             {label}
         </span>
-        <span aria-hidden="true" className="-translate-y-[3px] flex-1 border-b border-dotted border-black/[0.14] dark:border-white/[0.14]" />
         <span
             title={isEmpty ? undefined : value}
-            className={`min-w-0 max-w-[58%] shrink truncate text-[12px] leading-snug ${mono ? "font-mono" : "font-semibold"} ${
+            className={`min-w-0 truncate text-right text-[12px] leading-snug sm:text-left ${mono ? "font-mono" : "font-semibold"} ${
                 isEmpty ? "italic text-slate-300 dark:text-slate-600" : "text-slate-800 dark:text-slate-100"
             }`}
         >
@@ -92,11 +98,11 @@ const MetaRow: FunctionComponent<{
 
 /** A big editorial stat numeral (Sprints / Open / Done). */
 const StatTile: FunctionComponent<{ label: string; value: number; accent?: boolean }> = ({ label, value, accent }) => (
-    <div className="flex flex-col items-center justify-center gap-1 py-0.5">
-        <div className={`font-display text-2xl font-black tabular-nums leading-none ${accent ? "bg-gradient-to-br from-ember-500 to-signal-500 bg-clip-text text-transparent" : "text-slate-900 dark:text-white"}`}>
+    <div className="flex min-w-0 flex-col items-start justify-center gap-1 px-2 py-1">
+        <div className={`font-display text-xl font-black tabular-nums leading-none ${accent ? "bg-gradient-to-br from-ember-500 to-signal-500 bg-clip-text text-transparent" : "text-slate-900 dark:text-white"}`}>
             {value}
         </div>
-        <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+        <div className="truncate text-[8px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
             {label}
         </div>
     </div>
@@ -221,48 +227,45 @@ const ProjectCard: FunctionComponent<{
         >
             {isRunning && (
                 <div
-                    className="pointer-events-none absolute inset-0 rounded-[1.75rem] scale-[1.01]"
-                    style={{ boxShadow: "0 0 0 1px rgba(0,171,132,0.42), 0 0 24px rgba(0,171,132,0.14)" }}
+                    className="pointer-events-none absolute inset-0 rounded-3xl scale-[1.005]"
+                    style={{ boxShadow: "0 0 0 1px rgba(0,171,132,0.32), 0 0 18px rgba(0,171,132,0.1)" }}
                 />
             )}
 
             <div
-                className={`relative flex h-full flex-col overflow-hidden rounded-[1.75rem] border backdrop-blur-2xl transition-shadow duration-300 ${
+                className={`relative flex h-full flex-col overflow-hidden rounded-3xl border backdrop-blur-2xl transition-shadow duration-300 ${
                     isCardSelected
-                        ? "border-ember-500/45 bg-white/80 shadow-[0_14px_44px_rgba(255,184,0,0.12)] ring-1 ring-ember-500/25 dark:bg-void-800/80"
-                        : "border-black/[0.06] bg-white/72 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:bg-void-800/64 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]"
+                        ? "border-ember-500/45 bg-white/86 shadow-[0_12px_34px_rgba(255,184,0,0.1)] ring-1 ring-ember-500/25 dark:bg-void-800/82"
+                        : "border-black/[0.06] bg-white/76 shadow-[0_2px_18px_rgba(0,0,0,0.035)] dark:border-white/[0.06] dark:bg-void-800/66 dark:shadow-[0_4px_22px_rgba(0,0,0,0.18)]"
                 }`}
             >
-                {/* Status spine — left edge, status-encoded */}
                 <div
-                    aria-hidden="true"
-                    className={`pointer-events-none absolute left-0 top-0 z-20 h-full w-[3px] ${statusSpine[source.status]} ${isRunning ? "animate-pulse" : ""}`}
+                    role="img"
+                    aria-label={statusSpineLabel[source.status]}
+                    className={`pointer-events-none absolute left-0 top-0 z-20 h-full w-1 ${statusSpine[source.status]} ${isRunning ? "motion-safe:animate-pulse motion-reduce:animate-none" : ""}`}
                 />
                 <div className="absolute inset-0 bg-signal-500/[0.025] opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-visible:opacity-100" />
-                {/* Corner wash — status-green while running, else a soft warm amber */}
-                <div className={`pointer-events-none absolute -top-16 -left-10 h-40 w-40 rounded-full blur-3xl opacity-40 ${
-                    isRunning ? "bg-status-green/20" : "bg-ember-500/10"
+                <div className={`pointer-events-none absolute -top-14 -left-12 h-36 w-36 rounded-full blur-3xl opacity-25 ${
+                    isRunning ? "bg-status-green/18" : "bg-ember-500/8"
                 }`} />
-                {/* Oversized editorial monogram watermark */}
                 <div
                     aria-hidden="true"
-                    className="pointer-events-none absolute -bottom-10 -right-3 select-none font-display text-[7rem] font-black leading-none tracking-tighter text-black/[0.035] dark:text-white/[0.03]"
+                    className="pointer-events-none absolute -bottom-8 -right-2 select-none font-display text-[5.5rem] font-black leading-none tracking-tighter text-black/[0.022] dark:text-white/[0.02]"
                 >
                     {source.name.slice(0, 2).toUpperCase()}
                 </div>
-                <WaveFluid accentHex={EMBER_HEX} />
-                <BorderTrace accentHex={EMBER_HEX} />
+                {isRunning || isCardSelected ? <WaveFluid accentHex={EMBER_HEX} /> : null}
+                {isCardSelected ? <BorderTrace accentHex={EMBER_HEX} /> : null}
 
-                <div className="relative z-10 flex flex-1 flex-col gap-4 p-5 pl-6 min-w-0">
-                    {/* Top line — status + source kind */}
-                    <div className="flex items-center justify-between gap-3">
+                <div className="relative z-10 flex min-w-0 flex-1 flex-col gap-4 p-5 pl-6">
+                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
                         <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${statusClass}`}>
                             <StatusDot status={source.status} />
                             <span>{statusText}</span>
                         </span>
-                        <div className="flex items-center gap-2">
+                        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
                             {isCardSelected ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-ember-500/[0.14] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-ember-700 dark:text-ember-200">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-ember-500/[0.12] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-ember-700 dark:text-ember-200">
                                     <Check className="h-2.5 w-2.5" strokeWidth={3} aria-hidden={true} />
                                     Selected
                                 </span>
@@ -279,13 +282,11 @@ const ProjectCard: FunctionComponent<{
                         </div>
                     </div>
 
-                    {/* Identity — monogram + name */}
-                    <div className="flex items-center gap-3.5">
+                    <div className="flex min-w-0 items-start gap-3.5">
                         <div
                             aria-hidden="true"
-                            className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-2xl border border-ember-500/20 bg-gradient-to-br from-ember-500/[0.16] to-ember-600/[0.08] font-display text-xl font-black text-ember-700 dark:border-ember-400/15 dark:text-ember-200"
+                            className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-2xl border border-ember-500/18 bg-ember-500/[0.1] font-display text-xl font-black text-ember-700 dark:border-ember-400/15 dark:text-ember-200"
                         >
-                            <span className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,184,0,0.12)_0%,transparent_55%)]" />
                             <span className="relative">{source.name.slice(0, 1).toUpperCase()}</span>
                         </div>
                         <div className="min-w-0 flex-1">
@@ -307,24 +308,24 @@ const ProjectCard: FunctionComponent<{
                                     onOpenInvocation();
                                 }
                             }}
-                            className="flex items-center justify-between rounded-xl border border-ember-500/25 bg-ember-500/[0.08] px-3 py-2.5 text-left text-ember-700 transition-colors hover:bg-ember-500/[0.12] dark:text-ember-200"
+                            className="flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-ember-500/25 bg-ember-500/[0.08] px-3 py-2.5 text-left text-ember-700 transition-colors hover:bg-ember-500/[0.12] disabled:cursor-wait disabled:opacity-80 dark:text-ember-200"
                             disabled={!setupInvocationId}
+                            aria-label={setupInvocationId ? `Open setup invocation for ${source.name}` : `Project setup starting for ${source.name}`}
                             title={setupInvocationId ? "Open setup invocation" : "Invocation starting"}
                         >
-                            <span className="flex items-center gap-2">
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                <span className="text-[10px] font-black uppercase tracking-[0.14em]">
+                            <span className="flex min-w-0 items-center gap-2">
+                                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                                <span className="truncate text-[10px] font-black uppercase tracking-[0.14em]">
                                     Project setup running
                                 </span>
                             </span>
-                            <span className="ml-3 font-mono text-[10px] font-bold opacity-80">
+                            <span className="shrink-0 font-mono text-[10px] font-bold opacity-80">
                                 {setupInvocationId ? setupInvocationId.slice(0, 8) : "starting"}
                             </span>
                         </button>
                     ) : null}
 
-                    {/* Manifest — repo URL, workspace path, target branch, host, last run */}
-                    <div className="flex flex-col gap-2 border-t border-black/[0.06] pt-3.5 dark:border-white/[0.07]">
+                    <div className="flex flex-col gap-2 rounded-2xl border border-black/[0.06] bg-white/45 p-3 dark:border-white/[0.07] dark:bg-white/[0.035]">
                         {hasRepoUrl ? (
                             <MetaRow icon={Link} label="Repo" value={viewModel.gitUrl.value} isEmpty={false} mono />
                         ) : null}
@@ -334,14 +335,12 @@ const ProjectCard: FunctionComponent<{
                         <MetaRow icon={Clock3} label="Last run" value={lastRunValue} isEmpty={viewModel.lastRunAt.isEmpty} />
                     </div>
 
-                    {/* Stats band */}
-                    <div className="grid grid-cols-[repeat(3,minmax(0,1fr))] divide-x divide-black/[0.06] border-y border-black/[0.06] py-2 dark:divide-white/[0.07] dark:border-white/[0.07]">
+                    <div className="grid grid-cols-[repeat(3,minmax(0,1fr))] divide-x divide-black/[0.06] rounded-2xl border border-black/[0.06] bg-black/[0.018] py-1 dark:divide-white/[0.07] dark:border-white/[0.07] dark:bg-white/[0.026]">
                         <StatTile label="Sprints" value={source.sprintsCount} />
                         <StatTile label="Open" value={source.openTasks} />
                         <StatTile label="Done" value={source.completedTasks} accent={completion === 100 && totalTasks > 0} />
                     </div>
 
-                    {/* Completion meter */}
                     <div>
                         <div className="flex items-center justify-between text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
                             <span>Completion</span>
@@ -349,23 +348,22 @@ const ProjectCard: FunctionComponent<{
                         </div>
                         <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.08]">
                             <div
-                                className="h-full rounded-full bg-gradient-to-r from-ember-500 via-ember-400 to-signal-500 shadow-[0_0_10px_rgba(255,184,0,0.4)] transition-[width] duration-700"
+                                className="h-full rounded-full bg-gradient-to-r from-ember-500 to-signal-500 transition-[width] duration-700"
                                 style={{ width: `${completion}%` }}
                             />
                         </div>
                     </div>
 
-                    {/* Actions — select toggle + compact icon toolbar */}
-                    <div className="mt-auto flex flex-wrap items-center gap-2">
+                    <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-black/[0.06] pt-3 dark:border-white/[0.07]">
                         <button
                             type="button"
                             onClick={(event) => { event.stopPropagation(); onSelect(); }}
                             onPointerDown={(event) => event.stopPropagation()}
                             aria-pressed={isCardSelected}
                             aria-label={isCardSelected ? `${source.name} is selected` : `Select ${source.name}`}
-                            className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold tracking-wide transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/40 ${
+                            className={`inline-flex min-w-[10rem] flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold tracking-wide transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/40 ${
                                 isCardSelected
-                                    ? "bg-ember-500 text-void-900 shadow-[0_4px_18px_rgba(255,184,0,0.3)] hover:bg-ember-400"
+                                    ? "bg-ember-500 text-void-900 shadow-[0_3px_14px_rgba(255,184,0,0.22)] hover:bg-ember-400"
                                     : "border border-black/[0.1] bg-white/50 text-slate-700 hover:border-ember-500/45 hover:bg-ember-500/[0.08] hover:text-ember-700 dark:border-white/[0.12] dark:bg-white/[0.04] dark:text-slate-200 dark:hover:border-ember-500/45 dark:hover:text-ember-200"
                             }`}
                         >
@@ -404,28 +402,29 @@ const ProjectCard: FunctionComponent<{
 
 const AddCard: FunctionComponent<{ onClick: () => void }> = ({ onClick }) => (
     <button
+        type="button"
         onClick={onClick}
+        aria-label="Add Project: local or Git"
         className="group relative flex h-full min-h-[300px] w-full flex-col items-center justify-center gap-5
                    overflow-hidden p-7
-                   bg-white/45 dark:bg-void-800/35
+                   bg-white/55 dark:bg-void-800/40
                    backdrop-blur-2xl
-                   border border-dashed border-black/[0.12] dark:border-white/[0.12] hover:border-ember-500/50
-                   rounded-[1.75rem]
+                   border border-dashed border-black/[0.12] dark:border-white/[0.12] hover:border-ember-500/45
+                   rounded-3xl
                    shadow-[0_2px_20px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.18)]
                    transition-all duration-500
-                   hover:bg-ember-500/[0.03] cursor-pointer"
+                   hover:bg-ember-500/[0.035] cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/40"
     >
-        {/* Ghost watermark + corner wash to echo the project cards */}
-        <span aria-hidden="true" className="pointer-events-none absolute -top-14 -left-8 h-36 w-36 rounded-full bg-ember-500/10 blur-3xl opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
-        <span aria-hidden="true" className="pointer-events-none absolute -bottom-10 -right-3 select-none font-display text-[7rem] font-black leading-none tracking-tighter text-black/[0.03] dark:text-white/[0.025]">
+        <span aria-hidden="true" className="pointer-events-none absolute -top-14 -left-8 h-36 w-36 rounded-full bg-ember-500/8 blur-3xl opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+        <span aria-hidden="true" className="pointer-events-none absolute -bottom-10 -right-3 select-none font-display text-[6rem] font-black leading-none tracking-tighter text-black/[0.024] dark:text-white/[0.02]">
             +
         </span>
 
-        <div className="relative grid h-14 w-14 place-items-center rounded-2xl border border-black/[0.06] bg-black/[0.02] transition-all duration-300 group-hover:scale-110 group-hover:border-ember-500/30 group-hover:bg-ember-500/[0.12] dark:border-white/[0.06] dark:bg-white/[0.02]">
+        <div className="relative grid h-14 w-14 place-items-center rounded-2xl border border-black/[0.06] bg-white/70 transition-all duration-300 group-hover:border-ember-500/30 group-hover:bg-ember-500/[0.12] dark:border-white/[0.06] dark:bg-white/[0.035]">
             <Plus className="h-6 w-6 text-slate-400 transition-colors duration-300 group-hover:text-ember-500" strokeWidth={2.2} />
         </div>
 
-        <div className="relative flex flex-col items-center gap-1.5">
+        <div className="relative flex max-w-full flex-col items-center gap-1.5 text-center">
             <span className="font-display text-sm font-black uppercase tracking-[0.18em]
                              text-slate-400 dark:text-slate-500
                              group-hover:text-ember-600 dark:group-hover:text-ember-300 transition-colors duration-300">
@@ -682,8 +681,7 @@ export const ProjectsPage: FunctionComponent = () => {
                     title="Manage Projects"
                     subtitle="Connected repositories and local directories. Monitor health, tasks, and sprint activity."
                     actions={
-                    <div className="flex flex-col sm:flex-row md:flex-col items-start sm:items-center md:items-end gap-4 shrink-0">
-                        {/* Status pills */}
+                    <div className="flex flex-col items-start gap-3 sm:items-end">
                         <div className="flex flex-wrap items-center gap-2.5">
                             {runningCount > 0 && (
                                 <div className="px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] rounded-full
@@ -706,36 +704,35 @@ export const ProjectsPage: FunctionComponent = () => {
                             </div>
                         </div>
 
-                        {/* CTA */}
-                        <div className="flex items-center gap-3">
-                            <button
-                                onClick={() => {
-                                    setModalSourceType('new_project');
-                                    setShowModal(true);
-                                }}
-                                className="flex items-center gap-2 px-4 py-2 bg-ember-500 hover:bg-ember-400 text-void-900 font-bold text-sm rounded-2xl transition-all active:scale-95 shadow-[0_4px_20px_rgba(255,184,0,0.25)] hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)] focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
-                            >
-                                <Sparkles className="w-4 h-4" />
-                                New Project
-                            </button>
-                        </div>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setModalSourceType('new_project');
+                                setShowModal(true);
+                            }}
+                            className="flex items-center gap-2 rounded-2xl bg-ember-500 px-4 py-2 text-sm font-bold text-void-900 shadow-[0_4px_18px_rgba(255,184,0,0.22)] transition-all hover:bg-ember-400 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
+                        >
+                            <Sparkles className="w-4 h-4" aria-hidden="true" />
+                            New Project
+                        </button>
                     </div>
                     }
                 />
 
-                {/* ── Filter Tab Strip ────────────────────────────────── */}
-                <div className="flex flex-wrap gap-1 p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl w-fit">
+                <div className="flex w-full flex-wrap gap-1 rounded-2xl border border-black/[0.06] bg-white/55 p-1 backdrop-blur-xl dark:border-white/[0.06] dark:bg-white/[0.035] sm:w-fit">
                     {(['All', 'Running', 'Idle', 'Failed'] as Filter[]).map(f => (
                         <button
                             key={f}
+                            type="button"
                             onClick={() => setActiveFilter(f)}
-                            className={`text-xs font-semibold tracking-wide px-4 py-1.5 rounded-lg transition-all duration-200 flex items-center gap-2
+                            aria-pressed={activeFilter === f}
+                            className={`flex min-w-0 items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold tracking-wide transition-all duration-200
                                 ${activeFilter === f
-                                    ? 'bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)]'
+                                    ? 'bg-white text-slate-900 shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:bg-void-700 dark:text-white dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)]'
                                     : 'text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                                 }`}
                         >
-                            {f}
+                            <span className="truncate">{f}</span>
                             <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded-md
                                 ${activeFilter === f
                                     ? 'bg-ember-500/[0.12] text-ember-600 dark:text-ember-400'
@@ -762,7 +759,8 @@ export const ProjectsPage: FunctionComponent = () => {
                         )}
                     >
                     {!loading ? (
-                        <div className="col-start-1 row-start-1 grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] gap-5">
+                        filtered.length > 0 || sources.length > 0 ? (
+                        <div className="col-start-1 row-start-1 grid grid-cols-1 gap-5 sm:grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))]">
                             {filtered.map(source => (
                                 <div key={source.id} className="project-card-entry h-full">
                                     <ProjectCard
@@ -794,6 +792,30 @@ export const ProjectsPage: FunctionComponent = () => {
                                 }} />
                             </div>
                         </div>
+                        ) : (
+                            <div className="col-start-1 row-start-1 rounded-3xl border border-dashed border-black/[0.1] bg-white/55 p-8 text-center backdrop-blur-xl dark:border-white/[0.1] dark:bg-white/[0.035]">
+                                <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl border border-black/[0.06] bg-white/70 dark:border-white/[0.06] dark:bg-white/[0.04]">
+                                    <FolderOpen className="h-5 w-5 text-ember-500" aria-hidden="true" />
+                                </div>
+                                <h2 className="mt-4 font-display text-xl font-black tracking-tight text-slate-900 dark:text-white">
+                                    No projects connected
+                                </h2>
+                                <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                                    Add a local directory, connect a Git repository, or create a new project to start building the operational inventory.
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setModalSourceType('local');
+                                        setShowModal(true);
+                                    }}
+                                    className="mt-5 inline-flex items-center justify-center gap-2 rounded-2xl bg-ember-500 px-4 py-2.5 text-sm font-bold text-void-900 shadow-[0_4px_18px_rgba(255,184,0,0.22)] transition-all hover:bg-ember-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
+                                >
+                                    <Plus className="h-4 w-4" aria-hidden="true" />
+                                    Add Project
+                                </button>
+                            </div>
+                        )
                     ) : null}
                     </SkeletonLoader>
                 </div>
@@ -807,16 +829,16 @@ export const ProjectsPage: FunctionComponent = () => {
                 />
             )}
             {activeSetupProject && (
-                <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/55 px-6 backdrop-blur-xl" role="dialog" aria-modal="true" aria-labelledby="setup-project-title">
-                    <div className="flex flex-col max-h-[calc(100vh-2rem)] w-full max-w-xl rounded-[2rem] border border-black/[0.06] bg-white p-4 sm:p-6 shadow-[0_40px_90px_rgba(0,0,0,0.28)] dark:border-white/[0.08] dark:bg-void-800">
+                <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/55 px-4 backdrop-blur-xl sm:px-6" role="dialog" aria-modal="true" aria-labelledby="setup-project-title">
+                    <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-xl flex-col rounded-[2rem] border border-black/[0.06] bg-white/96 p-4 shadow-[0_34px_84px_rgba(0,0,0,0.26)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/96 sm:p-6">
                         <div className="overflow-y-auto pr-2 -mr-2">
                             <div className="flex items-start justify-between gap-4">
-                                <div>
+                                <div className="min-w-0">
                                     <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-ember-500">
                                         <Bot className="h-4 w-4" />
                                         Project Setup Agent
                                     </div>
-                                    <h2 id="setup-project-title" className="mt-3 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+                                    <h2 id="setup-project-title" className="mt-3 break-words font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white sm:text-3xl">
                                         Setup {activeSetupProject.name}
                                     </h2>
                                 </div>
@@ -841,14 +863,14 @@ export const ProjectsPage: FunctionComponent = () => {
                                         type="button"
                                         onClick={() => setSetupOptions(prev => ({ ...prev, [option.key]: !prev[option.key] }))}
                                         disabled={isActiveSetupRunning}
-                                        className={`rounded-2xl border p-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
+                                        className={`min-w-0 rounded-2xl border p-4 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 disabled:cursor-not-allowed disabled:opacity-60 ${
                                             setupOptions[option.key]
                                                 ? "border-ember-500/35 bg-ember-500/[0.08] text-slate-900 dark:text-white"
                                                 : "border-black/[0.06] bg-black/[0.025] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-400"
                                         }`}
                                         aria-pressed={setupOptions[option.key]}
                                     >
-                                        <span className="block text-xs font-black uppercase tracking-[0.14em]">{option.label}</span>
+                                        <span className="block truncate text-xs font-black uppercase tracking-[0.14em]">{option.label}</span>
                                         <span className="mt-1 block text-xs font-medium opacity-75">{option.description}</span>
                                     </button>
                                 ))}
