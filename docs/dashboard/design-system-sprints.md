@@ -53,6 +53,7 @@ This document outlines the design system for the Sprints page and related planni
 
 *   Kanban task cards use `controlFeedback` for hover/focus/action controls and `listReorder` for card drag/reorder movement. Status and drag GSAP feedback stays in the task-card motion helper.
 *   Cards expose task ID, title, status, priority, dependency blockers, QA review state, session metadata, PR links, and live duration without hover-only disclosure. Status changes and live duration updates use polite announcements; exact text remains visible/static for reduced-motion users.
+*   Overview Active Streams task rows keep a compact operational density: duration is visible at rest, row actions use icon-only controls with accessible names and titles, and desktop controls reveal on hover or keyboard focus without expanding into labeled pills. Mobile layouts may keep the compact icon group visible to preserve touch access.
 *   Pointer drag is pointer-only. In reduced motion, draggable reordering is disabled and the card exposes static "drag disabled" copy instead of relying on movement.
 *   Destructive task deletion opens `ConfirmDialog` before invoking delete callbacks and restores focus through the shared confirmation flow.
 
