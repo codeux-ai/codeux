@@ -170,6 +170,8 @@ The dashboard now exposes:
 - per-sprint startup script editing in the browser page itself
 - preview logs, rebuild, stop, open, and remove actions
 - Browser controls expose explicit availability and progress states: session cards, window chrome, launch controls, script saves, log refreshes, and rebuild/stop/remove actions use static status badges plus `aria-busy` / live-region text so operators can tell whether a preview is starting, running, stopped, erroring, refreshing, saving, removing, rebuilding, or launching without relying on animation alone.
+- The session rail keeps overflow arrows visible on large screens when more than five previews exist, uses keyboard-reachable scroll buttons, and switches scroll behavior from smooth movement to instant movement when `prefers-reduced-motion: reduce` is active.
+- Preview cards render selected, starting, removing, health, port-routing, and unavailable-link states as text or badges. Links without a routed host port are not focusable or clickable, and removal controls stay disabled while a remove request is pending.
 - The in-app browser keeps the current iframe and existing logs visible while background refreshes run. Duplicate launch, rebuild, stop, remove, script-save, and navigation submissions are blocked while their matching async action is pending.
 - port routing status on preview cards, including container-port to host-port mappings such as `:4444 -> :5653`
 - when `showInAppBrowser` is disabled, Browser entry points are hidden from the dashboard shell and the `/browser` route shows a configuration notice instead of the embedded workspace

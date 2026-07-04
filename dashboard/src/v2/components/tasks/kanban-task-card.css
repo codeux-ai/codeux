@@ -5,15 +5,21 @@
     box-shadow var(--kanban-card-control-duration, var(--interaction-control-feedback-duration)) var(--kanban-card-control-ease, var(--interaction-control-feedback-ease)),
     transform var(--kanban-card-control-duration, var(--interaction-control-feedback-duration)) var(--kanban-card-control-ease, var(--interaction-control-feedback-ease));
   cursor: grab;
+  outline-offset: 3px;
 }
 @media (hover: hover) {
   .kanban-card:hover {
     box-shadow: 0 6px 16px rgba(0,0,0,0.16);
     transform: translateY(-2px);
+    border-color: rgba(0, 224, 160, 0.22);
   }
 }
+.kanban-card:active {
+  cursor: grabbing;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.16), inset 0 0 0 1px rgba(0, 224, 160, 0.18);
+}
 @media (prefers-reduced-motion: reduce) {
-  .kanban-card, .kanban-card:hover {
+  .kanban-card, .kanban-card:hover, .kanban-card:active {
     transition: none;
     transform: none;
   }
@@ -21,13 +27,16 @@
 .kanban-card:focus-visible {
   outline: none;
   box-shadow: var(--v2-shadow-premium), 0 0 0 4px rgba(0, 224, 160, 0.4);
+  border-color: rgba(0, 224, 160, 0.4);
 }
 
 .kanban-card--dragging {
-  opacity: 0.45;
-  filter: blur(0.5px);
-  transform: scale(1.03);
+  opacity: 0.64;
+  filter: saturate(0.85);
+  transform: scale(1.02);
   transition: none;
+  cursor: grabbing;
+  box-shadow: 0 0 0 2px rgba(0, 224, 160, 0.55), 0 12px 28px rgba(0,0,0,0.2);
 }
 @media (prefers-reduced-motion: reduce) {
   .kanban-card--dragging {
@@ -40,11 +49,18 @@
   transform: none !important;
   scale: 1 !important;
 }
+.kanban-card-reduced-motion {
+  cursor: default;
+  box-shadow: var(--card-shadow-idle, 0 1px 3px rgba(0,0,0,0.08)), inset 0 0 0 1px rgba(100,116,139,0.12);
+}
+.kanban-card[data-optimistic="true"] {
+  box-shadow: 0 0 0 1px rgba(0, 224, 160, 0.18), 0 2px 20px rgba(0,0,0,0.04);
+}
 
 .kanban-card__actions {
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-0.5rem);
+  opacity: 0.94;
+  pointer-events: auto;
+  transform: translateY(0);
   transition:
     opacity var(--kanban-card-control-duration, var(--interaction-control-feedback-duration)) var(--kanban-card-control-ease, var(--interaction-control-feedback-ease)),
     transform var(--kanban-card-control-duration, var(--interaction-control-feedback-duration)) var(--kanban-card-control-ease, var(--interaction-control-feedback-ease));
@@ -55,8 +71,13 @@
 .kanban-card:focus-visible .kanban-card__actions,
 .kanban-card:focus-within .kanban-card__actions {
   opacity: 1;
-  pointer-events: auto;
   transform: translateY(0);
+}
+
+.kanban-card__actions button {
+  min-width: 2.75rem;
+  min-height: 2rem;
+  white-space: nowrap;
 }
 
 @media (any-pointer: coarse) {

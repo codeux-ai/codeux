@@ -55,20 +55,22 @@ describe("MemorySearch Accessibility", () => {
         expect(getByText("Search cleared")).toBeInTheDocument();
     });
 
-    test("typing in search makes active-query polite announcement", async () => {
+    test("typing in search makes debounced pending state visible and announced", async () => {
         searchQuerySignal.value = "";
         const { getByRole, getByText } = render(<MemorySearch />);
         const input = getByRole("textbox", { name: "Search memories" });
 
         await fireEvent.input(input, { target: { value: "test query" } });
 
-        expect(getByText("Searching...")).toBeInTheDocument();
+        expect(input).toHaveAttribute("aria-busy", "true");
+        expect(getByText("Applying search...")).toBeInTheDocument();
+        expect(getByText("Applying search")).toBeInTheDocument();
     });
 
-    test("typing debounces writes to the memory search signal", async () => {
+    test("typing debounces writes to the memory search signal and announces committed search", async () => {
         vi.useFakeTimers();
         searchQuerySignal.value = "";
-        const { getByRole } = render(<MemorySearch />);
+        const { getByRole, getByText } = render(<MemorySearch />);
         const input = getByRole("textbox", { name: "Search memories" });
 
         await fireEvent.input(input, { target: { value: "architecture" } });
@@ -85,5 +87,6 @@ describe("MemorySearch Accessibility", () => {
             vi.advanceTimersByTime(1);
         });
         expect(searchQuerySignal.value).toBe("architecture");
+        expect(getByText("Search applied for architecture")).toBeInTheDocument();
     });
 });

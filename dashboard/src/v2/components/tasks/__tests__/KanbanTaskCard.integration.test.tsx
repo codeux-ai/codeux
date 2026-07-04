@@ -190,8 +190,10 @@ describe("KanbanTaskCard Integration", () => {
     expect(getByText("ACTIVE")).toBeInTheDocument();
     expect(getByText("4m 12s")).toBeInTheDocument();
 
-    // Test that the PR link anchor tag exists by checking for "PR"
-    const prLink = getByText("PR").closest('a');
+    expect(getByText("Live")).toBeInTheDocument();
+
+    // Test that the PR link anchor tag exists by checking for "PR ready"
+    const prLink = getByText("PR ready").closest('a');
     expect(prLink).toBeInTheDocument();
     expect(prLink).toHaveAttribute("href", "https://github.com/org/repo/pull/42");
   });
@@ -211,6 +213,10 @@ describe("KanbanTaskCard Integration", () => {
     const deleteBtn = getByTitle(/Delete task/i);
     expect(editBtn).toBeInTheDocument();
     expect(deleteBtn).toBeInTheDocument();
+    expect(editBtn).toBeVisible();
+    expect(deleteBtn).toBeVisible();
+    expect(editBtn).toHaveAccessibleName("Edit task TASK-123: Implement new feature");
+    expect(deleteBtn).toHaveAccessibleName("Delete task TASK-123: Implement new feature");
 
     // Check indicator labels are accessible via their status titles
     const dependencyIndicator = getByTitle(/Depends on Backend API/i);
@@ -227,11 +233,15 @@ describe("KanbanTaskCard Integration", () => {
     }
 
     const actionsContainer = editBtn.parentElement;
-    expect(actionsContainer).toHaveClass("group-focus:opacity-100");
+    expect(actionsContainer).toHaveClass("kanban-card__actions");
+    expect(actionsContainer).toHaveAttribute("aria-label", "Actions for task TASK-123");
 
     // Simulate delete click to ensure confirm dialog is requested
     await user.click(deleteBtn);
-    expect(mockRequestConfirm).toHaveBeenCalled();
+    expect(mockRequestConfirm).toHaveBeenCalledWith(expect.objectContaining({
+      destructive: true,
+      body: expect.stringContaining("cannot be undone"),
+    }));
   });
 
   it("renders status transition clearly when a task status updates", async () => {
@@ -294,6 +304,7 @@ describe("KanbanTaskCard Integration", () => {
     // Verify screen-reader text is updated
     const srText = getByText("Draggable reordering is disabled in reduced motion mode.");
     expect(srText).toBeInTheDocument();
+    expect(getByText("Drag disabled: reduced motion")).toBeInTheDocument();
   });
 
   it("ensures dependency indicators have clear screen-reader support", () => {
@@ -306,7 +317,7 @@ describe("KanbanTaskCard Integration", () => {
     );
 
     // Check that descriptive 'Dependency' text is in the document (from the new sr-only span)
-    const srText = getByText(/Depends on task TASK-124, status: completed. Title: Backend API/i);
+    const srText = getByText(/Depends on task TASK-124, resolved. Status: completed. Title: Backend API/i);
     expect(srText).toBeInTheDocument();
     expect(srText).toHaveClass("sr-only");
 
@@ -319,6 +330,29 @@ describe("KanbanTaskCard Integration", () => {
     if (indicatorIcon) {
        expect(indicatorIcon).toHaveAttribute("aria-hidden", "true");
     }
+  });
+
+  it("keeps delete focus on the trigger when a delete confirmation is cancelled", async () => {
+    const user = userEvent.setup();
+    mockRequestConfirm.mockImplementationOnce(async () => false);
+
+    const { getByTitle } = render(
+      <KanbanTaskCard
+        viewModel={mockViewModel}
+        onEdit={onEdit}
+        onDelete={onDelete}
+      />
+    );
+
+    const deleteBtn = getByTitle(/Delete task/i);
+    deleteBtn.focus();
+    expect(deleteBtn).toHaveFocus();
+
+    await user.click(deleteBtn);
+
+    expect(mockRequestConfirm).toHaveBeenCalled();
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(deleteBtn).toHaveFocus();
   });
 
   it("provides accurate drag-and-drop screen-reader guidance", async () => {
@@ -376,7 +410,8 @@ describe("KanbanTaskCard Integration", () => {
     expect(sourceSpan).toHaveClass('min-w-0');
 
     const actionsContainer = container.querySelector('.absolute.top-3.right-3');
-    expect(actionsContainer).toHaveClass('[@media(any-pointer:coarse)]:opacity-100');
+    expect(actionsContainer).toHaveClass('kanban-card__actions');
+    expect(actionsContainer).toHaveAttribute("aria-label", "Actions for task TASK-123");
   });
 
 });

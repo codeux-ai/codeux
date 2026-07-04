@@ -83,7 +83,8 @@ export const TemplateCard: FunctionComponent<{
   onSelect: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
-}> = ({ template, onSelect, onEdit, onDelete }) => {
+  selected?: boolean;
+}> = ({ template, onSelect, onEdit, onDelete, selected = false }) => {
   const Icon = IconMap[template.icon] || Zap;
   const tagColor = template.categoryColor || "slate";
   const tagStyles = getTagStyles(tagColor);
@@ -96,7 +97,13 @@ export const TemplateCard: FunctionComponent<{
 
   return (
     <article
-      className={`${PANEL_CLASS} group grid h-[19rem] cursor-pointer grid-rows-[auto_minmax(0,1fr)_auto] gap-5 !overflow-hidden !rounded-[1.45rem] !p-5 transition-[transform,background-color,border-color,box-shadow] before:absolute before:inset-x-5 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-[color:var(--stats-card-accent,var(--stats-accent-amber))] before:to-transparent before:opacity-30 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-panel-hover)] hover:shadow-[var(--stats-card-shadow-hover)] motion-safe:hover:-translate-y-0.5`}
+      aria-current={selected ? "true" : undefined}
+      data-selected={selected ? "true" : undefined}
+      className={`${PANEL_CLASS} group grid h-[19rem] cursor-pointer grid-rows-[auto_minmax(0,1fr)_auto] gap-5 !overflow-hidden !rounded-[1.45rem] !p-5 transition-[transform,background-color,border-color,box-shadow] duration-[var(--interaction-selection-movement-duration)] ease-[var(--interaction-selection-movement-ease)] before:absolute before:inset-x-5 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-[color:var(--stats-card-accent,var(--stats-accent-amber))] before:to-transparent before:opacity-30 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-panel-hover)] hover:shadow-[var(--stats-card-shadow-hover)] motion-reduce:transition-none motion-safe:hover:-translate-y-0.5 ${
+        selected
+          ? "!border-signal-500/45 !bg-signal-500/[0.08] shadow-[0_0_0_1px_rgba(0,224,160,0.16),var(--stats-card-shadow-hover)]"
+          : ""
+      }`}
       onClick={(event) => {
         if ((event.target as HTMLElement).closest("button")) {
           return;
@@ -145,6 +152,7 @@ export const TemplateCard: FunctionComponent<{
             type="button"
             aria-label={template.name}
             aria-describedby={`${descriptionId} ${metaId}`}
+            aria-pressed={selected ? "true" : undefined}
             onClick={(event) => { event.stopPropagation(); onSelect(); }}
             className={`inline-flex min-h-11 min-w-0 flex-1 items-center justify-between gap-3 rounded-[var(--stats-control-radius)] border border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-surface-control-active)] px-3.5 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-control-text-active)] shadow-[var(--stats-control-shadow)] transition-[background-color,border-color,box-shadow,color] hover:bg-[color:var(--stats-surface-control-active-strong)] hover:text-[color:var(--stats-control-text-active-strong)] ${CONTROL_FOCUS_CLASS}`}
           >

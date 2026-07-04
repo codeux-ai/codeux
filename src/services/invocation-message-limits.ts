@@ -6,12 +6,12 @@
  * single codex run was observed writing ~3 MB of `function_call_output`
  * across a session, with individual outputs up to ~590 KB. Persisting those
  * verbatim as invocation messages bloats the DB and makes the invocation slow
- * to load in the dashboard. The full payload is never needed for display, so
- * we cap message content and tool payloads here, keeping the head and tail
- * (errors usually surface at the end) with a clear elision marker.
+ * to load in the dashboard. Provider output payloads can be capped for display,
+ * keeping the head and tail (errors usually surface at the end) with a clear
+ * elision marker. User prompt content must be stored verbatim by callers.
  */
 
-/** Cap for a message's human-readable `contentMarkdown`. */
+/** Cap for provider-output `contentMarkdown`; user prompt content is uncapped. */
 export const MAX_MESSAGE_CONTENT_CHARS = 16_000;
 /** Cap for raw tool arguments / output stored in `toolCallsJson`. */
 export const MAX_TOOL_PAYLOAD_CHARS = 8_000;

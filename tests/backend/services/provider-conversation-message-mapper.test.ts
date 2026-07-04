@@ -17,6 +17,24 @@ describe("conversationTurnToMessage", () => {
     });
   });
 
+  it("preserves long user turns verbatim", () => {
+    const text = [
+      "Prompt start",
+      "fatal: your current branch 'code-ux-bootstrap-123' does not have any commits yet",
+      "x".repeat(MAX_MESSAGE_CONTENT_CHARS + 100),
+      "Prompt end",
+    ].join("\n");
+    const turn: ParsedConversationTurn = {
+      kind: "user",
+      text,
+    };
+    const result = conversationTurnToMessage(turn, "codex", "gpt-5.5");
+    expect(result.role).toBe("user");
+    expect(result.contentMarkdown).toBe(text);
+    expect(result.contentMarkdown).toContain("fatal: your current branch");
+    expect(result.contentMarkdown).not.toContain("characters truncated");
+  });
+
   it("maps an injected_context turn to a system message", () => {
     const turn: ParsedConversationTurn = {
       kind: "injected_context",

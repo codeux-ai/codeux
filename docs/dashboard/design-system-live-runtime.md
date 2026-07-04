@@ -40,6 +40,8 @@ By adhering to these rules, the Live page remains a focused, professional worksp
 - Use `asyncFeedback` for non-blocking runtime notifications, reconnect progress, stale-snapshot messaging, and long-running operation results.
 - `LiveTransportBanner` derives disconnected/recovering/error state from the live transport view model and adds UI-only stale-snapshot messaging from `snapshotUpdatedAt`. Refreshing and stale banners are polite and keep cached runtime panels visible. Disconnected transport and blocking connection errors are urgent and assertive.
 - Runtime panels should not use animation as the only notification. Loading, running, stale, empty, reconnecting, and error states need visible text or badges plus live-region semantics.
+- Runtime action buttons use `aria-disabled` for optimistic pending states when focus should remain stable, suppress activation while pending or unavailable, and expose the current reason through the visible label, `title`, or screen-reader status text.
+- Collapsible connection, execution, and invocation panels use `expansionCollapse` and keep their headings/buttons keyboard reachable. Collapsed content must have `aria-expanded`/`aria-controls`; reduced motion snaps height changes while preserving status rows and labels.
 
 ## Accessibility Rules
 
@@ -55,6 +57,7 @@ By adhering to these rules, the Live page remains a focused, professional worksp
 - Animations for spinners must be `motion-safe`.
 - Error toasts and blocking runtime errors persist until dismissed, resolved, or superseded by a successful recovery. Non-blocking refresh/reconnect/stale notices remain polite so they do not interrupt the operator's current focus.
 - Under reduced motion, transport banners, feed updates, duration flashes, row emphasis, and spinner states must snap to their final visual state while retaining static rails, badges, labels, `aria-busy`, and live-region text.
+- Stale-data and first-snapshot recovery states must not hide cached execution data. If cached rows exist, keep them rendered and add polite stale/refreshing copy; use assertive alerts only for disconnected transport, blocking connection errors, or failed invocation summaries.
 
 ## Sidebar Row Rails
 - The left rail is the primary distinction marker for dense sidebar feeds. Use `border-l-2` on compact rows rather than large icons, tall cards, or heavy colored backgrounds.
