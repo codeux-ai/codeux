@@ -89,6 +89,8 @@ All standard overlays (Dialog, DropdownMenu, Popover, Tooltip, ConfirmDialog) ad
 4. **Focus Trapping:** Active focus traps must gracefully handle empty containers or containers with dynamically hidden content. If no valid focusable descendants exist, the container itself receives focus. Traps must filter out hidden, disabled, inert, or `aria-hidden="true"` elements when calculating focus boundaries. Furthermore, if the original trigger is removed from the DOM, focus safely falls back to the document body.
 5. **Scroll Management:** When native `element.scrollIntoView()` triggers unwanted whole-page layout shifts or window bouncing in nested `overflow-y-auto` panels, replace it by calculating bounding client rects (`element.getBoundingClientRect()`) against the container and adjusting `container.scrollTop` manually.
 
+Global search follows the same overlay rules. Its open/close GSAP timeline uses `enterExit`, `listReveal`, and `controlFeedback` interaction tokens; the result list keeps stale matches visible during background refresh with `aria-busy`, a polite live status, and visual dimming. Arrow-key navigation updates the combobox `aria-activedescendant` only when a real option exists and keeps the active row visible by adjusting the overlay result scroller, not the page scroll position.
+
 ## Menu & Popover Keyboard Expectations
 DropdownMenus and Popovers are expected to be fully keyboard accessible:
 - Triggers cloned into these components preserve caller's `ref`, `onClick`, `onKeyDown`, `aria-label`, and disabled behavior while augmenting `aria-haspopup`, `aria-expanded`, and `aria-controls`.

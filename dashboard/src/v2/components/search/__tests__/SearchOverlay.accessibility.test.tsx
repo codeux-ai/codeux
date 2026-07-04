@@ -22,6 +22,7 @@ vi.mock("gsap", () => ({
 // Mock use-reduced-motion to return true so tests don't wait for animations
 vi.mock("../../hooks/use-reduced-motion.js", () => ({
     useReducedMotion: () => true,
+    useResolvedMotionDuration: () => 0,
 }));
 
 // Mock use-focus-trap to prevent focus interference during jsdom testing
@@ -105,7 +106,7 @@ describe("SearchOverlay Accessibility", () => {
                 results={{ sprints: [], tasks: [], agents: [], containers: [] }}
             />
         );
-        expect(statusRegion.textContent).toBe("Searching...");
+        expect(statusRegion.textContent).toBe("Searching workspace");
 
         // Rerender with results
         rerender(
@@ -163,6 +164,43 @@ describe("SearchOverlay Accessibility", () => {
         // Press up
         await user.keyboard("{ArrowUp}");
         expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-spr-1");
+    });
+
+    it("does not expose an active descendant when no results are available", async () => {
+        const user = userEvent.setup();
+        render(
+            <SearchOverlay
+                isOpen={true}
+                onClose={mockOnClose}
+                searchQuery="missing"
+                onSearchChange={mockOnSearchChange}
+                results={{ sprints: [], tasks: [], agents: [], containers: [] }}
+            />
+        );
+
+        const combobox = screen.getAllByRole("combobox", { name: "Global search", hidden: true })[0];
+        combobox.focus();
+
+        await user.keyboard("{ArrowDown}{End}{Home}{ArrowUp}");
+
+        expect(combobox).not.toHaveAttribute("aria-activedescendant");
+    });
+
+    it("marks stale result lists busy while keeping options available", () => {
+        render(
+            <SearchOverlay
+                isOpen={true}
+                onClose={mockOnClose}
+                searchQuery="t"
+                isLoading={true}
+                onSearchChange={mockOnSearchChange}
+                results={mockResults}
+            />
+        );
+
+        expect(screen.getByRole("listbox", { hidden: true })).toHaveAttribute("aria-busy", "true");
+        expect(screen.getAllByRole("option", { hidden: true })).toHaveLength(2);
+        expect(screen.getByRole("status", { hidden: true })).toHaveTextContent("Updating results for 't'. 2 current results remain available.");
     });
 
                     it("supports Home and End keyboard navigation", async () => {
