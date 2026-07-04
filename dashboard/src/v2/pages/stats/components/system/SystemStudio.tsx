@@ -509,43 +509,64 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
         eyebrow="Invocation Records"
         title="Invocation Records"
         description="Search, server filters, record tabs, result counts, pagination, and expandable transcript detail stay in one operational record area."
-        action={<SectionCount label="Available" value={invocations.length} />}
+        action={(
+          <div
+            className="inline-flex min-h-8 items-center gap-2 rounded-[var(--stats-control-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-chip)] px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-detail-color)]"
+            aria-label={`Available invocation records: ${invocations.length.toLocaleString()}`}
+          >
+            <span>Available</span>
+            <span className="inline-flex min-w-[3.25rem] justify-end font-black tabular-nums text-[color:var(--stats-value-color)]">
+              {invocations.length.toLocaleString()}
+            </span>
+          </div>
+        )}
       >
         <div className="space-y-4">
-          <div
-            className={`sticky top-3 z-30 flex max-w-full flex-wrap gap-1 self-start p-1 ${CHIP_CLASS}`}
-            role="group"
-            aria-label="Invocation record views"
-            onKeyDown={handleRecordViewKeyDown}
-          >
-            {recordTabs.map((tab) => {
-              const tabCount = tab === "all" ? invocations.length : tab === "errors" ? errorCount : systemCount;
-              const tabLabel = tab === "all" ? "All" : tab === "errors" ? "Errors" : "System Msgs";
-              return (
-              <button
-                key={tab}
-                type="button"
-                ref={(node) => {
-                  recordViewRefs.current[tab] = node;
-                }}
-                onClick={() => setActiveTab(tab)}
-                aria-pressed={activeTab === tab}
-                aria-label={`${tabLabel} invocation records, ${tabCount.toLocaleString()} ${tabCount === 1 ? "record" : "records"}`}
-                className={`inline-flex min-w-max items-center gap-2 rounded-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-all ${CONTROL_FOCUS_CLASS} ${
-                  activeTab === tab ? TAB_ACTIVE_CLASS : TAB_IDLE_CLASS
-                }`}
+          <div className={`${SUBPANEL_CLASS} p-3`}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Record Views</div>
+              <div
+                className="grid w-full grid-cols-3 gap-px overflow-hidden rounded-[var(--stats-control-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-border-hairline)] sm:w-auto"
+                role="group"
+                aria-label="Invocation record views"
+                onKeyDown={handleRecordViewKeyDown}
               >
-                {tabLabel}
-                <span className={`rounded-full px-2 py-0.5 text-[9px] font-black tabular-nums tracking-[0.12em] ${activeTab === tab ? TAB_COUNT_ACTIVE_CLASS : TAB_COUNT_IDLE_CLASS}`}>
-                  {tabCount.toLocaleString()}
-                </span>
-              </button>
-              );
-            })}
+                {recordTabs.map((tab) => {
+                  const tabCount = tab === "all" ? invocations.length : tab === "errors" ? errorCount : systemCount;
+                  const tabLabel = tab === "all" ? "All" : tab === "errors" ? "Errors" : "System Msgs";
+                  return (
+                    <button
+                      key={tab}
+                      type="button"
+                      ref={(node) => {
+                        recordViewRefs.current[tab] = node;
+                      }}
+                      onClick={() => setActiveTab(tab)}
+                      aria-pressed={activeTab === tab}
+                      aria-label={`${tabLabel} invocation records, ${tabCount.toLocaleString()} ${tabCount === 1 ? "record" : "records"}`}
+                      className={`inline-flex min-h-10 min-w-0 items-center justify-center gap-2 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] transition-[background-color,border-color,box-shadow,color] duration-200 motion-reduce:transition-none sm:min-w-[10rem] ${CONTROL_FOCUS_CLASS} ${
+                        activeTab === tab ? TAB_ACTIVE_CLASS : `border-transparent bg-[color:var(--stats-surface-subpanel)] ${TAB_IDLE_CLASS}`
+                      }`}
+                    >
+                      <span className="min-w-0 truncate">{tabLabel}</span>
+                      <span
+                        className={`inline-flex min-w-[2.5rem] justify-end rounded-full px-2 py-0.5 text-[9px] font-black tabular-nums tracking-[0.08em] ${activeTab === tab ? TAB_COUNT_ACTIVE_CLASS : TAB_COUNT_IDLE_CLASS}`}
+                        aria-hidden="true"
+                      >
+                        {tabCount.toLocaleString()}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           <div className="space-y-3">
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Filters</div>
+            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
+              <span>Filters</span>
+              <span className="h-px min-w-6 flex-1 bg-[color:var(--stats-border-hairline)]" aria-hidden="true" />
+            </div>
             <SystemFilterBar
               filters={filters}
               onFiltersChange={setFilters}
@@ -573,7 +594,10 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
           ) : null}
 
           <div className="space-y-3">
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">Invocation Ledger</div>
+            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
+              <span>Invocation Ledger</span>
+              <span className="h-px min-w-6 flex-1 bg-[color:var(--stats-border-hairline)]" aria-hidden="true" />
+            </div>
             <InvocationsTable
               invocations={tabbedInvocations}
               sort={sort}

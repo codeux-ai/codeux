@@ -138,7 +138,34 @@ describe("SystemStudio", () => {
 
     const recordsSection = screen.getByRole("region", { name: "Invocation Records" });
     expect(within(recordsSection).getByText("Available")).toBeTruthy();
-    expect(within(recordsSection).getByRole("button", { name: /^All/ })).toBeTruthy();
+    expect(within(recordsSection).getByLabelText("Available invocation records: 2")).toBeTruthy();
+
+    const recordViewGroup = within(recordsSection).getByRole("group", { name: "Invocation record views" });
+    const allRecordsButton = within(recordViewGroup).getByRole("button", { name: "All invocation records, 2 records" });
+    const errorRecordsButton = within(recordViewGroup).getByRole("button", { name: "Errors invocation records, 1 record" });
+    const systemRecordsButton = within(recordViewGroup).getByRole("button", { name: "System Msgs invocation records, 1 record" });
+    expect(within(recordViewGroup).getByText("All")).toBeTruthy();
+    expect(within(recordViewGroup).getByText("Errors")).toBeTruthy();
+    expect(within(recordViewGroup).getByText("System Msgs")).toBeTruthy();
+    expect(within(recordViewGroup).getByText("2")).toBeTruthy();
+    expect(within(recordViewGroup).getAllByText("1")).toHaveLength(2);
+    expect(allRecordsButton.getAttribute("aria-pressed")).toBe("true");
+    expect(errorRecordsButton.getAttribute("aria-pressed")).toBe("false");
+    expect(systemRecordsButton.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.keyDown(recordViewGroup, { key: "End" });
+
+    await waitFor(() => {
+      expect(systemRecordsButton.getAttribute("aria-pressed")).toBe("true");
+      expect(screen.getByText("Showing 1 of 2")).toBeTruthy();
+    });
+
+    fireEvent.keyDown(recordViewGroup, { key: "Home" });
+
+    await waitFor(() => {
+      expect(allRecordsButton.getAttribute("aria-pressed")).toBe("true");
+      expect(screen.getByText("Showing 2 of 2")).toBeTruthy();
+    });
 
     fireEvent.click(screen.getByRole("button", { name: /^Errors/ }));
 
