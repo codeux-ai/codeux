@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useMemo } from "preact/hooks";
+import { useMemo, useState } from "preact/hooks";
 import { Server, Boxes, BrainCircuit, SlidersHorizontal, Wrench, Plug, X, Check } from "lucide-preact";
 import type { AgentMcpAccessConfig, CustomMcpServer, McpToolToggle } from "../../types.js";
 import { Toggle } from "../ui/Toggle.js";
@@ -28,6 +28,9 @@ export const AgentMcpManagePanel: FunctionComponent<{
   availableServers: CustomMcpServer[];
   disabled?: boolean;
 }> = ({ onClose, value, onChange, availableServers, disabled }) => {
+  const [statusMessage, setStatusMessage] = useState(
+    "MCP access changes are pending until the agent is saved."
+  );
   const toolEnabledByName = useMemo(() => {
     const map = new Map<string, boolean>();
     for (const toggle of value.codeUxToolToggles) {
@@ -38,24 +41,41 @@ export const AgentMcpManagePanel: FunctionComponent<{
 
   const isToolEnabled = (name: string): boolean => toolEnabledByName.get(name) ?? true;
 
-  const setCodeUxEnabled = (enabled: boolean): void => onChange({ ...value, codeUxEnabled: enabled });
+  const setCodeUxEnabled = (enabled: boolean): void => {
+    if (disabled) return;
+    setStatusMessage(`Code UX tools ${enabled ? "enabled" : "disabled"}. Save Agent to persist this access change.`);
+    onChange({ ...value, codeUxEnabled: enabled });
+  };
 
-  const setTool = (name: string, enabled: boolean): void =>
+  const setTool = (name: string, enabled: boolean): void => {
+    if (disabled) return;
+    setStatusMessage(`${name} ${enabled ? "enabled" : "disabled"}. Save Agent to persist tool access.`);
     onChange({ ...value, codeUxToolToggles: buildToolToggles((candidate) => (candidate === name ? enabled : isToolEnabled(candidate))) });
+  };
 
   const setCategory = (category: McpToolCategory, enabled: boolean): void => {
+    if (disabled) return;
     const names = new Set(TOOL_DEFINITIONS.filter((def) => def.category === category).map((def) => def.name));
+    setStatusMessage(`${CATEGORY_META[category].label} tools ${enabled ? "enabled" : "disabled"}. Save Agent to persist tool access.`);
     onChange({ ...value, codeUxToolToggles: buildToolToggles((candidate) => (names.has(candidate as never) ? enabled : isToolEnabled(candidate))) });
   };
 
   const isLinked = (id: string): boolean => value.linkedServerIds.includes(id);
-  const setLinked = (id: string, linked: boolean): void =>
+  const setLinked = (id: string, linked: boolean): void => {
+    if (disabled) return;
+    const server = availableServers.find((entry) => entry.id === id);
+    if (server?.enabled === false && linked) {
+      setStatusMessage(`${server.label || server.name} is off in Settings. Enable it there before linking this agent.`);
+      return;
+    }
+    setStatusMessage(`${server?.label || server?.name || "Server"} ${linked ? "linked" : "unlinked"}. Save Agent to persist MCP server access.`);
     onChange({
       ...value,
       linkedServerIds: linked
         ? Array.from(new Set([...value.linkedServerIds, id]))
         : value.linkedServerIds.filter((entry) => entry !== id),
     });
+  };
 
   const enabledToolCount = TOOL_DEFINITIONS.filter((def) => isToolEnabled(def.name)).length;
   const linkedServerCount = availableServers.filter((server) => isLinked(server.id)).length;
@@ -90,6 +110,17 @@ export const AgentMcpManagePanel: FunctionComponent<{
 
       {/* Body */}
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-5">
+        <div
+          role="status"
+          aria-live="polite"
+          className={`min-h-[2.5rem] rounded-2xl border px-4 py-2.5 text-[12px] font-medium ${
+            disabled
+              ? "border-amber-400/20 bg-amber-400/[0.08] text-amber-700 dark:text-amber-300"
+              : "border-black/[0.05] bg-white/35 text-slate-500 dark:border-white/[0.05] dark:bg-white/[0.02] dark:text-slate-400"
+          }`}
+        >
+          {disabled ? "MCP controls are disabled while this agent is saving." : statusMessage}
+        </div>
         {/* Built-in code_ux */}
         <section className="rounded-2xl border border-black/[0.06] bg-white/40 p-5 backdrop-blur-md dark:border-white/[0.06] dark:bg-white/[0.02]">
           <div className="flex items-start justify-between gap-4">
@@ -104,7 +135,7 @@ export const AgentMcpManagePanel: FunctionComponent<{
                 </p>
               </div>
             </div>
-            <Toggle value={value.codeUxEnabled} onChange={setCodeUxEnabled} aria-label="Enable Code UX for this agent" />
+            <Toggle value={value.codeUxEnabled} onChange={setCodeUxEnabled} aria-label="Enable Code UX for this agent" disabled={disabled} />
           </div>
 
           {value.codeUxEnabled && (
@@ -125,7 +156,12 @@ export const AgentMcpManagePanel: FunctionComponent<{
                           <div className="text-[10px] text-slate-400 dark:text-slate-500">{meta.description}</div>
                         </div>
                       </div>
-                      <Toggle value={allEnabled} onChange={(enabled) => setCategory(category, enabled)} aria-label={`Enable all ${meta.label} tools`} />
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full border border-current/20 px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
+                          {allEnabled ? "All enabled" : "Some disabled"}
+                        </span>
+                        <Toggle value={allEnabled} onChange={(enabled) => setCategory(category, enabled)} aria-label={`Enable all ${meta.label} tools`} disabled={disabled} />
+                      </div>
                     </div>
                     <div className="mt-2.5 flex flex-col gap-1.5 border-t border-black/[0.04] pt-2.5 dark:border-white/[0.04]">
                       {tools.map((def) => (
@@ -134,7 +170,12 @@ export const AgentMcpManagePanel: FunctionComponent<{
                             <div className="truncate font-mono text-[11px] font-semibold text-slate-600 dark:text-slate-300">{def.name}</div>
                             <div className="truncate text-[10px] text-slate-400 dark:text-slate-500">{def.description}</div>
                           </div>
-                          <Toggle value={isToolEnabled(def.name)} onChange={(enabled) => setTool(def.name, enabled)} aria-label={`Enable ${def.name}`} disabled={disabled} />
+                          <div className="flex shrink-0 items-center gap-2">
+                            <span className="rounded-full border border-current/20 px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
+                              {isToolEnabled(def.name) ? "Enabled" : "Disabled"}
+                            </span>
+                            <Toggle value={isToolEnabled(def.name)} onChange={(enabled) => setTool(def.name, enabled)} aria-label={`Enable ${def.name}`} disabled={disabled} />
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -182,7 +223,12 @@ export const AgentMcpManagePanel: FunctionComponent<{
                     </div>
                   </div>
                 </div>
-                <Toggle value={isLinked(server.id)} onChange={(linked) => setLinked(server.id, linked)} aria-label={`Link ${server.label || server.name}`} disabled={disabled} />
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="rounded-full border border-current/20 px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
+                    {isLinked(server.id) ? "Linked" : server.enabled === false ? "Disabled" : "Unlinked"}
+                  </span>
+                  <Toggle value={isLinked(server.id)} onChange={(linked) => setLinked(server.id, linked)} aria-label={`Link ${server.label || server.name}`} disabled={disabled || (server.enabled === false && !isLinked(server.id))} />
+                </div>
               </div>
             ))
           )}

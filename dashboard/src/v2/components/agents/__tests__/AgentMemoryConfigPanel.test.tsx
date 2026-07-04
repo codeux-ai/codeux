@@ -43,6 +43,7 @@ describe("AgentMemoryConfigPanel", () => {
     );
     const closeBtn = screen.getByLabelText("Close");
     expect(closeBtn).toBeDisabled();
+    expect(screen.getByText("Memory filters are locked while the agent is saving.")).toBeInTheDocument();
   });
 
   afterEach(() => {
@@ -53,14 +54,17 @@ describe("AgentMemoryConfigPanel", () => {
     renderHarness();
 
     expect(screen.getByRole("button", { name: "Short Term" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Both" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Both/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Long Term" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Select All" })).toBeInTheDocument();
 
     for (const label of ["Architecture", "Codebase", "Context", "Preferences", "Patterns", "Decision", "Error", "Learning"]) {
-      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: label })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: new RegExp(label) })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: new RegExp(label) })).toHaveAttribute("aria-pressed", "true");
     }
+
+    expect(screen.getAllByText("Selected").length).toBeGreaterThanOrEqual(8);
+    expect(screen.getByText("Memory filter changes are pending until the agent is saved.")).toBeInTheDocument();
 
     expect(screen.getByLabelText("Minimum strength")).toBeInTheDocument();
     expect(screen.getByLabelText("Max Short Term")).toHaveAttribute("placeholder", "Unlimited");
@@ -73,18 +77,18 @@ describe("AgentMemoryConfigPanel", () => {
       categories: ["architecture"],
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Codebase" }));
-    fireEvent.click(screen.getByRole("button", { name: "Context" }));
-    fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
-    fireEvent.click(screen.getByRole("button", { name: "Patterns" }));
-    fireEvent.click(screen.getByRole("button", { name: "Decision" }));
-    fireEvent.click(screen.getByRole("button", { name: "Error" }));
-    fireEvent.click(screen.getByRole("button", { name: "Learning" }));
+    fireEvent.click(screen.getByRole("button", { name: /Codebase/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Context/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Preferences/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Patterns/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Decision/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Error/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Learning/ }));
 
     const config = JSON.parse(screen.getByTestId("config").textContent ?? "{}") as AgentMemoryConfig;
     expect(config.categories).toEqual([]);
-    expect(screen.getByRole("button", { name: "Architecture" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "Learning" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /Architecture/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /Learning/ })).toHaveAttribute("aria-pressed", "true");
   });
 
   test("removes a per-category override when it matches the global minimum", () => {

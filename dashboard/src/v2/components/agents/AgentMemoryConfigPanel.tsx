@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import { useMemo, useState, useEffect } from "preact/hooks";
 import { BrainCircuit, Check, ChevronDown, ChevronUp, X } from "lucide-preact";
 import { DEFAULT_AGENT_MEMORY_CONFIG, MEMORY_CATEGORIES, type AgentMemoryConfig, type MemoryCategory } from "../../memory-types.js";
+import { INTERACTION_CSS_VARIABLES } from "../../lib/motion/tokens.js";
 
 export interface AgentMemoryConfigPanelProps {
   onClose: () => void;
@@ -188,6 +189,17 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-5">
+        <div
+          role="status"
+          aria-live="polite"
+          className={`min-h-[2.25rem] rounded-2xl border px-4 py-2 text-[12px] font-medium ${
+            disabled
+              ? "border-amber-400/20 bg-amber-400/[0.08] text-amber-700 dark:text-amber-300"
+              : "border-black/[0.05] bg-white/35 text-slate-500 dark:border-white/[0.05] dark:bg-white/[0.02] dark:text-slate-400"
+          }`}
+        >
+          {disabled ? "Memory filters are locked while the agent is saving." : "Memory filter changes are pending until the agent is saved."}
+        </div>
         <section className="rounded-2xl border border-black/[0.05] bg-white/35 p-4 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02]">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
@@ -214,8 +226,13 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
                       ? "bg-signal-500 text-void-900 shadow-[0_0_12px_rgba(0,224,160,0.25)]"
                       : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white"
                   } disabled:cursor-not-allowed disabled:opacity-50`}
+                  style={{
+                    transitionDuration: INTERACTION_CSS_VARIABLES.selectionMovement.duration,
+                    transitionTimingFunction: INTERACTION_CSS_VARIABLES.selectionMovement.ease,
+                  }}
                 >
                   {option.label}
+                  {active && <span className="sr-only"> selected</span>}
                 </button>
               );
             })}
@@ -260,9 +277,16 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
                       ? "border-signal-500/30 bg-signal-500/10 text-signal-700 dark:border-signal-500/25 dark:bg-signal-500/15 dark:text-signal-300"
                       : "border-black/[0.06] bg-white/50 text-slate-500 hover:border-signal-500/20 hover:text-slate-700 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:text-slate-200"
                   }`}
+                  style={{
+                    transitionDuration: INTERACTION_CSS_VARIABLES.selectionMovement.duration,
+                    transitionTimingFunction: INTERACTION_CSS_VARIABLES.selectionMovement.ease,
+                  }}
                 >
                   <span className="min-w-0 truncate">{label}</span>
-                  {selected && <Check className="h-3.5 w-3.5 shrink-0" strokeWidth={2.8} />}
+                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-current/20 px-1.5 py-0.5 text-[8px] uppercase tracking-[0.12em]">
+                    {selected && <Check className="h-3 w-3" strokeWidth={2.8} />}
+                    {selected ? "Selected" : "Off"}
+                  </span>
                 </button>
               );
             })}

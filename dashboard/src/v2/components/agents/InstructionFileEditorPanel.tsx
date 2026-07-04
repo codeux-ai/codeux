@@ -41,8 +41,10 @@ export const InstructionFileEditorPanel: FunctionComponent<{
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [mode, setMode] = useState<Mode>("write");
+  const [touched, setTouched] = useState(false);
 
   const dirty = content !== loadedContent;
+  const validationError = touched && content.trim().length === 0 ? "Instruction file content is required before saving." : null;
 
   /* Load file content whenever the selected file changes */
   useEffect(() => {
@@ -51,6 +53,7 @@ export const InstructionFileEditorPanel: FunctionComponent<{
     setError(null);
     setMode("write");
     setJustSaved(false);
+    setTouched(false);
     fetchInstructionFile(projectId, file.id)
       .then((result) => {
         if (cancelled) return;
@@ -77,6 +80,13 @@ export const InstructionFileEditorPanel: FunctionComponent<{
 
   const handleSave = useCallback(async () => {
     if (saving || !dirty) return;
+    setTouched(true);
+    if (content.trim().length === 0) {
+      setMode("write");
+      window.setTimeout(() => textareaRef.current?.focus(), 0);
+      setError("Instruction file content is required. Add guidance or use the starter template, then retry Save.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -111,6 +121,9 @@ export const InstructionFileEditorPanel: FunctionComponent<{
 
   const handleInput = (event: JSX.TargetedEvent<HTMLTextAreaElement>) => {
     setContent(event.currentTarget.value);
+    if (error && event.currentTarget.value.trim().length > 0) {
+      setError(null);
+    }
   };
 
   const tokens = useMemo(() => estimateTokens(content), [content]);
@@ -118,7 +131,9 @@ export const InstructionFileEditorPanel: FunctionComponent<{
 
   const status = saving
     ? { cls: "border-signal-500/30 bg-signal-500/10 text-signal-600 dark:text-signal-400", label: "Saving", icon: <RefreshCw className="h-2.5 w-2.5 animate-spin" strokeWidth={2.4} /> }
-    : dirty
+    : error
+      ? { cls: "border-status-red/20 bg-status-red/[0.08] text-status-red", label: "Needs retry", icon: <AlertCircle className="h-2.5 w-2.5" strokeWidth={2.4} /> }
+      : dirty
       ? { cls: "border-amber-400/30 bg-amber-400/10 text-amber-600 dark:text-amber-400", label: "Unsaved", icon: <span className="h-1 w-1 rounded-full bg-amber-500" /> }
       : justSaved
         ? { cls: "border-signal-500/30 bg-signal-500/10 text-signal-600 dark:text-signal-400", label: "Saved", icon: <Check className="h-2.5 w-2.5" strokeWidth={3} /> }
@@ -192,7 +207,15 @@ export const InstructionFileEditorPanel: FunctionComponent<{
           {dirty && !saving && (
             <button
               type="button"
-              onClick={() => setContent(loadedContent)}
+              onClick={() => {
+                const previousFocus = document.activeElement as HTMLElement | null;
+                if (window.confirm("Revert unsaved instruction file edits? This restores the last saved content.")) {
+                  setContent(loadedContent);
+                  setTouched(false);
+                  setError(null);
+                }
+                window.setTimeout(() => previousFocus?.focus(), 0);
+              }}
               title="Revert changes"
               className="inline-flex items-center gap-2 rounded-full border border-black/[0.08] bg-white/40 px-4 py-2.5 text-[12px] font-bold uppercase tracking-[0.12em] text-slate-600 backdrop-blur-md transition-colors hover:bg-white/70 hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
             >
@@ -223,9 +246,14 @@ export const InstructionFileEditorPanel: FunctionComponent<{
       {/* ── Body ── */}
       <div className="relative z-10 flex flex-col gap-3 p-6 md:p-8">
         {error && (
-          <div className="flex items-center gap-2 rounded-2xl border border-status-red/20 bg-status-red/[0.06] px-4 py-3 text-[13px] font-medium text-status-red backdrop-blur-md">
+          <div role="alert" className="flex min-h-[2.75rem] items-center gap-2 rounded-2xl border border-status-red/20 bg-status-red/[0.06] px-4 py-3 text-[13px] font-medium text-status-red backdrop-blur-md">
             <AlertCircle className="h-4 w-4 shrink-0" strokeWidth={2.4} />
             {error}
+          </div>
+        )}
+        {!error && (
+          <div role="status" aria-live="polite" className="min-h-[2.75rem] rounded-2xl border border-black/[0.05] bg-white/35 px-4 py-3 text-[12px] font-medium text-slate-500 dark:border-white/[0.05] dark:bg-white/[0.02] dark:text-slate-400">
+            {saving ? "Saving instruction file..." : dirty ? "Unsaved instruction edits. Save to write the file." : "Instruction file is saved."}
           </div>
         )}
 
@@ -253,10 +281,19 @@ export const InstructionFileEditorPanel: FunctionComponent<{
               ref={textareaRef}
               value={content}
               onInput={handleInput}
+              onBlur={() => setTouched(true)}
               spellcheck={false}
+              aria-invalid={!!validationError}
+              aria-errormessage={validationError ? "instruction-file-content-error" : undefined}
               placeholder={`# ${file.label}\n\nWrite the instructions agents should follow in this project…`}
               className="block h-[60vh] min-h-[420px] w-full resize-y rounded-2xl border border-black/[0.05] bg-white/40 px-5 py-4 font-mono text-[13px] leading-relaxed text-slate-900 shadow-sm outline-none backdrop-blur-md transition-all placeholder-slate-400 focus:border-signal-500 focus:ring-4 focus:ring-signal-500/10 dark:border-white/[0.07] dark:bg-white/[0.03] dark:text-white dark:placeholder-slate-600 dark:focus:ring-signal-500/15"
             />
+            {validationError && (
+              <p id="instruction-file-content-error" role="alert" className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-status-red">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" strokeWidth={2.4} />
+                {validationError}
+              </p>
+            )}
             {!exists && content.trim() === "" && (
               <div className="pointer-events-none absolute inset-x-5 bottom-5 flex justify-center">
                 <button
