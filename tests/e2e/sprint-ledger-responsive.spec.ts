@@ -1,7 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { completeOnboarding, ensureSelectedProject } from './helpers/prepare-app';
 
-async function ensureProjectSelected(page) {
+async function ensureProjectSelected(page: Page): Promise<void> {
   const projectButton = page.locator('[data-tour-id="project-selector"]');
   await expect(projectButton).toBeVisible();
   const text = await projectButton.innerText();

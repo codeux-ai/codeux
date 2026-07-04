@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { completeOnboarding, ensureSelectedProject } from './helpers/prepare-app';
 
 const routes = [
   '/',
@@ -14,6 +15,15 @@ const routes = [
   '/browser',
   '/files',
 ];
+
+test.beforeEach(async ({ page, request }) => {
+  await completeOnboarding(request);
+  await ensureSelectedProject(request);
+
+  await page.addInitScript(() => {
+    localStorage.setItem('codeux:dashboard-tour-hidden:v1', 'true');
+  });
+});
 
 test('Benchmark Page Load & Fast Navigation', async ({ page }) => {
   const consoleMessages: { type: string; text: string }[] = [];
