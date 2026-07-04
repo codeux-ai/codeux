@@ -1,6 +1,6 @@
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
-import { useEffect, useMemo, useState, useCallback } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState, useCallback } from "preact/hooks";
 import {
   ArrowDown,
   ArrowUp,
@@ -99,6 +99,12 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [lastBulkAction, setLastBulkAction] = useState<BulkLedgerAction>(null);
   const { isOpen, options, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
+  const bulkDeleteButtonRef = useRef<HTMLButtonElement>(null);
+  const ledgerFocusRef = useRef<HTMLDivElement>(null);
+  const [sortAnnouncement, setSortAnnouncement] = useState("Sorted by Created descending.");
+  const [filterAnnouncement, setFilterAnnouncement] = useState("");
+  const [selectionAnnouncement, setSelectionAnnouncement] = useState("No sprints selected.");
+  const [bulkAnnouncement, setBulkAnnouncement] = useState("");
 
   useEffect(() => {
     if (initialQuery !== undefined) {
@@ -208,9 +214,45 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
     transitionDuration: interactionTokens.listReorder.duration,
     transitionTimingFunction: interactionTokens.listReorder.ease,
   };
+  const controlFeedbackStyle = {
+    transitionDuration: interactionTokens.controlFeedback.duration,
+    transitionTimingFunction: interactionTokens.controlFeedback.ease,
+  };
+  const selectionMovementStyle = {
+    transitionDuration: interactionTokens.selectionMovement.duration,
+    transitionTimingFunction: interactionTokens.selectionMovement.ease,
+  };
+
+  const sortLabels: Record<SprintTableSortKey, string> = {
+    showcasePinned: "Showcase",
+    sprintKey: "Sprint ID",
+    name: "Sprint",
+    status: "Status",
+    tasksCount: "Tasks",
+    completion: "Completion",
+    createdAt: "Created",
+  };
+
+  useEffect(() => {
+    const hasFilters = Boolean(filters.query.trim()) || filters.qa !== "all" || filters.showcase !== "all" || filters.status !== "all";
+    setFilterAnnouncement(hasFilters
+      ? `Filter results updated: showing ${ledgerSprints.length} of ${sprints.length} sprints.`
+      : `Filters cleared: showing all ${sprints.length} sprints.`);
+  }, [filters, ledgerSprints.length, sprints.length]);
+
+  useEffect(() => {
+    const selectedCount = selectedFiltered.length;
+    setSelectionAnnouncement(selectedCount === 0
+      ? "No sprints selected."
+      : `${selectedCount} of ${ledgerSprints.length} filtered sprints selected.`);
+  }, [ledgerSprints.length, selectedFiltered.length]);
 
   const handleSort = (key: SprintTableSortKey) => {
-    setSort((current) => nextSort(current, key));
+    setSort((current) => {
+      const next = nextSort(current, key);
+      setSortAnnouncement(`Sorted by ${sortLabels[next.key]} ${next.direction === "asc" ? "ascending" : "descending"}. ${ledgerSprints.length} sprint${ledgerSprints.length === 1 ? " remains" : "s remain"} visible.`);
+      return next;
+    });
   };
 
   const handleToggleSelectAll = () => {
@@ -234,15 +276,32 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
     setLastBulkAction(null);
   }, []);
 
+  const restoreBulkDeleteFocus = useCallback(() => {
+    const focusTarget = () => {
+      if (bulkDeleteButtonRef.current && !bulkDeleteButtonRef.current.disabled) {
+        bulkDeleteButtonRef.current.focus();
+      } else {
+        ledgerFocusRef.current?.focus();
+      }
+    };
+    if (typeof window.requestAnimationFrame === "function") {
+      window.requestAnimationFrame(focusTarget);
+    } else {
+      window.setTimeout(focusTarget, 0);
+    }
+  }, []);
+
   const handleBulkStart = useCallback(() => {
     setLastBulkAction("start");
+    setBulkAnnouncement(`Starting ${selectedFiltered.length} selected sprint${selectedFiltered.length === 1 ? "" : "s"}.`);
     onBulkStart(selectedFiltered.map((s) => s.id));
   }, [onBulkStart, selectedFiltered]);
 
   const handleBulkDelete = useCallback(async () => {
+    const selectedCount = selectedFiltered.length;
     const confirmed = await requestConfirm({
       title: "Delete Sprints?",
-      body: `Delete ${selectedFiltered.length} selected sprint${selectedFiltered.length === 1 ? "" : "s"} from the current filtered ledger result? This action is permanent and will cascade to all downstream tasks, logs, and associated git artifacts. Please ensure you have cleaned up your repository branches if needed before proceeding.`,
+      body: `You are deleting ${selectedCount} selected sprint${selectedCount === 1 ? "" : "s"} from the current filtered ledger result. This action is permanent and will cascade to all downstream tasks, logs, and associated git artifacts. Please ensure you have cleaned up your repository branches if needed before proceeding.`,
       confirmLabel: "Delete Sprints",
       cancelLabel: "Cancel",
       destructive: true,
@@ -250,18 +309,25 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
 
     if (confirmed) {
       setLastBulkAction("delete");
+      setBulkAnnouncement(`Deleting ${selectedCount} selected sprint${selectedCount === 1 ? "" : "s"}.`);
       onBulkDelete(selectedFiltered.map((s) => s.id));
+      restoreBulkDeleteFocus();
       // Selection clears naturally as items are removed, keeping the pending state visible
+    } else {
+      setBulkAnnouncement(`Bulk delete canceled. ${selectedCount} selected sprint${selectedCount === 1 ? "" : "s"} remain selected.`);
+      restoreBulkDeleteFocus();
     }
-  }, [onBulkDelete, selectedFiltered, requestConfirm]);
+  }, [onBulkDelete, selectedFiltered, requestConfirm, restoreBulkDeleteFocus]);
 
   const handleBulkShowcaseEnable = useCallback(() => {
     setLastBulkAction("pin");
+    setBulkAnnouncement(`Pinning ${selectedFiltered.length} selected sprint${selectedFiltered.length === 1 ? "" : "s"}.`);
     onBulkShowcaseEnable(selectedFiltered.map((s) => s.id));
   }, [onBulkShowcaseEnable, selectedFiltered]);
 
   const handleBulkShowcaseDisable = useCallback(() => {
     setLastBulkAction("unpin");
+    setBulkAnnouncement(`Unpinning ${selectedFiltered.length} selected sprint${selectedFiltered.length === 1 ? "" : "s"}.`);
     onBulkShowcaseDisable(selectedFiltered.map((s) => s.id));
   }, [onBulkShowcaseDisable, selectedFiltered]);
 
@@ -317,6 +383,8 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
         onBulkShowcaseEnable={handleBulkShowcaseEnable}
         onBulkShowcaseDisable={handleBulkShowcaseDisable}
         onClearSelection={handleClearSelection}
+        controlTransitionStyle={controlFeedbackStyle}
+        deleteButtonRef={bulkDeleteButtonRef}
       />
 
       <ConfirmDialog
@@ -327,6 +395,8 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
       />
 
       <div
+        ref={ledgerFocusRef}
+        tabIndex={-1}
         className="min-h-[20rem] px-3 py-4 transition-[opacity,transform] sm:px-4 lg:px-5"
         data-ledger-view-state={viewStateKey}
         style={listReorderStyle}
@@ -342,6 +412,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
                 disabled={windowedSprints.length === 0 || isAnyBulkPending}
                 onClick={handleToggleSelectAll}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-black/[0.04] hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:bg-white/[0.05] dark:hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+                style={selectionMovementStyle}
                 title={isAnyBulkPending ? "Bulk action in progress for selected sprints" : selectionSummary.allSelected ? "Deselect all filtered sprints" : "Select all filtered sprints"}
                 aria-label={selectionSummary.allSelected ? "Deselect all filtered sprints" : "Select all filtered sprints"}
                 aria-pressed={selectionSummary.allSelected}
@@ -356,6 +427,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
                 type="button"
                 onClick={() => handleSort("showcasePinned")}
                 className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+                style={controlFeedbackStyle}
                 aria-label={`Sort by Showcase, currently ${sort.key === "showcasePinned" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Showcase in ${sort.key === "showcasePinned" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
               >
                 Showcase
@@ -367,6 +439,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
                 type="button"
                 onClick={() => handleSort("sprintKey")}
                 className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+                style={controlFeedbackStyle}
                 aria-label={`Sort by Sprint ID, currently ${sort.key === "sprintKey" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Sprint ID in ${sort.key === "sprintKey" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
               >
                 Sprint ID
@@ -378,6 +451,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
                 type="button"
                 onClick={() => handleSort("name")}
                 className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+                style={controlFeedbackStyle}
                 aria-label={`Sort by Sprint, currently ${sort.key === "name" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Sprint in ${sort.key === "name" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
               >
                 Sprint
@@ -389,6 +463,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
                 type="button"
                 onClick={() => handleSort("status")}
                 className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+                style={controlFeedbackStyle}
                 aria-label={`Sort by Status, currently ${sort.key === "status" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Status in ${sort.key === "status" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
               >
                 Status
@@ -400,6 +475,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
                 type="button"
                 onClick={() => handleSort("tasksCount")}
                 className="inline-flex w-full items-center justify-end gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+                style={controlFeedbackStyle}
                 aria-label={`Sort by Tasks, currently ${sort.key === "tasksCount" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Tasks in ${sort.key === "tasksCount" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
               >
                 {renderSortIndicator("tasksCount")}
@@ -411,6 +487,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
                 type="button"
                 onClick={() => handleSort("completion")}
                 className="inline-flex w-full items-center justify-end gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+                style={controlFeedbackStyle}
                 aria-label={`Sort by Completion, currently ${sort.key === "completion" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Completion in ${sort.key === "completion" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
               >
                 {renderSortIndicator("completion")}
@@ -422,6 +499,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
                 type="button"
                 onClick={() => handleSort("createdAt")}
                 className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+                style={controlFeedbackStyle}
                 aria-label={`Sort by Created, currently ${sort.key === "createdAt" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Created in ${sort.key === "createdAt" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
               >
                 Created
@@ -473,6 +551,8 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
                   pendingActionIds={pendingActionIds}
                   isAnyBulkPending={isAnyBulkPending}
                   transitionStyle={listReorderStyle}
+                  controlTransitionStyle={controlFeedbackStyle}
+                  selectionTransitionStyle={selectionMovementStyle}
                   onToggleRow={handleToggleRow}
                   onToggleShowcase={stableOnToggleShowcase}
                   onSprintToggle={stableOnSprintToggle}
@@ -490,6 +570,9 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
             </Table>
           </div>
         </div>
+      </div>
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {[sortAnnouncement, filterAnnouncement, selectionAnnouncement, bulkAnnouncement].filter(Boolean).join(" ")}
       </div>
     </div>
   );

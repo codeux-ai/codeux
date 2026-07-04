@@ -78,7 +78,7 @@ export function TableBody({ children }: { children: ComponentChildren }) {
   return <tbody ref={tbodyRef} className="block lg:table-row-group" role="rowgroup">{children}</tbody>;
 }
 
-export function TableRow({ children, className = "", selected, onClick, style }: { children: ComponentChildren; className?: string; selected?: boolean; onClick?: (e: MouseEvent) => void; style?: import("preact").JSX.CSSProperties }) {
+export function TableRow({ children, className = "", selected, onClick, style, "aria-busy": ariaBusy }: { children: ComponentChildren; className?: string; selected?: boolean; onClick?: (e: MouseEvent) => void; style?: import("preact").JSX.CSSProperties; "aria-busy"?: boolean }) {
   const tokens = useInteractionTokens();
   const selectedClass = selected ? "bg-signal-500/5 ring-2 ring-inset ring-signal-500/30" : "";
   const cursorClass = onClick ? "cursor-pointer" : "";
@@ -87,6 +87,7 @@ export function TableRow({ children, className = "", selected, onClick, style }:
       data-table-row
       onClick={onClick as any}
       aria-selected={selected}
+      aria-busy={ariaBusy || undefined}
       role="row"
       className={`group mb-3 block overflow-hidden rounded-[1.5rem] border shadow-[var(--elevation-base)] backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:shadow-[var(--elevation-raised)] focus-within:ring-2 focus-within:ring-signal-500/20 lg:table-row lg:overflow-visible lg:rounded-none lg:border-0 lg:shadow-none lg:hover:bg-[var(--fill-muted-hover)] lg:transition-colors ${cursorClass} ${selectedClass} ${className}`}
       style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease, ...(typeof style === "object" ? style : {}) }}
