@@ -1,6 +1,6 @@
 import type { FunctionComponent } from "preact";
-import { useEffect, useState } from "preact/hooks";
-import { Terminal, Trash2 } from "lucide-preact";
+import { useEffect, useRef, useState } from "preact/hooks";
+import { Check, Terminal, Trash2, X } from "lucide-preact";
 import { PillChoiceGroup, ProviderLogo, Row, SecretInput, SelectInput, TextInput, Toggle } from "./SettingsFormFields.js";
 import { getProviderDefaultAuthPath, getProviderTypeLabel } from "../../lib/settings-view-models.js";
 import { TerminalLoginModal } from "./TerminalLoginModal.js";
@@ -40,22 +40,33 @@ export const ProviderInstanceCard: FunctionComponent<{
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [removeArmed, setRemoveArmed] = useState(false);
   const [feedback, setFeedback] = useState<{ tone: "success" | "warning" | "error"; message: string } | null>(null);
+  const removeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const cancelRemoveButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const currentAuthType = provider.authType || (provider.mountAuth ? "localAuth" : "apiKey");
   const providerInstanceLabel = provider.name || providerConfigId;
   const headingId = `provider-instance-${providerConfigId.replace(/\W/g, "-")}-heading`;
   const feedbackId = `${headingId}-feedback`;
+  const customEndpointDisabledReasonId = `${headingId}-custom-endpoint-disabled`;
   const enabledValue = enabled ?? true;
+  const customEndpointDisabled = currentAuthType !== "apiKey";
 
   useEffect(() => {
     setRemoveArmed(false);
     setFeedback(null);
   }, [providerConfigId]);
 
+  useEffect(() => {
+    if (removeArmed) {
+      cancelRemoveButtonRef.current?.focus();
+    }
+  }, [removeArmed]);
+
   const applyUpdate = (updates: Partial<SystemProviderConfig>, message: string): void => {
     try {
       onUpdate(updates);
       setFeedback({ tone: "warning", message });
+      setRemoveArmed(false);
     } catch (updateError) {
       setFeedback({
         tone: "error",
@@ -94,12 +105,18 @@ export const ProviderInstanceCard: FunctionComponent<{
     applySanitizedUpdate(updates, `${providerInstanceLabel} authentication mode changed locally. Save changes to persist it.`);
   };
 
-  const handleRemove = (): void => {
-    if (!removeArmed) {
-      setRemoveArmed(true);
-      setFeedback({ tone: "warning", message: `Confirm removal of ${providerInstanceLabel}. This stays local until settings are saved.` });
-      return;
-    }
+  const armRemove = (): void => {
+    setRemoveArmed(true);
+    setFeedback({ tone: "warning", message: `Removal is armed for ${providerInstanceLabel}. Confirm or cancel; no saved settings change happens until you save.` });
+  };
+
+  const cancelRemove = (): void => {
+    setRemoveArmed(false);
+    setFeedback({ tone: "warning", message: `Removal cancelled for ${providerInstanceLabel}. Local settings are unchanged.` });
+    removeButtonRef.current?.focus();
+  };
+
+  const confirmRemove = (): void => {
     try {
       onRemove?.();
       setFeedback({ tone: "success", message: `${providerInstanceLabel} removed locally. Save changes to persist it.` });
@@ -147,6 +164,7 @@ export const ProviderInstanceCard: FunctionComponent<{
                 value={enabledValue}
                 onChange={(value) => {
                   onToggleEnabled(value);
+                  setRemoveArmed(false);
                   setFeedback({
                     tone: "warning",
                     message: `${providerInstanceLabel} ${value ? "enabled" : "disabled"} locally. Save changes to persist it.`,
@@ -156,21 +174,17 @@ export const ProviderInstanceCard: FunctionComponent<{
             </label>
           ) : null}
           {onRemove ? (
-
             <button
+              ref={removeButtonRef}
               type="button"
-              onClick={handleRemove}
-              aria-label={removeArmed ? `Confirm remove ${providerInstanceLabel}` : `Remove ${providerInstanceLabel}`}
+              onClick={armRemove}
+              aria-label={`Remove ${providerInstanceLabel}`}
               aria-describedby={feedback ? feedbackId : undefined}
               aria-pressed={removeArmed}
-              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] focus:outline-none focus-visible:ring-2 focus-visible:ring-status-red/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
-                removeArmed
-                  ? "border-status-red/45 bg-status-red text-white"
-                  : "border-status-red/20 bg-status-red/[0.06] text-status-red hover:bg-status-red/[0.1]"
-              }`}
+              className="inline-flex items-center gap-2 rounded-full border border-status-red/20 bg-status-red/[0.06] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-status-red hover:bg-status-red/[0.1] focus:outline-none focus-visible:ring-2 focus-visible:ring-status-red/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900"
             >
               <Trash2 className="h-3.5 w-3.5" />
-              {removeArmed ? "Confirm remove" : "Remove"}
+              Remove
             </button>
           ) : null}
         </div>
@@ -187,8 +201,50 @@ export const ProviderInstanceCard: FunctionComponent<{
         </div>
       ) : null}
 
+      {removeArmed ? (
+        <div
+          role="group"
+          aria-label={`Confirm removal of ${providerInstanceLabel}`}
+          aria-describedby={feedbackId}
+          className="rounded-[1.25rem] border border-status-red/25 bg-status-red/[0.06] p-3"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-status-red">Remove {providerInstanceLabel} locally?</div>
+              <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                This removes the provider instance from the draft only. Use Save Changes to persist it, or Reset to discard the local removal.
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <button
+                ref={cancelRemoveButtonRef}
+                type="button"
+                onClick={cancelRemove}
+                className="inline-flex items-center gap-2 rounded-xl border border-black/[0.08] bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-black/[0.035] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-white/[0.12] dark:bg-white/[0.08] dark:text-slate-100 dark:hover:bg-white/[0.12] dark:focus-visible:ring-offset-void-900"
+              >
+                <X className="h-3.5 w-3.5" />
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmRemove}
+                className="inline-flex items-center gap-2 rounded-xl bg-status-red px-3 py-2 text-xs font-black text-white hover:brightness-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-status-red/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900"
+              >
+                <Check className="h-3.5 w-3.5" />
+                Confirm remove
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <Row label="Display name" description="Used throughout AI Models and runtime route summaries.">
-        <TextInput value={provider.name} onChange={(value) => onUpdate({ name: value })} aria-label={`${providerInstanceLabel} display name`} />
+        <TextInput
+          value={provider.name}
+          onChange={(value) => applyUpdate({ name: value }, `${providerInstanceLabel} display name changed locally. Save changes to persist it.`)}
+          aria-label={`${providerInstanceLabel} display name`}
+          aria-describedby={feedback ? feedbackId : undefined}
+        />
       </Row>
 
       {provider.provider !== "jules" ? (
@@ -420,6 +476,11 @@ export const ProviderInstanceCard: FunctionComponent<{
       {/* Claude and Codex Custom Base URL */}
       {(provider.provider === "claude-code" || provider.provider === "codex") && currentAuthType !== "dashboardAuth" && (
         <>
+          {customEndpointDisabled ? (
+            <div id={customEndpointDisabledReasonId} className="rounded-xl border border-amber-500/20 bg-amber-500/[0.08] px-3 py-2 text-xs font-semibold text-amber-700 dark:text-amber-200">
+              Custom endpoint fields are disabled while local auth is selected. Switch this provider instance back to API Key to edit gateway provider, base URL, or model overrides.
+            </div>
+          ) : null}
           {currentAuthType === "localAuth" && (
             <Row label="Auth path" description="Host path copied into the Docker runtime for this exact provider instance.">
                 <TextInput value={provider.authPath} onChange={(value) => onUpdate(sanitizeSystemProviderConfig({ ...provider, authPath: value }))} aria-label={`${providerInstanceLabel} auth path`} mono />
@@ -432,11 +493,12 @@ export const ProviderInstanceCard: FunctionComponent<{
               <ProviderCombobox
                 value={provider.customProviderId || ""}
                 aria-label={`${providerInstanceLabel} API provider`}
+              aria-describedby={customEndpointDisabled ? customEndpointDisabledReasonId : undefined}
               onChange={(value, apiBaseUrl) => onUpdate({
                 customProviderId: value || undefined,
                 ...(apiBaseUrl ? { customBaseUrl: apiBaseUrl } : {}),
               })}
-              disabled={currentAuthType !== "apiKey"}
+              disabled={customEndpointDisabled}
               placeholder="Leave empty to use the default endpoint"
             />
           </Row>
@@ -448,7 +510,15 @@ export const ProviderInstanceCard: FunctionComponent<{
                 : "Override OPENAI_BASE_URL. Route Codex through a custom OpenAI-compatible endpoint, e.g. https://openrouter.ai/api/v1. Leave empty to use the default OpenAI API. Type a custom URL/IP or pick a provider above."
             }
           >
-              <TextInput value={provider.customBaseUrl || ""} onChange={(value) => onUpdate({ customBaseUrl: value || undefined })} aria-label={`${providerInstanceLabel} custom base URL`} disabled={currentAuthType !== "apiKey"} mono />
+              <TextInput
+                value={provider.customBaseUrl || ""}
+                onChange={(value) => onUpdate({ customBaseUrl: value || undefined })}
+                aria-label={`${providerInstanceLabel} custom base URL`}
+                aria-describedby={customEndpointDisabled ? customEndpointDisabledReasonId : undefined}
+                disabled={customEndpointDisabled}
+                helperText={customEndpointDisabled ? "Switch to API Key authentication to edit this endpoint." : undefined}
+                mono
+              />
           </Row>
           <Row
             label="Custom model"
@@ -462,10 +532,11 @@ export const ProviderInstanceCard: FunctionComponent<{
             <ModelCombobox
               value={provider.customModel || ""}
               onChange={(value) => onUpdate({ customModel: value || undefined })}
-              disabled={currentAuthType !== "apiKey"}
+              disabled={customEndpointDisabled}
                 placeholder="Leave empty to use the agent's selected model"
                 providerId={provider.customProviderId}
                 aria-label={`${providerInstanceLabel} custom model`}
+                aria-describedby={customEndpointDisabled ? customEndpointDisabledReasonId : undefined}
               />
           </Row>
         </>

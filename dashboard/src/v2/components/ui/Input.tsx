@@ -108,7 +108,9 @@ export const Input: FunctionComponent<InputProps> = ({
     props["aria-describedby"]
   ].filter(Boolean).join(" ") || undefined;
 
-  const errorMessage = showError ? [errorId, props["aria-errormessage"]].filter(Boolean).join(" ") || undefined : undefined;
+  const errorMessage = showError
+    ? [errorId, props["aria-errormessage"]].filter(Boolean).join(" ") || undefined
+    : props["aria-errormessage"];
   const hasInvalidState = showError || hasExternalInvalidState;
 
   return (

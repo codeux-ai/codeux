@@ -4,6 +4,7 @@ import { render } from "@testing-library/preact";
 import { describe, it, expect } from "vitest";
 import { FieldWrapper } from "../../../src/v2/components/forms/FieldWrapper";
 import { Input } from "../../../src/v2/components/ui/Input";
+import { PillChoiceGroup } from "../../../src/v2/components/settings/SettingsFormFields";
 
 describe("FieldWrapper Accessibility", () => {
   it("renders a required indicator with screen-reader text", () => {
@@ -21,7 +22,7 @@ describe("FieldWrapper Accessibility", () => {
 
   it("links error message stably and supports helperTextId", async () => {
     const { container, getByText, rerender } = render(
-      <FieldWrapper label="Test" error="Invalid input" helperTextId="helper-123">
+      <FieldWrapper label="Test" error="Invalid input" helperTextId="helper-123" forceTouch>
         <Input />
       </FieldWrapper>
     );
@@ -29,11 +30,8 @@ describe("FieldWrapper Accessibility", () => {
     const input = container.querySelector("input");
     expect(input).not.toBeNull();
 
-    input!.focus();
-    input!.blur();
-
     rerender(
-      <FieldWrapper label="Test" error="Invalid input" helperTextId="helper-123">
+      <FieldWrapper label="Test" error="Invalid input" helperTextId="helper-123" forceTouch>
         <Input />
       </FieldWrapper>
     );
@@ -124,6 +122,32 @@ describe("FieldWrapper Accessibility", () => {
     expect(input?.getAttribute("aria-errormessage")).toBeFalsy();
     expect(input?.getAttribute("aria-invalid")).toBeFalsy();
     expect(input?.getAttribute("aria-describedby")).toBeTruthy();
+  });
+
+  it("wires invalid pill choice groups to helper and error ownership", () => {
+    const { getByRole, getByText } = render(
+      <PillChoiceGroup
+        value="manual"
+        onChange={() => undefined}
+        options={[
+          { value: "manual", label: "Manual" },
+          { value: "auto", label: "Auto" },
+        ]}
+        invalid
+        forceValidation
+        helperText="Choose one routing mode."
+        errorText="Routing mode is unavailable."
+        aria-label="Routing mode"
+      />
+    );
+
+    const group = getByRole("radiogroup", { name: "Routing mode" });
+    const error = getByText("Routing mode is unavailable.");
+
+    expect(group.getAttribute("aria-invalid")).toBe("true");
+    expect(group.getAttribute("aria-errormessage")).toBe(error.id);
+    expect(group.getAttribute("aria-describedby")).toContain(error.id);
+    expect(group.getAttribute("aria-describedby")).not.toContain("helper");
   });
   it("handles helper-to-error transition and successful recovery", () => {
     const { container, rerender, getByText, queryByText } = render(
