@@ -767,6 +767,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                 const StepIcon = step.icon;
                 const activeItem = step.active;
                 const complete = step.complete;
+                const statusLabel = activeItem ? "Current" : complete ? "Done" : "Pending";
                 return (
                   <button
                     key={step.id}
@@ -774,14 +775,17 @@ export const OnboardingExperience: FunctionComponent = () => {
                     type="button"
                     aria-current={activeItem ? "step" : undefined}
                     onClick={step.onClick}
-                    className={`group flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-[background-color,border-color,transform] hover:translate-x-1 ${
-                      activeItem ? "border-white/30 bg-white text-slate-950 shadow-[0_16px_40px_rgba(0,0,0,0.18)]" : "border-white/0 text-slate-300 hover:border-white/10 hover:bg-white/8 hover:text-white"
+                    className={`group flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-[background-color,border-color,transform] hover:translate-x-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-400/60 ${
+                      activeItem ? "border-white/30 bg-white text-slate-950 shadow-[0_16px_40px_rgba(0,0,0,0.18)]" : complete ? "border-signal-300/12 bg-signal-500/[0.055] text-slate-200 hover:border-signal-300/20 hover:bg-signal-500/[0.08]" : "border-white/0 text-slate-400 hover:border-white/10 hover:bg-white/8 hover:text-white"
                     }`}
                   >
                     <span className={`flex h-8 w-8 items-center justify-center rounded-xl ${activeItem ? "bg-signal-500/14 text-signal-700" : complete ? "bg-signal-400/15 text-signal-300" : "bg-white/8 text-slate-300"}`}>
                       {complete ? <Check className="h-4 w-4" /> : <StepIcon className="h-4 w-4" />}
                     </span>
-                    <span className="text-sm font-bold">{step.label}</span>
+                    <span className="min-w-0 flex-1 text-sm font-bold">{step.label}</span>
+                    <span aria-hidden="true" className={`shrink-0 rounded-full px-2 py-1 text-[8px] font-black uppercase tracking-[0.14em] ${activeItem ? "bg-signal-500/12 text-signal-700" : complete ? "bg-white/[0.08] text-signal-200" : "bg-white/[0.055] text-slate-500"}`}>
+                      {statusLabel}
+                    </span>
                   </button>
                 );
               })}
@@ -800,6 +804,14 @@ export const OnboardingExperience: FunctionComponent = () => {
                   : `Step ${activeStep - 2} of 6`}
               </div>
               <h3 className="mt-1 font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{active.label}</h3>
+              <div className="mt-2 flex items-center gap-1.5 md:hidden" aria-label="Onboarding progress">
+                {steps.map((step, index) => (
+                  <span
+                    key={step.id}
+                    className={`h-1.5 rounded-full transition-all ${index === activeStep ? "w-7 bg-signal-500" : index < activeStep ? "w-3 bg-signal-500/45" : "w-3 bg-slate-300 dark:bg-white/12"}`}
+                  />
+                ))}
+              </div>
             </div>
             <button
               type="button"
@@ -1002,24 +1014,32 @@ export const OnboardingExperience: FunctionComponent = () => {
                         data-onboarding-card
                         key={providerId}
                         type="button"
+                        aria-pressed={selected}
                         onClick={() => toggleProvider(providerId)}
-                        className={`group relative overflow-hidden rounded-3xl border p-4 text-left shadow-[0_14px_34px_rgba(15,23,42,0.04)] transition-[border-color,background-color,transform,box-shadow] hover:-translate-y-1 ${selected ? "border-signal-500/30 bg-signal-500/10 shadow-[0_18px_46px_rgba(0,224,160,0.08)]" : "border-black/[0.06] bg-white/75 hover:border-black/[0.12] dark:border-white/[0.06] dark:bg-white/[0.04]"}`}
+                        className={`group relative min-w-0 overflow-hidden rounded-[1.65rem] border p-4 text-left shadow-[0_14px_34px_rgba(15,23,42,0.04)] transition-[border-color,background-color,transform,box-shadow] hover:-translate-y-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/45 ${selected ? "border-signal-500/30 bg-signal-500/10 shadow-[0_18px_46px_rgba(0,224,160,0.08)]" : "border-black/[0.06] bg-white/75 hover:border-black/[0.12] dark:border-white/[0.06] dark:bg-white/[0.04]"}`}
                       >
                         <div aria-hidden className={`absolute left-0 top-4 bottom-4 w-1 rounded-r-full transition-opacity ${selected ? "bg-signal-500 opacity-100" : "bg-slate-300 opacity-0 group-hover:opacity-100 dark:bg-slate-600"}`} />
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-3">
                             <ProviderBrandIcon id={providerId} />
-                            <div>
-                              <div className="font-black text-slate-900 dark:text-white">{providerLabels[providerId]}</div>
+                            <div className="min-w-0">
+                              <div className="break-words font-black leading-tight text-slate-900 dark:text-white">{providerLabels[providerId]}</div>
                               <div className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{instanceCount || 1} instance{(instanceCount || 1) === 1 ? "" : "s"}</div>
                             </div>
                           </div>
-                          <span className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${provider?.available ? "bg-signal-500/10 text-signal-700 dark:text-signal-300" : selected ? "bg-ember-500/10 text-ember-600 dark:text-ember-400" : "bg-slate-500/10 text-slate-500"}`}>
-                            {providerId === "jules" ? "API key" : provider?.available ? "Detected" : selected ? "Configure" : "Optional"}
-                          </span>
+                          <div className="flex shrink-0 flex-col items-end gap-1.5">
+                            <span className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${provider?.available ? "bg-signal-500/10 text-signal-700 dark:text-signal-300" : selected ? "bg-ember-500/10 text-ember-600 dark:text-ember-400" : "bg-slate-500/10 text-slate-500"}`}>
+                              {providerId === "jules" ? "API key" : provider?.available ? "Detected" : selected ? "Configure" : "Optional"}
+                            </span>
+                            {selected ? (
+                              <span className="rounded-full border border-black/[0.06] bg-white/50 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-slate-300">
+                                Selected
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
                         <div className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{provider?.description || providerDescriptions[providerId]}</div>
-                        <div className="mt-3 font-mono text-[11px] text-slate-400">{provider?.authPath || (providerId === "jules" ? "API key only" : "Auth path configurable")}</div>
+                        <div className="mt-3 break-all rounded-xl border border-black/[0.04] bg-black/[0.025] px-2.5 py-2 font-mono text-[11px] text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.035]">{provider?.authPath || (providerId === "jules" ? "API key only" : "Auth path configurable")}</div>
                       </button>
                     );
                   })}
@@ -1037,16 +1057,21 @@ export const OnboardingExperience: FunctionComponent = () => {
                   const providerEntries = getSystemProvidersByType(settings, providerId);
                   const readinessStatus = readinessByProvider[providerId];
                   return (
-                    <div data-onboarding-card key={providerId} className="relative overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/78 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.055)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+                    <div data-onboarding-card key={providerId} className="relative overflow-hidden rounded-[1.85rem] border border-black/[0.06] bg-white/80 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.055)] dark:border-white/[0.06] dark:bg-white/[0.045]">
                       <div aria-hidden className="pointer-events-none absolute -right-6 -top-8 font-display text-[7rem] font-black leading-none tracking-tight text-black/[0.025] dark:text-white/[0.025]">
                         {getProviderWatermark(providerId)}
                       </div>
-                      <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 border-b border-black/[0.06] pb-4 dark:border-white/[0.06]">
+                      <div className="relative z-10 flex flex-wrap items-start justify-between gap-3 border-b border-black/[0.06] pb-4 dark:border-white/[0.06]">
                         <div className="flex min-w-0 items-start gap-3">
                           <ProviderBrandIcon id={providerId} />
                           <div className="min-w-0">
-                            <div className="text-base font-black text-slate-900 dark:text-white">{providerLabels[providerId]}</div>
-                            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="break-words text-base font-black text-slate-900 dark:text-white">{providerLabels[providerId]}</div>
+                              <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.14em] ${readinessStatus?.available ? "bg-signal-500/10 text-signal-700 dark:text-signal-200" : "bg-slate-500/10 text-slate-500 dark:text-slate-400"}`}>
+                                {readinessStatus?.available ? "Credentials detected" : "Credential setup"}
+                              </span>
+                            </div>
+                            <div className="mt-1 break-words text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                               {readinessStatus?.detectedFiles.length ? `Detected: ${readinessStatus.detectedFiles.join(", ")}` : providerDescriptions[providerId]}
                             </div>
                           </div>
@@ -1054,7 +1079,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                         <button
                           type="button"
                           onClick={() => addProviderInstance(providerId)}
-                          className="inline-flex items-center gap-2 rounded-2xl border border-signal-500/20 bg-signal-500/10 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-signal-700 hover:bg-signal-500/15 dark:text-signal-200"
+                          className="inline-flex shrink-0 items-center gap-2 rounded-2xl border border-signal-500/20 bg-signal-500/10 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-signal-700 hover:bg-signal-500/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/45 dark:text-signal-200"
                         >
                           <Plus className="h-3.5 w-3.5" />
                           Add instance
