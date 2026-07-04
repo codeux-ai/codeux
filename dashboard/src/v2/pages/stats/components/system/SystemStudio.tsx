@@ -4,6 +4,8 @@ import {
   Activity,
   Clock,
   Database,
+  AlertTriangle,
+  Inbox,
   ShieldCheck,
   Terminal,
   TrendingUp,
@@ -148,6 +150,30 @@ const SectionCount: FunctionComponent<{
   <div className={`inline-flex h-8 items-center gap-2 rounded-full px-3 text-[10px] font-bold uppercase tracking-[0.16em] ${STATUS_TONE_CLASS[tone]}`}>
     <span>{label}</span>
     <span className="tabular-nums text-[color:var(--stats-value-color)]">{value.toLocaleString()}</span>
+  </div>
+);
+
+const SystemFeedbackState: FunctionComponent<{
+  icon: LucideIcon;
+  title: string;
+  detail: string;
+  role: "status" | "alert";
+  ariaLabel: string;
+  tone?: keyof typeof STATUS_TONE_CLASS;
+}> = ({ icon: Icon, title, detail, role, ariaLabel, tone = "neutral" }) => (
+  <div
+    role={role}
+    aria-label={ariaLabel}
+    aria-live={role === "status" ? "polite" : undefined}
+    className={`${SUBPANEL_CLASS} flex min-w-0 flex-col gap-3 p-4 text-left sm:flex-row sm:items-start`}
+  >
+    <div className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--stats-chip-radius)] ${STATUS_TONE_CLASS[tone]}`}>
+      <Icon className="h-4 w-4" strokeWidth={2.2} aria-hidden="true" />
+    </div>
+    <div className="min-w-0">
+      <div className="text-sm font-bold text-[color:var(--stats-value-color)]">{title}</div>
+      <div className="mt-1 text-sm leading-relaxed text-[color:var(--stats-detail-color)]">{detail}</div>
+    </div>
   </div>
 );
 
@@ -350,6 +376,17 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
         description="Current volume, success rate, latency, cache efficiency, and in-flight work are derived from the server-projected summary for the current filter set."
         action={<SectionCount label="Filtered" value={summaryMetrics.totalInvocations} />}
       >
+        {summaryMetrics.totalInvocations === 0 ? (
+          <div className="mb-4">
+            <SystemFeedbackState
+              icon={Inbox}
+              title="Invocation health needs records"
+              detail="No invocation records match the current filter set, so rate and latency metrics are unavailable."
+              role="status"
+              ariaLabel="Invocation health reduced data"
+            />
+          </div>
+        ) : null}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           <SystemMetricCard
             icon={Activity}
@@ -369,7 +406,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             icon={ShieldCheck}
             label="Success Rate"
             value={successRateLabel}
-            detail={summaryMetrics.failedCount > 0 ? `${summaryMetrics.failedCount} failed` : "no failures"}
+            detail={summaryMetrics.failedCount > 0 ? `${summaryMetrics.failedCount} failed` : summaryMetrics.totalInvocations > 0 ? "no failures in data" : "needs records"}
             circleClassName={STATUS_TONE_CLASS.positive}
             valueClassName={successTone}
           />
@@ -407,6 +444,17 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
         description="Git, Jules, Jira, and other integrations are isolated from the main invocation table so external traffic stays easy to audit."
         action={<SectionCount label="Calls" value={externalApiCallCount} />}
       >
+        {externalApiCallCount === 0 ? (
+          <div className="mb-4">
+            <SystemFeedbackState
+              icon={Database}
+              title="No external API activity classified"
+              detail="This data set does not include classified Git, Jules, Jira, or other external API calls."
+              role="status"
+              ariaLabel="No external API activity"
+            />
+          </div>
+        ) : null}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           {Object.entries(apiData).map(([key, metrics]) => (
             <SystemMetricCard
@@ -414,7 +462,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
               icon={Database}
               label={formatExternalApiLabel(key)}
               value={metrics.calls.toLocaleString()}
-              detail={metrics.calls > 0 ? formatStatsDuration(metrics.avgDurationMs) : "No calls"}
+              detail={metrics.calls > 0 ? formatStatsDuration(metrics.avgDurationMs) : "No classified calls"}
               circleClassName={STATUS_TONE_CLASS.neutral}
             />
           ))}
@@ -429,11 +477,14 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
       >
         <div>
           {errorEntries.length === 0 ? (
-            <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center py-12 text-center`}>
-              <ShieldCheck className="mb-3 h-8 w-8 text-[color:var(--stats-positive-text)] opacity-50" />
-              <div className="text-sm font-bold text-[color:var(--stats-value-color)]">No Errors Recorded</div>
-              <div className="mt-1 text-sm text-[color:var(--stats-detail-color)]">All invocations completed successfully.</div>
-            </div>
+            <SystemFeedbackState
+              icon={ShieldCheck}
+              title="No error categories classified"
+              detail="Failed or cancelled invocations with classifiable details will appear here."
+              role="status"
+              ariaLabel="No error categories"
+              tone="positive"
+            />
           ) : (
             <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
               {errorEntries.map(([category, count]) => {
@@ -532,9 +583,14 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
           </div>
 
           {error ? (
-            <div role="alert" className={`rounded-2xl px-4 py-3 text-sm ${STATUS_TONE_CLASS.negative}`}>
-              Failed to load invocations — {error}
-            </div>
+            <SystemFeedbackState
+              icon={AlertTriangle}
+              title="Failed to load invocations"
+              detail={error}
+              role="alert"
+              ariaLabel="Invocation load failed"
+              tone="negative"
+            />
           ) : null}
 
           <div className="space-y-3">
