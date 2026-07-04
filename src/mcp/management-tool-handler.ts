@@ -50,54 +50,130 @@ export interface ManagementToolHandlerDeps {
   getDashboardSettings: () => DashboardSettings;
   projectManagementRepository: ProjectManagementRepository;
   executionControlService: ExecutionControlService;
-  taskRerunService: TaskRerunService;
   settingsRepository: SettingsRepository;
   agentPresetSyncService: AgentPresetSyncService;
   memoryService: MemoryService;
   memoryPromotionService: MemoryPromotionService;
   embeddingModelManager: EmbeddingModelManager;
   knowledgeService: KnowledgeService;
-  planningAgentService: PlanningAgentService;
+  taskRerunService?: TaskRerunService;
+  planningAgentService?: PlanningAgentService;
   projectSetupService?: ProjectSetupService;
   sprintIssueService: SprintIssueService;
   quicksprintService?: QuicksprintService;
   schedulerService?: SchedulerService;
 }
 
+interface DashboardManagementServices {
+  taskRerunService?: TaskRerunService;
+  planningAgentService?: PlanningAgentService;
+  projectSetupService?: ProjectSetupService;
+  quicksprintService?: QuicksprintService;
+  schedulerService?: SchedulerService;
+}
+
 export class ManagementToolHandler {
-  private readonly sprintActions: SprintActions;
-  private readonly taskActions: TaskActions;
   private readonly settingsActions: SettingsActions;
   private readonly agentActions: AgentActions;
   private readonly memoryActions: MemoryActions;
   private readonly previewActions: PreviewActions;
+  private dashboardServices: DashboardManagementServices;
 
   constructor(private readonly deps: ManagementToolHandlerDeps) {
-    this.sprintActions = new SprintActions(deps);
-    this.taskActions = new TaskActions(
-      deps.projectManagementRepository,
-      deps.executionControlService,
-      deps.executionRepository,
-      deps.taskRerunService
-    );
     this.settingsActions = new SettingsActions(deps.settingsRepository);
     this.agentActions = new AgentActions(deps.agentPresetSyncService);
     this.memoryActions = new MemoryActions(deps.memoryService, deps.memoryPromotionService, deps.embeddingModelManager);
     this.previewActions = new PreviewActions(deps.sprintPreviewService);
+    this.dashboardServices = {
+      taskRerunService: deps.taskRerunService,
+      planningAgentService: deps.planningAgentService,
+      projectSetupService: deps.projectSetupService,
+      quicksprintService: deps.quicksprintService,
+      schedulerService: deps.schedulerService,
+    };
+  }
+
+  setTaskRerunService(taskRerunService: TaskRerunService): void {
+    this.dashboardServices.taskRerunService = taskRerunService;
+  }
+
+  setPlanningAgentService(planningAgentService: PlanningAgentService): void {
+    this.dashboardServices.planningAgentService = planningAgentService;
+  }
+
+  setProjectSetupService(projectSetupService: ProjectSetupService): void {
+    this.dashboardServices.projectSetupService = projectSetupService;
+  }
+
+  setQuicksprintService(quicksprintService: QuicksprintService): void {
+    this.dashboardServices.quicksprintService = quicksprintService;
+  }
+
+  setSchedulerService(schedulerService: SchedulerService): void {
+    this.dashboardServices.schedulerService = schedulerService;
+  }
+
+  private requirePlanningAgentService(): PlanningAgentService {
+    const planningAgentService = this.dashboardServices.planningAgentService;
+    if (!planningAgentService) {
+      throw new Error("Planning agent service is not enabled.");
+    }
+    return planningAgentService;
+  }
+
+  private requireTaskRerunService(): TaskRerunService {
+    const taskRerunService = this.dashboardServices.taskRerunService;
+    if (!taskRerunService) {
+      throw new Error("Task rerun service is not enabled.");
+    }
+    return taskRerunService;
+  }
+
+  private createPlanningAgentAccessor(): PlanningAgentService {
+    return {
+      planSprint: (...args: Parameters<PlanningAgentService["planSprint"]>) =>
+        this.requirePlanningAgentService().planSprint(...args),
+    } as unknown as PlanningAgentService;
+  }
+
+  private createTaskRerunAccessor(): TaskRerunService {
+    return {
+      rerunTask: (...args: Parameters<TaskRerunService["rerunTask"]>) =>
+        this.requireTaskRerunService().rerunTask(...args),
+    } as unknown as TaskRerunService;
+  }
+
+  private getSprintActions(): SprintActions {
+    return new SprintActions({
+      projectManagementRepository: this.deps.projectManagementRepository,
+      executionControlService: this.deps.executionControlService,
+      executionRepository: this.deps.executionRepository,
+      planningAgentService: this.createPlanningAgentAccessor(),
+      sprintIssueService: this.deps.sprintIssueService,
+    });
+  }
+
+  private getTaskActions(): TaskActions {
+    return new TaskActions(
+      this.deps.projectManagementRepository,
+      this.deps.executionControlService,
+      this.deps.executionRepository,
+      this.createTaskRerunAccessor()
+    );
   }
 
   private getQuicksprintActions(): QuicksprintActions {
-    if (!this.deps.quicksprintService) {
+    if (!this.dashboardServices.quicksprintService) {
       throw new Error("Quicksprint service is not enabled.");
     }
-    return new QuicksprintActions(this.deps.quicksprintService);
+    return new QuicksprintActions(this.dashboardServices.quicksprintService);
   }
 
   private getSchedulerActions(): SchedulerActions {
-    if (!this.deps.schedulerService) {
+    if (!this.dashboardServices.schedulerService) {
       throw new Error("Scheduler service is not enabled.");
     }
-    return new SchedulerActions(this.deps.schedulerService);
+    return new SchedulerActions(this.dashboardServices.schedulerService);
   }
 
   private formatError(domain: string, action: string, error: unknown): { content: Array<{ type: string; text: string }> } {
@@ -123,12 +199,12 @@ export class ManagementToolHandler {
           this.deps.projectManagementRepository,
           args.domain,
           args.approval,
-          this.deps.projectSetupService
+          this.dashboardServices.projectSetupService
         );
       } else if (args.domain === "sprints") {
-        envelope = await this.sprintActions.handleSprintAction(args);
+        envelope = await this.getSprintActions().handleSprintAction(args);
       } else if (args.domain === "tasks") {
-        envelope = await this.taskActions.handleTaskAction(args);
+        envelope = await this.getTaskActions().handleTaskAction(args);
       } else if (args.domain === "quicksprints") {
         envelope = await this.getQuicksprintActions().handleQuicksprintAction(args);
       } else if (args.domain === "scheduler") {
@@ -178,7 +254,7 @@ export class ManagementToolHandler {
         this.deps.projectManagementRepository,
         "projects",
         args.approval,
-        this.deps.projectSetupService
+        this.dashboardServices.projectSetupService
       );
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
@@ -188,7 +264,7 @@ export class ManagementToolHandler {
 
   async handleManageSprints(args: ManageSprintsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
-      const envelope = await this.sprintActions.handleSprintAction({ domain: "sprints", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
+      const envelope = await this.getSprintActions().handleSprintAction({ domain: "sprints", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError("sprints", args.action, error);
@@ -197,7 +273,7 @@ export class ManagementToolHandler {
 
   async handleManageTasks(args: ManageTasksArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
-      const envelope = await this.taskActions.handleTaskAction({ domain: "tasks", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
+      const envelope = await this.getTaskActions().handleTaskAction({ domain: "tasks", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError("tasks", args.action, error);
