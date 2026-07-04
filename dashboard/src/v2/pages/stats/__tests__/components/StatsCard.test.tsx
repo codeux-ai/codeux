@@ -1,6 +1,9 @@
 /** @vitest-environment jsdom */
 /** @jsx h */
 import { h } from "preact";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { render, screen, cleanup, fireEvent, within } from "@testing-library/preact";
@@ -18,6 +21,9 @@ vi.mock("../../../../components/ui/WaveFluid.js", () => ({
 vi.mock("../../../../components/ui/BorderTrace.js", () => ({
   BorderTrace: () => <div data-testid="border-trace" />,
 }));
+
+const testDir = dirname(fileURLToPath(import.meta.url));
+const statsRoot = resolve(testDir, "../..");
 
 describe("StatsCard", () => {
   afterEach(() => {
@@ -151,6 +157,20 @@ describe("StatsCard", () => {
     fireEvent.click(screen.getByRole("button", { name: /Throughput/i }));
 
     expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps shared stats surfaces on solid Warm Void tokens instead of glass blur", () => {
+    const themeCss = readFileSync(resolve(statsRoot, "styles/stats-theme.css"), "utf8");
+    const cardCss = readFileSync(resolve(statsRoot, "components/StatsCard.module.css"), "utf8");
+
+    expect(themeCss).toContain("--stats-surface-panel: #fffdfa");
+    expect(themeCss).toContain("--stats-surface-chip: #f4ede4");
+    expect(themeCss).not.toContain("surface-glass");
+    expect(`${themeCss}\n${cardCss}`).not.toMatch(/backdrop-filter|-webkit-backdrop-filter/);
+
+    render(<SeriesLegendButton series={CHART_SERIES[0]} active={false} currentValue={0} onToggle={vi.fn()} />);
+
+    expect(screen.getByRole("button", { name: /Throughput/i }).className).not.toContain("backdrop-blur");
   });
 
 });
