@@ -59,15 +59,15 @@ describe("HeaderStats", () => {
         // Instead of picking specific indices, we search within each card
         // Verify the layout container uses the responsive grid classes
         const grid = container.firstChild as Element;
-        expect(grid.className).toContain("grid-cols-[repeat(auto-fit,minmax(240px,1fr))]");
+        expect(grid.className).toContain("grid-cols-[repeat(auto-fit,minmax(220px,1fr))]");
 
         const cards = container.querySelectorAll(".group");
         expect(cards.length).toBe(4);
 
         // Card 1: Total Tokens (Green #00E0A0)
         expect(cards[0].innerHTML).toContain('stroke="#00E0A0"');
-        // Card 2: Sprints (Blue #00AAFF)
-        expect(cards[1].innerHTML).toContain('stroke="#00AAFF"');
+        // Card 2: Sprints (Signal #00E0A0)
+        expect(cards[1].innerHTML).toContain('stroke="#00E0A0"');
         // Card 3: Open Tasks (Yellow #FFB800)
         expect(cards[2].innerHTML).toContain('stroke="#FFB800"');
         // Card 4: Completed Tasks (Green #00E0A0)

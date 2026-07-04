@@ -26,7 +26,7 @@ export const OverviewTelemetry: FunctionComponent = () => {
 
   if (error) {
     return (
-      <aside className="sticky top-24 flex h-[calc(100vh-7rem)] min-h-[30rem] flex-col overflow-hidden rounded-[1.75rem] border border-status-red/20 bg-white/80 p-8 backdrop-blur-sm dark:bg-void-800/75">
+      <aside className="sticky top-24 flex h-[calc(100vh-7rem)] min-h-[30rem] flex-col overflow-hidden rounded-[1.5rem] border border-status-red/20 bg-white/80 p-6 backdrop-blur-sm dark:bg-void-800/75" aria-label="Live telemetry">
         <div className="flex items-center gap-3">
           <Radio className="w-5 h-5 text-status-red" strokeWidth={1.5} />
           <div>
@@ -39,36 +39,31 @@ export const OverviewTelemetry: FunctionComponent = () => {
   }
 
   return (
-    <aside className="sticky top-24 flex h-[calc(100vh-7rem)] min-h-[34rem] flex-col overflow-hidden group">
-      <h3 className="mb-7 flex items-center gap-4 font-display text-3xl font-black tracking-tighter text-slate-900 dark:text-white">
+    <aside className="sticky top-24 flex h-[calc(100vh-7rem)] min-h-[34rem] flex-col overflow-hidden group" aria-label="Live telemetry">
+      <h3 className="mb-5 flex items-center gap-3 font-display text-xl font-bold tracking-tight text-slate-900 dark:text-white">
         <div className="relative flex items-center justify-center">
           <div className={`w-3.5 h-3.5 rounded-full relative z-10 shadow-sm ${
             hasActiveProjects
               ? "bg-status-green shadow-[0_0_8px_rgba(0,171,132,0.4)]"
               : hasAttentionProjects
                 ? "bg-status-amber shadow-[0_0_8px_rgba(245,158,11,0.4)]"
-                : "bg-slate-400 dark:bg-slate-500"
+            : "bg-slate-400 dark:bg-slate-500"
           }`} />
         </div>
-        Telemetry.
+        Telemetry
       </h3>
 
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/78 p-8 backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/75">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-signal-500/40 to-transparent" />
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.5rem] border border-black/[0.06] bg-white/62 p-5 backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/62 md:p-6">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-signal-500/22 to-transparent" />
         {isLoading ? (
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-4" role="status" aria-live="polite" aria-label="Loading live telemetry">
             <SkeletonPanel />
             <SkeletonPanel />
           </div>
         ) : !hasRuntimeSignal ? (
-          <div className="relative flex h-full items-center justify-center overflow-hidden">
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div className="h-48 w-48 rounded-full border border-black/[0.07] dark:border-white/[0.08] animate-[ping_4s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
-              <div className="absolute h-72 w-72 rounded-full border border-black/[0.04] dark:border-white/[0.05] animate-[ping_7s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
-              <div className="absolute h-[22rem] w-[22rem] rounded-full border border-black/[0.02] dark:border-white/[0.03] animate-[ping_10s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
-            </div>
+          <div className="relative flex h-full items-center justify-center overflow-hidden" role="status" aria-live="polite" aria-label="No active runtime telemetry">
             <div className="relative z-10 text-center">
-              <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-[1.25rem] border border-black/[0.07] shadow-[0_0_28px_rgba(100,116,139,0.12)] dark:border-white/[0.07]">
+              <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-[1.25rem] border border-black/[0.07] bg-white/55 shadow-[0_0_18px_rgba(100,116,139,0.08)] dark:border-white/[0.07] dark:bg-white/[0.03]">
                 <FolderKanban className="h-7 w-7 text-slate-400 dark:text-slate-500" strokeWidth={1.5} />
               </div>
               <span className="block font-display text-sm font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-500">Awaiting Runtime</span>
@@ -79,34 +74,34 @@ export const OverviewTelemetry: FunctionComponent = () => {
           <div className="relative z-10 flex min-h-0 flex-1 flex-col">
             {/* Stat cards */}
             <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="rounded-2xl border border-status-green/15 bg-status-green/[0.06] p-4">
-                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-status-green">Active</div>
+              <div className="rounded-2xl border border-status-green/15 bg-status-green/[0.045] p-3.5">
+                <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-status-green">Active</div>
                 <div className="mt-1.5 font-mono text-2xl font-black text-slate-900 dark:text-white">{telemetry?.activeProjects?.length ?? 0}</div>
               </div>
-              <div className="rounded-2xl border border-signal-500/15 bg-signal-500/[0.06] p-4">
-                <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-400"><Zap className="h-3 w-3" strokeWidth={2.4} />Running</div>
+              <div className="rounded-2xl border border-signal-500/15 bg-signal-500/[0.045] p-3.5">
+                <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-600 dark:text-signal-400"><Zap className="h-3 w-3" strokeWidth={2.4} />Running</div>
                 <div className="mt-1.5 font-mono text-2xl font-black text-slate-900 dark:text-white">{totalRunningDispatches}</div>
               </div>
-              <div className="rounded-2xl border border-status-amber/15 bg-status-amber/[0.07] p-4">
-                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-status-amber">Attention</div>
+              <div className="rounded-2xl border border-ember-500/15 bg-ember-500/[0.055] p-3.5">
+                <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-ember-600 dark:text-ember-500">Attention</div>
                 <div className="mt-1.5 font-mono text-2xl font-black text-slate-900 dark:text-white">{telemetry?.attentionProjects?.length ?? 0}</div>
               </div>
-              <div className="rounded-2xl border border-black/[0.05] bg-black/[0.02] p-4 dark:border-white/[0.06] dark:bg-white/[0.02]">
-                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Events</div>
+              <div className="rounded-2xl border border-black/[0.05] bg-black/[0.018] p-3.5 dark:border-white/[0.06] dark:bg-white/[0.018]">
+                <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Events</div>
                 <div className="mt-1.5 font-mono text-2xl font-black text-slate-900 dark:text-white">{telemetry?.recentEvents?.length ?? 0}</div>
               </div>
             </div>
 
             {/* Attention block (capped, scrollable) */}
             {telemetry?.attentionProjects?.length > 0 && (
-              <div className="mt-5 max-h-[26%] shrink-0 overflow-y-auto dashboard-scrollbar rounded-[1.5rem] border border-status-amber/18 bg-status-amber/[0.07] p-4">
-                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-status-amber">
+              <div className="mt-5 max-h-[26%] shrink-0 overflow-y-auto dashboard-scrollbar rounded-[1.5rem] border border-ember-500/18 bg-ember-500/[0.055] p-4">
+                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-ember-600 dark:text-ember-500">
                   <AlertTriangle className="h-3.5 w-3.5" strokeWidth={2.1} />
                   Human Intervention Needed
                 </div>
                 <div className="mt-3 space-y-2.5">
                   {telemetry.attentionProjects.map((project) => (
-                    <div key={project.sprintRunId} className="rounded-2xl border border-status-amber/15 bg-white/75 p-3.5 dark:bg-void-800/55">
+                    <div key={project.sprintRunId} className="rounded-2xl border border-ember-500/15 bg-white/72 p-3.5 dark:bg-void-800/55">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="truncate text-sm font-bold tracking-tight text-slate-900 dark:text-white">{project.projectName}</div>
@@ -114,7 +109,7 @@ export const OverviewTelemetry: FunctionComponent = () => {
                             {project.sprintName}{project.sprintNumber != null ? ` · Sprint ${project.sprintNumber}` : ""}
                           </div>
                         </div>
-                        <div className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-status-amber/20 bg-status-amber/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-status-amber">
+                        <div className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-status-amber/20 bg-status-amber/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-amber">
                           <AlertTriangle className="h-3 w-3" strokeWidth={2.2} />
                           Paused
                         </div>
@@ -158,7 +153,7 @@ export const OverviewTelemetry: FunctionComponent = () => {
                                 </div>
                               </div>
                             </div>
-                            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-status-green/20 bg-status-green/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-status-green">
+                            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-600 dark:text-signal-400">
                               <Activity className="h-3 w-3 animate-pulse" strokeWidth={2.2} />
                               {running}
                             </span>
@@ -178,7 +173,7 @@ export const OverviewTelemetry: FunctionComponent = () => {
               <div className="flex min-h-0 flex-1 flex-col">
                 <div className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Runtime Timeline</div>
                 <div className="min-h-0 flex-1 space-y-2 overflow-y-auto dashboard-scrollbar pr-1">
-                  {telemetry?.recentEvents?.map((event) => {
+                  {telemetry?.recentEvents?.length ? telemetry.recentEvents.map((event) => {
                     const style = getEventStyle(event);
                     return (
                       <div key={event.id} className="relative overflow-hidden rounded-2xl border border-black/[0.05] bg-black/[0.02] p-3 dark:border-white/[0.06] dark:bg-white/[0.02]">
@@ -195,7 +190,14 @@ export const OverviewTelemetry: FunctionComponent = () => {
                         </div>
                       </div>
                     );
-                  })}
+                  }) : (
+                    <div className="flex min-h-28 items-center justify-center rounded-2xl border border-black/[0.05] bg-black/[0.015] px-4 py-6 text-center dark:border-white/[0.06] dark:bg-white/[0.015]" role="status" aria-live="polite">
+                      <div>
+                        <div className="font-display text-sm font-semibold tracking-tight text-slate-600 dark:text-slate-300">No Runtime Events</div>
+                        <div className="mt-1 font-mono text-[11px] text-slate-400 dark:text-slate-500">Timeline entries appear as dispatches report state.</div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

@@ -66,10 +66,10 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
     });
 
     return (
-        <div className="w-full relative z-10 px-2">
+        <div className="w-full relative z-10">
             {/* Section Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 md:mb-12 gap-6 sm:gap-8">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-5 md:mb-6 gap-4 sm:gap-6">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6 min-w-0">
                     <h2 className="text-lg md:text-xl font-bold tracking-tight text-slate-900 dark:text-white font-display">Active Streams</h2>
                     <div className="w-full sm:w-auto">
                         <FilterStrip
@@ -81,21 +81,21 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                         />
                     </div>
                 </div>
-                <div className="text-xs font-semibold text-slate-400 dark:text-slate-600 font-mono hidden sm:block">
+                <div className="text-xs font-semibold text-slate-400 dark:text-slate-600 font-mono hidden sm:block whitespace-nowrap">
                     {filteredTasks.length} active
                 </div>
             </div>
 
             {/* Task rows */}
-            <div ref={listRef} className="flex flex-col w-full space-y-3">
+            <div ref={listRef} className="flex flex-col w-full space-y-3 rounded-[1.5rem] border border-black/[0.05] bg-white/45 p-3 backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/35">
                 {isLoading ? (
-                    <>
+                    <div className="flex flex-col gap-3" role="status" aria-live="polite" aria-label="Loading active task streams">
                         <SkeletonRow />
                         <SkeletonRow />
                         <SkeletonRow />
                         <SkeletonRow />
                         <SkeletonRow />
-                    </>
+                    </div>
                 ) : filteredTasks.length > 0 ? (
                     sprintGroups.flatMap((group) => [
                         group.sprint ? (
@@ -120,7 +120,7 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                         )),
                     ])
                 ) : (
-                    <div data-flip-id="empty-state">
+                    <div data-flip-id="empty-state" role="status" aria-live="polite">
                         <EmptyState
                             title="No Active Streams"
                             description="There are no tasks currently matching the selected filter in active sprints."
