@@ -170,10 +170,22 @@ export const MemoryList: FunctionComponent<{
     if (renderedNodes.length === 0) {
         const isEmpty = totalAliveCount === 0;
         const message = isEmpty ? "No memories exist" : "No memories match your search or filters";
+        const query = searchQuerySignal.value.trim();
         return (
-            <div className="flex min-h-0 min-w-0 flex-col items-center justify-center p-8 text-center text-slate-400">
+            <div
+                id="memory-panel"
+                aria-labelledby={`tab-${activeTier.value}`}
+                className="flex min-h-0 min-w-0 flex-col items-center justify-center p-8 text-center text-slate-400"
+                role="listbox"
+                aria-label="Memory List"
+            >
                 <div className="sr-only" aria-live="polite" aria-atomic="true">{message}</div>
                 <p className="max-w-full break-words text-sm font-medium">{message}</p>
+                {!isEmpty && (
+                    <p className="mt-2 max-w-full break-words text-xs font-medium text-slate-400 dark:text-slate-500">
+                        Showing 0 of {totalAliveCount} memories{query ? ` for "${query}"` : ""}
+                    </p>
+                )}
             </div>
         );
     }
@@ -193,6 +205,7 @@ export const MemoryList: FunctionComponent<{
                 <div className="inline-flex max-w-full items-center gap-1.5 self-start rounded-lg border border-black/[0.04] bg-black/[0.02] px-2 py-1 text-xs font-medium text-slate-500 dark:border-white/[0.04] dark:bg-white/[0.02] dark:text-slate-400">
                     <span className="truncate">
                         Showing {resultCount} of {totalAliveCount} memories
+                        {searchQuerySignal.value.trim() ? ` for "${searchQuerySignal.value.trim()}"` : ""}
                     </span>
                 </div>
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
