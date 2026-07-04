@@ -18,19 +18,22 @@ export function conversationTurnToMessage(
   provider: string,
   model: string | null,
 ): AppendExecutionInvocationMessageInput {
+  const base: Record<string, unknown> = { provider, model };
+  if (turn.toolCallId) base.toolCallId = turn.toolCallId;
+
+  if (turn.kind === "user") {
+    return { role: "user", contentMarkdown: turn.text || "", metadata: base };
+  }
+
   const sanitizedTurnText = truncateForStorage(
     sanitizeInvocationOutputText(turn.text || ""),
     MAX_MESSAGE_CONTENT_CHARS,
   );
-  const base: Record<string, unknown> = { provider, model };
-  if (turn.toolCallId) base.toolCallId = turn.toolCallId;
 
   const capPayload = (value: string | null | undefined): string | null =>
     value == null ? null : truncateForStorage(value, MAX_TOOL_PAYLOAD_CHARS);
 
   switch (turn.kind) {
-    case "user":
-      return { role: "user", contentMarkdown: sanitizedTurnText, metadata: base };
     case "injected_context":
       return { role: "system", contentMarkdown: sanitizedTurnText, metadata: { ...base, kind: "injected_context" } };
     case "assistant":
