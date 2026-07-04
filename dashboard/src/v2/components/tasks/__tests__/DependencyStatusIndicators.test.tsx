@@ -28,8 +28,10 @@ describe("DependencyStatusIndicators", () => {
     const task1Elements = container.querySelectorAll('span[aria-hidden="true"]');
     expect(Array.from(task1Elements).some(el => el.textContent === "TASK-1")).toBeTruthy();
 
+    expect(getByText("Blocked: 4 dependencies need completion")).toBeTruthy();
+
     // Verify explicit accessible text
-    expect(getByText("Depends on task TASK-1, status: completed. Title: Test task 1")).toBeTruthy();
+    expect(getByText("Depends on task TASK-1, resolved. Status: completed. Title: Test task 1")).toBeTruthy();
 
     // Verify sr-only accessible text
     const srText = getByText((content, element) => {
@@ -50,10 +52,24 @@ describe("DependencyStatusIndicators", () => {
 
     const inProgressIndicator = getByTitle(/Depends on Test task 4 \(in progress\)/i);
     expect(inProgressIndicator.className).toContain("text-signal-500");
+    expect(getByText("In progress")).toBeTruthy();
 
     const unknownIndicator = getByTitle(/Depends on Unknown Task \(missing\) \(pending\)/i);
     expect(unknownIndicator.className).toContain("border-dashed");
-    expect(container.querySelector('[role="list"]')).toHaveAccessibleName("Task dependencies");
+    expect(container.querySelector('[role="list"]')).toHaveAccessibleName("Blocked: 4 dependencies need completion. Task dependencies");
+  });
+
+  it("summarizes resolved dependencies without implying blockers", () => {
+    const { getByText, getByRole } = render(
+      <DependencyStatusIndicators
+        indicators={[
+          { recordId: "1", id: "TASK-1", title: "Completed task", status: "completed" },
+        ]}
+      />
+    );
+
+    expect(getByText("Dependencies resolved: 1 clear")).toBeTruthy();
+    expect(getByRole("list")).toHaveAccessibleName("Dependencies resolved: 1 clear. Task dependencies");
   });
 
   it("returns null when no indicators provided", () => {
