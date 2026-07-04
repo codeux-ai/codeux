@@ -12,6 +12,8 @@ describe("SprintPreviewDockerPlanBuilder", () => {
         GITHUB_TOKEN: undefined,
         GH_TOKEN: undefined,
         GEMINI_CLI_TRUST_WORKSPACE: undefined,
+        AGY_MODEL: undefined,
+        ANTIGRAVITY_MODEL: undefined,
       },
     });
   });
