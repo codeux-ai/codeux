@@ -84,8 +84,8 @@ describe("LiveTransportBanner", () => {
     expect(banner).toHaveAttribute("aria-busy", "true");
   });
 
-  it("renders nothing while recovering (transient state must not flash/shift layout)", () => {
-    const { container } = render(
+  it("renders recovering state while waiting for the first snapshot", () => {
+    render(
       <LiveTransportBanner
         transportState="connected"
         isRecovering={true}
@@ -93,9 +93,12 @@ describe("LiveTransportBanner", () => {
         error={null}
       />
     );
-    expect(container.firstChild).toHaveClass("overflow-hidden");
-    expect(container.firstChild).toBeEmptyDOMElement();
-    expect(screen.queryByText("Recovering State")).not.toBeInTheDocument();
+
+    const banner = screen.getByRole("status");
+    expect(screen.getByText("Recovering Live Data")).toBeInTheDocument();
+    expect(screen.getByText(/Waiting for the first runtime snapshot/)).toBeInTheDocument();
+    expect(banner).toHaveAttribute("aria-live", "polite");
+    expect(banner).toHaveAttribute("aria-busy", "true");
   });
 
   it("renders nothing while connecting (initial connect resolves near-instantly)", () => {
