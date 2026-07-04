@@ -4,6 +4,7 @@
 import { h } from "preact";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";
+import userEvent from "@testing-library/user-event";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { GlobalSearch } from "../../../dashboard/src/v2/components/top-nav/GlobalSearch.js";
 import { SearchOverlay } from "../../../dashboard/src/v2/components/search/SearchOverlay.js";
@@ -195,11 +196,97 @@ describe("Global Search", () => {
             render(<SearchOverlay isOpen={true} onClose={vi.fn()} searchQuery="test" onSearchChange={vi.fn()} results={{sprints:[], tasks:[], agents:[], containers:[]}} isLoading={true} />);
             const spinner = document.querySelector(".animate-spin");
             expect(spinner).toBeInTheDocument();
+            expect(screen.getAllByRole("status", { hidden: true })[0]).toHaveTextContent("Searching workspace");
+        });
+
+        it("announces background loading while keeping stale results readable", () => {
+            render(
+                <SearchOverlay
+                    isOpen={true}
+                    onClose={vi.fn()}
+                    searchQuery="generic"
+                    onSearchChange={vi.fn()}
+                    results={{
+                        sprints: [{ id: "sprint-1", title: "Generic Sprint", displayKey: "SPR-1", sprintKey: "SPR-1", routeSprintId: "sprint-1", status: "running" }],
+                        tasks: [],
+                        agents: [],
+                        containers: []
+                    }}
+                    isLoading={true}
+                />
+            );
+
+            const listbox = screen.getByRole("listbox", { hidden: true });
+            expect(listbox).toHaveAttribute("aria-busy", "true");
+            expect(listbox).toHaveClass("opacity-75");
+            expect(listbox).not.toHaveClass("pointer-events-none");
+            expect(screen.getByRole("status", { hidden: true })).toHaveTextContent("Updating results for 'generic'. 1 current results remain available.");
+            expect(screen.getByRole("option", { name: /generic sprint/i, hidden: true })).toBeInTheDocument();
+            expect(screen.getByLabelText("Updating search results")).toBeInTheDocument();
         });
 
         it("shows empty state when no results are found", () => {
             render(<SearchOverlay isOpen={true} onClose={vi.fn()} searchQuery="test" onSearchChange={vi.fn()} results={{sprints:[], tasks:[], agents:[], containers:[]}} isLoading={false} />);
             expect(visibleText("No results found for 'test'")).toBeInTheDocument();
+        });
+
+        it("does not move active descendant for empty result sets", () => {
+            render(<SearchOverlay isOpen={true} onClose={vi.fn()} searchQuery="missing" onSearchChange={vi.fn()} results={{sprints:[], tasks:[], agents:[], containers:[]}} isLoading={false} />);
+
+            const combobox = screen.getByRole("combobox", { hidden: true });
+            fireEvent.keyDown(window, { key: "ArrowDown" });
+            fireEvent.keyDown(window, { key: "End" });
+            fireEvent.keyDown(window, { key: "Home" });
+
+            expect(combobox).not.toHaveAttribute("aria-activedescendant");
+        });
+
+        it("updates active descendant and keeps focused results within the result scroller", async () => {
+            render(
+                <SearchOverlay
+                    isOpen={true}
+                    onClose={vi.fn()}
+                    searchQuery="generic"
+                    onSearchChange={vi.fn()}
+                    results={{
+                        sprints: [
+                            { id: "sprint-1", title: "Generic Sprint One", displayKey: "SPR-1", sprintKey: "SPR-1", routeSprintId: "sprint-1", status: "running" },
+                            { id: "sprint-2", title: "Generic Sprint Two", displayKey: "SPR-2", sprintKey: "SPR-2", routeSprintId: "sprint-2", status: "running" }
+                        ],
+                        tasks: [],
+                        agents: [],
+                        containers: []
+                    }}
+                    isLoading={false}
+                />
+            );
+
+            const combobox = screen.getByRole("combobox", { hidden: true });
+            const listbox = screen.getByRole("listbox", { hidden: true });
+            const scroller = listbox.parentElement as HTMLElement;
+            Object.defineProperty(scroller, "scrollTop", { value: 0, writable: true, configurable: true });
+            const scrollIntoView = vi.fn();
+            window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
+            const rectSpy = vi.spyOn(window.HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+                if (this.id === "search-result-sprint-2") {
+                    return { top: 120, bottom: 160, left: 0, right: 200, width: 200, height: 40, x: 0, y: 120, toJSON: () => ({}) } as DOMRect;
+                }
+                if (this.className.toString().includes("dashboard-scrollbar")) {
+                    return { top: 0, bottom: 100, left: 0, right: 200, width: 200, height: 100, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+                }
+                return { top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+            });
+
+            fireEvent.keyDown(window, { key: "ArrowDown" });
+            expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-sprint-1");
+            fireEvent.keyDown(window, { key: "ArrowDown" });
+
+            expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-sprint-2");
+            await waitFor(() => {
+                expect(scroller.scrollTop).toBe(60);
+            });
+            expect(scrollIntoView).not.toHaveBeenCalled();
+            rectSpy.mockRestore();
         });
 
         it("closes on Escape", () => {
@@ -235,6 +322,20 @@ describe("Global Search", () => {
             expect(mockNavigate).toHaveBeenCalledWith({ to: "/sprints", search: { sprintId: "sprint-32", sprintKey: "CODUX-32" } });
             expect(onClose).toHaveBeenCalled();
         });
+
+        it("restores focus to the invoking global search control after close", async () => {
+            const user = userEvent.setup();
+            render(<GlobalSearch projectId="p1" selectedProject={{ id: "p1", name: "Project 1" } as any} sprints={[]} />);
+
+            const trigger = screen.getByRole("button", { name: "Search workspace" });
+            trigger.focus();
+            await user.click(trigger);
+            await user.click(screen.getByRole("button", { name: "Close search", hidden: true }));
+
+            await waitFor(() => {
+                expect(document.activeElement).toBe(trigger);
+            });
+        });
     });
 
     describe("SearchResultRow Component", () => {
@@ -244,7 +345,8 @@ describe("Global Search", () => {
 
             const link = screen.getByRole("option");
             expect(link).toHaveAttribute("aria-selected", "true");
-            expect(link).toHaveClass("bg-signal-500/[0.07]");
+            expect(link).toHaveAttribute("data-selected", "true");
+            expect(link).toHaveClass("border-signal-500/55");
             expect(screen.getByText("SPR-1")).toBeInTheDocument();
             expect(screen.getByText("Test Sprint")).toBeInTheDocument();
         });
