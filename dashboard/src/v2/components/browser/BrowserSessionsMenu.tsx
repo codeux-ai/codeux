@@ -10,6 +10,19 @@ import { getSafeUrl } from "../../lib/safe-url.js";
 
 type InteractionState = 'closed' | 'hover' | 'open';
 
+const statusLabel: Record<SprintPreviewSession["status"], string> = {
+    starting: "Starting",
+    running: "Running",
+    stopped: "Stopped",
+    error: "Error",
+};
+
+const healthLabel: Record<SprintPreviewSession["healthStatus"], string> = {
+    healthy: "Healthy",
+    unreachable: "Unreachable",
+    unknown: "Health unknown",
+};
+
 export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ enabled = true }) => {
     const { selectedProject } = useProjectData();
     const [sessions, setSessions] = useState<SprintPreviewSession[]>([]);
@@ -78,7 +91,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
     const handleMenuKeyDown = (e: KeyboardEvent) => {
         if (!isMenuVisible || !containerRef.current) return;
 
-        const items = Array.from(containerRef.current.querySelectorAll('[role="menuitem"]')) as HTMLElement[];
+        const items = Array.from(containerRef.current.querySelectorAll('[role="menuitem"]:not([aria-disabled="true"])')) as HTMLElement[];
         if (items.length === 0) return;
 
         const currentIndex = items.indexOf(document.activeElement as HTMLElement);
@@ -121,13 +134,6 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
             return `:${session.containerAppPort} ➔ :${session.hostPort}`;
         }
         return session.containerAppPort ? `:${session.containerAppPort} ➔ pending` : "port pending";
-    };
-
-    const statusColors: Record<SprintPreviewSession["status"], string> = {
-        starting: "bg-ember-500",
-        running: "bg-signal-500",
-        stopped: "bg-slate-500",
-        error: "bg-status-red",
     };
 
     if (!enabled) {
@@ -185,37 +191,81 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                 <p className="text-xs text-slate-500 font-medium">Discovering active sessions...</p>
                             </div>
                         ) : sessions.length > 0 ? (
-                            sessions.map((session, index) => (
-                                <a
-                                    key={session.id}
-                                    href={getSafeUrl(buildPreviewUrl(session.id, session.lastKnownPath))}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    role="menuitem"
-                                    aria-label={`Open preview session ${session.sprintName || "Unknown Sprint"} in a new tab`}
-                                    tabIndex={index === 0 ? 0 : -1}
-                                    className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex flex-col gap-1.5 px-3 py-3 text-left transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.04] group border-b border-black/[0.04] dark:border-white/[0.04] last:border-0"
-                                >
+                            sessions.map((session, index) => {
+                                const sprintName = session.sprintName || "Unknown Sprint";
+                                const canOpen = Boolean(session.hostPort);
+                                const firstEnabledIndex = sessions.findIndex((candidate) => Boolean(candidate.hostPort));
+                                const menuItemClassName = `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex flex-col gap-1.5 px-3 py-3 text-left transition-colors group border-b border-black/[0.04] dark:border-white/[0.04] last:border-0 ${
+                                    canOpen
+                                        ? "hover:bg-black/[0.04] dark:hover:bg-white/[0.04]"
+                                        : "cursor-not-allowed bg-slate-500/[0.04]"
+                                }`;
+                                const content = (
+                                    <>
                                     <div className="flex flex-wrap items-center justify-between min-w-0 w-full gap-2">
                                         <div className="flex items-center gap-2 min-w-0">
                                             <div className="flex items-center gap-1.5 shrink-0 bg-black/[0.04] dark:bg-white/[0.04] px-1.5 py-0.5 rounded-md">
-                                                <div className={`w-1.5 h-1.5 rounded-full ${statusColors[session.status] || "bg-slate-400"} hidden`} />
-                                                {session.status === 'starting' ? <Loader2 className="w-3 h-3 animate-spin text-ember-500" /> : session.status === 'running' ? <Play className="w-3 h-3 text-signal-500" fill="currentColor" /> : session.status === 'error' ? <AlertCircle className="w-3 h-3 text-status-red" /> : <Square className="w-3 h-3 text-slate-500" fill="currentColor" />}
-                                                <span className="text-[9px] font-bold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">{session.status}</span>
+                                                {session.status === 'starting' ? <Loader2 aria-hidden="true" className="w-3 h-3 animate-spin text-ember-500 motion-reduce:animate-none" /> : session.status === 'running' ? <Play aria-hidden="true" className="w-3 h-3 text-signal-500" fill="currentColor" /> : session.status === 'error' ? <AlertCircle aria-hidden="true" className="w-3 h-3 text-status-red" /> : <Square aria-hidden="true" className="w-3 h-3 text-slate-500" fill="currentColor" />}
+                                                <span className="text-[9px] font-bold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">{statusLabel[session.status]}</span>
                                             </div>
                                             <span className="min-w-0 break-words text-sm font-semibold text-slate-700 dark:text-slate-200 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">
-                                                {session.sprintName || "Unknown Sprint"}
+                                                {sprintName}
                                             </span>
                                         </div>
-                                        <ExternalLink aria-hidden="true" className="w-3.5 h-3.5 shrink-0 text-slate-400 group-hover:text-signal-500 transition-colors" />
+                                        {canOpen ? (
+                                            <ExternalLink aria-hidden="true" className="w-3.5 h-3.5 shrink-0 text-slate-400 group-hover:text-signal-500 transition-colors" />
+                                        ) : (
+                                            <span className="rounded-full border border-slate-400/25 bg-slate-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-slate-500 dark:border-slate-500/40 dark:bg-slate-500/15 dark:text-slate-400">
+                                                Link unavailable
+                                            </span>
+                                        )}
                                     </div>
-                                    <div className="flex items-center pl-1 min-w-0">
+                                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pl-1 min-w-0">
+                                        <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                                            {healthLabel[session.healthStatus]}
+                                        </span>
                                         <span className="break-words text-[10px] font-mono text-slate-500 dark:text-slate-400">
                                             {formatPort(session)}
                                         </span>
                                     </div>
-                                </a>
-                            ))
+                                    {!canOpen && (
+                                        <div className="pl-1 text-[10px] text-slate-500 dark:text-slate-400">
+                                            Preview link unavailable until a host port is routed.
+                                        </div>
+                                    )}
+                                    </>
+                                );
+
+                                if (!canOpen) {
+                                    return (
+                                        <div
+                                            key={session.id}
+                                            role="menuitem"
+                                            aria-disabled="true"
+                                            aria-label={`Preview link unavailable for ${sprintName}`}
+                                            tabIndex={-1}
+                                            className={menuItemClassName}
+                                        >
+                                            {content}
+                                        </div>
+                                    );
+                                }
+
+                                return (
+                                    <a
+                                        key={session.id}
+                                        href={getSafeUrl(buildPreviewUrl(session.id, session.lastKnownPath))}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        role="menuitem"
+                                        aria-label={`Open preview session ${sprintName} in a new tab`}
+                                        tabIndex={index === firstEnabledIndex ? 0 : -1}
+                                        className={menuItemClassName}
+                                    >
+                                        {content}
+                                    </a>
+                                );
+                            })
                         ) : !selectedProject ? (
                             <div className="px-4 py-8 text-center flex flex-col items-center justify-center gap-3" role="status" aria-live="polite">
                                 <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-void-700 flex items-center justify-center text-slate-400">

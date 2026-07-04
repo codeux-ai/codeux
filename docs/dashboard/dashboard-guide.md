@@ -375,6 +375,7 @@ Legacy runtime:
   - non-critical side-panel data such as startup-script contents and container logs now load after the main browser surface, so the page opens faster and the iframe/session rail render first
   - browser chrome and session controls expose explicit accessible names for window controls, back/forward/reload, external open, rebuild, stop, script save, and session removal
   - preview state changes are announced through status/alert regions for loading, starting, running, stopped, reconnecting or unavailable containers, stale logs, saving scripts, launching containers, and empty session states
+  - session rail controls expose selected, starting, removing, health, disabled launch, and unavailable-link states through visible text/badges plus ARIA state; overflow scrolling respects reduced-motion preferences and does not rely on hover-only arrow discovery
   - address entry has a programmatic label, disabled-state description, and announced navigation submissions while preserving focus in the form
   - remove actions on session cards fully delete preview-session entries after stopping any live container
   - rebuild, stop, open-in-tab, startup-script editing, and log viewing
