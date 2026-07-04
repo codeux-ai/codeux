@@ -123,6 +123,7 @@ describe("InvocationFeedPanel", () => {
     expect(screen.getByText("Provider timed out")).toBeInTheDocument();
     expect(screen.getByText("1 invocation failed. Open the transcript for details.")).toHaveAttribute("role", "alert");
     expect(screen.getByText("Invocation status: running.")).toBeInTheDocument();
+    expect(document.querySelector(".motion-reduce\\:ring-2")).toBeInTheDocument();
 
     const feed = screen.getByRole("log", { name: "Live invocation feed" });
     expect(feed).toHaveAttribute("aria-live", "polite");

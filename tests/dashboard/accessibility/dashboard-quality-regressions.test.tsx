@@ -642,11 +642,11 @@ describe("dashboard accessibility quality regressions", () => {
     expect(settings).toMatch(/role=\{error \? "alert" : "status"\}/);
     expect(settings).toMatch(/Current values remain visible/);
 
-    const liveBanner = readSource("dashboard/src/v2/components/live-session/LiveTransportBanner.tsx");
-    expect(liveBanner).toMatch(/Stale Data/);
-    expect(liveBanner).toMatch(/role: "status"/);
-    expect(liveBanner).toMatch(/ariaLive: "polite"/);
-    expect(liveBanner).toMatch(/ariaBusy: true/);
+    const liveSessionViewModel = readSource("dashboard/src/v2/lib/live-session-view-model.ts");
+    expect(liveSessionViewModel).toMatch(/Stale Data/);
+    expect(liveSessionViewModel).toMatch(/role: "status"/);
+    expect(liveSessionViewModel).toMatch(/ariaLive: "polite"/);
+    expect(liveSessionViewModel).toMatch(/ariaBusy: true/);
 
     const searchOverlay = readSource("dashboard/src/v2/components/search/SearchOverlay.tsx");
     expect(searchOverlay).toMatch(/current results remain available/);

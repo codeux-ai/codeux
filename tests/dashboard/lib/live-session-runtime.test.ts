@@ -379,6 +379,12 @@ describe("live session runtime state", () => {
       expect(getLiveActionDisplayProps(true, false)).toEqual({ "aria-disabled": true, "aria-busy": true, "data-action-state": "pending" });
       expect(getLiveActionDisplayProps(false, true)).toEqual({ "aria-disabled": true, "aria-busy": false, "data-action-state": "disabled" });
       expect(getLiveActionDisplayProps(false, false)).toEqual({ "aria-disabled": false, "aria-busy": false, "data-action-state": "idle" });
+      expect(getLiveActionDisplayProps("disabled", true, "Task is already complete.")).toEqual({
+        "aria-disabled": true,
+        "aria-busy": false,
+        "data-action-state": "disabled",
+        "data-disabled-reason": "Task is already complete.",
+      });
     });
   });
 

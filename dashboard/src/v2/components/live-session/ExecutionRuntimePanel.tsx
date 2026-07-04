@@ -104,7 +104,8 @@ const RuntimeActionButton: FunctionComponent<{
     toneClassName: string;
     onActivate: () => void;
     icon: ComponentChildren;
-}> = ({ actionState, labels, ariaLabel, toneClassName, onActivate, icon }) => {
+    disabledReason?: string | null;
+}> = ({ actionState, labels, ariaLabel, toneClassName, onActivate, icon, disabledReason = null }) => {
     const label = getLiveActionLabel(actionState, labels);
     const statusLabel = getLiveActionStatusLabel(actionState, labels);
     const isPending = actionState === "pending";
@@ -118,12 +119,12 @@ const RuntimeActionButton: FunctionComponent<{
             }}
             aria-label={ariaLabel}
             title={statusLabel ?? label}
-            {...getLiveActionDisplayProps(actionState, actionState === "disabled")}
+            {...getLiveActionDisplayProps(actionState, actionState === "disabled", disabledReason)}
             className={`inline-flex min-h-6 items-center gap-1.5 rounded-md px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] transition-colors aria-disabled:opacity-60 ${toneClassName}`}
         >
             {icon}
             <span>{label}</span>
-            {statusLabel && <span className="sr-only">{statusLabel}</span>}
+            {statusLabel && <span className="text-[8px] normal-case tracking-normal opacity-80">{statusLabel}</span>}
         </button>
     );
 };
@@ -402,21 +403,14 @@ export const ExecutionRuntimePanel: FunctionComponent<{
         }
     }, [open, isReducedMotion, motionTokens.expansionCollapse.duration, motionTokens.expansionCollapse.ease, collapsible]);
 
-    if (!snapshot) {
-        return (
-            <div role="status" aria-live="polite" aria-busy="true" className="rounded-[1.75rem] border border-black/[0.08] bg-white p-5 text-[11px] font-mono text-slate-400 shadow-sm dark:border-white/[0.08] dark:bg-void-800 dark:text-slate-500">
-                Loading execution runtime.
-            </div>
-        );
-    }
-    const activeSprintRuns = useMemo(() => snapshot.sprintRuns.filter((run) => run.status === "running" || run.status === "queued"), [snapshot.sprintRuns, snapshot.sprintRuns.length]);
-    const activeDispatches = useMemo(() => snapshot.taskDispatches.filter((dispatch) => (
+    const activeSprintRuns = useMemo(() => (snapshot?.sprintRuns ?? []).filter((run) => run.status === "running" || run.status === "queued"), [snapshot?.sprintRuns, snapshot?.sprintRuns?.length]);
+    const activeDispatches = useMemo(() => (snapshot?.taskDispatches ?? []).filter((dispatch) => (
         dispatch.status === "queued" || dispatch.status === "claimed" || dispatch.status === "running"
-    )), [snapshot.taskDispatches, snapshot.taskDispatches.length]);
-    const activeConnections = useMemo(() => snapshot.connections.filter((connection) => connection.status !== "offline"), [snapshot.connections, snapshot.connections.length]);
+    )), [snapshot?.taskDispatches, snapshot?.taskDispatches?.length]);
+    const activeConnections = useMemo(() => (snapshot?.connections ?? []).filter((connection) => connection.status !== "offline"), [snapshot?.connections, snapshot?.connections?.length]);
     const pendingInboxTotal = useMemo(
-        () => snapshot.connections.reduce((sum, connection) => sum + connection.pendingInboxCount, 0),
-        [snapshot.connections, snapshot.connections.length],
+        () => (snapshot?.connections ?? []).reduce((sum, connection) => sum + connection.pendingInboxCount, 0),
+        [snapshot?.connections, snapshot?.connections?.length],
     );
 
     const { queuedWorkers, runningWorkers } = useMemo(() => {
@@ -427,16 +421,24 @@ export const ExecutionRuntimePanel: FunctionComponent<{
         };
     }, [activeDispatches]);
 
-    const visibleSprintRuns = useMemo(() => snapshot.sprintRuns.slice(0, 4), [snapshot.sprintRuns, snapshot.sprintRuns.length]);
-    const visibleTaskDispatches = useMemo(() => snapshot.taskDispatches.slice(0, 8), [snapshot.taskDispatches, snapshot.taskDispatches.length]);
+    const visibleSprintRuns = useMemo(() => (snapshot?.sprintRuns ?? []).slice(0, 4), [snapshot?.sprintRuns, snapshot?.sprintRuns?.length]);
+    const visibleTaskDispatches = useMemo(() => (snapshot?.taskDispatches ?? []).slice(0, 8), [snapshot?.taskDispatches, snapshot?.taskDispatches?.length]);
     const blockedAttentionCount = useMemo(
-        () => snapshot.attentionItems.filter((item) => item.status === "open" || item.status === "claimed").length,
-        [snapshot.attentionItems, snapshot.attentionItems.length],
+        () => (snapshot?.attentionItems ?? []).filter((item) => item.status === "open" || item.status === "claimed").length,
+        [snapshot?.attentionItems, snapshot?.attentionItems?.length],
     );
     const failedTaskCount = useMemo(
-        () => snapshot.taskDispatches.filter((dispatch) => dispatch.status === "failed").length,
-        [snapshot.taskDispatches, snapshot.taskDispatches.length],
+        () => (snapshot?.taskDispatches ?? []).filter((dispatch) => dispatch.status === "failed").length,
+        [snapshot?.taskDispatches, snapshot?.taskDispatches?.length],
     );
+
+    if (!snapshot) {
+        return (
+            <div role="status" aria-live="polite" aria-busy="true" className="rounded-[1.75rem] border border-black/[0.08] bg-white p-5 text-[11px] font-mono text-slate-400 shadow-sm dark:border-white/[0.08] dark:bg-void-800 dark:text-slate-500">
+                Loading execution runtime.
+            </div>
+        );
+    }
 
     return (
         <div role="region" aria-label="Execution runtime" aria-busy={activeSprintRuns.length > 0 || activeDispatches.length > 0 ? "true" : undefined} className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800">
