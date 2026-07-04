@@ -4,7 +4,10 @@ import * as os from "os";
 import * as path from "path";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { DashboardRealtimeEventRepository } from "../../../src/repositories/dashboard-realtime-event-repository.js";
-import { DashboardRealtimeService } from "../../../src/services/dashboard-realtime-service.js";
+import {
+  computeDashboardRealtimePayloadFingerprint,
+  DashboardRealtimeService,
+} from "../../../src/services/dashboard-realtime-service.js";
 
 const tempDirs: string[] = [];
 
@@ -188,5 +191,83 @@ describe("DashboardRealtimeService Extra Coverage", () => {
       expect(fastResolved).toBe(true);
       expect(logger.error).toHaveBeenCalledWith("Failed to publish project execution updated realtime snapshot", expect.any(Object));
     });
+  });
+});
+
+describe("dashboard realtime semantic fingerprints", () => {
+  it("ignores overview timestamp-only changes while preserving recent event id changes", () => {
+    const basePayload = {
+      activeProjects: [{
+        projectId: "project-1",
+        projectName: "Project 1",
+        sprintId: "sprint-1",
+        sprintRunId: "run-1",
+        sprintRunStatus: "running",
+        activeDispatchCount: 1,
+        runningDispatchCount: 1,
+        updatedAt: "2026-03-30T09:00:00.000Z",
+      }],
+      attentionProjects: [],
+      recentEvents: [{ id: "event-1", eventType: "task_started", createdAt: "2026-03-30T09:00:00.000Z" }],
+      updatedAt: "2026-03-30T09:00:00.000Z",
+    };
+
+    const timestampOnlyFingerprint = computeDashboardRealtimePayloadFingerprint("overview.telemetry.updated", {
+      ...basePayload,
+      updatedAt: "2026-03-30T09:01:00.000Z",
+      activeProjects: [{ ...basePayload.activeProjects[0], updatedAt: "2026-03-30T09:01:00.000Z" }],
+    });
+
+    expect(timestampOnlyFingerprint).toBe(
+      computeDashboardRealtimePayloadFingerprint("overview.telemetry.updated", basePayload),
+    );
+    expect(computeDashboardRealtimePayloadFingerprint("overview.telemetry.updated", {
+      ...basePayload,
+      recentEvents: [{ id: "event-2", eventType: "task_started", createdAt: "2026-03-30T09:00:00.000Z" }],
+    })).not.toBe(timestampOnlyFingerprint);
+  });
+
+  it("preserves git status content changes while ignoring collection timestamp churn", () => {
+    const basePayload = {
+      mode: "REMOTE",
+      available: true,
+      repositoryRoot: "/repo",
+      branch: "feature/live",
+      hasRemote: true,
+      dirty: false,
+      openPullRequests: [{
+        number: 42,
+        title: "Feature",
+        url: "https://example.test/pr/42",
+        state: "OPEN",
+        isDraft: false,
+        headRefName: "feature/live",
+        baseRefName: "dev",
+        mergeStateStatus: "CLEAN",
+        reviewDecision: null,
+        updatedAt: "2026-03-30T09:00:00.000Z",
+        comments: 1,
+        checks: [{ name: "ci", status: "COMPLETED", conclusion: "SUCCESS" }],
+      }],
+      ciRuns: [],
+      mergedPullRequests: [],
+      tracking: { scope: "FEATURE_PR_CI", label: "Feature PR", branch: "feature/live" },
+      warnings: [],
+      lastUpdated: "2026-03-30T09:00:00.000Z",
+    };
+
+    const timestampOnlyFingerprint = computeDashboardRealtimePayloadFingerprint("project.git.updated", {
+      ...basePayload,
+      lastUpdated: "2026-03-30T09:01:00.000Z",
+      openPullRequests: [{ ...basePayload.openPullRequests[0], updatedAt: "2026-03-30T09:01:00.000Z" }],
+    });
+
+    expect(timestampOnlyFingerprint).toBe(
+      computeDashboardRealtimePayloadFingerprint("project.git.updated", basePayload),
+    );
+    expect(computeDashboardRealtimePayloadFingerprint("project.git.updated", {
+      ...basePayload,
+      dirty: true,
+    })).not.toBe(timestampOnlyFingerprint);
   });
 });
