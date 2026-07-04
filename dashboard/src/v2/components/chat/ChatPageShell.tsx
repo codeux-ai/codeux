@@ -15,6 +15,9 @@ export const ChatPageShell: FunctionComponent<{
   onSetChatMode: (mode: "threads" | "invocations") => void;
   onCreateThread: () => void;
   pendingDashboardMessages: number;
+  threadCount?: number;
+  invocationCount?: number;
+  runningInvocationCount?: number;
   error: string | null;
   railSlot: ComponentChildren;
   detailSlot: ComponentChildren;
@@ -24,6 +27,9 @@ export const ChatPageShell: FunctionComponent<{
   onSetChatMode,
   onCreateThread,
   pendingDashboardMessages,
+  threadCount = 0,
+  invocationCount = 0,
+  runningInvocationCount = 0,
   error,
   railSlot,
   detailSlot,
@@ -40,6 +46,22 @@ export const ChatPageShell: FunctionComponent<{
     if (!activeTab) return;
     setIndicatorRect({ left: activeTab.offsetLeft, width: activeTab.offsetWidth });
   }, [chatMode]);
+
+  const selectChatMode = (mode: "threads" | "invocations"): void => {
+    onSetChatMode(mode);
+    const targetRef = mode === "threads" ? threadsTabRef : invocationsTabRef;
+    targetRef.current?.focus();
+  };
+
+  const threadsStatusCopy = pendingDashboardMessages > 0
+    ? `${pendingDashboardMessages} pending`
+    : `${threadCount} ${threadCount === 1 ? "thread" : "threads"}`;
+  const threadsTabDisplayCopy = pendingDashboardMessages > 0
+    ? `${pendingDashboardMessages} queued`
+    : threadsStatusCopy;
+  const invocationsStatusCopy = runningInvocationCount > 0
+    ? `${runningInvocationCount} running`
+    : `${invocationCount} ${invocationCount === 1 ? "invocation" : "invocations"}`;
 
   useLayoutEffect(() => {
     const ctx = gsap.context(() => {
@@ -70,25 +92,30 @@ export const ChatPageShell: FunctionComponent<{
 
           <div role="tablist" aria-label="Chat Mode" className="relative flex flex-wrap items-center rounded-full border border-black/[0.06] bg-white/70 p-1 dark:border-white/[0.06] dark:bg-white/[0.03]"
             onKeyDown={(e) => {
-              if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+              if (e.key === "ArrowRight" || e.key === "ArrowDown") {
                 e.preventDefault();
-                const newMode = chatMode === "threads" ? "invocations" : "threads";
-                onSetChatMode(newMode);
-                // Also focus the corresponding tab
-                const targetId = newMode === "threads" ? "tab-threads" : "tab-invocations";
-                document.getElementById(targetId)?.focus();
+                selectChatMode(chatMode === "threads" ? "invocations" : "threads");
+              } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+                e.preventDefault();
+                selectChatMode(chatMode === "threads" ? "invocations" : "threads");
+              } else if (e.key === "Home") {
+                e.preventDefault();
+                selectChatMode("threads");
+              } else if (e.key === "End") {
+                e.preventDefault();
+                selectChatMode("invocations");
               }
             }}
           >
             <div
               aria-hidden="true"
-              className="absolute inset-y-1 rounded-full bg-slate-900 shadow-[0_1px_2px_rgba(0,0,0,0.08),0_1px_8px_rgba(0,0,0,0.06)] dark:bg-white dark:shadow-[0_1px_8px_rgba(0,0,0,0.35)]"
+              className="absolute inset-y-1 rounded-full bg-slate-900 shadow-[0_1px_2px_rgba(0,0,0,0.08),0_1px_8px_rgba(0,0,0,0.06)] motion-reduce:ring-2 motion-reduce:ring-signal-500/60 dark:bg-white dark:shadow-[0_1px_8px_rgba(0,0,0,0.35)]"
               style={{
                 left: indicatorRect ? `${indicatorRect.left}px` : 0,
                 width: indicatorRect ? `${indicatorRect.width}px` : 0,
                 opacity: indicatorRect ? 1 : 0,
                 transitionProperty: "left, width, opacity",
-                transitionDuration: interactionTokens.selectionMovement.duration,
+                transitionDuration: prefersReducedMotion ? "0ms" : interactionTokens.selectionMovement.duration,
                 transitionTimingFunction: interactionTokens.selectionMovement.ease,
               }}
             />
@@ -99,6 +126,7 @@ export const ChatPageShell: FunctionComponent<{
               role="tab"
               aria-selected={chatMode === "threads"}
               aria-controls="chat-panel"
+              aria-label={`Threads, ${threadsStatusCopy}`}
               tabIndex={chatMode === "threads" ? 0 : -1}
               type="button"
               onClick={() => onSetChatMode("threads")}
@@ -113,7 +141,11 @@ export const ChatPageShell: FunctionComponent<{
                   : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
               }`}
             >
-              Threads
+              <span className="inline-flex items-center gap-2">
+                <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${chatMode === "threads" ? "bg-current" : "bg-transparent motion-reduce:bg-slate-300 dark:motion-reduce:bg-slate-600"}`} />
+                <span>Threads</span>
+                <span className="rounded-full bg-black/5 px-1.5 py-0.5 font-mono text-[9px] tracking-normal dark:bg-white/10">{threadsTabDisplayCopy}</span>
+              </span>
             </button>
             <button
               ref={invocationsTabRef}
@@ -121,6 +153,7 @@ export const ChatPageShell: FunctionComponent<{
               role="tab"
               aria-selected={chatMode === "invocations"}
               aria-controls="chat-panel"
+              aria-label={`Invocations, ${invocationsStatusCopy}`}
               tabIndex={chatMode === "invocations" ? 0 : -1}
               type="button"
               onClick={() => onSetChatMode("invocations")}
@@ -135,7 +168,11 @@ export const ChatPageShell: FunctionComponent<{
                   : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
               }`}
             >
-              Invocations
+              <span className="inline-flex items-center gap-2">
+                <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${chatMode === "invocations" ? "bg-current" : "bg-transparent motion-reduce:bg-slate-300 dark:motion-reduce:bg-slate-600"}`} />
+                <span>Invocations</span>
+                <span className="rounded-full bg-black/5 px-1.5 py-0.5 font-mono text-[9px] tracking-normal dark:bg-white/10">{invocationsStatusCopy}</span>
+              </span>
             </button>
           </div>
           <span
@@ -154,7 +191,7 @@ export const ChatPageShell: FunctionComponent<{
           >
             {chatMode === "threads" && pendingDashboardMessages > 0 && (
               <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-status-amber opacity-75"></span>
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-status-amber opacity-75 motion-reduce:animate-none"></span>
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-status-amber"></span>
               </span>
             )}

@@ -18,6 +18,10 @@ export const WorkingBubble: FunctionComponent<WorkingBubbleProps> = ({ displayNa
   const data = getWorkingBubbleData(runtimeState);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
+  const phaseLabel = phase === "starting" ? "Starting" : "Working";
+  const statusText = phase === "starting"
+    ? `${displayName || "Listener"} is preparing a reply. Starting.`
+    : `${displayName || "Listener"} is preparing a reply. Working on a reply.`;
 
   useLayoutEffect(() => {
     if (!bubbleRef.current) return;
@@ -46,19 +50,23 @@ export const WorkingBubble: FunctionComponent<WorkingBubbleProps> = ({ displayNa
             <PlanningRequestWidget status="running" planName={data.planName || "Execution Plan"} />
           ) : (
             <div className="flex flex-col w-full rounded-2xl border bg-slate-100/80 backdrop-blur-md p-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] rounded-tl-sm border-slate-200/60 text-slate-800 dark:bg-white/5 dark:border-white/10 dark:text-slate-200">
-              <div className="flex items-center gap-2">
-                <span aria-live="polite" role="status" className="text-[13px] font-medium text-slate-700 dark:text-slate-300">
-                  {displayName || "Listener"} is preparing a reply
+              <div className="flex flex-wrap items-center gap-2">
+                <span aria-live="polite" role="status" aria-atomic="true" className="text-[13px] font-medium text-slate-700 dark:text-slate-300">
+                  {statusText}
                   <span className={`ml-2 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                     phase === "starting" ? "border-slate-500/30 bg-slate-500/10 text-slate-500" : "border-signal-500/30 bg-signal-500/10 text-signal-500"
                   }`}>
-                    {phase === "starting" ? "Starting" : "Working"}
+                    {phaseLabel}
                   </span>
                 </span>
-                <span className="flex items-center gap-1 ml-1">
-                  <span className={`h-1.5 w-4 rounded-full bg-signal-500/80 ${!prefersReducedMotion && phase !== "starting" ? "animate-pulse" : ""}`} />
-                  <span className={`h-1.5 w-4 rounded-full bg-signal-500/80 [animation-delay:120ms] ${!prefersReducedMotion && phase !== "starting" ? "animate-pulse" : ""}`} />
-                  <span className={`h-1.5 w-4 rounded-full bg-signal-500/80 [animation-delay:240ms] ${!prefersReducedMotion && phase !== "starting" ? "animate-pulse" : ""}`} />
+                <span aria-hidden="true" className={`flex items-center gap-1 ml-1 rounded-full border px-2 py-1 ${
+                  phase === "starting"
+                    ? "border-slate-400/30 bg-slate-400/10"
+                    : "border-signal-500/30 bg-signal-500/10"
+                }`}>
+                  <span className={`h-1.5 w-4 rounded-full ${phase === "starting" ? "bg-slate-400/80" : "bg-signal-500/80"} ${!prefersReducedMotion && phase !== "starting" ? "animate-pulse" : ""}`} />
+                  <span className={`h-1.5 w-4 rounded-full ${phase === "starting" ? "bg-slate-400/80" : "bg-signal-500/80"} [animation-delay:120ms] ${!prefersReducedMotion && phase !== "starting" ? "animate-pulse" : ""}`} />
+                  <span className={`h-1.5 w-4 rounded-full ${phase === "starting" ? "bg-slate-400/80" : "bg-signal-500/80"} [animation-delay:240ms] ${!prefersReducedMotion && phase !== "starting" ? "animate-pulse" : ""}`} />
                 </span>
               </div>
             </div>
