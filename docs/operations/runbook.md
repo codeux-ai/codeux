@@ -81,6 +81,13 @@ Checks:
 - Git host API reads are throttled and cached briefly to avoid rate-limit bursts when multiple sprints poll PR/CI state at the same time. Failed-run job/log enrichment is still limited, so Git/CI panels may trail live task state under heavy activity.
 - "Workflow completed without PR" is only expected when `git.autoCreatePr` is disabled for the resolved system/project/sprint settings.
 
+### 2a. Models catalog workflow cannot push to a protected branch
+Checks:
+- The Models Catalog workflow runs on pushes to `main` and `dev`, fetches `models.dev`, and compares the result with `assets/models-dev/catalog.json`.
+- When the catalog changes, the workflow must not push directly back to `main` or `dev`; branch protection requires PR-based changes. It pushes `chore/models-catalog-<target-branch>` instead and opens or updates a PR against the branch that triggered the workflow.
+- If the job reports a push rejection for `refs/heads/main` or `refs/heads/dev`, the workflow is running an older definition. Re-run it after the branch includes the PR-based catalog update workflow.
+- If PR creation fails, check the workflow token permissions include both `contents: write` and `pull-requests: write`.
+
 ### 3. API-backed tools return key setup instructions
 Checks:
 - Is Jules API key configured in dashboard settings?
