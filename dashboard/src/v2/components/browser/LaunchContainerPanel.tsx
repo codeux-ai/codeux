@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { Play, Loader2 } from "lucide-preact";
+import { Play, Loader2, Rocket } from "lucide-preact";
 import type { Sprint } from "../../types.js";
 
 interface LaunchContainerPanelProps {
@@ -19,15 +19,31 @@ export const LaunchContainerPanel: FunctionComponent<LaunchContainerPanelProps> 
   launchEnabled,
   launchBusy,
 }) => {
+  const disabled = !launchEnabled || launchBusy || sprints.length === 0 || !launchSprintId;
+  const helperText = launchBusy
+    ? "A preview is already launching..."
+    : !launchEnabled
+      ? "Select a project to start"
+      : sprints.length === 0
+        ? "No active sprint to launch"
+        : "Choose a sprint snapshot and launch its isolated container.";
+
   return (
     <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
-      <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-        Launch Container
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-signal-500/20 bg-signal-500/[0.1] text-signal-600 dark:text-signal-300">
+          <Rocket className="h-4 w-4" strokeWidth={2.2} />
+        </div>
+        <div className="min-w-0">
+          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+            Launch Container
+          </div>
+          <div aria-live="polite" className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
+            {helperText}
+          </div>
+        </div>
       </div>
       <div className="mt-4 space-y-3">
-        <div aria-live="polite" className="text-xs text-slate-500 mb-2">
-          {launchBusy ? "A preview is already launching..." : !launchEnabled ? "Select a project to start" : sprints.length === 0 ? "No active sprint to launch" : null}
-        </div>
         <select
           value={launchSprintId}
           onChange={(event) => onLaunchSprintChange((event.currentTarget as HTMLSelectElement).value)}
@@ -52,13 +68,13 @@ export const LaunchContainerPanel: FunctionComponent<LaunchContainerPanelProps> 
               onLaunchContainer();
             }
           }}
-          disabled={!launchEnabled || launchBusy || sprints.length === 0 || !launchSprintId}
-          aria-disabled={!launchEnabled || launchBusy || sprints.length === 0 || !launchSprintId}
+          disabled={disabled}
+          aria-disabled={disabled}
           aria-busy={launchBusy}
           className={`inline-flex h-10 w-full items-center justify-center gap-2 rounded-2xl px-4 text-sm font-semibold text-void-900 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 ${
-            (!launchEnabled || launchBusy || sprints.length === 0 || !launchSprintId)
-              ? "bg-signal-500 cursor-not-allowed opacity-50"
-              : "bg-signal-500 hover:bg-signal-400"
+            disabled
+              ? "cursor-not-allowed bg-signal-500 opacity-50"
+              : "bg-signal-500 shadow-[0_12px_30px_rgba(0,224,160,0.18)] hover:-translate-y-px hover:bg-signal-400"
           }`}
         >
           {launchBusy ? (
