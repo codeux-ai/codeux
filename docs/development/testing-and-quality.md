@@ -56,7 +56,7 @@ GitHub Actions optimization notes:
 - Workflow hygiene is guarded by `tests/backend/repository-hygiene.test.ts`, which asserts pinned pnpm and Node versions, frozen lockfile installs, security audit coverage, CI script order, and Playwright E2E isolation.
 - Restores and saves Vite, Vitest, and TypeScript compiler increment caches across runs where applicable.
 - Caches Playwright browser binaries (`~/.cache/ms-playwright`) to avoid downloading browsers on every run, dramatically reducing E2E setup time.
-- Uses `fullyParallel` execution in `playwright.config.ts` on CI to harness all available CPU cores.
+- Uses `fullyParallel` execution in `playwright.config.ts`, but CI caps browser workers at 1 so the shared temp home and dashboard server stay deterministic across specs.
 - Seamlessly integrates browser-level E2E tests for WebGL visual rendering, failure fallbacks, and mobile/desktop responsive layout breakpoints, removing mock-heavy DOM stubs from Unit tests.
 - Uses the GitHub Actions reporter to publish Playwright test failures inline on pull request checks.
 - Cancels superseded runs for the same branch or PR to conserve resources.

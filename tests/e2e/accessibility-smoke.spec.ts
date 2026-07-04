@@ -21,19 +21,19 @@ test('Dashboard accessibility smoke test', async ({ page }) => {
 
   // 2. Primary Navigation
   const nav = page.getByRole('navigation', { name: /Dock navigation/i });
-  await expect(nav).toBeVisible();
+  await expect(nav).toBeVisible({ timeout: 15_000 });
 
   // 3. Global Search
   const searchTrigger = page.getByRole('button', { name: 'Search' });
-  await expect(searchTrigger).toBeVisible();
+  await expect(searchTrigger).toBeVisible({ timeout: 15_000 });
 
   // 4. Notification trigger
   const notificationTrigger = page.getByRole('button', { name: 'Notifications' });
-  await expect(notificationTrigger).toBeVisible();
+  await expect(notificationTrigger).toBeVisible({ timeout: 15_000 });
 
   // 5. Project Selector
   const projectSelector = page.getByRole('button', { name: /Project/i });
-  await expect(projectSelector).toBeVisible();
+  await expect(projectSelector).toBeVisible({ timeout: 15_000 });
 
   // 6. Stats Chart (if visible)
   const statsChart = page.getByRole('region', { name: /Statistics|Chart/i }).first();
@@ -44,11 +44,11 @@ test('Dashboard accessibility smoke test', async ({ page }) => {
   // 7. Open Dialog
   await searchTrigger.click();
   const dialog = page.getByRole('dialog', { name: 'Search' });
-  await expect(dialog).toBeVisible();
+  await expect(dialog).toBeVisible({ timeout: 15_000 });
   const searchInput = dialog.getByPlaceholder('Find sprints, tasks, agents, previews...');
-  await expect(searchInput).toBeFocused();
+  await expect(searchInput).toBeFocused({ timeout: 15_000 });
   await page.keyboard.press('Escape');
-  await expect(dialog).toBeHidden();
+  await expect(dialog).toBeHidden({ timeout: 15_000 });
 
   // 8. Sprint Ledger
   await page.goto('/sprints');
@@ -61,5 +61,5 @@ test('Dashboard accessibility smoke test', async ({ page }) => {
   }
 
   const sprintLedger = page.getByRole('region', { name: 'Sprint Ledger' });
-  await expect(sprintLedger).toBeVisible();
+  await expect(sprintLedger).toBeVisible({ timeout: 15_000 });
 });

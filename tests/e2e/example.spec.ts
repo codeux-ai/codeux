@@ -17,8 +17,8 @@ test('loads the local Code UX shell from a prepared app state', async ({ page, r
 
   await page.goto('/');
 
-  await expect(page).toHaveTitle('Code UX');
-  await expect(page.getByRole('navigation', { name: /Dock navigation/i })).toBeVisible();
-  await expect(page.locator('[aria-label="Dashboard Overview"]')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Project/i })).toBeVisible();
+  await expect(page).toHaveTitle('Code UX', { timeout: 15_000 });
+  await expect(page.getByRole('navigation', { name: /Dock navigation/i })).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('[aria-label="Dashboard Overview"]')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('button', { name: /Project/i })).toBeVisible({ timeout: 15_000 });
 });

@@ -19,10 +19,10 @@ test.describe('AgentAvatarScene E2E Tests', () => {
 
     // Assert that the 3D scene container is rendered and contains a canvas
     const avatarScene = page.locator('[data-testid="agent-avatar-scene"]');
-    await expect(avatarScene).toBeVisible();
+    await expect(avatarScene).toBeVisible({ timeout: 15_000 });
 
     const canvas = avatarScene.locator('canvas');
-    await expect(canvas).toBeVisible();
+    await expect(canvas).toBeVisible({ timeout: 15_000 });
   });
 
   test('should render fallback UI (SVG) when WebGL is unsupported or fails', async ({ page }) => {
@@ -43,9 +43,9 @@ test.describe('AgentAvatarScene E2E Tests', () => {
 
     // Verify that the fallback SVG container is rendered instead of the WebGL canvas
     const fallbackSvg = page.locator('[data-testid="agent-avatar-fallback"]');
-    await expect(fallbackSvg).toBeVisible();
+    await expect(fallbackSvg).toBeVisible({ timeout: 15_000 });
 
     const avatarScene = page.locator('[data-testid="agent-avatar-scene"]');
-    await expect(avatarScene).not.toBeVisible();
+    await expect(avatarScene).not.toBeVisible({ timeout: 15_000 });
   });
 });

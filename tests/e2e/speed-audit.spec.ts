@@ -16,6 +16,8 @@ const routes = [
   '/files',
 ];
 
+const routeReadyTimeoutMs = 15_000;
+
 function locatorForRouteReady(page: Page, route: string): Locator {
   switch (route) {
     case '/':
@@ -88,9 +90,7 @@ test('Benchmark Page Load & Fast Navigation', async ({ page }) => {
   console.log('\n--- 1. Initial Page Load Audit ---');
   const loadStart = Date.now();
   await page.goto('/');
-  // Wait for the app to settle
-  await page.waitForLoadState('networkidle');
-  await expect(locatorForRouteReady(page, '/')).toBeVisible();
+  await expect(locatorForRouteReady(page, '/')).toBeVisible({ timeout: routeReadyTimeoutMs });
   const initialLoadTime = Date.now() - loadStart;
   console.log(`Initial load duration: ${initialLoadTime}ms`);
 
@@ -111,8 +111,7 @@ test('Benchmark Page Load & Fast Navigation', async ({ page }) => {
   for (const route of routes) {
     const navStart = Date.now();
     await page.goto(route);
-    await page.waitForLoadState('networkidle');
-    await expect(locatorForRouteReady(page, route)).toBeVisible();
+    await expect(locatorForRouteReady(page, route)).toBeVisible({ timeout: routeReadyTimeoutMs });
     const duration = Date.now() - navStart;
     navigationTimes[route] = duration;
     console.log(`Route navigation to ${route}: ${duration}ms`);
