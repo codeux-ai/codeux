@@ -8,6 +8,7 @@ import {
   Save,
   Square,
   FileCode2,
+  Loader2,
 } from "lucide-preact";
 import { useProjectData } from "./context/project-data.js";
 import { useSprints } from "../hooks/useSprints.js";
@@ -65,6 +66,7 @@ export const BrowserPage: FunctionComponent = () => {
   const [launching, setLaunching] = useState(false);
   const [sessionActionPending, setSessionActionPending] = useState(false);
   const [savingScript, setSavingScript] = useState(false);
+  const [logsRefreshing, setLogsRefreshing] = useState(false);
   const [removingSessionIds, setRemovingSessionIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [addressValue, setAddressValue] = useState("/");
@@ -256,6 +258,21 @@ export const BrowserPage: FunctionComponent = () => {
     }
     setFrameSrc(`${buildPreviewOrigin(visibleSelectedSession.id)}${normalizePath(path)}`);
 
+  };
+
+  const handleRefreshLogs = async () => {
+    if (!visibleSelectedSession || logsRefreshing) {
+      return;
+    }
+    setLogsRefreshing(true);
+    try {
+      const result = await fetchPreviewLogs(visibleSelectedSession.id, 160);
+      setLogs(result.logs);
+    } catch {
+      setLogs("");
+    } finally {
+      setLogsRefreshing(false);
+    }
   };
 
   const handleStart = async (sprintId = launchSprintId) => {
@@ -466,7 +483,7 @@ export const BrowserPage: FunctionComponent = () => {
       )}
 
       {showInAppBrowser && previewEnabled && (
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]" data-testid="browser-main-tool-panel">
+      <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]" data-testid="browser-main-tool-panel">
         <PreviewWindowChrome
           session={visibleSelectedSession}
           onNavigateBack={() => postNavigationCommand("back")}
@@ -491,11 +508,18 @@ export const BrowserPage: FunctionComponent = () => {
             <div className="relative h-full w-full">
               {!navigationEnabled && (
                 <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-center p-4">
-                  <div className="flex items-center gap-3 rounded-full border border-black/[0.08] bg-white/90 px-4 py-2.5 shadow-[0_8px_32px_rgba(0,0,0,0.08)] backdrop-blur-md dark:border-white/[0.08] dark:bg-void-900/90 dark:shadow-[0_8px_32px_rgba(0,0,0,0.24)]">
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-signal-500 border-t-transparent" />
-                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300" aria-hidden="true">
-                      {visibleSelectedSession.status === "starting" ? "Container starting..." : visibleSelectedSession.status === "error" ? "Container failed" : "Waiting for connection..."}
-                    </span>
+                  <div className="max-w-[min(34rem,calc(100vw-2rem))] rounded-2xl border border-black/[0.08] bg-white/90 px-4 py-3 shadow-[0_8px_32px_rgba(0,0,0,0.08)] backdrop-blur-md dark:border-white/[0.08] dark:bg-void-900/90 dark:shadow-[0_8px_32px_rgba(0,0,0,0.24)]">
+                    <div className="flex items-center gap-3">
+                      <div className={`h-4 w-4 shrink-0 rounded-full border-2 border-t-transparent ${visibleSelectedSession.status === "error" ? "border-status-red" : "animate-spin border-signal-500"}`} />
+                      <span className="min-w-0 break-words text-xs font-semibold text-slate-700 dark:text-slate-300" aria-hidden="true">
+                        {visibleSelectedSession.status === "starting" ? "Container starting..." : visibleSelectedSession.status === "error" ? "Container failed" : "Waiting for connection..."}
+                      </span>
+                    </div>
+                    {visibleSelectedSession.status === "error" && visibleSelectedSession.lastError && (
+                      <div className="mt-2 max-h-24 overflow-auto break-words border-t border-black/[0.06] pt-2 font-mono text-[11px] leading-5 text-status-red dark:border-white/[0.06]">
+                        {visibleSelectedSession.lastError}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -510,7 +534,7 @@ export const BrowserPage: FunctionComponent = () => {
           ) : null}
         </PreviewWindowChrome>
 
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           <LaunchContainerPanel
             sprints={sprints}
             launchSprintId={launchSprintId}
@@ -521,16 +545,21 @@ export const BrowserPage: FunctionComponent = () => {
           />
           <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
             <div className="flex items-start justify-between gap-3">
-              <div>
+              <div className="min-w-0">
                 <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Selected Sprint</div>
-                <div className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">
+                <div className="mt-2 break-words text-lg font-semibold leading-6 text-slate-900 dark:text-white">
                   {scriptTargetSprint?.name || "All sprints"}
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowScriptEditor((value) => !value)}
-                className="inline-flex h-10 items-center gap-2 rounded-2xl border border-black/[0.08] px-3 text-xs font-semibold text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
+                aria-pressed={showScriptEditor}
+                className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-2xl border px-3 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 ${
+                  showScriptEditor
+                    ? "border-signal-500/25 bg-signal-500/10 text-signal-700 dark:text-signal-300"
+                    : "border-black/[0.08] text-slate-600 hover:-translate-y-px hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
+                }`}
               >
                 <FileCode2 className="h-4 w-4" strokeWidth={2} />
                 Script
@@ -540,7 +569,7 @@ export const BrowserPage: FunctionComponent = () => {
               {visibleSelectedSession && (
                 <div className="rounded-2xl border border-sky-500/20 bg-sky-500/10 px-4 py-3 dark:border-sky-500/25 dark:bg-sky-500/12">
                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Port routing</div>
-                  <div className="mt-1 font-mono text-[12px] text-slate-700 dark:text-slate-300">{formatPortMapping(visibleSelectedSession)}</div>
+                  <div className="mt-1 break-all font-mono text-[12px] text-slate-700 dark:text-slate-300">{formatPortMapping(visibleSelectedSession)}</div>
                 </div>
               )}
               <div className="rounded-2xl border border-ember-500/20 bg-ember-500/10 px-4 py-3 dark:border-ember-500/25 dark:bg-ember-500/12">
@@ -549,7 +578,7 @@ export const BrowserPage: FunctionComponent = () => {
                   {script?.path || visibleSelectedSession?.startupScriptPath || "Open editor to load script"}
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <button
                   type="button"
                   onClick={handleRebuild}
@@ -557,7 +586,7 @@ export const BrowserPage: FunctionComponent = () => {
                   aria-disabled={!visibleSelectedSession || sessionActionPending}
                   aria-label="Rebuild preview container"
                   aria-busy={sessionActionPending}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:border-slate-300/50 disabled:bg-slate-200/60 disabled:text-slate-500 disabled:opacity-100 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:border-slate-700 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] bg-white/60 text-xs font-semibold text-slate-700 transition hover:-translate-y-px hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:border-slate-300/50 disabled:bg-slate-200/60 disabled:text-slate-500 disabled:opacity-100 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:border-slate-700 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
                 >
                   <RotateCcw className={`h-4 w-4 ${sessionActionPending ? 'animate-spin' : ''}`} strokeWidth={2} />
                   {sessionActionPending ? "Rebuilding..." : "Rebuild"}
@@ -569,7 +598,7 @@ export const BrowserPage: FunctionComponent = () => {
                   aria-disabled={!visibleSelectedSession || sessionActionPending}
                   aria-label="Stop preview container"
                   aria-busy={sessionActionPending}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:border-slate-300/50 disabled:bg-slate-200/60 disabled:text-slate-500 disabled:opacity-100 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:border-slate-700 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] bg-white/60 text-xs font-semibold text-slate-700 transition hover:-translate-y-px hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:border-slate-300/50 disabled:bg-slate-200/60 disabled:text-slate-500 disabled:opacity-100 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:border-slate-700 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
                 >
                   <Square className="h-4 w-4" strokeWidth={2} />
                   {sessionActionPending ? "Stopping..." : "Stop"}
@@ -580,7 +609,7 @@ export const BrowserPage: FunctionComponent = () => {
                   rel="noopener noreferrer"
                   aria-disabled={!visibleSelectedSession}
                   title={visibleSelectedSession ? "Open preview in new tab" : "Start container to open"}
-                  className={`inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white ${!visibleSelectedSession ? "pointer-events-none opacity-50 cursor-not-allowed" : ""}`}
+                  className={`inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] bg-white/60 text-xs font-semibold text-slate-700 transition hover:-translate-y-px hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white ${!visibleSelectedSession ? "pointer-events-none cursor-not-allowed opacity-50" : ""}`}
                 >
                   <ExternalLink className="h-4 w-4" strokeWidth={2} />
                   Open
@@ -591,7 +620,7 @@ export const BrowserPage: FunctionComponent = () => {
 
           <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Runtime notes</div>
-            <div className="mt-4 space-y-3 text-sm text-slate-600 dark:text-slate-300">
+            <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
               <p>Ports are assigned from the sprint preview range and bound to `127.0.0.1` to avoid conflicts with the main dashboard.</p>
               <p>Each preview container runs from a dedicated sprint snapshot directory, so multiple active sprints from the same project stay isolated without registering git worktrees.</p>
             </div>
@@ -612,23 +641,36 @@ export const BrowserPage: FunctionComponent = () => {
                   disabled={savingScript || !scriptTargetSprint}
                   aria-disabled={savingScript || !scriptTargetSprint}
                   aria-busy={savingScript}
-                  className="inline-flex h-10 items-center gap-2 rounded-2xl bg-slate-900 px-4 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                  className="inline-flex h-10 shrink-0 items-center gap-2 rounded-2xl bg-slate-900 px-4 text-xs font-semibold text-white transition hover:-translate-y-px hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
                 >
-                  <Save className="h-4 w-4" strokeWidth={2} />
+                  {savingScript ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} /> : <Save className="h-4 w-4" strokeWidth={2} />}
                   {savingScript ? "Saving..." : "Save"}
                 </button>
               </div>
               <textarea
                 value={scriptDraft}
                 onInput={(event) => setScriptDraft((event.currentTarget as HTMLTextAreaElement).value)}
-                className="min-h-[12rem] md:min-h-[18rem] w-full rounded-[1.5rem] whitespace-pre-wrap break-words border border-black/[0.08] bg-slate-100/80 p-4 font-mono text-[12px] leading-6 text-slate-800 outline-none transition focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-void-950 dark:text-slate-100"
+                className="min-h-[12rem] w-full resize-y overflow-auto rounded-[1.5rem] border border-black/[0.08] bg-slate-100/80 p-4 font-mono text-[12px] leading-6 text-slate-800 outline-none transition focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-void-950 dark:text-slate-100 md:min-h-[18rem]"
               />
             </div>
           )}
 
           <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
-            <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Container logs</div>
-            <pre className="min-h-[12rem] md:min-h-[18rem] max-h-[360px] overflow-auto rounded-[1.5rem] whitespace-pre-wrap break-words bg-slate-100/80 p-4 font-mono text-[11px] leading-6 text-slate-700 dark:bg-void-950 dark:text-slate-300">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Container logs</div>
+              <button
+                type="button"
+                onClick={() => void handleRefreshLogs()}
+                disabled={!visibleSelectedSession || logsRefreshing}
+                aria-disabled={!visibleSelectedSession || logsRefreshing}
+                aria-busy={logsRefreshing}
+                className="inline-flex h-9 shrink-0 items-center gap-2 rounded-xl border border-black/[0.08] bg-white/60 px-3 text-[11px] font-semibold text-slate-600 transition hover:-translate-y-px hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${logsRefreshing ? "animate-spin" : ""}`} strokeWidth={2.2} />
+                Refresh
+              </button>
+            </div>
+            <pre className="max-h-[360px] min-h-[12rem] overflow-auto rounded-[1.5rem] border border-black/[0.06] bg-slate-100/80 p-4 whitespace-pre-wrap break-words font-mono text-[11px] leading-6 text-slate-700 dark:border-white/[0.06] dark:bg-void-950 dark:text-slate-300 md:min-h-[18rem]">
               {logs || "No logs yet."}
             </pre>
           </div>
