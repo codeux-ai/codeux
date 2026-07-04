@@ -350,6 +350,7 @@ Legacy runtime:
 - Heavy WebGL-only dashboard surfaces are now lazy-loaded, including the global ocean background and the agent avatar scene, so the initial dashboard route no longer eagerly pulls those renderer modules into the first page chunk
 - Tasks page is project-scoped and uses a three-column board state (`Queued`, `In Progress`, `Completed`), where `coding_completed` acts as active work.
 - Tasks page renders create/edit inline through the new `TaskComposer` replacing the modal flow.
+- Legacy create/edit task modals still announce validation through the shared action feedback region, focus and scroll the first invalid required field into view, and expose status, priority, executor, and dependency choices with native radio or checkbox semantics. Dependency filtering reports result-count changes through a polite live region and preserves selected dependencies when the current filter hides them.
 - On a fresh installation, the Tasks page replaces the old generic project/sprint/task database message with a polished task-scope placeholder; the project action opens the shared Add Project dialog and the sprint action routes operators to the Sprints page before the kanban controls appear.
 - Task cards now explicitly show downstream dependent tasks as readable metadata tags.
 - Task cards keep the premium glass layout with pointer-driven tilt, status wave, border trace, compact executor/time metadata, and dependency status badges.
@@ -463,6 +464,7 @@ Legacy runtime:
   - if the operator chooses `Reset downstream tasks`, Code UX writes fresh pending execution snapshots for every dependent task so completed/running descendants no longer keep stale PR or session state during a clean rerun
   - if `Clear worktree` is enabled, the existing task worktree is removed before the reset so the next run starts from a clean workspace
 - Rerun confirmation now warns when the selected task, or the selected downstream reset chain, already merged code; operators can use the **Undo the Git merge** checkbox to programmatically revert the merge commit in the feature branch before restarting the task cleanly.
+- Rerun confirmation keeps provider/model loading, downstream reset, clear worktree, and undo-merge options visible and keyboard reachable. Pending, success, retry, and error recovery stay inside the modal through the shared action feedback region so failed reruns can be retried without losing context.
 - Reruns now reuse the same dispatch model as normal dashboard orchestration instead of bypassing execution state
 - Task cards now open a DB-backed runtime feed sourced from `task_run_events`
 - Task cards now expose a task-scoped invocation feed sourced from the Live snapshot's `recentInvocations`, matching by task, dispatch, and task-run identity and linking each row to the full Chat invocation transcript
