@@ -211,7 +211,7 @@ describe("SettingsPage data interactions", () => {
     });
 
     // Switch to Project scope
-    const projectScopeBtns = screen.getAllByRole("button", { name: "Project" });
+    const projectScopeBtns = screen.getAllByRole("radio", { name: "Project" });
     fireEvent.click(projectScopeBtns[0]);
 
     await waitFor(() => {
@@ -255,7 +255,7 @@ describe("SettingsPage data interactions", () => {
       expect(fetchSystemSettings).toHaveBeenCalledTimes(1);
     });
 
-    const projectScopeBtns = screen.getAllByRole("button", { name: "Project" });
+    const projectScopeBtns = screen.getAllByRole("radio", { name: "Project" });
     fireEvent.click(projectScopeBtns[0]);
 
     await waitFor(() => {
@@ -283,7 +283,7 @@ describe("SettingsPage data interactions", () => {
       expect(fetchExternalSettingsHints).toHaveBeenCalledTimes(1);
     });
 
-    const projectScopeBtn = screen.getAllByRole("button", { name: "Project" })[0];
+    const projectScopeBtn = screen.getAllByRole("radio", { name: "Project" })[0];
     fireEvent.click(projectScopeBtn);
 
     await waitFor(() => {
@@ -298,11 +298,11 @@ describe("SettingsPage data interactions", () => {
       expect(fetchSystemSettings).toHaveBeenCalledTimes(1);
     });
 
-    const projectScopeBtns = screen.getAllByRole("button", { name: "Project" });
+    const projectScopeBtns = screen.getAllByRole("radio", { name: "Project" });
     const projectScopeBtn = projectScopeBtns[0];
     fireEvent.click(projectScopeBtn);
 
-    expect(screen.getByText(/Editing overrides for Test Project/)).toBeInTheDocument();
+    expect(screen.getByText(/Editing overrides for/)).toHaveTextContent(/Editing overrides for\s+Test Project/);
   });
 
   it("renders quality assurance controls in agents settings", async () => {
