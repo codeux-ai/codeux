@@ -1,7 +1,7 @@
 import type { AiProviderSettings, SprintPrSectionKey, SprintPrTemplateSections, Subtask } from "../../../contracts/app-types.js";
-import type { SprintRecord } from "../../../contracts/project-management-types.js";
+import type { SprintLinkedIssueRecord, SprintRecord } from "../../../contracts/project-management-types.js";
 import type { ExecutionRepository } from "../../../repositories/execution-repository.js";
-import type { SprintPrComposerInput, SprintPrSubtaskSummary } from "./pr-description-composer.js";
+import type { SprintPrComposerInput, SprintPrLinkedIssueSummary, SprintPrSubtaskSummary } from "./pr-description-composer.js";
 import { foldUsageGroups } from "./pr-billing-mode.js";
 
 export interface BuildSprintPrComposerInputArgs {
@@ -19,6 +19,16 @@ export interface BuildSprintPrComposerInputArgs {
 function isTaskCompleted(task: Subtask): boolean {
   return task.status === "COMPLETED"
     || (task.status === "CODING_COMPLETED" && (task.is_merged || task.merge_indicator === "MERGED" || task.merge_indicator === "AUTOMERGE"));
+}
+
+function mapLinkedIssue(issue: SprintLinkedIssueRecord): SprintPrLinkedIssueSummary {
+  return {
+    provider: issue.provider,
+    issueKey: issue.issueKey,
+    issueNumber: issue.issueNumber,
+    title: issue.title,
+    url: issue.url,
+  };
 }
 
 export function buildSprintPrComposerInput(args: BuildSprintPrComposerInputArgs): SprintPrComposerInput {
@@ -68,6 +78,7 @@ export function buildSprintPrComposerInput(args: BuildSprintPrComposerInputArgs)
     defaultBranch: args.defaultBranch,
     featureBranch: args.featureBranch,
     subtasks,
+    linkedIssues: (sprint.linkedIssues || []).map(mapLinkedIssue),
     planning,
     aggregateUsage,
     startedAt: sprintRun?.startedAt ?? null,

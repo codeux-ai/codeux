@@ -58,6 +58,8 @@ Imported issues appear in the sprint composer under the Sprint Prompt field as l
 
 When the sprint is submitted, selected issues are persisted as linked sprint issue records and the sprint prompt receives a structured `Linked Issues` markdown section. Each imported issue is appended with source metadata, labels, assignees, author and timestamps when available, the complete issue body, and the selected conversation context. This gives the Planning agent and task agents the actual issue text instead of only a remote link.
 
+Sprint completion PR descriptions also summarize persisted linked issues in the summary section. Jira tickets render by their issue key and stored Jira URL, while GitHub and GitLab issues render by their issue key or number and stored issue URL. Sprints without linked issues omit that PR section entirely.
+
 Special imported tasks selected from the same import flows appear in their own composer tray instead of the linked-issue markdown section. Security and quality selections still come from issue search results, but they are created as imported sprint tasks so they bypass planning prose and land directly on the sprint. Merge-conflict and failed-CI selections are also created directly as sprint tasks, using the imported-task endpoint, so they attach to the sprint immediately without being folded into the planning prompt. The composer shows the task kind, source, priority, and removal controls so operators can review remediation work before the sprint is created or updated.
 
 Issue import uses the saved integration tokens:
