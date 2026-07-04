@@ -72,7 +72,7 @@ For modals with extensive form content (like `AddProjectModal` and `AddTaskModal
 ## Safe Areas & Bottom Navigation
 
 Fixed bottom navigation elements, such as the `KineticDock`, must account for mobile browser UI chrome and safe areas:
-1. **Dynamic Bottom Constraints**: Use `bottom-0` and set the container's height dynamically with `h-[calc(height+env(safe-area-inset-bottom))]` while applying `pb-[env(safe-area-inset-bottom)]` or a style attribute for bottom padding to elevate the controls above the iOS home indicator.
+1. **Dynamic Bottom Constraints**: Use `bottom-0` and set the container's height dynamically with `calc(base height + env(safe-area-inset-bottom) + 20px)` while applying `calc(env(safe-area-inset-bottom) + 20px)` bottom padding to keep the dock above both the iOS home indicator and the viewport edge.
 2. **Horizontal Scroll Boundaries**: For horizontally scrolling lists inside constrained boundaries (e.g., `snap-x`), add an explicit right spacer (`<div className="w-[1px] shrink-0" aria-hidden="true" />`) and apply horizontal scroll padding (`scroll-px-*`) to prevent the last navigation item from being clipped visually or causing focus states to overflow out of bounds.
 3. **Route Change Feedback**: Bottom navigation should expose a polite live status for the active route and keep focus-visible rings inside the scroll boundary. Active, pressed, focus-visible, and disabled-like states must be visible without hover, fisheye, or indicator movement.
 

@@ -240,7 +240,13 @@ export const KineticDock: FunctionComponent = () => {
     };
 
     return (
-        <div style={{ paddingBottom: 'env(safe-area-inset-bottom)' }} className="fixed bottom-0 left-0 right-0 z-50 flex justify-center items-end h-[calc(7rem+env(safe-area-inset-bottom))] pointer-events-none px-4 max-w-[100vw] overflow-hidden">
+        <div
+            style={{
+                height: 'calc(7rem + env(safe-area-inset-bottom) + 20px)',
+                paddingBottom: 'calc(env(safe-area-inset-bottom) + 20px)',
+            }}
+            className="fixed bottom-0 left-0 right-0 z-50 flex justify-center items-end pointer-events-none px-4 max-w-[100vw] overflow-hidden"
+        >
             <nav
                 aria-label="Dock navigation"
                 aria-describedby="dock-route-status"

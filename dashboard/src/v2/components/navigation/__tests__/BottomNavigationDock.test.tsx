@@ -91,12 +91,15 @@ describe('BottomNavigationDock (KineticDock)', () => {
         render(<KineticDock />);
 
         const nav = screen.getByRole('navigation', { name: 'Dock navigation' });
-        expect(nav.getAttribute('class')).toContain('scroll-px-2.5');
+        expect(nav.getAttribute('class')).toContain('scroll-px-4');
 
         // The outer div should have the dynamic height calculation and bottom 0
         const outerDiv = nav.parentElement;
         expect(outerDiv?.getAttribute('class')).toContain('bottom-0');
-        expect(outerDiv?.getAttribute('class')).toContain('h-[calc(7rem+env(safe-area-inset-bottom))]');
+        expect(outerDiv).toHaveStyle({
+            height: 'calc(7rem + env(safe-area-inset-bottom) + 20px)',
+            paddingBottom: 'calc(env(safe-area-inset-bottom) + 20px)',
+        });
 
         // Assert the spacer div is present (last child of nav)
         const lastChild = nav.lastElementChild;

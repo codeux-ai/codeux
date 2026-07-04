@@ -1351,8 +1351,8 @@ export const OnboardingExperience: FunctionComponent = () => {
                           value={settings.defaults.appearance.navigationMode}
                           onChange={(value) => updateAppearance({ navigationMode: value as any })}
                           options={[
-                            { value: "DOCK", label: "Dock" },
                             { value: "SIDEBAR", label: "Sidebar" },
+                            { value: "DOCK", label: "Dock" },
                           ]}
                         />
                       </div>

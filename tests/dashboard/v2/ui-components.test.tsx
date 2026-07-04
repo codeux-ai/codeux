@@ -200,6 +200,9 @@ describe("UI Components Coverage", () => {
     // Check it rendered
     const dockNav = screen.getByLabelText("Dock navigation");
     expect(dockNav).toBeDefined();
+    expect(dockNav.parentElement).toHaveStyle({
+      paddingBottom: "calc(env(safe-area-inset-bottom) + 20px)",
+    });
 
     // Trigger pointer events to test fish-eye does not throw
     fireEvent.pointerMove(dockNav, { clientX: 100 });
