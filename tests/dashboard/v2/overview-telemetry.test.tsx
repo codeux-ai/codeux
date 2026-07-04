@@ -53,7 +53,8 @@ describe("OverviewTelemetry Component", () => {
     });
 
     const { container } = render(<OverviewTelemetry />);
-    expect(screen.getByText("Telemetry.")).toBeInTheDocument();
+    expect(screen.getByText("Telemetry")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Loading live telemetry" })).toBeInTheDocument();
   });
 
   it("renders Awaiting Runtime state when empty", () => {
@@ -72,6 +73,7 @@ describe("OverviewTelemetry Component", () => {
     render(<OverviewTelemetry />);
     expect(screen.getByText("Awaiting Runtime")).toBeInTheDocument();
     expect(screen.getByText("No active project telemetry yet")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "No active runtime telemetry" })).toBeInTheDocument();
   });
 
   it("renders compact intervention cards", () => {
