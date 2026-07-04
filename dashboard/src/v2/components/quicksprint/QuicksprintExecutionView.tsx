@@ -1,8 +1,8 @@
 import type { FunctionComponent } from "preact";
-import { ChevronLeft, Info, BrainCircuit, MessageSquareText, Zap, Compass, Edit2, Play, TestTube2, AlertCircle, EyeOff, Eye, Rocket, ClipboardList } from "lucide-preact";
+import { ChevronLeft, BrainCircuit, Zap, EyeOff, Eye, Rocket, ClipboardList } from "lucide-preact";
 import type { PlanningRouteOption } from "../../lib/sprint-composer-state.js";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
-import { SubtaskSlider, getTagStyles, IconMap } from "./quicksprint-shared.js";
+import { QUICKSPRINT_GLASS_SURFACE, QUICKSPRINT_PRIMARY_ACTION, QUICKSPRINT_SECONDARY_ACTION, SubtaskSlider, getTagStyles, IconMap } from "./quicksprint-shared.js";
 import { PlanningProgressOverlay } from "../ui/PlanningProgressOverlay.js";
 import type { ProviderId } from "../../types.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
@@ -84,6 +84,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
   if (!selectedTemplate) return null;
   const TemplateIcon = IconMap[selectedTemplate.icon] || Zap;
   const tagColor = selectedTemplate.categoryColor || "slate";
+  const tagStyles = getTagStyles(tagColor);
 
   return (
     <>
@@ -95,6 +96,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
                 <button
                   onClick={() => setPhase("browse")}
                   className="inline-flex min-h-[44px] min-w-[44px] h-8 w-8 items-center justify-center rounded-full border border-black/[0.06] text-slate-400 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:hover:text-white"
+                  aria-label="Back to quicksprint templates"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
@@ -104,16 +106,33 @@ export const QuicksprintExecutionView: FunctionComponent<{
                 </div>
               </div>
 
-              <h2 data-qs-stagger className="mt-6 font-display text-[1.8rem] font-black leading-tight tracking-tight text-slate-900 dark:text-white sm:text-[2.1rem]">
-                {selectedTemplate.name}
-              </h2>
-              <p data-qs-stagger className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                {selectedTemplate.description}
-              </p>
+              <div data-qs-stagger className="mt-6 flex min-w-0 items-start gap-4">
+                <div className="mt-1 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-ember-500/[0.09] text-ember-500">
+                  <TemplateIcon className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="break-words font-display text-[1.8rem] font-black leading-tight tracking-tight text-slate-900 [overflow-wrap:anywhere] dark:text-white sm:text-[2.1rem]">
+                    {selectedTemplate.name}
+                  </h2>
+                  <p className="mt-2 max-w-2xl break-words text-sm leading-relaxed text-slate-500 [overflow-wrap:anywhere] dark:text-slate-400">
+                    {selectedTemplate.description}
+                  </p>
+                  <span
+                    className={`mt-3 inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ${tagStyles.bg} ${tagStyles.text}`}
+                    style={tagStyles.style?.["--accent"] ? { backgroundColor: "color-mix(in srgb, var(--accent) 15%, transparent)", color: "var(--accent)", ...tagStyles.style } : undefined}
+                  >
+                    <span
+                      className={`block h-1.5 w-1.5 shrink-0 rounded-full ${tagStyles.dot}`}
+                      style={tagStyles.style?.["--accent"] ? { backgroundColor: "var(--accent)", ...tagStyles.style } : undefined}
+                    />
+                    <span className="min-w-0 break-words [overflow-wrap:anywhere]">{selectedTemplate.category}</span>
+                  </span>
+                </div>
+              </div>
 
               {/* Planning Route + Model Override */}
               <div data-qs-stagger className="mt-8 grid gap-4 sm:grid-cols-2">
-                <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
+                <div className={`p-4 ${QUICKSPRINT_GLASS_SURFACE}`}>
                   <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Planning Route</div>
                   <div className="mt-2">
                     <AvantgardeSelect
@@ -149,9 +168,14 @@ export const QuicksprintExecutionView: FunctionComponent<{
                 <div className={`rounded-[1.4rem] border p-4 transition-all ${
                   showModelOverride
                     ? "border-signal-500/20 bg-signal-500/[0.04] dark:bg-signal-500/[0.08]"
-                    : "border-black/[0.06] bg-black/[0.025] opacity-40 dark:border-white/[0.06] dark:bg-white/[0.03]"
+                    : "border-black/[0.06] bg-black/[0.025] opacity-55 dark:border-white/[0.06] dark:bg-white/[0.03]"
                 }`}>
-                  <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Model Override</div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Model Override</div>
+                    {!showModelOverride && (
+                      <span className="rounded-full border border-black/[0.06] bg-white/60 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.04]">Route Locked</span>
+                    )}
+                  </div>
                   <div className="mt-2">
                     <AvantgardeSelect
                       variant="compact"
@@ -188,7 +212,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   onInput={(e) => setAdditionalPrompt((e.target as HTMLTextAreaElement).value)}
                   placeholder="Add extra context or requirements for this specific run — e.g. 'Focus only on the auth module' or 'Include migration scripts'..."
                   rows={4}
-                  className="w-full rounded-[1.7rem] border border-black/[0.06] bg-black/[0.025] p-5 text-sm leading-relaxed text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:border-ember-500/40 focus:shadow-[0_0_0_1px_rgba(255,107,0,0.16),0_0_30px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:placeholder:text-slate-600 resize-y"
+                  className="w-full resize-y rounded-[1.4rem] border border-black/[0.06] bg-white/52 p-5 text-sm leading-relaxed text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:border-ember-500/40 focus:shadow-[0_0_0_1px_rgba(255,107,0,0.16),0_0_30px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:placeholder:text-slate-600"
                 />
               </div>
 
@@ -207,7 +231,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
                     showPrompt ? "mt-4 max-h-[600px] opacity-100" : "max-h-0 opacity-0"
                   }`}
                 >
-                  <div className="rounded-[1.4rem] border border-black/[0.05] bg-black/[0.02] p-5 dark:border-white/[0.05] dark:bg-white/[0.02]">
+                  <div className={`p-5 ${QUICKSPRINT_GLASS_SURFACE}`}>
                     <pre className="max-h-80 overflow-y-auto text-xs font-mono leading-relaxed text-slate-500 dark:text-slate-400 whitespace-pre-wrap break-words scrollbar-thin scrollbar-thumb-black/10 dark:scrollbar-thumb-white/10">
                       {combinedPrompt}
                     </pre>
@@ -228,11 +252,17 @@ export const QuicksprintExecutionView: FunctionComponent<{
               <div className="mt-auto pt-8" />
 
               {/* Action buttons */}
+              {isBusy && (
+                <div data-qs-stagger className="mb-4 rounded-[1.2rem] border border-ember-500/20 bg-ember-500/[0.08] px-4 py-3 text-xs font-semibold text-ember-700 dark:text-ember-300" role="status" aria-live="polite">
+                  {executingMode === "plan_and_start" ? "Planning and start request is running." : "Planning request is running."}
+                </div>
+              )}
+
               <div data-qs-stagger className="space-y-3">
                 <button
                   onClick={() => handleExecute("plan_and_start")}
                   disabled={isBusy}
-                  className="flex min-h-[44px] w-full items-center justify-center gap-2.5 rounded-[1.35rem] bg-ember-600 px-5 py-3.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white shadow-[0_0_20px_rgba(255,107,0,0.25)] transition-all hover:bg-ember-500 hover:shadow-[0_0_28px_rgba(255,107,0,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className={`w-full ${QUICKSPRINT_PRIMARY_ACTION}`}
                 >
                   <Rocket className="h-4 w-4" />
                   Plan & Start
@@ -240,7 +270,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
                 <button
                   onClick={() => handleExecute("plan_only")}
                   disabled={isBusy}
-                  className="flex min-h-[44px] w-full items-center justify-center gap-2.5 rounded-[1.35rem] border border-black/[0.08] bg-white/66 px-5 py-3.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-black/[0.04] disabled:opacity-50 disabled:cursor-not-allowed dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06]"
+                  className={`w-full ${QUICKSPRINT_SECONDARY_ACTION}`}
                 >
                   <ClipboardList className="h-4 w-4" />
                   Plan Only

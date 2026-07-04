@@ -65,6 +65,11 @@ export const ICON_OPTIONS: ReadonlyArray<{ value: string; Icon: FunctionComponen
   { value: "Wrench", Icon: Wrench },
 ];
 
+export const QUICKSPRINT_GLASS_SURFACE = "rounded-[1.4rem] border border-black/[0.06] bg-white/62 shadow-[0_18px_44px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.07] dark:bg-white/[0.035] dark:shadow-[0_18px_44px_rgba(0,0,0,0.22)]";
+export const QUICKSPRINT_FIELD_CLASS = "w-full rounded-[1rem] border border-black/[0.07] bg-white/55 text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:border-ember-500/45 focus:ring-4 focus:ring-ember-500/15 dark:border-white/[0.07] dark:bg-white/[0.035] dark:text-slate-300 dark:placeholder:text-slate-600";
+export const QUICKSPRINT_PRIMARY_ACTION = "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[1.35rem] bg-ember-600 px-5 py-3 text-[11px] font-bold uppercase tracking-[0.14em] text-white shadow-[0_0_20px_rgba(255,107,0,0.25)] transition-all hover:bg-ember-500 hover:shadow-[0_0_28px_rgba(255,107,0,0.35)] disabled:cursor-not-allowed disabled:opacity-45";
+export const QUICKSPRINT_SECONDARY_ACTION = "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[1.35rem] border border-black/[0.08] bg-white/66 px-5 py-3 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-black/[0.04] disabled:cursor-not-allowed disabled:opacity-45 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06]";
+
 /* ═════════════════════════════════════════════════════════════════════ */
 /*  Template Card                                                       */
 /* ═════════════════════════════════════════════════════════════════════ */
@@ -75,49 +80,54 @@ export const TemplateCard: FunctionComponent<{
 }> = ({ template, onSelect, onEdit }) => {
   const Icon = IconMap[template.icon] || Zap;
   const tagColor = template.categoryColor || "slate";
+  const tagStyles = getTagStyles(tagColor);
 
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className="group relative flex flex-col rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-5 text-left transition-all hover:border-ember-500/30 hover:shadow-[0_0_24px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-void-800/60 dark:hover:border-ember-500/30"
-    >
+    <article className="group relative flex min-h-[13rem] flex-col rounded-[1.45rem] border border-black/[0.06] bg-white/68 text-left shadow-[0_14px_34px_rgba(15,23,42,0.055)] backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:border-ember-500/30 hover:shadow-[0_20px_44px_rgba(255,107,0,0.1)] dark:border-white/[0.07] dark:bg-white/[0.035] dark:hover:border-ember-500/30">
       {!template.isBuiltIn && onEdit && (
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onEdit(); }}
-          className="absolute top-4 right-4 rounded-lg min-h-[44px] min-w-[44px] p-1.5 text-slate-300 opacity-0 transition-all group-hover:opacity-100 hover:bg-ember-500/10 hover:text-ember-500 dark:text-slate-500"
+          className="absolute top-3 right-3 z-10 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-slate-300 opacity-0 transition-all focus:opacity-100 group-hover:opacity-100 hover:bg-ember-500/10 hover:text-ember-500 dark:text-slate-500"
           title="Edit template"
+          aria-label={`Edit ${template.name}`}
         >
           <Settings2 className="h-3.5 w-3.5" />
         </button>
       )}
 
-      <div className="flex items-center gap-3 mb-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-ember-500/[0.08] text-ember-500 transition-colors group-hover:bg-ember-500/[0.14]">
-          <Icon className="h-4.5 w-4.5" />
+      <button
+        type="button"
+        onClick={onSelect}
+        className="flex min-h-full flex-1 flex-col rounded-[1.45rem] p-5 text-left outline-none transition-all focus-visible:ring-4 focus-visible:ring-ember-500/18"
+        aria-label={`Use quicksprint template ${template.name}`}
+      >
+        <div className="mb-3 flex min-w-0 items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-ember-500/[0.08] text-ember-500 transition-colors group-hover:bg-ember-500/[0.14]">
+            <Icon className="h-4.5 w-4.5" />
+          </div>
+          <h3 className="min-w-0 flex-1 break-words pr-8 text-sm font-bold leading-tight text-slate-900 [overflow-wrap:anywhere] dark:text-white">{template.name}</h3>
         </div>
-        <h3 className="flex-1 text-sm font-bold text-slate-900 dark:text-white leading-tight pr-6">{template.name}</h3>
-      </div>
 
-      <p className="flex-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400 mb-4">{template.description}</p>
+        <p className="mb-4 min-w-0 flex-1 break-words text-xs leading-relaxed text-slate-500 [overflow-wrap:anywhere] dark:text-slate-400">{template.description}</p>
 
-      <div className="flex items-center justify-between">
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ${getTagStyles(tagColor).bg} ${getTagStyles(tagColor).text}`}
-          style={getTagStyles(tagColor).style?.["--accent"] ? { backgroundColor: "color-mix(in srgb, var(--accent) 15%, transparent)", color: "var(--accent)", ...getTagStyles(tagColor).style } : undefined}
-        >
+        <div className="flex min-w-0 items-center justify-between gap-3">
           <span
-            className={`block h-1.5 w-1.5 rounded-full ${getTagStyles(tagColor).dot}`}
-            style={getTagStyles(tagColor).style?.["--accent"] ? { backgroundColor: "var(--accent)", ...getTagStyles(tagColor).style } : undefined}
-          />
-          {template.category}
-        </span>
-        <span className="text-[10px] font-medium text-slate-400">
-          {template.defaultTaskCount} subtask{template.defaultTaskCount !== 1 ? "s" : ""}
-        </span>
-      </div>
-    </button>
+            className={`inline-flex min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ${tagStyles.bg} ${tagStyles.text}`}
+            style={tagStyles.style?.["--accent"] ? { backgroundColor: "color-mix(in srgb, var(--accent) 15%, transparent)", color: "var(--accent)", ...tagStyles.style } : undefined}
+          >
+            <span
+              className={`block h-1.5 w-1.5 shrink-0 rounded-full ${tagStyles.dot}`}
+              style={tagStyles.style?.["--accent"] ? { backgroundColor: "var(--accent)", ...tagStyles.style } : undefined}
+            />
+            <span className="min-w-0 break-words [overflow-wrap:anywhere]">{template.category}</span>
+          </span>
+          <span className="shrink-0 text-[10px] font-medium text-slate-400">
+            {template.defaultTaskCount} subtask{template.defaultTaskCount !== 1 ? "s" : ""}
+          </span>
+        </div>
+      </button>
+    </article>
   );
 };
 
@@ -146,7 +156,7 @@ export const SubtaskSlider: FunctionComponent<{
   }, [handlePointer]);
 
   return (
-    <div className="select-none">
+    <div className="select-none" aria-label="Subtask count">
       {/* Large number display */}
       <div className="flex items-baseline gap-2 mb-6">
         <span className="font-mono text-[3.5rem] font-black leading-none tracking-tighter text-slate-900 dark:text-white tabular-nums">

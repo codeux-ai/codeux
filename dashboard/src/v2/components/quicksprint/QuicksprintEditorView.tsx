@@ -1,8 +1,8 @@
 import type { FunctionComponent } from "preact";
-import { ChevronLeft, Compass, Palette, Smile, Trash2, Settings2, Zap } from "lucide-preact";
+import { ChevronLeft, Trash2, Settings2, Zap } from "lucide-preact";
 import type { AgentPreset } from "../../types.js";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
-import { SubtaskSlider, TAG_STYLES, ICON_OPTIONS, IconMap, getTagStyles } from "./quicksprint-shared.js";
+import { QUICKSPRINT_FIELD_CLASS, QUICKSPRINT_GLASS_SURFACE, QUICKSPRINT_PRIMARY_ACTION, TAG_STYLES, ICON_OPTIONS, IconMap, getTagStyles } from "./quicksprint-shared.js";
 import type { QuicksprintTemplateRecord } from "../../../../../src/contracts/quicksprint-types.js";
 
 export const QuicksprintEditorView: FunctionComponent<{
@@ -49,7 +49,14 @@ export const QuicksprintEditorView: FunctionComponent<{
   handleEditorDelete,
   cardRef,
 }) => {
-  const SelectedIcon = IconMap[edIcon] || Compass;
+  const isNameMissing = !edName.trim();
+  const isPromptMissing = !edInstruction.trim() && !edAgentPresetId;
+  const isSaveDisabled = edSaving || isNameMissing || isPromptMissing;
+  const validationMessage = isNameMissing
+    ? "Template name is required."
+    : isPromptMissing
+      ? "Add agent instructions or choose an agent preset."
+      : "";
 
   return (
     <>
@@ -59,6 +66,7 @@ export const QuicksprintEditorView: FunctionComponent<{
               <button
                 onClick={() => setPhase("browse")}
                 className="inline-flex min-h-[44px] min-w-[44px] h-8 w-8 items-center justify-center rounded-full border border-black/[0.06] text-slate-400 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:hover:text-white"
+                aria-label="Back to quicksprint templates"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
@@ -76,7 +84,9 @@ export const QuicksprintEditorView: FunctionComponent<{
                 value={edName}
                 onInput={(e) => setEdName((e.target as HTMLInputElement).value)}
                 placeholder="API Integration Tests"
-                className="w-full rounded-[1rem] border border-black/[0.06] bg-transparent px-4 py-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:ring-4 focus:ring-signal-500/20 focus:border-signal-500 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem]"
+                aria-invalid={isNameMissing ? "true" : "false"}
+                aria-describedby={validationMessage ? "quicksprint-editor-validation" : undefined}
+                className={`${QUICKSPRINT_FIELD_CLASS} px-4 py-3 font-display text-[1.65rem] font-black leading-tight tracking-tight text-slate-900 placeholder:text-slate-200 dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem]`}
                 autoFocus
               />
             </label>
@@ -89,13 +99,13 @@ export const QuicksprintEditorView: FunctionComponent<{
                 value={edDescription}
                 onInput={(e) => setEdDescription((e.target as HTMLInputElement).value)}
                 placeholder="What this template does in one line"
-                className="w-full rounded-[1rem] border border-black/[0.06] bg-transparent px-4 py-3 text-sm leading-relaxed text-slate-700 outline-none transition-colors placeholder:text-slate-300 focus:ring-4 focus:ring-signal-500/20 focus:border-signal-500 dark:border-white/[0.06] dark:text-slate-300 dark:placeholder:text-slate-600"
+                className={`${QUICKSPRINT_FIELD_CLASS} px-4 py-3 text-sm leading-relaxed`}
               />
             </label>
 
             {/* Icon + Color + Category Tag + Default Tasks */}
             <div data-qs-stagger className="mt-8 grid gap-4 sm:grid-cols-2">
-              <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
+              <div className={`p-4 ${QUICKSPRINT_GLASS_SURFACE}`}>
                 <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-3">Category Tag</div>
                 <div className="flex items-center gap-3">
                   {/* Icon picker trigger */}
@@ -110,6 +120,7 @@ export const QuicksprintEditorView: FunctionComponent<{
                     }}
                     className="flex min-h-[44px] min-w-[44px] h-10 w-10 flex-shrink-0 cursor-pointer items-center justify-center rounded-xl border border-black/[0.08] bg-white/80 text-slate-600 shadow-sm transition-all duration-200 hover:scale-105 hover:shadow-md hover:border-ember-500/30 hover:text-ember-500 active:scale-95 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:text-ember-400"
                     title="Pick icon"
+                    aria-label="Pick template icon"
                   >
                     {(() => { const Ic = IconMap[edIcon] || Zap; return <Ic className="h-5 w-5" />; })()}
                   </button>
@@ -126,6 +137,7 @@ export const QuicksprintEditorView: FunctionComponent<{
                     }}
                     className="flex min-h-[44px] min-w-[44px] h-10 w-10 flex-shrink-0 cursor-pointer items-center justify-center rounded-xl border border-black/[0.08] bg-white/80 shadow-sm transition-all duration-200 hover:scale-105 hover:shadow-md active:scale-95 dark:border-white/[0.08] dark:bg-white/[0.05]"
                     title="Pick tag color"
+                    aria-label="Pick category color"
                   >
                     <span
                       className={`block h-5 w-5 rounded-full shadow-[inset_0_1px_2px_rgba(255,255,255,0.4),0_0_0_2px_rgba(0,0,0,0.06)] transition-transform duration-200 ${getTagStyles(edCategoryColor).dot}`}
@@ -139,7 +151,8 @@ export const QuicksprintEditorView: FunctionComponent<{
                     value={edCategory}
                     onInput={(e) => setEdCategory((e.target as HTMLInputElement).value)}
                     placeholder="e.g. engineering..."
-                    className="flex-1 min-w-0 rounded-[1rem] border border-black/[0.06] bg-transparent px-3 py-2 text-sm text-slate-700 outline-none transition-colors placeholder:text-slate-300 focus:ring-4 focus:ring-signal-500/20 focus:border-signal-500 dark:border-white/[0.06] dark:text-slate-300 dark:placeholder:text-slate-600"
+                    className={`${QUICKSPRINT_FIELD_CLASS} min-w-0 flex-1 px-3 py-2 text-sm`}
+                    aria-label="Category label"
                   />
                 </div>
 
@@ -154,13 +167,13 @@ export const QuicksprintEditorView: FunctionComponent<{
                         className={`block h-1.5 w-1.5 rounded-full ${getTagStyles(edCategoryColor).dot}`}
                         style={getTagStyles(edCategoryColor).style?.["--accent"] ? { backgroundColor: "var(--accent)", ...getTagStyles(edCategoryColor).style } : undefined}
                       />
-                      {edCategory}
+                      <span className="min-w-0 break-words [overflow-wrap:anywhere]">{edCategory}</span>
                     </span>
                   </div>
                 )}
               </div>
 
-              <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
+              <div className={`p-4 ${QUICKSPRINT_GLASS_SURFACE}`}>
                 <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">Default Tasks</div>
                 <div className="font-mono text-2xl font-black tracking-tight text-slate-900 dark:text-white">{edTaskCount}</div>
                 <input
@@ -191,6 +204,7 @@ export const QuicksprintEditorView: FunctionComponent<{
                         type="button"
                         onClick={() => { setEdIcon(opt.value); setShowIconPicker(false); }}
                         title={opt.value}
+                        aria-label={`Use ${opt.value} icon`}
                         className={`flex min-h-[44px] min-w-[44px] h-9 w-9 cursor-pointer items-center justify-center rounded-xl transition-all duration-150 ${
                           isActive
                             ? "bg-ember-500/20 text-ember-500 shadow-[0_0_10px_rgba(255,107,0,0.15)] scale-110"
@@ -223,6 +237,7 @@ export const QuicksprintEditorView: FunctionComponent<{
                         key={value}
                         type="button"
                         onClick={() => { setEdCategoryColor(value); setShowColorPicker(false); }}
+                        aria-label={`Use ${value} category color`}
                         className="group flex min-h-[44px] min-w-[44px] h-8 w-8 cursor-pointer items-center justify-center rounded-full transition-all duration-200 hover:scale-125 active:scale-95"
                       >
                         <span
@@ -245,9 +260,9 @@ export const QuicksprintEditorView: FunctionComponent<{
             {/* Agent Preset */}
             {agentPresets.length > 0 && (
               <div data-qs-stagger className="mt-6">
-                <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
+                <div className={`p-4 ${QUICKSPRINT_GLASS_SURFACE}`}>
                   <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">Agent Preset (optional)</div>
-                  <p className="text-xs text-slate-400 dark:text-slate-500 mb-3">
+                  <p className="mb-3 break-words text-xs text-slate-400 [overflow-wrap:anywhere] dark:text-slate-500">
                     Attach an agent's instructions to this template. The agent's prompt will be prepended to the template instructions.
                   </p>
                   <AvantgardeSelect
@@ -272,12 +287,14 @@ export const QuicksprintEditorView: FunctionComponent<{
                 onInput={(e) => setEdInstruction((e.target as HTMLTextAreaElement).value)}
                 placeholder="Write detailed instructions for the planning agent. Leave empty to use only the agent preset's instructions..."
                 rows={10}
-                className="w-full rounded-[1rem] border border-black/[0.06] bg-black/[0.025] p-5 text-sm font-mono leading-relaxed text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:ring-4 focus:ring-signal-500/20 focus:border-signal-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:placeholder:text-slate-600 resize-y"
+                aria-invalid={isPromptMissing ? "true" : "false"}
+                aria-describedby={validationMessage ? "quicksprint-editor-validation" : undefined}
+                className={`${QUICKSPRINT_FIELD_CLASS} min-h-64 resize-y break-words p-5 font-mono text-sm leading-relaxed [overflow-wrap:anywhere]`}
               />
             </div>
 
             {/* Footer */}
-            <div data-qs-stagger className="mt-8 flex items-center justify-between">
+            <div data-qs-stagger className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 {editorTemplate && !editorTemplate.isBuiltIn && (
                   <button
@@ -294,10 +311,15 @@ export const QuicksprintEditorView: FunctionComponent<{
                   </button>
                 )}
               </div>
+              {validationMessage && (
+                <div id="quicksprint-editor-validation" className="rounded-full border border-status-red/20 bg-status-red/[0.08] px-3 py-2 text-xs font-semibold text-status-red" role="alert">
+                  {validationMessage}
+                </div>
+              )}
               <button
                 onClick={handleEditorSave}
-                disabled={edSaving || (!edName.trim() || (!edInstruction.trim() && !edAgentPresetId))}
-                className="inline-flex min-h-[44px] items-center gap-2 rounded-[1.35rem] bg-ember-600 px-6 py-3 text-[11px] font-bold uppercase tracking-[0.14em] text-white shadow-[0_0_20px_rgba(255,107,0,0.25)] transition-all hover:bg-ember-500 hover:shadow-[0_0_28px_rgba(255,107,0,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isSaveDisabled}
+                className={`${QUICKSPRINT_PRIMARY_ACTION} px-6`}
               >
                 {edSaving ? "Saving..." : editorTemplate ? "Save Changes" : "Create Template"}
               </button>

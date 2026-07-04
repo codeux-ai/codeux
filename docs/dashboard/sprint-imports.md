@@ -44,6 +44,8 @@ Use `Import -> GitHub Issues` or `Import -> GitLab Issues` to search the selecte
 
 For local projects, the dashboard reads the repository's `remote.origin.url` from `.git/config` when available. This pre-fills the provider and `owner/repository` target for projects that were added from a local checkout instead of a Git clone URL.
 
+The import surface is structured as a compact planning modal. The left rail summarizes provider, repository, and selected count; the filter row keeps provider, repository, search, state, and labels together; and issue cards emphasize source metadata, issue key, title, labels, source link, selection state, and the `Append Conversation` toggle. Long repository paths, titles, source labels, and URLs are wrapped in the card layout instead of relying on truncation for primary metadata.
+
 Imported issues appear in the sprint composer under the Sprint Prompt field as linked issue cards. Each card shows the provider, repository, issue key, title, labels, assignees, and a direct link to the source issue. The import view includes an `Append Conversation` toggle on each issue card. When enabled, the sprint prompt receives the full issue body plus issue comments/notes; when disabled, it receives the full issue body without the conversation.
 
 When the sprint is submitted, selected issues are persisted as linked sprint issue records and the sprint prompt receives a structured `Linked Issues` markdown section. Each imported issue is appended with source metadata, labels, assignees, author/timestamps when available, the complete issue body, and the selected conversation context. This gives the Planning agent and task agents the actual issue text instead of only a remote link.
@@ -57,6 +59,8 @@ When the GitHub token is empty, GitHub issue search, issue context loading, and 
 ## Jira Issue Import
 
 Use `Import -> Jira Issues` to search Jira with guided filters, multi-select issues, and attach them to the sprint composer. The Jira modal follows the same interaction model as the GitHub/GitLab importer: project key, search text, status, assignee text, optional labels, selectable issue cards, source links, and per-issue `Append Conversation` toggles.
+
+Jira cards use the same import hierarchy as GitHub/GitLab cards while preserving Jira-specific metadata. Each card highlights the issue key, project key, issue type, priority, status, assignees, labels, description preview, selected state, source link, and conversation toggle. Empty results and provider/search errors are announced in modal status or alert regions without changing the search request semantics.
 
 Operators do not need to write JQL in the dashboard. The server builds the Jira query from the selected filters, defaults to open issues sorted by recent updates, and uses `Settings -> Integrations -> Jira -> Default project` to prefill the project key when available.
 
