@@ -25,6 +25,49 @@ const topLimit = readPositiveInt("CODEUX_GUARDRAIL_REPORT_LIMIT", 20);
 
 const broadAnyPattern =
   /(^|[^A-Za-z0-9_$])(?:as\s+any\b|:\s*any\b|<any\b|Array<\s*any\s*>|Promise<\s*any\s*>|Record<[^>\n]*\bany\b|\bany\[\])/;
+const heavySnapshotEventTypes = [
+  "project.live.updated",
+  "project.execution.updated",
+  "project.runtime_status.updated",
+  "projects.updated",
+  "overview.telemetry.updated",
+];
+const dependencyFactoryPlaceholderPatterns = [
+  {
+    name: "{} as any",
+    pattern: /\{\s*\}\s+as\s+any\b/g,
+    remediation:
+      "Use createLateBoundDependency<T>() plus resolveLateBoundDependency(), or pass a typed concrete dependency.",
+  },
+  {
+    name: "{} as unknown",
+    pattern: /\{\s*\}\s+as\s+unknown\b/g,
+    remediation:
+      "Use createLateBoundDependency<T>() for construction-order links instead of an empty placeholder cast.",
+  },
+  {
+    name: "{} as any/unknown as T",
+    pattern: /\{\s*\}\s+as\s+(?:any|unknown)\s+as\s+[A-Za-z_$][\w$]*(?:<[^;\n]+>)?/g,
+    remediation:
+      "Replace double-cast placeholders with a LateBoundDependency<T> holder or a real typed instance.",
+  },
+  {
+    name: "{} as service-like dependency",
+    pattern: /\{\s*\}\s+as\s+[A-Za-z_$][\w$]*(?:Service|Repository|Handler|Manager|Runner|Factory|Dependencies)\b/g,
+    remediation:
+      "Do not cast empty objects to service dependencies; wire an actual implementation or a LateBoundDependency<T>.",
+  },
+];
+const optimisticInsertionCallPattern =
+  /\bsetOptimisticTasks\s*\([\s\S]{0,240}?=>\s*\[\s*([A-Za-z_$][\w$]*)\s*,\s*\.\.\.[A-Za-z_$][\w$]*\s*\]/;
+const realtimeFiles = [
+  "src/repositories/dashboard-realtime-event-repository.ts",
+  "src/services/dashboard-realtime-service.ts",
+];
+const optimisticInsertionFiles = [
+  "dashboard/src/v2/TasksPage.tsx",
+  "dashboard/src/v2/lib/tasks/task-board-actions.ts",
+];
 
 function readPositiveInt(name, fallback) {
   const raw = process.env[name];
@@ -106,6 +149,14 @@ function thresholdFor(filePath) {
   return toRelative(filePath).startsWith("dashboard/src/") ? dashboardMaxLines : defaultMaxLines;
 }
 
+function lineNumberAt(text, index) {
+  return text.slice(0, index).split(/\r?\n/).length;
+}
+
+function compactMatch(value) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
 async function collectProductionFiles() {
   const files = [];
   for (const sourceRoot of [...productionRoots, ...scriptRoots]) {
@@ -122,6 +173,13 @@ async function collectArtifactFiles() {
   }
 
   return files.filter(isBackupArtifact).sort((a, b) => toRelative(a).localeCompare(toRelative(b)));
+}
+
+async function collectDependencyFactoryFiles() {
+  const files = await walkFiles("src/app/dependency-factory");
+  return files
+    .filter((filePath) => path.extname(filePath) === ".ts")
+    .sort((a, b) => toRelative(a).localeCompare(toRelative(b)));
 }
 
 async function inspectSourceFile(filePath) {
@@ -147,6 +205,138 @@ async function inspectSourceFile(filePath) {
   };
 }
 
+async function inspectDependencyFactoryFile(filePath) {
+  const text = await readFile(filePath, "utf8");
+  const violations = [];
+
+  for (const placeholder of dependencyFactoryPlaceholderPatterns) {
+    placeholder.pattern.lastIndex = 0;
+    for (const match of text.matchAll(placeholder.pattern)) {
+      violations.push({
+        path: toRelative(filePath),
+        line: lineNumberAt(text, match.index ?? 0),
+        pattern: placeholder.name,
+        match: compactMatch(match[0]),
+        remediation: placeholder.remediation,
+      });
+    }
+  }
+
+  return violations;
+}
+
+async function inspectRealtimeSnapshotPersistence() {
+  const violations = [];
+  const [repositoryRelativePath, serviceRelativePath] = realtimeFiles;
+  const repositoryPath = path.join(root, repositoryRelativePath);
+  const servicePath = path.join(root, serviceRelativePath);
+  const [repositoryText, serviceText] = await Promise.all([
+    readFile(repositoryPath, "utf8"),
+    readFile(servicePath, "utf8"),
+  ]);
+
+  if (!/if\s*\(\s*replayable\s*\)\s*\{[\s\S]{0,2000}INSERT\s+INTO\s+dashboard_realtime_events/.test(repositoryText)) {
+    violations.push({
+      path: toRelative(repositoryPath),
+      line: lineNumberAt(repositoryText, repositoryText.indexOf("INSERT INTO dashboard_realtime_events")),
+      pattern: "replayable-gated dashboard_realtime_events INSERT",
+      match: "INSERT INTO dashboard_realtime_events",
+      remediation:
+        "Persist only replayable realtime events; non-replayable heavy snapshots should update in-memory sequence watermarks without writing payload_json.",
+    });
+  }
+
+  const buildPublishTaskIndex = serviceText.indexOf("private buildPublishTask");
+  const buildPublishTaskPublishIndex = serviceText.indexOf("this.publishRawEvent({", buildPublishTaskIndex);
+  const buildPublishTaskPublishEnd = serviceText.indexOf("});", buildPublishTaskPublishIndex);
+  const buildPublishTaskPublishBlock =
+    buildPublishTaskPublishIndex >= 0 && buildPublishTaskPublishEnd >= 0
+      ? serviceText.slice(buildPublishTaskPublishIndex, buildPublishTaskPublishEnd + 3)
+      : "";
+
+  if (!/\breplayable:\s*false\b/.test(buildPublishTaskPublishBlock)) {
+    violations.push({
+      path: toRelative(servicePath),
+      line: lineNumberAt(serviceText, buildPublishTaskPublishIndex >= 0 ? buildPublishTaskPublishIndex : buildPublishTaskIndex),
+      pattern: "buildPublishTask replayable: false",
+      match: compactMatch(buildPublishTaskPublishBlock || "this.publishRawEvent({ ... })"),
+      remediation:
+        "Snapshot publish tasks must call publishRawEvent with replayable: false so heavy snapshot payloads are never replay-persisted.",
+    });
+  }
+
+  const directPublishPattern = /this\.publishRawEvent\s*\(\s*\{[\s\S]*?\}\s*\)/g;
+  for (const match of serviceText.matchAll(directPublishPattern)) {
+    const block = match[0];
+    if (!heavySnapshotEventTypes.some((eventType) => block.includes(`"${eventType}"`))) {
+      continue;
+    }
+    if (/\bpayload\b/.test(block) && !/\breplayable:\s*false\b/.test(block)) {
+      const eventType = heavySnapshotEventTypes.find((candidate) => block.includes(`"${candidate}"`)) ?? "heavy snapshot";
+      violations.push({
+        path: toRelative(servicePath),
+        line: lineNumberAt(serviceText, match.index ?? 0),
+        pattern: `${eventType} direct publishRawEvent replayability`,
+        match: compactMatch(block),
+        remediation:
+          "Do not publish heavy snapshot payloads as replayable raw events; route them through buildPublishTask or set replayable: false.",
+      });
+    }
+  }
+
+  return violations;
+}
+
+async function inspectDuplicateOptimisticInsertions() {
+  const violations = [];
+
+  for (const relativePath of optimisticInsertionFiles) {
+    const filePath = path.join(root, relativePath);
+    let text;
+    try {
+      text = await readFile(filePath, "utf8");
+    } catch (error) {
+      if (error && error.code === "ENOENT") {
+        continue;
+      }
+      throw error;
+    }
+
+    const calls = [];
+    const callPattern = /setOptimisticTasks\s*\([\s\S]*?\);/g;
+    for (const match of text.matchAll(callPattern)) {
+      const block = match[0];
+      const insertionMatch = optimisticInsertionCallPattern.exec(block);
+      if (!insertionMatch) {
+        continue;
+      }
+      calls.push({
+        path: relativePath,
+        line: lineNumberAt(text, match.index ?? 0),
+        insertedSymbol: insertionMatch[1],
+        match: compactMatch(block),
+      });
+    }
+
+    for (let index = 1; index < calls.length; index += 1) {
+      const previous = calls[index - 1];
+      const current = calls[index];
+      if (previous.insertedSymbol === current.insertedSymbol && current.line - previous.line <= 8) {
+        violations.push({
+          path: current.path,
+          line: current.line,
+          pattern: "duplicate adjacent optimistic insertion",
+          match: current.match,
+          remediation:
+            "Keep one optimistic insertion for a newly created task; remove the duplicate adjacent setOptimisticTasks call or centralize insertion in one helper.",
+        });
+      }
+    }
+  }
+
+  return violations;
+}
+
 function printList(items, renderItem) {
   for (const item of items.slice(0, topLimit)) {
     console.log(renderItem(item));
@@ -157,12 +347,24 @@ function printList(items, renderItem) {
   }
 }
 
-const [productionFiles, artifactFiles] = await Promise.all([
+const [productionFiles, artifactFiles, dependencyFactoryFiles] = await Promise.all([
   collectProductionFiles(),
   collectArtifactFiles(),
+  collectDependencyFactoryFiles(),
 ]);
 
-const reports = await Promise.all(productionFiles.map(inspectSourceFile));
+const [reports, dependencyFactoryViolationsNested, realtimeSnapshotViolations, optimisticInsertionViolations] = await Promise.all([
+  Promise.all(productionFiles.map(inspectSourceFile)),
+  Promise.all(dependencyFactoryFiles.map(inspectDependencyFactoryFile)),
+  inspectRealtimeSnapshotPersistence(),
+  inspectDuplicateOptimisticInsertions(),
+]);
+const dependencyFactoryViolations = dependencyFactoryViolationsNested.flat();
+const blockingViolations = [
+  ...dependencyFactoryViolations,
+  ...realtimeSnapshotViolations,
+  ...optimisticInsertionViolations,
+];
 const oversizedFiles = reports
   .filter((report) => report.lineCount > report.threshold)
   .sort((a, b) => b.lineCount - a.lineCount || a.path.localeCompare(b.path));
@@ -180,6 +382,14 @@ if (artifactFiles.length > 0) {
   for (const artifactFile of artifactFiles) {
     console.error(`  - ${toRelative(artifactFile)}`);
   }
+}
+
+if (blockingViolations.length > 0) {
+  console.error("\nBlocking quality guardrail violations:");
+  printList(blockingViolations, (violation) => (
+    `  - ${violation.path}:${violation.line} [${violation.pattern}] ${violation.match}\n` +
+    `    Remediation: ${violation.remediation}`
+  ));
 }
 
 if (oversizedFiles.length > 0) {
@@ -203,6 +413,6 @@ if (anyFiles.length > 0) {
   console.log("\nAdvisory: no broad any patterns found.");
 }
 
-if (artifactFiles.length > 0) {
+if (artifactFiles.length > 0 || blockingViolations.length > 0) {
   process.exit(1);
 }
