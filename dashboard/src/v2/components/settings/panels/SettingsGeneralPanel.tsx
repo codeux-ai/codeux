@@ -1,4 +1,5 @@
 import type { FunctionComponent, ComponentChildren } from "preact";
+import { useEffect, useMemo, useState } from "preact/hooks";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
 import { ActionButton, NoticePanel } from "../SettingsSurface.js";
 import { NumberInput, Row, Toggle, TextInput, PillChoiceGroup } from "../SettingsFormFields.js";
@@ -6,6 +7,7 @@ import type { ProjectSettings } from "../../../../../../src/contracts/settings-s
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
 import { Bot, Cog, Database, FolderOpen, Sparkles } from "lucide-preact";
 import { openOnboarding } from "../../../lib/onboarding-control.js";
+import { useProjectData } from "../../../context/project-data.js";
 
 
 const ProjectContextCard: FunctionComponent<{
@@ -13,25 +15,121 @@ const ProjectContextCard: FunctionComponent<{
   projectId: string;
   baseDir: string;
   sourceType: string;
-}> = ({ projectName, projectId, baseDir, sourceType }) => (
-  <SectionCard title="Project Context" watermark="PRJ" icon={<FolderOpen strokeWidth={2.4} />}>
-    <Row label="Project" description="The selected project receives its own override document and inherits all other values from system defaults.">
-      <div className="rounded-xl bg-black/[0.04] px-3 py-2 text-sm font-semibold text-slate-700 dark:bg-white/[0.04] dark:text-slate-200">
-        {projectName}
-      </div>
-    </Row>
-    <Row label="Project id" description="Stable identifier used by the API and runtime." >
-      <div className="rounded-xl bg-black/[0.04] px-3 py-2 font-mono text-sm text-slate-600 dark:bg-white/[0.04] dark:text-slate-300">
-        {projectId}
-      </div>
-    </Row>
-    <Row label="Base directory" description="Workers and local execution enter this directory before acting." >
-      <div className="max-w-[28rem] rounded-xl bg-black/[0.04] px-3 py-2 font-mono text-sm text-slate-600 dark:bg-white/[0.04] dark:text-slate-300">
-        {baseDir}
-      </div>
-    </Row>
-  </SectionCard>
-);
+}> = ({ projectName, projectId, baseDir, sourceType }) => {
+  const { updateProject } = useProjectData();
+  const [projectNameDraft, setProjectNameDraft] = useState(projectName);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setProjectNameDraft(projectName);
+    setSaveState("idle");
+    setSaveMessage(null);
+  }, [projectId, projectName]);
+
+  const trimmedProjectName = projectNameDraft.trim();
+  const isInvalidProjectName = trimmedProjectName.length === 0;
+  const isDirtyProjectName = trimmedProjectName !== projectName.trim();
+  const isSavingProjectName = saveState === "saving";
+  const sourceTypeLabel = useMemo(() => sourceType === "git" ? "Git repository" : "Local workspace", [sourceType]);
+
+  const saveProjectName = async (): Promise<void> => {
+    if (isInvalidProjectName) {
+      setSaveState("error");
+      setSaveMessage("Project name cannot be empty.");
+      return;
+    }
+    if (!isDirtyProjectName) {
+      setProjectNameDraft(projectName);
+      setSaveState("idle");
+      setSaveMessage(null);
+      return;
+    }
+
+    setSaveState("saving");
+    setSaveMessage(null);
+    try {
+      const updatedProject = await updateProject(projectId, { name: trimmedProjectName });
+      setProjectNameDraft(updatedProject.name);
+      setSaveState("saved");
+      setSaveMessage("Project name updated.");
+    } catch (error) {
+      setSaveState("error");
+      setSaveMessage(error instanceof Error ? error.message : "Failed to update project name.");
+    }
+  };
+
+  const resetProjectName = (): void => {
+    setProjectNameDraft(projectName);
+    setSaveState("idle");
+    setSaveMessage(null);
+  };
+
+  return (
+    <SectionCard title="Project Context" watermark="PRJ" icon={<FolderOpen strokeWidth={2.4} />}>
+      <Row label="Project name" description="Rename the selected project. Settings, tasks, and runtime history stay attached to the same project id.">
+        <div className="flex min-w-0 flex-col gap-2">
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="min-w-0 flex-1 sm:min-w-[18rem]">
+              <TextInput
+                value={projectNameDraft}
+                onChange={(value) => {
+                  setProjectNameDraft(value);
+                  setSaveState("idle");
+                  setSaveMessage(null);
+                }}
+                invalid={saveState === "error" && isInvalidProjectName}
+                disabled={isSavingProjectName}
+                aria-label="Project name"
+              />
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <ActionButton
+                label="Save Name"
+                tone="primary"
+                busy={isSavingProjectName}
+                disabled={!isDirtyProjectName || isInvalidProjectName}
+                onClick={() => { void saveProjectName(); }}
+              />
+              <ActionButton
+                label="Reset"
+                disabled={!isDirtyProjectName || isSavingProjectName}
+                onClick={resetProjectName}
+              />
+            </div>
+          </div>
+          {saveMessage ? (
+            <div
+              role={saveState === "error" ? "alert" : "status"}
+              className={`text-xs font-semibold ${
+                saveState === "error"
+                  ? "text-status-red"
+                  : "text-signal-700 dark:text-signal-300"
+              }`}
+            >
+              {saveMessage}
+            </div>
+          ) : null}
+        </div>
+      </Row>
+      <Row label="Project id" description="Stable identifier used by the API and runtime.">
+        <div className="rounded-xl bg-black/[0.04] px-3 py-2 font-mono text-sm text-slate-600 dark:bg-white/[0.04] dark:text-slate-300">
+          {projectId}
+        </div>
+      </Row>
+      <Row label="Source type" description="How this project is mounted for local execution.">
+        <div className="rounded-xl bg-black/[0.04] px-3 py-2 text-sm font-semibold text-slate-700 dark:bg-white/[0.04] dark:text-slate-200">
+          {sourceTypeLabel}
+        </div>
+      </Row>
+      <Row label="Base directory" description="Workers and local execution enter this directory before acting.">
+        <div className="max-w-[28rem] rounded-xl bg-black/[0.04] px-3 py-2 font-mono text-sm text-slate-600 dark:bg-white/[0.04] dark:text-slate-300">
+          {baseDir}
+        </div>
+      </Row>
+    </SectionCard>
+  );
+};
 
 const AutomationCard: FunctionComponent<{
   settings: ProjectSettings;
@@ -153,12 +251,21 @@ const DockerRuntimeCard: FunctionComponent<{
         mono
       />
     </Row>
-    <Row label="Cache setup as image" description="Build and reuse a derived Docker image from the base image plus setup script contents." badge={getFieldBadge("cliWorkflow.containerCacheSetupScriptImage")} last>
+    <Row label="Cache setup as image" description="Build and reuse a derived Docker image from the base image plus setup script contents." badge={getFieldBadge("cliWorkflow.containerCacheSetupScriptImage")}>
       <Toggle aria-label="Toggle setting" value={settings.cliWorkflow.containerCacheSetupScriptImage} onChange={() => update((current) => ({
         ...current,
         cliWorkflow: {
           ...current.cliWorkflow,
           containerCacheSetupScriptImage: !current.cliWorkflow.containerCacheSetupScriptImage,
+        },
+      }))} />
+    </Row>
+    <Row label="Preinstall Playwright browsers" description="Install Chromium and OS dependencies for browser checks inside coding containers." badge={getFieldBadge("cliWorkflow.containerInstallPlaywrightBrowsers")} last>
+      <Toggle aria-label="Toggle setting" value={settings.cliWorkflow.containerInstallPlaywrightBrowsers} onChange={() => update((current) => ({
+        ...current,
+        cliWorkflow: {
+          ...current.cliWorkflow,
+          containerInstallPlaywrightBrowsers: !current.cliWorkflow.containerInstallPlaywrightBrowsers,
         },
       }))} />
     </Row>

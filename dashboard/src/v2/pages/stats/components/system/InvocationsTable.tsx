@@ -89,12 +89,28 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
     }
   };
 
+  const getAriaSort = (key: SystemSortKey): "ascending" | "descending" | undefined => {
+    if (sort.key !== key) {
+      return undefined;
+    }
+
+    return sort.dir === "asc" ? "ascending" : "descending";
+  };
+
+  const getSortButtonLabel = (label: string, key: SystemSortKey): string => {
+    if (sort.key !== key) {
+      return `Sort invocations by ${label}`;
+    }
+
+    return `Sort invocations by ${label}, currently sorted ${sort.dir === "asc" ? "ascending" : "descending"}`;
+  };
+
   const renderSortIcon = (key: SystemSortKey) => {
-    if (sort.key !== key) return <ArrowUpDown aria-label="sortable" className="ml-1 h-3 w-3" />;
+    if (sort.key !== key) return <ArrowUpDown aria-hidden="true" className="ml-1 h-3 w-3" />;
     return sort.dir === "asc" ? (
-      <ArrowUp aria-label="sorted ascending" className="ml-1 h-3 w-3 text-[color:var(--stats-signal-text)]" />
+      <ArrowUp aria-hidden="true" className="ml-1 h-3 w-3 text-[color:var(--stats-signal-text)]" />
     ) : (
-      <ArrowDown aria-label="sorted descending" className="ml-1 h-3 w-3 text-[color:var(--stats-signal-text)]" />
+      <ArrowDown aria-hidden="true" className="ml-1 h-3 w-3 text-[color:var(--stats-signal-text)]" />
     );
   };
 
@@ -154,7 +170,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
     return label.length > 0 ? label : "unknown";
   };
 
-  const cellClass = "block px-3 py-2 align-middle lg:table-cell lg:px-2 lg:py-3";
+  const cellClass = "block min-w-0 break-words px-3 py-2 align-middle [overflow-wrap:anywhere] lg:table-cell lg:px-2 lg:py-3";
   const mobileLabelClass = "mb-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)] lg:hidden";
 
   if (loading) {
@@ -194,12 +210,16 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
   return (
     <div className="min-w-0 overflow-visible">
       <table className="block w-full border-separate border-spacing-y-2 lg:table">
+        <caption className="sr-only">
+          Invocation ledger with sortable time, token, and duration columns. Rows include status, type, model, token counts, context, and transcript expansion controls.
+        </caption>
         <thead className="sticky top-0 z-10 hidden bg-[color:var(--stats-surface-panel)] backdrop-blur-sm lg:table-header-group">
           <tr className="text-left text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">
-            <th id="invocations-time" scope="col" className="pb-2 pl-6">
+            <th id="invocations-time" scope="col" aria-sort={getAriaSort("startedAt")} className="pb-2 pl-6">
               <button
                 type="button"
                 onClick={() => handleSort("startedAt")}
+                aria-label={getSortButtonLabel("time", "startedAt")}
                 className={`flex items-center ${TAB_IDLE_CLASS}`}
               >
                 Time {renderSortIcon("startedAt")}
@@ -208,38 +228,42 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
             <th id="invocations-status" scope="col" className="pb-2">Status</th>
             <th id="invocations-type" scope="col" className="pb-2">Type</th>
             <th id="invocations-model" scope="col" className="pb-2">Model</th>
-            <th id="invocations-input" scope="col" className="pb-2">
+            <th id="invocations-input" scope="col" aria-sort={getAriaSort("inputTokens")} className="pb-2">
               <button
                 type="button"
                 onClick={() => handleSort("inputTokens")}
+                aria-label={getSortButtonLabel("input tokens", "inputTokens")}
                 className={`flex items-center ${TAB_IDLE_CLASS}`}
               >
                 In {renderSortIcon("inputTokens")}
               </button>
             </th>
-            <th id="invocations-output" scope="col" className="pb-2">
+            <th id="invocations-output" scope="col" aria-sort={getAriaSort("outputTokens")} className="pb-2">
               <button
                 type="button"
                 onClick={() => handleSort("outputTokens")}
+                aria-label={getSortButtonLabel("output tokens", "outputTokens")}
                 className={`flex items-center ${TAB_IDLE_CLASS}`}
               >
                 Out {renderSortIcon("outputTokens")}
               </button>
             </th>
             <th id="invocations-cached" scope="col" className="pb-2">Cached</th>
-            <th id="invocations-total" scope="col" className="pb-2">
+            <th id="invocations-total" scope="col" aria-sort={getAriaSort("totalTokens")} className="pb-2">
               <button
                 type="button"
                 onClick={() => handleSort("totalTokens")}
+                aria-label={getSortButtonLabel("total tokens", "totalTokens")}
                 className={`flex items-center ${TAB_IDLE_CLASS}`}
               >
                 Total {renderSortIcon("totalTokens")}
               </button>
             </th>
-            <th id="invocations-duration" scope="col" className="pb-2">
+            <th id="invocations-duration" scope="col" aria-sort={getAriaSort("durationMs")} className="pb-2">
               <button
                 type="button"
                 onClick={() => handleSort("durationMs")}
+                aria-label={getSortButtonLabel("average duration", "durationMs")}
                 className={`flex items-center ${TAB_IDLE_CLASS}`}
               >
                 Avg Duration {renderSortIcon("durationMs")}
@@ -295,7 +319,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                       <div className={`shrink-0 rounded-lg p-1.5 ${providerBg} ${providerText}`}>
                         <ProviderIcon className="h-3 w-3" strokeWidth={2.5} />
                       </div>
-                      <span className="min-w-0 truncate">
+                      <span className="min-w-0 break-words [overflow-wrap:anywhere]">
                         <span className="font-bold capitalize text-[color:var(--stats-value-color)]">{formatLabel(invocation.provider)}</span>
                         <span className="mx-1 text-[color:var(--stats-label-color)]">·</span>
                         {invocation.model || "—"}
@@ -377,7 +401,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
           <button
             type="button"
             onClick={revealMore}
-            className="rounded-full bg-[color:var(--stats-surface-chip)] px-4 py-2 text-xs font-bold text-[color:var(--stats-detail-color)] transition-colors hover:bg-[color:var(--stats-surface-chip-hover)]"
+            className="rounded-full bg-[color:var(--stats-surface-chip)] px-4 py-2 text-xs font-bold text-[color:var(--stats-detail-color)] transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--stats-focus-ring)]"
           >
             Show more invocations
           </button>

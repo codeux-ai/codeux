@@ -115,7 +115,7 @@ const AppLayout = () => {
   const appearanceSettings = appearancePreview || effectiveSettings?.settings.appearance || systemSettings?.defaults.appearance;
   const appearanceTheme = appearanceSettings?.theme || "SYSTEM";
   const reducedMotion = appearanceSettings?.reducedMotion || "AUTO";
-  const backgroundPattern = appearanceSettings?.backgroundPattern || "HEXAGONS";
+  const backgroundPattern = appearanceSettings?.backgroundPattern || "NONE";
   const backgroundImage = appearanceSettings?.backgroundImage;
   // On a low-power render profile (e.g. the desktop app under WSL, where the GPU is software-only
   // and requestAnimationFrame has no vsync to pace it) the animated WebGL/canvas backgrounds

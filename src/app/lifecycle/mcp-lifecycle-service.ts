@@ -1,6 +1,7 @@
 import express from "express";
 import { createServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from "http";
 import type { AddressInfo } from "net";
+import type { Socket } from "node:net";
 import { randomUUID, timingSafeEqual, createHash } from "crypto";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -268,6 +269,13 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
     httpServer.listen(deps.port!, deps.host, () => resolve(httpServer));
     httpServer.on("error", reject);
   });
+  const sockets = new Set<Socket>();
+  server.on("connection", (socket: Socket) => {
+    sockets.add(socket);
+    socket.on("close", () => {
+      sockets.delete(socket);
+    });
+  });
   const address = server.address() as AddressInfo | null;
   const resolvedPort = address?.port ?? deps.port;
 
@@ -303,6 +311,11 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
           }
           resolve();
         });
+        server.closeIdleConnections?.();
+        for (const socket of sockets) {
+          socket.destroy();
+        }
+        server.closeAllConnections?.();
       });
     },
   };

@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import { StructuredProviderResponseService, ProviderTransportError, ProviderEmptyOutputError } from "../../../src/services/structured-provider-response-service.js";
+import {
+  StructuredProviderResponseService,
+  ProviderTransportError,
+  ProviderEmptyOutputError,
+  ProviderInvocationCancelledError,
+} from "../../../src/services/structured-provider-response-service.js";
 import type { ProviderExecutionService } from "../../../src/services/provider-execution-service.js";
 
 describe("StructuredProviderResponseService", () => {
@@ -62,6 +67,43 @@ describe("StructuredProviderResponseService", () => {
 
     // Should short circuit, exactly 1 call
     expect(mockExecution.executeProvider).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws ProviderInvocationCancelledError when the execution invocation was cancelled", async () => {
+    const mockExecution = {
+      executeProvider: vi.fn().mockResolvedValue({
+        ok: false,
+        stdout: "",
+        stderr: "",
+        nativeSessionId: null,
+      }),
+    } as unknown as ProviderExecutionService;
+
+    const mockRepo = {
+      getExecutionInvocation: vi.fn(() => ({ id: "inv-1", status: "cancelled" })),
+    } as any;
+
+    const service = new StructuredProviderResponseService({
+      providerExecutionService: mockExecution,
+      executionRepository: mockRepo,
+    });
+
+    await expect(service.executeAndParse({
+      projectId: "proj-1",
+      purpose: "qa_review",
+      type: "qa_review",
+      provider: "qwen-code",
+      model: "test-model",
+      apiKey: "123",
+      prompt: "review this",
+      invocationId: "inv-1",
+      settings: {} as any,
+      parseFn: (text) => JSON.parse(text),
+      buildRetryPrompt: () => "retry",
+      providerLabel: "QA"
+    })).rejects.toThrow(ProviderInvocationCancelledError);
+
+    expect(mockRepo.getExecutionInvocation).toHaveBeenCalledWith("inv-1");
   });
 
   it("retries provider failures when enabled and reuses the original prompt", async () => {

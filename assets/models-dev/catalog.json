@@ -48809,41 +48809,6 @@
         "temperature": true,
         "tool_call": true
       },
-      "zai-org/GLM-5": {
-        "attachment": false,
-        "cost": {
-          "cache_read": 0.5,
-          "input": 1,
-          "output": 3.2
-        },
-        "description": "General GLM flagship for coding, analysis, and tool-heavy engineering workflows",
-        "family": "glm",
-        "id": "zai-org/GLM-5",
-        "interleaved": {
-          "field": "reasoning_content"
-        },
-        "last_updated": "2026-02-12",
-        "limit": {
-          "context": 202752,
-          "output": 202752
-        },
-        "modalities": {
-          "input": [
-            "text"
-          ],
-          "output": [
-            "text"
-          ]
-        },
-        "name": "GLM-5",
-        "open_weights": true,
-        "reasoning": true,
-        "reasoning_options": [],
-        "release_date": "2026-02-12",
-        "structured_output": true,
-        "temperature": true,
-        "tool_call": true
-      },
       "zai-org/GLM-5.1": {
         "attachment": false,
         "cost": {
@@ -125334,21 +125299,21 @@
         "temperature": true,
         "tool_call": true
       },
-      "z-ai/glm-5.1": {
+      "z-ai/glm-5.2": {
         "attachment": false,
         "cost": {
           "input": 0,
           "output": 0
         },
-        "description": "Flagship GLM model for hybrid reasoning, coding, and agentic engineering",
+        "description": "Open flagship GLM for long-horizon coding agents and million-token context work",
         "family": "glm",
-        "id": "z-ai/glm-5.1",
+        "id": "z-ai/glm-5.2",
         "interleaved": {
           "field": "reasoning_content"
         },
-        "last_updated": "2026-03-27",
+        "last_updated": "2026-06-13",
         "limit": {
-          "context": 131072,
+          "context": 1000000,
           "output": 131072
         },
         "modalities": {
@@ -125359,7 +125324,7 @@
             "text"
           ]
         },
-        "name": "GLM-5.1",
+        "name": "GLM-5.2",
         "open_weights": true,
         "reasoning": true,
         "reasoning_options": [
@@ -125367,8 +125332,7 @@
             "type": "toggle"
           }
         ],
-        "release_date": "2026-03-27",
-        "status": "deprecated",
+        "release_date": "2026-06-13",
         "structured_output": true,
         "temperature": true,
         "tool_call": true
@@ -143198,6 +143162,7 @@
       "qwen/qwen3.6-27b": {
         "attachment": true,
         "cost": {
+          "cache_read": 0.15,
           "input": 0.285,
           "output": 2.4
         },
@@ -171988,8 +171953,9 @@
       "google-gemma-4-26b-a4b-it": {
         "attachment": true,
         "cost": {
-          "input": 0.1625,
-          "output": 0.5
+          "cache_read": 0.05,
+          "input": 0.13,
+          "output": 0.4
         },
         "description": "Open Gemma instruction model for efficient chat and self-hosted deployments",
         "family": "gemma",
@@ -172391,9 +172357,9 @@
       "kimi-k2-7-code": {
         "attachment": true,
         "cost": {
-          "cache_read": 0.2,
-          "input": 0.9,
-          "output": 4.3
+          "cache_read": 0.16,
+          "input": 0.75,
+          "output": 3.5
         },
         "description": "Coding-focused Kimi model, stronger on long-horizon repo work with less overthinking",
         "family": "kimi-k2",
@@ -172531,9 +172497,9 @@
       "minimax-m25": {
         "attachment": false,
         "cost": {
-          "cache_read": 0.04,
-          "input": 0.34,
-          "output": 1.19
+          "cache_read": 0.03,
+          "input": 0.27,
+          "output": 0.95
         },
         "description": "Prior MiniMax coding model for agent workflows, office edits, and automation",
         "family": "minimax",
@@ -172613,7 +172579,7 @@
         "tool_call": true
       },
       "minimax-m3-preview": {
-        "attachment": false,
+        "attachment": true,
         "cost": {
           "cache_read": 0.06,
           "input": 0.3,
@@ -172629,7 +172595,9 @@
         },
         "modalities": {
           "input": [
-            "text"
+            "text",
+            "image",
+            "video"
           ],
           "output": [
             "text"
@@ -172828,8 +172796,9 @@
       "olafangensan-glm-4.7-flash-heretic": {
         "attachment": false,
         "cost": {
-          "input": 0.14,
-          "output": 0.8
+          "cache_read": 0.035,
+          "input": 0.07,
+          "output": 0.4
         },
         "description": "Efficient GLM model for fast reasoning, coding, and agent workflows",
         "family": "glm",
@@ -173813,8 +173782,9 @@
       "qwen3-vl-235b-a22b": {
         "attachment": true,
         "cost": {
-          "input": 0.25,
-          "output": 1.5
+          "cache_read": 0.1,
+          "input": 0.21,
+          "output": 1.9
         },
         "description": "Multimodal model for analyzing text, images, documents, and rich media",
         "id": "qwen3-vl-235b-a22b",
@@ -173902,9 +173872,9 @@
       "xiaomi-mimo-v2-5": {
         "attachment": true,
         "cost": {
-          "cache_read": 0.0625,
-          "input": 0.175,
-          "output": 0.35
+          "cache_read": 0.05,
+          "input": 0.14,
+          "output": 0.28
         },
         "description": "Open MiMo model for multimodal coding agents and long-context automation",
         "family": "mimo",
@@ -174210,9 +174180,9 @@
       "zai-org-glm-5-1": {
         "attachment": false,
         "cost": {
-          "cache_read": 0.325,
-          "input": 1.75,
-          "output": 5.5
+          "cache_read": 0.286,
+          "input": 1.54,
+          "output": 4.84
         },
         "description": "Strong GLM coding model for agentic engineering, terminals, and repository generation",
         "family": "glm",

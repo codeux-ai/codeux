@@ -182,7 +182,8 @@ export const MultiSelect: FunctionComponent<MultiSelectProps> = ({
   return (
     <div className={`relative ${className}`} ref={containerRef}>
       <div
-        className={`flex min-h-10 w-full flex-wrap items-center gap-1.5 rounded-[0.95rem] border border-black/[0.06] bg-transparent px-3 py-1.5 transition-colors focus-within:border-signal-500 dark:border-white/[0.07] ${ariaInvalid === 'true' || ariaInvalid === true ? 'border-status-red' : ''}`}
+        style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
+        className={`flex min-h-10 w-full flex-wrap items-center gap-1.5 rounded-[0.95rem] border border-black/[0.06] bg-transparent px-3 py-1.5 transition-colors motion-reduce:duration-0 motion-reduce:ease-none focus-within:border-signal-500 focus-within:ring-2 focus-within:ring-[var(--focus-ring-signal)] focus-within:ring-offset-2 focus-within:ring-offset-white dark:border-white/[0.07] dark:focus-within:ring-offset-void-900 ${ariaInvalid === 'true' || ariaInvalid === true ? 'border-status-red focus-within:ring-[var(--focus-ring-danger)]' : ''}`}
         onClick={() => {
           inputRef.current?.focus();
           setIsOpen(true);
@@ -205,6 +206,7 @@ export const MultiSelect: FunctionComponent<MultiSelectProps> = ({
                   removeTag(tag);
                 }}
                 className="hover:text-status-red focus:outline-none"
+                aria-disabled="false"
                 aria-label={`Remove ${label}`}
               >
                 <X className="h-3 w-3" strokeWidth={2.5} />
@@ -253,7 +255,7 @@ export const MultiSelect: FunctionComponent<MultiSelectProps> = ({
                 style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
                 aria-selected={isSelected}
                 tabIndex={-1}
-                className={`flex cursor-pointer items-center px-3 py-2 text-xs hover:bg-black/[0.04] dark:hover:bg-white/[0.05] focus:bg-black/[0.04] dark:focus:bg-white/[0.05] focus:ring-1 focus:ring-inset focus:ring-signal-500/50 outline-none ${
+                className={`flex cursor-pointer items-center px-3 py-2 text-xs transition-colors motion-reduce:duration-0 motion-reduce:ease-none hover:bg-black/[0.04] dark:hover:bg-white/[0.05] focus:bg-black/[0.04] dark:focus:bg-white/[0.05] focus:ring-1 focus:ring-inset focus:ring-[var(--focus-ring-signal)] outline-none ${
                   isSelected ? "bg-signal-500/10 text-signal-700 dark:text-signal-400" : "text-slate-700 dark:text-slate-300"
                 }`}
                 onMouseDown={(e) => {

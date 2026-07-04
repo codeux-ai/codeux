@@ -408,13 +408,34 @@ describe("SettingsIntegrationsPanel", () => {
         expect(container.textContent).toContain("Gemini Primary");
       });
 
-      const localCopyBtn = screen.getByRole("button", { name: /Local Copy/i });
+      const localCopyBtn = screen.getByRole("radio", { name: /Local Copy/i });
       fireEvent.click(localCopyBtn);
 
       expect(state.updateSystem).toHaveBeenCalled();
       expect(updatedSystem.integrations.providers.gemini.authType).toBe("localAuth");
       expect(updatedSystem.integrations.providers.gemini.mountAuth).toBe(true);
       expect(updatedSystem.integrations.providers.gemini.apiKey).toBe("");
+      expect(screen.getByRole("status").textContent).toContain("Gemini Primary authentication mode changed locally");
+    });
+
+    it("exposes dashboard login as a dialog-launching busy control when dashboard auth is selected", async () => {
+      const state = createBaseState("codex", {
+        apiKey: "",
+        authType: "dashboardAuth",
+        mountAuth: true,
+        authPath: "~/.code-ux/credentials/codex",
+      });
+
+      const { container } = render(<SettingsIntegrationsPanel state={state as any} />);
+
+      await waitFor(() => {
+        expect(container.textContent).toContain("Dashboard Login");
+      });
+
+      const loginButton = screen.getByRole("button", { name: "Connect and log in to Codex Primary" });
+      expect(loginButton.getAttribute("aria-haspopup")).toBe("dialog");
+      expect(loginButton.getAttribute("aria-expanded")).toBe("false");
+      expect(loginButton.getAttribute("aria-busy")).toBe("false");
     });
 
     it("clears API key and disables base URL / model fields when switching Codex to Local Copy", async () => {
@@ -438,7 +459,7 @@ describe("SettingsIntegrationsPanel", () => {
         expect(container.textContent).toContain("Codex Primary");
       });
 
-      const localCopyBtn = screen.getByRole("button", { name: /Local Copy/i });
+      const localCopyBtn = screen.getByRole("radio", { name: /Local Copy/i });
       fireEvent.click(localCopyBtn);
 
       expect(state.updateSystem).toHaveBeenCalled();
@@ -486,7 +507,7 @@ describe("SettingsIntegrationsPanel", () => {
         expect(container.textContent).toContain("Claude Primary");
       });
 
-      const localCopyBtn = screen.getByRole("button", { name: /Local Copy/i });
+      const localCopyBtn = screen.getByRole("radio", { name: /Local Copy/i });
       fireEvent.click(localCopyBtn);
 
       expect(state.updateSystem).toHaveBeenCalled();
@@ -518,7 +539,7 @@ describe("SettingsIntegrationsPanel", () => {
         expect(container.textContent).toContain("Qwen Primary");
       });
 
-      const localCopyBtn = screen.getByRole("button", { name: /Local Copy/i });
+      const localCopyBtn = screen.getByRole("radio", { name: /Local Copy/i });
       fireEvent.click(localCopyBtn);
 
       expect(state.updateSystem).toHaveBeenCalled();
@@ -549,7 +570,7 @@ describe("SettingsIntegrationsPanel", () => {
         expect(container.textContent).toContain("OpenCode Primary");
       });
 
-      const localCopyBtn = screen.getByRole("button", { name: /Local Copy/i });
+      const localCopyBtn = screen.getByRole("radio", { name: /Local Copy/i });
       fireEvent.click(localCopyBtn);
 
       expect(state.updateSystem).toHaveBeenCalled();

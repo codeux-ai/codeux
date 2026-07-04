@@ -94,7 +94,8 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
 
           if (e.key === "ArrowRight" || e.key === "ArrowLeft" || e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Home" || e.key === "End") {
             e.preventDefault();
-            const currentIndex = tabs.findIndex(t => t.id === activeTab);
+            const focusedIndex = tabs.findIndex((tab) => tabRefs.current[tab.id] === document.activeElement);
+            const currentIndex = focusedIndex >= 0 ? focusedIndex : tabs.findIndex(t => t.id === activeTab);
             let nextIndex = currentIndex;
             if (e.key === "Home") {
               nextIndex = 0;

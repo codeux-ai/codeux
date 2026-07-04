@@ -13,6 +13,7 @@ export interface DockerSetupImageCacheInput {
   baseImage: string;
   setupScriptPath?: string;
   cacheEnabled: boolean;
+  installPlaywrightBrowsers?: boolean;
   buildIfMissing?: boolean;
   runtimeRoot: string;
   repoPath: string;
@@ -39,6 +40,7 @@ export class DockerSetupImageCache {
       onActivity,
       mapSourcePathForDaemon,
     } = input;
+    const installPlaywrightBrowsers = input.installPlaywrightBrowsers === true;
 
     if (!setupScriptPath) {
       if (cacheEnabled) {
@@ -60,9 +62,11 @@ export class DockerSetupImageCache {
       return { image: baseImage, runSetupScriptAtRuntime: true };
     }
 
-    const dockerfileContent = this.buildDockerfile(baseImage);
+    const dockerfileContent = this.buildDockerfile(baseImage, installPlaywrightBrowsers);
     const cacheKey = createHash("sha1")
       .update(baseImage)
+      .update("\n")
+      .update(installPlaywrightBrowsers ? "playwright=1" : "playwright=0")
       .update("\n")
       .update(scriptContent)
       .update("\n")
@@ -74,7 +78,7 @@ export class DockerSetupImageCache {
 
     await fs.mkdir(cacheDir, { recursive: true });
     await fs.writeFile(path.join(cacheDir, "setup.sh"), scriptContent, "utf8");
-    await fs.writeFile(path.join(cacheDir, "Dockerfile"), this.buildDockerfile(baseImage), "utf8");
+    await fs.writeFile(path.join(cacheDir, "Dockerfile"), dockerfileContent, "utf8");
 
     if (await this.imageExists(imageTag, repoPath, signal)) {
       onActivity(`Using cached Docker setup image ${imageTag}.`);
@@ -112,7 +116,7 @@ export class DockerSetupImageCache {
     }
   }
 
-  private buildDockerfile(baseImage: string): string {
+  private buildDockerfile(baseImage: string, installPlaywrightBrowsers: boolean): string {
     return [
       `FROM ${baseImage}`,
       `LABEL org.opencontainers.image.title="Code UX setup cache"`,
@@ -120,9 +124,11 @@ export class DockerSetupImageCache {
       `LABEL ai.codeux.role="setup-cache"`,
       `LABEL ai.codeux.base-image="${this.escapeDockerfileLabelValue(baseImage)}"`,
       "USER root",
+      `ENV CODE_UX_INSTALL_PLAYWRIGHT=${installPlaywrightBrowsers ? "1" : "0"}`,
+      ...(installPlaywrightBrowsers ? ["ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright"] : []),
       "RUN if command -v apt-get >/dev/null 2>&1; then apt-get update -qy && apt-get install -qy --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*; fi",
       "COPY setup.sh /tmp/code-ux-setup.sh",
-      "RUN sed -i 's/\\r//' /tmp/code-ux-setup.sh && bash /tmp/code-ux-setup.sh && rm -f /tmp/code-ux-setup.sh",
+      "RUN sed -i 's/\\r//' /tmp/code-ux-setup.sh && bash /tmp/code-ux-setup.sh && rm -f /tmp/code-ux-setup.sh && if [ \"$CODE_UX_INSTALL_PLAYWRIGHT\" = \"1\" ] && [ -d /ms-playwright ]; then chmod -R a+rX /ms-playwright; fi",
     ].join("\n");
   }
 

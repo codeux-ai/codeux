@@ -6,11 +6,17 @@ export interface ActivityCoalescerSink {
   ): void;
 }
 
+export interface ActivityCoalescerLogger {
+  warn(message: string, metadata?: Record<string, unknown>): void;
+}
+
 export interface ActivityWriteCoalescerOptions {
   /** Max time a buffered activity waits before being flushed. */
   flushIntervalMs?: number;
   /** Flush immediately once this many activities are buffered. */
   maxBuffer?: number;
+  /** Optional structured logger used to surface best-effort persistence failures. */
+  logger?: ActivityCoalescerLogger;
 }
 
 /**
@@ -28,14 +34,16 @@ export class ActivityWriteCoalescer {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private readonly flushIntervalMs: number;
   private readonly maxBuffer: number;
+  private readonly logger: ActivityCoalescerLogger | null;
 
   constructor(
     private readonly sink: ActivityCoalescerSink,
     private readonly sessionId: string,
     options: ActivityWriteCoalescerOptions = {},
   ) {
-    this.flushIntervalMs = options.flushIntervalMs ?? 250;
-    this.maxBuffer = options.maxBuffer ?? 50;
+    this.flushIntervalMs = Math.max(0, options.flushIntervalMs ?? 250);
+    this.maxBuffer = Math.max(1, Math.floor(options.maxBuffer ?? 50));
+    this.logger = options.logger ?? null;
   }
 
   push(description: string, originator?: string): void {
@@ -63,13 +71,23 @@ export class ActivityWriteCoalescer {
     this.buffer = [];
     try {
       this.sink.appendActivities(this.sessionId, batch);
-    } catch {
+    } catch (error) {
+      this.logger?.warn("activity_write_coalescer_flush_failed", {
+        sessionId: this.sessionId,
+        batchSize: batch.length,
+        error,
+      });
       // Activity persistence is best-effort; never let it break the provider run.
     }
   }
 
   /** Flush any remaining buffered activities and cancel the pending timer. */
   stop(): void {
+    this.flush();
+  }
+
+  /** Alias for callers that model shutdown as an explicit drain. */
+  drain(): void {
     this.flush();
   }
 }

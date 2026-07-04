@@ -48,12 +48,30 @@ The internal architecture uses a single unified `buildPublishTask` helper for al
 The current publisher schedules:
 
 - `project.live.updated`
+- `project.git.updated`
 - `projects.updated`
 - `project.structure.updated`
 - `project.execution.updated`
+- `project.runtime_status.updated`
 - `overview.telemetry.updated`
 
 This avoids emitting one websocket message for every low-level DB mutation while still keeping the dashboard near realtime.
+
+Coalescing rules:
+
+- Snapshot refreshes are coalesced by scope before the debounce flush. Repeated schedules for the same project and event type collapse into one pending publish.
+- `projects.updated` and `overview.telemetry.updated` are represented as boolean pending flags, so a burst can schedule at most one publish for each surface per flush.
+- Throttled snapshot publishes are requeued for the next allowed cadence instead of rebuilt immediately.
+- Snapshot payloads that fingerprint the same after timestamp fields are ignored are not written or broadcast again.
+- `execution_refresh` is a lightweight non-replayable invalidation event and coalesces scheduled project ids into one debounce payload.
+- Replayable runtime and chat events published through `publishRawEvent` remain distinct; they are not deduplicated by the snapshot coalescer.
+
+Failure handling guarantees:
+
+- A failed realtime event append is logged as `dashboard_realtime_event_write_failed` with event type, scope, project id, and correlation id when present. The failure increments the event type's failure metric and does not crash unrelated scheduled publishes.
+- A throwing in-process realtime listener is logged with sequence, scope, project id, and correlation id, then delivery continues for remaining listeners.
+- A websocket socket write failure is logged as `dashboard_realtime_websocket_broadcast_failed` with the event context and client id. The failed socket is destroyed and removed without interrupting other subscribed sockets.
+- Provider streaming activity writes are buffered by `ActivityWriteCoalescer`; failed activity batch writes are best-effort, logged with session id and batch size, and never abort the provider run.
 
 Production refinement shipped on March 15, 2026:
 
@@ -80,6 +98,8 @@ Current subscription scopes:
 - `projects`
 - `overview`
 - `project:<projectId>`
+- `project:<projectId>:live`
+- `project:<projectId>:git`
 - `thread:<threadId>`
 
 Reconnect behavior:
@@ -112,7 +132,7 @@ Behavior:
 - sprint and task pages now react to project-structure invalidation events
 - sprint and task hooks now treat realtime invalidation as silent background refresh, which avoids foreground loading flicker while the browser is already showing current data
 - execution snapshot consumers now diff snapshots semantically instead of treating every fetch-time `updatedAt` stamp as a meaningful change
-- git status is now folded into that same `/api/live` contract and refreshed server-side so the browser no longer polls git independently on the Live page
+- git status is now kept off the hot `/api/live` contract and streams only on the `project:<projectId>:git` sub-scope, so base project pages do not parse large Git/CI payloads they ignore
 - reconnect recovery for the Live page now means re-fetching `/api/live` on `snapshot_required`, not running parallel status/execution repair logic in the browser
 - polling remains a recovery tool for other websocket-backed dashboard surfaces, but the Live page no longer keeps its own steady-state poll loop
 
@@ -144,6 +164,7 @@ Production refinement shipped on March 15, 2026:
 
 - project execution, runtime-status, and structure refresh scheduling now also fan into `project.live.updated`, so the Live page always receives a fresh combined snapshot after any committed runtime mutation
 - the server now performs a periodic background live-snapshot refresh for the selected project so git status and other slower-changing runtime metadata continue to stream even when no new task event is being written
+- large live and git snapshot publishers check websocket subscription demand before running their loaders, so task churn does not assemble or serialize heavy frames when no tab is subscribed to `project:<projectId>:live` or `project:<projectId>:git`
 
 ## What This Improves
 

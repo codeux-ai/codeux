@@ -258,7 +258,7 @@ describe("KanbanTaskCard Integration", () => {
     );
 
     // We verify the new status is announced via aria-live
-    const liveRegion = await findByText("Task TASK-123 status is now completed");
+    const liveRegion = await findByText("Task TASK-123 status is now Completed");
     expect(liveRegion).toBeInTheDocument();
     expect(liveRegion).toHaveAttribute("aria-live", "polite");
     expect(container).toBeInTheDocument();
@@ -306,7 +306,7 @@ describe("KanbanTaskCard Integration", () => {
     );
 
     // Check that descriptive 'Dependency' text is in the document (from the new sr-only span)
-    const srText = getByText(/Dependency TASK-124 \(Backend API\) is completed/i);
+    const srText = getByText(/Depends on task TASK-124, status: completed. Title: Backend API/i);
     expect(srText).toBeInTheDocument();
     expect(srText).toHaveClass("sr-only");
 
@@ -328,6 +328,16 @@ describe("KanbanTaskCard Integration", () => {
     const kbdGuidance = document.getElementById(`task-card-kbd-${mockViewModel.task.recordId}`);
     expect(kbdGuidance).toBeInTheDocument();
     expect(kbdGuidance).toHaveTextContent(/Draggable task. Drag and drop is pointer-only. Keyboard reordering is not supported/i);
+  });
+
+  it("does not trap Enter or Space on the pointer-only draggable card", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<KanbanTaskCard viewModel={mockViewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    const card = container.querySelector(".kanban-card") as HTMLElement;
+    expect(card).toHaveAccessibleName(/Task TASK-123: Implement new feature. Status In Progress. Priority High/i);
+    card.focus();
+    await user.keyboard("{Enter} ");
+    expect(card).toHaveFocus();
   });
 
   it("provides task titles in action button accessible labels", () => {

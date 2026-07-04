@@ -112,7 +112,20 @@ describe("SprintTaskDispatchService", () => {
       name: "Container task",
       provider: "codex",
     });
-    expect(taskService.startSprintTask).toHaveBeenCalled();
+    expect(taskService.startSprintTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: taskRecord.taskKey,
+        record_id: taskRecord.id,
+      }),
+      undefined,
+      "feature/sprint-8",
+      "/workspace/dispatch-project",
+      8,
+      expect.objectContaining({ projectId: project.id }),
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({ taskRecordId: taskRecord.id }),
+    );
 
     const dispatches = executionRepository.listTaskDispatches({
       projectId: project.id,
@@ -123,6 +136,94 @@ describe("SprintTaskDispatchService", () => {
       executorType: "docker_cli",
       status: "running",
     });
+  });
+
+  it("does not revive a dispatch cancelled while session startup is in flight", async () => {
+    const { projectManagementRepository, executionRepository, taskService, service } = await createFixture();
+    const project = projectManagementRepository.createProject({
+      name: "Cancelled Startup Project",
+      sourceType: "local",
+      sourceRef: "/workspace/cancelled-startup-project",
+    });
+    const sprint = projectManagementRepository.createSprint(project.id, {
+      name: "Cancelled Startup Sprint",
+      number: 18,
+    });
+    const taskRecord = projectManagementRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Cancel during startup",
+      promptMarkdown: "The sprint is cancelled while the provider starts.",
+      executorType: "docker_cli",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      executorMode: "mixed",
+    });
+
+    taskService.startSprintTask.mockImplementation(async (
+      _task: unknown,
+      _sourceId: unknown,
+      _featureBranch: unknown,
+      _repoPath: unknown,
+      _sprintNumber: unknown,
+      _settingsScope: unknown,
+      dispatchId: string,
+      taskRunId: string,
+    ) => {
+      const cancelledAt = new Date().toISOString();
+      executionRepository.updateSprintRun(sprintRun.id, {
+        status: "cancelled",
+        finishedAt: cancelledAt,
+        lastHeartbeatAt: cancelledAt,
+      });
+      executionRepository.updateTaskDispatch(dispatchId, {
+        status: "cancelled",
+        finishedAt: cancelledAt,
+        lastHeartbeatAt: cancelledAt,
+      });
+      executionRepository.updateTaskRun(taskRunId, {
+        state: "BLOCKED",
+        finishedAt: cancelledAt,
+      });
+      projectManagementRepository.updateTask(taskRecord.id, {
+        status: "pending",
+      });
+      return {
+        id: "late-session",
+        name: "Late session",
+        provider: "codex",
+      };
+    });
+
+    await service.startTask({
+      task: {
+        id: taskRecord.taskKey,
+        record_id: taskRecord.id,
+        title: taskRecord.title,
+        prompt: taskRecord.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "PENDING",
+      },
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      featureBranch: "feature/sprint-18",
+      repoPath: "/workspace/cancelled-startup-project",
+      sprintNumber: 18,
+    });
+
+    const [dispatch] = executionRepository.listTaskDispatches({
+      projectId: project.id,
+      sprintRunId: sprintRun.id,
+    });
+    const taskRun = executionRepository.getLatestTaskRun(taskRecord.id, sprintRun.id);
+
+    expect(dispatch).toMatchObject({ status: "cancelled" });
+    expect(taskRun).toMatchObject({ state: "BLOCKED" });
+    expect(projectManagementRepository.getTask(taskRecord.id)).toMatchObject({ status: "pending" });
   });
 
   it("creates a running Jules execution invocation as soon as the task is dispatched", async () => {

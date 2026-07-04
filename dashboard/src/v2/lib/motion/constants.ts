@@ -1,11 +1,21 @@
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useResolvedMotionDuration } from "../../hooks/use-reduced-motion.js";
+import type { InteractionContractName } from "./tokens.js";
+
+export interface GsapInteractionToken {
+  duration: number;
+  ease: string;
+}
+
+export type GsapInteractionTokenMap = Record<InteractionContractName, GsapInteractionToken>;
 
 export const GSAP_DURATIONS = {
   fast: 0.15,
   base: 0.2,
   slow: 0.3
 } as const;
+
+export type GsapDurationScale = Record<keyof typeof GSAP_DURATIONS, number>;
 
 export const GSAP_EASINGS = {
   spring: "elastic.out(1, 0.4)",
@@ -14,7 +24,7 @@ export const GSAP_EASINGS = {
   linear: "linear"
 } as const;
 
-export const GSAP_INTERACTION_TOKENS = {
+export const GSAP_INTERACTION_TOKENS: GsapInteractionTokenMap = {
   controlFeedback: {
     duration: GSAP_DURATIONS.fast,
     ease: GSAP_EASINGS.smooth
@@ -49,7 +59,7 @@ export const GSAP_INTERACTION_TOKENS = {
   }
 } as const;
 
-export function useGsapDurations() {
+export function useGsapDurations(): GsapDurationScale {
   const reducedMotion = useReducedMotion();
   if (reducedMotion) {
     return {
@@ -65,7 +75,7 @@ export function useGsapDurations() {
  * Hook to get GSAP interaction tokens safely resolved for reduced motion.
  * Returns durations as 0 when reduced motion is preferred.
  */
-export function useGsapInteractionTokens() {
+export function useGsapInteractionTokens(): GsapInteractionTokenMap {
   const controlFeedbackDuration = useResolvedMotionDuration(GSAP_INTERACTION_TOKENS.controlFeedback.duration);
   const enterExitDuration = useResolvedMotionDuration(GSAP_INTERACTION_TOKENS.enterExit.duration);
   const expansionCollapseDuration = useResolvedMotionDuration(GSAP_INTERACTION_TOKENS.expansionCollapse.duration);
@@ -76,37 +86,13 @@ export function useGsapInteractionTokens() {
   const asyncFeedbackDuration = useResolvedMotionDuration(GSAP_INTERACTION_TOKENS.asyncFeedback.duration);
 
   return {
-    controlFeedback: {
-      ...GSAP_INTERACTION_TOKENS.controlFeedback,
-      duration: controlFeedbackDuration
-    },
-    enterExit: {
-      ...GSAP_INTERACTION_TOKENS.enterExit,
-      duration: enterExitDuration
-    },
-    expansionCollapse: {
-      ...GSAP_INTERACTION_TOKENS.expansionCollapse,
-      duration: expansionCollapseDuration
-    },
-    selectionMovement: {
-      ...GSAP_INTERACTION_TOKENS.selectionMovement,
-      duration: selectionMovementDuration
-    },
-    listReveal: {
-      ...GSAP_INTERACTION_TOKENS.listReveal,
-      duration: listRevealDuration
-    },
-    listReorder: {
-      ...GSAP_INTERACTION_TOKENS.listReorder,
-      duration: listReorderDuration
-    },
-    inlineValidation: {
-      ...GSAP_INTERACTION_TOKENS.inlineValidation,
-      duration: inlineValidationDuration
-    },
-    asyncFeedback: {
-      ...GSAP_INTERACTION_TOKENS.asyncFeedback,
-      duration: asyncFeedbackDuration
-    }
+    controlFeedback: { ...GSAP_INTERACTION_TOKENS.controlFeedback, duration: controlFeedbackDuration },
+    enterExit: { ...GSAP_INTERACTION_TOKENS.enterExit, duration: enterExitDuration },
+    expansionCollapse: { ...GSAP_INTERACTION_TOKENS.expansionCollapse, duration: expansionCollapseDuration },
+    selectionMovement: { ...GSAP_INTERACTION_TOKENS.selectionMovement, duration: selectionMovementDuration },
+    listReveal: { ...GSAP_INTERACTION_TOKENS.listReveal, duration: listRevealDuration },
+    listReorder: { ...GSAP_INTERACTION_TOKENS.listReorder, duration: listReorderDuration },
+    inlineValidation: { ...GSAP_INTERACTION_TOKENS.inlineValidation, duration: inlineValidationDuration },
+    asyncFeedback: { ...GSAP_INTERACTION_TOKENS.asyncFeedback, duration: asyncFeedbackDuration }
   };
 }

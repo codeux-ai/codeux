@@ -9,14 +9,25 @@ describe("Dialog and Modal", () => {
     cleanup();
   });
 
-  test("renders with accessible name", () => {
+  test("does not add a generic fallback name", () => {
     render(
       <Dialog isOpen={true} onClose={() => {}}>
         <div>Content</div>
       </Dialog>
     );
     const dialog = screen.getByRole("dialog");
-    expect(dialog.getAttribute("aria-label")).toBe("Dialog");
+    expect(dialog.getAttribute("aria-label")).toBeNull();
+    expect(dialog.getAttribute("aria-labelledby")).toBeNull();
+  });
+
+  test("uses explicit aria-label as accessible name", () => {
+    render(
+      <Dialog isOpen={true} onClose={() => {}} ariaLabel="Delete task">
+        <div>Content</div>
+      </Dialog>
+    );
+    const dialog = screen.getByRole("dialog", { name: "Delete task" });
+    expect(dialog.getAttribute("aria-label")).toBe("Delete task");
   });
 
   test("does not add fallback if aria-labelledby is provided", () => {

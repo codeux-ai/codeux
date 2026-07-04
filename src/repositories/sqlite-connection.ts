@@ -45,6 +45,7 @@ export function openSqliteDatabase(dbPath: string): DatabaseSync {
         PRAGMA temp_store = MEMORY;
         PRAGMA cache_size = -16000;
         PRAGMA mmap_size = 268435456;
+        PRAGMA wal_autocheckpoint = 0;
       `);
       return db;
     } catch (error) {

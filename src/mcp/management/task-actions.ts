@@ -5,57 +5,40 @@ import type { ExecutionRepository } from "../../repositories/execution-repositor
 import type { TaskRerunService } from "../../services/task-rerun-service.js";
 import type { CreateTaskInput, TaskExecutorType, TaskPriority, TaskStatus, UpdateTaskInput } from "../../contracts/project-management-types.js";
 import type { ProviderId } from "../../contracts/app-types.js";
+import {
+  managementValidationError,
+  parseOptionalEnumStrict,
+  parseOptionalNullableString,
+  parseOptionalString,
+  parseOptionalStringAlias,
+  parseRequiredString as readRequiredString,
+} from "./payload-parsers.js";
 
 const VALID_PRIORITIES: TaskPriority[] = ["critical", "high", "medium", "low"];
 const VALID_TASK_STATUSES: TaskStatus[] = ["pending", "in_progress", "coding_completed", "completed", "QA_REVIEW_FAILED"];
 const VALID_EXECUTOR_TYPES: TaskExecutorType[] = ["auto", "docker_cli", "jules"];
 
 function readString(payload: Record<string, unknown>, key: string): string | undefined {
-  return typeof payload[key] === "string" ? payload[key].trim() : undefined;
+  return parseOptionalString(payload, key);
 }
 
-function readNullableString(payload: Record<string, unknown>, key: string): string | null | undefined {
-  if (!(key in payload)) {
+function parsePriority(payload: Record<string, unknown>, key: string): TaskPriority | undefined {
+  return parseOptionalEnumStrict(payload, key, VALID_PRIORITIES);
+}
+
+function parseStatus(payload: Record<string, unknown>, key: string): TaskStatus | undefined {
+  if (!(key in payload) || payload[key] === undefined || payload[key] === null) {
     return undefined;
   }
-  if (payload[key] === null) {
-    return null;
-  }
-  return typeof payload[key] === "string" ? payload[key].trim() : undefined;
-}
-
-function readRequiredString(payload: Record<string, unknown>, key: string): string {
   const value = readString(payload, key);
-  if (!value) {
-    throw new Error(`${key} is required`);
+  if (value && VALID_TASK_STATUSES.includes(value as TaskStatus)) {
+    return value as TaskStatus;
   }
-  return value;
+  throw managementValidationError(`Invalid value for ${key}. Must be one of: ${VALID_TASK_STATUSES.join(", ")}`, key);
 }
 
-function readStringAlias(payload: Record<string, unknown>, primaryKey: string, aliasKey: string): string | undefined {
-  return readString(payload, primaryKey) || readString(payload, aliasKey);
-}
-
-function parsePriority(val: unknown): TaskPriority | undefined {
-  if (typeof val === "string") {
-    const normalized = val.toLowerCase();
-    if (VALID_PRIORITIES.includes(normalized as TaskPriority)) {
-      return normalized as TaskPriority;
-    }
-  }
-  return undefined;
-}
-
-function parseStatus(val: unknown): TaskStatus | undefined {
-  return typeof val === "string" && VALID_TASK_STATUSES.includes(val as TaskStatus)
-    ? val as TaskStatus
-    : undefined;
-}
-
-function parseExecutorType(val: unknown): TaskExecutorType | undefined {
-  return typeof val === "string" && VALID_EXECUTOR_TYPES.includes(val as TaskExecutorType)
-    ? val as TaskExecutorType
-    : undefined;
+function parseExecutorType(payload: Record<string, unknown>, key: string): TaskExecutorType | undefined {
+  return parseOptionalEnumStrict(payload, key, VALID_EXECUTOR_TYPES);
 }
 
 function readStringArray(value: unknown): string[] | undefined {
@@ -135,17 +118,17 @@ export class TaskActions {
 
     const input: CreateTaskInput = {
       sprintId,
-      title: readStringAlias(payload, "title", "name") || "New Task",
+      title: parseOptionalStringAlias(payload, "title", "name") || "New Task",
       promptMarkdown: readString(payload, "promptMarkdown") || "",
       description: readString(payload, "description") || "",
-      priority: parsePriority(payload.priority) || "medium",
-      executorType: parseExecutorType(payload.executorType) || "auto",
-      status: parseStatus(payload.status) || "pending",
+      priority: parsePriority(payload, "priority") || "medium",
+      executorType: parseExecutorType(payload, "executorType") || "auto",
+      status: parseStatus(payload, "status") || "pending",
       dependsOnTaskIds: readStringArray(payload.dependsOnTaskIds) || [],
     };
     const taskKey = readString(payload, "taskKey");
-    const agentPresetId = readNullableString(payload, "agentPresetId");
-    const model = readNullableString(payload, "model");
+    const agentPresetId = parseOptionalNullableString(payload, "agentPresetId");
+    const model = parseOptionalNullableString(payload, "model");
     const sortOrder = readSortOrder(payload.sortOrder);
 
     if (taskKey) input.taskKey = taskKey;
@@ -164,13 +147,13 @@ export class TaskActions {
     const taskId = readRequiredString(payload, "taskId");
 
     const updateInput: UpdateTaskInput = {};
-    const title = readStringAlias(payload, "title", "name");
+    const title = parseOptionalStringAlias(payload, "title", "name");
     const promptMarkdown = readString(payload, "promptMarkdown");
     const description = readString(payload, "description");
-    const agentPresetId = readNullableString(payload, "agentPresetId");
-    const model = readNullableString(payload, "model");
-    const status = parseStatus(payload.status);
-    const executorType = parseExecutorType(payload.executorType);
+    const agentPresetId = parseOptionalNullableString(payload, "agentPresetId");
+    const model = parseOptionalNullableString(payload, "model");
+    const status = parseStatus(payload, "status");
+    const executorType = parseExecutorType(payload, "executorType");
     const sortOrder = readSortOrder(payload.sortOrder);
 
     if (title) updateInput.title = title;
@@ -184,7 +167,7 @@ export class TaskActions {
     if (typeof payload.isIndependent === "boolean") updateInput.isIndependent = payload.isIndependent;
     if (typeof payload.isMerged === "boolean") updateInput.isMerged = payload.isMerged;
 
-    const priority = parsePriority(payload.priority);
+    const priority = parsePriority(payload, "priority");
     if (priority) {
       updateInput.priority = priority;
     }

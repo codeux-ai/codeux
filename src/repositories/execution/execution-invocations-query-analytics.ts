@@ -17,6 +17,15 @@ export function computeBasicSummary(db: Database, conditions: string[], values: 
       SUM(COALESCE(provider_invocations.input_tokens, 0)) as totalInputTokens,
       SUM(COALESCE(provider_invocations.output_tokens, 0)) as totalOutputTokens,
       SUM(COALESCE(provider_invocations.cached_input_tokens, 0)) as totalCachedTokens,
+      SUM(CASE
+        WHEN provider_invocations.raw_usage_json IS NOT NULL AND json_valid(provider_invocations.raw_usage_json)
+        THEN COALESCE(
+          CAST(json_extract(provider_invocations.raw_usage_json, '$.costCents') AS REAL),
+          CAST(json_extract(provider_invocations.raw_usage_json, '$.cost') AS REAL) * 100,
+          0
+        )
+        ELSE 0
+      END) as totalCostCents,
       AVG(provider_invocations.duration_ms) as avgDurationMs
     FROM execution_invocations${INVOCATION_JOINS}
     WHERE ${conditions.join(" AND ")}

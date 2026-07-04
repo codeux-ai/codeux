@@ -173,6 +173,7 @@ function makeBasePayload() {
       containerImage: "node:20",
       containerSetupScriptPath: "",
       containerCacheSetupScriptImage: true,
+      containerInstallPlaywrightBrowsers: true,
       containerMountGitConfig: true,
       containerGitUserName: "Jules",
       containerGitUserEmail: "jules@example.com",

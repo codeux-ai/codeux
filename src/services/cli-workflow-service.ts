@@ -11,7 +11,7 @@ import type {
   Subtask,
   ThinkingMode,
 } from "../contracts/app-types.js";
-import type { UpdateTaskDispatchInput, UpdateTaskRunInput } from "../contracts/execution-types.js";
+import type { TaskRunRecord, UpdateTaskDispatchInput, UpdateTaskRunInput } from "../contracts/execution-types.js";
 import { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
@@ -42,6 +42,8 @@ import { executePrFinalizeStage } from "./cli-workflow/pipeline/pr-finalize-stag
 import { executeCleanupStage } from "./cli-workflow/pipeline/cleanup-stage.js";
 import { executeMemoryCaptureStage } from "./cli-workflow/pipeline/memory-capture-stage.js";
 import type { ActiveDispatchRegistry } from "./active-dispatch-registry.js";
+import { SERVER_SHUTDOWN_STOP_REASON } from "./active-dispatch-registry.js";
+import { isRuntimeShutdownInProgress } from "./shutdown-state.js";
 import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import type { MemoryService } from "./memory-service.js";
 import type { ProviderConcurrencyService } from "./provider-concurrency-service.js";
@@ -64,6 +66,7 @@ interface StartCliTaskInput {
   provider: Exclude<ProviderId, "jules">;
   providerSettingsOverride?: ProviderSettingsOverride;
   task: Subtask;
+  taskRecordId?: string;
   repoPath: string;
   featureBranch: string;
   sprintNumber: number;
@@ -131,27 +134,49 @@ export class CliWorkflowService {
 
     const sessionId = `cli-${input.provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
     const taskRunKey = buildTaskRunKey(input.repoPath, input.sprintNumber, input.task.id);
+    const taskRecordId = input.taskRecordId || input.task.record_id || input.task.id;
     
     const explicitResumeTarget = !input.forceFreshWorkspace && input.resumeWorkspaceSessionId && input.resumeWorkerBranch
       ? {
         sessionId: input.resumeWorkspaceSessionId,
         workerBranch: input.resumeWorkerBranch,
+        worktreePath: null as string | null,
       }
       : null;
+    const taskRun = input.taskRunId && this.deps.executionRepository
+      ? this.deps.executionRepository.getTaskRun(input.taskRunId)
+      : null;
+    const workspaceResumeTarget = !input.forceFreshWorkspace && workflowSettings.resumeFailedTaskInSameWorkspace && this.deps.executionRepository
+      ? this.deps.executionRepository.getLatestTaskWorkspaceResumeTarget(taskRecordId, taskRun?.sprintRunId || undefined)
+      : null;
+    const executionResumeTarget = workspaceResumeTarget
+      && workspaceResumeTarget.workerBranch
+      && (!workspaceResumeTarget.provider || workspaceResumeTarget.provider === input.provider)
+      ? {
+        sessionId: workspaceResumeTarget.sessionId,
+        workerBranch: workspaceResumeTarget.workerBranch,
+        worktreePath: workspaceResumeTarget.worktreePath,
+      }
+      : null;
+    const sessionTracking = this.deps.sessionTracking as SessionTrackingRepository & {
+      findLatestResumableCliSessionForTask?: SessionTrackingRepository["findLatestFailedCliSessionForTask"];
+    };
     const failedResumeTarget = !input.forceFreshWorkspace && workflowSettings.resumeFailedTaskInSameWorkspace
-      ? this.deps.sessionTracking.findLatestFailedCliSessionForTask({
+      ? (sessionTracking.findLatestResumableCliSessionForTask || sessionTracking.findLatestFailedCliSessionForTask).call(sessionTracking, {
         provider: input.provider,
         taskId: taskRunKey,
         featureBranch: input.featureBranch,
         repoPath: input.repoPath,
       })
       : null;
-    const resumeTarget = explicitResumeTarget || failedResumeTarget;
+    const resumeTarget = explicitResumeTarget || executionResumeTarget || (failedResumeTarget
+      ? { ...failedResumeTarget, worktreePath: null as string | null }
+      : null);
 
     const workerBranch = resumeTarget?.workerBranch || buildWorkerBranch(input.featureBranch, input.task.id, input.provider);
-    const resumeWorktreePath = resumeTarget
+    const resumeWorktreePath = resumeTarget?.worktreePath || (resumeTarget
       ? await this.workspaceManager.resolveResumeWorktreePath(input.repoPath, resumeTarget.sessionId, workflowSettings.executionMode)
-      : undefined;
+      : undefined);
     
     const title = `Sprint ${input.sprintNumber}: ${buildTaskRunTag(input.repoPath, input.sprintNumber, input.task.id)} [${input.task.id}] ${input.task.title}`;
 
@@ -291,6 +316,7 @@ export class CliWorkflowService {
       })
       : undefined;
 
+    let preserveWorkspaceForShutdown = false;
     try {
       this.appendExecutionEvent(args, "cli_workspace_bound", {
         provider: args.provider,
@@ -388,6 +414,26 @@ export class CliWorkflowService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const finishedAt = new Date().toISOString();
+      const wasShutdownAbort = isRuntimeShutdownInProgress()
+        || (abortController.signal.aborted && abortController.signal.reason === SERVER_SHUTDOWN_STOP_REASON);
+      if (wasShutdownAbort) {
+        preserveWorkspaceForShutdown = true;
+        this.deps.sessionTracking.appendActivity(args.sessionId, {
+          originator: "system",
+          description: "Workflow interrupted by Code UX shutdown. Startup recovery will reconcile the preserved workspace.",
+        });
+        this.appendExecutionEvent(args, "cli_workflow_shutdown_interrupted", {
+          provider: args.provider,
+          sessionId: args.sessionId,
+          workspaceSessionId: ctx.workspaceSessionId,
+        }, `cli:shutdown-interrupted:${args.sessionId}`);
+        this.deps.logger?.info("CLI workflow interrupted by Code UX shutdown", {
+          sessionId: args.sessionId,
+          dispatchId: args.dispatchId ?? null,
+          taskRunId: args.taskRunId ?? null,
+        });
+        return;
+      }
       if (abortController.signal.aborted || message.toLowerCase().includes("aborted")) {
         this.deps.sessionTracking.updateSession(args.sessionId, { state: "CANCELLED" });
         this.deps.sessionTracking.appendActivity(args.sessionId, {
@@ -527,7 +573,15 @@ export class CliWorkflowService {
       }
     } finally {
       try {
-        const cleanupResult = await executeCleanupStage(ctx);
+        const cleanupResult = preserveWorkspaceForShutdown
+          ? { cleanedUp: false }
+          : await executeCleanupStage(ctx);
+        if (preserveWorkspaceForShutdown) {
+          this.deps.sessionTracking.appendActivity(args.sessionId, {
+            originator: "system",
+            description: `Preserving worktree for shutdown recovery: ${ctx.worktreePath}`,
+          });
+        }
         this.appendExecutionEvent(args, cleanupResult.cleanedUp ? "cli_worktree_cleaned" : "cli_worktree_preserved", {
           provider: args.provider,
           worktreePath: ctx.worktreePath,
@@ -594,6 +648,11 @@ export class CliWorkflowService {
       return;
     }
 
+    if (this.isSprintRunCancelled(taskRun.sprintRunId)) {
+      this.markTaskRunCancelledBySprintStop(taskRun, input.finishedAt, input.errorMessage ?? "Sprint run was cancelled.");
+      return;
+    }
+
     const taskRunUpdate: UpdateTaskRunInput = {
       state: input.state,
       finishedAt: input.finishedAt,
@@ -618,6 +677,43 @@ export class CliWorkflowService {
         finishedAt: input.finishedAt,
         lastHeartbeatAt: input.finishedAt,
         errorMessage: input.errorMessage ?? null,
+      });
+    }
+  }
+
+  private isSprintRunCancelled(sprintRunId?: string | null): boolean {
+    if (!sprintRunId || !this.deps.executionRepository) {
+      return false;
+    }
+    const sprintRun = this.deps.executionRepository.getSprintRun(sprintRunId);
+    return sprintRun?.status === "cancelled" || sprintRun?.status === "cancel_requested";
+  }
+
+  private markTaskRunCancelledBySprintStop(taskRun: TaskRunRecord, finishedAt: string, message: string): void {
+    if (!this.deps.executionRepository) {
+      return;
+    }
+
+    this.deps.executionRepository.updateTaskRun(taskRun.id, {
+      connectionId: null,
+      state: "BLOCKED",
+      finishedAt,
+      durationMs: taskRun.startedAt
+        ? Math.max(0, new Date(finishedAt).getTime() - new Date(taskRun.startedAt).getTime())
+        : null,
+    });
+    this.deps.projectManagementRepository?.updateTask(taskRun.taskId, {
+      status: "pending",
+    });
+
+    if (taskRun.dispatchId) {
+      this.deps.executionRepository.releaseLease("task_dispatch", taskRun.dispatchId);
+      this.deps.executionRepository.updateTaskDispatch(taskRun.dispatchId, {
+        connectionId: null,
+        status: "cancelled",
+        finishedAt,
+        lastHeartbeatAt: finishedAt,
+        errorMessage: message,
       });
     }
   }

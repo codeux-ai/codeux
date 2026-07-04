@@ -12,20 +12,22 @@ export function FormError({ id, error, helperId, helperText }: FormErrorProps) {
 
   return (
     <div class="grid grid-cols-1 mt-1.5 overflow-hidden relative">
-      <div
-        id={helperId}
-        aria-hidden={!!error}
-        class={`
-          col-start-1 row-start-1
-          text-xs text-slate-500 dark:text-slate-400
-          motion-safe:transition-all motion-safe:duration-200 ease-in-out
-          ${error
-            ? 'opacity-0 -translate-y-1 pointer-events-none'
-            : 'opacity-100 translate-y-0 visible'}
-        `}
-      >
-        {helperText}
-      </div>
+      {helperText && (
+        <div
+          id={helperId}
+          aria-hidden={!!error}
+          class={`
+            col-start-1 row-start-1
+            text-xs text-slate-500 dark:text-slate-400
+            motion-safe:transition-all motion-safe:duration-200 ease-in-out
+            ${error
+              ? 'opacity-0 -translate-y-1 pointer-events-none'
+              : 'opacity-100 translate-y-0 visible'}
+          `}
+        >
+          {helperText}
+        </div>
+      )}
       {error && (
         <div
           id={id}

@@ -2,7 +2,7 @@
 
 Quicksprint turns a reusable template into a sprint goal prompt, then sends that prompt through the normal sprint planning flow.
 
-The route and model controls share Sprint Composer routing metadata. Their default option reflects the effective `planning` route mapping, including a pinned provider instance and route-specific model override, instead of blindly showing the worker default.
+The route and model controls share Sprint Composer routing metadata. Their default option reflects the effective `planning` route mapping, including a pinned provider instance and route-specific model override, instead of blindly showing the worker default. When an operator selects a provider instance and model explicitly, the dashboard preserves the instance id for the select control but sends the underlying CLI provider type plus the selected model to planning, so the model is invoked through the intended provider runtime.
 
 This page documents the built-in template catalog, how the dashboard organizes it, and the authoring rules for high-quality templates.
 
@@ -50,17 +50,15 @@ Adding a new `.md` file to a resolved template directory is enough for it to app
 
 ## Dashboard Behavior
 
-The Quicksprint panel separates templates into two groups:
-- `Default Templates`
-- `Custom Templates`
+The Quicksprint panel presents default and custom templates in one shared browse rail. Template cards use the same stats-surface design language as the dashboard telemetry cards, with taller premium surfaces, high-contrast titles, category/subtask chips, a dedicated launch control, and separate icon controls for edit/delete actions. Cards label their source as `Default Template` or `Custom Template`; custom cards can still be edited, and both sources can be removed from the current project's catalog.
 
-Default templates are now organized by `purpose`.
+Default templates are organized by `purpose`. The purpose selector narrows the visible default templates while custom/project templates remain in the same rail.
 
-Projects can also have generated or project-local templates without any active built-in defaults. In that case the dashboard suppresses the empty `Default Templates` rail and shows the populated custom/project rail directly, so the browse slider never opens on an empty catalog.
+Projects can also have generated or project-local templates without any active built-in defaults. In that case the dashboard shows the populated custom/project rail directly, so browse mode never opens on an empty default catalog.
 
-The browse panel renders template groups as horizontally scrollable rails so large catalogs stay readable without cutting off rows on smaller viewports. Browse rails keep template cards arranged in exactly two rows by default, then continue horizontally for overflow items instead of adding a third visible row or forcing the whole page to widen. The panel content scrolls internally when these rails exceed the viewport height, preserving the rounded quicksprint shell without clipping the loaded templates.
+The browse panel renders templates as a horizontally scrollable rail so large catalogs stay readable without cutting off rows on smaller viewports. The rail keeps template cards arranged in exactly two rows by default, then continues horizontally for overflow items instead of adding a third visible row or forcing the whole page to widen. The panel does not claim its own vertical scroll area, and vertical wheel/trackpad gestures over the template area are handed to the surrounding dashboard page scroller so normal page scrolling still works.
 
-Each rail exposes left and right controls for page-style scrolling. These controls move the rail contents without changing the selected template or interfering with keyboard focus. Touch and trackpad users can swipe the rail directly with normal horizontal scrolling, so mobile behavior preserves swipe scrolling rather than replacing it with control-only navigation. Trackpad scrolling works the same way.
+The rail exposes left and right controls for page-style scrolling. These controls move the rail contents without changing the selected template or interfering with keyboard focus. Horizontal wheel, trackpad, and touch movement can still scroll the rail directly. Vertical wheel movement over the rail is forwarded to the surrounding dashboard page scroller, so the composer never traps normal page scrolling.
 
 This browse-slider treatment only changes how templates are discovered and selected. Template execution still uses the same quicksprint planning flow, subtask-count controls, and `Plan Only` / `Plan & Start` behavior as before.
 
@@ -115,3 +113,5 @@ Templates are resolved by stable `id` in this order:
 - TypeScript fallback catalog
 
 The first template for an id wins. This lets a project override a home/default template by writing a mixed Markdown file with the same `id`, while home-level files can override bundled defaults for all projects.
+
+Deleting a custom template removes its project file. Deleting a default template writes a project-local hidden marker with the same template id, so the bundled or home template disappears for that project without deleting the shared asset globally. Removing that marker from the project template directory restores the default template.

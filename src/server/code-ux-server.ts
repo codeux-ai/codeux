@@ -2,6 +2,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import axios from "axios";
 import type { AxiosError } from "axios";
 import express from "express";
+import type { Server as HttpServer } from "node:http";
 import type { AppConfig } from "../config/app-config.js";
 import { JulesApiClient } from "../integrations/jules-api-client.js";
 import type {
@@ -71,11 +72,17 @@ import { getCodeUxSubtasksDir, CODE_UX_SERVICE_NAME, CODE_UX_VERSION } from "../
 import { SprintMarkdownService } from "../services/sprint-markdown-service.js";
 import type { SprintIssueService } from "../services/sprint-issue-service.js";
 import { VirtualWorkerService } from "../services/virtual-worker-service.js";
+import type { ProjectAttentionService } from "../domain/workers/project-attention-service.js";
 import type { ProjectWorkerAssignmentService } from "../domain/workers/project-worker-assignment-service.js";
 import { SprintPreviewRepository } from "../repositories/sprint-preview-repository.js";
 import { SprintPreviewService } from "../services/sprint-preview-service.js";
 import { SprintFileBrowserService } from "../services/sprint-file-browser-service.js";
 import { resolveEffectiveDashboardSettings } from "../services/settings-resolution-service.js";
+import { ActiveDispatchRegistry } from "../services/active-dispatch-registry.js";
+import { ShutdownContainerService } from "../services/shutdown-container-service.js";
+import { beginRuntimeShutdown } from "../services/shutdown-state.js";
+import { workspaceVolumeHelperPool } from "../infrastructure/providers/cli/workspace-volume-helper.js";
+import { shutdownGitHelperPool } from "../shared/subprocess/command-runner.js";
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
   const normalized = String(message || "").trim().toLowerCase();
@@ -118,7 +125,10 @@ export class CodeUxServer {
   private static readonly STARTUP_RECOVERY_DELAY_MS = 1_000;
   private static readonly STARTUP_CONTAINER_CLEANUP_DELAY_MS = 5_000;
   private static readonly STARTUP_MAINTENANCE_DELAY_MS = 30_000;
-  private static activeSigintHandler: (() => void) | null = null;
+  private static readonly SHUTDOWN_CLOSE_TIMEOUT_MS = 5_000;
+  private static readonly SHUTDOWN_SIGNAL_TIMEOUT_MS = 30_000;
+  private static readonly shutdownSignals: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
+  private static readonly activeSignalHandlers = new Map<NodeJS.Signals, () => void>();
   private readonly projectRoot: string;
   private readonly appConfig: AppConfig;
   private server: Server;
@@ -139,6 +149,7 @@ export class CodeUxServer {
   private projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
   private projectWorkerAssignmentService: ProjectWorkerAssignmentService;
   private projectAttentionRepository: ProjectAttentionRepository;
+  private projectAttentionService: ProjectAttentionService;
   private qaReviewRepository: QaReviewRepository;
   private agentPresetRepository: AgentPresetRepository;
   private dockerService: DockerService;
@@ -160,6 +171,8 @@ export class CodeUxServer {
   private taskRerunService: TaskRerunService;
   private executionControlService: ExecutionControlService;
   private executionInvocationControlService: ExecutionInvocationControlService;
+  private activeDispatchRegistry: ActiveDispatchRegistry;
+  private shutdownContainerService: ShutdownContainerService;
   private planningAgentService: PlanningAgentService;
   private quicksprintService: import("../services/quicksprint-service.js").QuicksprintService;
   private projectSetupService: import("../services/project-setup-service.js").ProjectSetupService;
@@ -183,8 +196,9 @@ export class CodeUxServer {
   private dashboardHandle: DashboardServerHandle | null = null;
   private mcpServiceBound = false;
   private isClosing = false;
+  private closePromise: Promise<void> | null = null;
   private readonly mcpApprovalTracker = new McpApprovalTracker();
-  private readonly sigintHandler: () => void;
+  private readonly signalHandler: () => void;
 
   constructor(options: CodeUxServerOptions) {
     this.projectRoot = options.projectRoot;
@@ -208,6 +222,7 @@ export class CodeUxServer {
     this.projectWorkerAssignmentRepository = deps.projectWorkerAssignmentRepository;
     this.projectWorkerAssignmentService = deps.projectWorkerAssignmentService;
     this.projectAttentionRepository = deps.projectAttentionRepository;
+    this.projectAttentionService = deps.projectAttentionService;
     this.qaReviewRepository = deps.qaReviewRepository;
     this.agentPresetRepository = deps.agentPresetRepository;
     this.agentPresetSyncService = deps.agentPresetSyncService;
@@ -229,6 +244,11 @@ export class CodeUxServer {
     this.taskRerunService = deps.taskRerunService;
     this.executionControlService = deps.executionControlService;
     this.executionInvocationControlService = deps.executionInvocationControlService;
+    this.activeDispatchRegistry = deps.activeDispatchRegistry;
+    this.shutdownContainerService = new ShutdownContainerService({
+      activeDispatchRegistry: this.activeDispatchRegistry,
+      logger: this.logger.child({ component: "shutdown-container-service" }),
+    });
     this.planningAgentService = deps.planningAgentService;
     this.quicksprintService = deps.quicksprintService;
     this.projectSetupService = deps.projectSetupService;
@@ -240,6 +260,8 @@ export class CodeUxServer {
       executionRepository: this.executionRepository,
       qaReviewRepository: this.qaReviewRepository,
       projectManagementRepository: this.projectManagementRepository,
+      projectAttentionService: this.projectAttentionService,
+      guardrailService: this.guardrailService,
       sprintOrchestrator: this.sprintOrchestrator,
       dockerService: this.dockerService,
       getDashboardSettings: (scope) => {
@@ -264,27 +286,36 @@ export class CodeUxServer {
 
     this.configureMcpServer(this.server, this.appConfig.runtimeRole);
 
-    this.sigintHandler = () => {
-      void this.handleSigint();
+    this.signalHandler = () => {
+      void this.handleShutdownSignal();
     };
 
-    if (CodeUxServer.activeSigintHandler) {
-      process.off("SIGINT", CodeUxServer.activeSigintHandler);
+    for (const signal of CodeUxServer.shutdownSignals) {
+      const activeHandler = CodeUxServer.activeSignalHandlers.get(signal);
+      if (activeHandler) {
+        process.off(signal, activeHandler);
+      }
+      process.on(signal, this.signalHandler);
+      CodeUxServer.activeSignalHandlers.set(signal, this.signalHandler);
     }
-    process.on("SIGINT", this.sigintHandler);
-    CodeUxServer.activeSigintHandler = this.sigintHandler;
   }
 
-  private async handleSigint(): Promise<void> {
-    await this.close();
+  private async handleShutdownSignal(): Promise<void> {
+    await this.withShutdownTimeout(this.close(), "server shutdown", CodeUxServer.SHUTDOWN_SIGNAL_TIMEOUT_MS);
     process.exit(0);
   }
 
   async close(): Promise<void> {
-    if (this.isClosing) {
-      return;
+    if (this.closePromise) {
+      return this.closePromise;
     }
+    this.closePromise = this.closeInternal();
+    return this.closePromise;
+  }
+
+  private async closeInternal(): Promise<void> {
     this.isClosing = true;
+    beginRuntimeShutdown();
 
     if (this.runtimeCleanupInterval) {
       clearInterval(this.runtimeCleanupInterval);
@@ -306,27 +337,88 @@ export class CodeUxServer {
       clearTimeout(timer);
     }
     this.startupTaskTimers.clear();
-    if (this.mcpHttpHandle) {
-      await this.mcpHttpHandle.close().catch(() => undefined);
-      this.mcpHttpHandle = null;
-    }
     this.virtualWorkerService.stop();
     this.schedulerService.stop();
+    await shutdownGitHelperPool().catch((error) => {
+      this.logger.warn("Failed to stop Docker git helper containers during shutdown", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+    await workspaceVolumeHelperPool.shutdown().catch((error) => {
+      this.logger.warn("Failed to stop Docker workspace helper containers during shutdown", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+    await this.shutdownContainerService.stopRunningContainers().catch((error) => {
+      this.logger.warn("Failed to stop running containers during shutdown", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+    if (this.mcpHttpHandle) {
+      await this.withShutdownTimeout(this.mcpHttpHandle.close().catch(() => undefined), "MCP HTTP transport close");
+      this.mcpHttpHandle = null;
+    }
     if (this.dashboardHandle) {
-      await new Promise<void>((resolve, reject) => {
-        this.dashboardHandle?.server.close((error) => {
-          if (error && error.message !== "Server is not running.") {
-            reject(error);
-            return;
-          }
-          resolve();
-        });
-      }).catch(() => undefined);
+      await this.withShutdownTimeout(
+        (this.dashboardHandle.close
+          ? this.dashboardHandle.close()
+          : this.closeHttpServer(this.dashboardHandle.server)
+        ).catch(() => undefined),
+        "dashboard server close",
+      );
       this.dashboardHandle = null;
       this.runtimeContext.dashboardRuntimePort = null;
     }
-    await this.server.close();
+    await this.withShutdownTimeout(this.server.close(), "MCP server close");
     this.mcpServiceBound = false;
+    for (const [signal, activeHandler] of CodeUxServer.activeSignalHandlers) {
+      if (activeHandler === this.signalHandler) {
+        process.off(signal, activeHandler);
+        CodeUxServer.activeSignalHandlers.delete(signal);
+      }
+    }
+  }
+
+  private async closeHttpServer(server: HttpServer): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error && error.message !== "Server is not running.") {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+      server.closeIdleConnections?.();
+      setImmediate(() => {
+        server.closeAllConnections?.();
+      });
+    });
+  }
+
+  private async withShutdownTimeout<T>(
+    promise: Promise<T>,
+    label: string,
+    timeoutMs = CodeUxServer.SHUTDOWN_CLOSE_TIMEOUT_MS
+  ): Promise<T | undefined> {
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<undefined>((resolve) => {
+          timeout = setTimeout(() => {
+            this.logger.warn("Timed out while closing runtime component during shutdown", {
+              component: label,
+              timeoutMs,
+            });
+            resolve(undefined);
+          }, timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    }
   }
 
   private configureMcpServer(server: Server, runtimeRole: "project_manager"): void {
@@ -681,7 +773,7 @@ export class CodeUxServer {
     const dashboardBindUp = !this.isDashboardEnabled() || this.runtimeContext.dashboardRuntimePort !== null;
     const mcpServiceUp = this.mcpServiceBound;
 
-    const isReady = settingsDbUp && dashboardBindUp && mcpServiceUp && !!this.projectRuntimeRepository.getSelectedProjectLiveStatus().timestamp;
+    const isReady = settingsDbUp && dashboardBindUp && mcpServiceUp;
 
     return {
       status: isReady ? "READY" : "NOT_READY",

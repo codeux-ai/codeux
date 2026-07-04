@@ -2,12 +2,16 @@
 /** @jsx h */
 /** @jsxFrag Fragment */
 import { h, Fragment } from "preact";
-import { render, screen, fireEvent } from "@testing-library/preact";
+import { cleanup, render, screen, fireEvent } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { expect, describe, it } from "vitest";
+import { afterEach, expect, describe, it } from "vitest";
 import { TelemetryLedgerTabs } from "../../../dashboard/src/v2/pages/stats/components/TelemetryLedgerTabs.js";
 
 expect.extend(matchers);
+
+afterEach(() => {
+  cleanup();
+});
 
 const mockStats = {
   tasks: [
@@ -68,5 +72,28 @@ describe("TelemetryLedgerTabs", () => {
     expect(screen.queryByText("Task Ledger")).not.toBeInTheDocument();
     expect(screen.getByText("Sprint Ledger")).toBeInTheDocument();
     expect(screen.getAllByText("Sprint 1").length).toBeGreaterThan(0);
+  });
+
+  it("uses tab semantics and arrow keys to move through telemetry ledgers", () => {
+    render(<TelemetryLedgerTabs stats={mockStats} />);
+
+    const tablist = screen.getByRole("tablist", { name: "Telemetry ledgers" });
+    const taskTab = screen.getByRole("tab", { name: "Task Telemetry, 1 entry" });
+    const sprintTab = screen.getByRole("tab", { name: "Sprint Telemetry, 1 entry" });
+
+    expect(taskTab).toHaveAttribute("aria-selected", "true");
+    expect(sprintTab).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByRole("tabpanel", { name: "Task Telemetry, 1 entry" })).toHaveAttribute("aria-labelledby", "tab-tasks");
+
+    taskTab.focus();
+    fireEvent.keyDown(tablist, { key: "ArrowRight" });
+
+    expect(sprintTab).toHaveFocus();
+    expect(sprintTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel", { name: "Sprint Telemetry, 1 entry" })).toHaveAttribute("aria-labelledby", "tab-sprints");
+
+    fireEvent.keyDown(tablist, { key: "Home" });
+    expect(taskTab).toHaveFocus();
+    expect(taskTab).toHaveAttribute("aria-selected", "true");
   });
 });

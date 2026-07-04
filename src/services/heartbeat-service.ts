@@ -37,6 +37,9 @@ export class HeartbeatService {
           sprintRunId,
           error: err instanceof Error ? err.message : String(err),
         });
+        if (isLeaseOwnershipError(err)) {
+          this.stopHeartbeat(sprintRunId);
+        }
       }
     }, this.intervalMs);
 
@@ -53,6 +56,9 @@ export class HeartbeatService {
         sprintRunId,
         error: err instanceof Error ? err.message : String(err),
       });
+      if (isLeaseOwnershipError(err)) {
+        this.stopHeartbeat(sprintRunId);
+      }
     }
   }
 
@@ -70,4 +76,9 @@ export class HeartbeatService {
     }
     this.activeRuns.clear();
   }
+}
+
+function isLeaseOwnershipError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /Lease token mismatch|Lease already held/.test(message);
 }

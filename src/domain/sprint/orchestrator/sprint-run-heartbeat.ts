@@ -20,11 +20,6 @@ export function renewSprintRunHeartbeat(
   }
 
   const now = new Date().toISOString();
-  executionRepository.updateSprintRun(args.sprintRunId, {
-    status: "running",
-    lastHeartbeatAt: now,
-  });
-
   if (args.leaseToken) {
     executionRepository.renewLease({
       scopeType: "sprint",
@@ -33,6 +28,11 @@ export function renewSprintRunHeartbeat(
       expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
     });
   }
+
+  executionRepository.updateSprintRun(args.sprintRunId, {
+    status: "running",
+    lastHeartbeatAt: now,
+  });
 
   return true;
 }

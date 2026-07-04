@@ -2,9 +2,38 @@
 
 The browser preview provides an integrated environment for interacting with running sprint containers directly from the dashboard.
 
+## Interaction Contracts
+
+- Preview refresh, launch, rebuild, stop, remove, navigation, and startup-script save operations use visible async feedback plus local status text. Page-level operation results use `ActionFeedbackRegion` where available; control-specific progress stays beside the control that is pending.
+- Use `controlFeedback` for preview chrome buttons, session rail controls, launch controls, rebuild/stop/open actions, script save, and address navigation controls.
+- Use `enterExit` for preview window empty/starting/error states, menus, and browser chrome state surfaces.
+- Use `selectionMovement` for active session cards and rail selection changes.
+- Use `listReveal` for session menu contents and empty/loading menu states as they appear.
+- Use `listReorder` when session cards shift after removal or filtering.
+- Use `asyncFeedback` for launch/rebuild/stop/script-save/log-refresh feedback and `ActionFeedbackRegion` progress/result surfaces.
+- Under reduced motion, spinners and rail movement must snap or stop while status badges, button labels, `aria-busy`, visible disabled reasons, and log status copy remain visible.
+
 ## Accessibility Expectations
 - Interactive elements (session menus, sliders, actions) must be fully keyboard accessible.
 - Iframes and embedded views must have descriptive titles indicating their purpose and target.
-- Live regions should transparently report state changes (starting, stopping, rebuilding, error) without overwhelming screen readers.
-- Disruptive actions (rebuild, stop) should have clear labels.
+- Window controls, navigation controls, session removal, external open, rebuild, stop, and script save actions must use explicit accessible names instead of relying on `title` text or icon shape.
+- Live regions should transparently report loading, starting, running, stopped, reconnecting/unavailable, stale-log, saving, launching, empty-session, and error states without overwhelming screen readers.
+- The address form must keep a programmatic label, describe why it is disabled when the preview container is unavailable, and announce submitted navigation attempts while keeping focus in the address field.
+- Session rails must keep horizontal overflow inside the rail, expose the active session state, and remain keyboard reachable at narrow widths.
 - Hidden slider controls must become visible when they or their container receive keyboard focus.
+- File-browser trees and change lists should expose tree/listbox semantics, selected file state, loading/error/empty regions, and wrapping long paths so keyboard users do not need pointer hover to inspect files or diffs.
+- Rebuild and stop track distinct pending actions. The active operation owns the button label, `aria-busy`, and status text; sibling controls are disabled with visible recovery text instead of relying on click-time announcements.
+- Launch controls set `aria-busy` on both the launch region and launch button while a container is starting. The selected session iframe remains mounted during refresh/starting states when a previous frame exists; do not replace stale preview content with a blank loading placeholder unless no frame exists.
+- Startup-script saving sets `aria-busy` on the save button and textarea and pauses editing until the save completes. Script save status is a polite live region connected through `aria-describedby`.
+- Container logs keep stale log text mounted during refresh, set `aria-busy` on the log region, and show a visible Ready/Refreshing/Error badge plus polite live-region copy.
+- Navigation pending state is a short client-side command guard. Back, forward, reload, and address submit controls announce that the navigation command is being sent; the iframe bridge does not acknowledge command completion.
+
+## Verification Notes
+
+For documentation-only updates, run `pnpm run lint` and:
+
+```bash
+rg "interaction|reduced motion|aria-busy|asyncFeedback" docs/dashboard docs/index.md docs/SUMMARY.md
+```
+
+For Browser UI changes, focused coverage includes `tests/dashboard/v2/browser-page-components.test.tsx`; page-level tests often mock browser rail, chrome, and launch-panel components so BrowserPage assertions can focus on page state.

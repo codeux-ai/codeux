@@ -366,6 +366,16 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               })}
             />
           </Row>
+          <Row label="Preinstall Playwright browsers" description="Install Chromium and OS dependencies for browser checks inside coding containers." badge={getBadge("cliWorkflow.containerInstallPlaywrightBrowsers")}>
+            <Toggle aria-label="Preinstall Playwright browsers" aria-description="Install Chromium and OS dependencies for browser checks inside coding containers." value={settings.cliWorkflow.containerInstallPlaywrightBrowsers}
+              onChange={(value) => update({
+                cliWorkflow: {
+                  ...settings.cliWorkflow,
+                  containerInstallPlaywrightBrowsers: value,
+                },
+              })}
+            />
+          </Row>
         </div>
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
           {[
@@ -565,7 +575,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               description={skill.isInternal ? "Built-in skill managed by Code UX." : "Project skill discovered from local configuration."}
               badge={getBadge("skills")}
             >
-              <Toggle aria-label="Toggle setting"                 value={skill.enabled}
+              <Toggle aria-label={`Enable ${skill.name}`}                 value={skill.enabled}
                 onChange={(value) => {
                   const nextSkills = settings.skills.map((entry, entryIndex) => (
                     entryIndex === index ? { ...entry, enabled: value } : entry

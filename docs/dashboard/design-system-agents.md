@@ -3,6 +3,10 @@
 ## Core Aesthetic
 The Agents management surface leans into a premium "Workshop" feel. We use a lot of glassmorphism (`backdrop-blur-md` to `backdrop-blur-2xl`), very soft explicit gradients based on the agent's accent colors, and precise, delicate borders. Empty states should feel intentional, not like missing content.
 
+## Content Privacy
+- Never show real user/customer/live project names in screenshots, examples, test fixtures, PR notes, or design docs. Use generic labels such as `live project`, `customer project`, `non-test project`, or `approved local test project`.
+- Agent preset examples should avoid names, repository paths, or goals that identify a real project. Generalize them before publishing.
+
 ## Color & Transparency Rules
 - **Base Cards (Unselected):** `bg-white/55 border-black/[0.06] backdrop-blur-xl`.
 - **Selected Cards:** `bg-white/85 border-signal-500/40 shadow-[0_8px_32px_rgba(0,224,160,0.12)]`.

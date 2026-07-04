@@ -4,6 +4,7 @@ import { FolderGit2, CheckCircle2, Circle, PlayCircle, Clock, Play, Square, Sett
 import type { Task } from "../../types.js";
 import type { TaskStreamState } from "../../hooks/use-overview-stream-actions.js";
 import { SprintReviewBadge } from "../sprints/SprintReviewBadge.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 interface TaskRowProps {
     task: Task;
@@ -14,13 +15,15 @@ interface TaskRowProps {
 export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onPlayStop }) => {
     const isRunning = state?.isRunning ?? task.status === "in_progress";
     const busy = state?.busy ?? false;
+    const tokens = useInteractionTokens();
     return (
     <div
         className="group relative flex items-center justify-between py-5 border-b border-black/[0.06] dark:border-white/[0.06] last:border-0 focus-within:ring-2 focus-within:ring-signal-500/30 focus-within:ring-offset-2 focus-within:z-10 focus-within:rounded-xl"
+        style={{ "--task-row-control-duration": tokens.controlFeedback.duration, "--task-row-control-ease": tokens.controlFeedback.ease }}
     >
         {/* Hover backdrop */}
-        <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-signal-500/0 via-signal-500/[0.03] to-signal-500/0 dark:via-signal-500/[0.05] opacity-0 group-hover:opacity-100 transition-opacity duration-400 -z-10 rounded-xl" />
-        <div aria-hidden="true" className="absolute inset-y-1 inset-x-0 bg-white/50 dark:bg-void-700/40 opacity-0 group-hover:opacity-100 transition-all duration-300 -z-10 rounded-xl" />
+        <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-signal-500/0 via-signal-500/[0.03] to-signal-500/0 dark:via-signal-500/[0.05] opacity-0 group-hover:opacity-100 transition-opacity duration-[var(--task-row-control-duration)] ease-[var(--task-row-control-ease)] -z-10 rounded-xl" />
+        <div aria-hidden="true" className="absolute inset-y-1 inset-x-0 bg-white/50 dark:bg-void-700/40 opacity-0 group-hover:opacity-100 transition-all duration-[var(--task-row-control-duration)] ease-[var(--task-row-control-ease)] -z-10 rounded-xl" />
 
         <div className="flex-1 flex flex-col md:grid md:grid-cols-12 gap-3 md:gap-5 items-start md:items-center min-w-0">
             {/* ID */}
@@ -30,7 +33,7 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
 
             {/* Title */}
             <div className="col-span-8 md:col-span-5 flex items-center min-w-0">
-                <span className={`text-base md:text-lg font-bold tracking-tight text-slate-900 dark:text-white truncate group-hover:translate-x-1.5 transition-transform duration-300 ease-out ${task.status === 'completed' ? 'opacity-50' : task.status === 'coding_completed' ? 'opacity-80' : ''}`}>
+                <span className={`text-base md:text-lg font-bold tracking-tight text-slate-900 dark:text-white truncate group-hover:translate-x-1.5 transition-transform duration-[var(--task-row-control-duration)] ease-[var(--task-row-control-ease)] ${task.status === 'completed' ? 'opacity-50' : task.status === 'coding_completed' ? 'opacity-80' : ''}`}>
                     {task.title}
                 </span>
                 {task.latestReview && (
@@ -75,18 +78,18 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
             </div>
 
             {/* Time / Actions */}
-            <div className="flex md:col-span-2 items-center justify-end h-full relative overflow-hidden w-full md:w-auto mt-2 md:mt-0">
-                <div className="flex items-center gap-2 md:absolute md:right-0 transition-all duration-300 md:opacity-100 md:group-hover:opacity-0 md:group-hover:translate-x-3">
+            <div className="flex md:col-span-2 flex-wrap items-center justify-start md:justify-end gap-2 h-full w-full md:w-auto mt-2 md:mt-0">
+                <div className="flex items-center gap-2 rounded-full border border-black/[0.05] bg-black/[0.02] px-2 py-1 dark:border-white/[0.06] dark:bg-white/[0.03]">
                     <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" strokeWidth={2} aria-hidden="true" />
                     <span className="sr-only">Duration: </span>
                     <span className="text-xs font-mono text-slate-500 dark:text-slate-400">{task.time}</span>
                 </div>
 
                 {/* Quick actions */}
-                <div className="flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-xl rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] md:absolute md:right-0 opacity-100 md:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-[opacity,transform] duration-200 origin-right motion-safe:scale-95 motion-safe:group-hover:scale-100 motion-safe:group-focus-within:scale-100">
+                <div className="flex flex-wrap items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-xl rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] transition-[opacity,transform] duration-[var(--task-row-control-duration)] ease-[var(--task-row-control-ease)] origin-right">
                     <button
                         type="button"
-                        className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-full transition-colors active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
+                        className="touch-target inline-flex items-center gap-1.5 rounded-full bg-transparent px-2.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600 transition-colors active:scale-95 hover:bg-slate-100 hover:text-signal-600 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:text-slate-400 dark:hover:bg-void-600 dark:hover:text-signal-400"
                         title={isRunning ? "Stop task" : "Rerun task"}
                         aria-label={`${isRunning ? "Stop" : "Rerun"} task ${task.id}: ${task.title}`}
                         aria-busy={busy}
@@ -97,24 +100,27 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
                         }}
                     >
                         {busy ? <><Loader2 aria-hidden="true" className="w-3.5 h-3.5 animate-spin" /><span className="sr-only">Loading</span></> : isRunning ? <Square className="w-3.5 h-3.5" fill="currentColor" /> : <Play className="w-3.5 h-3.5" fill="currentColor" />}
+                        <span>{isRunning ? "Stop" : "Rerun"}</span>
                     </button>
                     <a
                         href={`/tasks?sprintId=${encodeURIComponent(task.sprintId)}`}
-                        className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 rounded-full transition-colors active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
+                        className="touch-target inline-flex items-center gap-1.5 rounded-full bg-transparent px-2.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600 transition-colors active:scale-95 hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:text-slate-400 dark:hover:bg-void-600 dark:hover:text-slate-200"
                         title="Configure task"
                         aria-label={`Configure task ${task.id}: ${task.title}`}
                         onClick={(event: MouseEvent) => event.stopPropagation()}
                     >
                         <Settings className="w-3.5 h-3.5" />
+                        <span>Configure</span>
                     </a>
                     <a
                         href="/live"
-                        className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-emerald-700 dark:hover:text-status-green bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 rounded-full transition-colors active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
+                        className="touch-target inline-flex items-center gap-1.5 rounded-full bg-transparent px-2.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600 transition-colors active:scale-95 hover:bg-slate-100 hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:text-slate-400 dark:hover:bg-void-600 dark:hover:text-status-green"
                         title="Open live session"
                         aria-label={`Open live session for task ${task.id}: ${task.title}`}
                         onClick={(event: MouseEvent) => event.stopPropagation()}
                     >
                         <Maximize2 className="w-3.5 h-3.5" />
+                        <span>Live</span>
                     </a>
                 </div>
             </div>

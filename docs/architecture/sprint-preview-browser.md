@@ -77,7 +77,7 @@ Install behavior:
 - preview containers now reuse the shared Docker runtime package caches instead of mounting host `node_modules`, and pnpm is pinned to a persistent store under that runtime cache so exported workspaces do not trigger cold installs on every rebuild
 - preview docker arguments and runtime path layouts are deterministically constructed via the helper in `sprint-preview-docker-plan.ts`
 - preview fallback now prefers the base image plus app-level install/build commands over re-running the worker-oriented setup script, which avoids unrelated provider/Playwright bootstrap work from blocking app previews
-- the shared worker setup script now leaves Playwright bootstrap disabled by default, so fresh Docker startup in WSL is not blocked by browser downloads unless an image explicitly opts in with `CODE_UX_INSTALL_PLAYWRIGHT=1`
+- preview image resolution keeps Playwright bootstrap disabled even when the provider Docker Runtime setting preinstalls Playwright browsers for coding containers; preview startup avoids unrelated browser downloads unless that runtime is explicitly changed later
 - before the preview container is created, Code UX repairs the per-sprint Docker volume by creating the expected workspace, `HOME`, npm cache, and pnpm store directories as root, then applying ownership and writable directory permissions so the non-root preview bootstrap can start reliably
 
 Runtime command preference:
@@ -169,6 +169,8 @@ The dashboard now exposes:
 - project-level `Sprint Browser` settings in the project settings editor for port range, startup script path, and automation overrides
 - per-sprint startup script editing in the browser page itself
 - preview logs, rebuild, stop, open, and remove actions
+- Browser controls expose explicit availability and progress states: session cards, window chrome, launch controls, script saves, log refreshes, and rebuild/stop/remove actions use static status badges plus `aria-busy` / live-region text so operators can tell whether a preview is starting, running, stopped, erroring, refreshing, saving, removing, rebuilding, or launching without relying on animation alone.
+- The in-app browser keeps the current iframe and existing logs visible while background refreshes run. Duplicate launch, rebuild, stop, remove, script-save, and navigation submissions are blocked while their matching async action is pending.
 - port routing status on preview cards, including container-port to host-port mappings such as `:4444 -> :5653`
 - when `showInAppBrowser` is disabled, Browser entry points are hidden from the dashboard shell and the `/browser` route shows a configuration notice instead of the embedded workspace
 - when `enabled` is disabled, preview reconciliation stops active preview containers and prevents new launches or rebuilds

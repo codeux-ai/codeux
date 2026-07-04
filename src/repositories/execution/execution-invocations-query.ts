@@ -1,4 +1,5 @@
 import { DatabaseAdapter as Database } from "../db/database-adapter.js";
+import type { SQLiteParam } from "../repository-utils.js";
 import {
   ExecutionInvocationRecord,
   ExecutionInvocationMessageRecord
@@ -21,6 +22,16 @@ import {
   computeAvailableProviders
 } from "./execution-invocations-query-analytics.js";
 
+const PROVIDER_INVOCATION_COST_CENTS_SQL = `
+      CASE
+        WHEN provider_invocations.raw_usage_json IS NOT NULL AND json_valid(provider_invocations.raw_usage_json)
+        THEN COALESCE(
+          CAST(json_extract(provider_invocations.raw_usage_json, '$.costCents') AS REAL),
+          CAST(json_extract(provider_invocations.raw_usage_json, '$.cost') AS REAL) * 100,
+          0
+        )
+        ELSE 0
+      END`;
 
 // Shared projection: invocation columns + provider usage + the sprint key /
 // task key context the dashboard renders (and links) on each invocation card.
@@ -56,6 +67,7 @@ const INVOCATION_SELECT = `
       provider_invocations.cached_input_tokens AS cached_input_tokens,
       provider_invocations.output_tokens AS output_tokens,
       provider_invocations.total_tokens AS total_tokens,
+      ${PROVIDER_INVOCATION_COST_CENTS_SQL} AS cost_cents,
       sprints.number AS sprint_number,
       sprints.name AS sprint_name,
       sprints.slug AS sprint_slug,
@@ -119,6 +131,48 @@ export function queryExecutionInvocations(
   return rows.map(mapExecutionInvocationRow);
 }
 
+export function queryProjectExecutionSnapshotInvocations(
+  db: Database,
+  params: {
+    projectId: string;
+    sprintRunIds: string[];
+    selectedSprintId?: string | null;
+  },
+): ExecutionInvocationRecord[] {
+  const scopePredicates = [`
+    execution_invocations.id IN (
+      SELECT id
+      FROM execution_invocations
+      WHERE project_id = ?
+      ORDER BY started_at DESC, rowid DESC
+      LIMIT 24
+    )
+  `];
+  const values: SQLiteParam[] = [params.projectId, params.projectId];
+
+  if (params.sprintRunIds.length > 0) {
+    scopePredicates.push(
+      `COALESCE(execution_invocations.sprint_run_id, provider_invocations.sprint_run_id) IN (${params.sprintRunIds.map(() => "?").join(", ")})`,
+    );
+    values.push(...params.sprintRunIds);
+  }
+
+  if (params.selectedSprintId) {
+    scopePredicates.push("COALESCE(execution_invocations.sprint_id, provider_invocations.sprint_id) = ?");
+    values.push(params.selectedSprintId);
+  }
+
+  const rows = db.prepare(`
+    SELECT${INVOCATION_SELECT}
+    FROM execution_invocations${INVOCATION_JOINS}
+    WHERE execution_invocations.project_id = ?
+      AND (${scopePredicates.join(" OR ")})
+    ORDER BY execution_invocations.started_at DESC, execution_invocations.rowid DESC
+  `).all(...values) as ExecutionInvocationRow[];
+
+  return rows.map(mapExecutionInvocationRow);
+}
+
 export function queryExecutionInvocationMessages(
   db: Database,
   invocationId: string
@@ -179,6 +233,17 @@ export function queryActiveExecutionInvocationsByTypes(
   return rows.map(mapExecutionInvocationRow);
 }
 
+export function queryActiveExecutionInvocations(db: Database): ExecutionInvocationRecord[] {
+  const rows = db.prepare(`
+    SELECT${INVOCATION_SELECT}
+    FROM execution_invocations${INVOCATION_JOINS}
+    WHERE execution_invocations.status IN ('running', 'paused')
+    ORDER BY execution_invocations.started_at DESC, execution_invocations.rowid DESC
+  `).all() as ExecutionInvocationRow[];
+
+  return rows.map(mapExecutionInvocationRow);
+}
+
 export function queryProjectInvocations(
   db: import("../db/database-adapter.js").DatabaseAdapter,
   params: import("../../contracts/invocation-types.js").ProjectInvocationsQuery & { projectId: string }
@@ -199,6 +264,11 @@ export function queryProjectInvocations(
   if (params.purpose) {
     conditions.push("provider_invocations.purpose = ?");
     values.push(params.purpose);
+  }
+
+  if (params.agentPresetId) {
+    conditions.push("execution_invocations.agent_preset_id = ?");
+    values.push(params.agentPresetId);
   }
 
   if (params.search) {
@@ -225,7 +295,7 @@ export function queryProjectInvocations(
     startedAt: "execution_invocations.started_at",
     durationMs: "provider_invocations.duration_ms",
     totalTokens: "provider_invocations.total_tokens",
-    costCents: "provider_invocations.cost_cents"
+    costCents: PROVIDER_INVOCATION_COST_CENTS_SQL
   };
 
   let orderBy = "ORDER BY execution_invocations.started_at DESC, execution_invocations.rowid DESC";
@@ -260,6 +330,7 @@ export function queryProjectInvocations(
     totalInputTokens: Number(summaryRow.totalInputTokens) || 0,
     totalOutputTokens: Number(summaryRow.totalOutputTokens) || 0,
     totalCachedTokens: Number(summaryRow.totalCachedTokens) || 0,
+    totalCostCents: Number(summaryRow.totalCostCents) || 0,
     avgDurationMs: Number(summaryRow.avgDurationMs) || 0,
     p95DurationMs,
     externalApiMetrics,

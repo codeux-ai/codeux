@@ -77,6 +77,8 @@ const shellQuote = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'
 
 const isWorkspaceHandle = (value: string): boolean => value.startsWith(WORKSPACE_HANDLE_PREFIX);
 
+type RefLookup = (ref: string) => Promise<boolean>;
+
 const parseWorkspaceHandle = (value: string): { volumeName: string } => {
   if (!isWorkspaceHandle(value)) {
     throw new Error(`Unsupported workspace reference: ${value}`);
@@ -168,16 +170,18 @@ export class WorkspaceManager implements IWorkspaceManager {
   async createSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout, options?: SnapshotWorkspaceOptions): Promise<string> {
     await this.assertExactGitWorktreeRoot(repoPath);
     const workspaceRef = this.buildWorktreePath(repoPath, `${sessionId}-snapshot`, "DOCKER");
+    const refLookup = this.createRefLookup(repoPath);
     await this.removeWorktree(repoPath, workspaceRef).catch(() => undefined);
     await this.createVolume(workspaceRef);
-    if (options?.singleBranch && await this.trySeedSingleBranchWorkspace(repoPath, workspaceRef, checkout)) {
+    if (options?.singleBranch && await this.trySeedSingleBranchWorkspace(repoPath, workspaceRef, checkout, refLookup)) {
       return workspaceRef;
     }
     await this.seedAndCheckoutVolume(
       repoPath,
       workspaceRef,
       await this.snapshotSeedBranches(repoPath, checkout),
-      () => this.checkoutSnapshotBranch(repoPath, workspaceRef, checkout),
+      () => this.checkoutSnapshotBranch(repoPath, workspaceRef, checkout, refLookup),
+      refLookup,
     );
     return workspaceRef;
   }
@@ -188,12 +192,14 @@ export class WorkspaceManager implements IWorkspaceManager {
     if (await this.workspaceExists(workspaceRef)) {
       return workspaceRef;
     }
+    const refLookup = this.createRefLookup(repoPath);
     await this.createVolume(workspaceRef);
     await this.seedAndCheckoutVolume(
       repoPath,
       workspaceRef,
       await this.snapshotSeedBranches(repoPath, checkout),
-      () => this.checkoutSnapshotBranch(repoPath, workspaceRef, checkout),
+      () => this.checkoutSnapshotBranch(repoPath, workspaceRef, checkout, refLookup),
+      refLookup,
     );
     return workspaceRef;
   }
@@ -223,6 +229,7 @@ export class WorkspaceManager implements IWorkspaceManager {
     repoPath: string,
     workspaceRef: string,
     checkout?: SnapshotCheckout,
+    refLookup: RefLookup = this.createRefLookup(repoPath),
   ): Promise<void> {
     const requested = [checkout?.branch, checkout?.fallbackBranch]
       .map((branch) => branch?.trim())
@@ -231,9 +238,9 @@ export class WorkspaceManager implements IWorkspaceManager {
     for (const branch of requested) {
       // The pushed origin tip is authoritative for review (the worker/base work
       // is pushed there), so prefer it over any local ref.
-      const startRef = (await this.refExists(repoPath, `refs/remotes/origin/${branch}`))
+      const startRef = (await refLookup(`refs/remotes/origin/${branch}`))
         ? `origin/${branch}`
-        : (await this.refExists(repoPath, `refs/heads/${branch}`))
+        : (await refLookup(`refs/heads/${branch}`))
           ? branch
           : null;
       if (startRef) {
@@ -247,9 +254,9 @@ export class WorkspaceManager implements IWorkspaceManager {
     // ref here since it matches what the host has checked out.
     const headBranch = await this.resolveRepoCurrentBranch(repoPath);
     if (headBranch) {
-      const startRef = (await this.refExists(repoPath, `refs/heads/${headBranch}`))
+      const startRef = (await refLookup(`refs/heads/${headBranch}`))
         ? headBranch
-        : (await this.refExists(repoPath, `refs/remotes/origin/${headBranch}`))
+        : (await refLookup(`refs/remotes/origin/${headBranch}`))
           ? `origin/${headBranch}`
           : null;
       if (startRef) {
@@ -325,6 +332,7 @@ export class WorkspaceManager implements IWorkspaceManager {
         )
           .catch(() => undefined);
       }
+      const refLookup = this.createRefLookup(repoPath);
 
       if (resumeSessionId && await this.workspaceExists(workspaceRef) && await this.canResumeExistingWorkspace(workspaceRef, workerBranch)) {
         // Re-point the resumed workspace at the already-pushed worker-branch tip so a
@@ -336,7 +344,7 @@ export class WorkspaceManager implements IWorkspaceManager {
         return;
       }
 
-      const startRef = await this.resolveWorktreeStartRef(repoPath, workerBranch, featureBranch);
+      const startRef = await this.resolveWorktreeStartRef(repoPath, workerBranch, featureBranch, refLookup);
       await this.removeWorktree(repoPath, workspaceRef).catch(() => undefined);
       if (isWorkspaceHandle(workspaceRef)) {
         await this.createVolume(workspaceRef);
@@ -344,7 +352,7 @@ export class WorkspaceManager implements IWorkspaceManager {
         // those instead of every accumulated branch (falls back to the full seed if a ref is missing).
         await this.seedAndCheckoutVolume(repoPath, workspaceRef, [workerBranch, featureBranch], async () => {
           await this.runWorkspaceCommand(workspaceRef, "git", ["checkout", "-B", workerBranch, startRef]);
-        });
+        }, refLookup);
       } else {
         await fs.mkdir(path.dirname(workspaceRef), { recursive: true });
         try {
@@ -700,6 +708,7 @@ export class WorkspaceManager implements IWorkspaceManager {
     repoPath: string,
     worktreePath: string,
     checkout?: SnapshotCheckout,
+    refLookup: RefLookup = this.createRefLookup(repoPath),
   ): Promise<boolean> {
     const candidates = [checkout?.branch, checkout?.fallbackBranch]
       .map((branch) => branch?.trim())
@@ -707,13 +716,25 @@ export class WorkspaceManager implements IWorkspaceManager {
     const requested = candidates.length > 0 ? candidates : [await this.resolveRepoCurrentBranch(repoPath)];
 
     let resolvedBranch: string | null = null;
+    let resolvedStartRef: string | null = null;
     for (const candidate of requested) {
-      if (candidate && await this.refExists(repoPath, `refs/heads/${candidate}`)) {
+      if (!candidate) {
+        continue;
+      }
+      const remoteRef = `refs/remotes/origin/${candidate}`;
+      const localRef = `refs/heads/${candidate}`;
+      if (await refLookup(remoteRef)) {
         resolvedBranch = candidate;
+        resolvedStartRef = remoteRef;
+        break;
+      }
+      if (await refLookup(localRef)) {
+        resolvedBranch = candidate;
+        resolvedStartRef = localRef;
         break;
       }
     }
-    if (!resolvedBranch) {
+    if (!resolvedBranch || !resolvedStartRef) {
       return false;
     }
 
@@ -726,7 +747,7 @@ export class WorkspaceManager implements IWorkspaceManager {
     try {
       await this.ensurePublicHelperImage(WORKSPACE_HELPER_IMAGE, repoPath, process.env);
       // Single-ref bundle: full history of just this branch, not every ref in the repo.
-      await runCommandStrict("git", ["bundle", "create", bundlePath, resolvedBranch], repoPath);
+      await runCommandStrict("git", ["bundle", "create", bundlePath, resolvedStartRef], repoPath);
       const initScript = [
         "set -e",
         "tmp=$(mktemp)",
@@ -743,7 +764,7 @@ export class WorkspaceManager implements IWorkspaceManager {
         "git -C /workspace config user.name \"${CODE_UX_GIT_USER_NAME:-Code UX}\"",
         "git -C /workspace config user.email \"${CODE_UX_GIT_USER_EMAIL:-agents@codeux.ai}\"",
         // Check out the seeded branch in the same container, removing the separate checkout run.
-        `git -C /workspace checkout -B ${shellQuote(resolvedBranch)} ${shellQuote(`refs/heads/${resolvedBranch}`)} >/dev/null`,
+        `git -C /workspace checkout -B ${shellQuote(resolvedBranch)} ${shellQuote(resolvedStartRef)} >/dev/null`,
         ownerSpec ? `chown -R ${shellQuote(ownerSpec)} /workspace` : null,
       ].filter((step): step is string => Boolean(step)).join(" && ");
 
@@ -776,7 +797,7 @@ export class WorkspaceManager implements IWorkspaceManager {
    * host for each candidate branch — the exact refs a targeted seed must carry so the volume can
    * later check out either the local or origin-tracking form of those branches.
    */
-  private async resolveExistingSeedRefs(repoPath: string, branches: Array<string | null | undefined>): Promise<string[]> {
+  private async resolveExistingSeedRefs(repoPath: string, branches: Array<string | null | undefined>, refLookup: RefLookup): Promise<string[]> {
     const refs: string[] = [];
     const seen = new Set<string>();
     for (const branch of branches) {
@@ -784,8 +805,8 @@ export class WorkspaceManager implements IWorkspaceManager {
       if (!name) {
         continue;
       }
-      for (const ref of [`refs/heads/${name}`, `refs/remotes/origin/${name}`]) {
-        if (!seen.has(ref) && await this.refExists(repoPath, ref)) {
+      for (const ref of [`refs/remotes/origin/${name}`, `refs/heads/${name}`]) {
+        if (!seen.has(ref) && await refLookup(ref)) {
           seen.add(ref);
           refs.push(ref);
         }
@@ -806,8 +827,9 @@ export class WorkspaceManager implements IWorkspaceManager {
     worktreePath: string,
     branches: Array<string | null | undefined>,
     checkout: () => Promise<void>,
+    refLookup: RefLookup = this.createRefLookup(repoPath),
   ): Promise<void> {
-    const seedRefs = await this.resolveExistingSeedRefs(repoPath, branches);
+    const seedRefs = await this.resolveExistingSeedRefs(repoPath, branches, refLookup);
     if (seedRefs.length === 0) {
       await this.seedWorkspaceFromBundle(repoPath, worktreePath);
       await checkout();
@@ -932,20 +954,38 @@ export class WorkspaceManager implements IWorkspaceManager {
     }
   }
 
-  private async resolveWorktreeStartRef(repoPath: string, workerBranch: string, featureBranch: string): Promise<string> {
-    if (await this.refExists(repoPath, `refs/remotes/origin/${workerBranch}`)) {
+  private async resolveWorktreeStartRef(repoPath: string, workerBranch: string, featureBranch: string, refLookup: RefLookup = this.createRefLookup(repoPath)): Promise<string> {
+    if (await refLookup(`refs/remotes/origin/${workerBranch}`)) {
       return `origin/${workerBranch}`;
     }
-    if (await this.refExists(repoPath, `refs/heads/${workerBranch}`)) {
+    if (await refLookup(`refs/heads/${workerBranch}`)) {
       return workerBranch;
     }
-    if (await this.refExists(repoPath, `refs/remotes/origin/${featureBranch}`)) {
+    if (await refLookup(`refs/remotes/origin/${featureBranch}`)) {
       return `origin/${featureBranch}`;
     }
-    if (await this.refExists(repoPath, `refs/heads/${featureBranch}`)) {
+    if (await refLookup(`refs/heads/${featureBranch}`)) {
       return featureBranch;
     }
     throw new Error(`Cannot prepare isolated workspace: neither worker branch ${workerBranch} nor feature branch ${featureBranch} exists locally or on origin.`);
+  }
+
+  /**
+   * Exact-ref lookup cache scoped to one workspace preparation. Git repos with long-lived sprint
+   * history can accumulate thousands of branches, so callers check only concrete refs they already
+   * know about and memoize those answers across start-ref resolution, bundle seeding, and checkout.
+   */
+  private createRefLookup(repoPath: string): RefLookup {
+    const cache = new Map<string, Promise<boolean>>();
+    return async (ref: string): Promise<boolean> => {
+      const cached = cache.get(ref);
+      if (cached) {
+        return await cached;
+      }
+      const lookup = this.refExists(repoPath, ref);
+      cache.set(ref, lookup);
+      return await lookup;
+    };
   }
 
   private async refExists(repoPath: string, ref: string): Promise<boolean> {

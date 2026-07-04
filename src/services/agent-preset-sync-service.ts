@@ -12,6 +12,7 @@ import { CODE_UX_INTERNAL_DOCS_SOURCE_REF, type KnowledgeService } from "./knowl
 import { runCommandStrict } from "./cli-process-runner.js";
 import { readLocalGitOriginUrl } from "../infrastructure/git/local-git-origin.js";
 import { PrService } from "../infrastructure/providers/cli/pr-service.js";
+import { hasAgentAvatarConfig, resolveAgentAvatarConfig } from "../contracts/agent-avatar-style.js";
 
 interface AgentPresetSyncServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
@@ -89,6 +90,14 @@ export class AgentPresetSyncService {
   }): Promise<AgentPresetRecord> {
     const nextName = input.name.trim();
     this.assertAgentNameAvailable(projectId, nextName);
+    const labels = input.labels ?? [];
+    const avatarConfig = this.resolvePersistedAvatarConfig({
+      projectId,
+      id: input.id,
+      name: nextName,
+      labels,
+      avatarConfig: input.avatarConfig,
+    });
 
     if (this.shouldSaveToProjectDirectory(projectId)) {
       const project = this.requireProject(projectId);
@@ -97,7 +106,7 @@ export class AgentPresetSyncService {
         name: nextName,
         description: input.description?.trim() || "",
         instructionMarkdown: input.instructionMarkdown?.trim() || "",
-        avatarConfig: input.avatarConfig,
+        avatarConfig,
         providerConfigId: input.providerConfigId,
         model: input.model,
         memoryTemplateOverrideEnabled: input.memoryTemplateOverrideEnabled,
@@ -109,21 +118,26 @@ export class AgentPresetSyncService {
         name: nextName,
         description: source.description ?? input.description,
         instructionMarkdown: source.instructionMarkdown,
-        labels: input.labels,
+        labels,
         sourcePath: source.sourcePath,
         sourceScope: source.sourceScope,
         sourceUpdatedAt: source.sourceUpdatedAt,
         sourceImportedAt: source.sourceUpdatedAt,
-        avatarConfig: source.avatarConfig,
+        avatarConfig: source.avatarConfig ?? avatarConfig,
         providerConfigId: source.providerConfigId,
         model: source.model,
         memoryTemplateOverrideEnabled: source.memoryTemplateOverrideEnabled,
         memoryTemplateMarkdown: source.memoryTemplateMarkdown,
+        memoryConfig: source.memoryConfig,
       });
       return await this.decorateAgentPreset(created);
     }
 
-    const created = this.deps.agentPresetRepository.createAgentPreset(projectId, input);
+    const created = this.deps.agentPresetRepository.createAgentPreset(projectId, {
+      ...input,
+      labels,
+      avatarConfig,
+    });
     return await this.decorateAgentPreset(created);
   }
 
@@ -233,6 +247,14 @@ export class AgentPresetSyncService {
       if (!existing) {
         const labels = this.inferLabelsForSource(source.normalizedName);
         const stableId = BASE_AGENT_IDS[source.normalizedName];
+        const avatarConfig = this.resolvePersistedAvatarConfig({
+          projectId,
+          id: stableId,
+          name: source.name,
+          labels,
+          avatarConfig: source.avatarConfig,
+          sourcePath: source.sourcePath,
+        });
         const created = this.deps.agentPresetRepository.importAgentPresetFromSource(projectId, {
           id: stableId,
           name: source.name,
@@ -243,7 +265,7 @@ export class AgentPresetSyncService {
           sourceScope: source.sourceScope,
           sourceUpdatedAt: source.sourceUpdatedAt,
           sourceImportedAt: source.sourceUpdatedAt,
-          avatarConfig: source.avatarConfig,
+          avatarConfig,
           providerConfigId: source.providerConfigId,
           model: source.model,
           memoryTemplateOverrideEnabled: source.memoryTemplateOverrideEnabled,
@@ -257,6 +279,16 @@ export class AgentPresetSyncService {
         }
         continue;
       }
+
+      const labels = existing.labels.length > 0 ? existing.labels : this.inferLabelsForSource(source.normalizedName);
+      const avatarConfig = this.resolvePersistedAvatarConfig({
+        projectId,
+        id: existing.id,
+        name: source.name || existing.name,
+        labels,
+        avatarConfig: source.avatarConfig,
+        sourcePath: source.sourcePath,
+      });
 
       const metadataChanged = existing.sourcePath !== source.sourcePath
         || existing.sourceScope !== source.sourceScope
@@ -274,7 +306,7 @@ export class AgentPresetSyncService {
       const contentChanged = source.instructionMarkdown.trim() !== existing.instructionMarkdown.trim();
       const descriptionChanged = (source.description || "") !== (existing.description || "");
       const nameChanged = source.normalizedName !== this.normalizeName(existing.name);
-      const avatarChanged = JSON.stringify(source.avatarConfig || {}) !== JSON.stringify(existing.avatarConfig || {});
+      const avatarChanged = JSON.stringify(avatarConfig || {}) !== JSON.stringify(existing.avatarConfig || {});
       const providerChanged = (source.providerConfigId || "") !== (existing.providerConfigId || "");
       const modelChanged = (source.model || "") !== (existing.model || "");
       const memoryEnabledChanged = Boolean(source.memoryTemplateOverrideEnabled) !== Boolean(existing.memoryTemplateOverrideEnabled);
@@ -287,7 +319,7 @@ export class AgentPresetSyncService {
           description: source.description,
           instructionMarkdown: source.instructionMarkdown,
           sourceUpdatedAt: source.sourceUpdatedAt,
-          avatarConfig: source.avatarConfig,
+          avatarConfig,
           providerConfigId: source.providerConfigId,
           model: source.model,
           memoryTemplateOverrideEnabled: source.memoryTemplateOverrideEnabled,
@@ -316,12 +348,20 @@ export class AgentPresetSyncService {
     }
 
     const source = await this.readAgentSourceFile(existing.sourcePath, existing.sourceScope || "project");
+    const avatarConfig = this.resolvePersistedAvatarConfig({
+      projectId: existing.projectId,
+      id: existing.id,
+      name: source.name || existing.name,
+      labels: existing.labels,
+      avatarConfig: source.avatarConfig,
+      sourcePath: source.sourcePath,
+    });
     const updated = this.deps.agentPresetRepository.importLinkedAgentPreset(agentPresetId, {
       name: existing.sourceScope === "project" ? existing.name : source.name,
       description: source.description,
       instructionMarkdown: source.instructionMarkdown,
       sourceUpdatedAt: source.sourceUpdatedAt,
-      avatarConfig: source.avatarConfig,
+      avatarConfig,
       providerConfigId: source.providerConfigId,
       model: source.model,
       memoryTemplateOverrideEnabled: source.memoryTemplateOverrideEnabled,
@@ -567,10 +607,18 @@ export class AgentPresetSyncService {
 
     try {
       const source = await this.readAgentSourceFile(preset.sourcePath, preset.sourceScope || "project");
+      const avatarConfig = this.resolvePersistedAvatarConfig({
+        projectId: preset.projectId,
+        id: preset.id,
+        name: source.name || preset.name,
+        labels: preset.labels,
+        avatarConfig: source.avatarConfig,
+        sourcePath: source.sourcePath,
+      });
       const sourceDiffersFromDb = this.normalizeName(source.name) !== this.normalizeName(preset.name)
         || (source.description || "") !== (preset.description || "")
         || source.instructionMarkdown.trim() !== preset.instructionMarkdown.trim()
-        || JSON.stringify(source.avatarConfig || {}) !== JSON.stringify(preset.avatarConfig || {})
+        || JSON.stringify(avatarConfig || {}) !== JSON.stringify(preset.avatarConfig || {})
         || (source.providerConfigId || "") !== (preset.providerConfigId || "")
         || (source.model || "") !== (preset.model || "")
         || Boolean(source.memoryTemplateOverrideEnabled) !== Boolean(preset.memoryTemplateOverrideEnabled)
@@ -659,6 +707,28 @@ export class AgentPresetSyncService {
 
   private normalizeName(value: string): string {
     return value.trim().replace(/[_-]+/g, " ").replace(/\s+/g, " ").toLowerCase();
+  }
+
+  private resolvePersistedAvatarConfig(input: {
+    projectId: string;
+    id?: string | null;
+    name: string;
+    labels?: readonly string[];
+    avatarConfig?: AgentAvatarConfig | null;
+    sourcePath?: string | null;
+  }): AgentAvatarConfig {
+    if (hasAgentAvatarConfig(input.avatarConfig)) {
+      return { ...input.avatarConfig };
+    }
+    return resolveAgentAvatarConfig({
+      projectId: input.projectId,
+      id: input.id,
+      name: input.name,
+      labels: input.labels,
+      seed: [input.projectId, input.id, input.name, input.sourcePath]
+        .filter((part): part is string => Boolean(part && part.trim()))
+        .join(":"),
+    });
   }
 
   private inferLabelsForSource(normalizedName: string): string[] {

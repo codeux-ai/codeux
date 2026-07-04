@@ -1,5 +1,6 @@
 import type { Express } from "express";
-import type { DashboardDependencies } from "./dashboard-server.js";
+import type { DashboardDependencies, DashboardServerOptions } from "./dashboard-server.js";
+import { CODE_UX_VERSION } from "../shared/config/code-ux-paths.js";
 
 import { registerProjectRoutes } from "./project-routes.js";
 import { registerSprintRoutes } from "./sprint-routes.js";
@@ -26,33 +27,80 @@ import { registerUpdateStatusRoutes } from "./update-status-routes.js";
 import { registerMemoryRoutes } from "./memory-routes.js";
 import { registerKnowledgeRoutes } from "./knowledge-routes.js";
 
-export const registerDashboardRoutes = (
-  app: Express,
-  deps: DashboardDependencies,
-  liveActivityCacheMs: number
-): void => {
+export interface DashboardRouteRegistrationOptions {
+  app: Express;
+  deps: DashboardDependencies;
+  liveActivityCacheMs: number;
+}
+
+export const createDashboardRouteDependencies = (options: DashboardServerOptions): DashboardDependencies => {
+  const {
+    app: _app,
+    dashboardDir: _dashboardDir,
+    port: _port,
+    liveActivityCacheMs: _liveActivityCacheMs,
+    getUpdateStatus,
+    ...routeDependencies
+  } = options;
+
+  return {
+    ...routeDependencies,
+    getUpdateStatus: getUpdateStatus ?? (async () => ({
+      currentVersion: CODE_UX_VERSION,
+      latestVersion: null,
+      updateAvailable: false,
+      checkedAt: new Date().toISOString(),
+    })),
+  };
+};
+
+const registerProjectRouteGroup = (app: Express, deps: DashboardDependencies): void => {
   registerProjectRoutes(app, deps);
+};
+
+const registerSprintRouteGroup = (app: Express, deps: DashboardDependencies): void => {
   registerSprintRoutes(app, deps);
   registerSprintComposerRoutes(app, deps);
   registerTaskRoutes(app, deps);
   registerLiveTaskRoutes(app, deps);
   registerConversationRoutes(app, deps);
   registerPlanningRoutes(app, deps);
-  registerPreviewRoutes(app, deps);
-  registerFileBrowserRoutes(app, deps);
+};
+
+const registerRuntimeRouteGroup = (app: Express, deps: DashboardDependencies): void => {
   registerRuntimeRoutes(app, deps);
   registerLocalDirectoryRoutes(app);
   registerExecutionControlRoutes(app, deps);
+};
+
+const registerPreviewRouteGroup = (app: Express, deps: DashboardDependencies): void => {
+  registerPreviewRoutes(app, deps);
+  registerFileBrowserRoutes(app, deps);
+};
+
+const registerSettingsRouteGroup = (app: Express, deps: DashboardDependencies, liveActivityCacheMs: number): void => {
   registerSettingsRoutes(app, deps, liveActivityCacheMs);
+};
+
+const registerProjectConfigurationRouteGroup = (app: Express, deps: DashboardDependencies): void => {
   registerConnectionRoutes(app, deps);
   registerAgentPresetRoutes(app, deps);
   registerInstructionFileRoutes(app, deps);
+};
+
+const registerExecutionRouteGroup = (app: Express, deps: DashboardDependencies): void => {
   registerExecutionInvocationRoutes(app, deps);
   registerQuicksprintRoutes(app, deps);
   registerSchedulerRoutes(app, deps);
   registerTerminalRoutes(app, deps);
+};
+
+const registerSystemIntegrationRouteGroup = (app: Express, deps: DashboardDependencies): void => {
   registerGitProviderRoutes(app, deps);
   registerUpdateStatusRoutes(app, deps);
+};
+
+const registerOptionalKnowledgeRouteGroup = (app: Express, deps: DashboardDependencies): void => {
   if (
     deps.memoryService &&
     deps.memoryPromotionService &&
@@ -81,4 +129,20 @@ export const registerDashboardRoutes = (
       projectManagementRepository: deps.projectManagementRepository,
     });
   }
+};
+
+export const registerDashboardRoutes = ({
+  app,
+  deps,
+  liveActivityCacheMs,
+}: DashboardRouteRegistrationOptions): void => {
+  registerProjectRouteGroup(app, deps);
+  registerSprintRouteGroup(app, deps);
+  registerPreviewRouteGroup(app, deps);
+  registerRuntimeRouteGroup(app, deps);
+  registerSettingsRouteGroup(app, deps, liveActivityCacheMs);
+  registerProjectConfigurationRouteGroup(app, deps);
+  registerExecutionRouteGroup(app, deps);
+  registerSystemIntegrationRouteGroup(app, deps);
+  registerOptionalKnowledgeRouteGroup(app, deps);
 };

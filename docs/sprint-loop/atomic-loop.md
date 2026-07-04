@@ -108,6 +108,10 @@ For `status` and `orchestrate`, each cycle can run:
 
 3. Derive effective task status
 - `status-derivation-step.ts`
+- Task transition decisions are centralized in `src/domain/sprint/task-transition-state.ts`.
+  The step asks this pure helper whether dependencies are met, whether a failed
+  session should reset to `PENDING` or remain `BLOCKED`, and whether terminal,
+  QA-pending, merge-required, quota, or failed states should be preserved.
 
 4. Start ready tasks (orchestrate only)
 - `start-ready-tasks-step.ts`
@@ -118,6 +122,7 @@ For `status` and `orchestrate`, each cycle can run:
   - commit/push branch
   - open PR back to sprint feature branch
   - track state and activity in sqlite
+- CLI task dispatch carries two task identities through the runtime: the human task key (`T01`, `T02`, ...) stays in branch names, titles, prompts, and task-run tags, while repository/execution lookups use the persisted task record id (`record_id`). Workspace resume targets, task runs, dispatches, and provider invocations must use the record id so normal planned sprint tasks can resume from the correct Docker workspace volume after cancellation or restart.
 
 5. Build protocol instructions
 - `protocol-step.ts`
@@ -148,10 +153,18 @@ When `action=orchestrate`, `wait` is true, and `watchLoop` is enabled:
 - Wait interval is 10 seconds between cycles.
 - Output interval defaults to 300 seconds and is now used only as an internal checkpoint boundary for heartbeat/lease renewal inside the same sprint run.
 - Code UX does not stop at that boundary anymore. It keeps the same sprint run alive, renews its lease/heartbeat, resets the checkpoint window, and continues watching until a real terminal condition is reached.
+- Startup recovery and dashboard **Resume** restart monitoring through the existing-run recovery path. A resumed paused run keeps its original sprint-run id, is moved back to `running`, and then starts the watch loop without creating a duplicate run. Resume is refused while another queued/running/cancel-pending run for the same sprint is active.
+- Live CLI telemetry stays enabled during watch mode, including transcript parsing and token accounting. To keep high-concurrency sprints responsive, each provider watcher fingerprints its current stdout/stderr and provider log sources, skips parse/token work when the sources are unchanged, reuses Codex tokenizer encodings and recent token counts, and only persists provider usage rows when token/transcript state changes.
+- Dashboard live snapshots are optimized for high sprint concurrency: selected-sprint checks use targeted project/sprint lookups instead of hydrating every sprint, recent provider activities are cached until the project's latest provider activity event changes, and provider activity event reads use partial sqlite indexes for the activity-only paths.
+- Preview reconciliation also avoids full project execution snapshots in the common running-session path. It queries running sprint runs directly and memoizes that result while reconciling preview sessions and auto-starting previews.
 - Loop exits when:
   - all tasks terminal (`COMPLETED+merged` or `FAILED`), or
   - no runnable tasks remain, or
   - merge-required tasks are detected.
+- The watch loop uses the same `task-transition-state.ts` helper as the cycle
+  runner to classify settled tasks, failed terminal tasks, PR-backed merge waits,
+  QA-pending tasks, quota waits, dependency blockers, and worker attention waits.
+  Protocol text and status table rendering remain separate presentation steps.
 
 On completion it may:
 - clean up subtask directory,
@@ -186,6 +199,7 @@ For `action=status`:
 - In local-git mode, when a task completed without a PR and then receives QA fixes, the QA follow-up process continues by attempting to recover the worker branch from task/task run metadata, open/merged PR metadata, or git branch name matching. If the preserved resume workspace is missing, Code UX prepares/recreates the expected worktree on the recovered branch and continues the QA follow-up run without failing. If no branch can be recovered and no safe workspace can be prepared, the orchestrator fails fast.
 - Feature-PR auto-merge mode `WHEN_GREEN` waits for a green gate before attempting the merge.
 - Main-branch auto-merge mode `ALWAYS` intentionally bypasses the main CI wait gate and attempts the final `feature -> default` merge as soon as the PR is not conflicted or review-blocked.
+- Before creating the final `feature -> default` merge PR, Code UX now verifies that the configured default branch exists on `origin`. If it is missing, Code UX creates it from the repository's actual `origin/HEAD` branch, pushes it, and then creates the final PR against the configured target.
 - Main-branch PR creation failures are logged and surfaced in the final merge gate feedback instead of being reduced to an unexplained missing-PR wait state.
 - When the watch loop waits or exits at the final main-merge gate, the dashboard status snapshot is republished with the finalization report so operators can see the current blocker without waiting for a later cycle.
 - If `waitForJulesCiAutofix` is enabled and feature PR checks fail, the sprint loop notifies the Jules session with failed-check context, matched failed run ids/URLs, failed job names, and failed-job log excerpts (when available), then keeps the task in work state.

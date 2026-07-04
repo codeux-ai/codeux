@@ -1,5 +1,6 @@
 import type { MergeFeedbackResult } from "../ci/main-merge-gate.js";
 import type { Subtask, CiIntelligenceSettings } from "../../../contracts/app-types.js";
+import { partitionSubtasksByStatus } from "../task-transition-state.js";
 
 export type WatchLoopDecisionStatus = "wait" | "exit" | "continue";
 
@@ -101,22 +102,6 @@ export function decideMainMergeWaitOrPause(params: {
   }
 
   return null;
-}
-
-function partitionSubtasksByStatus(subtasks: Subtask[]) {
-  const tasksByStatus = new Map<string, Subtask[]>();
-  const statusCounts: Record<string, number> = {};
-  for (const task of subtasks) {
-    const status = task.status || "UNKNOWN";
-    let list = tasksByStatus.get(status);
-    if (!list) {
-      list = [];
-      tasksByStatus.set(status, list);
-    }
-    list.push(task);
-    statusCounts[status] = (statusCounts[status] || 0) + 1;
-  }
-  return { tasksByStatus, statusCounts };
 }
 
 export function decideTerminalCompletion(params: {

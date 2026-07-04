@@ -2,32 +2,32 @@ import type { FunctionComponent } from "preact";
 import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 
 /**
  * SVG sparkline with smooth cubic bezier curves (tension 0.35).
  * Draws on mount via GSAP stroke-dashoffset animation.
  * On hover (detected via closest `.group`): replays from the start and adds a glow.
  */
-export const Sparkline: FunctionComponent<{ points: number[]; color: string; className?: string }> = ({
+export const Sparkline: FunctionComponent<{ points: number[]; color: string; className?: string; ariaLabel?: string }> = ({
     points,
     color,
     className = "absolute bottom-0 left-0 h-20 w-full pointer-events-none",
+    ariaLabel,
 }) => {
     const isReducedMotion = useReducedMotion();
-
-    if (!points || points.length === 0) {
-        return null;
-    }
+    const tokens = useGsapInteractionTokens();
 
     const pathRef = useRef<SVGPathElement>(null);
     const svgRef  = useRef<SVGSVGElement>(null);
 
-    const max = Math.max(...points);
-    const min = Math.min(...points);
+    const hasPoints = points.length > 0;
+    const max = hasPoints ? Math.max(...points) : 0;
+    const min = hasPoints ? Math.min(...points) : 0;
     const range = max - min || 1;
 
     // Smooth cubic bezier path (tension 0.35)
-    const pathD = points.map((p, i) => {
+    const pathD = hasPoints ? points.map((p, i) => {
         const x = points.length === 1 ? 50 : (i / (points.length - 1)) * 100;
         const y = 100 - ((p - min) / range) * 80;
         if (i === 0) return `M ${x} ${y}`;
@@ -35,9 +35,9 @@ export const Sparkline: FunctionComponent<{ points: number[]; color: string; cla
         const prevY = 100 - ((points[i - 1] - min) / range) * 80;
         const dx = x - prevX;
         return `C ${prevX + dx * 0.35} ${prevY} ${x - dx * 0.35} ${y} ${x} ${y}`;
-    }).join(' ');
+    }).join(' ') : "";
 
-    const gradId = `sg-${color.replace('#', '')}`;
+    const gradId = `sg-${color.replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
     const applyDrawState = (animate: boolean) => {
         if (!pathRef.current || !pathRef.current.getTotalLength) return;
@@ -49,7 +49,7 @@ export const Sparkline: FunctionComponent<{ points: number[]; color: string; cla
         }
         gsap.set(pathRef.current, { strokeDasharray: `${len} ${len}`, strokeDashoffset: len });
         if (animate) {
-            gsap.to(pathRef.current, { strokeDashoffset: 0, duration: 1.4, ease: "power3.inOut", delay: 0.4 });
+            gsap.to(pathRef.current, { strokeDashoffset: 0, duration: tokens.listReveal.duration, ease: tokens.listReveal.ease, delay: tokens.controlFeedback.duration });
             return;
         }
         gsap.set(pathRef.current, { strokeDashoffset: 0 });
@@ -57,13 +57,14 @@ export const Sparkline: FunctionComponent<{ points: number[]; color: string; cla
 
     // Recompute the path contract whenever the rendered line changes.
     useLayoutEffect(() => {
+        if (!pathD) return;
         applyDrawState(true);
         return () => {
             if (pathRef.current) {
                 gsap.killTweensOf(pathRef.current);
             }
         };
-    }, [pathD]);
+    }, [pathD, isReducedMotion, tokens.listReveal.duration, tokens.listReveal.ease, tokens.controlFeedback.duration]);
 
     // Hover: replay from the start + glow the whole SVG
     useEffect(() => {
@@ -74,11 +75,11 @@ export const Sparkline: FunctionComponent<{ points: number[]; color: string; cla
             if (!pathRef.current || !svgRef.current) return;
             applyDrawState(false);
             const len = pathRef.current.getTotalLength();
-            gsap.fromTo(pathRef.current, { strokeDashoffset: len }, { strokeDashoffset: 0, duration: 0.85, ease: "power2.out" });
+            gsap.fromTo(pathRef.current, { strokeDashoffset: len }, { strokeDashoffset: 0, duration: tokens.controlFeedback.duration, ease: tokens.controlFeedback.ease });
             gsap.to(svgRef.current, {
                 filter: `drop-shadow(0 0 5px ${color})`,
                 opacity: 0.55,
-                duration: 0.4,
+                duration: tokens.controlFeedback.duration,
             });
         };
 
@@ -87,7 +88,7 @@ export const Sparkline: FunctionComponent<{ points: number[]; color: string; cla
             gsap.to(svgRef.current, {
                 filter: 'none',
                 opacity: 0.2,
-                duration: 0.5,
+                duration: tokens.controlFeedback.duration,
             });
         };
 
@@ -99,16 +100,23 @@ export const Sparkline: FunctionComponent<{ points: number[]; color: string; cla
             if (pathRef.current) gsap.killTweensOf(pathRef.current);
             if (svgRef.current) gsap.killTweensOf(svgRef.current);
         };
-    }, [color]);
+    }, [color, isReducedMotion, tokens.controlFeedback.duration, tokens.controlFeedback.ease]);
+
+    if (!hasPoints) {
+        return null;
+    }
 
     return (
         <svg
             ref={svgRef}
             className={className}
-            style={{ opacity: 0.2 }}
+            style={{ opacity: isReducedMotion ? 0.32 : 0.2 }}
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
-            aria-hidden="true"
+            role={ariaLabel ? "img" : undefined}
+            aria-label={ariaLabel}
+            aria-hidden={ariaLabel ? undefined : "true"}
+            data-reduced-motion={isReducedMotion ? "true" : "false"}
         >
             <defs>
                 <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">

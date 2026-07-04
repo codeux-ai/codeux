@@ -29,7 +29,7 @@ import type { PlannedSprintPayload, PlannedTaskDraft } from "../contracts/projec
 import { persistPlannedTasks } from "./planning-task-persistence.js";
 import { ProviderExecutionService, resolveEffectiveModel } from "./provider-execution-service.js";
 import { StructuredAgentRequestService, type StructuredAgentRequestResult } from "./structured-agent-request-service.js";
-import { StructuredProviderResponseService } from "./structured-provider-response-service.js";
+import { ProviderInvocationCancelledError, StructuredProviderResponseService } from "./structured-provider-response-service.js";
 import { waitUntil } from "../shared/polling/wait-until.js";
 import { LEARNINGS_FILENAME } from "../contracts/memory-types.js";
 import * as PlanningPromptBuilder from "./planning-prompt-builder.js";
@@ -105,6 +105,21 @@ function isExecutionInvocationActiveForFinalize(
   }
   const current = executionRepository?.getExecutionInvocation(invocationId);
   return current?.status !== "cancelled";
+}
+
+function finalizePlanningInvocationError(
+  executionRepository: PlanningAgentServiceDeps["executionRepository"],
+  invocationId: string | undefined,
+  error: unknown,
+): void {
+  if (!invocationId || !isExecutionInvocationActiveForFinalize(executionRepository, invocationId)) {
+    return;
+  }
+  executionRepository?.updateExecutionInvocation(invocationId, {
+    status: error instanceof ProviderInvocationCancelledError ? "cancelled" : "failed",
+    errorMessage: error instanceof Error ? error.message : String(error),
+    finishedAt: new Date().toISOString(),
+  });
 }
 
 interface PlanningContinuationContext {
@@ -233,13 +248,7 @@ export class PlanningAgentService {
     } catch (error) {
 //
 
-      if (invocation && isExecutionInvocationActiveForFinalize(this.deps.executionRepository, invocation.id)) {
-        this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
-          status: "failed",
-          errorMessage: error instanceof Error ? error.message : String(error),
-          finishedAt: new Date().toISOString(),
-        });
-      }
+      finalizePlanningInvocationError(this.deps.executionRepository, invocation?.id, error);
       throw error;
     }
 
@@ -426,13 +435,7 @@ export class PlanningAgentService {
         );
       }
 
-      if (invocation && isExecutionInvocationActiveForFinalize(this.deps.executionRepository, invocation.id)) {
-        this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
-          status: "failed",
-          errorMessage: error instanceof Error ? error.message : String(error),
-          finishedAt: new Date().toISOString(),
-        });
-      }
+      finalizePlanningInvocationError(this.deps.executionRepository, invocation?.id, error);
       throw error;
     }
 
@@ -592,8 +595,11 @@ export class PlanningAgentService {
         }
         : null,
     });
-    const providerConfigId = args.overrides?.virtualProvider
-      ? Object.entries(route.providers).find(([, candidate]) => candidate.provider === args.overrides?.virtualProvider)?.[0] || route.providerConfigId
+    const virtualProviderOverride = args.overrides?.virtualProvider;
+    const providerConfigId = virtualProviderOverride
+      ? Object.entries(route.providers).find(([candidateConfigId, candidate]) => (
+        candidateConfigId === virtualProviderOverride || candidate.provider === virtualProviderOverride
+      ))?.[0] || route.providerConfigId
       : route.providerConfigId;
     const baseProviderSettings = route.providers[providerConfigId];
     if (!baseProviderSettings) {

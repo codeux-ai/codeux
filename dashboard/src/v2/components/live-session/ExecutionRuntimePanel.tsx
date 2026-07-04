@@ -49,6 +49,12 @@ const CONNECTION_ROLE_LABELS: Record<string, string> = {
     project_manager: "Manager",
 };
 
+function getInterventionHeading(intervention: { attentionType: string | null; ownerType: string | null }): string {
+    if (intervention.attentionType === "merge_conflict") return "Merge conflict";
+    if (intervention.ownerType === "system" || intervention.ownerType === "worker") return "Stopped automatically";
+    return "Human intervention needed";
+}
+
 export const ATTENTION_SEVERITY_TONE: Record<string, string> = {
     critical: "border-status-red/20 bg-status-red/10 text-status-red",
     high: "border-status-red/20 bg-status-red/10 text-status-red",
@@ -131,11 +137,17 @@ export const ConnectionRuntimePanel: FunctionComponent<{
         [snapshot?.connections, snapshot?.connections?.length],
     );
 
-    if (!snapshot) return null;
+    if (!snapshot) {
+        return (
+            <div role="status" aria-live="polite" aria-busy="true" className="rounded-[1.75rem] border border-black/[0.08] bg-white p-5 text-[11px] font-mono text-slate-400 shadow-sm dark:border-white/[0.08] dark:bg-void-800 dark:text-slate-500">
+                Loading live connections.
+            </div>
+        );
+    }
 
     const header = (
         <div className="flex flex-wrap items-center gap-2.5">
-            <Radio className="h-4 w-4 text-signal-500" strokeWidth={1.5} />
+            <Radio className="h-4 w-4 text-signal-500" strokeWidth={1.5} aria-hidden="true" />
             <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Live Connections</span>
             <div className="flex flex-wrap items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em]">
                 <span className="rounded-full border border-black/[0.05] bg-black/[0.03] px-2 py-1 text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-400">
@@ -165,12 +177,13 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                     aria-expanded={open}
                     aria-controls={contentId}
                     onClick={() => setOpen((current) => !current)}
-                    className="relative z-10 flex w-full items-center justify-between gap-4 p-5 text-left transition-colors duration-200 hover:bg-black/[0.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:hover:bg-white/[0.01] dark:focus-visible:ring-offset-void-800"
+                    className="relative z-10 flex w-full items-center justify-between gap-4 p-5 text-left transition-colors duration-[var(--interaction-control-feedback-duration)] hover:bg-black/[0.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:hover:bg-white/[0.01] dark:focus-visible:ring-offset-void-800"
                 >
                     {header}
                     <ChevronDown
-                        className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-300 ${open ? "rotate-0" : "-rotate-90"}`}
+                        className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-[var(--interaction-enter-exit-duration)] ${open ? "rotate-0" : "-rotate-90"}`}
                         strokeWidth={2}
+                        aria-hidden="true"
                     />
                 </button>
             ) : (
@@ -183,11 +196,11 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                 <div ref={contentRef} className={collapsible ? "collapsible-content overflow-hidden" : ""}>
                     <div className={`relative z-10 ${collapsible ? "px-5 pb-5 pt-0" : "px-5 pb-5 pt-0"}`}>
                         {snapshot.connections.length === 0 ? (
-                            <p className="text-[11px] font-mono text-slate-400 dark:text-slate-600">
+                            <p role="status" aria-live="polite" className="text-[11px] font-mono text-slate-400 dark:text-slate-600">
                                 No listeners or workers are connected to the selected project yet.
                             </p>
                         ) : (
-                            <div className="max-h-[50dvh] sm:max-h-72 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar">
+                            <div className="max-h-[50dvh] sm:max-h-72 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar" role="log" aria-live="polite" aria-label="Live connection runtime rows">
                                 {visibleConnections.map((connection) => (
                                     <div
                                         key={connection.id}
@@ -196,7 +209,7 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                                         <div className="flex items-start justify-between gap-3 min-w-0">
                                             <div className="min-w-0">
                                                 <div className="flex flex-wrap items-center gap-2">
-                                                    <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                                    <span className="min-w-0 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
                                                         {connection.displayName}
                                                     </span>
                                                     <span className="rounded-md border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
@@ -213,15 +226,15 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                                                     {connection.model && (
                                                         <>
                                                             <span>·</span>
-                                                            <span>{connection.model}</span>
+                                                            <span className="break-words">{connection.model}</span>
                                                         </>
                                                     )}
                                                     <span>·</span>
-                                                    <span className="truncate">{connection.connectionKey}</span>
+                                                    <span className="break-all">{connection.connectionKey}</span>
                                                 </div>
                                                 {(connection.machineName || connection.platform || connection.arch || connection.localExecutionRuntime) && (
                                                     <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
-                                                        {connection.machineName && <span>{connection.machineName}</span>}
+                                                        {connection.machineName && <span className="break-all">{connection.machineName}</span>}
                                                         {connection.platform && (
                                                             <>
                                                                 <span>·</span>
@@ -283,7 +296,7 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                                                     </div>
                                                 )}
                                                 {connection.instruction && (
-                                                    <p className="line-clamp-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                                                    <p className="line-clamp-2 break-words text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
                                                         {connection.instruction}
                                                     </p>
                                                 )}
@@ -322,6 +335,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
     } = useExecutionTimeline();
 
     const [open, setOpen] = useState(defaultOpen);
+    const [expandedInterventionIds, setExpandedInterventionIds] = useState<Set<string>>(() => new Set());
     const contentId = useId();
 
     const contentRef = useRef<HTMLDivElement>(null);
@@ -346,7 +360,13 @@ export const ExecutionRuntimePanel: FunctionComponent<{
         }
     }, [open, isReducedMotion, enterDuration, collapsible]);
 
-    if (!snapshot) return null;
+    if (!snapshot) {
+        return (
+            <div role="status" aria-live="polite" aria-busy="true" className="rounded-[1.75rem] border border-black/[0.08] bg-white p-5 text-[11px] font-mono text-slate-400 shadow-sm dark:border-white/[0.08] dark:bg-void-800 dark:text-slate-500">
+                Loading execution runtime.
+            </div>
+        );
+    }
     const activeSprintRuns = useMemo(() => snapshot.sprintRuns.filter((run) => run.status === "running" || run.status === "queued"), [snapshot.sprintRuns, snapshot.sprintRuns.length]);
     const activeDispatches = useMemo(() => snapshot.taskDispatches.filter((dispatch) => (
         dispatch.status === "queued" || dispatch.status === "claimed" || dispatch.status === "running"
@@ -377,7 +397,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
     );
 
     return (
-        <div className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800">
+        <div role="region" aria-label="Execution runtime" aria-busy={activeSprintRuns.length > 0 || activeDispatches.length > 0 ? "true" : undefined} className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800">
 
 
 
@@ -387,10 +407,10 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                     aria-expanded={open}
                     aria-controls={contentId}
                     onClick={() => setOpen((current) => !current)}
-                    className="relative z-10 flex w-full items-center justify-between gap-4 p-5 text-left transition-colors duration-200 hover:bg-black/[0.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:hover:bg-white/[0.01] dark:focus-visible:ring-offset-void-800"
+                    className="relative z-10 flex w-full items-center justify-between gap-4 p-5 text-left transition-colors duration-[var(--interaction-control-feedback-duration)] hover:bg-black/[0.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:hover:bg-white/[0.01] dark:focus-visible:ring-offset-void-800"
                 >
                     <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-                        <Workflow className="h-4 w-4 text-signal-500" strokeWidth={1.5} />
+                        <Workflow className="h-4 w-4 text-signal-500" strokeWidth={1.5} aria-hidden="true" />
                         <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Execution Runtime</span>
                         <div className="flex flex-wrap items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em]">
                             {activeSprintRuns.length > 0 && (
@@ -411,14 +431,15 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                         </div>
                     </div>
                     <ChevronDown
-                        className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-300 ${open ? "rotate-0" : "-rotate-90"}`}
+                        className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-[var(--interaction-enter-exit-duration)] ${open ? "rotate-0" : "-rotate-90"}`}
                         strokeWidth={2}
+                        aria-hidden="true"
                     />
                 </button>
             ) : (
                 <div className="relative z-10 flex items-center justify-between gap-4 px-6 pt-6">
                     <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-                        <Workflow className="h-4 w-4 text-signal-500" strokeWidth={1.5} />
+                        <Workflow className="h-4 w-4 text-signal-500" strokeWidth={1.5} aria-hidden="true" />
                         <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Execution Runtime</span>
                     </div>
                 </div>
@@ -455,17 +476,17 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                 <span className="rounded-md border border-black/[0.05] bg-black/[0.02] px-2 py-0.5 text-[9px] font-mono text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.025]">{snapshot.sprintRuns.length} total</span>
                             </div>
                             {snapshot.sprintRuns.length === 0 ? (
-                                <div className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 text-[11px] font-mono text-slate-400 dark:border-white/[0.04] dark:bg-white/[0.015] dark:text-slate-500">No sprint runs recorded for the selected project.</div>
+                                <div role="status" aria-live="polite" className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 text-[11px] font-mono text-slate-400 dark:border-white/[0.04] dark:bg-white/[0.015] dark:text-slate-500">No sprint runs recorded for the selected project.</div>
                             ) : (
-                                <div className="space-y-2">
+                                <div className="space-y-2" role="log" aria-live="polite" aria-label="Sprint run status rows">
                                     {visibleSprintRuns.map((run) => (
                                         <div key={run.id} className={`rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] bg-black/[0.015] p-3 pl-3 transition-colors hover:border-signal-500/25 hover:bg-signal-500/[0.035] dark:border-white/[0.04] dark:bg-white/[0.015] ${statusRailTone(run.status)}`}>
                                             <div className="flex items-center justify-between gap-3 min-w-0">
                                                 <div className="min-w-0">
-                                                    <div className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                                    <div className="break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
                                                         {run.sprintName}{run.sprintNumber != null ? ` · Sprint ${run.sprintNumber}` : ""}
                                                     </div>
-                                                    <div className="mt-1 text-[10px] font-mono text-slate-400">
+                                                    <div className="mt-1 break-words text-[10px] font-mono text-slate-400">
                                                         {EXECUTOR_LABELS[run.executorMode] || run.executorMode} · {run.triggerType}
                                                         {run.triggeredBy ? ` · ${run.triggeredBy}` : ""}
                                                     </div>
@@ -476,7 +497,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                     </div>
                                                     {run.activeLeaseOwnerKey && (
                                                         <div className="mt-1 text-[10px] font-mono text-slate-400">
-                                                            lease {run.activeLeaseOwnerKey}
+                                                            lease <span className="break-all">{run.activeLeaseOwnerKey}</span>
                                                         </div>
                                                     )}
                                                 </div>
@@ -486,10 +507,11 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                     <button
                                                         type="button"
                                                         onClick={() => getPendingActionState(pendingActionIds, `sprint-start:${run.sprintId}`) === "idle" && onOrchestrateSprint(run.projectId, run.sprintId)}
+                                                        aria-label={`${run.status === "paused" ? "Resume" : "Run again"} sprint ${run.sprintName}`}
                                                         {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, `sprint-start:${run.sprintId}`) === "pending", false)}
                                                         className="inline-flex items-center gap-1.5 rounded-md border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/15 aria-disabled:opacity-50 dark:text-signal-400"
                                                         >
-                                                        <Play className="h-3 w-3" strokeWidth={2} />
+                                                        <Play className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
                                                         {getPendingActionState(pendingActionIds, `sprint-start:${run.sprintId}`) === "pending" ? "Starting" : (run.status === "paused" ? "Resume" : "Run Again")}
                                                         {getPendingActionState(pendingActionIds, `sprint-start:${run.sprintId}`) === "pending" && <span className="sr-only">Starting...</span>}
                                                     </button>
@@ -498,10 +520,11 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                     <button
                                                         type="button"
                                                         onClick={() => getPendingActionState(pendingActionIds, `sprint-pause:${run.id}`) === "idle" && onPauseSprintRun(run.id)}
+                                                        aria-label={`Pause sprint run ${run.sprintName}`}
                                                         {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, `sprint-pause:${run.id}`) === "pending", false)}
                                                         className="inline-flex items-center gap-1.5 rounded-md border border-status-amber/20 bg-status-amber/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-amber transition-colors hover:bg-status-amber/15 aria-disabled:opacity-50"
                                                     >
-                                                        <PauseCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, `sprint-pause:${run.id}`) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} />
+                                                        <PauseCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, `sprint-pause:${run.id}`) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />
                                                         {getPendingActionState(pendingActionIds, `sprint-pause:${run.id}`) === "pending" ? "Pausing" : "Pause"}
                                                         {getPendingActionState(pendingActionIds, `sprint-pause:${run.id}`) === "pending" && <span className="sr-only">Pausing...</span>}
                                                     </button>
@@ -510,10 +533,11 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                     <button
                                                         type="button"
                                                         onClick={() => getPendingActionState(pendingActionIds, `sprint-cancel:${run.id}`) === "idle" && onCancelSprintRun(run.id)}
+                                                        aria-label={`Cancel sprint run ${run.sprintName}`}
                                                         {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, `sprint-cancel:${run.id}`) === "pending", false)}
                                                         className="inline-flex items-center gap-1.5 rounded-md border border-status-red/20 bg-status-red/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/15 aria-disabled:opacity-50"
                                                         >
-                                                        <XCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, `sprint-cancel:${run.id}`) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} />
+                                                        <XCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, `sprint-cancel:${run.id}`) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />
                                                         {getPendingActionState(pendingActionIds, `sprint-cancel:${run.id}`) === "pending" ? "Cancelling" : "Cancel"}
                                                         {getPendingActionState(pendingActionIds, `sprint-cancel:${run.id}`) === "pending" && <span className="sr-only">Cancelling...</span>}
                                                     </button>
@@ -521,16 +545,17 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                 {run.status === "cancel_requested" && (
                                                     <>
                                                         <div className="inline-flex items-center gap-1.5 rounded-md border border-status-amber/20 bg-status-amber/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-amber">
-                                                            <Clock className="h-3 w-3" strokeWidth={2} />
+                                                            <Clock className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
                                                             Stop Pending
                                                         </div>
                                                         <button
                                                             type="button"
                                                             onClick={() => getPendingActionState(pendingActionIds, `sprint-force-cancel:${run.id}`) === "idle" && onForceCancelSprintRun(run.id)}
+                                                            aria-label={`Force cancel sprint run ${run.sprintName}`}
                                                             {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, `sprint-force-cancel:${run.id}`) === "pending", false)}
                                                             className="inline-flex items-center gap-1.5 rounded-md border border-status-red/20 bg-status-red/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/15 aria-disabled:opacity-50"
                                                             >
-                                                            <XCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, `sprint-force-cancel:${run.id}`) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} />
+                                                            <XCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, `sprint-force-cancel:${run.id}`) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />
                                                             {getPendingActionState(pendingActionIds, `sprint-force-cancel:${run.id}`) === "pending" ? "Force Cancelling" : "Force Cancel"}
                                                             {getPendingActionState(pendingActionIds, `sprint-force-cancel:${run.id}`) === "pending" && <span className="sr-only">Force Cancelling...</span>}
                                                         </button>
@@ -550,23 +575,47 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                                     ? "text-slate-500 dark:text-slate-400"
                                                                     : "text-status-amber"
                                                             }`}>
-                                                                {run.humanIntervention.ownerType === "system" || run.humanIntervention.ownerType === "worker"
-                                                                    ? "Stopped automatically"
-                                                                    : "Human intervention needed"}
+                                                                {getInterventionHeading(run.humanIntervention)}
                                                             </div>
-                                                            <div className="mt-1 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                                            <div className="mt-1 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
                                                                 {run.humanIntervention.title}
                                                             </div>
                                                         </div>
-                                                        <HumanInterventionBadge summary={run.humanIntervention} label="Details" compact align="right" />
+                                                        <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                                                            <HumanInterventionBadge summary={run.humanIntervention} label="Details" compact align="right" />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setExpandedInterventionIds((current) => {
+                                                                    const next = new Set(current);
+                                                                    if (next.has(run.id)) {
+                                                                        next.delete(run.id);
+                                                                    } else {
+                                                                        next.add(run.id);
+                                                                    }
+                                                                    return next;
+                                                                })}
+                                                                aria-expanded={expandedInterventionIds.has(run.id)}
+                                                                aria-controls={`${contentId}-intervention-${run.id}`}
+                                                                className="inline-flex items-center gap-1 rounded-md border border-black/[0.06] bg-white/60 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:border-signal-500/25 hover:text-slate-700 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:text-slate-200"
+                                                            >
+                                                                Instructions
+                                                                <ChevronDown
+                                                                    className={`h-3 w-3 transition-transform ${expandedInterventionIds.has(run.id) ? "rotate-180" : ""}`}
+                                                                    strokeWidth={2}
+                                                                    aria-hidden="true"
+                                                                />
+                                                            </button>
+                                                        </div>
                                                     </div>
-                                                    <p className="mt-2 text-[12px] leading-relaxed text-slate-600 dark:text-slate-300">
-                                                        {run.humanIntervention.reason}
-                                                    </p>
-                                                    {!(run.humanIntervention.ownerType === "system" || run.humanIntervention.ownerType === "worker") && (
-                                                        <p className="mt-2 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
+                                                    {expandedInterventionIds.has(run.id) && (
+                                                        <div id={`${contentId}-intervention-${run.id}`} className="mt-3 rounded-lg border border-black/[0.04] bg-white/45 p-3 dark:border-white/[0.05] dark:bg-white/[0.025]">
+                                                            <p className="break-words text-[12px] leading-relaxed text-slate-600 dark:text-slate-300">
+                                                                {run.humanIntervention.reason}
+                                                            </p>
+                                                            <p className="mt-2 break-words text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
                                                             {run.humanIntervention.instructions}
-                                                        </p>
+                                                            </p>
+                                                        </div>
                                                     )}
                                                 </div>
                                             )}
@@ -582,9 +631,9 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                 <span className="rounded-md border border-black/[0.05] bg-black/[0.02] px-2 py-0.5 text-[9px] font-mono text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.025]">{snapshot.taskDispatches.length} total</span>
                             </div>
                             {snapshot.taskDispatches.length === 0 ? (
-                                <div className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 text-[11px] font-mono text-slate-400 dark:border-white/[0.04] dark:bg-white/[0.015] dark:text-slate-500">No task dispatches yet.</div>
+                                <div role="status" aria-live="polite" className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 text-[11px] font-mono text-slate-400 dark:border-white/[0.04] dark:bg-white/[0.015] dark:text-slate-500">No task dispatches yet.</div>
                             ) : (
-                                <div className="max-h-[50dvh] sm:max-h-80 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar">
+                                <div className="max-h-[50dvh] sm:max-h-80 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar" role="log" aria-live="polite" aria-label="Task dispatch status rows">
                                     {visibleTaskDispatches.map((dispatch) => {
                                         const dispatchEvents = snapshot.recentEvents.filter(
                                             (e) => e.dispatchId === dispatch.id || (e.taskRunId && e.taskRunId === dispatch.taskRunId)
@@ -594,18 +643,18 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                             <div key={dispatch.id} className={`rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] bg-black/[0.015] p-3 pl-3 transition-colors hover:border-signal-500/25 hover:bg-signal-500/[0.035] dark:border-white/[0.04] dark:bg-white/[0.015] ${statusRailTone(activeCap ? "PENDING" : dispatch.status)}`}>
                                                 <div className="flex items-start justify-between gap-3 min-w-0">
                                                     <div className="min-w-0">
-                                                        <div className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                                        <div className="break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
                                                             {dispatch.taskKey} · {dispatch.taskTitle}
                                                         </div>
                                                         <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
-                                                            <span>{dispatch.sprintName}</span>
+                                                            <span className="break-words">{dispatch.sprintName}</span>
                                                             <span>·</span>
                                                             <span>{EXECUTOR_LABELS[dispatch.executorType] || dispatch.executorType}</span>
                                                             {dispatch.connectionDisplayName && (
                                                                 <>
                                                                     <span>·</span>
-                                                                    <span className="inline-flex items-center gap-1">
-                                                                        <Bot className="h-3 w-3" strokeWidth={2} />
+                                                                    <span className="inline-flex min-w-0 items-center gap-1 break-words">
+                                                                        <Bot className="h-3 w-3 shrink-0" strokeWidth={2} aria-hidden="true" />
                                                                         {dispatch.connectionDisplayName}
                                                                     </span>
                                                                 </>
@@ -647,7 +696,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                         {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, `dispatch-cancel:${dispatch.id}`) === "pending", false)}
                                                         className="inline-flex items-center gap-1.5 rounded-md border border-status-red/20 bg-status-red/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/15 aria-disabled:opacity-50"
                                                         >
-                                                        <XCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, `dispatch-cancel:${dispatch.id}`) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} />
+                                                        <XCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, `dispatch-cancel:${dispatch.id}`) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />
                                                         {getPendingActionState(pendingActionIds, `dispatch-cancel:${dispatch.id}`) === "pending" ? "Cancelling" : "Cancel"}
                                                         {getPendingActionState(pendingActionIds, `dispatch-cancel:${dispatch.id}`) === "pending" && <span className="sr-only">Cancelling...</span>}
                                                     </button>
@@ -655,7 +704,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                 {dispatch.status === "cancel_requested" && (
                                                     <>
                                                         <div className="inline-flex items-center gap-1.5 rounded-md border border-status-amber/20 bg-status-amber/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-amber">
-                                                            <Clock className="h-3 w-3" strokeWidth={2} />
+                                                            <Clock className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
                                                             Stop Pending
                                                         </div>
                                                         <button
@@ -665,7 +714,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                             {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, `dispatch-force-cancel:${dispatch.id}`) === "pending", false)}
                                                             className="inline-flex items-center gap-1.5 rounded-md border border-status-red/20 bg-status-red/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/15 aria-disabled:opacity-50"
                                                             >
-                                                            <XCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, `dispatch-force-cancel:${dispatch.id}`) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} />
+                                                            <XCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, `dispatch-force-cancel:${dispatch.id}`) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />
                                                             {getPendingActionState(pendingActionIds, `dispatch-force-cancel:${dispatch.id}`) === "pending" ? "Force Cancelling" : "Force Cancel"}
                                                             {getPendingActionState(pendingActionIds, `dispatch-force-cancel:${dispatch.id}`) === "pending" && <span className="sr-only">Force Cancelling...</span>}
                                                         </button>
@@ -679,7 +728,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                         {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, `dispatch-retry:${dispatch.id}`) === "pending", false)}
                                                         className="inline-flex items-center gap-1.5 rounded-md border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/15 aria-disabled:opacity-50 dark:text-signal-400"
                                                         >
-                                                        <RotateCcw className={`h-3 w-3 ${getPendingActionState(pendingActionIds, `dispatch-retry:${dispatch.id}`) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} />
+                                                        <RotateCcw className={`h-3 w-3 ${getPendingActionState(pendingActionIds, `dispatch-retry:${dispatch.id}`) === "pending" ? "motion-safe:animate-spin" : ""}`} strokeWidth={2} aria-hidden="true" />
                                                         {getPendingActionState(pendingActionIds, `dispatch-retry:${dispatch.id}`) === "pending" ? "Retrying" : "Retry"}
                                                         {getPendingActionState(pendingActionIds, `dispatch-retry:${dispatch.id}`) === "pending" && <span className="sr-only">Retrying...</span>}
                                                     </button>

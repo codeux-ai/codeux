@@ -160,21 +160,21 @@ const DeltaValue: FunctionComponent<{
 };
 
 const SummaryPill: FunctionComponent<Node> = ({ label, value, icon: Icon, accent }) => (
-  <div className="rounded-[1.75rem] border border-black/[0.05] bg-white/65 p-7 shadow-sm backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35">
+  <div className="min-w-0 rounded-[1.75rem] border border-black/[0.05] bg-white/65 p-7 shadow-sm backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35">
     <div className={`mb-2 flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em] ${accent}`}>
-      <Icon className="h-3.5 w-3.5" strokeWidth={1.8} />
+      <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.8} aria-hidden="true" />
       <span>{label}</span>
     </div>
-    <div className="font-mono text-xl font-black tracking-tighter text-slate-900 dark:text-white">
+    <div className="break-words font-mono text-xl font-black tracking-tighter text-slate-900 dark:text-white">
       {value}
     </div>
   </div>
 );
 
 const CounterTile: FunctionComponent<Node & { className?: string }> = ({ label, value, icon: Icon, accent, className }) => (
-  <div className={`rounded-[1.75rem] border border-black/[0.05] bg-white/68 p-7 shadow-sm backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35 ${className || ""}`}>
+  <div className={`min-w-0 rounded-[1.75rem] border border-black/[0.05] bg-white/68 p-7 shadow-sm backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35 ${className || ""}`}>
     <div className={`mb-2 flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em] ${accent}`}>
-      <Icon className="h-3.5 w-3.5" strokeWidth={1.9} />
+      <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.9} aria-hidden="true" />
       <span>{label}</span>
     </div>
     <DeltaValue value={Number(value)} compact />
@@ -289,6 +289,7 @@ export const TaskStagePills: FunctionComponent<{
                 boxShadow: active ? `0 0 10px ${meta.accent}` : "none",
               }}
             />
+            <span className="sr-only">{active ? "Active stage:" : "Stage:"}</span>
             {meta.shortLabel}
             <span className="font-mono normal-case tracking-normal text-slate-600 dark:text-slate-300">
               {formatDurationTight(timing.stageTotals[stage])}
@@ -297,7 +298,7 @@ export const TaskStagePills: FunctionComponent<{
         );
       })}
       <span className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300">
-        <Timer className="h-3 w-3" strokeWidth={2.2} />
+        <Timer className="h-3 w-3" strokeWidth={2.2} aria-hidden="true" />
         Total
         <span className="font-mono normal-case tracking-normal text-slate-700 dark:text-white">{formatDurationTight(timing.totalSeconds)}</span>
       </span>
@@ -317,12 +318,12 @@ export const SprintStatsDeck: FunctionComponent<{
 
   if (!hasSprintContext) {
     return (
-      <div className="relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white p-7 shadow-sm dark:border-white/[0.08] dark:bg-void-800">
+      <div role="status" aria-live="polite" className="relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white p-7 shadow-sm dark:border-white/[0.08] dark:bg-void-800">
 
 
         <div className="relative z-10 flex min-h-[22rem] flex-col items-center justify-center text-center">
           <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-[1.3rem] border border-signal-500/20 bg-signal-500/10 text-signal-500 shadow-[0_0_24px_rgba(0,224,160,0.16)]">
-            <Timer className="h-8 w-8" strokeWidth={1.4} />
+            <Timer className="h-8 w-8" strokeWidth={1.4} aria-hidden="true" />
           </div>
           <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">Sprint Stats</div>
           <h3 className="mt-3 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white">
@@ -337,7 +338,7 @@ export const SprintStatsDeck: FunctionComponent<{
   }
 
   return (
-    <div className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white p-7 shadow-sm dark:border-white/[0.08] dark:bg-void-800">
+    <div role="region" aria-label="Live sprint stats" className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white p-7 shadow-sm dark:border-white/[0.08] dark:bg-void-800">
 
 
 
@@ -357,7 +358,7 @@ export const SprintStatsDeck: FunctionComponent<{
         <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
-              <Timer className="h-4 w-4" strokeWidth={1.6} />
+              <Timer className="h-4 w-4" strokeWidth={1.6} aria-hidden="true" />
               Telemetry Field
             </div>
             <h3 className="mt-2 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white md:text-[2.35rem]">
@@ -369,7 +370,7 @@ export const SprintStatsDeck: FunctionComponent<{
           </div>
 
           <div className="w-full overflow-x-auto pb-1 xl:max-w-[62rem] xl:justify-end">
-            <div className="grid min-w-[60rem] grid-cols-5 gap-2.5">
+            <div className="grid min-w-[60rem] grid-cols-5 gap-2.5" role="group" aria-label="Sprint stat summary">
               <SummaryPill label="Elapsed" value={formatDuration(sprintTiming.sprintElapsedSeconds)} icon={Timer} accent="text-signal-500" />
               <SummaryPill label="Completion" value={formatPercent(completionRate)} icon={CheckCircle2} accent="text-status-green" />
               <SummaryPill label="Avg Finish" value={formatDurationTight(sprintTiming.averageCompletedTaskSeconds)} icon={Sparkles} accent="text-ember-500" />
@@ -383,12 +384,12 @@ export const SprintStatsDeck: FunctionComponent<{
           <div className="grid gap-3 xl:grid-cols-12">
             <div className="xl:col-span-7 rounded-[1.75rem] border border-black/[0.06] bg-white/68 p-7 shadow-sm backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/35">
               <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
-                <Clock3 className="h-3.5 w-3.5" strokeWidth={1.9} />
+                <Clock3 className="h-3.5 w-3.5" strokeWidth={1.9} aria-hidden="true" />
                 Sprint Clock
               </div>
               <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
                 <div>
-                  <div className="text-[3.5rem] font-black leading-none tracking-[-0.07em] text-slate-900 dark:text-white md:text-[4.6rem]">
+                  <div className="break-words text-[3.5rem] font-black leading-none tracking-[-0.07em] text-slate-900 dark:text-white md:text-[4.6rem]">
                     {formatDuration(sprintTiming.sprintElapsedSeconds)}
                   </div>
                   <div className="mt-3 text-sm text-slate-500 dark:text-slate-400">
@@ -435,7 +436,7 @@ export const SprintStatsDeck: FunctionComponent<{
             <div className="xl:col-span-5 space-y-3">
               <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/68 p-7 shadow-sm backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/35">
                 <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-                  <Activity className="h-3.5 w-3.5 text-signal-500" strokeWidth={1.9} />
+                  <Activity className="h-3.5 w-3.5 text-signal-500" strokeWidth={1.9} aria-hidden="true" />
                   Flow State
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -448,7 +449,7 @@ export const SprintStatsDeck: FunctionComponent<{
 
               <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/68 p-7 shadow-sm backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/35">
                 <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-                  <WandSparkles className="h-3.5 w-3.5 text-ember-500" strokeWidth={1.9} />
+                  <WandSparkles className="h-3.5 w-3.5 text-ember-500" strokeWidth={1.9} aria-hidden="true" />
                   Merge Surface
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -465,7 +466,7 @@ export const SprintStatsDeck: FunctionComponent<{
           <div className="mt-3 rounded-[1.75rem] border border-black/[0.06] bg-white/68 p-7 shadow-sm backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/35">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-                <Sparkles className="h-3.5 w-3.5 text-signal-500" strokeWidth={1.9} />
+                <Sparkles className="h-3.5 w-3.5 text-signal-500" strokeWidth={1.9} aria-hidden="true" />
                 Stage Ledger
               </div>
               <div className="text-[10px] font-mono uppercase tracking-[0.14em] text-slate-400">

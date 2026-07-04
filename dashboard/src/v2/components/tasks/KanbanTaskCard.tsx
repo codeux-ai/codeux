@@ -1,14 +1,13 @@
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
 import { useRef } from "preact/hooks";
-import type { TargetedEvent } from "preact/compat";
-import gsap from "gsap";
 import { Clock, FolderGit2, GitPullRequest, Settings, Trash2 } from "lucide-preact";
 import { WaveFluid } from "../ui/WaveFluid.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
 import type { Task } from "../../types.js";
 import { PRIORITY_CFG, STATUS_CFG } from "../../lib/tasks-constants.js";
 import { useTaskCardMotion, useTaskCardDragMotion } from "../../lib/motion/task-card-motion.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
@@ -35,51 +34,31 @@ export const KanbanTaskCard: FunctionComponent<{
   const { task, humanizedCreatedAt, dependencyIndicators, sessionId, sessionState, prUrl, liveRunningTime, liveStartedAt } = viewModel;
   const cardRef = useRef<HTMLDivElement>(null);
   const pri = PRIORITY_CFG[task.priority];
+  const statusLabel = STATUS_CFG[task.status].label;
+  const interactionTokens = useInteractionTokens();
+  const blockerCount = dependencyIndicators.filter((dep) => dep.status !== "completed").length;
+  const dependencySummary = dependencyIndicators.length === 0
+    ? "No dependency blockers."
+    : `${dependencyIndicators.length} ${dependencyIndicators.length === 1 ? "dependency" : "dependencies"}; ${blockerCount === 0 ? "no blockers" : `${blockerCount} ${blockerCount === 1 ? "blocker" : "blockers"}`}: ${dependencyIndicators.map((dep) => `${dep.id} ${dep.status.replace(/_/g, " ")}`).join(", ")}.`;
+  const reviewSummary = task.latestReview
+    ? `QA review ${task.latestReview.status}${task.latestReview.outcome ? `, outcome ${task.latestReview.outcome}` : ""}.`
+    : "No QA review recorded.";
   const isReducedMotion = useReducedMotion();
   const StatusIcon = STATUS_CFG[task.status].icon;
   const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel, triggerRef } = useConfirmDialog();
 
   const [flashTriggerCount, setFlashTriggerCount] = useState(0);
-  const prevStatusRef = useRef(task.status);
   const prevRunningTimeRef = useRef(liveRunningTime);
 
   useEffect(() => {
-    let shouldFlash = false;
-
-    // Trigger flash if the task status changes
-    if (prevStatusRef.current !== task.status) {
-      shouldFlash = true;
-
-      if (!isReducedMotion && cardRef.current) {
-        let flashColor = '';
-        const rawStatus = task.status as string;
-        if (rawStatus === 'done' || rawStatus === 'completed') flashColor = 'rgba(0,224,160,0.2)';
-        else if (rawStatus === 'in_progress' || rawStatus === 'active') flashColor = 'rgba(59,130,246,0.2)';
-        else if (rawStatus === 'blocked' || rawStatus === 'failed' || rawStatus === 'QA_REVIEW_FAILED') flashColor = 'rgba(245,158,11,0.2)';
-
-        if (flashColor) {
-          cardRef.current.style.setProperty('--status-flash', flashColor);
-          const tl = gsap.timeline();
-          tl.to(cardRef.current, { backgroundColor: 'var(--status-flash)', duration: 0.15 })
-            .to(cardRef.current, { backgroundColor: '', duration: 0.3, ease: 'power1.out', onComplete: () => {
-              if (cardRef.current) gsap.set(cardRef.current, { clearProps: 'backgroundColor' });
-            }});
-        }
-      }
-    }
-
-    // Trigger flash on initial data load (transition from null to value)
-    if (prevRunningTimeRef.current === null && liveRunningTime !== null) {
-      shouldFlash = true;
-    }
+    const shouldFlash = prevRunningTimeRef.current == null && liveRunningTime != null;
 
     if (shouldFlash) {
       setFlashTriggerCount((c) => c + 1);
     }
 
-    prevStatusRef.current = task.status;
     prevRunningTimeRef.current = liveRunningTime;
-  }, [task.status, liveRunningTime, isReducedMotion]);
+  }, [liveRunningTime]);
 
   useTaskCardMotion(cardRef, task.status, isReducedMotion, index);
   useTaskCardDragMotion(cardRef, isDragging, isReducedMotion);
@@ -91,20 +70,20 @@ export const KanbanTaskCard: FunctionComponent<{
       draggable={!isReducedMotion}
       onDragStart={!isReducedMotion ? (onDragStart as any) : undefined}
       onDragEnd={!isReducedMotion ? (onDragEnd as any) : undefined}
-      aria-roledescription={!isReducedMotion ? "sortable" : undefined}
       aria-describedby={`task-card-kbd-${task.recordId}`}
-      onKeyDown={(e) => {
-        // Placeholder for accessible reordering
-        if (e.key === " " || e.key === "Enter") {
-          e.preventDefault();
-          // Optional: Toggle accessible drag mode if implemented
-        }
-      }}
+      aria-label={`Task ${task.id}: ${task.title}. Status ${statusLabel}. Priority ${pri.label}. ${dependencySummary} ${reviewSummary}`}
       className={`kanban-card group relative flex flex-col bg-white/80 dark:bg-void-800/75 backdrop-blur-sm rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${task.isOptimistic ? "border-dashed border-2 border-slate-300 dark:border-slate-600 opacity-60 pointer-events-none" : "border border-black/[0.06] dark:border-white/[0.06]"} ${isReducedMotion ? 'kanban-card-reduced-motion' : ''} ${isDragging ? 'kanban-card--dragging ring-2 ring-signal-500' : ''}`}
-      style={{ transformStyle: "preserve-3d", willChange: "transform" }}
+      style={{
+        transformStyle: "preserve-3d",
+        willChange: "transform",
+        "--kanban-card-control-duration": interactionTokens.controlFeedback.duration,
+        "--kanban-card-control-ease": interactionTokens.controlFeedback.ease,
+        "--kanban-card-list-duration": interactionTokens.listReorder.duration,
+        "--kanban-card-list-ease": interactionTokens.listReorder.ease,
+      }}
     >
       <span id={`task-card-kbd-${task.recordId}`} className="sr-only">
-        {isReducedMotion ? "Draggable reordering is disabled in reduced motion mode." : (!onDragStart ? "Keyboard reordering is not supported. Use drag and drop to reorder." : "Draggable task. Drag and drop is pointer-only. Keyboard reordering is not supported.")}
+        {isReducedMotion ? "Draggable reordering is disabled in reduced motion mode." : "Draggable task. Drag and drop is pointer-only. Keyboard reordering is not supported."}
       </span>
       <div className="absolute inset-0 pointer-events-none transition-colors duration-300 group-hover:bg-signal-500/[0.02] dark:group-hover:bg-signal-500/[0.02]" />
       <WaveFluid accentHex={STATUS_CFG[task.status].hex} />
@@ -116,8 +95,11 @@ export const KanbanTaskCard: FunctionComponent<{
             {task.id.toUpperCase()}
           </span>
           <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.1em] text-slate-400">
-            <span className="sr-only">, Status: </span><span aria-live="polite" className="sr-only">Task {task.id} status is now {task.status.replace('_', ' ')}</span>
+            <span className="sr-only">, Status: </span><span aria-live="polite" aria-atomic="true" className="sr-only">Task {task.id} status is now {statusLabel}</span>
             <StatusIcon className="w-3 h-3" aria-hidden="true" style={{ color: STATUS_CFG[task.status].hex }} />
+            <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-2 py-0.5 text-[9px] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300">
+              {statusLabel}
+            </span>
           </div>
         </div>
         <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-bold uppercase tracking-[0.14em] ${pri.bg} ${pri.color}`}>
@@ -143,13 +125,24 @@ export const KanbanTaskCard: FunctionComponent<{
           </span>
         )}
         {sessionState && (
-          <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 min-w-0 truncate max-w-full"><span className="sr-only">Session State: </span>{sessionState}
+          <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 min-w-0 break-all max-w-full"><span className="sr-only">Session state: </span>{sessionState}
           </span>
         )}
         {sessionId && (
-          <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 font-mono min-w-0 truncate max-w-full"><span className="sr-only">Session ID: </span>{sessionId}
+          <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 font-mono min-w-0 break-all max-w-full"><span className="sr-only">Session ID: </span>{sessionId}
           </span>
         )}
+        {task.latestReview && (
+          <span className="rounded-full border border-status-amber/20 bg-status-amber/[0.08] px-2.5 py-1 text-status-amber">
+            QA {task.latestReview.outcome ?? task.latestReview.status}
+            <span className="sr-only">
+              . QA review state: {task.latestReview.status}{task.latestReview.outcome ? `, outcome ${task.latestReview.outcome}` : ""}{task.latestReview.summary ? `. ${task.latestReview.summary}` : ""}.
+            </span>
+          </span>
+        )}
+        <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1">
+          {isReducedMotion ? "Drag disabled: reduced motion" : "Pointer drag only"}
+        </span>
       </div>
 
       <div className="flex items-center gap-3 mt-auto relative z-10 min-w-0">
@@ -177,10 +170,12 @@ export const KanbanTaskCard: FunctionComponent<{
           <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-slate-300 dark:text-slate-600">
             <Clock className="w-3 h-3 shrink-0" strokeWidth={2} aria-hidden="true" />
             <span className="sr-only">Duration: </span>
-            <LiveDurationBadge
-              durationText={liveRunningTime ?? task.time ?? "Not started"}
-              flashTriggerCount={flashTriggerCount}
-            />
+            <span aria-live={liveRunningTime ? "polite" : undefined} aria-atomic="true">
+              <LiveDurationBadge
+                durationText={liveRunningTime ?? task.time ?? "Not started"}
+                flashTriggerCount={flashTriggerCount}
+              />
+            </span>
           </div>
           {prUrl && (
             <a
@@ -189,8 +184,9 @@ export const KanbanTaskCard: FunctionComponent<{
               rel="noopener noreferrer"
               className="flex items-center gap-1 text-[9px] font-mono text-signal-500 hover:text-signal-400 transition-colors"
               onClick={(e) => e.stopPropagation()}
+              aria-label={`Open pull request for task ${task.id}`}
             >
-              <GitPullRequest className="w-3 h-3" strokeWidth={2} />
+              <GitPullRequest className="w-3 h-3" strokeWidth={2} aria-hidden="true" />
               <span aria-hidden="true">PR</span><span className="sr-only">Pull request link</span>
             </a>
           )}
@@ -198,19 +194,20 @@ export const KanbanTaskCard: FunctionComponent<{
         <span className="text-[9px] font-mono text-slate-300 dark:text-slate-700">{liveStartedAt ? `· ${formatTimeAgo(liveStartedAt)}` : humanizedCreatedAt}</span>
       </div>
 
-      <div className="absolute top-3 right-3 flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] translate-y-[-8px] opacity-0 pointer-events-none [@media(any-pointer:coarse)]:opacity-100 [@media(any-pointer:coarse)]:pointer-events-auto [@media(any-pointer:coarse)]:translate-y-0 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus:pointer-events-auto group-focus:translate-y-0 group-focus:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 focus-within:translate-y-0 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-focus-within:translate-y-0 transition-all duration-300 ease-[cubic-bezier(0.175,0.885,0.32,1.275)] z-20">
+      <div className="kanban-card__actions absolute top-3 right-3 flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] z-20">
         <button
           type="button"
-          className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 rounded-full transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
+          className="inline-flex items-center gap-1.5 rounded-full px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors active:scale-95 hover:text-signal-600 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:text-slate-400 dark:hover:text-signal-400"
           title={`Edit task ${task.id}`} aria-label={`Edit task ${task.id}: ${task.title}`}
           onClick={() => onEdit(task)}
         >
-          <Settings className="w-3 h-3" />
+          <Settings className="w-3 h-3" aria-hidden="true" />
+          <span>Edit</span>
         </button>
         <button
           type="button"
           ref={triggerRef as any}
-          className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-status-red rounded-full transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red/30"
+          className="inline-flex items-center gap-1.5 rounded-full px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors active:scale-95 hover:text-status-red disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red/30 dark:text-slate-400"
           title={`Delete task ${task.id}`} aria-label={`Delete task ${task.id}: ${task.title}`}
           onClick={async (e) => {
             e.stopPropagation();
@@ -226,7 +223,8 @@ export const KanbanTaskCard: FunctionComponent<{
             }
           }}
         >
-          <Trash2 className="w-3 h-3" />
+          <Trash2 className="w-3 h-3" aria-hidden="true" />
+          <span>Delete</span>
         </button>
       </div>
 

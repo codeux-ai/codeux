@@ -139,4 +139,8 @@ describe("Onboarding automation defaults", () => {
     expect(getToggleInRow("Memory system")).toHaveAttribute("aria-pressed", "false");
     expect(getToggleInRow("Enable QA agent")).toHaveAttribute("aria-pressed", "false");
   });
+
+  it("defaults the appearance pattern overlay to none", () => {
+    expect(DEFAULT_DASHBOARD_SETTINGS.appearance.backgroundPattern).toBe("NONE");
+  });
 });

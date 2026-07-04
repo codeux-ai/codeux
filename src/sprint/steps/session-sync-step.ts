@@ -47,7 +47,7 @@ const mapSessionStateToTaskRunState = (
   if (sessionState === "COMPLETED") {
     return "COMPLETED";
   }
-  if (sessionState === "FAILED") {
+  if (sessionState === "FAILED" || sessionState === "CANCELLED") {
     return "FAILED";
   }
   if (sessionState === "QUOTA") {
@@ -76,7 +76,15 @@ const hasSubmittedReplyForActionRequiredState = (
   });
 };
 
-const mapTaskRunStateToDispatchStatus = (state: TaskRunState): TaskDispatchStatus => {
+const isCancelledSessionState = (sessionState: string | undefined): boolean => sessionState === "CANCELLED";
+
+const mapTaskRunStateToDispatchStatus = (
+  state: TaskRunState,
+  sessionState?: string,
+): TaskDispatchStatus => {
+  if (state === "FAILED" && isCancelledSessionState(sessionState)) {
+    return "cancelled";
+  }
   switch (state) {
     case "COMPLETED":
       return "completed";
@@ -110,11 +118,12 @@ const mapTaskRunStateToPlanningStatus = (state: TaskRunState): "pending" | "in_p
 const mergeDispatchStatus = (
   currentStatus: TaskDispatchStatus | null,
   nextRunState: TaskRunState,
+  sessionState?: string,
 ): TaskDispatchStatus => {
   if (currentStatus === "cancel_requested" && nextRunState === "RUNNING") {
     return "cancel_requested";
   }
-  return mapTaskRunStateToDispatchStatus(nextRunState);
+  return mapTaskRunStateToDispatchStatus(nextRunState, sessionState);
 };
 
 const resolveDispatchErrorMessage = (
@@ -122,6 +131,9 @@ const resolveDispatchErrorMessage = (
   nextRunState: TaskRunState,
   sessionState: string | undefined,
 ): string | null => {
+  if (nextRunState === "FAILED" && isCancelledSessionState(sessionState)) {
+    return null;
+  }
   if (nextRunState === "FAILED") {
     return `Provider session ${sessionState || "FAILED"}`;
   }
@@ -448,7 +460,7 @@ const syncExecutionRunState = async (
 
   if (wasTerminal && wasDispatchTerminal && !sessionReactivated) {
     if (currentDispatch && taskRun.dispatchId) {
-      const expectedStatus = mapTaskRunStateToDispatchStatus(taskRun.state);
+      const expectedStatus = mapTaskRunStateToDispatchStatus(taskRun.state, session.state);
       const expectedErrorMessage = resolveDispatchErrorMessage(currentDispatch.errorMessage, taskRun.state, session.state);
       if (currentDispatch.status !== expectedStatus || currentDispatch.errorMessage !== expectedErrorMessage) {
         deps.executionRepository.updateTaskDispatch(taskRun.dispatchId, {
@@ -490,7 +502,7 @@ const syncExecutionRunState = async (
 
   if (taskRun.dispatchId) {
     deps.executionRepository.updateTaskDispatch(taskRun.dispatchId, {
-      status: mergeDispatchStatus(currentDispatch?.status || null, nextRunState),
+      status: mergeDispatchStatus(currentDispatch?.status || null, nextRunState, session.state),
       startedAt: taskRun.startedAt || now,
       finishedAt: nextRunState === "RUNNING" ? null : (currentDispatch?.finishedAt || nextFinishedAt),
       lastHeartbeatAt: now,

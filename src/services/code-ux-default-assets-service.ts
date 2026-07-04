@@ -180,7 +180,7 @@ async function copyOrUpdateSetupScript(
   let needsUpdate = false;
   try {
     const targetContent = await fs.readFile(targetPath, "utf8");
-    if (!targetContent.includes("gnome-keyring-daemon")) {
+    if (!targetContent.includes("gnome-keyring-daemon") || !targetContent.includes("CODE_UX_INSTALL_PLAYWRIGHT")) {
       needsUpdate = true;
     }
   } catch {

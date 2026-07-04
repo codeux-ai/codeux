@@ -44,12 +44,12 @@ const InvocationFeedRow: FunctionComponent<{
         el.classList.add("bg-signal-500/10", "border-signal-500/20");
         setTimeout(() => {
           if (el) el.classList.remove("bg-signal-500/10", "border-signal-500/20");
-        }, 500);
+        }, Math.max(highlightDuration * 1000, 1));
       } else {
         gsap.killTweensOf(rowRef.current);
         gsap.fromTo(rowRef.current,
           { backgroundColor: "rgba(0, 224, 160, 0.15)", borderColor: "rgba(0, 224, 160, 0.3)" },
-          { backgroundColor: "rgba(0, 0, 0, 0.015)", borderColor: "rgba(0, 0, 0, 0.04)", duration: highlightDuration * 2, ease: "power2.out", overwrite: "auto", clearProps: "backgroundColor,borderColor" }
+          { backgroundColor: "rgba(0, 0, 0, 0.015)", borderColor: "rgba(0, 0, 0, 0.04)", duration: highlightDuration * 2, ease: INTERACTION_TOKENS.controlFeedback.ease, overwrite: "auto", clearProps: "backgroundColor,borderColor" }
         );
       }
     }
@@ -70,15 +70,16 @@ const InvocationFeedRow: FunctionComponent<{
       <div className="flex items-start justify-between gap-3 min-w-0">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
-            <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${dotClass} ${invocation.status === "running" ? "animate-pulse" : ""}`} />
-            <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
+            <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${dotClass} ${invocation.status === "running" ? "motion-safe:animate-pulse" : ""}`} aria-hidden="true" />
+            <span className="sr-only">Invocation status: {invocation.status}.</span>
+            <span className="min-w-0 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
               {purposeLabel}
             </span>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
-            <span>{providerLabel}</span>
+            <span className="break-words">{providerLabel}</span>
             <span>·</span>
-            <span>{modelLabel}</span>
+            <span className="break-words">{modelLabel}</span>
             <span>·</span>
             <span>{shortenRuntimeId(invocation.id)}</span>
           </div>
@@ -95,7 +96,7 @@ const InvocationFeedRow: FunctionComponent<{
             aria-label={`Open transcript for ${purposeLabel}`}
             className="mt-2 inline-flex items-center gap-1 rounded-md border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:text-signal-400 dark:focus-visible:ring-offset-void-800"
           >
-            <ExternalLink className="h-3 w-3" strokeWidth={2} />
+            <ExternalLink className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
             Transcript
           </a>
         </div>
@@ -104,12 +105,12 @@ const InvocationFeedRow: FunctionComponent<{
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <InvocationContextChips invocation={invocation} sprintKeyPrefix={sprintKeyPrefix} />
         <span className="inline-flex items-center gap-1 rounded-md border border-black/[0.05] px-2 py-0.5 text-[10px] font-mono text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
-          <MessageSquareText className="h-3 w-3" strokeWidth={2} />
-          {invocation.messageCount}
+          <MessageSquareText className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
+          {invocation.messageCount} messages
         </span>
         {duration && (
           <span className="inline-flex items-center gap-1 rounded-md border border-black/[0.05] px-2 py-0.5 text-[10px] font-mono text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
-            <Timer className="h-3 w-3" strokeWidth={2} />
+            <Timer className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
             {duration}
           </span>
         )}
@@ -121,7 +122,7 @@ const InvocationFeedRow: FunctionComponent<{
       </div>
 
       {invocation.lastErrorMessage && (
-        <p className="mt-2 line-clamp-2 text-[11px] leading-relaxed text-status-red">
+        <p role="alert" className="mt-2 line-clamp-2 break-words text-[11px] leading-relaxed text-status-red">
           {invocation.lastErrorMessage}
         </p>
       )}
@@ -183,11 +184,17 @@ export const InvocationFeedPanel: FunctionComponent<{
     [invocations],
   );
 
-  if (!snapshot) return null;
+  if (!snapshot) {
+    return (
+      <div role="status" aria-live="polite" aria-busy="true" className="rounded-[1.75rem] border border-black/[0.08] bg-white p-5 text-[11px] font-mono text-slate-400 shadow-sm dark:border-white/[0.08] dark:bg-void-800 dark:text-slate-500">
+        Loading invocation feed.
+      </div>
+    );
+  }
 
   const header = (
     <div className="flex flex-wrap items-center gap-2.5">
-      <Cpu className="h-4 w-4 text-signal-500" strokeWidth={1.5} />
+      <Cpu className="h-4 w-4 text-signal-500" strokeWidth={1.5} aria-hidden="true" />
       <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Invocation Feed</span>
       {runningCount > 0 && (
         <span className="rounded-md bg-signal-500/10 px-2 py-0.5 text-[9px] font-mono font-bold text-signal-500">
@@ -210,12 +217,13 @@ export const InvocationFeedPanel: FunctionComponent<{
           aria-expanded={open}
           aria-controls={contentId}
           onClick={() => setOpen((current) => !current)}
-          className="relative z-10 flex w-full items-center justify-between gap-4 p-5 text-left transition-colors duration-200 hover:bg-black/[0.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:hover:bg-white/[0.01] dark:focus-visible:ring-offset-void-800"
+          className="relative z-10 flex w-full items-center justify-between gap-4 p-5 text-left transition-colors duration-[var(--interaction-control-feedback-duration)] hover:bg-black/[0.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:hover:bg-white/[0.01] dark:focus-visible:ring-offset-void-800"
         >
           {header}
           <ChevronDown
-            className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-300 ${open ? "rotate-0" : "-rotate-90"}`}
+            className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-[var(--interaction-enter-exit-duration)] ${open ? "rotate-0" : "-rotate-90"}`}
             strokeWidth={2}
+            aria-hidden="true"
           />
         </button>
       ) : (
@@ -241,7 +249,7 @@ export const InvocationFeedPanel: FunctionComponent<{
             </div>
 
             {invocations.length === 0 ? (
-              <p className="text-[11px] font-mono text-slate-400 dark:text-slate-600">
+              <p role="status" aria-live="polite" className="text-[11px] font-mono text-slate-400 dark:text-slate-600">
                 No invocation records yet.
               </p>
             ) : (
@@ -249,6 +257,7 @@ export const InvocationFeedPanel: FunctionComponent<{
                 role="log"
                 aria-label="Live invocation feed"
                 aria-live="polite"
+                aria-busy={runningCount > 0 ? "true" : undefined}
                 aria-relevant="additions text"
                 className="max-h-[50dvh] sm:max-h-96 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar"
               >

@@ -228,9 +228,23 @@ describe("QuicksprintService", () => {
     });
 
     it("should throw if trying to delete a built-in template", async () => {
-      await expect(
-        service.deleteCustomTemplate(projectId, BUILTIN_QUICKSPRINT_TEMPLATES[0].id)
-      ).rejects.toThrowError(/Cannot delete built-in templates/);
+      await service.deleteCustomTemplate(projectId, BUILTIN_QUICKSPRINT_TEMPLATES[0].id);
+
+      expect(fs.writeFile).toHaveBeenCalledWith(
+        path.join(templatesDir, `${BUILTIN_QUICKSPRINT_TEMPLATES[0].id}.md`),
+        expect.stringContaining('"hidden": true'),
+        "utf8",
+      );
+    });
+
+    it("should hide a built-in template when a project tombstone exists", async () => {
+      const hiddenTemplateId = BUILTIN_QUICKSPRINT_TEMPLATES[0].id;
+      (fs.readdir as any).mockResolvedValue([`${hiddenTemplateId}.md`]);
+      (fs.readFile as any).mockResolvedValue(`---json\n${JSON.stringify({ id: hiddenTemplateId, hidden: true })}\n---\nHidden.\n`);
+
+      const templates = await service.listTemplates(projectId);
+
+      expect(templates.some((template) => template.id === hiddenTemplateId)).toBe(false);
     });
   });
 

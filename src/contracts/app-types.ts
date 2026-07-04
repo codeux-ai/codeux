@@ -858,6 +858,7 @@ export interface CliWorkflowSettings {
   containerImage: string;
   containerSetupScriptPath: string;
   containerCacheSetupScriptImage: boolean;
+  containerInstallPlaywrightBrowsers: boolean;
   containerMountGitConfig: boolean;
   containerGitUserName: string;
   containerGitUserEmail: string;

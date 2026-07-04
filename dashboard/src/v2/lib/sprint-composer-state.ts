@@ -41,6 +41,29 @@ export interface PlanningRouteOption {
   effectiveModel?: string;
 }
 
+export interface VirtualProviderRouteMetadata {
+  id?: string;
+  providerConfigId?: string;
+  provider?: string;
+  label?: string;
+  displayLabel?: string;
+  iconProviderId?: ProviderId;
+  effectiveModel?: string;
+}
+
+export function toVirtualPlanningRouteOption(provider: VirtualProviderRouteMetadata): PlanningRouteOption {
+  const providerConfigId = provider.providerConfigId || provider.id || provider.provider || "";
+  const providerType = provider.provider || provider.iconProviderId || provider.id;
+  return {
+    type: "virtual",
+    id: providerConfigId,
+    label: provider.displayLabel || provider.label || providerConfigId || provider.provider || "Provider",
+    provider: providerType,
+    iconProviderId: provider.iconProviderId || (provider.provider as ProviderId | undefined) || (provider.id as ProviderId | undefined),
+    effectiveModel: provider.effectiveModel,
+  };
+}
+
 export function toPlanningOverrides(
   routeOverride: PlanningRouteOption | null,
   modelOverride: string | null,

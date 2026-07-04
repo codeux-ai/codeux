@@ -1,4 +1,6 @@
 import type { ComponentChildren, FunctionComponent } from "preact";
+import { useRef, useState } from "preact/hooks";
+import { Eye, EyeOff } from "lucide-preact";
 import { SHARED_INTERACTION_CLASSES } from "../ui/Button.js";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
@@ -6,6 +8,7 @@ import type { ProviderId } from "../../../types.js";
 
 import { Toggle as UiToggle } from "../ui/Toggle.js";
 import { Input as UiInput } from "../ui/Input.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 export const Toggle = UiToggle;
 
@@ -17,7 +20,7 @@ export const SelectInput: FunctionComponent<{
   "aria-label"?: string;
   "aria-labelledby"?: string;
 }> = ({ value, onChange, options, disabled, "aria-label": ariaLabel, "aria-labelledby": ariaLabelledby }) => (
-  <div className="min-w-[220px]">
+  <div className="min-w-0 w-full sm:min-w-[220px]">
     <AvantgardeSelect value={value} onChange={onChange} options={options} disabled={disabled} aria-label={ariaLabel} aria-labelledby={ariaLabelledby} />
   </div>
 );
@@ -28,41 +31,79 @@ export const PillChoiceGroup: FunctionComponent<{
   options: Array<{ value: string; label: string; hint?: string }>;
   disabled?: boolean;
   invalid?: boolean;
-}> = ({ value, onChange, options, disabled, invalid }) => (
-  <div className="flex flex-wrap gap-2">
-    {options.map((option) => {
-      const active = option.value === value;
-      return (
-        <button
-          key={option.value}
-          type="button"
-          disabled={disabled}
-          aria-invalid={invalid}
-          onClick={() => onChange(option.value)}
-          className={`group relative min-w-[104px] overflow-hidden rounded-[1rem] border px-4 py-2 text-left transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-signal-500 disabled:cursor-not-allowed disabled:opacity-50 motion-safe:active:scale-[0.98] ${
-            invalid
-              ? "border-status-red/60 bg-status-red/[0.04] text-status-red hover:bg-status-red/[0.08]"
-              : active
-                ? "border-signal-500/30 bg-signal-500/[0.11] text-signal-700 shadow-[0_10px_20px_rgba(0,224,160,0.08)] hover:bg-signal-500/[0.15] dark:border-signal-400/30 dark:bg-signal-400/[0.12] dark:text-signal-200 dark:hover:bg-signal-400/[0.16]"
-                : "border-black/[0.06] bg-white/70 text-slate-600 hover:-translate-y-px hover:border-black/[0.12] hover:bg-black/[0.02] hover:text-slate-800 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-white/[0.12] dark:hover:bg-white/[0.08] dark:hover:text-white"
-          }`}
-        >
-          <div
-            className={`absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-signal-500 dark:bg-signal-400 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-              active ? "opacity-100 transform-none" : "opacity-0 -translate-x-full"
+  "aria-label"?: string;
+  "aria-labelledby"?: string;
+}> = ({ value, onChange, options, disabled, invalid, "aria-label": ariaLabel = "Setting choices", "aria-labelledby": ariaLabelledby }) => {
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const tokens = useInteractionTokens();
+
+  const moveSelection = (currentIndex: number, offset: number): void => {
+    if (!options.length || disabled) {
+      return;
+    }
+    const nextIndex = (currentIndex + offset + options.length) % options.length;
+    optionRefs.current[nextIndex]?.focus();
+    onChange(options[nextIndex].value);
+  };
+
+  return (
+    <div
+      role="radiogroup"
+      aria-label={ariaLabelledby ? undefined : ariaLabel}
+      aria-labelledby={ariaLabelledby}
+      className="flex min-w-0 flex-wrap gap-2"
+    >
+      {options.map((option, index) => {
+        const active = option.value === value;
+        return (
+          <button
+            key={option.value}
+            ref={(element) => { optionRefs.current[index] = element; }}
+            type="button"
+            role="radio"
+            disabled={disabled}
+            aria-checked={active}
+            aria-invalid={invalid}
+            onClick={() => onChange(option.value)}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+                event.preventDefault();
+                moveSelection(index, 1);
+              } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+                event.preventDefault();
+                moveSelection(index, -1);
+              }
+            }}
+            style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
+            className={`group relative min-w-[104px] max-w-full overflow-hidden rounded-[1rem] border px-4 py-2 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-signal-500 disabled:cursor-not-allowed disabled:opacity-50 motion-safe:active:scale-[0.98] ${
+              invalid
+                ? "border-status-red/60 bg-status-red/[0.04] text-status-red hover:bg-status-red/[0.08]"
+                : active
+                  ? "border-signal-500/30 bg-signal-500/[0.11] text-signal-700 shadow-[0_10px_20px_rgba(0,224,160,0.08)] hover:bg-signal-500/[0.15] dark:border-signal-400/30 dark:bg-signal-400/[0.12] dark:text-signal-200 dark:hover:bg-signal-400/[0.16]"
+                  : "border-black/[0.06] bg-white/70 text-slate-600 hover:-translate-y-px hover:border-black/[0.12] hover:bg-black/[0.02] hover:text-slate-800 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-white/[0.12] dark:hover:bg-white/[0.08] dark:hover:text-white"
             }`}
-          />
-          <div className="text-[11px] font-bold uppercase tracking-[0.14em]">{option.label}</div>
-          {option.hint ? (
-            <div className={`mt-1 text-[11px] leading-relaxed transition-colors duration-200 ${active ? "text-signal-600/80 dark:text-signal-300/80" : "text-slate-400 dark:text-slate-500"}`}>
-              {option.hint}
-            </div>
-          ) : null}
-        </button>
-      );
-    })}
-  </div>
-);
+          >
+            <div
+              className={`absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-signal-500 dark:bg-signal-400 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+                active ? "opacity-100 transform-none" : "opacity-0 -translate-x-full"
+              }`}
+              style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
+            />
+            <div className="break-words text-[11px] font-bold uppercase tracking-[0.14em]">{option.label}</div>
+            {option.hint ? (
+              <div
+                className={`mt-1 break-words text-[11px] leading-relaxed transition-colors ${active ? "text-signal-600/80 dark:text-signal-300/80" : "text-slate-400 dark:text-slate-500"}`}
+                style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
+              >
+                {option.hint}
+              </div>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+};
 
 export const ProviderLogo: FunctionComponent<{
   providerId: ProviderId | string;
@@ -78,20 +119,73 @@ export const TextInput: FunctionComponent<{
   mono?: boolean;
   disabled?: boolean;
   invalid?: boolean;
+  valid?: boolean;
+  helperText?: string;
+  errorText?: string;
+  forceValidation?: boolean;
+  maxLength?: number;
   "aria-label"?: string;
   "aria-description"?: string;
-}> = ({ value, onChange, placeholder, mono, disabled, invalid, "aria-label": ariaLabel, "aria-description": ariaDescription }) => (
+}> = ({ value, onChange, placeholder, mono, disabled, invalid, valid, helperText, errorText, forceValidation, maxLength, "aria-label": ariaLabel, "aria-description": ariaDescription }) => (
   <UiInput
     value={value}
     placeholder={placeholder}
     disabled={disabled}
-    aria-invalid={invalid}
+    aria-invalid={invalid || undefined}
     aria-label={ariaLabel}
     aria-description={ariaDescription}
+    valid={valid}
+    helperText={helperText}
+    errorText={errorText}
+    forceValidation={forceValidation}
+    maxLength={maxLength}
     onInput={(event) => onChange((event.currentTarget as HTMLInputElement).value)}
-    className={`transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:border-signal-500/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-white/[0.05] dark:text-slate-200 aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.14)] data-[valid=true]:border-signal-500/50 data-[valid=true]:bg-signal-500/[0.02] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.15)] dark:data-[valid=true]:bg-signal-500/[0.04] ${mono ? "font-mono" : "font-sans"}`}
+    className={`transition-all focus:border-signal-500/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-white/[0.05] dark:text-slate-200 aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.14)] data-[valid=true]:border-signal-500/50 data-[valid=true]:bg-signal-500/[0.02] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.15)] dark:data-[valid=true]:bg-signal-500/[0.04] ${mono ? "font-mono" : "font-sans"}`}
   />
 );
+
+export const SecretInput: FunctionComponent<{
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  mono?: boolean;
+  disabled?: boolean;
+  invalid?: boolean;
+  "aria-label"?: string;
+  "aria-description"?: string;
+}> = ({ value, onChange, placeholder, mono, disabled, invalid, "aria-label": ariaLabel, "aria-description": ariaDescription }) => {
+  const [revealed, setRevealed] = useState(false);
+  const RevealIcon = revealed ? EyeOff : Eye;
+
+  return (
+    <div className="relative min-w-0">
+      <UiInput
+        type={revealed ? "text" : "password"}
+        value={value}
+        placeholder={placeholder}
+        disabled={disabled}
+        autoComplete="off"
+        autoCapitalize="off"
+        spellcheck={false}
+        aria-invalid={invalid}
+        aria-label={ariaLabel}
+        aria-description={ariaDescription}
+        onInput={(event) => onChange((event.currentTarget as HTMLInputElement).value)}
+        className={`pr-11 transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:border-signal-500/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-white/[0.05] dark:text-slate-200 aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.14)] data-[valid=true]:border-signal-500/50 data-[valid=true]:bg-signal-500/[0.02] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.15)] dark:data-[valid=true]:bg-signal-500/[0.04] ${mono ? "font-mono" : "font-sans"}`}
+      />
+      <button
+        type="button"
+        disabled={disabled}
+        aria-label={revealed ? "Hide secret" : "Show secret"}
+        aria-pressed={revealed}
+        onClick={() => setRevealed((current) => !current)}
+        className={`${SHARED_INTERACTION_CLASSES} absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-lg border border-black/[0.06] bg-white/80 text-slate-500 hover:bg-white hover:text-slate-800 dark:border-white/[0.08] dark:bg-void-900/80 dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-slate-100`}
+      >
+        <RevealIcon className="h-3.5 w-3.5" strokeWidth={2.4} />
+      </button>
+    </div>
+  );
+};
 
 export const TextAreaInput: FunctionComponent<{
   value: string;
@@ -207,7 +301,7 @@ export const Row: FunctionComponent<{
         <div className="mt-0.5 text-xs font-medium leading-relaxed text-slate-400 group-hover:text-slate-500 dark:text-slate-500 dark:group-hover:text-slate-400 transition-colors duration-200">{description}</div>
       ) : null}
     </div>
-    <div className="w-full shrink-0 md:w-auto md:max-w-[34rem] lg:max-w-none">
+    <div className="min-w-0 w-full shrink-0 md:w-auto md:max-w-[34rem] lg:max-w-none">
       {children}
     </div>
   </div>

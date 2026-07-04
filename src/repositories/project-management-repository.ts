@@ -33,8 +33,8 @@ import type { ProjectSettingsOverride } from "../contracts/settings-scope-types.
 import type { ProjectWorkerAssignmentRecord } from "../contracts/worker-types.js";
 import { resolveRepositoryHost } from "../infrastructure/git/repository-host-resolver.js";
 import { readLocalGitOriginUrl } from "../infrastructure/git/local-git-origin.js";
-import { projectSummaryQuery } from "./project-management/project-summary-query.js";
-import { sprintSummaryQuery } from "./project-management/sprint-summary-query.js";
+import { loadProjectSummaryAggregationMap, projectSummaryQuery, type ProjectSummaryAggregation } from "./project-management/project-summary-query.js";
+import { loadSprintSummaryAggregationMap, sprintSummaryQuery, type SprintSummaryAggregation } from "./project-management/sprint-summary-query.js";
 import { validateTaskDependencies } from "./project-management/task-dependency-graph.js";
 import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
 
@@ -53,12 +53,6 @@ interface ProjectRow {
   updated_at: string;
   source_type: ProjectSourceType | null;
   source_ref: string | null;
-  sprints_count: number | string | null;
-  open_tasks: number | string | null;
-  completed_tasks: number | string | null;
-  has_active_runs: number | string | null;
-  last_run_at: string | null;
-  last_run_status: string | null;
 }
 
 interface SprintRow {
@@ -77,10 +71,6 @@ interface SprintRow {
   base_commit_sha: string | null;
   created_at: string;
   updated_at: string;
-  tasks_count: number | string | null;
-  completed_tasks: number | string | null;
-  latest_run_status: string | null;
-  latest_sprint_review_json?: string | null;
 }
 
 interface TaskRow {
@@ -315,12 +305,11 @@ export class ProjectManagementRepository {
       ${sprintSummaryQuery.select}
       ${sprintSummaryQuery.from}
       WHERE s.project_id = ?
-      ${sprintSummaryQuery.groupBy}
       ORDER BY COALESCE(s.number, 0) DESC, s.created_at DESC
     `).all(projectId) as unknown as SprintRow[];
 
     return {
-      sprints: rows.map((row) => this.mapSprintRow(row)),
+      sprints: this.hydrateSprints(rows),
       selectedSprintId,
     };
   }
@@ -801,7 +790,15 @@ export class ProjectManagementRepository {
 
 
   getSelectedSprintId(projectId: string): string | null {
-    this.requireProject(projectId);
+    const projectExists = this.db.prepare(`
+      SELECT 1 AS exists_flag
+      FROM projects
+      WHERE id = ?
+      LIMIT 1
+    `).get(projectId) as { exists_flag: number } | undefined;
+    if (!projectExists) {
+      throw new EntityNotFoundError(`Project not found: ${projectId}`);
+    }
     const row = this.db.prepare(`
       SELECT payload
       FROM app_settings
@@ -818,6 +815,16 @@ export class ProjectManagementRepository {
     } catch {
       return null;
     }
+  }
+
+  sprintBelongsToProject(projectId: string, sprintId: string): boolean {
+    const row = this.db.prepare(`
+      SELECT 1 AS exists_flag
+      FROM sprints
+      WHERE id = ? AND project_id = ?
+      LIMIT 1
+    `).get(sprintId, projectId) as { exists_flag: number } | undefined;
+    return Boolean(row);
   }
 
   setSelectedSprintId(projectId: string, sprintId: string | null): string | null {
@@ -924,11 +931,10 @@ export class ProjectManagementRepository {
       ${sprintSummaryQuery.select}
       ${sprintSummaryQuery.from}
       WHERE s.project_id = ? AND s.number = ?
-      ${sprintSummaryQuery.groupBy}
       LIMIT 1
     `).get(projectId, sprintNumber) as SprintRow | undefined;
 
-    return row ? this.mapSprintRow(row) : null;
+    return row ? this.hydrateSprints([row])[0] : null;
   }
 
   getTask(taskId: string): TaskRecord | null {
@@ -965,14 +971,13 @@ export class ProjectManagementRepository {
       ${sprintSummaryQuery.select}
       ${sprintSummaryQuery.from}
       WHERE s.id = ?
-      ${sprintSummaryQuery.groupBy}
     `).get(sprintId) as SprintRow | undefined;
 
     if (!row) {
       throw new EntityNotFoundError(`Sprint not found: ${sprintId}`);
     }
 
-    return this.mapSprintRow(row);
+    return this.hydrateSprints([row])[0];
   }
 
   private requireTask(taskId: string): TaskRecord {
@@ -1087,18 +1092,21 @@ export class ProjectManagementRepository {
     }
 
     const projectIds = rows.map((row) => row.id);
+    const summaryAggregationMap = loadProjectSummaryAggregationMap(this.storage, projectIds);
     const settingsOverridesMap = this.settingsRepository.getProjectSettingsBatch(projectIds);
     const agentBindingsMap = this.projectWorkerAssignmentRepository.listAssignmentsForProjects(projectIds, { activeOnly: true });
 
     return rows.map((row) => {
+      const summaryAggregation = summaryAggregationMap.get(row.id) || emptyProjectSummaryAggregation();
       const settingsOverrides = settingsOverridesMap.get(row.id) || {};
       const agentBindings = agentBindingsMap.get(row.id) || [];
-      return this.mapProjectRow(row, settingsOverrides, agentBindings);
+      return this.mapProjectRow(row, summaryAggregation, settingsOverrides, agentBindings);
     });
   }
 
   private mapProjectRow(
     row: ProjectRow,
+    summaryAggregation: ProjectSummaryAggregation,
     settingsOverrides: ProjectSettingsOverride,
     agentBindings: ProjectWorkerAssignmentRecord[]
   ): ProjectSummary {
@@ -1108,7 +1116,7 @@ export class ProjectManagementRepository {
     const effectiveRepoUrl = row.repo_url || inferredLocalRemoteUrl;
     const { provider, hostDomain } = resolveRepositoryHost(effectiveRepoUrl || (sourceType === "git" ? sourceRef : null));
 
-    const isRunning = toBoolean(row.has_active_runs);
+    const isRunning = summaryAggregation.hasActiveRuns;
     let status = row.status;
     if (isRunning) {
       status = "running";
@@ -1129,33 +1137,42 @@ export class ProjectManagementRepository {
       defaultBranch: row.default_branch,
       featureBranchPrefix: row.feature_branch_prefix,
       status,
-      sprintsCount: toNumber(row.sprints_count),
-      openTasks: toNumber(row.open_tasks),
-      completedTasks: toNumber(row.completed_tasks),
+      sprintsCount: summaryAggregation.sprintsCount,
+      openTasks: summaryAggregation.openTasks,
+      completedTasks: summaryAggregation.completedTasks,
       isRunning,
       settingsOverrides,
       agentBindings,
-      lastRunAt: row.last_run_at,
-      lastRunStatus: row.last_run_status,
+      lastRunAt: summaryAggregation.lastRunAt,
+      lastRunStatus: summaryAggregation.lastRunStatus,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
   }
 
-  private mapSprintRow(row: SprintRow): SprintRecord {
-    const tasksCount = toNumber(row.tasks_count);
-    const completedTasks = toNumber(row.completed_tasks);
-
-    let latestReview: import("../contracts/project-management-types.js").SprintReviewSummary | undefined;
-    if (row.latest_sprint_review_json) {
-      try {
-        const parsed = JSON.parse(row.latest_sprint_review_json) as import("../contracts/project-management-types.js").SprintReviewSummary;
-        parsed.findings = Array.isArray(parsed.findings) ? parsed.findings : [];
-        latestReview = parsed;
-      } catch {
-        // Ignore JSON parse errors
-      }
+  private hydrateSprints(rows: SprintRow[]): SprintRecord[] {
+    if (rows.length === 0) {
+      return [];
     }
+
+    const sprintIds = rows.map((row) => row.id);
+    const summaryAggregationMap = loadSprintSummaryAggregationMap(this.storage, sprintIds);
+    const linkedIssuesMap = this.listSprintLinkedIssuesBatch(sprintIds);
+
+    return rows.map((row) => this.mapSprintRow(
+      row,
+      summaryAggregationMap.get(row.id) || emptySprintSummaryAggregation(),
+      linkedIssuesMap.get(row.id) || []
+    ));
+  }
+
+  private mapSprintRow(
+    row: SprintRow,
+    summaryAggregation: SprintSummaryAggregation,
+    linkedIssues: SprintLinkedIssueRecord[]
+  ): SprintRecord {
+    const tasksCount = summaryAggregation.tasksCount;
+    const completedTasks = summaryAggregation.completedTasks;
 
     return {
       id: row.id,
@@ -1165,7 +1182,7 @@ export class ProjectManagementRepository {
       name: row.name,
       originalPrompt: row.original_prompt || null,
       goal: row.goal || "",
-      status: mapEffectiveSprintStatus(row.status, row.latest_run_status),
+      status: mapEffectiveSprintStatus(row.status, summaryAggregation.latestRunStatus),
       showcasePinned: toBoolean(row.showcase_pinned),
       startDate: row.start_date,
       endDate: row.end_date,
@@ -1173,21 +1190,37 @@ export class ProjectManagementRepository {
       baseCommitSha: row.base_commit_sha,
       tasksCount,
       completion: tasksCount > 0 ? Math.round((completedTasks / tasksCount) * 100) : 0,
-      linkedIssues: this.listSprintLinkedIssuesUnchecked(row.project_id, row.id),
-      latestReview,
+      linkedIssues,
+      latestReview: summaryAggregation.latestReview,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
   }
 
-  private listSprintLinkedIssuesUnchecked(projectId: string, sprintId: string): SprintLinkedIssueRecord[] {
-    const rows = this.db.prepare(`
-      SELECT *
-      FROM sprint_linked_issues
-      WHERE project_id = ? AND sprint_id = ?
-      ORDER BY provider ASC, repository ASC, issue_number ASC
-    `).all(projectId, sprintId) as unknown as LinkedIssueRow[];
-    return rows.map((row) => this.mapLinkedIssueRow(row));
+  private listSprintLinkedIssuesBatch(sprintIds: string[]): Map<string, SprintLinkedIssueRecord[]> {
+    const map = new Map<string, SprintLinkedIssueRecord[]>();
+    for (const sprintId of sprintIds) {
+      map.set(sprintId, []);
+    }
+
+    const rows = this.storage.executeChunkedInQuery<LinkedIssueRow>({
+      sqlPrefix: `
+        SELECT *
+        FROM sprint_linked_issues
+        WHERE sprint_id`,
+      sqlSuffix: `
+        ORDER BY provider ASC, repository ASC, issue_number ASC
+      `,
+      items: sprintIds,
+    });
+
+    for (const row of rows) {
+      const current = map.get(row.sprint_id) || [];
+      current.push(this.mapLinkedIssueRow(row));
+      map.set(row.sprint_id, current);
+    }
+
+    return map;
   }
 
   private mapLinkedIssueRow(row: LinkedIssueRow): SprintLinkedIssueRecord {
@@ -1679,6 +1712,25 @@ function mapEffectiveSprintStatus(
     default:
       return storedStatus === "running" ? "idle" : storedStatus;
   }
+}
+
+function emptyProjectSummaryAggregation(): ProjectSummaryAggregation {
+  return {
+    sprintsCount: 0,
+    openTasks: 0,
+    completedTasks: 0,
+    hasActiveRuns: false,
+    lastRunAt: null,
+    lastRunStatus: null,
+  };
+}
+
+function emptySprintSummaryAggregation(): SprintSummaryAggregation {
+  return {
+    tasksCount: 0,
+    completedTasks: 0,
+    latestRunStatus: null,
+  };
 }
 
 function parseJsonStringArray(value: string | null | undefined): string[] {

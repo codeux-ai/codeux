@@ -45,6 +45,7 @@ describe("TasksList", () => {
 
     const mockTask = {
         id: "task-1",
+        recordId: "task-record-1",
         sprintId: "sprint-1",
         title: "Test Task",
         status: "in_progress",
@@ -55,9 +56,16 @@ describe("TasksList", () => {
     const pageData: any = {
         sprints: [{
         id: "sprint-1",
+        name: "Sprint One",
+        completion: 42,
         status: "running"
     }],
         tasks: [mockTask],
+        selectedProject: { id: "project-1" },
+        execution: {
+            sprintRuns: [{ id: "run-1", sprintId: "sprint-1", status: "running" }],
+            taskDispatches: [{ id: "dispatch-1", taskId: "task-record-1", status: "running" }]
+        },
         isLoading: false
     };
 
@@ -113,6 +121,62 @@ describe("TasksList", () => {
         );
         // By default useProjectEffectiveSettings is NONE so fromTo should be called
         expect(gsap.fromTo).toHaveBeenCalled();
+    });
+
+    it("bounds the initial active-stream render for large task lists", () => {
+        const largeTasks = Array.from({ length: 25 }, (_, index) => ({
+            ...mockTask,
+            id: `bulk-${index + 1}`,
+            title: `Overview Bulk Task ${index + 1}`,
+            status: "in_progress",
+        }));
+
+        render(
+            <ProjectDataProvider initialProject={null}>
+                <TasksList pageData={{ ...pageData, tasks: largeTasks }} />
+            </ProjectDataProvider>
+        );
+
+        expect(screen.getByText("Overview Bulk Task 1")).toBeInTheDocument();
+        expect(screen.getByText("Overview Bulk Task 20")).toBeInTheDocument();
+        expect(screen.queryByText("Overview Bulk Task 21")).not.toBeInTheDocument();
+        expect(screen.getByText("25 active")).toBeInTheDocument();
+        expect(screen.getByText("25 tasks")).toBeInTheDocument();
+    });
+
+    it("resets the visible active-stream window when filters change", async () => {
+        const mixedTasks = [
+            ...Array.from({ length: 25 }, (_, index) => ({
+                ...mockTask,
+                id: `running-${index + 1}`,
+                title: `Running Bulk Task ${index + 1}`,
+                status: "in_progress",
+            })),
+            ...Array.from({ length: 25 }, (_, index) => ({
+                ...mockTask,
+                id: `completed-${index + 1}`,
+                title: `Completed Bulk Task ${index + 1}`,
+                status: "completed",
+            })),
+        ];
+
+        render(
+            <ProjectDataProvider initialProject={null}>
+                <TasksList pageData={{ ...pageData, tasks: mixedTasks }} />
+            </ProjectDataProvider>
+        );
+
+        expect(screen.getByText("Running Bulk Task 20")).toBeInTheDocument();
+        expect(screen.queryByText("Running Bulk Task 21")).not.toBeInTheDocument();
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole("tab", { name: "Completed" }));
+        });
+
+        expect(screen.getByText("Completed Bulk Task 1")).toBeInTheDocument();
+        expect(screen.getByText("Completed Bulk Task 20")).toBeInTheDocument();
+        expect(screen.queryByText("Completed Bulk Task 21")).not.toBeInTheDocument();
+        expect(screen.queryByText("Running Bulk Task 1")).not.toBeInTheDocument();
     });
 
 
@@ -191,12 +255,30 @@ const baseProps: any = {
         }
     });
 
-    it("makes hover-revealed controls accessible by keyboard", () => {
+    it("keeps active stream actions visible and keyboard focusable without hover", () => {
         render(<ProjectDataProvider initialData={null as any}><TasksList pageData={pageData} /></ProjectDataProvider>);
-        const actionButtons = screen.getAllByRole('link');
-        const actionButton = actionButtons.find(b => b.title === "Open live session");
-        if(!actionButton) { throw new Error("Live session button not found"); }
-        actionButton.focus();
-        expect(actionButton.className).toMatch(/focus-visible:ring-2/);
+
+        const stopButton = screen.getByRole("button", { name: /Stop task task-1: Test Task/i });
+        const configureLink = screen.getByRole("link", { name: /Configure task task-1: Test Task/i });
+        const liveLink = screen.getByRole("link", { name: /Open live session for task task-1: Test Task/i });
+
+        expect(stopButton).toBeVisible();
+        expect(stopButton).toHaveTextContent("Stop");
+        expect(configureLink).toBeVisible();
+        expect(configureLink).toHaveTextContent("Configure");
+        expect(liveLink).toBeVisible();
+        expect(liveLink).toHaveTextContent("Live");
+
+        liveLink.focus();
+        expect(liveLink.className).toMatch(/focus-visible:ring-2/);
+    });
+
+    it("labels sprint stream status and progress for assistive technology", () => {
+        render(<ProjectDataProvider initialData={null as any}><TasksList pageData={pageData} /></ProjectDataProvider>);
+
+        const sprintRegion = screen.getByRole("region", { name: /Sprint One active stream. Running. 42% complete./i });
+        expect(sprintRegion).toBeInTheDocument();
+        expect(sprintRegion).toHaveTextContent("Running");
+        expect(screen.getByRole("progressbar", { name: /Sprint One progress/i })).toHaveAttribute("aria-valuenow", "42");
     });
 });

@@ -15,13 +15,135 @@ export function toNumber(value: unknown): number {
   return 0;
 }
 
-export function parseJsonObject(value: string): Record<string, unknown> | null {
+export type JsonContainerKind = "object" | "array" | "object-or-array";
+
+export type JsonExtractionError =
+  | "not_found"
+  | "malformed"
+  | "unexpected_type";
+
+export interface JsonExtractionSuccess<T> {
+  ok: true;
+  value: T;
+  jsonText: string;
+  startIndex: number;
+  endIndex: number;
+}
+
+export interface JsonExtractionFailure {
+  ok: false;
+  error: JsonExtractionError;
+  jsonText?: string;
+  startIndex?: number;
+  endIndex?: number;
+}
+
+export type JsonExtractionResult<T> = JsonExtractionSuccess<T> | JsonExtractionFailure;
+
+function isExpectedJsonKind(value: unknown, kind: JsonContainerKind): boolean {
+  if (kind === "array") {
+    return Array.isArray(value);
+  }
+  if (kind === "object") {
+    return value !== null && typeof value === "object" && !Array.isArray(value);
+  }
+  return value !== null && typeof value === "object";
+}
+
+function findFirstBalancedJsonContainer(text: string, kind: JsonContainerKind): JsonExtractionFailure | {
+  jsonText: string;
+  startIndex: number;
+  endIndex: number;
+} {
+  const allowedStarts = kind === "object" ? ["{"] : kind === "array" ? ["["] : ["{", "["];
+  let start = -1;
+  for (let i = 0; i < text.length; i += 1) {
+    if (allowedStarts.includes(text[i])) {
+      start = i;
+      break;
+    }
+  }
+  if (start < 0) {
+    return { ok: false, error: "not_found" };
+  }
+
+  const opening = text[start];
+  const closing = opening === "{" ? "}" : "]";
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < text.length; i += 1) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === "\"") {
+      inString = true;
+    } else if (ch === opening) {
+      depth += 1;
+    } else if (ch === closing) {
+      depth -= 1;
+      if (depth === 0) {
+        return { jsonText: text.slice(start, i + 1), startIndex: start, endIndex: i + 1 };
+      }
+    }
+  }
+
+  return { ok: false, error: "malformed", jsonText: text.slice(start), startIndex: start, endIndex: text.length };
+}
+
+export function extractJsonContainer<T = unknown>(
+  text: string,
+  kind: JsonContainerKind = "object-or-array",
+): JsonExtractionResult<T> {
+  const extracted = findFirstBalancedJsonContainer(text, kind);
+  if ("ok" in extracted) {
+    return extracted;
+  }
+
+  try {
+    const value = JSON.parse(extracted.jsonText) as unknown;
+    if (!isExpectedJsonKind(value, kind)) {
+      return { ok: false, error: "unexpected_type", ...extracted };
+    }
+    return { ok: true, value: value as T, ...extracted };
+  } catch {
+    return { ok: false, error: "malformed", ...extracted };
+  }
+}
+
+export function parseJsonContainer<T = unknown>(
+  value: string,
+  kind: JsonContainerKind = "object-or-array",
+): JsonExtractionResult<T> {
   try {
     const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : null;
+    if (!isExpectedJsonKind(parsed, kind)) {
+      return { ok: false, error: "unexpected_type", jsonText: value, startIndex: 0, endIndex: value.length };
+    }
+    return { ok: true, value: parsed as T, jsonText: value, startIndex: 0, endIndex: value.length };
   } catch {
-    return null;
+    return { ok: false, error: "malformed", jsonText: value, startIndex: 0, endIndex: value.length };
   }
+}
+
+export function parseJsonObject(value: string): Record<string, unknown> | null {
+  const parsed = parseJsonContainer<Record<string, unknown>>(value, "object");
+  return parsed.ok ? parsed.value : null;
+}
+
+export function parseJsonArray(value: string): unknown[] | null {
+  const parsed = parseJsonContainer<unknown[]>(value, "array");
+  return parsed.ok ? parsed.value : null;
 }
 
 export interface NormalizedUsageCounts {

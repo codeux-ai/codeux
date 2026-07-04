@@ -174,11 +174,12 @@
 
 .heroSignalBadge strong {
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   color: var(--stats-value-color);
   font-size: 0.6875rem;
+  overflow-wrap: anywhere;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .heroSignalIcon {
@@ -271,13 +272,14 @@
 
 .heroControlSummary strong {
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   color: var(--stats-value-color);
   font-size: 0.75rem;
   font-weight: 900;
   line-height: 1.15;
+  overflow-wrap: anywhere;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .heroControlIcon,
@@ -328,10 +330,11 @@
 
 .heroContextBadgeValue {
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   color: var(--stats-value-color);
+  overflow-wrap: anywhere;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .heroPresetGroup {
@@ -359,6 +362,7 @@
   text-align: center;
   text-transform: uppercase;
   letter-spacing: 0.14em;
+  overflow-wrap: anywhere;
   transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, color 160ms ease, transform 160ms ease;
 }
 
@@ -407,8 +411,10 @@
   color: var(--stats-control-text-active);
   font-size: 0.6875rem;
   font-weight: 800;
+  line-height: 1.2;
   text-transform: uppercase;
   letter-spacing: 0.16em;
+  overflow-wrap: anywhere;
   box-shadow: var(--stats-control-shadow-active);
   transition: opacity 160ms ease, transform 160ms ease, box-shadow 160ms ease;
 }

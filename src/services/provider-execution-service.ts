@@ -21,6 +21,8 @@ import type { CreateProviderInvocationUsageInput } from "../contracts/execution-
 import { sanitizeInvocationOutputText } from "./invocation-output-sanitizer.js";
 import { conversationTurnToMessage } from "./provider-conversation-message-mapper.js";
 import { ActivityWriteCoalescer } from "./activity-write-coalescer.js";
+import { SERVER_SHUTDOWN_STOP_REASON } from "./active-dispatch-registry.js";
+import { isRuntimeShutdownInProgress } from "./shutdown-state.js";
 
 /** Counts tool-call turns in a parsed provider conversation, for tool-call stats. */
 function countConversationToolCalls(conversation: ParsedConversationTurn[] | undefined | null): number {
@@ -69,6 +71,23 @@ function persistInvocationMessages(
   }
 }
 
+function buildUsageTelemetrySignature(telemetry: ProviderUsageTelemetry): string {
+  const conversation = telemetry.conversation ?? [];
+  return [
+    telemetry.nativeSessionId || "",
+    telemetry.usageSource,
+    telemetry.transcriptText.length,
+    telemetry.inputTokens,
+    telemetry.cachedInputTokens,
+    telemetry.outputTokens,
+    telemetry.reasoningOutputTokens,
+    telemetry.totalTokens,
+    countConversationToolCalls(conversation),
+    conversation.length,
+    telemetry.rawUsageJson ? JSON.stringify(telemetry.rawUsageJson) : "",
+  ].join("|");
+}
+
 function isRestartInterruptedDockerInvocation(error: unknown, args: ExecutionProviderRunArgs): boolean {
   if (args.workflowSettings.executionMode !== "DOCKER") {
     return false;
@@ -79,6 +98,10 @@ function isRestartInterruptedDockerInvocation(error: unknown, args: ExecutionPro
     /Command spawner host exited/i.test(message)
     && /(signal=SIGINT|signal=SIGTERM|signal=SIGHUP)/i.test(message)
   );
+}
+
+function isServerShutdownAbort(signal: AbortSignal | undefined): boolean {
+  return isRuntimeShutdownInProgress() || Boolean(signal?.aborted && signal.reason === SERVER_SHUTDOWN_STOP_REASON);
 }
 
 export interface ProviderExecutionServiceDeps {
@@ -206,7 +229,9 @@ export class ProviderExecutionService {
       // sprints don't saturate the single thread with one INSERT per output line. Only used when
       // the caller didn't supply its own onActivity (i.e. when we'd otherwise write per line).
       const activityCoalescer = (!args.onActivity && this.deps.sessionTracking)
-        ? new ActivityWriteCoalescer(this.deps.sessionTracking, args.sessionId)
+        ? new ActivityWriteCoalescer(this.deps.sessionTracking, args.sessionId, {
+            logger: this.deps.logger,
+          })
         : null;
 
       // The telemetry watcher fires every ~1.5s while a run is live, and the handler below mirrors
@@ -216,6 +241,7 @@ export class ProviderExecutionService {
       // multiply it. Track a cheap signature of what we last persisted and skip the rewrite when the
       // conversation hasn't changed since the previous tick.
       let lastPersistedMessagesSignature: string | null = null;
+      let lastPersistedUsageSignature: string | null = null;
 
       if (!execInvocationId) {
         execInvocationId = this.deps.executionRepository?.createExecutionInvocation({
@@ -347,7 +373,13 @@ export class ProviderExecutionService {
           }
         },
         onTelemetry: (telemetry: ProviderUsageTelemetry) => {
-          if (invocation && this.deps.executionRepository && this.isProviderInvocationStillRunning(invocation.id)) {
+          const usageSignature = buildUsageTelemetrySignature(telemetry);
+          if (
+            usageSignature !== lastPersistedUsageSignature
+            && invocation
+            && this.deps.executionRepository
+            && this.isProviderInvocationStillRunning(invocation.id)
+          ) {
             const durationMs = Date.now() - startedMs;
             this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
               status: "running",
@@ -364,6 +396,7 @@ export class ProviderExecutionService {
               usageSource: telemetry.usageSource,
               rawUsageJson: telemetry.rawUsageJson || undefined,
             });
+            lastPersistedUsageSignature = usageSignature;
           }
 
           if (
@@ -402,8 +435,9 @@ export class ProviderExecutionService {
             ? await this.deps.providerRunner.runProviderForText(runnerOpts)
             : await this.deps.providerRunner.runProvider(runnerOpts);
         } catch (error) {
-          const wasCancelled = Boolean(args.signal?.aborted);
-          const preserveForStartupRecovery = isRestartInterruptedDockerInvocation(error, args);
+          const wasCancelled = isRuntimeShutdownInProgress() || Boolean(args.signal?.aborted);
+          const preserveForStartupRecovery = isServerShutdownAbort(args.signal)
+            || isRestartInterruptedDockerInvocation(error, args);
           if (invocation && this.deps.executionRepository && !preserveForStartupRecovery) {
             const finishedAt = new Date().toISOString();
             const durationMs = Date.now() - startedMs;
@@ -442,9 +476,9 @@ export class ProviderExecutionService {
       if (invocation && this.deps.executionRepository) {
         const finishedAt = new Date().toISOString();
         const durationMs = Date.now() - startedMs;
-        if (this.isProviderInvocationStillRunning(invocation.id)) {
+        if (this.isProviderInvocationStillRunning(invocation.id) && !isServerShutdownAbort(args.signal)) {
           this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
-            status: args.signal?.aborted ? "cancelled" : (result.ok ? "completed" : "failed"),
+            status: (args.signal?.aborted || isRuntimeShutdownInProgress()) ? "cancelled" : (result.ok ? "completed" : "failed"),
             model: effectiveModel,
             nativeSessionId: result.nativeSessionId,
             finishedAt,
@@ -534,7 +568,7 @@ export class ProviderExecutionService {
       }
 
       if (providerResult.ok) {
-        if (execInvocationId && this.isExecutionInvocationStillRunning(execInvocationId)) {
+        if (execInvocationId && this.isExecutionInvocationStillRunning(execInvocationId) && !isRuntimeShutdownInProgress()) {
           if (args.finalizeExecutionInvocation !== false) {
             this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
               status: "completed",
@@ -660,12 +694,14 @@ export class ProviderExecutionService {
       // If no retry policy handles the failure, propagate it to the caller if not OK
       if (execInvocationId) {
         if (this.isExecutionInvocationStillRunning(execInvocationId)) {
-          this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
-            status: args.signal?.aborted ? "cancelled" : "failed",
-            provider: args.provider,
-            model: args.model,
-            finishedAt: new Date().toISOString(),
-          });
+          if (!isRuntimeShutdownInProgress()) {
+            this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
+              status: args.signal?.aborted ? "cancelled" : "failed",
+              provider: args.provider,
+              model: args.model,
+              finishedAt: new Date().toISOString(),
+            });
+          }
           // Include both streams so the real failure detail is never hidden: some
           // providers (notably codex) print only a benign "Reading additional input
           // from stdin..." to stderr while the actionable error events go to stdout.

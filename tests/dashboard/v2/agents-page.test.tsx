@@ -29,6 +29,52 @@ import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-d
 
 vi.mock("../../../dashboard/src/v2/lib/agent-preset-api.js");
 vi.mock("../../../dashboard/src/v2/lib/settings-api.js");
+vi.mock("../../../dashboard/src/v2/lib/invocation-api.js", () => ({
+  fetchProjectInvocationsQuery: vi.fn(() => Promise.resolve({
+    items: [],
+    totalCount: 0,
+    summary: {
+      totalInvocations: 0,
+      runningCount: 0,
+      failedCount: 0,
+      completedCount: 0,
+      cancelledCount: 0,
+      pausedCount: 0,
+      totalTokens: 0,
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      totalCachedTokens: 0,
+      totalCostCents: 0,
+      avgDurationMs: 0,
+      p95DurationMs: 0,
+      externalApiMetrics: {
+        git: { calls: 0, avgDurationMs: 0 },
+        jules: { calls: 0, avgDurationMs: 0 },
+        jira: { calls: 0, avgDurationMs: 0 },
+        other: { calls: 0, avgDurationMs: 0 },
+      },
+      sprintStateSummary: {
+        totalSprints: 0,
+        activeSprints: 0,
+        completedSprints: 0,
+        failedSprints: 0,
+        totalTasks: 0,
+        runningTasks: 0,
+        blockedTasks: 0,
+      },
+      errorsByCategory: {
+        timeout: 0,
+        rateLimit: 0,
+        apiError: 0,
+        modelError: 0,
+        cancelled: 0,
+        other: 0,
+      },
+    },
+    availablePurposes: [],
+    availableProviders: [],
+  })),
+}));
 
 // Let's not mock the child components so we can test the full integration
 // Just mock wavefluid and scene to avoid complex WebGL/Canvas rendering

@@ -121,6 +121,42 @@ interface NormalizedUsageCounts {
   totalTokens: number;
 }
 
+type TiktokenEncoding = ReturnType<typeof encodingForModel>;
+
+const CODEX_TOKEN_CACHE_LIMIT = 768;
+const codexEncodingCache = new Map<string, TiktokenEncoding>();
+const codexTokenCountCache = new Map<string, number>();
+
+function fastHashString(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function rememberCodexTokenCount(cacheKey: string, count: number): number {
+  if (codexTokenCountCache.size >= CODEX_TOKEN_CACHE_LIMIT) {
+    const oldestKey = codexTokenCountCache.keys().next().value as string | undefined;
+    if (oldestKey) {
+      codexTokenCountCache.delete(oldestKey);
+    }
+  }
+  codexTokenCountCache.set(cacheKey, count);
+  return count;
+}
+
+function getCodexEncoding(model: string): TiktokenEncoding {
+  const cached = codexEncodingCache.get(model);
+  if (cached) {
+    return cached;
+  }
+  const encoding = encodingForModel(model as Parameters<typeof encodingForModel>[0]);
+  codexEncodingCache.set(model, encoding);
+  return encoding;
+}
+
 function normalizeUsageCounts(
   usage: Record<string, unknown>,
   args?: {
@@ -142,12 +178,18 @@ function normalizeUsageCounts(
 
 function tokenizeWithCodexModel(model: string | null | undefined, text: string): number {
   const normalized = typeof model === "string" && model.trim().length > 0 ? model.trim() : "gpt-4o";
+  const cacheKey = `${normalized}:${text.length}:${fastHashString(text)}`;
+  const cached = codexTokenCountCache.get(cacheKey);
+  if (cached !== undefined) {
+    codexTokenCountCache.delete(cacheKey);
+    codexTokenCountCache.set(cacheKey, cached);
+    return cached;
+  }
+
   try {
-    const encoding = encodingForModel(normalized as Parameters<typeof encodingForModel>[0]);
-    return encoding.encode(text).length;
+    return rememberCodexTokenCount(cacheKey, getCodexEncoding(normalized).encode(text).length);
   } catch {
-    const encoding = encodingForModel("gpt-4o");
-    return encoding.encode(text).length;
+    return rememberCodexTokenCount(cacheKey, getCodexEncoding("gpt-4o").encode(text).length);
   }
 }
 

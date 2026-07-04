@@ -1,11 +1,12 @@
 import type { FunctionComponent, ComponentChildren } from "preact";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useMemo } from "preact/hooks";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { createPortal } from "preact/compat";
 import { Check, ChevronDown } from "lucide-preact";
 import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
-import { useGsapDurations, GSAP_EASINGS } from "../../lib/motion/constants.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { SHARED_INTERACTION_CLASSES } from "./Button.js";
 
 export interface SelectOption {
   value: string;
@@ -108,7 +109,8 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
   const [position, setPosition] = useState<DropdownPosition | null>(null);
   const reducedMotion = useReducedMotion();
   const tokens = useInteractionTokens();
-  const durations = useGsapDurations();
+  const gsapTokens = useGsapInteractionTokens();
+  const generatedId = useId();
 
   const updatePosition = useCallback(() => {
     const el = triggerRef.current;
@@ -204,8 +206,8 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
             y: targetY,
             scale: 1,
             filter: "blur(0px)",
-            duration: durations.base,
-            ease: GSAP_EASINGS.smooth,
+            duration: gsapTokens.enterExit.duration,
+            ease: gsapTokens.enterExit.ease,
             clearProps: "filter"
           }
         );
@@ -215,8 +217,8 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
           y: initialY,
           scale: 0.98,
           filter: "blur(4px)",
-          duration: durations.fast,
-          ease: GSAP_EASINGS.smoothInOut,
+          duration: gsapTokens.enterExit.duration,
+          ease: gsapTokens.enterExit.ease,
           onComplete: () => {
             setIsRendered(false);
           }
@@ -225,7 +227,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
     }, panel);
 
     return () => ctx.revert();
-  }, [open, isRendered, position?.direction, reducedMotion]);
+  }, [open, isRendered, position?.direction, reducedMotion, gsapTokens.enterExit.duration, gsapTokens.enterExit.ease]);
 
   useEffect(() => {
     if (open) {
@@ -330,6 +332,9 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
   };
 
   const selected = options.find((o) => o.value === value);
+  const selectId = id || generatedId;
+  const listboxId = `${selectId}-listbox`;
+  const selectedOptionId = selected ? `select-option-${selected.value.replace(/\W/g, '-')}` : undefined;
 
   const activeOptionRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -351,24 +356,24 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
 
   const triggerClass =
     variant === "compact"
-      ? `flex w-full items-center justify-between gap-2 bg-transparent py-1 text-[11px] font-bold uppercase tracking-[0.14em] outline-none focus-visible:ring-2 focus-visible:ring-signal-500/20 ${
+      ? `flex w-full items-center justify-between gap-2 bg-transparent py-1 text-[11px] font-bold uppercase tracking-[0.14em] ${
           disabled
             ? "cursor-not-allowed text-slate-400"
             : "cursor-pointer text-signal-600 hover:text-signal-500 dark:text-signal-300 dark:hover:text-signal-200"
         }`
       : variant === "card"
-        ? `flex w-full items-center justify-between gap-2 rounded-[1.2rem] border bg-white/66 px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] outline-none focus:border-signal-500/30 focus-visible:ring-2 focus-visible:ring-signal-500/20 ${
+        ? `flex w-full items-center justify-between gap-2 rounded-[1.2rem] border bg-white/66 px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] focus:border-signal-500/30 ${
             disabled
               ? "cursor-not-allowed border-black/[0.06] text-slate-400 opacity-60"
               : `cursor-pointer text-signal-600 dark:bg-white/[0.02] dark:text-signal-300 ${open ? 'border-signal-500/30 dark:border-signal-500/30' : 'border-black/[0.06] hover:border-black/[0.1] dark:border-white/[0.06] dark:hover:border-white/[0.1]'}`
           }`
-        : `flex w-full items-center justify-between gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm font-medium outline-none focus:border-signal-500/30 focus-visible:ring-2 focus-visible:ring-signal-500/20 ${
+        : `flex w-full items-center justify-between gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm font-medium focus:border-signal-500/30 ${
             disabled
               ? "cursor-not-allowed border-black/[0.04] bg-black/[0.02] text-slate-400 opacity-60 dark:border-white/[0.04] dark:bg-white/[0.02]"
               : `cursor-pointer bg-white/52 text-slate-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_10px_24px_rgba(15,23,42,0.04)] backdrop-blur-xl dark:bg-white/[0.045] dark:text-slate-100 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_10px_24px_rgba(0,0,0,0.18)] ${open ? 'border-signal-500/30 dark:border-signal-500/30' : 'border-black/[0.06] hover:border-black/[0.12] dark:border-white/[0.06] dark:hover:border-white/[0.12]'}`
           }`;
 
-  const finalTriggerClass = `${triggerClass} ${invalid ? '!border-ember-500 !text-ember-600 dark:!border-ember-500 dark:!text-ember-400' : ''} ${invalid && !reducedMotion ? 'animate-form-shake' : ''}`;
+  const finalTriggerClass = `${triggerClass} ${SHARED_INTERACTION_CLASSES} focus-visible:ring-[var(--focus-ring-signal)] ${open ? 'shadow-[0_0_0_1px_var(--color-signal-500)]' : ''} ${invalid ? '!border-ember-500 !text-ember-600 dark:!border-ember-500 dark:!text-ember-400 focus-visible:!ring-[var(--focus-ring-danger)]' : ''} ${invalid && !reducedMotion ? 'animate-form-shake' : ''}`;
 
   const panel = isRendered && position
     ? createPortal(
@@ -386,6 +391,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
           }`}
         >
           <div
+            id={listboxId}
             ref={listboxRef}
             tabIndex={-1}
             className="max-h-[17rem] overflow-y-auto overscroll-contain py-1.5 outline-none dropdown-scrollbar"
@@ -427,13 +433,14 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
                     setOpen(false);
                     focusWithoutScroll(triggerRef.current);
                   }}
-                  className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors ${
+                  className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors motion-reduce:duration-0 motion-reduce:ease-none ${
                     isFocused ? "bg-signal-500/10 shadow-[inset_2px_0_0_0_var(--color-signal-500)] text-signal-600 dark:text-signal-300 z-10 relative" : ""
                   }${
                     isSelected
                       ? "bg-signal-50/50 dark:bg-signal-900/20 font-semibold text-signal-700 dark:text-signal-300"
                       : "text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-void-700"
                   }`}
+                  style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
                 >
                   {option.icon && <span className="flex-shrink-0">{renderOptionIcon(option.icon)}</span>}
                   <span className="truncate">{option.label}</span>
@@ -472,6 +479,10 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
         aria-invalid={ariaInvalid !== undefined ? ariaInvalid : (invalid ? "true" : "false")}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-controls={listboxId}
+        aria-activedescendant={open ? selectedOptionId : undefined}
+        aria-selected={Boolean(selected)}
+        aria-disabled={disabled}
         aria-label={ariaLabel}
         aria-labelledby={ariaLabelledby}
         aria-describedby={ariaDescribedBy}

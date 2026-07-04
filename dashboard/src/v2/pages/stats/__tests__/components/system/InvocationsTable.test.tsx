@@ -142,8 +142,8 @@ describe("InvocationsTable", () => {
     );
     const root = container as HTMLElement;
 
-    fireEvent.click(within(root).getByRole("button", { name: /Time/ }));
-    fireEvent.click(within(root).getByRole("button", { name: /In/ }));
+    fireEvent.click(within(root).getByRole("button", { name: /currently sorted descending/i }));
+    fireEvent.click(within(root).getByRole("button", { name: /input tokens/i }));
 
     expect(onSortChange).toHaveBeenNthCalledWith(1, { key: "startedAt", dir: "asc" });
     expect(onSortChange).toHaveBeenNthCalledWith(2, { key: "inputTokens", dir: "desc" });
@@ -164,7 +164,9 @@ describe("InvocationsTable", () => {
       expect(screen.getByRole("columnheader", { name: new RegExp(header) })).toBeTruthy();
     }
 
-    expect(screen.getByRole("button", { name: /Total sorted descending/i })).toBeTruthy();
+    expect(screen.getByText(/Invocation ledger with sortable time/i)).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: /Total/i }).getAttribute("aria-sort")).toBe("descending");
+    expect(screen.getByRole("button", { name: /Sort invocations by total tokens, currently sorted descending/i })).toBeTruthy();
     expect(screen.getAllByRole("button", { name: "Expand invocation inv-headers" }).length).toBeGreaterThan(0);
   });
 

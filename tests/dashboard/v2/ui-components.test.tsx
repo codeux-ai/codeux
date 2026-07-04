@@ -6,8 +6,8 @@ import * as React from "preact/compat";
 import { h } from "preact";
 import { useReducedMotion } from "../../../dashboard/src/v2/hooks/use-reduced-motion.js";
 
-import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/preact";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/preact";
 import { PlanningProgressOverlay } from "../../../dashboard/src/v2/components/ui/PlanningProgressOverlay.js";
 import { ToastProvider, useToast } from "../../../dashboard/src/v2/components/feedback/ToastProvider.js";
 import { ActionFeedbackRegion } from "../../../dashboard/src/v2/components/ui/ActionFeedbackRegion.js";
@@ -21,12 +21,20 @@ import { CollapsiblePanel } from "../../../dashboard/src/v2/components/ui/Collap
 import { Menu } from "../../../dashboard/src/v2/components/ui/Menu.js";
 import { ExecutionTimelineProvider } from "../../../dashboard/src/hooks/ExecutionTimelineContext.js";
 import { ConfirmDialog } from "../../../dashboard/src/v2/components/ui/ConfirmDialog.js";
+import { Dialog } from "../../../dashboard/src/v2/components/ui/Dialog.js";
+import { DropdownMenu, DropdownMenuItem } from "../../../dashboard/src/v2/components/ui/DropdownMenu.js";
 import { RerunTaskModal } from "../../../dashboard/src/v2/components/ui/RerunTaskModal.js";
 import { Button } from "../../../dashboard/src/v2/components/ui/Button.js";
 import { ActionButton } from "../../../dashboard/src/v2/components/settings/SettingsSurface.js";
 import { PageContainer } from "../../../dashboard/src/v2/components/layout/PageContainer.js";
 import * as matchers from '@testing-library/jest-dom/matchers';
 expect.extend(matchers);
+
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  vi.mocked(useReducedMotion).mockReturnValue(false);
+});
 
 
 
@@ -60,6 +68,14 @@ vi.mock("../../../dashboard/src/v2/lib/sprint-composer-state.js", () => ({
     setPlanningAgentPresetId: vi.fn(),
     isEditing: false,
     hasTasks: false,
+  })),
+  toVirtualPlanningRouteOption: vi.fn((provider: any) => ({
+    type: "virtual",
+    id: provider.providerConfigId || provider.id || provider.provider || "",
+    label: provider.displayLabel || provider.label || provider.providerConfigId || provider.id || provider.provider || "Provider",
+    provider: provider.provider || provider.iconProviderId || provider.id,
+    iconProviderId: provider.iconProviderId || provider.provider || provider.id,
+    effectiveModel: provider.effectiveModel,
   })),
   toPlanningOverrides: vi.fn(),
   resolveSubmitOriginalPrompt: vi.fn(),
@@ -131,7 +147,7 @@ describe("UI Components Coverage", () => {
 
     it("verifies inline feedback live-region semantics", () => {
       const { rerender } = render(
-        <ActionFeedbackRegion status="success" message="Saved successfully" />
+        <ActionFeedbackRegion status="pending" message="Saving changes" />
       );
 
       let regions = screen.getAllByRole("status");
@@ -315,6 +331,102 @@ describe("UI Components Coverage", () => {
     
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
     expect(screen.getByRole("listbox")).toBeDefined();
+  });
+
+  it("opens DropdownMenu from keyboard, skips disabled items, loops, and restores trigger focus on Escape", async () => {
+    const triggerRef = React.createRef<HTMLButtonElement>();
+    const onTriggerClick = vi.fn();
+    const onTriggerKeyDown = vi.fn();
+
+    const DropdownHarness = () => {
+      const [open, setOpen] = React.useState(false);
+
+      return (
+        <DropdownMenu
+          isOpen={open}
+          onOpenChange={setOpen}
+          menuAriaLabel="Actions"
+          content={
+            <div>
+              <DropdownMenuItem disabled>Disabled native</DropdownMenuItem>
+              <button role="menuitem" aria-disabled="true">Disabled aria</button>
+              <DropdownMenuItem>Enabled first</DropdownMenuItem>
+              <DropdownMenuItem>Enabled last</DropdownMenuItem>
+            </div>
+          }
+        >
+          <button ref={triggerRef} type="button" onClick={onTriggerClick} onKeyDown={onTriggerKeyDown}>
+            Actions
+          </button>
+        </DropdownMenu>
+      );
+    };
+
+    render(<DropdownHarness />);
+
+    const trigger = screen.getByRole("button", { name: "Actions" });
+    expect(triggerRef.current).toBe(trigger);
+    expect(trigger).toHaveAttribute("aria-haspopup", "menu");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(trigger).toHaveAttribute("aria-controls");
+
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    expect(onTriggerKeyDown).toHaveBeenCalled();
+
+    const menu = await screen.findByRole("menu", { name: "Actions" });
+    expect(menu).toBeInTheDocument();
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    await waitFor(() => expect(screen.getByRole("menuitem", { name: "Enabled first" })).toHaveFocus());
+
+    fireEvent.keyDown(document, { key: "ArrowUp" });
+    expect(screen.getByRole("menuitem", { name: "Enabled last" })).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: "Home" });
+    expect(screen.getByRole("menuitem", { name: "Enabled first" })).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: "End" });
+    expect(screen.getByRole("menuitem", { name: "Enabled last" })).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(trigger).toHaveFocus());
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(trigger);
+    expect(onTriggerClick).toHaveBeenCalled();
+  });
+
+  it("keeps DropdownMenu disabled triggers closed for pointer and keyboard activation", () => {
+    const onOpenChange = vi.fn();
+    render(
+      <DropdownMenu
+        isOpen={false}
+        onOpenChange={onOpenChange}
+        content={<DropdownMenuItem>Item</DropdownMenuItem>}
+      >
+        <button type="button" disabled>Disabled actions</button>
+      </DropdownMenu>
+    );
+
+    const trigger = screen.getByRole("button", { name: "Disabled actions" });
+    fireEvent.click(trigger);
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    fireEvent.keyDown(trigger, { key: " " });
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it("uses instant Dialog transitions when reduced motion is enabled", () => {
+    vi.mocked(useReducedMotion).mockReturnValue(true);
+
+    render(
+      <Dialog isOpen onClose={() => {}} ariaLabel="Reduced motion dialog">
+        <button type="button">Focusable child</button>
+      </Dialog>
+    );
+
+    expect(screen.getByRole("dialog", { name: "Reduced motion dialog" })).toHaveStyle({ transition: "none" });
   });
 
   it("toggles CollapsiblePanel via keyboard and updates aria attributes", () => {

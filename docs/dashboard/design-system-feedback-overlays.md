@@ -47,11 +47,13 @@ Any interface that blocks interaction with the rest of the application (e.g. `Mo
 Feedback surfaces indicate system status or asynchronous progress.
 
 - **ActionFeedbackRegion / Toasts:** Must wrap contents in a consistent unified surface (e.g., standard background, border, shadow, and rounded radius) instead of relying on heavily saturated background colors, utilizing appropriate semantic text colors and faint borders to communicate status.
+- **Async state semantics:** Pending and progress updates use polite `role="status"` announcements with `aria-busy` on the affected feedback region. Blocking errors use `role="alert"` and assertive live behavior only when the user must recover before continuing. Clear-error controls should not create nested alert regions.
+- **Toast behavior:** Toast entrance, exit, and stack reordering motion uses shared `asyncFeedback`, `enterExit`, and `listReorder` tokens. Non-error overflow toasts may dismiss automatically to keep stacks bounded, but error toasts remain visible until dismissed or acted on.
 
 ## Motion & Interaction
 
 - All motion must respect the user's OS preference (`useReducedMotion`).
-- Rely on shared constants from `INTERACTION_TOKENS` and `MODAL_MOTION` for unified entrance/exit easings and durations.
+- Rely on shared constants from `INTERACTION_TOKENS`, `useGsapInteractionTokens`, and `MODAL_MOTION` for unified entrance/exit easings and durations.
 - Avoid bypassing or faking timers during unmounts unless directly tied to the GSAP lifecycle to avoid layout jank or incomplete exits.
 
 ## Accessibility

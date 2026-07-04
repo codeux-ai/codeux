@@ -158,6 +158,7 @@ describe("TaskService", () => {
     await overrideService.startSprintTask(
       {
         id: "01-task",
+        record_id: "task-record-1",
         title: "Do Thing",
         prompt: "Implement",
         depends_on: [],
@@ -173,6 +174,11 @@ describe("TaskService", () => {
     expect(createSession).not.toHaveBeenCalled();
     expect(overrideStartCliTask).toHaveBeenCalledWith(expect.objectContaining({
       provider: "gemini",
+      task: expect.objectContaining({
+        id: "01-task",
+        record_id: "task-record-1",
+      }),
+      taskRecordId: "task-record-1",
       providerSettingsOverride: expect.objectContaining({
         model: "gemini-2.5-pro",
         thinkingMode: "HIGH",

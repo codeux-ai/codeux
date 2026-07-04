@@ -12,6 +12,7 @@ import {
   HostUnavailableError,
 } from "./command-spawner-client.js";
 import type { SpawnerCommandOptions, SpawnerRawResult } from "./command-spawner-protocol.js";
+import { isRuntimeShutdownInProgress } from "../../services/shutdown-state.js";
 
 declare const spawnCommandBrand: unique symbol;
 declare const spawnArgumentBrand: unique symbol;
@@ -136,6 +137,13 @@ export async function releaseGitHelperForCwd(cwd: string): Promise<void> {
   const uid = getUid ? getUid() : undefined;
   const gid = getGid ? getGid() : undefined;
   await gitHelperPool.release(JSON.stringify({ cwd: resolved, uid, gid })).catch(() => undefined);
+}
+
+/** Drains the process-wide git helper pool during server shutdown. */
+export async function shutdownGitHelperPool(): Promise<void> {
+  const pool = gitHelperPool;
+  gitHelperPool = null;
+  await pool?.shutdown();
 }
 
 export class CommandRunner {
@@ -639,6 +647,9 @@ export class CommandRunner {
   }
 
   private shouldRunGitInContainer(options: CommandOptions): boolean {
+    if (isRuntimeShutdownInProgress()) {
+      return false;
+    }
     if (process.env.NODE_ENV === "test") {
       return process.env.CODE_UX_CONTAINERIZED_GIT === "1";
     }

@@ -51,6 +51,7 @@ describe("DockerRunner", () => {
     vi.mocked(fs.stat).mockResolvedValue({ uid: 1000, gid: 1000 } as any);
     vi.mocked(fs.access).mockRejectedValue(new Error("missing"));
     vi.mocked(fs.writeFile).mockResolvedValue(undefined);
+    vi.mocked(fs.chmod).mockResolvedValue(undefined);
     vi.mocked(runCommandStrict).mockResolvedValue({ ok: true, stdout: "", stderr: "", code: 0, signal: null } as any);
     vi.mocked(runStreamingCommand).mockResolvedValue({
       ok: true,
@@ -147,9 +148,15 @@ describe("DockerRunner", () => {
     expect(dockerArgs.some((arg) => arg.includes("type=volume") && arg.includes("source=workspace-1"))).toBe(true);
     expect(dockerArgs.some((arg) => arg.includes("type=volume") && arg.includes("source=workspace-1-runtime") && arg.includes("target=/code-ux-runtime-home"))).toBe(true);
     expect(dockerArgs).toContain("HOME=/code-ux-runtime-home");
+    expect(dockerArgs).toContain("--env-file");
+    expect(dockerArgs[dockerArgs.indexOf("--env-file") + 1]).toBe("/tmp/code-ux-docker-123/provider.env");
+    expect(dockerArgs).toContain("CODE_UX_INSTALL_PLAYWRIGHT=1");
     expect(dockerArgs).not.toContain("HOME=/workspace/.code-ux-home");
     const cacheInstance = vi.mocked(DockerSetupImageCache).mock.results[0]?.value as any;
-    expect(cacheInstance.resolveImage).toHaveBeenCalledWith(expect.objectContaining({ runtimeRoot: "/runtime-root" }));
+    expect(cacheInstance.resolveImage).toHaveBeenCalledWith(expect.objectContaining({
+      installPlaywrightBrowsers: true,
+      runtimeRoot: "/runtime-root",
+    }));
   });
 
   it("kills the backing container directly when an aborted run is cancelled", async () => {
@@ -225,6 +232,34 @@ describe("DockerRunner", () => {
     expect(argvWrite?.[1]).toContain(`plan ${"x".repeat(1024)}`);
     expect(argvWrite?.[1]).toContain(" with ");
     expect(argvWrite?.[1]).toContain("'\"'\"'quotes'\"'\"'");
+  });
+
+  it("passes provider environment through an env-file so API keys do not enter docker argv", async () => {
+    await runner.runProviderInDocker({
+      command: "gemini",
+      args: ["--prompt", "plan"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: { GEMINI_API_KEY: "secret-key-value", GEMINI_MODEL: "gemini-2.5-pro" },
+      sessionId: "session-1",
+      providerLabel: "gemini",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity: vi.fn(),
+    });
+
+    const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
+    expect(dockerArgs).toContain("--env-file");
+    expect(dockerArgs.join(" ")).not.toContain("secret-key-value");
+    expect(dockerArgs.join(" ")).not.toContain("GEMINI_API_KEY=");
+
+    const envWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("provider.env"));
+    expect(envWrite?.[1]).toContain("GEMINI_API_KEY=secret-key-value");
+    expect(envWrite?.[2]).toEqual(expect.objectContaining({ mode: 0o600 }));
   });
 
   it("stages generated Gemini MCP config outside runtime home and copies it during bootstrap", async () => {

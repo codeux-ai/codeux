@@ -50,6 +50,17 @@ describe("readQwenLogData", () => {
     expect(sumQwenOpenAiUsage).toHaveBeenCalledWith([{ a: 1 }]);
   });
 
+  it("tolerates noisy docker wrapper output around the JSON array", async () => {
+    const runner = { readWorkspaceJsonArray: vi.fn(async () => "provider-runner: starting\n[{\"a\":1}]\n") };
+    sumQwenOpenAiUsage.mockReturnValue({ totalTokens: 5 });
+    buildQwenConversation.mockReturnValue([]);
+
+    const result = await readQwenLogData("/cwd", "DOCKER" as Mode, "sess", 0, runner as never);
+
+    expect(result).toEqual({ usage: { totalTokens: 5 }, conversation: [] });
+    expect(sumQwenOpenAiUsage).toHaveBeenCalledWith([{ a: 1 }]);
+  });
+
   it("returns null when the docker read yields nothing", async () => {
     const runner = { readWorkspaceJsonArray: vi.fn(async () => null) };
     expect(await readQwenLogData("/cwd", "DOCKER" as Mode, "sess", 0, runner as never)).toBeNull();

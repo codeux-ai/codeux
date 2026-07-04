@@ -1,6 +1,6 @@
 {
   "name": "@codeuxai/codeux",
-  "version": "0.8.10",
+  "version": "0.8.11",
   "description": "Containerized environment for running and managing AI sub-agents",
   "author": "Pierre Voss <p.voss@codeux.ai>",
   "license": "MIT",
@@ -58,6 +58,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:backend:coverage": "vitest run tests/backend --coverage",
+    "quality:guardrails": "node scripts/check-quality-guardrails.mjs",
     "lint": "tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc/root.tsbuildinfo",
     "typecheck": "tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc/root.tsbuildinfo",
     "ci": "pnpm run audit && pnpm run lint && pnpm run test:backend:coverage && pnpm run test:dashboard && pnpm run build",

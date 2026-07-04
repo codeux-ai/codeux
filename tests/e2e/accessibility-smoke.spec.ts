@@ -45,7 +45,7 @@ test('Dashboard accessibility smoke test', async ({ page }) => {
   await searchTrigger.click();
   const dialog = page.getByRole('dialog', { name: 'Search' });
   await expect(dialog).toBeVisible();
-  const searchInput = dialog.getByPlaceholder('Search sprints, tasks, agents...');
+  const searchInput = dialog.getByPlaceholder('Find sprints, tasks, agents, previews...');
   await expect(searchInput).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();

@@ -154,6 +154,10 @@ export class ProjectAttentionRepository {
         let itemId: string;
 
         if (existing) {
+          const nextPayload = {
+            ...(existing.payload || {}),
+            ...(input.payload || {}),
+          };
           this.db.prepare(`
             UPDATE project_attention_items
             SET severity = ?,
@@ -168,7 +172,7 @@ export class ProjectAttentionRepository {
             input.assignedWorkerEndpointId ?? existing.assignedWorkerEndpointId,
             input.title.trim(),
             input.summaryMarkdown.trim(),
-            serializePayload(input.payload),
+            serializePayload(nextPayload),
             now,
             existing.id,
           );

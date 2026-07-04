@@ -4,7 +4,7 @@ import { createPortal } from "preact/compat";
 import type { JSX } from "preact";
 import gsap from "gsap";
 import { calculatePosition, Position, Alignment } from "../../lib/positioning/index.js";
-import { useGsapInteractionTokens, GSAP_DURATIONS } from "../../lib/motion/constants.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 interface DropdownMenuProps {
@@ -44,6 +44,19 @@ export const DropdownMenuItem = ({ children, className = "", ...props }: JSX.HTM
   );
 };
 
+function assignRef<T>(ref: unknown, value: T | null): void {
+  if (!ref) return;
+  if (typeof ref === "function") {
+    ref(value);
+    return;
+  }
+  (ref as { current: T | null }).current = value;
+}
+
+function focusMenuItem(item: HTMLElement | undefined): void {
+  item?.focus({ preventScroll: true });
+}
+
 export const DropdownMenu = ({
   children,
   content,
@@ -61,7 +74,7 @@ export const DropdownMenu = ({
   const gsapTokens = useGsapInteractionTokens();
   const [isRendered, setIsRendered] = useState(false);
   const lastInteractionType = useRef<string | null>(null);
-  const localTriggerRef = useRef<HTMLDivElement>(null);
+  const localTriggerRef = useRef<HTMLElement>(null);
   const triggerRef = externalTriggerRef || localTriggerRef;
   const menuRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -261,17 +274,17 @@ export const DropdownMenu = ({
 
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        items[(currentIndex + 1) % items.length]?.focus();
+        focusMenuItem(items[(currentIndex + 1) % items.length]);
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         const nextIndex = currentIndex === -1 ? items.length - 1 : (currentIndex - 1 + items.length) % items.length;
-        items[nextIndex]?.focus();
+        focusMenuItem(items[nextIndex]);
       } else if (e.key === "Home") {
         e.preventDefault();
-        items[0]?.focus();
+        focusMenuItem(items[0]);
       } else if (e.key === "End") {
         e.preventDefault();
-        items[items.length - 1]?.focus();
+        focusMenuItem(items[items.length - 1]);
       } else if (e.key === "Enter" || e.key === " ") {
         if (document.activeElement && items.includes(document.activeElement as HTMLElement)) {
           // Check if the element handles Enter/Space itself, otherwise we click it.
@@ -301,16 +314,11 @@ export const DropdownMenu = ({
         id: (children.props as any).id || triggerId,
         ref: (node: any) => {
           if (externalTriggerRef) {
-            if (typeof externalTriggerRef === 'function') (externalTriggerRef as any)(node);
-            else (externalTriggerRef as any).current = node;
+            assignRef(externalTriggerRef, node);
           } else {
             (localTriggerRef as any).current = node;
           }
-          const childRef = (children as any).ref;
-          if (childRef) {
-            if (typeof childRef === 'function') childRef(node);
-            else childRef.current = node;
-          }
+          assignRef((children as any).ref, node);
         },
         onClick: (e: MouseEvent) => {
           lastInteractionType.current = 'click';
@@ -323,16 +331,9 @@ export const DropdownMenu = ({
         onKeyDown: (e: KeyboardEvent) => {
           if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
             lastInteractionType.current = e.key;
-            if (e.key !== 'Enter' && e.key !== ' ') {
-                e.preventDefault();
-                if (!(children.props as any).disabled) {
-                  onOpenChange(true);
-                }
-            } else if (!externalTriggerRef) {
-                e.preventDefault();
-                if (!(children.props as any).disabled) {
-                  onOpenChange(!isOpen);
-                }
+            e.preventDefault();
+            if (!(children.props as any).disabled) {
+              onOpenChange(e.key === 'Enter' || e.key === ' ' ? !isOpen : true);
             }
           }
           if ((children.props as any).onKeyDown) (children.props as any).onKeyDown(e);
@@ -341,12 +342,18 @@ export const DropdownMenu = ({
         "aria-label": (children.props as any)["aria-label"],
         "aria-haspopup": "menu",
         "aria-expanded": isOpen,
-        "aria-controls": isOpen ? menuId : undefined,
+        "aria-controls": menuId,
       }) : (
         <button
           type="button"
           id={triggerId}
-          ref={externalTriggerRef ? undefined : (localTriggerRef as unknown as RefObject<HTMLButtonElement>)}
+          ref={(node) => {
+            if (externalTriggerRef) {
+              assignRef(externalTriggerRef, node);
+            } else {
+              assignRef(localTriggerRef, node);
+            }
+          }}
           className="inline-flex cursor-pointer text-left"
           onClick={(e) => {
             lastInteractionType.current = 'click';
@@ -356,18 +363,13 @@ export const DropdownMenu = ({
           onKeyDown={(e) => {
             if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
               lastInteractionType.current = e.key;
-              if (e.key !== 'Enter' && e.key !== ' ') {
-                e.preventDefault();
-                onOpenChange(true);
-              } else if (!externalTriggerRef) {
-                e.preventDefault();
-                onOpenChange(!isOpen);
-              }
+              e.preventDefault();
+              onOpenChange(e.key === 'Enter' || e.key === ' ' ? !isOpen : true);
             }
           }}
           aria-haspopup="menu"
           aria-expanded={isOpen}
-          aria-controls={isOpen ? menuId : undefined}
+          aria-controls={menuId}
         >
           {children}
         </button>

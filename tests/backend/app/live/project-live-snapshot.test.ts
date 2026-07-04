@@ -9,6 +9,8 @@ describe("getProjectLiveSnapshot", () => {
     deps = {
       projectManagementRepository: {
         getSelectedProjectId: vi.fn().mockReturnValue("proj-1"),
+        getSelectedSprintId: vi.fn().mockReturnValue("sprint-1"),
+        sprintBelongsToProject: vi.fn().mockReturnValue(true),
         listSprints: vi.fn().mockReturnValue({ selectedSprintId: "sprint-1", sprints: [{ id: "sprint-1" }] }),
       } as any,
       projectRuntimeRepository: {
@@ -32,7 +34,9 @@ describe("getProjectLiveSnapshot", () => {
     expect(snapshot.updatedAt).toBeDefined();
 
     expect(deps.projectManagementRepository.getSelectedProjectId).toHaveBeenCalled();
-    expect(deps.projectManagementRepository.listSprints).toHaveBeenCalledWith("proj-1");
+    expect(deps.projectManagementRepository.getSelectedSprintId).toHaveBeenCalledWith("proj-1");
+    expect(deps.projectManagementRepository.sprintBelongsToProject).toHaveBeenCalledWith("proj-1", "sprint-1");
+    expect(deps.projectManagementRepository.listSprints).not.toHaveBeenCalled();
     expect(deps.projectRuntimeRepository.getProjectStatus).toHaveBeenCalledWith("proj-1", "sprint-1");
     expect(deps.getProjectExecutionSnapshot).toHaveBeenCalledWith("proj-1", { selectedSprintId: "sprint-1" });
     expect(deps.getGitStatus).toHaveBeenCalled();
@@ -81,7 +85,7 @@ describe("getProjectLiveSnapshot", () => {
 
     expect(snapshot.projectId).toBe("proj-hint");
     expect(deps.projectManagementRepository.getSelectedProjectId).not.toHaveBeenCalled();
-    expect(deps.projectManagementRepository.listSprints).toHaveBeenCalledWith("proj-hint");
+    expect(deps.projectManagementRepository.getSelectedSprintId).toHaveBeenCalledWith("proj-hint");
     expect(deps.projectRuntimeRepository.getProjectStatus).toHaveBeenCalledWith("proj-hint", "sprint-1");
     expect(deps.getProjectExecutionSnapshot).toHaveBeenCalledWith("proj-hint", { selectedSprintId: "sprint-1" });
   });
@@ -118,5 +122,25 @@ describe("getProjectLiveSnapshot", () => {
         statusSubtaskCount: 0,
       })
     );
+  });
+
+  it("keeps observability durations non-negative if the wall clock moves backwards", async () => {
+    const dateNowSpy = vi.spyOn(Date, "now")
+      .mockReturnValueOnce(10_000)
+      .mockReturnValueOnce(9_000)
+      .mockReturnValueOnce(8_000)
+      .mockReturnValueOnce(7_000)
+      .mockReturnValueOnce(6_000)
+      .mockReturnValue(5_000);
+
+    await getProjectLiveSnapshot(deps);
+
+    const [, fields] = (deps.logger.info as any).mock.calls.find(([event]: [string]) => event === "project_live_snapshot_assembled");
+    expect(fields.buildTimeMs).toBeGreaterThanOrEqual(0);
+    expect(fields.projectMgmtMs).toBeGreaterThanOrEqual(0);
+    expect(fields.runtimeMs).toBeGreaterThanOrEqual(0);
+    expect(fields.executionMs).toBeGreaterThanOrEqual(0);
+    expect(fields.gitMs).toBeGreaterThanOrEqual(0);
+    dateNowSpy.mockRestore();
   });
 });

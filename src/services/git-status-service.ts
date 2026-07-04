@@ -31,6 +31,8 @@ import {
   trimLogExcerpt,
   filterMergedPrs,
 } from "../infrastructure/git/git-status-policy.js";
+import { buildGitHttpAuthEnvForRepoWithFallbacks } from "./git-http-auth.js";
+import { commandRunner, type CommandResult } from "../shared/subprocess/command-runner.js";
 
 export type { GitTrackingRequest };
 
@@ -52,6 +54,7 @@ interface RepoPlumbing {
 
 const FAILED_RUN_DETAILS_LIMIT = 3;
 const FAILED_JOBS_PER_RUN_LIMIT = 3;
+const GIT_MUTATION_TIMEOUT_MS = 8000;
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
   const normalized = String(message || "").trim().toLowerCase();
@@ -530,7 +533,8 @@ export class GitStatusService {
     title: string;
     body: string;
   }, tokens: GitHostTokens | string = {}): Promise<ResolvePullRequestResult | null> {
-    const { token: effectiveToken } = await this.resolveProviderAndToken(this.normalizeTokens(tokens));
+    const normalizedTokens = this.normalizeTokens(tokens);
+    const { token: effectiveToken } = await this.resolveProviderAndToken(normalizedTokens);
 
     const existing = await this.findMatchingOpenPr(args.baseBranch, args.headBranch, effectiveToken);
     if (existing) {
@@ -538,6 +542,21 @@ export class GitStatusService {
         created: false,
         prNumber: existing.number,
         prUrl: existing.url,
+      };
+    }
+
+    const baseBranchReady = await this.ensureRemoteBaseBranchExists(
+      args.baseBranch,
+      args.headBranch,
+      effectiveToken,
+      normalizedTokens,
+    );
+    if (!baseBranchReady.ok) {
+      return {
+        created: false,
+        prNumber: null,
+        prUrl: null,
+        errorMessage: baseBranchReady.errorMessage,
       };
     }
 
@@ -583,6 +602,111 @@ export class GitStatusService {
       prNumber: created?.number ?? null,
       prUrl: created?.url ?? createdUrl,
     };
+  }
+
+  private async ensureRemoteBaseBranchExists(
+    baseBranch: string,
+    headBranch: string,
+    hostToken: string | undefined,
+    tokens: GitHostTokens,
+  ): Promise<{ ok: true } | { ok: false; errorMessage: string }> {
+    const base = baseBranch.trim();
+    if (!base) {
+      return { ok: false, errorMessage: "Cannot create pull request: base branch is empty." };
+    }
+
+    const remoteBase = await this.runGitWithAuth(["ls-remote", "--heads", "origin", base], hostToken, tokens);
+    if (remoteBase.ok && remoteBase.stdout.trim().length > 0) {
+      return { ok: true };
+    }
+
+    const localBaseExists = await this.gitRefExists(`refs/heads/${base}`, hostToken, tokens);
+    if (!localBaseExists) {
+      const sourceRef = await this.resolveBaseBranchStartPoint(base, headBranch, hostToken, tokens);
+      if (!sourceRef) {
+        return {
+          ok: false,
+          errorMessage: `Cannot create pull request: base branch \`${base}\` does not exist on origin and no repository default branch could be resolved as a start point.`,
+        };
+      }
+
+      const createLocal = await this.runGitWithAuth(["branch", base, sourceRef], hostToken, tokens);
+      if (!createLocal.ok) {
+        const detail = createLocal.stderr.trim() || createLocal.stdout.trim() || "git branch failed";
+        return {
+          ok: false,
+          errorMessage: `Cannot create pull request: failed to create missing base branch \`${base}\` from \`${sourceRef}\`: ${detail}`,
+        };
+      }
+    }
+
+    const pushBase = await this.runGitWithAuth(["push", "-u", "origin", `refs/heads/${base}:refs/heads/${base}`], hostToken, tokens);
+    if (!pushBase.ok) {
+      const detail = pushBase.stderr.trim() || pushBase.stdout.trim() || "git push failed";
+      return {
+        ok: false,
+        errorMessage: `Cannot create pull request: base branch \`${base}\` is missing on origin and could not be pushed: ${detail}`,
+      };
+    }
+
+    GitStatusService.invalidateCache(this.repoPath);
+    return { ok: true };
+  }
+
+  private async resolveBaseBranchStartPoint(
+    baseBranch: string,
+    headBranch: string,
+    hostToken: string | undefined,
+    tokens: GitHostTokens,
+  ): Promise<string | null> {
+    const originHead = await this.runGitWithAuth(["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"], hostToken, tokens);
+    const originHeadRef = originHead.ok ? originHead.stdout.trim() : "";
+    if (originHeadRef && originHeadRef !== `origin/${baseBranch}` && await this.gitRefResolvable(originHeadRef, hostToken, tokens)) {
+      return originHeadRef;
+    }
+
+    const remoteShow = await this.runGitWithAuth(["remote", "show", "origin"], hostToken, tokens);
+    const remoteDefault = remoteShow.ok
+      ? remoteShow.stdout.split("\n").map((line) => line.trim()).find((line) => line.startsWith("HEAD branch:"))
+      : undefined;
+    const remoteDefaultBranch = remoteDefault?.slice("HEAD branch:".length).trim();
+    if (remoteDefaultBranch && remoteDefaultBranch !== baseBranch) {
+      const candidate = `origin/${remoteDefaultBranch}`;
+      if (await this.gitRefResolvable(candidate, hostToken, tokens)) {
+        return candidate;
+      }
+    }
+
+    const plumbing = await this.getRepoPlumbing();
+    const currentBranch = plumbing.branch?.trim();
+    if (currentBranch && currentBranch !== baseBranch && currentBranch !== headBranch && await this.gitRefResolvable(currentBranch, hostToken, tokens)) {
+      return currentBranch;
+    }
+
+    return null;
+  }
+
+  private async gitRefExists(ref: string, hostToken: string | undefined, tokens: GitHostTokens): Promise<boolean> {
+    const result = await this.runGitWithAuth(["show-ref", "--verify", "--quiet", ref], hostToken, tokens);
+    return result.ok;
+  }
+
+  private async gitRefResolvable(ref: string, hostToken: string | undefined, tokens: GitHostTokens): Promise<boolean> {
+    const result = await this.runGitWithAuth(["rev-parse", "--verify", ref], hostToken, tokens);
+    return result.ok;
+  }
+
+  private async runGitWithAuth(args: string[], hostToken: string | undefined, tokens: GitHostTokens): Promise<CommandResult> {
+    if (this.runner !== defaultRunner) {
+      return this.runner("git", args, { cwd: this.repoPath, hostToken });
+    }
+
+    const authEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(this.repoPath, tokens);
+    return commandRunner.run("git", args, {
+      cwd: this.repoPath,
+      timeout: GIT_MUTATION_TIMEOUT_MS,
+      env: authEnv ?? process.env,
+    });
   }
 
   private async fetchOpenPrs(ghToken?: string): Promise<{ data: GitPullRequestStatus[]; warning?: string }> {

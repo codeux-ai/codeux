@@ -11,9 +11,24 @@ expect.extend(matchers);
 import { InvocationFeedPanel } from "../../../../../dashboard/src/v2/components/live-session/InvocationFeedPanel.js";
 import { useExecutionTimeline } from "../../../../../dashboard/src/hooks/ExecutionTimelineContext.js";
 import type { ExecutionDashboardSnapshot, ExecutionInvocationRecord } from "../../../../../dashboard/src/types.js";
+import gsap from "gsap";
 
 vi.mock("../../../../../dashboard/src/hooks/ExecutionTimelineContext.js", () => ({
   useExecutionTimeline: vi.fn(),
+}));
+
+vi.mock("../../../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({
+  useReducedMotion: () => true,
+  useResolvedMotionDuration: () => 0,
+}));
+
+vi.mock("gsap", () => ({
+  default: {
+    killTweensOf: vi.fn(),
+    fromTo: vi.fn(),
+    to: vi.fn(),
+    set: vi.fn(),
+  },
 }));
 
 const createInvocation = (overrides: Partial<ExecutionInvocationRecord> = {}): ExecutionInvocationRecord => ({
@@ -106,12 +121,25 @@ describe("InvocationFeedPanel", () => {
     expect(screen.getByText("Task Coding")).toBeInTheDocument();
     expect(screen.getByText("QA Review")).toBeInTheDocument();
     expect(screen.getByText("Provider timed out")).toBeInTheDocument();
+    expect(screen.getByText("Invocation status: running.")).toBeInTheDocument();
 
     const feed = screen.getByRole("log", { name: "Live invocation feed" });
     expect(feed).toHaveAttribute("aria-live", "polite");
+    expect(feed).toHaveAttribute("aria-busy", "true");
 
     expect(screen.getByRole("link", { name: "Open transcript for Task Coding" }))
       .toHaveAttribute("href", "/chat?mode=invocations&invocation=xi-live-1");
+  });
+
+  it("renders a polite loading state when execution has not arrived yet", () => {
+    vi.mocked(useExecutionTimeline).mockReturnValue({
+      execution: null,
+    } as never);
+
+    render(<InvocationFeedPanel />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("Loading invocation feed.");
+    expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
   });
 
   it("renders an empty feed state when the snapshot has no invocation records", () => {
@@ -122,6 +150,7 @@ describe("InvocationFeedPanel", () => {
     render(<InvocationFeedPanel />);
 
     expect(screen.getByText("No invocation records yet.")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
   });
 
   it("renders explicitly scoped invocations instead of the full snapshot list", () => {
@@ -139,5 +168,25 @@ describe("InvocationFeedPanel", () => {
     expect(screen.queryByText("raw-provider")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open transcript for Task Coding" }))
       .toHaveAttribute("href", "/chat?mode=invocations&invocation=xi-scoped");
+  });
+
+  it("uses tokenized reduced-motion status highlights without GSAP animation", () => {
+    vi.useFakeTimers();
+    vi.mocked(useExecutionTimeline).mockReturnValue({
+      execution: createSnapshot([]),
+    } as never);
+
+    const { rerender } = render(<InvocationFeedPanel invocations={[
+      createInvocation({ id: "xi-changing", status: "running" }),
+    ]} />);
+
+    rerender(<InvocationFeedPanel invocations={[
+      createInvocation({ id: "xi-changing", status: "completed", finishedAt: "2024-01-01T10:02:00.000Z" }),
+    ]} />);
+
+    expect(gsap.fromTo).not.toHaveBeenCalled();
+    expect(screen.getByText("completed")).toBeInTheDocument();
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
   });
 });

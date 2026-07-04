@@ -6,7 +6,11 @@ import { request as httpRequest } from "http";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
-import { setupDashboardServer } from "../../../src/server/dashboard-server.js";
+import {
+  configureDashboardApp,
+  setupDashboardServer,
+  type DashboardServerOptions,
+} from "../../../src/server/dashboard-server.js";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import httpRequestMock from "supertest";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
@@ -166,6 +170,147 @@ function buildSettingsServerOptions() {
   };
 }
 
+function buildDashboardTestOptions(
+  overrides: Partial<DashboardServerOptions> & Pick<DashboardServerOptions, "app">,
+): DashboardServerOptions {
+  return {
+    dashboardDir: "/nonexistent",
+    port: 0,
+    liveActivityCacheMs: 1000,
+    getStatus: () => ({ ok: true }),
+    getLiveSnapshot: (projectId?: string | null) => ({
+      projectId: projectId || "project-1",
+      selectedSprintId: null,
+      status: { project_id: projectId || "project-1", timestamp: null, subtasks: [] },
+      execution: {
+        projectId: projectId || "project-1",
+        projectName: "Project 1",
+        sprintRuns: [],
+        taskDispatches: [],
+        connections: [],
+        primaryAssignedWorker: null,
+        overflowAssignedWorkers: [],
+        attentionItems: [],
+        recentEvents: [],
+        updatedAt: null,
+      },
+      gitStatus: null,
+      gitStatusError: null,
+      updatedAt: null,
+    }) as any,
+    getExecutionSnapshot: () => ({
+      projectId: null,
+      projectName: null,
+      sprintRuns: [],
+      taskDispatches: [],
+      connections: [],
+      primaryAssignedWorker: null,
+      overflowAssignedWorkers: [],
+      attentionItems: [],
+      recentEvents: [],
+      updatedAt: null,
+    }),
+    getProjectExecutionSnapshot: (projectId: string) => ({
+      projectId,
+      projectName: "Project 1",
+      sprintRuns: [],
+      taskDispatches: [],
+      connections: [],
+      primaryAssignedWorker: null,
+      overflowAssignedWorkers: [],
+      attentionItems: [],
+      recentEvents: [],
+      updatedAt: null,
+    }),
+    getProjectStatsSnapshot: (projectId: string) => ({
+      projectId,
+      projectName: "Project 1",
+      window: "7d",
+      generatedAt: "2026-07-03T00:00:00.000Z",
+      usage: {
+        invocationCount: 0,
+        activeTimeMs: 0,
+        wallTimeMs: 0,
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        reasoningOutputTokens: 0,
+        totalTokens: 0,
+        reportedInvocationCount: 0,
+        estimatedInvocationCount: 0,
+        unavailableInvocationCount: 0,
+        unsupportedInvocationCount: 0,
+      },
+      activeSprint: null,
+      buckets: [],
+      sprints: [],
+      tasks: [],
+      providers: [],
+      purposes: [],
+      tokenSources: [],
+    }),
+    getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null }),
+    getLiveActivities: async () => ({}),
+    getGitStatus: async () => ({ branch: "main" }) as any,
+    getExternalSettingsHints: () => ({ env: {}, settingsJson: {}, resolved: {} }) as any,
+    ...buildSettingsServerOptions(),
+    listProjects: () => ({ projects: [{ id: "project-1", name: "Project 1" }], selectedProjectId: "project-1" }) as any,
+    createProject: () => ({ id: "project-1", name: "Project 1" }) as any,
+    getProject: (projectId: string) => ({ id: projectId, name: "Project 1" }) as any,
+    updateProject: (projectId: string) => ({ id: projectId, name: "Project 1" }) as any,
+    deleteProject: () => {},
+    selectProject: (projectId: string | null) => projectId,
+    selectSprint: (_projectId: string, sprintId: string | null) => sprintId,
+    listSprints: (projectId: string) => ({ sprints: [{ id: "sprint-1", projectId, title: "Sprint 1" }] }) as any,
+    getSprint: (sprintId: string) => ({ id: sprintId, projectId: "project-1", title: "Sprint 1" }) as any,
+    createSprint: () => ({ id: "sprint-1", projectId: "project-1", title: "Sprint 1" }) as any,
+    updateSprint: (sprintId: string) => ({ id: sprintId, projectId: "project-1", title: "Sprint 1" }) as any,
+    deleteSprint: () => {},
+    importSprintFromMarkdown: () => ({ id: "sprint-1", projectId: "project-1", title: "Sprint 1" }) as any,
+    exportSprintToMarkdown: () => ({ files: [] }) as any,
+    listTasks: (projectId: string) => [{ id: "task-1", projectId, title: "Task 1" }] as any,
+    getTask: (taskId: string) => ({ id: taskId, projectId: "project-1", title: "Task 1" }) as any,
+    createTask: (projectId: string) => ({ id: "task-1", projectId, title: "Task 1" }) as any,
+    updateTask: (taskId: string) => ({ id: taskId, projectId: "project-1", title: "Task 1" }) as any,
+    deleteTask: () => {},
+    searchJiraIssues: async () => [],
+    listSprintLinkedIssues: () => [],
+    replaceSprintLinkedIssues: () => [],
+    listConnections: (projectId: string) => [{ id: "connection-1", projectId, label: "Connection 1" }] as any,
+    updateConnection: (connectionId: string) => ({ id: connectionId }) as any,
+    listAgentPresets: () => [],
+    createAgentPreset: () => ({ id: "agent-1" } as any),
+    updateAgentPreset: (agentPresetId: string) => ({ id: agentPresetId } as any),
+    deleteAgentPreset: () => {},
+    listInstructionFiles: () => [],
+    readInstructionFile: () => ({ id: "instructions", content: "" }) as any,
+    writeInstructionFile: () => ({ id: "instructions", content: "" }) as any,
+    listConversationThreads: () => [],
+    createConversationThread: () => ({ id: "thread-1" }) as any,
+    updateConversationThread: (threadId: string) => ({ id: threadId }) as any,
+    updateThreadRoute: (threadId: string) => ({ id: threadId }) as any,
+    compactThreadSession: (threadId: string) => ({ id: threadId }) as any,
+    deleteConversationThread: () => {},
+    listConversationMessages: () => [],
+    postConversationMessage: () => ({ id: "message-1" }) as any,
+    listProjectInvocations: () => [],
+    listInvocationMessages: () => [],
+    rerunTask: async () => ({ ok: true }),
+    orchestrateSprint: async () => ({ ok: true }),
+    pauseSprintRun: () => ({ ok: true }),
+    cancelSprintRun: () => ({ ok: true }),
+    forceCancelSprintRun: () => ({ ok: true }),
+    cancelTaskDispatch: () => ({ ok: true }),
+    forceCancelTaskDispatch: () => ({ ok: true }),
+    forceCompleteTask: async () => {},
+    retryTaskDispatch: async () => ({ ok: true }),
+    listDockerContainers: async () => [],
+    listSprintPreviewSessions: (projectId: string) => [{ id: "preview-1", projectId }] as any,
+    listFileBrowserSessions: (projectId: string) => [{ id: "file-browser-1", projectId }] as any,
+    ...overrides,
+  };
+}
+
 async function waitForRealtimeMessage(
   socket: WebSocket,
   predicate: (message: DashboardRealtimeServerMessage) => boolean,
@@ -191,6 +336,30 @@ async function waitForRealtimeMessage(
 }
 
 describe("setupDashboardServer", () => {
+  it("registers grouped dashboard routes through the typed route boundary", async () => {
+    const app = express();
+    configureDashboardApp(buildDashboardTestOptions({ app }));
+
+    const cases = [
+      { path: "/api/projects", expectedBody: { selectedProjectId: "project-1" } },
+      { path: "/api/projects/project-1/sprints", expectedBody: { sprints: [{ id: "sprint-1" }] } },
+      { path: "/api/projects/project-1/tasks", expectedBody: [{ id: "task-1" }] },
+      { path: "/api/projects/project-1/connections", expectedBody: [{ id: "connection-1" }] },
+      { path: "/api/status", expectedBody: { ok: true } },
+      { path: "/api/telemetry/overview", expectedBody: { activeProjects: [] } },
+      { path: "/api/projects/project-1/preview/sessions", expectedBody: [{ id: "preview-1" }] },
+      { path: "/api/projects/project-1/file-browser/sessions", expectedBody: [{ id: "file-browser-1" }] },
+      { path: "/api/system-settings", expectedBody: { runtime: { dashboardPort: DEFAULT_DASHBOARD_SETTINGS.dashboardPort } } },
+      { path: "/api/system/update-status", expectedBody: { currentVersion: expect.any(String), updateAvailable: false } },
+      { path: "/api/git-providers/available", expectedBody: { github: expect.any(Boolean), gitlab: expect.any(Boolean) } },
+    ];
+
+    for (const testCase of cases) {
+      const response = await httpRequestMock(app).get(testCase.path);
+      expect(response.status, testCase.path).toBe(200);
+      expect(response.body).toMatchObject(testCase.expectedBody);
+    }
+  });
 
   it("allows same-origin API requests", async () => {
     const app = express();

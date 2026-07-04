@@ -166,12 +166,14 @@ The v2 settings page exposes:
 - quick category search with `/` focus
 - Route Mapping as the main AI routing workspace with route summaries, provider-pool counts, and override counts
 - pill-style controls for common mode switches such as profile, strategy, execution mode, and merge policy
+- manual Route Mapping entries display and edit only their resolved primary instance, even if an older weighted pool remains saved on the route; weighted and agent strategies continue to display their selected provider pool
 
 Dashboard route and model controls share provider display metadata from the settings view-model helpers:
 - provider routes use provider instance ids internally but display the settings page instance name, such as `Codex Primary`, instead of legacy virtual-worker labels
 - provider icons use the underlying provider type, so additional Codex, Qwen Code, OpenCode, and Antigravity instances keep the correct brand icon
 - default route/model options show the resolved inherited worker defaults when available, such as `Default Route (Codex Primary)` and `Default Model (gpt-5.5)`
 - Sprint Composer and Quicksprint default route/model labels resolve from the `planning` invocation route mapping. A pinned Planning Route provider and its route-specific model override are displayed as the default, even when the worker default points at a different provider.
+- Sprint Composer and Quicksprint explicit route selections keep the selected provider-instance id as the option value for UI state, but send the underlying CLI provider type in `PlanningOverrides.virtualProvider`. That keeps a selected instance such as `Claude Live` paired with the `claude-code` runtime when a model override is also selected.
 - model option values remain the provider catalog values returned by `getProviderModelOptions`; only labels and icons are display metadata
 
 File:

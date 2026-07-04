@@ -55,6 +55,7 @@ Runtime resolution:
 - project settings inherit live system defaults; they do not snapshot them
 - project saves are diffed against the current system defaults, not hardcoded app defaults
 - sprint settings are sparse temporary overrides on top of resolved project settings
+- effective system, project, and sprint resolution uses an in-process typed cache owned by `SettingsRepository` and implemented in `SettingsResolutionService`. Cache entries are keyed by scope plus a process-wide settings resolution revision. Any system save, project save/reset, sprint save/reset, or test data reset increments that revision and clears the writer's local cache, so other repository instances can no longer hit entries created before the write. The cache is bounded by the repository service lifetime and does not retain provider secrets beyond the existing settings service lifetime.
 - orchestration, worker dispatch, and selected-project CI tracking resolve effective settings for the active project or sprint at runtime instead of using only the startup system snapshot
 - `git.defaultBranch` resolves with the following precedence:
   1. Sprint setting override (Dashboard)
@@ -76,12 +77,15 @@ Runtime resolution:
 - Interactive provider login containers use readable names such as `code-ux-login-<provider>-<session>` and run on a small cached prerequisite image named like `code-ux-login-base-node-24-bookworm-slim:<hash>`.
 - Packaged Windows Electron uses an opaque BrowserWindow and Chromium GPU memory hints to mitigate tile-memory pressure. All animated backgrounds render at full fidelity; WebGL backgrounds use `powerPreference: "low-power"` and 0.5× render scale, and all background layers apply CSS `contain: strict` to limit compositor tile scope.
 - On startup, Code UX schedules Docker asset pruning in the background so dashboard boot is not blocked by Docker cleanup. The prune path uses label-filtered Docker queries for managed workspace/runtime volumes plus helper/login containers, removes containers and volumes in batches, and applies a short per-command timeout. Helper/login container cleanup uses `docker rm -f -v` so anonymous image-declared volumes are removed with the container. Cached setup-script images are content-addressed and are intentionally preserved across dashboard restarts so provider launches can reuse them until the base image, setup script content, or setup Dockerfile changes.
-- On startup, Code UX also performs automated database maintenance, pruning old completed task runs (and their cascaded child tables), VM activities, attention items, and realtime events according to the configured retention policy, followed by a `VACUUM` operation on database files to reclaim disk space.
-- restart recovery also treats interrupted Docker sessions without a live backing container as failed, so abandoned workspaces are reclaimed instead of waiting forever for a callback that cannot arrive.
-- Docker provider runs interrupted by Code UX process shutdown keep their provider usage rows running when the spawner exits from a restart signal; startup recovery then resumes or fails them based on whether the labeled backing container still exists.
+- On startup, Code UX also performs automated database maintenance, pruning old completed task runs (and their cascaded child tables), VM activities, attention items, and realtime events according to the configured retention policy. Released virtual-worker assignment history is purged during the same maintenance pass because virtual workers are ephemeral and live paths only depend on active assignments. Maintenance then runs `VACUUM` on database files to reclaim disk space. SQLite WAL auto-checkpointing is disabled on runtime connections so ordinary startup writes cannot synchronously checkpoint a large WAL on the dashboard thread; controlled maintenance checkpoints truncate WAL files on the maintenance cadence instead.
+- restart recovery treats interrupted Docker sessions without a live backing container as cancelled/retryable, so app shutdowns and restarts do not inflate invocation failure statistics while abandoned runtime callbacks are still cleared.
+- restart recovery respects live sprint lease ownership: if an active run has an unexpired `sprint_orchestrator:<pid>` lease and that PID is still alive, the new process skips recovery instead of releasing the lease and starting a duplicate watch loop.
+- QA review keepalives refresh the sprint-run heartbeat only; the orchestrator heartbeat owns sprint lease renewal with its original lease token.
+- On Code UX shutdown (`SIGINT`, `SIGTERM`, `SIGHUP`, or Electron quit), the server first requests registered active dispatches to abort and then kills any still-running Docker containers with `code-ux.*` labels or deterministic `code-ux-*` runtime names. This prevents provider, preview, browser, login, and workspace-helper containers from surviving a normal app stop. Shutdown does not remove Docker workspace/runtime volumes, and startup recovery can continue from the same workspace volume when `Resume failed task in same workspace` is enabled.
+- Failed-task retry uses the latest `cli_workspace_bound` task-run event as the authoritative Docker workspace binding. This matters after restart recovery because the interrupted provider session id can differ from the workspace session id that actually names the preserved volume.
 - startup recovery now also requeues task-level CLI follow-up runs that were left in `in_progress` after QA/repair `Fix` work lost its backing container, so the orchestrator can start the container again instead of leaving the sprint stuck after a server restart.
 - startup recovery treats Jules task sessions as durable remote runtime. If Code UX restarts after a sprint run or task dispatch was incorrectly terminalized while the sprint itself is still active, recovery rehydrates one sprint run, reattaches active Jules task runs/dispatches/provider invocation rows to it, and resumes the watch loop instead of failing the sessions.
-- startup recovery also reconciles dispatch rows linked to terminal task runs. If a task run is already `COMPLETED` or `FAILED` but its dispatch still says blocked/failed/running from an older recovery path, Code UX rewrites the dispatch to the terminal status so live dashboards do not show stale error indicators for completed work.
+- startup recovery also reconciles dispatch rows linked to terminal task runs. If a task run is already `COMPLETED` or `FAILED` but its dispatch still says blocked/failed/running from an older recovery path, Code UX rewrites the dispatch to the terminal status so live dashboards do not show stale error indicators for completed work. Dispatch rows already closed as `cancelled` by shutdown/restart recovery are left cancelled even though their task run uses `FAILED` as the internal retry sentinel.
 - Jules sessions that still report `AWAITING_USER_FEEDBACK` are kept locally `running` when the recent activity transcript shows a user reply after the latest agent clarification request. This clears stale blocked dispatch errors and attention indicators while Code UX waits for Jules to process the submitted reply.
 - session sync uses the shared bounded Jules session snapshot for normal polling, but directly fetches any recorded task session missing from that snapshot or present only as a stale nonterminal snapshot copy. Older long-running sprints can otherwise keep local task runs marked `running` after Jules already completed the session and opened a PR.
 - When Code UX has to create a missing feature branch, it prefers `origin/<defaultBranch>` over the local `<defaultBranch>` ref when the remote-tracking base branch exists.
@@ -180,7 +184,7 @@ The effective endpoints return:
 Dashboard behavior:
 - project settings now render a per-setting override badge only when a control is actually overridden at project scope
 - sprint override dialogs use the same field-level source metadata and show override badges only for sprint-local overrides
-- the v2 settings page includes a quick-find field (keyboard shortcut `/`) that filters categories without changing the scoped settings model
+- the v2 settings page includes a quick-find field (keyboard shortcut `/`) that filters categories without changing the scoped settings model. Smart Find uses a centralized typed settings search index spanning category metadata, provider and integration labels, invocation routes, instruction templates, and important field synonyms, so provider searches such as `claude` surface both AI model routing and Integrations matches with visible match context.
 - dashboard theme selection is unified through `dashboard/src/v2/hooks/useThemeSetting.ts`: both the top-nav theme toggle and Settings > Appearance theme control persist through `saveSystemSettings` and react to the same `codeux:settings-updated` event stream.
 - the main settings editor is composed of smaller panel modules for better maintainability (e.g., automation, provider, worker, QA controls) instead of one monolithic component.
 - AI provider configuration and catalog metadata are centralized in `settings-view-models.ts` instead of directly within the editor.
@@ -338,9 +342,10 @@ QA merge-gate notes:
   - `containerImage`
   - `containerSetupScriptPath` (optional; when set to a relative path, runtime checks both sprint repo root and current server working directory)
     - if empty, Code UX first seeds missing bundled defaults into `~/.code-ux`, then falls back to `.code-ux/container/setup.sh` in repo root, then home directory, then the bundled Code UX default script
-  - `containerCacheSetupScriptImage` (default `false`)
+  - `containerCacheSetupScriptImage` (default `true`)
     - when enabled, Docker runtime builds and reuses a derived image keyed by the base image plus setup script contents
     - cache misses fall back to the current per-run setup script path if the image build fails
+  - `containerInstallPlaywrightBrowsers` (default `true`): provider coding containers set `CODE_UX_INSTALL_PLAYWRIGHT=1`, so the shared setup script installs Playwright Chromium plus OS dependencies for agent browser checks. Disable it to skip the browser download during setup; preview containers keep this disabled unless they opt into the provider setup path explicitly.
   - `containerMountGitConfig` (default `false`): copy the host `.gitconfig` into Docker. When disabled, Docker provider runs configure Git with `containerGitUserName` and `containerGitUserEmail` instead.
   - `containerGitUserName` (default `Code UX`)
   - `containerGitUserEmail` (default `agents@codeux.ai`)
@@ -456,7 +461,7 @@ Repository demo script:
 - Packaged desktop installs also ship this script as a default asset. On first use, Code UX copies it to `~/.code-ux/container/setup.sh` when that file does not already exist, so Docker can mount a normal user-directory script instead of relying on a repo checkout.
 - It verifies `npm`, ensures `git` + `gh`, installs `pnpm` when needed, and leaves provider CLI installation to the runtime's provider-specific fallback.
 - `npm` refresh is now opt-in via `CODE_UX_REFRESH_NPM=1` instead of happening on every container start.
-- Playwright bootstrap is now opt-in via `CODE_UX_INSTALL_PLAYWRIGHT=1` instead of downloading Chromium during every fresh container bootstrap.
+- Playwright bootstrap is controlled by the Docker Runtime `containerInstallPlaywrightBrowsers` setting. Provider coding containers enable it by default through `CODE_UX_INSTALL_PLAYWRIGHT=1`, while preview containers keep it disabled by default.
 - Docker CLI execution now uses isolated Docker volumes as the workspace backing store instead of repo-local worktrees or persistent host-side runtime homes.
   - container `/workspace` contains only the Git checkout used for the coding task
   - provider `HOME` lives in a sibling runtime volume mounted at `/code-ux-runtime-home`, so CLI auth/config/cache/session state does not appear inside the Git worktree
@@ -470,7 +475,7 @@ Repository demo script:
     - Gemini: `GEMINI_MODEL`
     - Codex: `CODEX_MODEL` plus `--model` when applicable
     - Claude Code: `--model` when applicable
-  - When `containerCacheSetupScriptImage` is enabled and a setup script is present, runtime first tries to reuse a prebuilt image named like `code-ux-setup-cache-node-24-bookworm:<hash>` instead of rerunning the setup script on every container launch. The hash covers the base image, setup script content, and setup-cache Dockerfile content. Build contexts and lock directories live under the repo-scoped Docker runtime root, so cache hits survive dashboard restarts and concurrent launches wait for one build instead of triggering duplicate builds.
+  - When `containerCacheSetupScriptImage` is enabled and a setup script is present, runtime first tries to reuse a prebuilt image named like `code-ux-setup-cache-node-24-bookworm:<hash>` instead of rerunning the setup script on every container launch. The hash covers the base image, setup script content, Playwright browser install setting, and setup-cache Dockerfile content. Build contexts and lock directories live under the repo-scoped Docker runtime root, so cache hits survive dashboard restarts and concurrent launches wait for one build instead of triggering duplicate builds.
   - An empty `containerSetupScriptPath` still participates in caching because runtime resolves the default script chain automatically, including the bundled Code UX setup script.
   - `claude` fallback uses the official installer: `curl -fsSL https://claude.ai/install.sh | bash`
   - Claude runner uses explicit headless prompt mode (`claude -p "<prompt>"`) with `--dangerously-skip-permissions`.
@@ -487,12 +492,13 @@ Worker runtime notes:
 - virtual workers are now the only supported worker mode
 - virtual workers create ephemeral `worker_endpoints` rows with `endpoint_type = virtual_cli`
 - virtual workers do not create MCP connection rows, so the connection tab remains MCP-only
+- virtual worker startup reconciliation only schedules projects with claimable queued dispatches; already-running dispatches are monitored by recovery/watch-loop paths and do not create new virtual worker cycles
 
 Runtime cleanup notes:
 - cleanup treats expired sprint leases as stale, not active ownership
 - when a stale `running` sprint run has no active dispatches and its heartbeat is older than the cleanup cutoff, Code UX fails that run and releases the expired sprint lease in the same sweep
 - startup now prunes orphaned virtual worker endpoints before new virtual cycles begin
-- startup schedules a fast, label-filtered stale Docker workspace prune for untracked, unrecoverable, and outdated sessions while preserving content-addressed setup-cache images for reuse. Tracked CLI sessions marked `FAILED` remain protected so same-workspace task retry can resume their Docker workspace/runtime volumes.
+- startup schedules a fast, label-filtered stale Docker workspace prune for untracked, unrecoverable, and outdated sessions while preserving content-addressed setup-cache images for reuse. Tracked CLI sessions marked `FAILED` or `CANCELLED` remain protected so same-workspace task retry can resume their Docker workspace/runtime volumes.
 - successful CLI task runs now preserve their workspace while the owning sprint is still non-terminal (so QA follow-up and sprint-side retries can continue in the same workspace handle)
 - preserved workspaces are tagged by persisted task-run workspace metadata (including Docker `docker-volume://...` handles) and cleaned when the sprint reaches a terminal state (`completed`, `failed`, or `cancelled`); cleanup removes both the workspace volume and its `-runtime` provider-state volume
 - Docker-backed planning invocations also use a stable project/sprint snapshot workspace and paired provider runtime volume. Failed or incomplete planning runs leave it in place so Restart/Continue can resume provider-local session state instead of starting from a cleaned throwaway snapshot; successful planning removes the workspace and runtime volume.

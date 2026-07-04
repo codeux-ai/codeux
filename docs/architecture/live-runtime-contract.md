@@ -17,6 +17,9 @@ The Live snapshot (`ProjectLiveDashboardSnapshot`) serves as the authoritative b
    The browser UI renders the exact snapshot it receives over HTTP `/api/live` or websockets. It does not attempt to reconcile competing sources, merge partial updates manually, or maintain local hidden state that contradicts the snapshot.
    Live task cards may still derive display-only task runtime fields such as the latest session id, PR URL, worker branch, and display phase from the current sprint-scoped dispatch/event history that already exists inside the same snapshot. This is a projection step inside the snapshot boundary, not a second source of truth.
 
+5. **Dashboard View-Model Boundary:**
+   Live Session render-time projections live in pure dashboard helpers under `dashboard/src/v2/lib/`, with `live-session-view-model.ts` owning deterministic sprint-scoped runtime collections, projected task display state, task filter counts, task-card invocation feeds, duration ticker eligibility, and transport banner state. `LiveSessionPage` memoizes calls into these helpers and keeps hooks, local optimistic action state, and JSX composition in the component. This keeps large task lists from rebuilding indexes ad hoc during render and makes missing snapshots, stale transport states, and invocation selection testable without mounting the full page.
+
 ## Field Ownership & Mutation Triggers
 
 The top-level fields within `ProjectLiveDashboardSnapshot` are explicitly owned and mapped back to strict backend origins:

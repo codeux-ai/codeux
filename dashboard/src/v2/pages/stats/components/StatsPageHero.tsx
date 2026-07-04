@@ -128,6 +128,9 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
   const customRangeMessage = customControlsOpen ? getCustomRangeMessage(customFrom, customTo) : "";
   const rangeMessage = customRangeError || customRangeMessage;
   const rangeHasError = Boolean(rangeMessage);
+  const customRangeDescriptionIds = rangeHasError
+    ? "stats-custom-range-help stats-custom-range-error"
+    : "stats-custom-range-help";
   const canApplyCustomRange = isValidCustomRange(customFrom, customTo);
   const selectedProjectLabel = selectedProject?.name || "No project selected";
   const rangeScopeLabel = stats?.range?.label || formatWindowLabel(activeQuery);
@@ -263,7 +266,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                     className={`${INPUT_CLASS} !h-10 w-full !px-3 !text-[12px]`}
                     aria-invalid={rangeHasError ? "true" : "false"}
                     aria-errormessage={rangeHasError ? "stats-custom-range-error" : undefined}
-                    aria-describedby="stats-custom-range-help"
+                    aria-describedby={customRangeDescriptionIds}
                   />
                 </label>
                 <label className={styles.customRangeField}>
@@ -280,7 +283,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                     className={`${INPUT_CLASS} !h-10 w-full !px-3 !text-[12px]`}
                     aria-invalid={rangeHasError ? "true" : "false"}
                     aria-errormessage={rangeHasError ? "stats-custom-range-error" : undefined}
-                    aria-describedby="stats-custom-range-help"
+                    aria-describedby={customRangeDescriptionIds}
                   />
                 </label>
                 <button
@@ -292,7 +295,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                 >
                   Apply
                 </button>
-                <div id="stats-custom-range-help" className={styles.customRangeHelp}>
+                <div id="stats-custom-range-help" className={styles.customRangeHelp} aria-live="polite">
                   {rangeHasError ? (
                     <span id="stats-custom-range-error" role="alert" className={styles.customRangeError}>
                       {rangeMessage}

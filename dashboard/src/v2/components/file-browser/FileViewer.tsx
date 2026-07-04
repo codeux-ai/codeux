@@ -49,7 +49,7 @@ export const FileViewer: FunctionComponent<FileViewerProps> = ({ file, loading, 
   if (!file) {
     return (
       <ViewerShell>
-        <span class="flex flex-col gap-2 items-center text-slate-500 text-balance break-words">
+        <span class="flex flex-col gap-2 items-center text-slate-500 text-balance break-words" role="status">
           <span class="font-medium text-slate-700 dark:text-slate-300">No file selected</span>
           <span>Select a file from the tree to view its contents.</span>
         </span>
@@ -72,7 +72,7 @@ export const FileViewer: FunctionComponent<FileViewerProps> = ({ file, loading, 
   }
 
   return (
-    <div class="min-w-0 flex-1 h-full w-full">
+    <section class="min-w-0 flex-1 h-full w-full" aria-label={`File contents for ${file.path}`}>
       <Editor
         height="100%"
         theme={isDark ? MONACO_DARK_THEME : MONACO_LIGHT_THEME}
@@ -90,6 +90,7 @@ export const FileViewer: FunctionComponent<FileViewerProps> = ({ file, loading, 
           automaticLayout: true,
           readOnly: true,
           domReadOnly: true,
+          ariaLabel: `File contents for ${file.path}`,
           minimap: { enabled: true, scale: 0.8 },
           fontSize: 13,
           fontLigatures: true,
@@ -102,6 +103,6 @@ export const FileViewer: FunctionComponent<FileViewerProps> = ({ file, loading, 
           scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
         }}
       />
-    </div>
+    </section>
   );
 };

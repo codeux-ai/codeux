@@ -17,12 +17,12 @@ export async function completeOnboarding(request: APIRequestContext): Promise<vo
 // safe to call from every spec's beforeEach even with parallel workers sharing
 // one server (selection is global server state, and all specs only need *some*
 // project selected, not an exclusive one).
-export async function ensureSelectedProject(request: APIRequestContext): Promise<void> {
+export async function ensureSelectedProject(request: APIRequestContext): Promise<string> {
   const res = await request.get('/api/projects');
   const body = (await res.json()) as { projects?: Array<{ id: string }>; selectedProjectId?: string | null };
 
   if (body.selectedProjectId) {
-    return;
+    return body.selectedProjectId;
   }
 
   let projectId = body.projects?.[0]?.id;
@@ -35,4 +35,36 @@ export async function ensureSelectedProject(request: APIRequestContext): Promise
   }
 
   await request.put(`/api/projects/${projectId}/select`);
+  return projectId;
+}
+
+export async function createE2EAgentPreset(
+  request: APIRequestContext,
+  projectId: string,
+): Promise<{ id: string; name: string }> {
+  const name = `E2E Avatar Agent ${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const created = await request.post(`/api/projects/${projectId}/agent-presets`, {
+    data: {
+      name,
+      description: 'E2E avatar rendering fixture',
+      instructionMarkdown: '',
+      labels: ['e2e'],
+      avatarConfig: {
+        chassis: 'classic',
+        eyes: 'smile',
+        antenna: 'jewel',
+        wings: 'none',
+        headphones: 'bumper',
+        accent: 'jade',
+        baseColor: 'pearl',
+      },
+    },
+  });
+
+  if (!created.ok()) {
+    throw new Error(`Failed to create E2E agent preset: ${created.status()} ${await created.text()}`);
+  }
+
+  const body = (await created.json()) as { id: string; name: string };
+  return { id: body.id, name: body.name };
 }

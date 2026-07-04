@@ -2,9 +2,9 @@
 /** @jsx h */
 /** @jsxFrag Fragment */
 import { h, Fragment } from "preact";
-import { render, screen, fireEvent } from "@testing-library/preact";
+import { cleanup, render, screen, fireEvent } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { expect, describe, it, beforeEach } from "vitest";
+import { expect, describe, it, beforeEach, afterEach } from "vitest";
 import { GitTelemetryTab } from "../../../dashboard/src/v2/pages/stats/components/GitTelemetryTab.jsx";
 
 expect.extend(matchers);
@@ -53,6 +53,10 @@ describe("GitTelemetryTab", () => {
     }
   });
 
+  afterEach(() => {
+    cleanup();
+  });
+
   it("renders Task Leaderboard by default", () => {
     render(<GitTelemetryTab gitStats={mockGitStats as any} />);
     expect(screen.getByText("Task Git Ledger")).toBeInTheDocument();
@@ -66,6 +70,25 @@ describe("GitTelemetryTab", () => {
     fireEvent.click(buttons[0] as HTMLElement);
     expect(screen.getByText("Sprint Git Ledger")).toBeInTheDocument();
     expect(screen.getAllByText("Sprint 1").length).toBeGreaterThan(0);
+  });
+
+  it("moves leaderboard tabs with vertical and horizontal arrow keys", () => {
+    render(<GitTelemetryTab gitStats={mockGitStats as any} />);
+
+    const tablist = screen.getByRole("tablist", { name: "Git telemetry leaderboards" });
+    const taskTab = screen.getByRole("tab", { name: /Task Leaderboard/ });
+    const sprintTab = screen.getByRole("tab", { name: /Sprint Leaderboard/ });
+
+    taskTab.focus();
+    fireEvent.keyDown(tablist, { key: "ArrowDown" });
+
+    expect(sprintTab).toHaveFocus();
+    expect(sprintTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel", { name: "Sprint Leaderboard" })).toHaveAttribute("aria-labelledby", "git-tab-sprints");
+
+    fireEvent.keyDown(tablist, { key: "ArrowUp" });
+    expect(taskTab).toHaveFocus();
+    expect(taskTab).toHaveAttribute("aria-selected", "true");
   });
 
   it("can sort by insertions, deletions, files, prs, merges", () => {

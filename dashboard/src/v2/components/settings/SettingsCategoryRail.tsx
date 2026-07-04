@@ -2,6 +2,10 @@ import type { FunctionComponent } from "preact";
 import { useRef } from "preact/hooks";
 import { Layers3 } from "lucide-preact";
 import type { Category, CategoryId } from "../../hooks/use-settings-page-state.js";
+import {
+  getSettingsSearchMatchPreview,
+  type SettingsSearchMatches,
+} from "../../lib/settings-search-index.js";
 import { NoticePanel } from "./SettingsSurface.js";
 import { SHARED_INTERACTION_CLASSES } from "../ui/Button.js";
 
@@ -20,23 +24,11 @@ export const CATEGORIES: Category[] = [
   { id: "danger", num: "10", label: "Danger Zone", icon: AlertTriangle, description: "Reset project overrides only when needed", danger: true },
 ];
 
-export const CATEGORY_SEARCH_HINTS: Record<CategoryId, string[]> = {
-  general: ["automation", "scope", "runtime", "dashboard", "clarification", "pause", "resume"],
-  appearance: ["theme", "layout", "dock", "sidebar", "light", "dark", "motion", "appearance"],
-  models: ["provider", "routing", "model", "thinking", "worker", "codex", "gemini", "claude", "jules", "pricing", "price", "cost", "token", "catalogue", "override", "billing", "usage"],
-  sprint: ["ci", "merge", "watch", "loop", "docker", "execution", "cleanup", "branch", "branch name", "branch naming", "branch scheme", "default branch", "feature branch", "git flow", "autofix", "browser", "preview", "container", "port"],
-  browser: ["browser", "preview", "container", "port", "routing", "rebuild", "launch", "concurrent", "iframe"],
-  agents: ["agent", "prompt", "template", "markdown", "instruction"],
-  memory: ["memory", "embedding", "capture", "promotion", "learning"],
-  integrations: ["github", "gitlab", "jira", "atlassian", "token", "api key", "auth", "credential", "integration"],
-  mcp: ["mcp", "server", "tool", "tools", "custom mcp", "model context protocol", "code_ux", "toggle", "http", "sse"],
-  danger: ["reset", "delete", "danger", "database", "wipe"],
-};
-
 export interface SettingsCategoryRailProps {
   filteredCategories: Category[];
   activeCategory: CategoryId;
   settingsSearch: string;
+  settingsSearchMatches: SettingsSearchMatches;
   onSwitchCategory: (categoryId: CategoryId) => void;
 }
 
@@ -44,6 +36,7 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
   filteredCategories,
   activeCategory,
   settingsSearch,
+  settingsSearchMatches,
   onSwitchCategory,
 }) => {
   const normalizedSearch = settingsSearch.trim().toLowerCase();
@@ -64,15 +57,23 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
   };
 
   return (
-    <div className="lg:sticky lg:top-16 flex flex-col gap-3 rounded-[1.75rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-3 backdrop-blur-2xl shadow-[var(--elevation-base)]">
+    <nav
+      aria-label="Settings categories"
+      className="lg:sticky lg:top-16 flex min-w-0 flex-col gap-3 rounded-[1.75rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-3 backdrop-blur-2xl shadow-[var(--elevation-base)]"
+    >
       <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.03] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
         <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-600">
           <Layers3 className="h-3.5 w-3.5" strokeWidth={2} />
           Categories
         </div>
-        <div className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+        <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="mt-2 break-words text-xs leading-relaxed text-slate-500 dark:text-slate-400"
+        >
           {normalizedSearch
-            ? `Showing ${filteredCategories.length} categories for “${settingsSearch.trim()}”.`
+            ? `Showing ${filteredCategories.length} categories for "${settingsSearch.trim()}".`
             : "Jump directly into the area you need without digging through the full settings tree."}
         </div>
       </div>
@@ -80,7 +81,8 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
       {filteredCategories.map((category, index) => {
         const isActive = activeCategory === category.id;
         const isDanger = category.danger;
-        const isSearchMatch = Boolean(normalizedSearch && (CATEGORY_SEARCH_HINTS[category.id]?.some(hint => hint.includes(normalizedSearch)) || category.label.toLowerCase().includes(normalizedSearch) || category.description.toLowerCase().includes(normalizedSearch)));
+        const matchPreview = getSettingsSearchMatchPreview(settingsSearchMatches[category.id], 2);
+        const isSearchMatch = Boolean(normalizedSearch && matchPreview.length > 0);
 
         return (
           <button
@@ -130,19 +132,31 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
               >
                 {category.label}
               </div>
-              <div className={`mt-0.5 truncate text-[10px] font-medium leading-tight transition-colors duration-200 ${isActive ? (isDanger ? "text-status-red/70" : "text-signal-700/70 dark:text-signal-300/70") : "text-slate-400 group-hover:text-slate-500 dark:text-slate-500 dark:group-hover:text-slate-400"}`}>
+              <div className={`mt-0.5 break-words text-[10px] font-medium leading-tight transition-colors duration-200 ${isActive ? (isDanger ? "text-status-red/70" : "text-signal-700/70 dark:text-signal-300/70") : "text-slate-400 group-hover:text-slate-500 dark:text-slate-500 dark:group-hover:text-slate-400"}`}>
                 {category.description}
               </div>
+              {isSearchMatch ? (
+                <div className={`mt-2 flex flex-wrap gap-1.5 text-[9px] font-bold uppercase tracking-[0.12em] ${isActive ? (isDanger ? "text-status-red/80" : "text-signal-700/80 dark:text-signal-200/80") : "text-slate-500 dark:text-slate-400"}`}>
+                  {matchPreview.map((match) => (
+                    <span
+                      key={`${category.id}-${match}`}
+                      className={`max-w-full truncate rounded-full border px-2 py-0.5 ${isDanger ? "border-status-red/20 bg-status-red/[0.05]" : "border-signal-500/20 bg-signal-500/[0.06]"}`}
+                    >
+                      {match}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
             </div>
           </button>
         );
       })}
 
       {filteredCategories.length === 0 ? (
-        <NoticePanel title="No matches">
+        <NoticePanel title="No matches" tone="warning">
           Try broader terms like `routing`, `CI`, `auth`, `agent`, or `memory`.
         </NoticePanel>
       ) : null}
-    </div>
+    </nav>
   );
 };

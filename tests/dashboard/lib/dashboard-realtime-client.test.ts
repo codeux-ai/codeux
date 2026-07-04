@@ -124,6 +124,27 @@ describe("dashboard-realtime-client", () => {
     unsubscribe();
   });
 
+  it("syncs newly added scopes immediately when the shared socket is already open", async () => {
+    const { subscribeToDashboardRealtime } = await import("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js");
+    const unsubscribeOverview = subscribeToDashboardRealtime(["overview"], () => {});
+
+    const socket = MockWebSocket.instances[0]!;
+    socket.emit("open");
+    vi.advanceTimersByTime(25);
+    socket.sentMessages = [];
+
+    const unsubscribeLive = subscribeToDashboardRealtime(["project:p1:live"], () => {});
+
+    expect(socket.sentMessages).toHaveLength(1);
+    expect(JSON.parse(socket.sentMessages[0] || "{}")).toMatchObject({
+      type: "set_subscriptions",
+      scopes: ["overview", "project:p1:live"],
+    });
+
+    unsubscribeLive();
+    unsubscribeOverview();
+  });
+
   it("suppresses subsequent snapshot_required messages within a 3000ms cooldown", async () => {
     const { subscribeToDashboardRealtime } = await import("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js");
     const listener = vi.fn();

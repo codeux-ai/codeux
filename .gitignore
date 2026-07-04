@@ -39,3 +39,7 @@ logs/openai/
 # This is a pnpm-only project — never commit an npm lockfile (ungoverned by pnpm overrides)
 package-lock.json
 **/package-lock.json
+
+# Editor/merge backup files should never live in source trees.
+src/**/*.orig
+dashboard/src/**/*.orig

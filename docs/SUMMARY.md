@@ -16,6 +16,7 @@
 - [Dashboard Realtime Foundation](./architecture/dashboard-realtime-foundation.md)
 - [Live Runtime Contract](./architecture/live-runtime-contract.md)
 - [Execution Runtime Event Timeline](./architecture/execution-runtime-event-timeline.md)
+- [Quality Guardrails](./architecture/quality-guardrails.md)
 - [Usage Telemetry And Stats](./architecture/usage-telemetry-and-stats.md)
 - [Git Stats Analytics](./architecture/git-stats-analytics.md)
 - [Dashboard Resource Layer](./architecture/dashboard-resource-layer.md)
@@ -50,6 +51,7 @@
 - [Instruction Template System](./instructions/markdown-template-system.md)
 - [Dashboard Guide](./dashboard/dashboard-guide.md)
 - [Dashboard Accessibility Patterns](./dashboard/dashboard-guide.md#accessibility-patterns)
+  - [Dashboard Accessibility Quality Audit](./dashboard/accessibility-quality-audit.md)
   - [Interaction Patterns](./dashboard/interaction-patterns.md)
 - [Stats & Analytics Design System](./dashboard/design-system-stats.md)
 - [Dashboard Onboarding](./dashboard/onboarding.md)
@@ -68,6 +70,7 @@
 - [CLI Commands Reference](./reference/cli-commands.md) - `codeux` management syntax, aliases, prompting, JSON payloads, and approvals
 - [CLI Management Surface](./operations/management-cli.md)
 - [Testing and Quality](./development/testing-and-quality.md)
+- [Quality Guardrails](./architecture/quality-guardrails.md)
 - [Electron Desktop App](./deployment/electron-desktop.md)
 - [Documentation Standards](./development/documentation-standards.md)
 - [Glossary](./reference/glossary.md)

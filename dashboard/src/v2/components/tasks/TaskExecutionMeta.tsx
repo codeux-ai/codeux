@@ -37,27 +37,40 @@ export const TaskExecutionMeta: FunctionComponent<TaskExecutionMetaProps> = memo
     }
   };
 
+  const durationLabel = time || "Not started";
+  const executorLabel = getExecutorLabel();
+  const modeLabel = executionMode || "Standard";
+
   return (
-    <div className={`flex gap-2.5 items-center text-xs font-medium text-slate-500 dark:text-slate-400 ${className}`}>
-      {/* Time Chip */}
-      <div className="flex items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 rounded-full border border-black/[0.06] dark:border-white/[0.08]">
+    <div className={`flex flex-wrap gap-2.5 items-center text-xs font-medium text-slate-500 dark:text-slate-400 ${className}`} role="list" aria-label="Task execution metadata">
+      <div
+        className="flex min-w-0 items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 rounded-full border border-black/[0.06] dark:border-white/[0.08]"
+        role="listitem"
+        aria-label={`Duration: ${durationLabel}`}
+      >
         <Clock className="w-3 h-3" strokeWidth={2} aria-hidden="true" />
-        <span className="sr-only">Duration: </span>
-        <span>{time || "Not started"}</span>
+        <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Duration</span>
+        <span className="break-words font-mono" aria-live="polite">{durationLabel}</span>
       </div>
 
-      {/* Executor Chip */}
-      <div className="flex items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 rounded-full border border-black/[0.06] dark:border-white/[0.08]">
+      <div
+        className="flex min-w-0 items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 rounded-full border border-black/[0.06] dark:border-white/[0.08]"
+        role="listitem"
+        aria-label={`Executor: ${executorLabel}`}
+      >
         {getExecutorIcon()}
-        <span className="sr-only">Executor: </span>
-        <span>{getExecutorLabel()}</span>
+        <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Executor</span>
+        <span className="break-words">{executorLabel}</span>
       </div>
 
-      {/* Execution Mode Chip */}
-      <div className="flex items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 rounded-full border border-black/[0.06] dark:border-white/[0.08]">
+      <div
+        className="flex min-w-0 items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 rounded-full border border-black/[0.06] dark:border-white/[0.08]"
+        role="listitem"
+        aria-label={`Mode: ${modeLabel}`}
+      >
         <Settings className="w-3 h-3" strokeWidth={2} aria-hidden="true" />
-        <span className="sr-only">Mode: </span>
-        <span className="capitalize">{executionMode || "Standard"}</span>
+        <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Mode</span>
+        <span className="break-words capitalize">{modeLabel}</span>
       </div>
     </div>
   );

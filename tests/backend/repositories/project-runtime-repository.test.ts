@@ -324,6 +324,82 @@ describe("ProjectRuntimeRepository", () => {
     });
   });
 
+  it("preserves an existing task run PR URL when same-session status sync omits PR metadata", async () => {
+    const { executionRepository, projectRepository, runtimeRepository, storage } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Runtime PR Project",
+      sourceType: "local",
+      sourceRef: "/workspace/runtime-pr",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Runtime PR Sprint",
+      number: 25,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T02",
+      title: "Keep PR URL",
+      promptMarkdown: "Create a PR.",
+      status: "coding_completed",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      provider: "opencode",
+      state: "COMPLETED",
+      sessionId: "cli-opencode-existing",
+      sessionName: "sessions/cli-opencode-existing",
+      workerBranch: "task/runtime-pr-t02",
+      prUrl: "https://github.com/example/repo/pull/42",
+      startedAt: "2026-07-03T10:00:00.000Z",
+      finishedAt: "2026-07-03T10:01:00.000Z",
+    });
+
+    runtimeRepository.syncDashboardStatus({
+      project_id: project.id,
+      sprint_id: sprint.id,
+      sprint_number: 25,
+      subtasks: [
+        {
+          id: "T02",
+          record_id: task.id,
+          title: task.title,
+          prompt: task.promptMarkdown,
+          depends_on: [],
+          is_independent: true,
+          status: "CODING_COMPLETED",
+          session_id: "cli-opencode-existing",
+          session_name: "sessions/cli-opencode-existing",
+          provider: "opencode",
+          worker_branch: "task/runtime-pr-t02",
+        },
+      ],
+      reportText: "Task is waiting on QA.",
+    });
+
+    const runRows = storage.getDatabase().getRawDatabase().prepare(`
+      SELECT state, session_id, worker_branch, pr_url
+      FROM task_runs
+      WHERE task_id = ?
+      ORDER BY rowid DESC
+    `).all(task.id) as Array<{ state: string; session_id: string | null; worker_branch: string | null; pr_url: string | null }>;
+    expect(runRows).toHaveLength(1);
+    expect(runRows[0]).toMatchObject({
+      state: "COMPLETED",
+      session_id: "cli-opencode-existing",
+      worker_branch: "task/runtime-pr-t02",
+      pr_url: "https://github.com/example/repo/pull/42",
+    });
+  });
+
   it("does not create a new task_run every cycle for a guardrail-blocked task (idempotent terminal sync)", async () => {
     const { projectRepository, runtimeRepository, storage } = await createRepositories();
 

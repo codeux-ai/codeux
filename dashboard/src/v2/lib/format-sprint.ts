@@ -1,4 +1,4 @@
-export function formatSprintDisplay(sprint?: { name?: string; sprintNumber?: number | string | null; number?: number | string | null } | null, sprintKeyPrefix: string = "SPR"): string {
+export function formatSprintTitle(sprint?: { name?: string; sprintNumber?: number | string | null; number?: number | string | null } | null, sprintKeyPrefix: string = "SPR"): string {
     if (!sprint) return "All Sprints";
 
     let num = sprint.sprintNumber || sprint.number;
@@ -18,9 +18,27 @@ export function formatSprintDisplay(sprint?: { name?: string; sprintNumber?: num
         // It handles optional spaces and colons/hyphens
         const prefixEscaped = sprintKeyPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const prefixRegex = new RegExp(`^${prefixEscaped}-${num}\\s*[:\\-]?\\s*`, 'i');
-        const cleanName = name ? name.replace(prefixRegex, '') : `Sprint ${num}`;
-        return `${sprintKeyPrefix}-${num}: ${cleanName}`;
+        return name ? name.replace(prefixRegex, '') : `Sprint ${num}`;
     }
 
     return name || "Unnamed Sprint";
+}
+
+export function formatSprintDisplay(sprint?: { name?: string; sprintNumber?: number | string | null; number?: number | string | null } | null, sprintKeyPrefix: string = "SPR"): string {
+    if (!sprint) return "All Sprints";
+
+    let num = sprint.sprintNumber || sprint.number;
+    const name = sprint.name;
+    if (!num && name) {
+        const prefixEscaped = sprintKeyPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const match = name.match(new RegExp(`^${prefixEscaped}-(\\d+)`, 'i'));
+        if (match) {
+            num = match[1];
+        }
+    }
+    if (num) {
+        return `${sprintKeyPrefix}-${num}: ${formatSprintTitle(sprint, sprintKeyPrefix)}`;
+    }
+
+    return formatSprintTitle(sprint, sprintKeyPrefix);
 }

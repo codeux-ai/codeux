@@ -15,6 +15,8 @@ describe("LiveDurationBadge", () => {
     const badge = container.firstChild as HTMLElement;
     expect(badge).not.toBeNull();
     expect(badge.className).toContain("tabular-nums");
+    expect(badge.className).toContain("min-w-0");
+    expect(badge.className).toContain("truncate");
 
     // Ensure the text itself renders.
     expect(container.textContent).toBe("Live duration: 00:01:05");

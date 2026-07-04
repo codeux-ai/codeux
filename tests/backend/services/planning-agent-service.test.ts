@@ -966,6 +966,23 @@ describe("PlanningAgentService", () => {
       goal: "Goal",
     });
 
+    const systemSettings = settingsRepository.getSystemSettings();
+    settingsRepository.saveSystemSettings({
+      ...systemSettings,
+      integrations: {
+        ...systemSettings.integrations,
+        providers: {
+          ...systemSettings.integrations.providers,
+          "claude-live": {
+            ...systemSettings.integrations.providers["claude-code"],
+            provider: "claude-code",
+            name: "Claude Live",
+            apiKey: "claude-key",
+          },
+        },
+      },
+    });
+
     settingsRepository.saveProjectSettings(project.id, {
       workers: {
         executionMode: "VIRTUAL",
@@ -981,6 +998,13 @@ describe("PlanningAgentService", () => {
           codex: {
             apiKey: "codex-key",
             model: "codex-model",
+            thinkingMode: "disabled",
+          },
+          "claude-live": {
+            provider: "claude-code",
+            name: "Claude Live",
+            apiKey: "claude-key",
+            model: "claude-model",
             thinkingMode: "disabled",
           },
         },
@@ -999,6 +1023,19 @@ describe("PlanningAgentService", () => {
     expect(providerRunner.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
       provider: "codex",
       model: "custom-model",
+    }));
+
+    await service.improveSprintPrompt(project.id, {
+      name: "Sprint",
+      goal: "Prompt",
+      overrides: {
+        virtualProvider: "claude-live" as any,
+        virtualModel: "fable-5",
+      },
+    });
+    expect(providerRunner.runProviderForText).toHaveBeenLastCalledWith(expect.objectContaining({
+      provider: "claude-code",
+      model: "fable-5",
     }));
 
     // Test replanning
@@ -1767,6 +1804,91 @@ describe("PlanningAgentService", () => {
     expect(invocation?.status).toBe("failed");
     expect(invocation?.finishedAt).toBeDefined();
     expect(invocation?.errorMessage).toContain("Provider failed completely");
+  });
+
+  it("finalizes cancelled planning invocations as cancelled instead of failed", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-cancelled-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
+    await fs.writeFile(
+      path.join(repoPath, ".code-ux", "agents", "planning_agent.md"),
+      "Turn sprint goals into concrete executable tasks.\n",
+      "utf8",
+    );
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+    const connectionRepository = new ConnectionChatRepository(storage);
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+    const controller = new AbortController();
+    const providerRunner: IProviderRunner = {
+      runProvider: vi.fn(),
+      runProviderForText: vi.fn().mockImplementation(async () => {
+        controller.abort();
+        return {
+          ok: false,
+          stdout: "",
+          stderr: "cancelled by operator",
+          code: 137,
+          signal: "SIGTERM",
+          nativeSessionId: null,
+          usageTelemetry: {
+            inputTokens: 1,
+            cachedInputTokens: 0,
+            outputTokens: 0,
+            reasoningOutputTokens: 0,
+            totalTokens: 1,
+            usageSource: "estimated",
+            rawUsageJson: {},
+            transcriptText: "",
+            nativeSessionId: null,
+          },
+          text: "",
+        };
+      }),
+    };
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      executionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: { orchestrateSprint: vi.fn() } as any,
+      providerRunner,
+    });
+
+    const project = projectRepository.createProject({
+      name: "Cancelled Planning Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Cancelled Planning Sprint",
+      goal: "Goal",
+    });
+    settingsRepository.saveProjectSettings(project.id, {
+      workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "claude-code" },
+      cliWorkflow: { executionMode: "DOCKER" },
+    });
+
+    await expect(service.planSprint(project.id, sprint.id, { autoStart: false }, controller.signal))
+      .rejects.toThrow("Provider invocation cancelled");
+
+    const [invocation] = executionRepository.listExecutionInvocations({ projectId: project.id, limit: 10 });
+    expect(invocation?.status).toBe("cancelled");
+    expect(invocation?.finishedAt).toBeDefined();
+    expect(invocation?.errorMessage).toContain("Provider invocation cancelled");
   });
 
 

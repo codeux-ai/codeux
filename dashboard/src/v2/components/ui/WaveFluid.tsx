@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 
 /**
  * Fluid wave at bottom of card.
@@ -12,17 +13,25 @@ import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 export const WaveFluid: FunctionComponent<{ accentHex: string; isActive?: boolean }> = ({ accentHex, isActive }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const prefersReducedMotion = useReducedMotion();
+    const tokens = useGsapInteractionTokens();
 
     useLayoutEffect(() => {
         if (!containerRef.current) return;
 
-        if (prefersReducedMotion) return;
+        if (prefersReducedMotion) {
+            if (isActive) {
+                gsap.set(containerRef.current, { opacity: 0.62 });
+            } else {
+                gsap.set(containerRef.current, { clearProps: "opacity" });
+            }
+            return;
+        }
 
         let ctx = gsap.context(() => {
             if (isActive) {
                 gsap.to(containerRef.current, {
                     opacity: 0.8,
-                    duration: 2,
+                    duration: tokens.asyncFeedback.duration * 4,
                     yoyo: true,
                     repeat: -1,
                     ease: "sine.inOut"
@@ -31,20 +40,22 @@ export const WaveFluid: FunctionComponent<{ accentHex: string; isActive?: boolea
                 gsap.killTweensOf(containerRef.current);
                 gsap.to(containerRef.current, {
                     opacity: "",
-                    duration: 0.5,
-                    ease: "power2.out",
+                    duration: tokens.asyncFeedback.duration,
+                    ease: tokens.asyncFeedback.ease,
                     clearProps: "opacity"
                 });
             }
         });
 
         return () => ctx.revert();
-    }, [isActive]);
+    }, [isActive, prefersReducedMotion, tokens.asyncFeedback.duration, tokens.asyncFeedback.ease]);
 
     return (
     <div
         ref={containerRef}
-        className="absolute bottom-0 left-0 right-0 h-16 overflow-hidden pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 motion-safe:transition-opacity motion-safe:duration-700 motion-safe:ease-out"
+        data-active={isActive ? "true" : "false"}
+        className={`absolute bottom-0 left-0 right-0 h-16 overflow-hidden pointer-events-none ${isActive ? "opacity-[0.65]" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"} motion-safe:transition-opacity motion-reduce:transition-none`}
+        style={{ transitionDuration: "var(--interaction-async-feedback-duration)", transitionTimingFunction: "var(--interaction-async-feedback-ease)" }}
     >
         {/* Primary wave — 2 cycles, drifts left */}
         <svg

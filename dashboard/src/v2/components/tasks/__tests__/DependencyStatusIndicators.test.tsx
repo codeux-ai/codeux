@@ -45,7 +45,7 @@ describe("DependencyStatusIndicators", () => {
     expect(pendingIndicator.className).toContain("text-slate-500");
     expect(pendingIndicator.className).not.toContain("border-dashed");
 
-    const blockedIndicator = getByTitle(/Depends on Test task 3 \(QA REVIEW_FAILED\)/);
+    const blockedIndicator = getByTitle(/Depends on Test task 3 \(QA REVIEW FAILED\)/i);
     expect(blockedIndicator.className).toContain("text-red-500");
 
     const inProgressIndicator = getByTitle(/Depends on Test task 4 \(in progress\)/i);
@@ -53,6 +53,7 @@ describe("DependencyStatusIndicators", () => {
 
     const unknownIndicator = getByTitle(/Depends on Unknown Task \(missing\) \(pending\)/i);
     expect(unknownIndicator.className).toContain("border-dashed");
+    expect(container.querySelector('[role="list"]')).toHaveAccessibleName("Task dependencies");
   });
 
   it("returns null when no indicators provided", () => {

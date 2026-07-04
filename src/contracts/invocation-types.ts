@@ -8,6 +8,7 @@ export interface ProjectInvocationsQuery {
   status?: ExecutionInvocationStatus;
   purpose?: string;
   provider?: string;
+  agentPresetId?: string;
   search?: string;
   errorCategories?: string[];
   sortKey?: "startedAt" | "durationMs" | "totalTokens" | "costCents";
@@ -28,6 +29,7 @@ export interface ProjectInvocationsQueryResult {
     totalInputTokens: number;
     totalOutputTokens: number;
     totalCachedTokens: number;
+    totalCostCents: number;
     avgDurationMs: number;
     p95DurationMs: number;
     externalApiMetrics: {
@@ -88,6 +90,7 @@ export interface ExecutionInvocationRecord {
   cachedInputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  costCents?: number | null;
   // Joined sprint/task context for display + deep-linking on the dashboard.
   sprintNumber?: number | null;
   sprintName?: string | null;

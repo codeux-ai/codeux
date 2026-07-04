@@ -7,13 +7,14 @@ import { render, screen, cleanup } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
 import { BranchNameSchemeEditor } from "../BranchNameSchemeEditor";
 import { SprintKeyEditor } from "../SprintKeyEditor";
-import { TextInput, NumberInput, TextAreaInput } from "../SettingsFormFields";
+import { TextInput, SecretInput, NumberInput, TextAreaInput, PillChoiceGroup } from "../SettingsFormFields";
 
 
 import { SettingsCategoryRail } from "../SettingsCategoryRail";
 import { ActionButton, NoticePanel } from "../SettingsSurface";
 import { OverrideBadge } from "../panels/SharedPanelComponents";
 import { SlidersHorizontal } from "lucide-preact";
+import type { SettingsSearchMatches } from "../../../lib/settings-search-index";
 import userEvent from "@testing-library/user-event";
 
   it("SettingsCategoryRail renders categories with proper aria-current semantics", () => {
@@ -25,11 +26,57 @@ import userEvent from "@testing-library/user-event";
         filteredCategories={mockCategories}
         activeCategory="general"
         settingsSearch=""
+        settingsSearchMatches={{}}
         onSwitchCategory={() => {}}
       />
     );
     const btn = screen.getByRole("button", { name: /General/ });
     expect(btn).toHaveAttribute("aria-current", "page");
+  });
+
+  it("SettingsCategoryRail explains provider search matches", () => {
+    const mockCategories = [
+      { id: "integrations" as const, num: "08", label: "Integrations", icon: SlidersHorizontal, description: "Connections" }
+    ];
+    const settingsSearchMatches: SettingsSearchMatches = {
+      integrations: {
+        categoryId: "integrations",
+        matchedLabels: ["Claude Code"],
+        matchedDescriptions: [],
+        matchedTerms: [],
+      },
+    };
+
+    render(
+      <SettingsCategoryRail
+        filteredCategories={mockCategories}
+        activeCategory="integrations"
+        settingsSearch="claude"
+        settingsSearchMatches={settingsSearchMatches}
+        onSwitchCategory={() => {}}
+      />
+    );
+
+    expect(screen.getByText("Showing 1 categories for \"claude\".")).toBeInTheDocument();
+    expect(screen.getByText("Claude Code")).toBeInTheDocument();
+  });
+
+  it("PillChoiceGroup exposes radio semantics for the selected option", () => {
+    render(
+      <PillChoiceGroup
+        value="system"
+        onChange={() => {}}
+        aria-label="Scope choice"
+        options={[
+          { value: "system", label: "System" },
+          { value: "project", label: "Project" },
+        ]}
+      />
+    );
+
+    expect(screen.getByRole("radiogroup", { name: "Scope choice" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "System" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "Project" })).toHaveAttribute("aria-checked", "false");
   });
 
   it("ActionButton provides busy state feedback", () => {
@@ -102,6 +149,26 @@ describe("SettingsControls Accessibility", () => {
     const input = screen.getByRole("textbox");
     expect(input).toHaveAttribute("aria-label", "Test Label");
     expect(input).toHaveAttribute("aria-description", "Test Description");
+  });
+
+  it("SecretInput masks values by default and reveals only on request", async () => {
+    const user = userEvent.setup();
+    render(
+      <SecretInput
+        value="sk-test-secret"
+        onChange={() => {}}
+        aria-label="API key"
+        aria-description="Secret token"
+      />
+    );
+
+    const input = screen.getByLabelText("API key");
+    expect(input).toHaveAttribute("type", "password");
+    expect(input).toHaveAttribute("aria-description", "Secret token");
+
+    await user.click(screen.getByRole("button", { name: "Show secret" }));
+    expect(input).toHaveAttribute("type", "text");
+    expect(screen.getByRole("button", { name: "Hide secret" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("NumberInput passes aria-label and aria-description", () => {

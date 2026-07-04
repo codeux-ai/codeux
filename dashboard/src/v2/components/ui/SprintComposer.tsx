@@ -15,15 +15,24 @@ import {
   useSprintComposerState, 
   type SprintSubmitMode,
   type PlanningRouteOption,
+  toVirtualPlanningRouteOption,
   toPlanningOverrides,
   resolveSubmitOriginalPrompt,
 } from "../../lib/sprint-composer-state.js";
 import { getProviderModelOptions } from "../../lib/settings-view-models.js";
-import { getPlanningFeedback, type PlanningActionType, PLANNING_ACTION_LABELS } from "../../lib/sprint-planning-feedback.js";
+import {
+  getPlanningCancelledMessage,
+  getPlanningFeedback,
+  getPlanningPendingMessage,
+  type PlanningActionType,
+  PLANNING_ACTION_LABELS,
+} from "../../lib/sprint-planning-feedback.js";
 import { PlanningProgressOverlay } from "./PlanningProgressOverlay.js";
 import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
 import { useActionFeedback } from "../../hooks/use-action-feedback.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
+import { GSAP_INTERACTION_TOKENS } from "../../lib/motion/constants.js";
 import type { ImprovePromptInput } from "../../types.js";
 import type { ActionFeedbackState } from "../../hooks/use-action-feedback.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
@@ -145,6 +154,8 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const fieldsRef = useRef<HTMLFormElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const goalInputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const activeRequestRef = useRef<{ id: string; detached: boolean; cancelled: boolean } | null>(null);
   const ignoredRequestIdsRef = useRef<Set<string>>(new Set());
@@ -157,7 +168,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   });
   const [isImproving, setIsImproving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { feedback: actionFeedback, setPending, setSuccess, setError, clearFeedback, clearError } = useActionFeedback();
+  const { feedback: actionFeedback, setPending, setSuccess, setWarning, setError, clearFeedback, clearError } = useActionFeedback();
   const [touchedName, setTouchedName] = useState(false);
   const [touchedGoal, setTouchedGoal] = useState(false);
   const reducedMotion = useReducedMotion();
@@ -270,6 +281,21 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     return null;
   }, [isImproving, isSubmitting, state.submitMode]);
 
+  const focusFirstInvalidField = (requiresGoal: boolean): void => {
+    const nameMissing = !state.name.trim();
+    const goalMissing = requiresGoal && !state.goal.trim();
+    const target = nameMissing ? nameInputRef.current : goalMissing ? goalInputRef.current : null;
+    target?.focus();
+  };
+
+  const submitActionType = (): PlanningActionType => {
+    if (state.submitMode === "plan_only") return "plan_only";
+    if (state.submitMode === "replan") return "replan";
+    if (state.submitMode === "draft") return "draft";
+    if (state.submitMode === "append_tasks") return "append_tasks";
+    return "plan_and_start";
+  };
+
   useEffect(() => {
     if (!isBusy) {
       setElapsedMs(0);
@@ -279,7 +305,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     const start = Date.now();
     const interval = setInterval(() => {
       setElapsedMs(Date.now() - start);
-    }, 100);
+    }, GSAP_INTERACTION_TOKENS.controlFeedback.duration * 1000);
     return () => clearInterval(interval);
   }, [isBusy]);
 
@@ -294,23 +320,42 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     if (cardRef.current) {
       timeline.fromTo(
         cardRef.current,
-        { y: 28, opacity: 0, scale: 0.985, filter: "blur(14px)" },
-        { y: 0, opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.72, ease: "power4.out" },
+        {
+          y: MODAL_MOTION.entry.yStart,
+          opacity: MODAL_MOTION.entry.opacityStart,
+          scale: MODAL_MOTION.entry.scaleStart,
+          filter: MODAL_MOTION.entry.filterStart,
+        },
+        {
+          y: MODAL_MOTION.entry.yEnd,
+          opacity: MODAL_MOTION.entry.opacityEnd,
+          scale: MODAL_MOTION.entry.scaleEnd,
+          filter: MODAL_MOTION.entry.filterEnd,
+          duration: reducedMotion ? 0 : MODAL_MOTION.entry.duration,
+          ease: MODAL_MOTION.entry.ease,
+        },
       );
     }
 
     if (fieldsRef.current) {
       timeline.fromTo(
         Array.from(fieldsRef.current.querySelectorAll("[data-composer-stagger]")),
-        { y: 18, opacity: 0 },
-        { y: 0, opacity: 1, stagger: 0.055, duration: 0.5, ease: "power3.out" },
-        "-=0.45",
+        { y: reducedMotion ? 0 : MODAL_MOTION.fieldStagger.yStart, opacity: 0 },
+        {
+          y: 0,
+          opacity: 1,
+          stagger: reducedMotion ? 0 : MODAL_MOTION.fieldStagger.stagger,
+          duration: reducedMotion ? 0 : MODAL_MOTION.fieldStagger.duration,
+          ease: MODAL_MOTION.fieldStagger.ease,
+        },
+        `-=${MODAL_MOTION.entry.duration}`,
       );
     }
-  }, [initialSprint?.id]);
+  }, [initialSprint?.id, reducedMotion]);
 
   const handleCancel = (): void => {
     const activeRequest = activeRequestRef.current;
+    const actionType = busyAction || submitActionType();
     if (activeRequest) {
       activeRequest.cancelled = true;
       ignoredRequestIdsRef.current.add(activeRequest.id);
@@ -323,7 +368,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     activeRequestRef.current = null;
     setIsImproving(false);
     setIsSubmitting(false);
-    setError("Planning request cancelled.", { autoDismiss: true });
+    setWarning(getPlanningCancelledMessage(actionType), { autoDismiss: false });
     if (previousFocusRef.current) {
       const el = previousFocusRef.current;
       setTimeout(() => el.focus(), 0);
@@ -350,6 +395,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     if (!state.name.trim() || !state.goal.trim()) {
       state.setHasAttemptedSubmit(true);
       state.setHasAttemptedImprove(true);
+      focusFirstInvalidField(true);
       return;
     }
     previousFocusRef.current = document.activeElement as HTMLElement | null;
@@ -368,7 +414,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     };
     setIsImproving(true);
     clearFeedback();
-    setPending(PLANNING_ACTION_LABELS.improve);
+    setPending(getPlanningPendingMessage("improve"));
     try {
       const improvedGoal = await onImprovePrompt({
         name: state.name.trim(),
@@ -392,7 +438,8 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         || activeRequest?.detached
       ) return;
       if (!isUnmountedRef.current) {
-        setError(error instanceof Error ? error.message : String(error), { retryAction: handleImprovePrompt, retryLabel: "Retry Improve", autoDismiss: false });
+        const message = error instanceof Error ? error.message : String(error);
+        setError(`Prompt improvement failed: ${message}`, { retryAction: handleImprovePrompt, retryLabel: "Retry Improve", autoDismiss: false });
       }
     } finally {
       if (abortRef.current === controller) {
@@ -417,10 +464,12 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     event.preventDefault();
     if (!state.name.trim()) {
       state.setHasAttemptedSubmit(true);
+      focusFirstInvalidField(false);
       return;
     }
 
     if (state.submitMode === "append_tasks" && onAppendTasks) {
+      setPending(getPlanningPendingMessage("append_tasks"), { autoDismiss: true });
       onAppendTasks();
       return;
     }
@@ -440,8 +489,8 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     };
     setIsSubmitting(true);
     clearFeedback();
-    const actionType = state.submitMode === "plan_only" ? "plan_only" : state.submitMode === "replan" ? "replan" : "plan_and_start";
-    setPending(PLANNING_ACTION_LABELS[actionType]);
+    const actionType = submitActionType();
+    setPending(getPlanningPendingMessage(actionType));
     try {
       await onSubmit({
         name: state.name.trim(),
@@ -472,7 +521,8 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         || activeRequest?.detached
       ) return;
       if (!isUnmountedRef.current) {
-        setError(error instanceof Error ? error.message : String(error), { retryAction: () => fieldsRef.current?.requestSubmit(), retryLabel: "Retry Request", autoDismiss: false });
+        const message = error instanceof Error ? error.message : String(error);
+        setError(`Sprint request failed: ${message}`, { retryAction: () => fieldsRef.current?.requestSubmit(), retryLabel: "Retry Request", autoDismiss: false });
       }
     } finally {
       if (abortRef.current === controller) {
@@ -502,14 +552,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
       id: c.id,
       label: c.displayName,
     })),
-    ...virtualProviders.map(v => ({
-      type: 'virtual' as const,
-      id: v.providerConfigId || v.id || v.provider || "",
-      label: v.displayLabel || v.label || v.providerConfigId || v.id || v.provider || "Provider",
-      provider: v.providerConfigId || v.id || v.provider,
-      iconProviderId: v.iconProviderId || (v.provider as ProviderId | undefined) || (v.id as ProviderId | undefined),
-      effectiveModel: v.effectiveModel,
-    }))
+    ...virtualProviders.map(toVirtualPlanningRouteOption)
   ];
 
   const currentRoute = state.routeOverride || null;
@@ -568,8 +611,11 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
       <form
         ref={fieldsRef}
         onSubmit={handleSubmit}
+        noValidate
         className="relative z-10 flex min-h-0 flex-1 flex-col"
         tabIndex={-1}
+        aria-label="Sprint composer"
+        aria-busy={isBusy ? "true" : "false"}
       >
         <div className="flex-1 min-h-0 overflow-y-auto">
           <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_21rem]">
@@ -705,6 +751,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
               return (
                 <div className="relative">
                   <input
+                    ref={nameInputRef}
                     type="text"
                     value={state.name}
                     onInput={(event) => state.setName((event.target as HTMLInputElement).value)}
@@ -840,7 +887,11 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                         {onRemoveImportedTask && !isBusy && (
                           <button
                             type="button"
-                            onClick={() => onRemoveImportedTask(task)}
+                            onClick={() => {
+                              onClearImportedTaskFeedback?.();
+                              clearImportedTaskError?.();
+                              onRemoveImportedTask(task);
+                            }}
                             className="mt-3 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 transition-colors hover:text-status-red"
                           >
                             Remove Task
@@ -866,6 +917,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                   return (
                     <div className="relative h-full">
                       <textarea
+                        ref={goalInputRef}
                         value={state.goal}
                         onInput={(event) => state.setGoal((event.target as HTMLTextAreaElement).value)}
                         onBlur={() => setTouchedGoal(true)}
@@ -1012,7 +1064,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                     {PLANNING_ACTION_LABELS[busyAction!] || "Planning in progress..."}
                   </div>
                   <div className="mt-0.5 text-[10px] text-signal-600/70 dark:text-signal-400/70">
-                    {String(Math.floor(elapsedMs / 60000)).padStart(2, "0")}:{String(Math.floor((elapsedMs % 60000) / 1000)).padStart(2, "0")} elapsed
+                    {feedback.text} · {String(Math.floor(elapsedMs / 60000)).padStart(2, "0")}:{String(Math.floor((elapsedMs % 60000) / 1000)).padStart(2, "0")} elapsed · Cancel remains available
                   </div>
                 </div>
               </button>

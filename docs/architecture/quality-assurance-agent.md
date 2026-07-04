@@ -127,7 +127,14 @@ Recovery guarantees:
 
 Run budgeting:
 
-Note: The run budget and retry limit rules are explicitly implemented in a dedicated domain module (`src/domain/qa-review/qa-review-budget.ts`). Additionally, the setup logic for trigger selection, and instruction composition is handled cleanly by pure functions in `src/domain/qa-review/qa-review-request-builder.ts` before the `QualityAssuranceService` acts on it. Branch resolution and stale-review decisions are handled by dedicated helpers in `src/domain/qa-review/qa-review-branch-resolution.ts` and `src/domain/qa-review/qa-review-stale-run.ts`. The task QA verdict-to-state transition logic (classifying the normalized result into pass, changes requested, or retryable failure intent) is handled purely in `src/domain/qa-review/task-review-outcome.ts`.
+Note: The QA service keeps side effects in `src/services/quality-assurance-service.ts` and delegates deterministic decisions to `src/domain/qa-review/`. Run budget and retry limit rules live in `qa-review-budget.ts`; trigger selection and request construction live in `qa-review-request-builder.ts`; branch resolution lives in `qa-review-branch-resolution.ts`; running-row recovery decisions live in `qa-review-stale-run.ts`; sprint completion preflight decisions live with the sprint snapshot helpers in `sprint-qa-snapshot.ts`; and task QA verdict-to-state classification lives in `task-review-outcome.ts`.
+
+This separation keeps repository writes, provider calls, task status mutations, logging, workspace cleanup, and Git operations in `QualityAssuranceService`, while pure helpers answer questions such as:
+
+- whether a task QA attempt is still within budget or should require human attention
+- whether a normalized task review means pass, changes requested, retryable failure, or fatal failure
+- whether a sprint completion review should run, stay blocked, or be skipped because it already passed or exhausted its retry budget
+- whether a `running` QA review row is still legitimately active or should be recovered as a failed stale run
 
 - the initial completed task review always counts as run `1`
 - extra QA runs only happen after QA requested fixes and the task reaches code-complete again
@@ -153,6 +160,7 @@ Behavior:
 - QA can choose a target task that should continue
 - QA can return structured `followUpTasks` with full task instructions so Code UX creates new pending sprint tasks automatically
 - if QA requests follow-up work and Code UX can continue that task session, sprint completion is held open
+- if sprint-completion QA targets a task that is already merged, Code UX does not reopen that settled session; it records the target for traceability and creates follow-up sprint tasks so repair work goes through a new tracked task branch
 - if QA creates follow-up tasks, sprint completion is held open until those new tasks finish and sprint QA passes on a later run
 - sprint QA runs once for the finished sprint, then only runs again after a prior `changes_requested` or failed result and meaningful sprint task state changes have occurred
 - a passing sprint QA result is final for that sprint state and is not retriggered by another orchestration cycle with no real work changes

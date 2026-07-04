@@ -11,6 +11,12 @@ import type { ConfirmDialogOptions } from "../../hooks/use-confirm-dialog.js";
 import { Loader2, AlertTriangle, CheckCircle2, CircleAlert, Info, XCircle } from "lucide-preact";
 import { Overlay } from "./Overlay.js";
 
+type DestructiveConfirmState = "idle" | "holding" | "cancelled" | "complete";
+
+function tokenSecondsToMs(seconds: number): number {
+  return seconds * 1000;
+}
+
 function DestructiveConfirmButton({
   onConfirm,
   label,
@@ -22,12 +28,15 @@ function DestructiveConfirmButton({
   className?: string;
   isLoading?: boolean;
 }) {
-  const [isHolding, setIsHolding] = useState(false);
+  const [confirmState, setConfirmState] = useState<DestructiveConfirmState>("idle");
   const [progress, setProgress] = useState(0);
   const reducedMotion = useReducedMotion();
+  const gsapTokens = useGsapInteractionTokens();
+  const progressId = "destructive-confirm-progress";
 
   const holdDuration = 1000;
   const holdTimerRef = useRef<number | null>(null);
+  const cancelResetTimerRef = useRef<number | null>(null);
   const holdButtonRef = useRef<HTMLButtonElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<number | null>(null);
@@ -42,11 +51,16 @@ function DestructiveConfirmButton({
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
     }
+    if (cancelResetTimerRef.current !== null) {
+      window.clearTimeout(cancelResetTimerRef.current);
+      cancelResetTimerRef.current = null;
+    }
   }, []);
 
   const startHold = () => {
-    if (isHolding || isLoading) return;
-    setIsHolding(true);
+    if (confirmState === "holding" || isLoading) return;
+    clearTimers();
+    setConfirmState("holding");
     setProgress(0);
     if (barRef.current) {
       gsap.killTweensOf(barRef.current);
@@ -65,7 +79,12 @@ function DestructiveConfirmButton({
         if (reducedMotion) {
           barRef.current.style.width = `${newProgress}%`;
         } else {
-          gsap.to(barRef.current, { width: `${newProgress}%`, duration: 0.12, ease: "power2.out", overwrite: true });
+          gsap.to(barRef.current, {
+            width: `${newProgress}%`,
+            duration: gsapTokens.controlFeedback.duration,
+            ease: gsapTokens.controlFeedback.ease,
+            overwrite: true,
+          });
         }
       }
 
@@ -77,7 +96,7 @@ function DestructiveConfirmButton({
     animationFrameRef.current = requestAnimationFrame(updateProgress);
 
     holdTimerRef.current = window.setTimeout(() => {
-      setIsHolding(false);
+      setConfirmState("complete");
       setProgress(100);
       if (barRef.current) {
         barRef.current.style.width = '100%';
@@ -87,21 +106,33 @@ function DestructiveConfirmButton({
   };
 
   const cancelHold = () => {
-    if (isHolding) {
+    clearTimers();
+    if (confirmState === "holding") {
+      setConfirmState("cancelled");
       if (!reducedMotion && holdButtonRef.current) {
-        gsap.to(holdButtonRef.current, {
-          keyframes: [{ x: -6, duration: 0.05 }, { x: 5, duration: 0.06 }, { x: -4, duration: 0.07 }, { x: 3, duration: 0.06 }, { x: -2, duration: 0.05 }, { x: 0, duration: 0.04 }],
-          ease: "none"
-        });
+        gsap.fromTo(
+          holdButtonRef.current,
+          { x: -4 },
+          { x: 0, duration: gsapTokens.inlineValidation.duration, ease: gsapTokens.inlineValidation.ease }
+        );
       }
+      const resetDelay = tokenSecondsToMs(gsapTokens.controlFeedback.duration);
+      if (resetDelay === 0) {
+        setConfirmState("idle");
+      } else {
+        cancelResetTimerRef.current = window.setTimeout(() => {
+          setConfirmState("idle");
+          cancelResetTimerRef.current = null;
+        }, resetDelay);
+      }
+    } else if (confirmState !== "complete") {
+      setConfirmState("idle");
     }
-    setIsHolding(false);
     setProgress(0);
     if (barRef.current) {
       gsap.killTweensOf(barRef.current);
       barRef.current.style.width = '0%';
     }
-    clearTimers();
     startTimeRef.current = null;
   };
 
@@ -159,12 +190,12 @@ function DestructiveConfirmButton({
       onContextMenu={(e) => e.preventDefault()}
       className={`relative overflow-hidden ${className}`}
       style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
-      aria-busy={isLoading}
+      aria-busy={isLoading ? "true" : undefined}
       disabled={isLoading}
-      aria-live="polite"
-      aria-label={isHolding ? `Holding — ${Math.floor(progress / 10) * 10}% complete, release to cancel` : `Hold to ${label}`}
+      aria-label={isLoading ? `Completing ${label}` : `Hold to ${label}`}
+      aria-describedby={progressId}
     >
-      {isHolding && (
+      {(confirmState === "holding" || confirmState === "complete") && (
         <div
           ref={barRef}
           className="absolute inset-0 bg-black/20 dark:bg-white/20 origin-left"
@@ -174,7 +205,21 @@ function DestructiveConfirmButton({
 
       <span className="relative z-10 flex items-center justify-center gap-2">
         {isLoading && <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /><span className="sr-only">Processing, please wait</span></>}
-        {isHolding ? `Hold to ${label}` : isLoading ? "Processing..." : label}
+        {isLoading ? "Completing..." : confirmState === "complete" ? "Confirmed" : confirmState === "cancelled" ? "Release canceled" : confirmState === "holding" ? `Hold to ${label}` : label}
+        {confirmState === "holding" && (
+          <span aria-hidden="true" className="tabular-nums opacity-85">
+            {Math.round(progress)}%
+          </span>
+        )}
+      </span>
+      <span id={progressId} className="sr-only">
+        {confirmState === "holding"
+          ? "Keep holding until progress completes. Release before completion to cancel."
+          : confirmState === "cancelled"
+            ? "Confirmation canceled. Hold again to confirm."
+            : confirmState === "complete"
+              ? "Confirmation completed."
+              : "Hold until complete. Release before completion to cancel."}
       </span>
     </button>
   );
@@ -317,9 +362,10 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
         aria-describedby={body ? "confirm-dialog-body" : undefined}
-        className="my-auto w-full max-w-[28rem] overflow-hidden rounded-[1.5rem] border border-black/[0.08] bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)] outline-none dark:border-white/[0.08] dark:bg-void-800 dark:shadow-[0_28px_90px_rgba(0,0,0,0.56)]"
+        tabIndex={-1}
+        className="my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-[1.5rem] border border-black/[0.08] bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)] outline-none dark:border-white/[0.08] dark:bg-void-800 dark:shadow-[0_28px_90px_rgba(0,0,0,0.56)] sm:max-w-[28rem]"
       >
-        <div className={`border-b p-5 ${toneStyles.panel}`}>
+        <div className={`shrink-0 border-b p-5 ${toneStyles.panel}`}>
           <div className="flex items-start gap-4">
             <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${toneStyles.ring}`}>
               <ToneIcon className="h-5 w-5" strokeWidth={1.8} />
@@ -332,7 +378,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
             </div>
           </div>
         </div>
-        <div className="p-5 pt-4">
+        <div className="min-h-0 flex-1 overflow-y-auto p-5 pt-4">
           {body && (
             <p id="confirm-dialog-body" className="text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-200">
               {body}
@@ -346,7 +392,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
             </div>
           )}
         </div>
-        <div className="flex flex-col-reverse gap-2 border-t border-black/[0.06] bg-void-50/80 p-4 dark:border-white/[0.08] dark:bg-white/[0.04] sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+        <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-black/[0.06] bg-void-50/80 p-4 dark:border-white/[0.08] dark:bg-white/[0.04] sm:flex-row sm:items-center sm:justify-end sm:gap-3">
           <button
             type="button"
             onClick={() => handleClose(onCancel)}

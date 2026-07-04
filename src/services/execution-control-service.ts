@@ -17,6 +17,14 @@ const RECOMPUTED_SPRINT_ATTENTION_TYPES: ProjectAttentionType[] = [
   "dashboard_reply_required",
 ];
 
+const ACTIVE_DISPATCH_STATUSES = new Set<TaskDispatchRecord["status"]>([
+  "queued",
+  "claimed",
+  "running",
+  "cancel_requested",
+  "paused",
+]);
+
 interface ExecutionControlServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
   executionRepository: ExecutionRepository;
@@ -77,18 +85,7 @@ export class ExecutionControlService {
     this.deps.sprintOrchestrator.setConsecutiveFailures(0);
     this.reapRecomputedSprintAttention(projectId, sprintId);
 
-    void this.deps.sprintOrchestrator.execute({
-      action: "orchestrate",
-      project_id: projectId,
-      sprint_id: sprintId,
-      wait: true,
-    }).catch((error) => {
-      this.deps.logger?.error("Dashboard-triggered sprint orchestration failed", {
-        projectId,
-        sprintId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    });
+    this.dispatchSprintOrchestration(projectId, sprintId);
 
     return { ok: true };
   }
@@ -117,15 +114,40 @@ export class ExecutionControlService {
       return sprintRun;
     }
 
+    const activeRun = this.resolveBlockingSprintRun(sprintRun.projectId, sprintRun.sprintId);
+    if (activeRun && activeRun.id !== sprintRunId) {
+      const label = activeRun.status === "cancel_requested" ? "cancellation is still pending" : "another run is already active";
+      throw new Error(
+        `Sprint run ${sprintRunId} cannot be resumed because ${label} (run ${activeRun.id}, status ${activeRun.status}).`,
+      );
+    }
+
     this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_resume_requested", "user", {
       requestedBy: "dashboard",
     }, {
       sourceEventKey: `dashboard-resume:${sprintRunId}`,
     });
 
-    await this.orchestrateSprint(sprintRun.projectId, sprintRun.sprintId);
-    const activeRun = this.deps.executionRepository.findActiveSprintRun(sprintRun.projectId, sprintRun.sprintId);
-    return activeRun || this.requireSprintRun(sprintRunId);
+    const now = new Date().toISOString();
+    const resumedRun = this.deps.executionRepository.updateSprintRun(sprintRunId, {
+      status: "running",
+      startedAt: sprintRun.startedAt ?? now,
+      finishedAt: null,
+      lastHeartbeatAt: now,
+    });
+
+    this.deps.sprintOrchestrator.setConsecutiveFailures(0);
+    this.reapRecomputedSprintAttention(sprintRun.projectId, sprintRun.sprintId);
+    void this.deps.sprintOrchestrator.recoverSprintRun(sprintRunId).catch((error) => {
+      this.deps.logger?.error("Dashboard-triggered sprint resume failed", {
+        projectId: sprintRun.projectId,
+        sprintId: sprintRun.sprintId,
+        sprintRunId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+
+    return resumedRun;
   }
 
   async cancelSprintRun(sprintRunId: string): Promise<SprintRunRecord> {
@@ -157,6 +179,7 @@ export class ExecutionControlService {
       finishedAt: now,
       lastHeartbeatAt: now,
     });
+    this.closeActiveTaskRuntimeRowsForSprintRun(sprintRun, now, "Sprint run was cancelled from the dashboard.");
     this.reapTransientMergeAttention(sprintRun.projectId, sprintRunId, "sprint_cancelled");
     this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_cancelled", "user", {
       requestedBy: "dashboard",
@@ -236,6 +259,7 @@ export class ExecutionControlService {
       finishedAt: now,
       lastHeartbeatAt: now,
     });
+    this.closeActiveTaskRuntimeRowsForSprintRun(sprintRun, now, "Sprint run was force-cancelled from the dashboard.");
     this.reapTransientMergeAttention(sprintRun.projectId, sprintRunId, "sprint_force_cancelled");
     this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_cancelled", "user", {
       requestedBy: "dashboard",
@@ -245,6 +269,47 @@ export class ExecutionControlService {
     });
 
     return updated;
+  }
+
+  private closeActiveTaskRuntimeRowsForSprintRun(sprintRun: SprintRunRecord, now: string, message: string): void {
+    for (const dispatch of this.deps.executionRepository.listTaskDispatches({
+      projectId: sprintRun.projectId,
+      sprintRunId: sprintRun.id,
+    })) {
+      if (!ACTIVE_DISPATCH_STATUSES.has(dispatch.status)) {
+        continue;
+      }
+
+      this.deps.executionRepository.releaseLease("task_dispatch", dispatch.id);
+      this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
+        connectionId: null,
+        status: "cancelled",
+        finishedAt: now,
+        lastHeartbeatAt: now,
+        errorMessage: message,
+      });
+
+      const taskRun = this.deps.executionRepository.getLatestTaskRun(dispatch.taskId, sprintRun.id);
+      if (taskRun?.dispatchId === dispatch.id) {
+        this.deps.executionRepository.updateTaskRun(taskRun.id, {
+          connectionId: null,
+          state: "BLOCKED",
+          finishedAt: now,
+          durationMs: this.calculateDurationMs(taskRun, now),
+        });
+        this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "dispatch_cancelled", "user", {
+          dispatchId: dispatch.id,
+          requestedBy: "dashboard",
+          reason: message,
+        }, {
+          sourceEventKey: `dashboard-sprint-cancel-sweep:${dispatch.id}`,
+        });
+      }
+
+      this.deps.projectManagementRepository.updateTask(dispatch.taskId, {
+        status: "pending",
+      });
+    }
   }
 
   async cancelTaskDispatch(dispatchId: string): Promise<TaskDispatchRecord> {
@@ -585,5 +650,20 @@ export class ExecutionControlService {
     }
 
     return null;
+  }
+
+  private dispatchSprintOrchestration(projectId: string, sprintId: string): void {
+    void this.deps.sprintOrchestrator.execute({
+      action: "orchestrate",
+      project_id: projectId,
+      sprint_id: sprintId,
+      wait: true,
+    }).catch((error) => {
+      this.deps.logger?.error("Dashboard-triggered sprint orchestration failed", {
+        projectId,
+        sprintId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
   }
 }

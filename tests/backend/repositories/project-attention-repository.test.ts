@@ -102,6 +102,53 @@ describe("ProjectAttentionRepository", () => {
     });
   });
 
+  it("preserves runtime retry metadata when refreshing duplicate attention payloads", async () => {
+    const { attention, project, sprint, task, sprintRun } = await buildFixture();
+
+    const first = attention.openOrRefreshItem({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      attentionType: "merge_conflict",
+      severity: "high",
+      ownerType: "worker",
+      title: "Merge conflict",
+      summaryMarkdown: "First summary",
+      payload: {
+        workerBranch: "task/old",
+        lastVirtualWorkerError: "literal mismatch",
+        lastVirtualWorkerSessionId: "virtual-merge-1",
+        mergeConflictRetryCount: 2,
+      },
+    });
+
+    const refreshed = attention.openOrRefreshItem({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      attentionType: "merge_conflict",
+      severity: "critical",
+      ownerType: "worker",
+      title: "Merge conflict",
+      summaryMarkdown: "Updated summary",
+      payload: {
+        workerBranch: "task/new",
+        mergeStateStatus: "DIRTY",
+      },
+    });
+
+    expect(refreshed.id).toBe(first.id);
+    expect(refreshed.payload).toEqual(expect.objectContaining({
+      workerBranch: "task/new",
+      mergeStateStatus: "DIRTY",
+      lastVirtualWorkerError: "literal mismatch",
+      lastVirtualWorkerSessionId: "virtual-merge-1",
+      mergeConflictRetryCount: 2,
+    }));
+  });
+
 
   it("creates or updates multiple attention items within a single transaction using openOrRefreshItems", async () => {
     const { attention, project, sprint, task, sprintRun } = await buildFixture();

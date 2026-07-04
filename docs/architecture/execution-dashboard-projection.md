@@ -105,6 +105,7 @@ Projection is built in:
 - `src/repositories/execution/execution-sprint-runs-query.ts` (sprint runs slice query)
 - `src/repositories/execution/execution-task-dispatches-query.ts` (dispatches slice query)
 - `src/repositories/execution/execution-runtime-events-query.ts` (events slice query)
+- `src/repositories/execution/execution-invocations-query.ts` (recent, expanded-run, and selected-sprint invocation feed)
 - `src/repositories/execution/execution-usage-query.ts` (provider usage mapping and rollups)
 - `src/repositories/execution/execution-wall-time-query.ts` (wall-time duration projection and DB-driven cache)
 - `src/repositories/execution/execution-human-intervention-query.ts` (operator attention formatting)
@@ -139,7 +140,15 @@ That makes multi-sprint and worker execution visible without reconstructing stat
 
 ## Backend Read-Model Optimizations
 
-To support the dashboard resource layer and page-scoped module boundaries, the backend read-model optimizations project data efficiently without altering the underlying data structures. **API routes and backend contracts remain unchanged.** This includes optimizing the project execution snapshot path by deduplicating sprint run and task IDs before making secondary aggregation queries for usage and wall-time.
+To support the dashboard resource layer and page-scoped module boundaries, the backend read-model optimizations project data efficiently without altering the underlying data structures. **API routes and backend contracts remain unchanged.** The project execution snapshot path performs one coordinated pass per slice, then uses precomputed ID sets and maps for secondary enrichment:
+
+- Sprint runs are fetched as active expanded runs plus a bounded inactive tail, preserving the dashboard status/recency ordering.
+- Task dispatches are fetched as a recent-project slice plus an expanded sprint-run slice and then collapsed in memory to the latest dispatch per task.
+- Runtime events are fetched from bounded recent-project and expanded sprint-run feeds, deduplicated by event ID, sorted by timestamp, and capped for realtime payload size.
+- Invocations are fetched with one snapshot-specific query that unions the bounded project-recent feed, expanded sprint-run IDs, and optional selected sprint scope through a single SQL predicate. This preserves the existing merged feed semantics, including provider-usage fallback scope fields, without issuing separate invocation scans for each feed.
+- Usage and wall-time rollups deduplicate sprint-run IDs and task IDs before executing chunked `IN` aggregations, then map totals by ID for the final DTO mapping.
+
+Expected scaling is bounded by slice count rather than task count: adding more tasks to the visible snapshot should not add per-task provider-usage, wall-time, task-run, runtime-event, or invocation follow-up reads. The only growth-sensitive reads are chunked `IN` queries, which batch IDs through the database adapter and keep compatibility with both file-backed and in-memory Vitest SQLite databases.
 
 The v2 stats page reads the adjacent project statistics snapshot and renders:
 

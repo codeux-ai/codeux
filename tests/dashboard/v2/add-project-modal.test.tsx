@@ -65,11 +65,11 @@ describe("AddProjectModal", () => {
     render(<AddProjectModal onClose={vi.fn()} onAdd={vi.fn()} />);
 
     const dialogCard = screen.getByRole("dialog").firstElementChild as HTMLElement;
-    expect(dialogCard.style.minHeight).toBe("min(640px, calc(100vh - 2rem))");
+    expect(dialogCard.style.minHeight).toBe("min(640px, calc(100dvh - 2rem))");
 
     fireEvent.click(screen.getByRole("button", { name: /git url/i }));
 
-    expect(dialogCard.style.minHeight).toBe("min(640px, calc(100vh - 2rem))");
+    expect(dialogCard.style.minHeight).toBe("min(640px, calc(100dvh - 2rem))");
   });
 
   it("preselects the new project flow and hides setup controls", () => {

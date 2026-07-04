@@ -4,7 +4,7 @@ import gsap from "gsap";
 import { ArrowLeft, Key, Plug, Plus, Settings2 } from "lucide-preact";
 import type { SettingsPageState, IntegrationId } from "../../../hooks/use-settings-page-state.js";
 import { NoticePanel, ActionButton } from "../SettingsSurface.js";
-import { ProviderLogo, Row, TextInput, Toggle } from "../SettingsFormFields.js";
+import { ProviderLogo, Row, SecretInput, TextInput, Toggle } from "../SettingsFormFields.js";
 import { ProviderBrandIcon } from "../../providers/ProviderBrandIcon.js";
 import { ProviderInstanceCard } from "../ProviderInstanceCard.js";
 import { JiraIcon } from "../../icons/JiraIcon.js";
@@ -389,7 +389,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                 : `Override the ${hostLabel} token for this scope. Leave blank to inherit the system token.`}
               badge={activeScope === "system" ? undefined : getFieldBadge(`git.${tokenKey}`)}
             >
-              <TextInput
+              <SecretInput
                 value={activeScope === "system"
                   ? (systemSettings.integrations[tokenKey] || "")
                   : (editableSettings.git[tokenKey] || "")}
@@ -530,7 +530,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
               <TextInput value={jiraSettings.email} onChange={(value) => updateJira({ email: value })} mono />
             </Row>
             <Row label="API token" description="Jira API token used for issue search, issue context loading, and transitions." badge={activeScope === "system" ? undefined : getFieldBadge("jira.apiToken")}>
-              <TextInput value={jiraSettings.apiToken} onChange={(value) => updateJira({ apiToken: value })} mono />
+              <SecretInput value={jiraSettings.apiToken} onChange={(value) => updateJira({ apiToken: value })} mono />
             </Row>
             <Row label="Default project" description="Project key used to prefill the Jira import JQL." badge={activeScope === "system" ? undefined : getFieldBadge("jira.defaultProject")}>
               <TextInput value={jiraSettings.defaultProject} onChange={(value) => updateJira({ defaultProject: value.toUpperCase() })} mono />

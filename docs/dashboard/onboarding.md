@@ -23,7 +23,7 @@ The onboarding UI is orchestrated by `OnboardingExperience.tsx`, which delegates
 - `OnboardingAutomationStep.tsx`
 - `OnboardingAppearanceStep.tsx`
 
-Navigation and step-sequencing state is managed by the shared `useOnboardingStepFlow` hook, allowing the orchestrator to act purely as a view-router and state-manager while the step components remain thin and focused.
+Navigation and step-sequencing state is managed by the shared `useOnboardingStepFlow` hook, allowing the orchestrator to act purely as a view-router and state-manager while the step components remain thin and focused. The hook owns a typed reducer for the onboarding session: modal visibility, active step, readiness payload, selected providers, the settings draft, saving state, and the displayed error. `OnboardingExperience.tsx` still performs the API calls, but it commits API results and user interactions through explicit reducer actions instead of coordinating independent `useState` setters.
 
 ## Runtime Readiness
 
@@ -88,14 +88,14 @@ Provider choices update:
 - Legacy container auth-copy fields under `defaults.cliWorkflow` for compatibility
 - Git onboarding mode under `defaults.cliWorkflow.gitMode`, which toggles the remote GitHub/GitLab setup cards and keeps git identity controls available in both modes
 
-Appearance choices update `defaults.appearance`, which is also used by the Settings page. The root dashboard shell listens for settings updates and Settings-page preview events, then reapplies theme, reduced-motion, navigation, background mode/style/color, uploaded image, and pattern preferences without a page reload.
+Appearance choices update `defaults.appearance`, which is also used by the Settings page. The root dashboard shell listens for settings updates and Settings-page preview events, then reapplies theme, reduced-motion, navigation, background mode/style/color, uploaded image, and pattern preferences without a page reload. New installs start with the pattern overlay set to `None`.
 
 Operators can reopen onboarding from `Settings -> General -> Onboarding`. The action resets the persisted onboarding completion state and clears the browser-local marker; it does not reset saved system or project settings.
 
 
 ## Settings Draft Management
 
-Onboarding settings state is managed purely without component side effects by helper functions in `dashboard/src/v2/lib/onboarding-settings-draft.ts`. These pure helpers process provider choices and system integration states directly into `SystemSettings` structures before they are flushed. This ensures:
+Onboarding settings state is managed purely without component side effects by helper functions in `dashboard/src/v2/lib/onboarding-settings-draft.ts` and reducer actions in `dashboard/src/v2/components/onboarding/use-onboarding-step-flow.ts`. The reducer applies settings recipes against a typed `structuredClone` copy of the current `SystemSettings` draft instead of JSON stringify/parse cloning, preserving optional fields and the current settings shape while keeping presentation components from mutating loaded API objects. These pure helpers process provider choices and system integration states directly into `SystemSettings` structures before they are flushed. This ensures:
 - Derived defaults are consistent across initial render, interactions, and final save.
 - Tests can independently verify provider sync behaviors without a full UI test harness.
 - Form controls map user intent strictly to Draft states instead of managing API formats internally.

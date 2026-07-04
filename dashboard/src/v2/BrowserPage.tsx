@@ -61,10 +61,13 @@ export const BrowserPage: FunctionComponent = () => {
   const [script, setScript] = useState<SprintPreviewScript | null>(null);
   const [scriptDraft, setScriptDraft] = useState("");
   const [logs, setLogs] = useState("");
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsError, setLogsError] = useState<string | null>(null);
 
   const [launching, setLaunching] = useState(false);
-  const [sessionActionPending, setSessionActionPending] = useState(false);
+  const [pendingSessionAction, setPendingSessionAction] = useState<"rebuild" | "stop" | null>(null);
   const [savingScript, setSavingScript] = useState(false);
+  const [navigationPending, setNavigationPending] = useState(false);
   const [removingSessionIds, setRemovingSessionIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [addressValue, setAddressValue] = useState("/");
@@ -76,6 +79,12 @@ export const BrowserPage: FunctionComponent = () => {
   const [actionFeedback, setActionFeedback] = useState<{status: 'idle' | 'pending' | 'success' | 'error', message: string | null}>({status: 'idle', message: null});
 
   const browserFeedback = useActionFeedback();
+  const navigationPendingTimerRef = useRef<number | null>(null);
+  const navigationPendingRef = useRef(false);
+  const launchingRef = useRef(false);
+  const pendingSessionActionRef = useRef<"rebuild" | "stop" | null>(null);
+  const savingScriptRef = useRef(false);
+  const removingSessionIdsRef = useRef<Set<string>>(new Set());
 
   const { sessions, selectedSession, loading, error: fetchError, refresh: refreshSessions } = usePreviewSessions({
     projectId: selectedProject?.id || null,
@@ -102,6 +111,7 @@ export const BrowserPage: FunctionComponent = () => {
   }, [selectedSprint?.id, sprints]);
 
   const removingSessionIdSet = useMemo(() => new Set(removingSessionIds), [removingSessionIds]);
+  const sessionActionPending = pendingSessionAction !== null;
   const previewEnabled = effectiveSettings?.settings.sprintPreview.enabled ?? true;
   const showInAppBrowser = effectiveSettings?.settings.sprintPreview.showInAppBrowser ?? true;
   const launchEnabled = previewEnabled && showInAppBrowser;
@@ -109,6 +119,31 @@ export const BrowserPage: FunctionComponent = () => {
     ? selectedSession
     : null;
   const navigationEnabled = Boolean(visibleSelectedSession && visibleSelectedSession.status === "running" && visibleSelectedSession.hostPort);
+  const sessionCards = sessions.filter((session) =>
+    (!selectedProject || session.projectId === selectedProject.id) && !removingSessionIdSet.has(session.id)
+  );
+  const previewStatusMessage = visibleSelectedSession
+    ? visibleSelectedSession.status === "running"
+      ? "Preview container is running."
+      : visibleSelectedSession.status === "starting"
+        ? "Preview container is starting."
+        : visibleSelectedSession.status === "error"
+          ? `Preview container has an error${visibleSelectedSession.lastError ? `: ${visibleSelectedSession.lastError}` : "."}`
+          : "Preview container is stopped."
+    : sessionCards.length === 0
+      ? "No preview sessions are available. Launch a container to begin."
+      : "No preview session is selected.";
+  const logsStatusMessage = visibleSelectedSession
+    ? logsLoading
+      ? logs
+        ? "Refreshing preview logs. Existing logs remain visible."
+        : "Loading preview logs."
+      : logsError
+        ? `Preview logs could not be loaded: ${logsError}`
+      : logs
+        ? "Preview logs loaded. Logs refresh automatically and may be slightly stale."
+        : "No preview logs are available yet."
+    : "No preview session selected for logs.";
 
   const scriptTargetSprint = useMemo(() => {
     if (visibleSelectedSession) {
@@ -183,20 +218,30 @@ export const BrowserPage: FunctionComponent = () => {
   useEffect(() => {
     if (!visibleSelectedSession) {
       setLogs("");
+      setLogsLoading(false);
+      setLogsError(null);
       return;
     }
-    setLogs("Loading logs...");
+    setLogs("");
+    setLogsLoading(true);
+    setLogsError(null);
     let cancelled = false;
     const deferredFetch = window.setTimeout(() => {
       void fetchPreviewLogs(visibleSelectedSession.id, 160)
         .then((result) => {
           if (!cancelled) {
             setLogs(result.logs);
+            setLogsError(null);
           }
         })
-        .catch(() => {
+        .catch((fetchLogsError) => {
           if (!cancelled) {
-            setLogs("");
+            setLogsError(fetchLogsError instanceof Error ? fetchLogsError.message : "Unknown log error");
+          }
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setLogsLoading(false);
           }
         });
     }, 250);
@@ -211,12 +256,27 @@ export const BrowserPage: FunctionComponent = () => {
       return;
     }
     const timer = window.setInterval(() => {
+      setLogsLoading(true);
+      setLogsError(null);
       void fetchPreviewLogs(visibleSelectedSession.id, 160)
-        .then((result) => setLogs(result.logs))
-        .catch(() => undefined);
+        .then((result) => {
+          setLogs(result.logs);
+          setLogsError(null);
+        })
+        .catch((fetchLogsError) => {
+          setLogsError(fetchLogsError instanceof Error ? fetchLogsError.message : "Unknown log error");
+        })
+        .finally(() => setLogsLoading(false));
     }, 8000);
     return () => window.clearInterval(timer);
   }, [visibleSelectedSession?.id]);
+
+  useEffect(() => () => {
+    if (navigationPendingTimerRef.current !== null) {
+      window.clearTimeout(navigationPendingTimerRef.current);
+    }
+    navigationPendingRef.current = false;
+  }, []);
 
   useEffect(() => {
     const handlePreviewMessage = (event: MessageEvent) => {
@@ -258,12 +318,35 @@ export const BrowserPage: FunctionComponent = () => {
 
   };
 
+  const markNavigationPending = () => {
+    if (navigationPendingTimerRef.current !== null) {
+      window.clearTimeout(navigationPendingTimerRef.current);
+    }
+    setNavigationPending(true);
+    navigationPendingRef.current = true;
+    navigationPendingTimerRef.current = window.setTimeout(() => {
+      navigationPendingRef.current = false;
+      setNavigationPending(false);
+      navigationPendingTimerRef.current = null;
+    }, 350);
+  };
+
+  const runNavigationAction = (action: () => void) => {
+    if (!navigationEnabled || navigationPendingRef.current) {
+      return;
+    }
+    markNavigationPending();
+    action();
+  };
+
   const handleStart = async (sprintId = launchSprintId) => {
     if (!selectedProject || !sprintId) return;
+    if (launchingRef.current) return;
     if (!previewEnabled) {
       setError("Browser Preview is disabled for this project.");
       return;
     }
+    launchingRef.current = true;
     setLaunching(true);
     browserFeedback.setPending("Launching container...");
     try {
@@ -276,17 +359,20 @@ export const BrowserPage: FunctionComponent = () => {
     } catch (actionError) {
       browserFeedback.setError(`Failed to launch container: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
     } finally {
+      launchingRef.current = false;
       setLaunching(false);
     }
   };
 
   const handleRebuild = async () => {
     if (!visibleSelectedSession) return;
+    if (pendingSessionActionRef.current) return;
     if (!previewEnabled) {
       setError("Browser Preview is disabled for this project.");
       return;
     }
-    setSessionActionPending(true);
+    pendingSessionActionRef.current = "rebuild";
+    setPendingSessionAction("rebuild");
     browserFeedback.setPending("Rebuilding container...");
     try {
       await rebuildPreviewSession(visibleSelectedSession.id);
@@ -296,13 +382,16 @@ export const BrowserPage: FunctionComponent = () => {
     } catch (actionError) {
       browserFeedback.setError(`Failed to rebuild container: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
     } finally {
-      setSessionActionPending(false);
+      pendingSessionActionRef.current = null;
+      setPendingSessionAction(null);
     }
   };
 
   const handleStop = async () => {
     if (!visibleSelectedSession) return;
-    setSessionActionPending(true);
+    if (pendingSessionActionRef.current) return;
+    pendingSessionActionRef.current = "stop";
+    setPendingSessionAction("stop");
     browserFeedback.setPending("Stopping container...");
     try {
       await stopPreviewSession(visibleSelectedSession.id);
@@ -311,14 +400,16 @@ export const BrowserPage: FunctionComponent = () => {
     } catch (actionError) {
       browserFeedback.setError(`Failed to stop container: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
     } finally {
-      setSessionActionPending(false);
+      pendingSessionActionRef.current = null;
+      setPendingSessionAction(null);
     }
   };
 
   const handleRemove = async (sessionId: string) => {
-    if (removingSessionIdSet.has(sessionId)) {
+    if (removingSessionIdsRef.current.has(sessionId)) {
       return;
     }
+    removingSessionIdsRef.current = new Set([...removingSessionIdsRef.current, sessionId]);
     setRemovingSessionIds((current) => [...current, sessionId]);
     if (activeSessionId === sessionId) {
       setActiveSessionId(null);
@@ -330,14 +421,19 @@ export const BrowserPage: FunctionComponent = () => {
       await removePreviewSession(sessionId);
       await refreshSessions(true);
     } catch (actionError) {
-      browserFeedback.setError(`Failed to save script: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
+      browserFeedback.setError(`Failed to remove session: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
     } finally {
+      const nextRemovingIds = new Set(removingSessionIdsRef.current);
+      nextRemovingIds.delete(sessionId);
+      removingSessionIdsRef.current = nextRemovingIds;
       setRemovingSessionIds((current) => current.filter((id) => id !== sessionId));
     }
   };
 
   const handleSaveScript = async () => {
     if (!selectedProject || !scriptTargetSprint) return;
+    if (savingScriptRef.current) return;
+    savingScriptRef.current = true;
     setSavingScript(true);
     browserFeedback.setPending("Saving script...");
     try {
@@ -346,27 +442,23 @@ export const BrowserPage: FunctionComponent = () => {
       setShowScriptEditor(false);
       browserFeedback.setSuccess("Script saved successfully");
     } catch (actionError) {
-      setActionFeedback({status: 'error', message: `Failed to launch container: ${actionError instanceof Error ? actionError.message : String(actionError)}`});
+      browserFeedback.setError(`Failed to save script: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
     } finally {
+      savingScriptRef.current = false;
       setSavingScript(false);
     }
   };
 
   const navigate = () => {
+    if (!navigationEnabled || navigationPendingRef.current) {
+      return;
+    }
     const nextPath = normalizePath(addressValue);
+    markNavigationPending();
     setCurrentPath(nextPath);
     setAddressValue(nextPath);
-    if (navigationEnabled) {
-      postNavigationCommand("push", nextPath);
-    } else if (visibleSelectedSession) {
-      setFrameSrc(`${buildPreviewOrigin(visibleSelectedSession.id)}${nextPath}`);
-
-    }
+    postNavigationCommand("push", nextPath);
   };
-
-  const sessionCards = sessions.filter((session) =>
-    (!selectedProject || session.projectId === selectedProject.id) && !removingSessionIdSet.has(session.id)
-  );
 
   if (!selectedProject) {
     return (
@@ -390,23 +482,31 @@ export const BrowserPage: FunctionComponent = () => {
         actions={
           <button
             type="button"
-            onClick={() => void refreshSessions()}
-          className="inline-flex min-h-[44px] items-center gap-2.5 rounded-full border border-black/[0.06] bg-white/75 px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-all hover:-translate-y-px hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/40 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:text-white"
+            onClick={() => {
+              if (!loading) {
+                void refreshSessions();
+              }
+            }}
+          disabled={loading}
+          aria-disabled={loading}
+          aria-busy={loading}
+          aria-label="Refresh preview sessions"
+          className="inline-flex min-h-[44px] items-center gap-2.5 rounded-full border border-black/[0.06] bg-white/75 px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-all hover:-translate-y-px hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-signal-500/40 motion-reduce:transition-none dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:text-white"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} strokeWidth={2} />
-            Refresh
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin motion-reduce:animate-none" : ""}`} strokeWidth={2} />
+            {loading ? "Refreshing" : "Refresh"}
           </button>
         }
       />
 
       {error && (
-        <div className="mb-5 rounded-2xl border border-status-red/20 bg-status-red/10 px-4 py-3 text-sm text-status-red">
+        <div className="mb-5 rounded-2xl border border-status-red/20 bg-status-red/10 px-4 py-3 text-sm text-status-red" role="alert">
           {error}
         </div>
       )}
 
       {actionFeedback.status !== "idle" && actionFeedback.message && (
-        <div className="mb-5 flex items-start gap-3 p-3 rounded-xl border bg-black/[0.02] dark:bg-white/[0.03] border-black/[0.06] dark:border-white/[0.06]">
+        <div className="mb-5 flex items-start gap-3 p-3 rounded-xl border bg-black/[0.02] dark:bg-white/[0.03] border-black/[0.06] dark:border-white/[0.06]" role={actionFeedback.status === "error" ? "alert" : "status"} aria-live="polite">
           <div className={`flex-1 text-sm font-medium mt-0.5 ${actionFeedback.status === 'error' ? 'text-status-red' : actionFeedback.status === 'success' ? 'text-status-green' : 'text-signal-700 dark:text-signal-400'}`}>
             {actionFeedback.status === 'pending' && <span className="mr-2 inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />}
             {actionFeedback.message}
@@ -414,6 +514,7 @@ export const BrowserPage: FunctionComponent = () => {
           <button
             type="button"
             onClick={() => setActionFeedback({status: 'idle', message: null})}
+            aria-label="Dismiss action message"
             className="shrink-0 p-1 rounded-md opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
           >
             <span className="sr-only">Dismiss</span>
@@ -469,31 +570,31 @@ export const BrowserPage: FunctionComponent = () => {
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]" data-testid="browser-main-tool-panel">
         <PreviewWindowChrome
           session={visibleSelectedSession}
-          onNavigateBack={() => postNavigationCommand("back")}
-          onNavigateForward={() => postNavigationCommand("forward")}
-          onReload={() => {
-            if (navigationEnabled) {
-              postNavigationCommand("reload");
-            } else {
-              reloadFrame();
-            }
-          }}
+          onNavigateBack={() => runNavigationAction(() => postNavigationCommand("back"))}
+          onNavigateForward={() => runNavigationAction(() => postNavigationCommand("forward"))}
+          onReload={() => runNavigationAction(() => postNavigationCommand("reload"))}
           addressValue={addressValue}
           onAddressChange={setAddressValue}
           onAddressSubmit={(_value) => navigate()}
           navigationEnabled={navigationEnabled}
+          navigationBusy={navigationPending}
         >
           <div aria-live="polite" role="status" className="sr-only">
-            {visibleSelectedSession ? `Container ${visibleSelectedSession.status}` : "No active session"}
-            {sessionActionPending ? " Action pending." : ""}
+            {previewStatusMessage}
+            {pendingSessionAction === "rebuild" ? " Rebuilding preview container." : ""}
+            {pendingSessionAction === "stop" ? " Stopping preview container." : ""}
+            {savingScript ? " Saving preview script." : ""}
+            {launching ? " Launching preview container." : ""}
+            {navigationPending ? " Preview navigation command is being sent." : ""}
+            {!navigationEnabled && visibleSelectedSession ? " Navigation controls are disabled until the container is running." : ""}
           </div>
           {visibleSelectedSession && frameSrc ? (
             <div className="relative h-full w-full">
               {!navigationEnabled && (
                 <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-center p-4">
                   <div className="flex items-center gap-3 rounded-full border border-black/[0.08] bg-white/90 px-4 py-2.5 shadow-[0_8px_32px_rgba(0,0,0,0.08)] backdrop-blur-md dark:border-white/[0.08] dark:bg-void-900/90 dark:shadow-[0_8px_32px_rgba(0,0,0,0.24)]">
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-signal-500 border-t-transparent" />
-                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300" aria-hidden="true">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-signal-500 border-t-transparent motion-reduce:animate-none" />
+                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                       {visibleSelectedSession.status === "starting" ? "Container starting..." : visibleSelectedSession.status === "error" ? "Container failed" : "Waiting for connection..."}
                     </span>
                   </div>
@@ -524,12 +625,15 @@ export const BrowserPage: FunctionComponent = () => {
               <div>
                 <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Selected Sprint</div>
                 <div className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">
-                  {scriptTargetSprint?.name || "All sprints"}
+                  <span className="break-words">{scriptTargetSprint?.name || "All sprints"}</span>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowScriptEditor((value) => !value)}
+                aria-expanded={showScriptEditor}
+                aria-controls="preview-script-editor"
+                aria-label={showScriptEditor ? "Hide startup script editor" : "Show startup script editor"}
                 className="inline-flex h-10 items-center gap-2 rounded-2xl border border-black/[0.08] px-3 text-xs font-semibold text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
               >
                 <FileCode2 className="h-4 w-4" strokeWidth={2} />
@@ -555,36 +659,48 @@ export const BrowserPage: FunctionComponent = () => {
                   onClick={handleRebuild}
                   disabled={!visibleSelectedSession || sessionActionPending}
                   aria-disabled={!visibleSelectedSession || sessionActionPending}
-                  aria-label="Rebuild preview container"
-                  aria-busy={sessionActionPending}
+                  aria-label={pendingSessionAction === "rebuild" ? "Rebuilding preview container" : "Rebuild preview container"}
+                  aria-busy={pendingSessionAction === "rebuild"}
+                  aria-describedby="preview-session-action-status"
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:border-slate-300/50 disabled:bg-slate-200/60 disabled:text-slate-500 disabled:opacity-100 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:border-slate-700 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
                 >
-                  <RotateCcw className={`h-4 w-4 ${sessionActionPending ? 'animate-spin' : ''}`} strokeWidth={2} />
-                  {sessionActionPending ? "Rebuilding..." : "Rebuild"}
+                  <RotateCcw className={`h-4 w-4 ${pendingSessionAction === "rebuild" ? 'animate-spin motion-reduce:animate-none' : ''}`} strokeWidth={2} />
+                  {pendingSessionAction === "rebuild" ? "Rebuilding..." : "Rebuild"}
                 </button>
                 <button
                   type="button"
                   onClick={handleStop}
                   disabled={!visibleSelectedSession || sessionActionPending}
                   aria-disabled={!visibleSelectedSession || sessionActionPending}
-                  aria-label="Stop preview container"
-                  aria-busy={sessionActionPending}
+                  aria-label={pendingSessionAction === "stop" ? "Stopping preview container" : "Stop preview container"}
+                  aria-busy={pendingSessionAction === "stop"}
+                  aria-describedby="preview-session-action-status"
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:border-slate-300/50 disabled:bg-slate-200/60 disabled:text-slate-500 disabled:opacity-100 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:border-slate-700 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
                 >
                   <Square className="h-4 w-4" strokeWidth={2} />
-                  {sessionActionPending ? "Stopping..." : "Stop"}
+                  {pendingSessionAction === "stop" ? "Stopping..." : "Stop"}
                 </button>
                 <a
                   href={visibleSelectedSession ? getSafeUrl(`${buildPreviewOrigin(visibleSelectedSession.id)}${normalizePath(currentPath)}`) : undefined}
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-disabled={!visibleSelectedSession}
+                  aria-label="Open selected preview in a new tab"
                   title={visibleSelectedSession ? "Open preview in new tab" : "Start container to open"}
                   className={`inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white ${!visibleSelectedSession ? "pointer-events-none opacity-50 cursor-not-allowed" : ""}`}
                 >
                   <ExternalLink className="h-4 w-4" strokeWidth={2} />
                   Open
                 </a>
+              </div>
+              <div id="preview-session-action-status" role="status" aria-live="polite" className="mt-3 min-h-4 text-xs text-slate-500 dark:text-slate-400">
+                {pendingSessionAction === "rebuild"
+                  ? "Rebuild in progress. Rebuild and stop controls are temporarily unavailable."
+                  : pendingSessionAction === "stop"
+                    ? "Stop in progress. Rebuild and stop controls are temporarily unavailable."
+                    : !visibleSelectedSession
+                      ? "Select or launch a preview session to enable container actions."
+                      : "Container actions are available."}
               </div>
             </div>
           </div>
@@ -598,7 +714,7 @@ export const BrowserPage: FunctionComponent = () => {
           </div>
 
           {showScriptEditor && (
-            <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+            <div id="preview-script-editor" className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Startup script</div>
@@ -612,6 +728,8 @@ export const BrowserPage: FunctionComponent = () => {
                   disabled={savingScript || !scriptTargetSprint}
                   aria-disabled={savingScript || !scriptTargetSprint}
                   aria-busy={savingScript}
+                  aria-label={savingScript ? "Saving startup script" : "Save startup script"}
+                  aria-describedby="preview-script-save-status"
                   className="inline-flex h-10 items-center gap-2 rounded-2xl bg-slate-900 px-4 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
                 >
                   <Save className="h-4 w-4" strokeWidth={2} />
@@ -619,18 +737,49 @@ export const BrowserPage: FunctionComponent = () => {
                 </button>
               </div>
               <textarea
+                aria-label="Startup script contents"
                 value={scriptDraft}
+                disabled={savingScript}
+                aria-busy={savingScript}
+                aria-describedby="preview-script-save-status"
                 onInput={(event) => setScriptDraft((event.currentTarget as HTMLTextAreaElement).value)}
-                className="min-h-[12rem] md:min-h-[18rem] w-full rounded-[1.5rem] whitespace-pre-wrap break-words border border-black/[0.08] bg-slate-100/80 p-4 font-mono text-[12px] leading-6 text-slate-800 outline-none transition focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-void-950 dark:text-slate-100"
+                className="min-h-[12rem] md:min-h-[18rem] w-full rounded-[1.5rem] whitespace-pre-wrap break-words border border-black/[0.08] bg-slate-100/80 p-4 font-mono text-[12px] leading-6 text-slate-800 outline-none transition focus:border-signal-500/40 disabled:cursor-wait disabled:opacity-80 dark:border-white/[0.08] dark:bg-void-950 dark:text-slate-100"
               />
+              <div id="preview-script-save-status" role="status" aria-live="polite" className="mt-3 min-h-4 text-xs text-slate-500 dark:text-slate-400">
+                {savingScript
+                  ? "Saving startup script. Editing is paused until the save completes."
+                  : scriptTargetSprint
+                    ? "Startup script changes can be saved for the selected sprint."
+                    : "Select a sprint before saving startup script changes."}
+              </div>
             </div>
           )}
 
           <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
-            <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Container logs</div>
-            <pre className="min-h-[12rem] md:min-h-[18rem] max-h-[360px] overflow-auto rounded-[1.5rem] whitespace-pre-wrap break-words bg-slate-100/80 p-4 font-mono text-[11px] leading-6 text-slate-700 dark:bg-void-950 dark:text-slate-300">
-              {logs || "No logs yet."}
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Container logs</div>
+              <div className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] ${
+                logsError
+                  ? "border-status-red/30 bg-status-red/10 text-status-red"
+                  : logsLoading
+                    ? "border-ember-500/30 bg-ember-500/10 text-ember-600 dark:text-ember-400"
+                    : "border-signal-500/30 bg-signal-500/10 text-signal-600 dark:text-signal-400"
+              }`}>
+                {logsError ? "Error" : logsLoading ? "Refreshing" : "Ready"}
+              </div>
+            </div>
+            <div className="sr-only" role="status" aria-live="polite">{logsStatusMessage}</div>
+            <pre
+              aria-label="Preview container logs"
+              aria-busy={logsLoading}
+              aria-describedby="preview-logs-status"
+              className="min-h-[12rem] md:min-h-[18rem] max-h-[360px] overflow-auto rounded-[1.5rem] whitespace-pre-wrap break-words bg-slate-100/80 p-4 font-mono text-[11px] leading-6 text-slate-700 dark:bg-void-950 dark:text-slate-300"
+            >
+              {logs || (logsLoading ? "Loading logs..." : "No logs yet.")}
             </pre>
+            <div id="preview-logs-status" className="mt-3 min-h-4 text-xs text-slate-500 dark:text-slate-400">
+              {logsStatusMessage}
+            </div>
           </div>
         </div>
       </div>

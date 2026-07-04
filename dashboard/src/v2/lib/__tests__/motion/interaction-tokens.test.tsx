@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook } from "@testing-library/preact";
-import { useInteractionTokens, INTERACTION_TOKENS } from "../../motion/tokens.js";
+import { useInteractionTokens, INTERACTION_TOKENS, INTERACTION_CONTRACT_NAMES, INTERACTION_CSS_VARIABLES, buildInteractionTransition } from "../../motion/tokens.js";
 import { useGsapInteractionTokens, GSAP_INTERACTION_TOKENS } from "../../motion/constants.js";
 
 // Mock the hook to test both true and false states
@@ -26,6 +26,31 @@ vi.mock("../../../hooks/use-reduced-motion.js", async (importOriginal) => {
 describe("Interaction Tokens", () => {
   beforeEach(() => {
     mockUseReducedMotion.mockReset();
+  });
+
+  it("exports every named CSS and GSAP interaction contract", () => {
+    expect(INTERACTION_CONTRACT_NAMES).toEqual([
+      "controlFeedback",
+      "enterExit",
+      "expansionCollapse",
+      "selectionMovement",
+      "listReveal",
+      "listReorder",
+      "inlineValidation",
+      "asyncFeedback"
+    ]);
+
+    for (const contract of INTERACTION_CONTRACT_NAMES) {
+      expect(INTERACTION_TOKENS[contract].duration).toBeTruthy();
+      expect(INTERACTION_TOKENS[contract].ease).toBeTruthy();
+      expect(GSAP_INTERACTION_TOKENS[contract].duration).toBeTypeOf("number");
+      expect(GSAP_INTERACTION_TOKENS[contract].ease).toBeTruthy();
+      expect(INTERACTION_CSS_VARIABLES[contract].duration).toContain("var(--interaction-");
+    }
+  });
+
+  it("builds transition strings from CSS interaction variables", () => {
+    expect(buildInteractionTransition("controlFeedback", "opacity")).toBe("opacity var(--interaction-control-feedback-duration) var(--interaction-control-feedback-ease)");
   });
 
   describe("useInteractionTokens", () => {

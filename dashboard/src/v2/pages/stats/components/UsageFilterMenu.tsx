@@ -99,15 +99,16 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
     <div
       ref={menuRef}
       role="dialog"
-      aria-label="Graph filters"
+      aria-labelledby="usage-graph-filter-menu-title"
+      aria-describedby="usage-graph-filter-menu-count"
       className={styles.menu}
       style={{ display: isOpen || (menuRef.current && gsap.getProperty(menuRef.current, 'opacity') as number > 0) ? 'block' : 'none' }}
     >
       <div className={styles.content}>
         <div className={`${styles.header} flex items-center justify-between`}>
-          <div aria-live="polite" className="sr-only">Showing {activeSeriesCount} filter{activeSeriesCount !== 1 ? 's' : ''}</div>
+          <div id="usage-graph-filter-menu-count" aria-live="polite" className="sr-only">Showing {activeSeriesCount} filter{activeSeriesCount !== 1 ? 's' : ''}</div>
           <div className="flex items-center gap-3">
-            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-value-color)]">
+            <span id="usage-graph-filter-menu-title" className="text-[11px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-value-color)]">
               Graph Filters
             </span>
             {activeSeriesCount > 0 && (
