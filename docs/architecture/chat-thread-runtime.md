@@ -24,6 +24,8 @@ Threads can dynamically shift their underlying execution backend:
 - **Connected MCP Routing (`worker`)**: The conversation maps to an external worker process connected via MCP. `workerEndpointId` binds the thread to that exact worker.
 - **Virtual Routing (`virtual`)**: When no MCP connection is available or a specific provider is chosen, the thread uses the internal virtual worker scheduler. The scheduler reads the `virtualProvider` and model preferences directly from the thread's runtime state and launches short-lived backend processes to handle the chat turn.
 
+For Docker or remote virtual provider runs, dashboard chat turns and chat compaction use the current remote default-branch snapshot for the project. The runtime resolves the project's saved default branch first, then the dashboard default, then `main`, and passes that checkout contract into provider execution so chat answers inspect the latest upstream baseline while preserving the thread's conversation state.
+
 Automatic worker pickup occurs seamlessly. If a project has an inherited worker mode (`VIRTUAL` or `CONNECTED_MCP`), new chat threads inherit this routing configuration automatically.
 
 ### UI State Contracts
