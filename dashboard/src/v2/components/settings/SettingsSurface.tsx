@@ -68,7 +68,8 @@ export const ActionButton: FunctionComponent<{
   tone?: "primary" | "secondary" | "danger" | "success" | "warning";
   busy?: boolean;
   disabled?: boolean;
-}> = ({ label, onClick, tone = "secondary", busy = false, disabled = false }) => {
+  disabledReason?: string;
+}> = ({ label, onClick, tone = "secondary", busy = false, disabled = false, disabledReason }) => {
   let toneClass = "border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white";
 
   if (tone === "primary") {
@@ -94,6 +95,9 @@ export const ActionButton: FunctionComponent<{
       disabled={disabled}
       aria-disabled={disabled || busy}
       aria-busy={busy}
+      aria-label={label}
+      aria-description={disabled && disabledReason ? disabledReason : undefined}
+      title={disabled && disabledReason ? disabledReason : undefined}
       className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-bold relative overflow-hidden ${SHARED_INTERACTION_CLASSES} ${toneClass}`}
     >
       <div className={`flex items-center justify-center gap-2 transition-opacity duration-200 ${busy ? "opacity-0" : "opacity-100"}`}>
@@ -150,8 +154,11 @@ export const SettingsBody: FunctionComponent<{
       <ActionFeedbackRegion
         status={error ? "error" : loading || saving ? "pending" : message ? "success" : dirty ? "warning" : "idle"}
         message={error || (loading ? loadingLabel : saving ? (savingLabel || "Saving...") : message ? (successLabel || message) : dirty ? (dirtyLabel || "You have unsaved changes.") : null)}
+        autoDismiss={false}
       />
     )}
-    {!loading && children}
+    <div aria-busy={loading || saving ? "true" : undefined} className={loading ? "opacity-70" : undefined}>
+      {children}
+    </div>
   </div>
 );

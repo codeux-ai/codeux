@@ -1,4 +1,5 @@
 import type { ComponentChildren, FunctionComponent } from "preact";
+import { useId } from "preact/hooks";
 import type { SettingsValueSource } from "../../../../types.js";
 import { getFieldSourceLabel } from "../../../lib/settings-view-models.js";
 
@@ -10,8 +11,11 @@ export const SectionCard: FunctionComponent<{
   badge?: string;
   icon?: ComponentChildren;
   actions?: ComponentChildren;
-}> = ({ title, children, danger, badge, icon, actions }) => (
-  <section className={`relative overflow-hidden rounded-[1.75rem] border p-5 shadow-[var(--elevation-base)] backdrop-blur-sm ${
+}> = ({ title, children, danger, badge, icon, actions }) => {
+  const titleId = useId();
+
+  return (
+    <section aria-labelledby={titleId} className={`relative overflow-hidden rounded-[1.75rem] border p-5 shadow-[var(--elevation-base)] backdrop-blur-sm ${
     danger
       ? "border-status-red/20 bg-status-red/[0.03] dark:border-status-red/20 dark:bg-status-red/[0.04]"
       : "border-[color:var(--border-hairline)] bg-[var(--surface-glass)]"
@@ -21,7 +25,7 @@ export const SectionCard: FunctionComponent<{
     <div className="mb-4 flex items-center justify-between gap-3">
       <div className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] ${danger ? "text-status-red/80" : "text-slate-500 dark:text-slate-300"}`}>
         {icon ? <span className="inline-flex h-3.5 w-3.5 items-center justify-center [&_svg]:h-3.5 [&_svg]:w-3.5" aria-hidden>{icon}</span> : null}
-        <h3>{title}</h3>
+        <h3 id={titleId}>{title}</h3>
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2">
         {actions ? actions : null}
@@ -37,7 +41,8 @@ export const SectionCard: FunctionComponent<{
       {children}
     </div>
   </section>
-);
+  );
+};
 
 export const IntegrationConfigRow: FunctionComponent<{
   label: string;
