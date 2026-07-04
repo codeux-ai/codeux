@@ -77,6 +77,7 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
   const removingSessionIdSet = new Set(removingSessionIds);
   const selectedSession = sessions.find((session) => session.id === selectedSessionId) || null;
   const railId = "preview-session-rail";
+  const hasOverflowControls = cardCount > 5;
 
   const scrollLeft = () => {
     if (scrollContainerRef.current) {
@@ -100,14 +101,14 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
             : "No preview sessions are available."}
         {removingSessionIds.length > 0 ? " Removing preview session." : ""}
       </div>
-      {cardCount > 5 && (
+      {hasOverflowControls && (
         <>
           <button
             type="button"
             onClick={scrollLeft}
             aria-label="Scroll preview sessions left"
             aria-controls={railId}
-            className="absolute -left-4 top-1/2 z-10 hidden -translate-y-1/2 rounded-full border border-black/[0.08] bg-white/95 p-2 text-slate-700 shadow-sm backdrop-blur-sm transition-all hover:bg-white hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 motion-reduce:transition-none dark:border-white/[0.08] dark:bg-[#05080d]/95 dark:text-slate-300 dark:hover:bg-[#05080d] dark:hover:text-white lg:flex"
+            className="absolute -left-4 top-1/2 z-10 flex -translate-y-1/2 rounded-full border border-black/[0.08] bg-white/95 p-2 text-slate-700 opacity-100 shadow-sm backdrop-blur-sm transition-all hover:bg-white hover:text-slate-900 focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 group-focus-within:opacity-100 motion-reduce:transition-none dark:border-white/[0.08] dark:bg-[#05080d]/95 dark:text-slate-300 dark:hover:bg-[#05080d] dark:hover:text-white lg:opacity-0 lg:group-hover:opacity-100"
             style={{ transition: controlTransition }}
             title="Scroll left"
           >
@@ -118,7 +119,7 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
             onClick={scrollRight}
             aria-label="Scroll preview sessions right"
             aria-controls={railId}
-            className="absolute -right-4 top-1/2 z-10 hidden -translate-y-1/2 rounded-full border border-black/[0.08] bg-white/95 p-2 text-slate-700 shadow-sm backdrop-blur-sm transition-all hover:bg-white hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 motion-reduce:transition-none dark:border-white/[0.08] dark:bg-[#05080d]/95 dark:text-slate-300 dark:hover:bg-[#05080d] dark:hover:text-white lg:flex"
+            className="absolute -right-4 top-1/2 z-10 flex -translate-y-1/2 rounded-full border border-black/[0.08] bg-white/95 p-2 text-slate-700 opacity-100 shadow-sm backdrop-blur-sm transition-all hover:bg-white hover:text-slate-900 focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 group-focus-within:opacity-100 motion-reduce:transition-none dark:border-white/[0.08] dark:bg-[#05080d]/95 dark:text-slate-300 dark:hover:bg-[#05080d] dark:hover:text-white lg:opacity-0 lg:group-hover:opacity-100"
             style={{ transition: controlTransition }}
             title="Scroll right"
           >
@@ -141,6 +142,8 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
           const linkUnavailableReason = session.status === "starting"
             ? "Preview link unavailable until the container finishes starting and receives a routed host port."
             : "Preview link unavailable until a host port is routed.";
+          const removePendingReason = `Preview session ${session.sprintName} is already being removed.`;
+          const removeDescriptionId = `preview-session-${session.id}-remove-state`;
 
           return (
             <div
@@ -213,6 +216,11 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
                     Selected
                   </div>
                 )}
+                {removing && (
+                  <div id={removeDescriptionId} className="mt-2 text-[10px] font-semibold text-status-red">
+                    {removePendingReason}
+                  </div>
+                )}
               </button>
 
               <div className="mt-4 flex items-center justify-between gap-2 border-t border-black/[0.06] pt-3 dark:border-white/[0.06]">
@@ -232,10 +240,11 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
                   style={{ transition: controlTransition }}
                   title="Remove preview container"
 
-                  aria-label={`Remove preview session ${session.sprintName}`}
+                  aria-label={removing ? `Removing preview session ${session.sprintName}` : `Remove preview session ${session.sprintName}`}
                   disabled={removing}
                   aria-disabled={removing}
                   aria-busy={removing}
+                  aria-describedby={removing ? removeDescriptionId : undefined}
                 >
                   {removing ? <Loader2 aria-hidden="true" className="h-3 w-3 animate-spin motion-reduce:animate-none" strokeWidth={2.5} /> : <Trash2 aria-hidden="true" className="h-3 w-3" strokeWidth={2.5} />}
                   {removing ? "Removing..." : "Remove"}
@@ -247,15 +256,26 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
                   className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border px-3 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/50 motion-reduce:transition-none ${
                     canOpen
                       ? "border-black/[0.08] text-slate-600 hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
-                      : "pointer-events-none border-slate-400/25 bg-slate-500/10 text-slate-500 dark:border-slate-500/40 dark:bg-slate-500/15 dark:text-slate-400"
+                      : "cursor-not-allowed border-slate-400/25 bg-slate-500/10 text-slate-500 dark:border-slate-500/40 dark:bg-slate-500/15 dark:text-slate-400"
                   }`}
                   style={{ transition: controlTransition }}
                   title={canOpen ? "Open isolated preview in a new tab" : linkUnavailableReason}
-                  onClick={(e) => e.stopPropagation()}
-                  aria-label={canOpen ? `Open preview session ${session.sprintName} in a new tab` : `Preview link unavailable for ${session.sprintName}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!canOpen) {
+                      e.preventDefault();
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (!canOpen && (e.key === "Enter" || e.key === " ")) {
+                      e.preventDefault();
+                    }
+                  }}
+                  role={!canOpen ? "link" : undefined}
+                  aria-label={canOpen ? `Open preview session ${session.sprintName} in a new tab` : `Open preview session ${session.sprintName} unavailable`}
                   aria-disabled={!canOpen}
                   aria-describedby={!canOpen ? `preview-session-${session.id}-link-state` : undefined}
-                  tabIndex={canOpen ? undefined : -1}
+                  tabIndex={canOpen ? undefined : 0}
                 >
                   <ExternalLink aria-hidden="true" className="h-3 w-3" strokeWidth={2.5} />
                   {canOpen ? "Open Link" : "Link Unavailable"}

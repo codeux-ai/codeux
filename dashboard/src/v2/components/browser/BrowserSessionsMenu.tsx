@@ -34,10 +34,40 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
     const [loadError, setLoadError] = useState<string | null>(null);
     const [interactionState, setInteractionState] = useState<InteractionState>('closed');
     const containerRef = useRef<HTMLDivElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
+    const pendingMenuFocusRef = useRef<"first" | "last" | null>(null);
+    const pointerActivationRef = useRef(false);
+    const suppressNextFocusOpenRef = useRef(false);
     const [menuId] = useState(() => `browser-menu-${Math.random().toString(36).substr(2, 9)}`);
-    const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const isMenuVisible = interactionState !== 'closed';
+
+    const getEnabledMenuItems = useCallback((): HTMLElement[] => {
+        if (!containerRef.current) {
+            return [];
+        }
+        return Array.from(
+            containerRef.current.querySelectorAll('[role="menuitem"]:not([aria-disabled="true"])')
+        ) as HTMLElement[];
+    }, []);
+
+    const restoreTriggerFocus = useCallback(() => {
+        const trigger = triggerRef.current;
+        if (trigger && !trigger.disabled && trigger.isConnected) {
+            suppressNextFocusOpenRef.current = true;
+            trigger.focus({ preventScroll: true });
+            return;
+        }
+        const fallback = document.querySelector<HTMLElement>('[data-overlay-focus-fallback], [data-focus-fallback], main, [role="main"], #root') || document.body;
+        fallback.focus?.({ preventScroll: true });
+    }, []);
+
+    const closeMenu = useCallback((restoreFocus = true) => {
+        setInteractionState('closed');
+        if (restoreFocus) {
+            queueMicrotask(restoreTriggerFocus);
+        }
+    }, [restoreTriggerFocus]);
 
     const loadSessions = useCallback(async () => {
         if (!selectedProject?.id) {
@@ -65,40 +95,65 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
     }, [isMenuVisible, loadSessions]);
 
     const handleMouseEnter = () => {
-        if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
         if (interactionState === 'closed') {
             setInteractionState('hover');
         }
     };
 
     const handleMouseLeave = () => {
-        if (interactionState === 'hover') {
-            hoverTimeout.current = setTimeout(() => {
-                setInteractionState((prev) => (prev === 'hover' ? 'closed' : prev));
-            }, 150);
-        }
+        setInteractionState((prev) => (prev === 'hover' ? 'closed' : prev));
     };
 
     const handleFocus = () => {
-        if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+        if (suppressNextFocusOpenRef.current) {
+            suppressNextFocusOpenRef.current = false;
+            return;
+        }
+        if (pointerActivationRef.current) {
+            return;
+        }
         setInteractionState('open');
     };
 
     const handleBlur = (e: FocusEvent) => {
         if (!containerRef.current?.contains(e.relatedTarget as Node)) {
-            setInteractionState('closed');
+            closeMenu(false);
         }
     };
 
     const toggleMenu = () => {
-        if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+        pointerActivationRef.current = false;
         setInteractionState((prev) => (prev === 'closed' || prev === 'hover' ? 'open' : 'closed'));
     };
 
-    const handleMenuKeyDown = (e: KeyboardEvent) => {
-        if (!isMenuVisible || !containerRef.current) return;
+    const focusMenuItem = (position: "first" | "last") => {
+        const items = getEnabledMenuItems();
+        const item = position === "first" ? items[0] : items[items.length - 1];
+        item?.focus({ preventScroll: true });
+    };
 
-        const items = Array.from(containerRef.current.querySelectorAll('[role="menuitem"]:not([aria-disabled="true"])')) as HTMLElement[];
+    const openMenuFromKeyboard = (position: "first" | "last") => {
+        pendingMenuFocusRef.current = position;
+        setInteractionState('open');
+    };
+
+    const handleTriggerKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openMenuFromKeyboard("first");
+        } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            openMenuFromKeyboard("last");
+        } else if (e.key === "Escape" && isMenuVisible) {
+            e.preventDefault();
+            closeMenu();
+        }
+    };
+
+    const handleMenuKeyDown = (e: KeyboardEvent) => {
+        if (!isMenuVisible) return;
+
+        const items = getEnabledMenuItems();
         if (items.length === 0) return;
 
         const currentIndex = items.indexOf(document.activeElement as HTMLElement);
@@ -111,30 +166,47 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
             e.preventDefault();
             const prevIndex = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
             items[prevIndex]?.focus();
+        } else if (e.key === 'Home') {
+            e.preventDefault();
+            items[0]?.focus();
+        } else if (e.key === 'End') {
+            e.preventDefault();
+            items[items.length - 1]?.focus();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            closeMenu();
         }
     };
 
     useEffect(() => {
+        if (!isMenuVisible || !pendingMenuFocusRef.current) {
+            return;
+        }
+        const position = pendingMenuFocusRef.current;
+        pendingMenuFocusRef.current = null;
+        queueMicrotask(() => focusMenuItem(position));
+    }, [isMenuVisible, sessions, getEnabledMenuItems]);
+
+    useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape' && isMenuVisible) {
-                setInteractionState('closed');
-                const triggerBtn = containerRef.current?.querySelector('button');
-                triggerBtn?.focus();
+                e.preventDefault();
+                closeMenu();
             }
         };
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [isMenuVisible]);
+    }, [closeMenu, isMenuVisible]);
 
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
             if (isMenuVisible && containerRef.current && !containerRef.current.contains(e.target as Node)) {
-                setInteractionState('closed');
+                closeMenu();
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [isMenuVisible]);
+    }, [closeMenu, isMenuVisible]);
 
     const formatPort = (session: SprintPreviewSession) => {
         if (session.containerAppPort && session.hostPort) {
@@ -153,14 +225,19 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
             ref={containerRef}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
+            onBlur={handleBlur}
             onKeyDown={handleMenuKeyDown as any}
         >
             <button
+                ref={triggerRef}
                 type="button"
                 data-tour-id="active-sessions"
+                onMouseDown={() => {
+                    pointerActivationRef.current = true;
+                }}
                 onClick={toggleMenu}
                 onFocus={handleFocus}
-                onBlur={handleBlur}
+                onKeyDown={handleTriggerKeyDown as any}
                 aria-haspopup="menu"
                 aria-expanded={isMenuVisible}
                 aria-controls={isMenuVisible ? menuId : undefined}
@@ -180,13 +257,14 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                     role="menu"
                     id={menuId}
                     aria-label="Active Browser Sessions"
+                    aria-busy={loading}
                     className="fixed inset-x-4 top-[72px] md:inset-auto md:absolute md:top-full md:right-0 mt-2 w-72 max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-5rem)] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50 flex flex-col"
                 >
                     <div className="px-3 py-2 flex justify-between items-center shrink-0 border-b border-black/[0.06] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02]">
                         <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Active Sessions</span>
                         <Link
                             to="/browser"
-                            onClick={() => setInteractionState('closed')}
+                            onClick={() => closeMenu(false)}
                             className="text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 hover:text-signal-700 dark:text-signal-500 dark:hover:text-signal-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-md px-1"
                         >
                             Open App
@@ -200,8 +278,9 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                         ? "border-status-red/25 bg-status-red/10 text-status-red"
                                         : "border-ember-500/25 bg-ember-500/10 text-ember-700 dark:text-ember-300"
                                 }`}
-                                role={loadError ? "alert" : "status"}
+                                role="status"
                                 aria-live="polite"
+                                aria-atomic="true"
                             >
                                 {loadError
                                     ? `Could not refresh sessions. Showing last loaded sessions. ${loadError}`
