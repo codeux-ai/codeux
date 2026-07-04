@@ -39,6 +39,18 @@ import { validateTaskDependencies } from "./project-management/task-dependency-g
 import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
 
 const SELECTED_PROJECT_KEY = "selected_project_id";
+const GENERATED_SPRINT_NAME_PREFIX = "Untitled sprint";
+
+export function createGeneratedSprintName(sprintNumber: number | null | undefined): string {
+  return typeof sprintNumber === "number" && Number.isFinite(sprintNumber)
+    ? `${GENERATED_SPRINT_NAME_PREFIX} ${Math.trunc(sprintNumber)}`
+    : GENERATED_SPRINT_NAME_PREFIX;
+}
+
+export function isGeneratedSprintName(name: string | null | undefined): boolean {
+  const trimmed = typeof name === "string" ? name.trim() : "";
+  return trimmed === GENERATED_SPRINT_NAME_PREFIX || /^Untitled sprint \d+$/.test(trimmed);
+}
 
 interface ProjectRow {
   id: string;
@@ -324,7 +336,8 @@ export class ProjectManagementRepository {
       const number = typeof input.number === "number" && input.number > nextSprintNumber - 1
         ? input.number
         : nextSprintNumber;
-      const name = input.name.trim();
+      const userProvidedName = input.name?.trim() || "";
+      const name = userProvidedName || createGeneratedSprintName(number);
       const slug = input.slug ? input.slug.toLowerCase() : this.createUniqueSprintSlug(projectId, name);
 
       this.db.prepare(`
@@ -1180,6 +1193,7 @@ export class ProjectManagementRepository {
       number: row.number === null ? null : toNumber(row.number),
       slug: row.slug,
       name: row.name,
+      isGeneratedName: isGeneratedSprintName(row.name),
       originalPrompt: row.original_prompt || null,
       goal: row.goal || "",
       status: mapEffectiveSprintStatus(row.status, summaryAggregation.latestRunStatus),

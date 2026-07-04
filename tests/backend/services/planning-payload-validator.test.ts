@@ -9,6 +9,7 @@ describe("PlanningPayloadValidator", () => {
   it("should validate a completely valid payload", () => {
     const validPayload = {
       goal: "Test Goal",
+      title: "Concise sprint title",
       tasks: [
         {
           key: "T01",
@@ -23,8 +24,37 @@ describe("PlanningPayloadValidator", () => {
     };
     const result = validator.validate(validPayload);
     expect(result.goal).toEqual("Test Goal");
+    expect(result.title).toEqual("Concise sprint title");
     expect(result.tasks.length).toEqual(1);
     expect(result.tasks[0]?.key).toEqual("T01");
+  });
+
+  it("normalizes optional top-level title and rejects non-string title values", () => {
+    const result = validator.validate({
+      goal: "Goal",
+      title: "   ",
+      tasks: [
+        {
+          key: "T01",
+          title: "Task 1",
+          description: "Description 1",
+          promptMarkdown: validPromptMarkdown,
+        },
+      ],
+    });
+    expect(result.title).toBeUndefined();
+    expect(() => validator.validate({
+      goal: "Goal",
+      title: 123,
+      tasks: [
+        {
+          key: "T01",
+          title: "Task 1",
+          description: "Description 1",
+          promptMarkdown: validPromptMarkdown,
+        },
+      ],
+    })).toThrow("Planning payload 'title' must be a string when provided.");
   });
 
   it("should reject payloads with aliased input fields", () => {

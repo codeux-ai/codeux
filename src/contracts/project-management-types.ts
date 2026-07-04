@@ -221,6 +221,7 @@ export interface SprintRecord {
   number: number | null;
   slug: string;
   name: string;
+  isGeneratedName: boolean;
   originalPrompt: string | null;
   goal: string;
   status: SprintStatus;
@@ -301,7 +302,7 @@ export interface UpdateProjectInput {
 }
 
 export interface CreateSprintInput {
-  name: string;
+  name?: string;
   originalPrompt?: string | null;
   goal?: string;
   linkedIssues?: SprintLinkedIssueInput[];
@@ -495,5 +496,6 @@ export interface PlannedTaskDraft {
 
 export interface PlannedSprintPayload {
   goal: string;
+  title?: string;
   tasks: PlannedTaskDraft[];
 }
