@@ -97,6 +97,28 @@ describe("NotificationPanel", () => {
     expect(screen.getByLabelText("Read notification")).toBeInTheDocument();
   });
 
+  it("keeps critical notifications discoverable in the live notification list until caller removal", () => {
+    const onDismiss = vi.fn();
+
+    render(
+      <NotificationPanel
+        unreadCount={1}
+        notifications={[makeNotification({ dismissible: false })]}
+        onMarkAllRead={vi.fn()}
+        onMarkRead={vi.fn()}
+        onDismiss={onDismiss}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    const list = screen.getByRole("list", { name: "Notifications list" });
+    expect(list).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByText("Cluster not ready")).toBeInTheDocument();
+    expect(screen.getByText("Docker daemon must be available before provider CLIs can run.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Dismiss Cluster not ready" })).not.toBeInTheDocument();
+    expect(onDismiss).not.toHaveBeenCalled();
+  });
+
   it("keeps focus on the panel after dismissing an item that compacts out of the list", async () => {
     const onDismiss = vi.fn();
     let rerenderPanel: ReturnType<typeof render>["rerender"] = () => undefined;

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { h } from "preact";
-import { render, screen } from "@testing-library/preact";
-import { describe, it, expect, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/preact";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { ActionFeedbackRegion } from "../ActionFeedbackRegion.js";
 import * as matchers from '@testing-library/jest-dom/matchers';
 expect.extend(matchers);
@@ -29,12 +29,16 @@ vi.mock("gsap", async (importOriginal) => {
 });
 
 describe("ActionFeedbackRegion", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it("sets correct role and aria-live depending on status", () => {
     const { unmount } = render(<ActionFeedbackRegion status="success" message="Success message" />);
 
     const el = screen.getByRole("status");
     expect(el).toBeInTheDocument();
-    expect(el).toHaveAttribute("aria-live", "polite");
+    expect(el).toHaveAttribute("aria-live", "off");
     expect(screen.getByText("Success message")).toBeInTheDocument();
     unmount();
 
@@ -71,17 +75,21 @@ describe("ActionFeedbackRegion", () => {
 
     const hiddenText = container.querySelector(".sr-only");
     expect(hiddenText).not.toBeNull();
-    expect(hiddenText?.textContent).toBe("pending");
+    expect(hiddenText?.textContent).toBe("pending. ");
 
     unmount();
   });
 
-  it("does not render progress for pending or error statuses", () => {
+  it("only renders progress for pending when progress is provided and non-error auto-dismiss states", () => {
     const { unmount } = render(<ActionFeedbackRegion status="error" message="Error msg" />);
     expect(document.querySelector(".absolute.bottom-0")).not.toBeInTheDocument();
     unmount();
 
-    render(<ActionFeedbackRegion status="pending" message="Pending msg" />);
+    const { unmount: unmountPendingWithoutProgress } = render(<ActionFeedbackRegion status="pending" message="Pending msg" />);
     expect(document.querySelector(".absolute.bottom-0")).not.toBeInTheDocument();
+    unmountPendingWithoutProgress();
+
+    render(<ActionFeedbackRegion status="pending" message="Pending msg" progress={40} />);
+    expect(document.querySelector(".absolute.bottom-0")).toBeInTheDocument();
   });
 });
