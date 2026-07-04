@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
 import { Clock, Settings, Cpu, User } from "lucide-preact";
 import type { TaskExecutorType } from "../../types.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 export interface TaskExecutionMetaProps {
   time?: string;
@@ -16,6 +17,7 @@ export const TaskExecutionMeta: FunctionComponent<TaskExecutionMetaProps> = memo
   executionMode,
   className = "",
 }) => {
+  const interactionTokens = useInteractionTokens();
   const getExecutorIcon = () => {
     switch (executorType) {
       case "docker_cli":
@@ -42,9 +44,17 @@ export const TaskExecutionMeta: FunctionComponent<TaskExecutionMetaProps> = memo
   const modeLabel = executionMode || "Standard";
 
   return (
-    <div className={`flex flex-wrap gap-2.5 items-center text-xs font-medium text-slate-500 dark:text-slate-400 ${className}`} role="list" aria-label="Task execution metadata">
+    <div
+      className={`flex flex-wrap gap-2.5 items-center text-xs font-medium text-slate-500 dark:text-slate-400 ${className}`}
+      role="list"
+      aria-label="Task execution metadata"
+      style={{
+        "--task-meta-control-duration": interactionTokens.controlFeedback.duration,
+        "--task-meta-control-ease": interactionTokens.controlFeedback.ease,
+      }}
+    >
       <div
-        className="flex min-w-0 items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 rounded-full border border-black/[0.06] dark:border-white/[0.08]"
+        className="flex min-h-7 min-w-0 items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 rounded-full border border-black/[0.06] dark:border-white/[0.08] transition-colors duration-[var(--task-meta-control-duration)] ease-[var(--task-meta-control-ease)]"
         role="listitem"
         aria-label={`Duration: ${durationLabel}`}
       >
@@ -54,7 +64,7 @@ export const TaskExecutionMeta: FunctionComponent<TaskExecutionMetaProps> = memo
       </div>
 
       <div
-        className="flex min-w-0 items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 rounded-full border border-black/[0.06] dark:border-white/[0.08]"
+        className="flex min-h-7 min-w-0 items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 rounded-full border border-black/[0.06] dark:border-white/[0.08] transition-colors duration-[var(--task-meta-control-duration)] ease-[var(--task-meta-control-ease)]"
         role="listitem"
         aria-label={`Executor: ${executorLabel}`}
       >
@@ -64,7 +74,7 @@ export const TaskExecutionMeta: FunctionComponent<TaskExecutionMetaProps> = memo
       </div>
 
       <div
-        className="flex min-w-0 items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 rounded-full border border-black/[0.06] dark:border-white/[0.08]"
+        className="flex min-h-7 min-w-0 items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 rounded-full border border-black/[0.06] dark:border-white/[0.08] transition-colors duration-[var(--task-meta-control-duration)] ease-[var(--task-meta-control-ease)]"
         role="listitem"
         aria-label={`Mode: ${modeLabel}`}
       >

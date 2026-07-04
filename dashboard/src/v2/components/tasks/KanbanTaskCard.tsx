@@ -36,14 +36,14 @@ export const KanbanTaskCard: FunctionComponent<{
   const pri = PRIORITY_CFG[task.priority];
   const statusLabel = STATUS_CFG[task.status].label;
   const interactionTokens = useInteractionTokens();
-  const blockerCount = dependencyIndicators.filter((dep) => dep.status !== "completed").length;
+  const blockerCount = dependencyIndicators.filter((dep) => dep.isBlocking ?? dep.status !== "completed").length;
   const dependencyActionLabel = viewModel.dependencyActionLabel ?? (blockerCount > 0 ? `${blockerCount} dependency ${blockerCount === 1 ? "blocker" : "blockers"}` : "Dependencies clear");
   const qaReviewLabel = viewModel.qaReviewLabel ?? (task.latestReview ? `QA ${task.latestReview.status}` : "QA not reviewed");
   const dragStateLabel = viewModel.dragStateLabel ?? "Pointer drag only; keyboard reordering is not supported";
   const cardActions = viewModel.actions ?? [];
   const dependencySummary = dependencyIndicators.length === 0
     ? "No dependency blockers."
-    : `${dependencyIndicators.length} ${dependencyIndicators.length === 1 ? "dependency" : "dependencies"}; ${blockerCount === 0 ? "no blockers" : `${blockerCount} ${blockerCount === 1 ? "blocker" : "blockers"}`}: ${dependencyIndicators.map((dep) => `${dep.id} ${dep.status.replace(/_/g, " ")}`).join(", ")}.`;
+    : `${dependencyIndicators.length} ${dependencyIndicators.length === 1 ? "dependency" : "dependencies"}; ${blockerCount === 0 ? "no blockers" : `${blockerCount} ${blockerCount === 1 ? "blocker" : "blockers"}`}: ${dependencyIndicators.map((dep) => `${dep.id} ${dep.stateLabel ?? dep.status.replace(/_/g, " ")}`).join(", ")}.`;
   const reviewSummary = task.latestReview
     ? `QA review ${task.latestReview.status}${task.latestReview.outcome ? `, outcome ${task.latestReview.outcome}` : ""}.`
     : "No QA review recorded.";
@@ -90,6 +90,9 @@ export const KanbanTaskCard: FunctionComponent<{
       aria-describedby={`task-card-kbd-${task.recordId}`}
       aria-label={`Task ${task.id}: ${task.title}. Status ${statusLabel}. Priority ${pri.label}. ${dependencySummary} ${reviewSummary} ${runtimeSummary} ${prSummary} ${dragStateLabel}.`}
       data-optimistic={task.isOptimistic ? "true" : undefined}
+      data-blocked={blockerCount > 0 ? "true" : undefined}
+      data-dragging={isDragging ? "true" : undefined}
+      aria-busy={task.isOptimistic ? "true" : undefined}
       className={`kanban-card group relative flex flex-col bg-white/80 dark:bg-void-800/75 backdrop-blur-sm rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${task.isOptimistic ? "border-dashed border-2 border-slate-300 dark:border-slate-600 opacity-70" : "border border-black/[0.06] dark:border-white/[0.06]"} ${isReducedMotion ? 'kanban-card-reduced-motion' : ''} ${isDragging ? 'kanban-card--dragging ring-2 ring-signal-500' : ''}`}
       style={{
         transformStyle: "preserve-3d",
@@ -242,7 +245,7 @@ export const KanbanTaskCard: FunctionComponent<{
           const ActionIcon = actionIconByKind[action.kind];
           const actionClassName = `inline-flex min-h-8 items-center gap-1.5 rounded-full px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] transition-colors active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 ${
             action.disabledReason
-              ? "text-slate-400 dark:text-slate-500"
+              ? "text-slate-400 dark:text-slate-500 cursor-not-allowed"
               : "text-slate-500 hover:text-signal-600 dark:text-slate-400 dark:hover:text-signal-400"
           }`;
 
@@ -269,6 +272,7 @@ export const KanbanTaskCard: FunctionComponent<{
               key={action.kind}
               type="button"
               aria-disabled="true"
+              aria-describedby={`task-card-action-reason-${task.recordId}-${action.kind}`}
               className={actionClassName}
               title={`${action.title} ${action.disabledReason ?? ""}`.trim()}
               aria-label={`${action.ariaLabel}. ${action.disabledReason ?? "Unavailable"}`}
@@ -279,12 +283,17 @@ export const KanbanTaskCard: FunctionComponent<{
             >
               <ActionIcon className="w-3 h-3" aria-hidden="true" />
               <span>{action.label}</span>
+              <span id={`task-card-action-reason-${task.recordId}-${action.kind}`} className="sr-only">
+                {action.disabledReason ?? "Unavailable"}
+              </span>
             </button>
           );
         })}
         <button
           type="button"
           aria-disabled={task.isOptimistic ? "true" : undefined}
+          aria-busy={task.isOptimistic ? "true" : undefined}
+          aria-describedby={task.isOptimistic ? `task-card-edit-reason-${task.recordId}` : undefined}
           className="inline-flex min-h-8 items-center gap-1.5 rounded-full px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors active:scale-95 hover:text-signal-600 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:text-slate-400 dark:hover:text-signal-400"
           title={task.isOptimistic ? `Edit unavailable while task ${task.id} is saving` : `Edit task ${task.id}`} aria-label={task.isOptimistic ? `Edit task ${task.id}: ${task.title}. Saving in progress` : `Edit task ${task.id}: ${task.title}`}
           onClick={(event) => {
@@ -296,11 +305,16 @@ export const KanbanTaskCard: FunctionComponent<{
         >
           <Settings className="w-3 h-3" aria-hidden="true" />
           <span>Edit</span>
+          {task.isOptimistic && (
+            <span id={`task-card-edit-reason-${task.recordId}`} className="sr-only">Saving in progress; edit is temporarily unavailable.</span>
+          )}
         </button>
         <button
           type="button"
           ref={triggerRef as any}
           aria-disabled={task.isOptimistic ? "true" : undefined}
+          aria-busy={task.isOptimistic ? "true" : undefined}
+          aria-describedby={task.isOptimistic ? `task-card-delete-reason-${task.recordId}` : undefined}
           className="inline-flex min-h-8 items-center gap-1.5 rounded-full px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors active:scale-95 hover:text-status-red disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red/30 dark:text-slate-400"
           title={task.isOptimistic ? `Delete unavailable while task ${task.id} is saving` : `Delete task ${task.id}`} aria-label={task.isOptimistic ? `Delete task ${task.id}: ${task.title}. Saving in progress` : `Delete task ${task.id}: ${task.title}`}
           onClick={async (e) => {
@@ -324,6 +338,9 @@ export const KanbanTaskCard: FunctionComponent<{
         >
           <Trash2 className="w-3 h-3" aria-hidden="true" />
           <span>Delete</span>
+          {task.isOptimistic && (
+            <span id={`task-card-delete-reason-${task.recordId}`} className="sr-only">Saving in progress; delete is temporarily unavailable.</span>
+          )}
         </button>
       </div>
 

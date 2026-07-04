@@ -281,7 +281,7 @@ describe("KanbanTaskCard Integration", () => {
     expect(deleteBtn).toHaveAccessibleName("Delete task TASK-123: Implement new feature");
 
     // Check indicator labels are accessible via their status titles
-    const dependencyIndicator = getByTitle(/Depends on Backend API/i);
+    const dependencyIndicator = getByTitle(/Depends on Backend API \(Resolved; completed\)/i);
     expect(dependencyIndicator).toBeInTheDocument();
 
     // The card itself should be focusable via tabIndex={0}
@@ -384,7 +384,7 @@ describe("KanbanTaskCard Integration", () => {
     );
 
     // Check that descriptive 'Dependency' text is in the document (from the new sr-only span)
-    const srText = getByText(/Depends on task TASK-124, resolved. Status: completed. Title: Backend API/i);
+    const srText = getByText(/Depends on task TASK-124, resolved. Dependency completed. Status: completed. Title: Backend API/i);
     expect(srText).toBeInTheDocument();
     expect(srText).toHaveClass("sr-only");
 

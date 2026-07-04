@@ -111,12 +111,20 @@ describe("task-card-view-model", () => {
         id: "T-2",
         title: "Dep 1",
         status: "completed",
+        isKnown: true,
+        stateLabel: "Resolved",
+        stateDescription: "Dependency completed",
+        isBlocking: false,
       });
       expect(vm.dependencyIndicators[1]).toEqual({
         recordId: "rec-dep2",
         id: "T-3",
         title: "Dep 2",
         status: "in_progress",
+        isKnown: true,
+        stateLabel: "In progress",
+        stateDescription: "Dependency is currently running",
+        isBlocking: true,
       });
     });
 
@@ -132,6 +140,10 @@ describe("task-card-view-model", () => {
         id: "missing-rec-1",
         title: "Unknown Task (missing-rec-1)",
         status: "pending",
+        isKnown: false,
+        stateLabel: "Unknown",
+        stateDescription: "Dependency record is missing",
+        isBlocking: true,
       });
     });
 
@@ -170,6 +182,52 @@ describe("task-card-view-model", () => {
       expect(vm.prUrl).toBe("https://example.test/pull/1");
       expect(vm.liveStartedAt).toBe("2023-10-01T11:58:00Z");
       expect(vm.liveRunningTime).toBe("2m 5s");
+    });
+
+    it("builds accessible labels for dependency, QA, drag, optimistic, and action states", () => {
+      const qaFailed = createMockTask({
+        recordId: "rec-qa",
+        id: "T-QA",
+        title: "Fix review",
+        status: "QA_REVIEW_FAILED",
+      });
+      const codingComplete = createMockTask({
+        recordId: "rec-code",
+        id: "T-CODE",
+        title: "Ready dependency",
+        status: "coding_completed",
+      });
+      const task = createMockTask({
+        dependsOnTaskIds: ["rec-qa", "rec-code"],
+        isOptimistic: true,
+        latestReview: {
+          status: "completed",
+          outcome: "fail",
+          summary: "Needs fixes.",
+          findings: [],
+          reviewer: "QA Bot",
+          finishedAt: "2023-10-01T11:30:00Z",
+        },
+      });
+
+      const vm = buildTaskCardViewModel(task, new Map([
+        ["rec-qa", qaFailed],
+        ["rec-code", codingComplete],
+      ]));
+
+      expect(vm.dependencyActionLabel).toBe("2 dependency blockers");
+      expect(vm.dependencyIndicators.map((dep) => dep.stateLabel)).toEqual(["QA failed", "Ready for QA"]);
+      expect(vm.qaReviewLabel).toBe("QA completed, fail");
+      expect(vm.optimisticSavingLabel).toBe("Saving task changes");
+      expect(vm.dragStateLabel).toBe("Pointer drag disabled while task changes are saving; keyboard reordering is not supported");
+      expect(vm.actions?.find((action) => action.kind === "preview")).toMatchObject({
+        ariaLabel: "Open sprint preview for task T-1: Task 1",
+        href: "/browser?sprintId=sprint-1",
+      });
+      expect(vm.actions?.find((action) => action.kind === "rerun")).toMatchObject({
+        ariaLabel: "Rerun task T-1: Task 1",
+        disabledReason: "Open Live to rerun",
+      });
     });
   });
 });

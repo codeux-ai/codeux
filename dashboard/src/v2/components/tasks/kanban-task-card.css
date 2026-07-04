@@ -30,6 +30,14 @@
   border-color: rgba(0, 224, 160, 0.4);
 }
 
+.kanban-card[data-blocked="true"] {
+  box-shadow: var(--card-shadow-idle, 0 1px 3px rgba(0,0,0,0.08)), inset 0 0 0 1px rgba(245, 158, 11, 0.22);
+}
+
+.kanban-card[data-dragging="true"] {
+  border-color: rgba(0, 224, 160, 0.55);
+}
+
 .kanban-card--dragging {
   opacity: 0.64;
   filter: saturate(0.85);
