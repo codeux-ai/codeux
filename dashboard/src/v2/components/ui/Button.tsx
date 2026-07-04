@@ -64,16 +64,18 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   const fixedWidthRef = useRef<number | null>(null);
   const labelRef = useRef<HTMLSpanElement>(null);
   const spinnerRef = useRef<HTMLDivElement>(null);
+  const lastIdleWidthRef = useRef<number | null>(null);
 
   useMagnetic(buttonRef, contentRef, { enabled: variant === "primary" || variant === "signal" });
 
   useLayoutEffect(() => {
     if (isFeedbackActive && buttonRef.current && fixedWidthRef.current === null) {
-      fixedWidthRef.current = buttonRef.current.offsetWidth;
+      fixedWidthRef.current = lastIdleWidthRef.current || buttonRef.current.offsetWidth;
       buttonRef.current.style.width = `${fixedWidthRef.current}px`;
     } else if (!isFeedbackActive && buttonRef.current) {
       fixedWidthRef.current = null;
       buttonRef.current.style.width = "";
+      lastIdleWidthRef.current = buttonRef.current.offsetWidth;
     }
   }, [isFeedbackActive]);
 
@@ -193,7 +195,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   const variantClasses = VARIANTS[variant];
   const sizeClasses = SIZES[size];
 
-    let overrideClasses = "";
+  let overrideClasses = "";
   if (isSuccess) overrideClasses = "!bg-status-green !text-white !border-status-green ring-2 ring-status-green ring-offset-2 ring-offset-white dark:ring-offset-void-900";
   else if (isError) overrideClasses = "!bg-status-red !text-white !border-transparent";
   if (isPending) overrideClasses += " pointer-events-none";
@@ -202,10 +204,10 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   return (
     <button
       {...props}
-      style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
+      style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease, ...(typeof props.style === "object" ? props.style : {}) }}
       ref={buttonRef}
       onClick={handleClick}
-      disabled={disabled && !isPending}
+      disabled={disabled}
       aria-disabled={disabled || isPending || isAriaDisabled}
       aria-busy={isPending}
       className={`${baseClasses} ${variantClasses} ${sizeClasses} ${overrideClasses} relative overflow-hidden ${className}`}
@@ -230,7 +232,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
         )}
         <div className="relative flex min-w-0 max-w-full items-center justify-center">
           <span ref={labelRef} className="flex min-w-0 max-w-full items-center justify-center gap-2 truncate" style={{ opacity: isPending ? 0 : 1 }}>{children}</span>
-          <div ref={spinnerRef} className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ opacity: isPending ? 1 : 0, transform: isPending ? "scale(1)" : "scale(0.7)" }}>
+          <div ref={spinnerRef} className="absolute inset-0 flex items-center justify-center pointer-events-none text-current" style={{ opacity: isPending ? 1 : 0, transform: isPending ? "scale(1)" : "scale(0.7)" }}>
             <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
           </div>
         </div>

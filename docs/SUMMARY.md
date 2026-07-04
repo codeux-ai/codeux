@@ -53,6 +53,7 @@
 - [Dashboard Accessibility Patterns](./dashboard/dashboard-guide.md#accessibility-patterns)
   - [Dashboard Accessibility Quality Audit](./dashboard/accessibility-quality-audit.md)
   - [Interaction Patterns](./dashboard/interaction-patterns.md)
+- [Shared Primitive Design System](./dashboard/design-system-shared-primitives.md)
 - [Stats & Analytics Design System](./dashboard/design-system-stats.md)
 - [Dashboard Onboarding](./dashboard/onboarding.md)
 - [Project Initialization](./dashboard/project-initialization.md)

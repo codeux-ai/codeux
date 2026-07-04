@@ -25,6 +25,7 @@ export const Input: FunctionComponent<InputProps> = ({
   onBlur,
   onFocusOut,
   onInput,
+  "aria-disabled": ariaDisabled,
   ...props
 }) => {
   const tokens = useInteractionTokens();
@@ -34,6 +35,8 @@ export const Input: FunctionComponent<InputProps> = ({
   const helperId = helperText ? `${generatedId}-helper` : undefined;
   const [touched, setTouched] = useState(false);
   const showError = !!errorText && (touched || !!forceValidation);
+  const isAriaDisabled = ariaDisabled === true || ariaDisabled === "true";
+  const isDisabled = !!disabled || isAriaDisabled;
 
   const [charCount, setCharCount] = useState(() => {
     if (props.value != null) return String(props.value).length;
@@ -48,6 +51,11 @@ export const Input: FunctionComponent<InputProps> = ({
   }, [props.value]);
 
   const handleInput = (e: any) => {
+    if (isDisabled) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     setCharCount(e.currentTarget.value.length);
     if (onInput) {
       onInput(e);
@@ -113,8 +121,9 @@ export const Input: FunctionComponent<InputProps> = ({
         aria-invalid={showError ? "true" : props["aria-invalid"]}
         aria-errormessage={errorMessage}
         aria-describedby={describedBy}
+        aria-disabled={isDisabled}
         style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease, ...(typeof style === "object" ? style : {}) }}
-        disabled={disabled}
+        disabled={isDisabled}
         data-valid={valid ? 'true' : undefined}
         className={`min-w-[220px] rounded-[var(--radius-ui)] border border-[color:var(--border-hairline)] bg-[var(--fill-muted)] hover:bg-[var(--fill-muted-hover)] px-3.5 py-2.5 text-sm text-slate-700 dark:text-slate-200 placeholder-slate-400 transition-colors  motion-reduce:duration-0 motion-reduce:ease-none focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-[var(--fill-muted)] aria-[invalid=true]:border-status-red aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.2)] aria-[invalid=true]:focus-visible:ring-status-red/50 ${className} data-[valid=true]:border-signal-500 data-[valid=true]:bg-signal-500/[0.02] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.2)] dark:data-[valid=true]:bg-signal-500/[0.04] `}
       />
