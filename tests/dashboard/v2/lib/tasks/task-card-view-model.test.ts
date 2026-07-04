@@ -93,6 +93,16 @@ describe("task-card-view-model", () => {
       expect(vm.dependencyIndicators).toEqual([]);
     });
 
+    it("uses the provided timestamp for created-at labels", () => {
+      const task = createMockTask({ createdAt: "2023-10-01T10:00:00Z" });
+      const lookup = new Map<string, Task>();
+      const now = new Date("2023-10-01T12:00:00Z").getTime();
+
+      const vm = buildTaskCardViewModel(task, lookup, undefined, now);
+
+      expect(vm.humanizedCreatedAt).toBe("2h ago");
+    });
+
     it("resolves dependencies from the lookup map", () => {
       const dep1 = createMockTask({ recordId: "rec-dep1", id: "T-2", title: "Dep 1", status: "completed" });
       const dep2 = createMockTask({ recordId: "rec-dep2", id: "T-3", title: "Dep 2", status: "in_progress" });

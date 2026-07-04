@@ -33,7 +33,7 @@ import { useProjectData } from "./context/project-data.js";
 import { useSprints } from "../hooks/useSprints.js";
 import { useProjectTasks } from "./hooks/use-project-tasks.js";
 import { createTask, deleteTask, updateTask } from "./lib/project-api.js";
-import { deriveTaskBoardState, getTaskLane } from "./lib/task-board-state.js";
+import { getTaskLane } from "./lib/task-board-state.js";
 import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "./lib/list-window.js";
 import { ListWindowSelector } from "./components/ui/ListWindowSelector.js";
 import { SkeletonCard, SkeletonLoader } from "./components/layout/SkeletonLoader.js";
@@ -47,10 +47,8 @@ import { Button } from "./components/ui/Button.js";
 import { fetchAgentPresets } from "./lib/agent-preset-api.js";
 import type { AgentPreset } from "./types.js";
 import { STATUS_CFG } from "./lib/tasks-constants.js";
-import { buildTaskCardViewModel } from "./lib/tasks/task-card-view-model.js";
 import { buildTaskBoardViewModel } from "./lib/tasks/task-board-view-model.js";
 import { useDashboardRuntimeData } from "../hooks/use-dashboard-runtime-data.js";
-import { buildLiveTaskEnrichmentMap } from "./lib/tasks/live-task-enrichment.js";
 import { useReducedMotion } from "./hooks/use-reduced-motion.js";
 
 const STATUS_ORDER: TaskStatus[] = ["pending", "in_progress", "coding_completed", "QA_REVIEW_FAILED", "completed"];
@@ -499,6 +497,7 @@ export const TasksPage: FunctionComponent = () => {
   }, [resolvedTaskId, tasks]);
 
   const { boardState, taskViewModels } = useMemo(() => {
+    const now = Date.now();
     return buildTaskBoardViewModel({
       tasks,
       optimisticTasks,
@@ -509,6 +508,7 @@ export const TasksPage: FunctionComponent = () => {
       taskDispatches: execution.taskDispatches,
       recentEvents: execution.recentEvents,
       subtasks: status.subtasks ?? [],
+      now,
     });
   }, [
     tasks,
