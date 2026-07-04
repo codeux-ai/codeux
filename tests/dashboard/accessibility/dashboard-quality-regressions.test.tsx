@@ -557,7 +557,7 @@ describe("dashboard accessibility quality regressions", () => {
     expect(caption).toHaveClass("sr-only");
     const row = screen.getByRole("row", { name: /gpt-5-codex-with-a-long-routing-name/i });
     expect(within(row).getByText("Model")).toHaveClass("lg:hidden");
-    expect(within(row).getByText("Messages")).toHaveClass("lg:hidden");
+    expect(within(row).getByText("Expand")).toHaveClass("lg:hidden");
     expect(collectIconOnlyButtonsWithoutNames(container)).toHaveLength(0);
     expect(collectHorizontalOverflowWithoutBoundary(container)).toHaveLength(0);
   });

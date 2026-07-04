@@ -18,9 +18,11 @@ import type { SystemSort, SystemSortKey } from "../../hooks/use-system-view-data
 import { formatTokens, formatStatsDuration, formatDateTime } from "../../stats-utils.js";
 import { DEFAULT_LIST_WINDOW, resolveListWindow } from "../../../../lib/list-window.js";
 import {
-  LEDGER_ROW_MODERN_CLASS,
+  CONTROL_FOCUS_CLASS,
   CHIP_CLASS,
+  DASHED_EMPTY_CLASS,
   STATUS_TONE_CLASS,
+  SUBPANEL_CLASS,
   TAB_IDLE_CLASS,
   TRACK_CLASS,
   getProviderIcon,
@@ -74,7 +76,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
   onRowExpand,
   loading,
   error,
-  }) => {
+}) => {
   const expandedInvocation = expandedId === null
     ? null
     : invocations.find((invocation) => invocation.id === expandedId) ?? null;
@@ -106,60 +108,57 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
   };
 
   const renderSortIcon = (key: SystemSortKey) => {
-    if (sort.key !== key) return <ArrowUpDown aria-hidden="true" className="ml-1 h-3 w-3" />;
+    if (sort.key !== key) return <ArrowUpDown aria-hidden="true" className="h-3.5 w-3.5" />;
     return sort.dir === "asc" ? (
-      <ArrowUp aria-hidden="true" className="ml-1 h-3 w-3 text-[color:var(--stats-signal-text)]" />
+      <ArrowUp aria-hidden="true" className="h-3.5 w-3.5 text-[color:var(--stats-signal-text)]" />
     ) : (
-      <ArrowDown aria-hidden="true" className="ml-1 h-3 w-3 text-[color:var(--stats-signal-text)]" />
+      <ArrowDown aria-hidden="true" className="h-3.5 w-3.5 text-[color:var(--stats-signal-text)]" />
     );
   };
 
-  const renderStatusChip = (status: string) => {
+  const statusChipClass = `inline-flex max-w-full items-center gap-1.5 rounded-[var(--stats-chip-radius)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.13em] ${CONTROL_FOCUS_CLASS}`;
+  const statusDotClass = "h-1.5 w-1.5 shrink-0 rounded-full";
+
+  const renderStatusChip = (status: ExecutionInvocationRecord["status"]) => {
     switch (status) {
       case "running":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${STATUS_TONE_CLASS.signal}`}>
-            <div className="h-2 w-2 rounded-full bg-[color:var(--stats-signal-text)]" />
-            <Loader2 className="h-3 w-3 animate-spin" />
+          <div className={`${CHIP_CLASS} ${statusChipClass} ${STATUS_TONE_CLASS.signal}`}>
+            <div className={`${statusDotClass} bg-[color:var(--stats-signal-text)]`} />
+            <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" />
             Running
           </div>
         );
       case "completed":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${STATUS_TONE_CLASS.positive}`}>
-            <div className="h-2 w-2 rounded-full bg-[color:var(--stats-positive-text)]" />
-            <CheckCircle2 className="h-3 w-3" />
+          <div className={`${CHIP_CLASS} ${statusChipClass} ${STATUS_TONE_CLASS.positive}`}>
+            <div className={`${statusDotClass} bg-[color:var(--stats-positive-text)]`} />
+            <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5" />
             Completed
           </div>
         );
       case "failed":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${STATUS_TONE_CLASS.negative}`}>
-            <div className="h-2 w-2 rounded-full bg-[color:var(--stats-negative-text)]" />
-            <XCircle className="h-3 w-3" />
+          <div className={`${CHIP_CLASS} ${statusChipClass} ${STATUS_TONE_CLASS.negative}`}>
+            <div className={`${statusDotClass} bg-[color:var(--stats-negative-text)]`} />
+            <XCircle aria-hidden="true" className="h-3.5 w-3.5" />
             Failed
           </div>
         );
       case "cancelled":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${STATUS_TONE_CLASS.neutral}`}>
-            <div className="h-2 w-2 rounded-full bg-[color:var(--stats-detail-color)]" />
-            <MinusCircle className="h-3 w-3" />
+          <div className={`${CHIP_CLASS} ${statusChipClass} ${STATUS_TONE_CLASS.neutral}`}>
+            <div className={`${statusDotClass} bg-[color:var(--stats-detail-color)]`} />
+            <MinusCircle aria-hidden="true" className="h-3.5 w-3.5" />
             Cancelled
           </div>
         );
       case "paused":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${STATUS_TONE_CLASS.warning}`}>
-            <div className="h-2 w-2 rounded-full bg-[color:var(--stats-warning-text)]" />
-            <PauseCircle className="h-3 w-3" />
+          <div className={`${CHIP_CLASS} ${statusChipClass} ${STATUS_TONE_CLASS.warning}`}>
+            <div className={`${statusDotClass} bg-[color:var(--stats-warning-text)]`} />
+            <PauseCircle aria-hidden="true" className="h-3.5 w-3.5" />
             Paused
-          </div>
-        );
-      default:
-        return (
-          <div className={`${CHIP_CLASS} px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--stats-label-color)]`}>
-            {status}
           </div>
         );
     }
@@ -170,15 +169,20 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
     return label.length > 0 ? label : "unknown";
   };
 
-  const cellClass = "block min-w-0 break-words px-3 py-2 align-middle [overflow-wrap:anywhere] lg:table-cell lg:px-2 lg:py-3";
+  const sortButtonClass = `inline-flex min-h-8 items-center gap-1.5 rounded-[var(--stats-control-radius)] px-2.5 py-1.5 transition-[background-color,border-color,color,box-shadow] duration-200 motion-reduce:transition-none ${TAB_IDLE_CLASS} ${CONTROL_FOCUS_CLASS}`;
+  const cellClass = "block min-w-0 break-words px-3 py-2 align-middle [overflow-wrap:anywhere] lg:table-cell lg:border-y lg:border-[color:var(--stats-border-hairline)] lg:bg-[color:var(--stats-surface-panel)] lg:px-3 lg:py-3 lg:group-hover:bg-[color:var(--stats-surface-panel-hover)]";
+  const firstCellClass = "lg:rounded-l-[var(--stats-subpanel-radius)] lg:border-l";
+  const lastCellClass = "lg:rounded-r-[var(--stats-subpanel-radius)] lg:border-r";
   const mobileLabelClass = "mb-1 text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)] lg:hidden";
+  const numericClass = "font-mono text-[11px] tabular-nums text-[color:var(--stats-detail-color)]";
+  const contextChipClass = `${CHIP_CLASS} inline-flex max-w-full items-center rounded-[var(--stats-chip-radius)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[color:var(--stats-label-color)]`;
 
   if (loading) {
     return (
       <div role="status" aria-label="Loading invocations" className="space-y-3">
         <span className="sr-only" aria-live="polite">Loading invocations</span>
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className={`${LEDGER_ROW_MODERN_CLASS} h-20 motion-safe:animate-pulse ${TRACK_CLASS}`} />
+          <div key={i} className={`${SUBPANEL_CLASS} h-14 !p-0 motion-safe:animate-pulse ${TRACK_CLASS}`} />
         ))}
       </div>
     );
@@ -200,7 +204,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
 
   if (invocations.length === 0) {
     return (
-      <div role="status" aria-live="polite" aria-label="Empty invocations table" className="flex flex-col items-center justify-center py-20 text-[color:var(--stats-detail-color)]">
+      <div role="status" aria-live="polite" aria-label="Empty invocations table" className={`${DASHED_EMPTY_CLASS} flex flex-col items-center justify-center py-16`}>
         <AlertTriangle className="mb-4 h-10 w-10 opacity-20" />
         <div className="text-sm font-medium">No invocations match the current filters</div>
       </div>
@@ -209,18 +213,18 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
 
   return (
     <div className="min-w-0 overflow-visible">
-      <table className="block w-full border-separate border-spacing-y-2 lg:table">
+      <table className="block w-full border-separate border-spacing-y-2 lg:table lg:border-spacing-y-1.5">
         <caption className="sr-only">
           Invocation ledger with sortable time, token, and duration columns. Rows include status, type, model, token counts, context, and transcript expansion controls.
         </caption>
-        <thead className="sticky top-0 z-10 hidden bg-[color:var(--stats-surface-panel)] backdrop-blur-sm lg:table-header-group">
-          <tr className="text-left text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">
-            <th id="invocations-time" scope="col" aria-sort={getAriaSort("startedAt")} className="pb-2 pl-6">
+        <thead className="sticky top-0 z-10 hidden bg-[color:var(--stats-surface-panel)] lg:table-header-group">
+          <tr className="text-left text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
+            <th id="invocations-time" scope="col" aria-sort={getAriaSort("startedAt")} className="pb-2 pl-3">
               <button
                 type="button"
                 onClick={() => handleSort("startedAt")}
                 aria-label={getSortButtonLabel("time", "startedAt")}
-                className={`flex items-center ${TAB_IDLE_CLASS}`}
+                className={sortButtonClass}
               >
                 Time {renderSortIcon("startedAt")}
               </button>
@@ -233,7 +237,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                 type="button"
                 onClick={() => handleSort("inputTokens")}
                 aria-label={getSortButtonLabel("input tokens", "inputTokens")}
-                className={`flex items-center ${TAB_IDLE_CLASS}`}
+                className={sortButtonClass}
               >
                 In {renderSortIcon("inputTokens")}
               </button>
@@ -243,7 +247,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                 type="button"
                 onClick={() => handleSort("outputTokens")}
                 aria-label={getSortButtonLabel("output tokens", "outputTokens")}
-                className={`flex items-center ${TAB_IDLE_CLASS}`}
+                className={sortButtonClass}
               >
                 Out {renderSortIcon("outputTokens")}
               </button>
@@ -254,7 +258,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                 type="button"
                 onClick={() => handleSort("totalTokens")}
                 aria-label={getSortButtonLabel("total tokens", "totalTokens")}
-                className={`flex items-center ${TAB_IDLE_CLASS}`}
+                className={sortButtonClass}
               >
                 Total {renderSortIcon("totalTokens")}
               </button>
@@ -264,13 +268,13 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                 type="button"
                 onClick={() => handleSort("durationMs")}
                 aria-label={getSortButtonLabel("average duration", "durationMs")}
-                className={`flex items-center ${TAB_IDLE_CLASS}`}
+                className={sortButtonClass}
               >
                 Avg Duration {renderSortIcon("durationMs")}
               </button>
             </th>
             <th id="invocations-context" scope="col" className="pb-2">Context</th>
-            <th id="invocations-expand" scope="col" className="pb-2 pr-6 text-right">Expand</th>
+            <th id="invocations-expand" scope="col" className="pb-2 pr-3 text-right">Expand</th>
           </tr>
         </thead>
         <tbody className="block lg:table-row-group">
@@ -285,7 +289,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               <Fragment key={invocation.id}>
                 <tr
                   key={invocation.id}
-                  className={`${LEDGER_ROW_MODERN_CLASS} block overflow-hidden lg:table-row ${
+                  className={`${SUBPANEL_CLASS} group block overflow-hidden !p-0 transition-[background-color,border-color,box-shadow] duration-200 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-subpanel-hover)] motion-reduce:transition-none lg:table-row lg:border-0 lg:bg-transparent lg:shadow-none ${
                     invocation.status === "running"
                       ? "border-l-2 border-l-[color:var(--stats-signal-text)]"
                       : invocation.status === "failed"
@@ -293,9 +297,15 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                         : ""
                   }`}
                 >
-                  <td headers="invocations-time" className={`${cellClass} lg:pl-6`}>
+                  <td headers="invocations-time" className={`${cellClass} ${firstCellClass} ${
+                    invocation.status === "running"
+                      ? "lg:border-l-2 lg:border-l-[color:var(--stats-signal-text)]"
+                      : invocation.status === "failed"
+                        ? "lg:border-l-2 lg:border-l-[color:var(--stats-negative-text)]"
+                        : ""
+                  }`}>
                     <div className={mobileLabelClass}>Time</div>
-                    <div className="text-[11px] font-mono text-[color:var(--stats-label-color)]">{formatDateTime(invocation.startedAt)}</div>
+                    <div className="font-mono text-[11px] leading-5 tabular-nums text-[color:var(--stats-label-color)]">{formatDateTime(invocation.startedAt)}</div>
                   </td>
                   <td headers="invocations-status" className={cellClass}>
                     <div className={mobileLabelClass}>Status</div>
@@ -309,42 +319,41 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                   </td>
                   <td headers="invocations-type" className={cellClass}>
                     <div className={mobileLabelClass}>Type</div>
-                    <div className={`${CHIP_CLASS} max-w-full px-2 py-0.5 text-[10px] font-medium capitalize text-[color:var(--stats-detail-color)]`}>
-                      <span className="block truncate">{formatLabel(invocation.type)}</span>
+                    <div className={`${CHIP_CLASS} inline-flex max-w-full rounded-[var(--stats-chip-radius)] px-2 py-0.5 text-[10px] font-bold capitalize tracking-[0.04em] text-[color:var(--stats-detail-color)]`}>
+                      <span className="min-w-0 truncate">{formatLabel(invocation.type)}</span>
                     </div>
                   </td>
                   <td headers="invocations-model" className={cellClass}>
                     <div className={mobileLabelClass}>Model</div>
-                    <div className="flex min-w-0 items-center gap-2 text-[11px] text-[color:var(--stats-detail-color)]">
-                      <div className={`shrink-0 rounded-lg p-1.5 ${providerBg} ${providerText}`}>
-                        <ProviderIcon className="h-3 w-3" strokeWidth={2.5} />
+                    <div className="flex min-w-0 items-center gap-2 rounded-[var(--stats-control-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-chip)] px-2 py-1.5 text-[11px] text-[color:var(--stats-detail-color)]">
+                      <div className={`shrink-0 rounded-[0.65rem] p-1.5 ${providerBg} ${providerText}`}>
+                        <ProviderIcon aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2.5} />
                       </div>
-                      <span className="min-w-0 break-words [overflow-wrap:anywhere]">
-                        <span className="font-bold capitalize text-[color:var(--stats-value-color)]">{formatLabel(invocation.provider)}</span>
-                        <span className="mx-1 text-[color:var(--stats-label-color)]">·</span>
-                        {invocation.model || "—"}
-                      </span>
+                      <div className="min-w-0 leading-4">
+                        <div className="truncate font-bold capitalize text-[color:var(--stats-value-color)]">{formatLabel(invocation.provider)}</div>
+                        <div className="min-w-0 break-words font-mono text-[10px] leading-4 text-[color:var(--stats-detail-color)] [overflow-wrap:anywhere]">{invocation.model || "—"}</div>
+                      </div>
                     </div>
                   </td>
                   <td headers="invocations-input" className={cellClass}>
                     <div className={mobileLabelClass}>In</div>
-                    <div className="text-[11px] text-[color:var(--stats-detail-color)]">{formatTokens(invocation.inputTokens ?? 0)}</div>
+                    <div className={numericClass}>{formatTokens(invocation.inputTokens ?? 0)}</div>
                   </td>
                   <td headers="invocations-output" className={cellClass}>
                     <div className={mobileLabelClass}>Out</div>
-                    <div className="text-[11px] text-[color:var(--stats-detail-color)]">{formatTokens(invocation.outputTokens ?? 0)}</div>
+                    <div className={numericClass}>{formatTokens(invocation.outputTokens ?? 0)}</div>
                   </td>
                   <td headers="invocations-cached" className={cellClass}>
                     <div className={mobileLabelClass}>Cached</div>
-                    <div className="text-[11px] text-[color:var(--stats-detail-color)]">{formatTokens(invocation.cachedInputTokens ?? 0)}</div>
+                    <div className={numericClass}>{formatTokens(invocation.cachedInputTokens ?? 0)}</div>
                   </td>
                   <td headers="invocations-total" className={cellClass}>
                     <div className={mobileLabelClass}>Total</div>
-                    <div className="text-[11px] font-bold text-[color:var(--stats-value-color)]">{formatTokens(invocation.totalTokens ?? 0)}</div>
+                    <div className="font-mono text-[11px] font-bold tabular-nums text-[color:var(--stats-value-color)]">{formatTokens(invocation.totalTokens ?? 0)}</div>
                   </td>
                   <td headers="invocations-duration" className={cellClass}>
                     <div className={mobileLabelClass}>Duration</div>
-                    <div className={`text-[11px] ${invocation.finishedAt ? "text-[color:var(--stats-detail-color)]" : "text-[color:var(--stats-signal-text)]"}`}>
+                    <div className={`font-mono text-[11px] tabular-nums ${invocation.finishedAt ? "text-[color:var(--stats-detail-color)]" : "text-[color:var(--stats-signal-text)]"}`}>
                       {duration}
                     </div>
                   </td>
@@ -352,13 +361,13 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                     <div className={mobileLabelClass}>Context</div>
                     <div className="flex min-w-0 flex-wrap gap-1">
                       {invocation.sprintNumber !== null && invocation.sprintNumber !== undefined ? (
-                        <div className={`${CHIP_CLASS} px-1.5 py-0.5 text-[9px] font-bold text-[color:var(--stats-label-color)]`}>
+                        <div className={contextChipClass}>
                           S{invocation.sprintNumber}
                         </div>
                       ) : null}
                       {invocation.taskKey !== null && invocation.taskKey !== undefined ? (
-                        <div className={`${CHIP_CLASS} px-1.5 py-0.5 text-[9px] font-bold text-[color:var(--stats-label-color)]`}>
-                          {invocation.taskKey}
+                        <div className={contextChipClass}>
+                          <span className="min-w-0 break-words [overflow-wrap:anywhere]">{invocation.taskKey}</span>
                         </div>
                       ) : null}
                       {invocation.sprintNumber == null && invocation.taskKey == null ? (
@@ -366,19 +375,19 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                       ) : null}
                     </div>
                   </td>
-                  <td headers="invocations-expand" className={`${cellClass} lg:pr-6 lg:text-right`}>
-                    <div className={mobileLabelClass}>Messages</div>
+                  <td headers="invocations-expand" className={`${cellClass} ${lastCellClass} lg:pr-3 lg:text-right`}>
+                    <div className={mobileLabelClass}>Expand</div>
                     <button
                       type="button"
                       onClick={() => onRowExpand(isExpanded ? null : invocation.id)}
                       aria-expanded={isExpanded}
                       aria-controls={`invocation-messages-${invocation.id}`}
                       aria-label={isExpanded ? `Collapse invocation ${invocation.id}` : `Expand invocation ${invocation.id}`}
-                      className={`rounded-full p-2 transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--stats-focus-ring)] ${
+                      className={`inline-flex h-8 w-8 items-center justify-center rounded-[var(--stats-chip-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-chip)] transition-[background-color,border-color,color,box-shadow] duration-200 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-chip-hover)] motion-reduce:transition-none ${CONTROL_FOCUS_CLASS} ${
                         isExpanded ? "text-[color:var(--stats-signal-text)]" : "text-[color:var(--stats-label-color)]"
                       }`}
                     >
-                      {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      {isExpanded ? <ChevronDown aria-hidden="true" className="h-4 w-4" /> : <ChevronRight aria-hidden="true" className="h-4 w-4" />}
                     </button>
                   </td>
                 </tr>
@@ -401,7 +410,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
           <button
             type="button"
             onClick={revealMore}
-            className="rounded-full bg-[color:var(--stats-surface-chip)] px-4 py-2 text-xs font-bold text-[color:var(--stats-detail-color)] transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--stats-focus-ring)]"
+            className={`${CHIP_CLASS} rounded-[var(--stats-chip-radius)] px-4 py-2 text-xs font-bold text-[color:var(--stats-detail-color)] transition-colors hover:bg-[color:var(--stats-surface-chip-hover)] ${CONTROL_FOCUS_CLASS}`}
           >
             Show more invocations
           </button>
