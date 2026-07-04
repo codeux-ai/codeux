@@ -10,11 +10,12 @@ Database maintenance runs automatically during normal startup. Operators can exp
 - `dbRetentionDays`: Bounded to a safe range (1-3650 days). Negative or zero values will be clamped.
 - Startup logs will show a structured result detailing counts of pruned elements, failed vacuums, and WAL checkpoint failures (`checkpointFailures`). WAL checkpoint failures are non-fatal, busy checkpoints are safe to retry later.
 
-1. Confirm API key source is available (recommended, but startup is allowed without key).
-2. Start server (`npm run dev` or `npm start`).
-   - `npm run dev` runs the TypeScript entrypoint through Node's `ts-node` ESM register hook.
+1. Confirm provider credentials or host login state are available when the selected provider requires them. Startup is allowed without provider keys so settings can be completed from the dashboard.
+2. Start the server from source with `pnpm run dev`, or start the compiled build with `pnpm start` after `pnpm run build`.
+   - `pnpm run dev` runs the TypeScript entrypoint through the repository development script.
+   - `pnpm start` runs `node dist/index.js`.
 3. Open dashboard and verify settings.
-4. Confirm `/api/status` and `/api/git-status` are responding.
+4. Confirm `/health`, `/api/status`, and `/api/git-status` are responding.
 
 If started without key:
 - Configure `JULES_API_KEY` in `.env`, or `julesApiKey` in `.jules-subagents/settings.json`, or set it in dashboard settings.
@@ -55,6 +56,7 @@ Checks:
 - Is server process running?
 - Is configured dashboard port free?
 - Any startup warning for `EADDRINUSE`?
+- Does `curl http://localhost:4444/health` return a liveness response? Playwright uses `/health` for startup because `/ready` requires project live-status state in a clean checkout.
 
 ### 1a. Dashboard loads slowly or live view feels stale during a sprint
 Checks:
@@ -70,6 +72,7 @@ Checks:
 - `/api/system/update-status` reports the running Code UX version plus the latest published npm version. It caches the npm lookup briefly, so repeated dashboard refreshes should not hammer the registry, and the dashboard logs a single startup notice when a newer release is available.
 - The dashboard title bar shows a small "Update available" badge next to the version label whenever `/api/system/update-status` reports a newer published version. If the badge is missing, the check either found no newer release or the lookup failed and was suppressed.
 - If the dashboard still degrades under load, inspect `runtime.debugLogFileLevel`; file logging defaults to `error` and uses async streams, but sustained log volume is still a useful signal that a hot loop is too noisy.
+- For request-level traceability, send or copy the `x-correlation-id` response header and search structured logs by `correlationId`. Dashboard request logs are normally hidden in `standard` console mode but can be enabled with `full` console visibility.
 
 ### 2. No PR/CI data in remote mode
 Checks:
@@ -198,6 +201,7 @@ Checks:
 - For tasks showing `QA_PENDING` with a `running` `qa_review_runs` row but no matching provider container, check the latest `qa_review` row in `execution_invocations`. Code UX now fails stale running QA rows automatically when the invocation never linked provider runtime or when its Docker-backed `provider_invocations.session_id` is absent from running `code-ux.session-id` container labels; the next cycle should enqueue a fresh QA review.
 - For Jules-backed tasks stuck in `RUNNING`, compare the recorded task session with the live Jules API. If the session is absent from both the list snapshot and a direct `getSession` lookup returns not found, session sync now fails the stale provider/execution/task-run rows and requeues the task when failed-task retry is enabled.
 - If provider concurrency repeatedly logs that the cap is reached but no provider containers are running, inspect `provider_invocations` for old `status = running` rows. Code UX now reconciles stale rows via a shared recovery helper during provider slot waits and startup so orphaned provider slots are failed and new work can claim the slot. Recovery waits for linked execution activity to go idle, so a newly claimed provider slot is not failed merely because its container has not appeared yet.
+- Provider invocation diagnostics are split between `provider_invocations` rows for status, duration, token, model, and execution metadata, and `execution_invocation_messages` rows for replayable prompt/transcript/tool/failure content. Inspect both when investigating missing telemetry or transcript rendering.
 
 ### 8. Tasks completed but pipeline not progressing
 Checks:
@@ -278,6 +282,11 @@ Failure Modes & Rollback Notes:
   4. If exposing Code UX to the network is required, **front it with a reverse proxy** (e.g., Nginx, Traefik, Caddy) that enforces authentication (such as Basic Auth, mTLS, or an OAuth proxy).
   5. For the MCP HTTP gateway, ensure `--mcp-http-auth-token` is configured when binding beyond loopback.
 
+Validation:
+- Run `pnpm run audit` before release or deployment validation; CI enforces `pnpm audit --audit-level=high`.
+- Review logs and invocation messages for redaction before sharing diagnostics. Provider output, environment-style tokens, authorization headers, auth paths, and credential-bearing URLs should be represented as `[REDACTED]`.
+- Keep dashboard and MCP listeners on loopback unless an authenticated reverse proxy or MCP HTTP token is in place.
+
 ### Subprocess Execution Limits
 
 Subprocess execution restricts accumulated `stdout` (default 5MB) and `stderr` (default 4KB) memory growth by slicing long outputs and prepending `"..."`. Streaming callbacks (e.g., `onStdoutLine`, `onStderrLine`) still process the full, untruncated line output regardless of this cap, avoiding memory bloat while preserving line-by-line inspection. These bounds can be overridden via `maxStdoutChars` and `maxStderrChars` in command options.
@@ -285,11 +294,20 @@ Subprocess execution restricts accumulated `stdout` (default 5MB) and `stderr` (
 ## Useful Commands
 
 ```bash
-pnpm test
+pnpm run lint
+pnpm run test:backend
+pnpm run test:dashboard
+pnpm run test:backend:coverage
 pnpm run build
+pnpm run ci
+pnpm exec playwright test
+pnpm run audit
+curl http://localhost:4444/health
 curl http://localhost:4444/api/status
 curl http://localhost:4444/api/git-status
 ```
+
+Local CI runs `pnpm run audit`, `pnpm run lint`, `pnpm run test:backend:coverage`, `pnpm run test:dashboard`, and `pnpm run build`. The Playwright workflow is separate, targets `dev` and `main` pushes and pull requests, cancels superseded runs for the same branch or PR, builds first, installs Chromium, and starts `node dist/index.js` against `/health`.
 
 ## Escalation Notes
 
