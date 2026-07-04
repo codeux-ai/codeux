@@ -194,17 +194,17 @@ describe("InvocationsTable", () => {
     );
     const root = container as HTMLElement;
 
-    expect(within(root).getByText("Loading messages")).toBeTruthy();
+    expect(within(root).getByRole("status", { name: "Loading transcript messages" })).toBeTruthy();
     await waitFor(() => {
-      expect(within(root).getByText("No messages recorded for this invocation")).toBeTruthy();
+      expect(within(root).getByRole("status", { name: "No transcript messages" })).toBeTruthy();
     });
 
     fireEvent.click(within(root).getAllByRole("button", { name: "Collapse invocation inv-expand" })[0]);
     expect(onRowExpand).toHaveBeenCalledWith(null);
   });
 
-  it("renders the empty state and loading skeletons", () => {
-    const { rerender, container } = render(
+  it("renders the empty state and loading skeletons with polite status semantics", () => {
+    const { rerender } = render(
       <InvocationsTable
         invocations={[]}
         sort={{ key: "startedAt", dir: "desc" }}
@@ -214,7 +214,9 @@ describe("InvocationsTable", () => {
       />,
     );
 
-    expect(screen.getByText("No invocations match the current filters")).toBeTruthy();
+    expect(screen.getByRole("status", { name: "No invocation records" })).toBeTruthy();
+    expect(screen.getByText("No invocation records to show")).toBeTruthy();
+    expect(screen.getByText("No records match the current filters or record view.")).toBeTruthy();
 
     rerender(
       <InvocationsTable
@@ -227,7 +229,25 @@ describe("InvocationsTable", () => {
       />,
     );
 
-    expect(container.querySelectorAll(".motion-safe\\:animate-pulse").length).toBe(6);
-    expect(container.querySelectorAll(".stats-surface-subpanel").length).toBe(6);
+    expect(screen.getByRole("status", { name: "Loading invocation records" })).toBeTruthy();
+    expect(screen.getByText("Loading invocation records")).toBeTruthy();
+    expect(screen.getByText("Refreshing the ledger rows and transcript expansion targets.")).toBeTruthy();
+  });
+
+  it("renders blocking load failures as named alerts", () => {
+    render(
+      <InvocationsTable
+        invocations={[]}
+        sort={{ key: "startedAt", dir: "desc" }}
+        onSortChange={vi.fn()}
+        expandedId={null}
+        onRowExpand={vi.fn()}
+        error="network down"
+      />,
+    );
+
+    expect(screen.getByRole("alert", { name: "Invocation records failed to load" })).toBeTruthy();
+    expect(screen.getByText("Failed to load invocation records")).toBeTruthy();
+    expect(screen.getByText("network down")).toBeTruthy();
   });
 });

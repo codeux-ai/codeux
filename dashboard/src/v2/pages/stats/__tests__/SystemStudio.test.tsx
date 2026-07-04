@@ -105,7 +105,7 @@ describe("SystemStudio", () => {
     expect(container.textContent).toContain("9m 0s");
     expect(container.textContent).toContain("Showing 2 of 2");
     expect(screen.getByText("Rate limited")).toBeTruthy();
-    expect(screen.queryByText("Loading messages")).toBeNull();
+    expect(screen.queryByRole("status", { name: "Loading transcript messages" })).toBeNull();
 
     expect(container.textContent).toContain("Sprint Overview");
     expect(container.textContent).toContain("Status Distribution");
@@ -172,15 +172,17 @@ describe("SystemStudio", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: "Expand invocation inv-running" })[0]);
 
-    expect(screen.getByText("Loading messages")).toBeTruthy();
+    expect(screen.getByRole("status", { name: "Loading transcript messages" })).toBeTruthy();
+    expect(screen.getByText("Fetching the recorded message list for this invocation.")).toBeTruthy();
     await waitFor(() => {
-      expect(screen.getByText("No messages recorded for this invocation")).toBeTruthy();
+      expect(screen.getByRole("status", { name: "No transcript messages" })).toBeTruthy();
+      expect(screen.getByText("No transcript messages recorded")).toBeTruthy();
     });
     expect(container.querySelectorAll("tbody > tr").length).toBe(2);
 
     fireEvent.click(screen.getAllByRole("button", { name: "Collapse invocation inv-running" })[0]);
 
-    expect(screen.queryByText("No messages recorded for this invocation")).toBeNull();
+    expect(screen.queryByRole("status", { name: "No transcript messages" })).toBeNull();
     expect(container.querySelectorAll("tbody > tr").length).toBe(1);
   });
 
@@ -190,7 +192,26 @@ describe("SystemStudio", () => {
     render(<SystemStudio projectId="project-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText("Failed to load invocations — boom")).toBeTruthy();
+      expect(screen.getByRole("alert", { name: "Invocation load failed" })).toBeTruthy();
+      expect(screen.getByText("Failed to load invocations")).toBeTruthy();
+      expect(screen.getAllByText("boom").length).toBeGreaterThan(0);
     });
+  });
+
+  it("uses polite feedback states for reduced system summary data", async () => {
+    (mockedFetchProjectInvocations as any).mockResolvedValue([]);
+
+    render(<SystemStudio projectId="project-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("status", { name: "Invocation health reduced data" })).toBeTruthy();
+    });
+
+    expect(screen.getByText("Invocation health needs records")).toBeTruthy();
+    expect(screen.getByRole("status", { name: "No external API activity" })).toBeTruthy();
+    expect(screen.getByText("No external API activity classified")).toBeTruthy();
+    expect(screen.getByRole("status", { name: "No error categories" })).toBeTruthy();
+    expect(screen.getByText("No error categories classified")).toBeTruthy();
+    expect(screen.getByRole("status", { name: "No invocation records" })).toBeTruthy();
   });
 });

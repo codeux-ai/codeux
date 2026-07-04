@@ -9,6 +9,9 @@ import {
   MessageSquare,
   Settings,
   User,
+  AlertTriangle,
+  Inbox,
+  type LucideIcon,
 } from "lucide-preact";
 import type { ExecutionInvocationMessageRecord, ExecutionInvocationRecord } from "../../../../types.js";
 import { fetchInvocationMessages } from "../../../../lib/invocation-api.js";
@@ -36,6 +39,32 @@ const ROLE_ICON_CLASS: Record<ExecutionInvocationMessageRecord["role"], string> 
 const SUMMARY_ITEM_CLASS = `${CHIP_CLASS} flex min-w-0 items-center gap-2 px-3 py-2`;
 const SUMMARY_LABEL_CLASS = "shrink-0 text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]";
 const SUMMARY_VALUE_CLASS = "min-w-0 truncate text-xs font-semibold text-[color:var(--stats-value-color)]";
+
+const SystemFeedbackState: FunctionComponent<{
+  icon: LucideIcon;
+  title: string;
+  detail: string;
+  role: "status" | "alert";
+  ariaLabel: string;
+  tone?: keyof typeof STATUS_TONE_CLASS;
+  busy?: boolean;
+}> = ({ icon: Icon, title, detail, role, ariaLabel, tone = "neutral", busy }) => (
+  <div
+    role={role}
+    aria-label={ariaLabel}
+    aria-live={role === "status" ? "polite" : undefined}
+    aria-busy={busy ? "true" : undefined}
+    className={`${SUBPANEL_CLASS} flex min-w-0 items-start gap-3 px-3 py-3 text-sm`}
+  >
+    <div className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--stats-chip-radius)] ${STATUS_TONE_CLASS[tone]}`}>
+      <Icon className={busy ? "h-4 w-4 motion-safe:animate-spin" : "h-4 w-4"} strokeWidth={2.2} aria-hidden="true" />
+    </div>
+    <div className="min-w-0">
+      <div className="font-bold text-[color:var(--stats-value-color)]">{title}</div>
+      <div className="mt-1 break-words leading-relaxed text-[color:var(--stats-detail-color)] [overflow-wrap:anywhere]">{detail}</div>
+    </div>
+  </div>
+);
 
 function formatRoleLabel(message: ExecutionInvocationMessageRecord, invocation: ExecutionInvocationRecord): string {
   if (message.role === "assistant") {
@@ -273,19 +302,32 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
       </div>
 
       {loading ? (
-        <div role="status" aria-live="polite" aria-busy="true" className={`${SUBPANEL_CLASS} flex items-center gap-2 px-3 py-3 text-sm text-[color:var(--stats-label-color)]`}>
-          <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden="true" />
-          Loading messages
-        </div>
+        <SystemFeedbackState
+          icon={Loader2}
+          title="Loading transcript messages"
+          detail="Fetching the recorded message list for this invocation."
+          role="status"
+          ariaLabel="Loading transcript messages"
+          tone="signal"
+          busy
+        />
       ) : error ? (
-        <div role="alert" className={`rounded-[var(--stats-subpanel-radius)] border px-3 py-3 text-sm ${STATUS_TONE_CLASS.negative}`}>
-          <div className="font-bold">Failed to load invocation messages</div>
-          <div className="mt-1 break-words [overflow-wrap:anywhere]">{error}</div>
-        </div>
+        <SystemFeedbackState
+          icon={AlertTriangle}
+          title="Failed to load invocation messages"
+          detail={error}
+          role="alert"
+          ariaLabel="Transcript messages failed to load"
+          tone="negative"
+        />
       ) : messages.length === 0 ? (
-        <div role="status" aria-live="polite" className={`${SUBPANEL_CLASS} px-3 py-4 text-sm text-[color:var(--stats-label-color)]`}>
-          No messages recorded for this invocation
-        </div>
+        <SystemFeedbackState
+          icon={Inbox}
+          title="No transcript messages recorded"
+          detail="This invocation has no stored message records to inspect."
+          role="status"
+          ariaLabel="No transcript messages"
+        />
       ) : (
         <div className="space-y-3">
           {visibleMessages.map((message, index) => {

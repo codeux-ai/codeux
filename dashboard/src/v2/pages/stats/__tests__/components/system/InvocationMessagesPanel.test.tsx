@@ -106,7 +106,8 @@ describe("InvocationMessagesPanel", () => {
     render(<InvocationMessagesPanel invocation={createInvocation()} />);
 
     expect(screen.getByRole("region", { name: "Invocation inv-1 message transcript" }).getAttribute("aria-busy")).toBe("true");
-    expect(screen.getByRole("status").textContent).toContain("Loading messages");
+    expect(screen.getByRole("status", { name: "Loading transcript messages" })).toBeTruthy();
+    expect(screen.getByText("Fetching the recorded message list for this invocation.")).toBeTruthy();
 
     await waitFor(() => {
       expect(screen.getByText("gemini-2.0-flash")).toBeTruthy();
@@ -151,7 +152,7 @@ describe("InvocationMessagesPanel", () => {
     render(<InvocationMessagesPanel invocation={createInvocation()} />);
 
     await waitFor(() => {
-      const alert = screen.getByRole("alert");
+      const alert = screen.getByRole("alert", { name: "Transcript messages failed to load" });
       expect(alert.textContent).toContain("Failed to load invocation messages");
       expect(alert.textContent).toContain("network down");
     });
@@ -163,9 +164,11 @@ describe("InvocationMessagesPanel", () => {
     render(<InvocationMessagesPanel invocation={createInvocation({ lastErrorMessage: "Provider failed\nwith quota error" })} />);
 
     await waitFor(() => {
-      expect(screen.getByRole("status").textContent).toContain("No messages recorded for this invocation");
+      expect(screen.getByRole("status", { name: "No transcript messages" })).toBeTruthy();
     });
 
+    expect(screen.getByText("No transcript messages recorded")).toBeTruthy();
+    expect(screen.getByText("This invocation has no stored message records to inspect.")).toBeTruthy();
     expect(screen.getByText("Error Summary")).toBeTruthy();
     fireEvent.click(screen.getByText("Error Summary"));
     expect(screen.getByText(/Provider failed/).textContent).toContain("with quota error");
