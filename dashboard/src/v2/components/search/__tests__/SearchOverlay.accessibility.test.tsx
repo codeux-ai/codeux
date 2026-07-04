@@ -155,6 +155,7 @@ describe("SearchOverlay Accessibility", () => {
         // Press down
         await user.keyboard("{ArrowDown}");
         expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-spr-1");
+        expect(screen.getByRole("option", { name: "sprints result: Sprint 1", hidden: true })).toHaveAttribute("aria-selected", "true");
 
         // Press down again
         await user.keyboard("{ArrowDown}");
@@ -249,5 +250,25 @@ describe("SearchOverlay Accessibility", () => {
         const dialog = screen.getByRole("dialog", { hidden: true });
         expect(dialog).toHaveClass("max-w-[calc(100vw-2rem)]");
         expect(dialog).toHaveClass("max-h-[calc(100dvh-2rem)]");
+    });
+
+    it("uses a polite no-results state that wraps long queries", () => {
+        render(
+            <SearchOverlay
+                isOpen={true}
+                onClose={mockOnClose}
+                searchQuery="very long missing project and sprint name"
+                onSearchChange={mockOnSearchChange}
+                results={{ sprints: [], tasks: [], agents: [], containers: [] }}
+            />
+        );
+
+        const emptyState = screen.getAllByRole("status", { hidden: true })
+            .find((element) => element.textContent?.includes("Try adjusting your search terms"));
+        expect(emptyState).toBeDefined();
+        expect(emptyState?.getAttribute("aria-live")).toBe("polite");
+        const visibleMessage = screen.getAllByText("No results found for 'very long missing project and sprint name'")
+            .find((element) => element.tagName.toLowerCase() === "span");
+        expect(visibleMessage?.className).toContain("break-words");
     });
 });

@@ -20,11 +20,11 @@ interface ActionFeedbackRegionProps {
   clearError?: () => void;
 }
 
-const statusConfig: Record<Exclude<ActionFeedbackStatus, "idle">, { icon: FunctionComponent<any>, colors: string, progressColors: string }> = {
-  pending: { icon: Loader2, colors: "text-signal-700 border-black/[0.08] dark:border-white/[0.08] dark:text-signal-400", progressColors: "bg-signal-500" },
-  success: { icon: CheckCircle, colors: "text-status-green border-black/[0.08] dark:border-white/[0.08]", progressColors: "bg-status-green" },
-  warning: { icon: AlertTriangle, colors: "text-status-amber border-black/[0.08] dark:border-white/[0.08]", progressColors: "bg-status-amber" },
-  error: { icon: XCircle, colors: "text-status-red border-black/[0.08] dark:border-white/[0.08]", progressColors: "bg-status-red" },
+const statusConfig: Record<Exclude<ActionFeedbackStatus, "idle">, { icon: FunctionComponent<any>, colors: string, iconSurface: string, progressColors: string }> = {
+  pending: { icon: Loader2, colors: "text-signal-700 border-signal-500/20 dark:text-signal-400", iconSurface: "bg-signal-500/10 border-signal-500/20", progressColors: "bg-signal-500" },
+  success: { icon: CheckCircle, colors: "text-status-green border-status-green/20", iconSurface: "bg-status-green/10 border-status-green/20", progressColors: "bg-status-green" },
+  warning: { icon: AlertTriangle, colors: "text-status-amber border-status-amber/25", iconSurface: "bg-status-amber/10 border-status-amber/25", progressColors: "bg-status-amber" },
+  error: { icon: XCircle, colors: "text-status-red border-status-red/25", iconSurface: "bg-status-red/10 border-status-red/25", progressColors: "bg-status-red" },
 };
 
 export function ActionFeedbackRegion({ status, message, onDismiss, className = "", autoDismissMs = 5000, autoDismiss, retryAction, retryLabel, progress, clearError }: ActionFeedbackRegionProps) {
@@ -162,35 +162,37 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
     <div
       ref={containerRef}
       role={isError ? "alert" : "status"}
-      aria-live={displayedStatus === "error" ? "assertive" : displayedStatus === "pending" ? "polite" : "off"}
+      aria-live={displayedStatus === "error" ? "assertive" : "polite"}
       aria-atomic="true"
       aria-busy={displayedStatus === "pending" ? "true" : undefined}
-      className={`relative overflow-hidden flex items-start gap-3 p-3 rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.2)] border ${config.colors} bg-white dark:bg-void-800 ${className}`}
+      className={`relative flex items-start gap-3 overflow-hidden rounded-2xl border bg-white p-3 shadow-[0_16px_36px_rgba(15,23,42,0.10)] dark:bg-void-800 dark:shadow-[0_16px_36px_rgba(0,0,0,0.34)] ${config.colors} ${className}`}
     >
-      <Icon key={displayedStatus} className={`w-5 h-5 shrink-0 ${displayedStatus === "pending" ? "animate-spin" : ""} motion-safe:animate-[icon-pop_0.18s_ease-out] motion-reduce:animate-none`} />
-      <div className="flex-1 text-sm font-medium mt-0.5 relative">
-        <div ref={messageRef}>
+      <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border ${config.iconSurface}`}>
+        <Icon key={displayedStatus} className={`h-4 w-4 ${displayedStatus === "pending" ? "motion-safe:animate-spin" : ""} motion-safe:animate-[icon-pop_0.18s_ease-out] motion-reduce:animate-none`} />
+      </div>
+      <div className="relative mt-0.5 min-w-0 flex-1 text-sm font-medium">
+        <div ref={messageRef} className="break-words leading-relaxed text-slate-700 dark:text-slate-200">
           <span className="sr-only">{displayedStatus}</span>
           {displayedMessage}
         </div>
       </div>
-      <div className="shrink-0 flex items-center gap-1">
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
         {retryAction && (
           <button
             ref={retryRef}
             type="button"
             onClick={retryAction}
             aria-label={retryLabel || "Retry"}
-            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md bg-white/50 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-black/40 border border-black/5 dark:border-white/5 transition-colors"
+            className="flex min-h-8 items-center gap-1.5 rounded-lg border border-black/[0.08] bg-white/70 px-2.5 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.08] dark:bg-black/20 dark:text-slate-200 dark:hover:bg-black/40"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             {retryLabel || "Retry"}
           </button>
         )}
         {displayedStatus === "error" && clearError ? (
-          <div role="alert" className="ml-auto flex items-center gap-2 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 px-3 py-1 text-xs font-medium">
+          <div role="alert" className="ml-auto flex min-h-8 items-center gap-2 rounded-lg border border-status-red/20 bg-status-red/10 px-3 py-1 text-xs font-medium text-status-red">
             Failed
-            <button aria-label="Clear error" onClick={clearError}>×</button>
+            <button className="rounded p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red/40" aria-label="Clear error" onClick={clearError}>×</button>
           </div>
         ) : onDismiss && (
           <button
@@ -210,7 +212,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
               }
               onDismiss?.();
             }}
-            className="p-1 rounded-md opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+            className="rounded-lg p-1.5 opacity-70 transition-colors hover:bg-black/5 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:hover:bg-white/10"
             aria-label="Dismiss"
           >
             <X className="w-4 h-4" />

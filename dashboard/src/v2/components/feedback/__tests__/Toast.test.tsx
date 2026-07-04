@@ -30,6 +30,8 @@ const TestComponent = () => {
     <div>
       <button onClick={() => addToast({ type: "error", message: "Error msg", action: { label: "Retry", onClick: () => {} } })}>Add Error</button>
       <button onClick={() => addToast({ type: "success", message: "Success msg" })}>Add Success</button>
+      <button onClick={() => addToast({ type: "info", message: "Info msg" })}>Add Info</button>
+      <button onClick={() => addToast({ type: "warning", message: "Warning msg" })}>Add Warning</button>
     </div>
   );
 };
@@ -118,5 +120,26 @@ describe("Toast System", () => {
     fireEvent.click(dismissBtn);
 
     expect(document.activeElement).not.toBe(dismissBtn);
+  });
+
+  it("stacks at most three non-error toasts while keeping errors assertive", async () => {
+    render(
+      <ToastProvider>
+        <TestComponent />
+      </ToastProvider>
+    );
+
+    fireEvent.click(screen.getByText("Add Success"));
+    fireEvent.click(screen.getByText("Add Info"));
+    fireEvent.click(screen.getByText("Add Warning"));
+    fireEvent.click(screen.getByText("Add Success"));
+    fireEvent.click(screen.getByText("Add Error"));
+
+    await waitFor(() => {
+      const visibleToasts = Array.from(document.querySelectorAll("div.pointer-events-auto p"));
+      const nonErrorToasts = visibleToasts.filter((node) => node.textContent !== "Error msg");
+      expect(nonErrorToasts).toHaveLength(3);
+      expect(screen.getAllByText("Error msg").length).toBeGreaterThan(0);
+    });
   });
 });

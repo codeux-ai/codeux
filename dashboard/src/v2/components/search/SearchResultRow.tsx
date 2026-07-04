@@ -126,19 +126,19 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
             role="option"
             aria-selected={isFocused}
             style={{ transitionDuration, transitionTimingFunction }}
-            className={`group relative flex items-center justify-between w-full text-left px-4 py-3 rounded-[1.25rem] transition-all overflow-hidden ${
+            className={`group relative flex w-full items-center justify-between overflow-hidden rounded-xl border px-3 py-3 text-left transition-all sm:px-4 ${
                 isFocused
-                    ? 'bg-signal-500/8 dark:bg-signal-500/10 border-signal-500/20 shadow-[0_0_20px_rgba(0,224,160,0.08)] backdrop-blur-2xl'
-                    : 'bg-white/50 dark:bg-void-800/40 hover:bg-white/80 dark:hover:bg-void-700/60 border-black/5 dark:border-white/5 backdrop-blur-xl'
-            } border aria-disabled:opacity-50 aria-disabled:pointer-events-none`}
+                    ? 'border-signal-500/25 bg-signal-500/10 shadow-[0_0_20px_rgba(0,224,160,0.08)] dark:bg-signal-500/10'
+                    : 'border-black/[0.06] bg-white/70 hover:bg-black/[0.025] dark:border-white/[0.08] dark:bg-white/[0.035] dark:hover:bg-white/[0.06]'
+            } aria-disabled:pointer-events-none aria-disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50`}
         >
             {/* Hover/Focus Background Glow */}
             {isFocused && (
-                <div className="absolute inset-0 bg-gradient-to-r from-signal-500/5 to-transparent pointer-events-none" />
+                <div className="pointer-events-none absolute inset-y-0 left-0 w-1 bg-signal-500" />
             )}
 
-            <div className="flex items-center gap-4 relative z-10 w-full overflow-hidden">
-                <div className={`p-2 rounded-xl transition-colors duration-200 shrink-0 ${
+            <div className="relative z-10 flex w-full items-center gap-3 overflow-hidden sm:gap-4">
+                <div className={`shrink-0 rounded-xl p-2 transition-colors duration-200 ${
                     isFocused ? 'bg-signal-500/15 text-signal-500' : 'bg-black/5 dark:bg-white/5 text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200'
                 }`}>
                     {item.avatarConfig ? (
@@ -150,19 +150,19 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
                     )}
                 </div>
 
-                <div className="flex flex-col min-w-0 flex-1 gap-0.5">
-                    <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-semibold text-slate-400 dark:text-slate-500 shrink-0">
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <span className="shrink-0 font-mono text-xs font-semibold text-slate-400 dark:text-slate-500">
                             {itemId}
                         </span>
-                        <span className={`font-semibold break-words whitespace-normal transition-colors duration-200 ${
+                        <span className={`min-w-0 break-words text-sm font-semibold leading-snug transition-colors duration-200 sm:text-[15px] ${
                             isFocused ? 'text-signal-600 dark:text-signal-400' : 'text-slate-800 dark:text-slate-200 group-hover:text-slate-900 dark:group-hover:text-white'
                         }`}>
                             {renderTitle()}
                         </span>
                     </div>
 
-                    <div className="flex items-center gap-2 mt-0.5">
+                    <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-2">
                         {showDot && (
                             <span className="relative flex h-2 w-2 shrink-0">
                                 <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${dotColorClass} ${dotColorClass.includes('animate-pulse') ? 'animate-ping' : ''}`}></span>
@@ -170,19 +170,19 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
                             </span>
                         )}
                         {badgeText && !showDot && (
-                            <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest rounded-full ${badgeColorClass} border border-black/5 dark:border-white/5 shrink-0`}>
+                            <span className={`shrink-0 rounded-full border border-black/[0.06] px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest dark:border-white/[0.08] ${badgeColorClass}`}>
                                 {badgeText}
                             </span>
                         )}
                         {showDot && badgeText && (
-                            <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                            <span className="min-w-0 break-words text-[10px] font-medium text-slate-500 dark:text-slate-400">
                                 {badgeText}
                             </span>
                         )}
                     </div>
                 </div>
 
-                <div className={`shrink-0 transition-all duration-300 ${
+                <div className={`hidden shrink-0 transition-all duration-300 sm:block ${
                     isFocused ? 'opacity-100 translate-x-0 text-signal-500' : 'opacity-0 -translate-x-2 text-slate-400'
                 }`}>
                     <ArrowRight className="w-5 h-5" strokeWidth={2} />

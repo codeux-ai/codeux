@@ -66,8 +66,10 @@ export const Dialog: FunctionComponent<DialogProps> = ({
 
   if (!shouldRender) return null;
 
+  const surfaceClassName = "relative z-50 bg-white dark:bg-void-800 rounded-2xl shadow-[0_24px_80px_rgba(15,23,42,0.22)] dark:shadow-[0_28px_90px_rgba(0,0,0,0.56)] border border-black/[0.08] dark:border-white/[0.08] outline-none max-w-[calc(100vw-2rem)] max-h-[min(calc(100dvh-2rem),85vh)] overflow-y-auto overscroll-contain";
+
   return (
-    <Overlay isOpen={isOpen} onClose={disableBackdropClick ? undefined : onClose} blur className="!items-end sm:!items-center pb-4 sm:pb-0">
+    <Overlay isOpen={isOpen} onClose={disableBackdropClick ? undefined : onClose} blur className="!items-end sm:!items-center p-4 sm:p-6">
       <div
         ref={trapRef}
         role="dialog"
@@ -77,7 +79,7 @@ export const Dialog: FunctionComponent<DialogProps> = ({
         aria-describedby={ariaDescribedBy || ariaDescribedby || undefined}
         tabIndex={-1}
         inert={!isOpen ? true : undefined}
-        className={`relative z-50 bg-white dark:bg-void-800 rounded-[1.75rem] shadow-2xl border border-black/[0.06] dark:border-white/[0.06] outline-none max-w-[calc(100vw-2rem)] max-h-[min(calc(100dvh-2rem),85vh)] overflow-y-auto overscroll-contain ${className}`}
+        className={`${surfaceClassName} ${className}`}
         style={{
           opacity: visible ? 1 : 0,
           transform: visible ? 'scale(1)' : 'scale(0.95)',

@@ -51,6 +51,7 @@ export const Drawer: FunctionComponent<DrawerProps> = ({
 
   const isRight = position === "right";
   const alignmentClass = isRight ? "right-0" : "left-0";
+  const radiusClass = isRight ? "rounded-l-2xl" : "rounded-r-2xl";
 
   useEffect(() => {
     if (isOpen) {
@@ -134,7 +135,7 @@ export const Drawer: FunctionComponent<DrawerProps> = ({
         aria-describedby={ariaDescribedBy || ariaDescribedby || undefined}
         tabIndex={-1}
         inert={!isOpen ? true : undefined}
-        className={`fixed top-0 bottom-0 ${alignmentClass} z-50 w-full max-w-sm sm:max-w-md bg-white dark:bg-void-800 rounded-[12px] shadow-lg border-x border-black/[0.06] dark:border-white/[0.06] outline-none h-dvh max-h-dvh pb-4 overflow-y-auto ${className}`}
+        className={`fixed top-0 bottom-0 ${alignmentClass} z-50 w-full max-w-sm sm:max-w-md bg-white dark:bg-void-800 ${radiusClass} shadow-[0_24px_80px_rgba(15,23,42,0.22)] dark:shadow-[0_28px_90px_rgba(0,0,0,0.56)] border-x border-black/[0.08] dark:border-white/[0.08] outline-none h-dvh max-h-dvh pb-4 overflow-y-auto overscroll-contain ${className}`}
         onClick={(e) => e.stopPropagation()}
       >
         {children}
