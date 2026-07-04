@@ -150,7 +150,7 @@ export const ToolCallWidget: FunctionComponent<ToolCallWidgetProps> = ({
   const isEdit = kind === "edit";
 
   return (
-    <div class="overflow-hidden min-w-0 rounded-xl border border-black/[0.04] dark:border-white/[0.04] bg-slate-50/50 dark:bg-white/[0.02]">
+    <div class="overflow-hidden min-w-0 rounded-[1.1rem] border border-black/[0.05] bg-white/62 shadow-[0_10px_26px_rgba(15,23,42,0.045)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-white/[0.035] dark:shadow-[0_12px_34px_rgba(0,0,0,0.18)]">
       <button
         type="button"
         disabled={!hasDetails}
@@ -161,8 +161,8 @@ export const ToolCallWidget: FunctionComponent<ToolCallWidgetProps> = ({
           <Icon size={15} class="text-signal-600 dark:text-signal-400" />
         </span>
         <span class="flex min-w-0 flex-1 flex-col">
-          <span class="flex items-center gap-2">
-            <span class="font-mono text-[12px] font-semibold text-slate-700 dark:text-slate-200">{name}</span>
+          <span class="flex min-w-0 items-center gap-2">
+            <span class="min-w-0 truncate font-mono text-[12px] font-semibold text-slate-700 dark:text-slate-200">{name}</span>
             <StatusBadge status={status} />
           </span>
           {summary && (
