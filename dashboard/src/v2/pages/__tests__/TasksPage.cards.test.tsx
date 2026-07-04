@@ -183,6 +183,7 @@ describe("TasksPage.cards Integration", () => {
     expect(listbox).toBeInTheDocument();
     expect(screen.getByRole("option", { name: /All Sprints/i })).toHaveAttribute("aria-selected", "false");
     expect(screen.getByRole("option", { name: /SPR-1: Sprint One/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Selected")).toBeInTheDocument();
 
     await user.keyboard("{End}{Enter}");
     expect(selectSprint).toHaveBeenCalledWith("sprint_2");
@@ -225,7 +226,7 @@ describe("TasksPage.cards Integration", () => {
     expect(getByText("Optimistic Title")).toBeInTheDocument();
     const card = container.querySelector(".kanban-card");
     expect(card).toHaveClass("border-dashed");
-    expect(card).toHaveClass("opacity-60");
-    expect(card).toHaveClass("pointer-events-none");
+    expect(card).toHaveClass("opacity-70");
+    expect(card).toHaveTextContent("Saving task changes");
   });
 });

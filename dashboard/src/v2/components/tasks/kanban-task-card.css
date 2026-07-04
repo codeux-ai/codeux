@@ -74,10 +74,19 @@
   transform: translateY(0);
 }
 
-.kanban-card__actions button {
+.kanban-card__actions button,
+.kanban-card__actions a {
   min-width: 2.75rem;
   min-height: 2rem;
   white-space: nowrap;
+  transition:
+    color var(--kanban-card-control-duration, var(--interaction-control-feedback-duration)) var(--kanban-card-control-ease, var(--interaction-control-feedback-ease)),
+    background-color var(--kanban-card-control-duration, var(--interaction-control-feedback-duration)) var(--kanban-card-control-ease, var(--interaction-control-feedback-ease)),
+    transform var(--kanban-card-selection-duration, var(--interaction-selection-movement-duration)) var(--kanban-card-selection-ease, var(--interaction-selection-movement-ease));
+}
+
+.kanban-card__actions [aria-disabled="true"] {
+  cursor: not-allowed;
 }
 
 @media (any-pointer: coarse) {
