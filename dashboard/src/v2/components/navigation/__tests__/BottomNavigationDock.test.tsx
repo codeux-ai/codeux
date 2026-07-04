@@ -21,18 +21,29 @@ vi.mock('@tanstack/react-router', async () => {
     return {
         ...actual as any,
         useRouterState: vi.fn(),
-        Link: forwardRef(({ children, to, className }: any, ref: any) => <a ref={ref} href={to} data-testid={`link-${to}`} className={className}>{children}</a>)
+        Link: forwardRef(({ children, to, className, ...props }: any, ref: any) => <a ref={ref} href={to} data-testid={`link-${to}`} className={className} {...props}>{children}</a>)
     };
 });
 
+class ResizeObserverMock {
+    observe = vi.fn();
+    unobserve = vi.fn();
+    disconnect = vi.fn();
+}
+
 describe('BottomNavigationDock (KineticDock)', () => {
     beforeEach(() => {
+        Object.defineProperty(window, "ResizeObserver", {
+            configurable: true,
+            writable: true,
+            value: ResizeObserverMock,
+        });
         vi.spyOn(ProjectDataHook, 'useProjectData').mockReturnValue({ selectedProject: { id: 'test-project' } } as any);
         vi.spyOn(ProjectEffectiveSettingsHook, 'useProjectEffectiveSettings').mockReturnValue({ data: { settings: { sprintPreview: { enabled: true, showInAppBrowser: true } } } } as any);
         // CRITICAL: We must mock useReducedMotion to FALSE to prove that even when animations are enabled,
         // the cursor-snapping behavior is intentionally gone.
         vi.spyOn(ReducedMotionHook, 'useReducedMotion').mockReturnValue(false);
-        vi.spyOn(RouterHook, 'useRouterState').mockReturnValue({ matches: [{ pathname: '/' }] } as any);
+        vi.spyOn(RouterHook, 'useRouterState').mockReturnValue([{ pathname: '/' }] as any);
     });
 
     afterEach(() => {
@@ -64,6 +75,8 @@ describe('BottomNavigationDock (KineticDock)', () => {
 
         // The inner icon wrapper that receives the hover transform classes
         const overviewLink = screen.getByTestId('link-/');
+        expect(overviewLink).toHaveAttribute('aria-current', 'page');
+        expect(overviewLink).toHaveAttribute('aria-label', 'Overview');
         const iconWrapper = overviewLink.querySelector('svg');
 
         expect(iconWrapper).toBeInTheDocument();
@@ -101,5 +114,14 @@ describe('BottomNavigationDock (KineticDock)', () => {
         // Assert the spacer div is present (last child of nav)
         const lastChild = nav.lastElementChild;
         expect(lastChild?.getAttribute('class')).toContain('w-[1px] shrink-0');
+    });
+
+    it('should keep navigation labels stable when Browser navigation is hidden', () => {
+        vi.spyOn(ProjectEffectiveSettingsHook, 'useProjectEffectiveSettings').mockReturnValue({ data: { settings: { sprintPreview: { enabled: true, showInAppBrowser: false } } } } as any);
+
+        render(<KineticDock />);
+
+        expect(screen.queryByRole('link', { name: 'Browser' })).not.toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'Files' })).toHaveAttribute('href', '/files');
     });
 });

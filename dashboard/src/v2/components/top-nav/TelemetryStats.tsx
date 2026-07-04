@@ -23,7 +23,7 @@ export const TelemetryStats: FunctionComponent<TelemetryStatsProps> = ({ project
     const queuedCount = allTasks.filter((t: Task) => t.status === "pending" && activeSprintIds.has(t.sprintId)).length;
 
     return (
-        <div className="hidden h-9 items-center gap-0.5 rounded-xl border border-black/[0.06] bg-black/[0.02] px-1 dark:border-white/[0.06] dark:bg-white/[0.02] xl:flex">
+        <div className="hidden h-9 items-center gap-0.5 rounded-xl border border-black/[0.06] bg-black/[0.03] px-1 dark:border-white/[0.06] dark:bg-white/[0.03] xl:flex" aria-label={`${runningCount} running tasks, ${queuedCount} queued tasks`}>
             {/* Running tasks */}
             <div className="flex items-center gap-2 px-2.5">
                 <span className="relative flex h-2 w-2">

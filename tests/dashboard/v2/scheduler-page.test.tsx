@@ -136,7 +136,7 @@ describe("SchedulerPage", () => {
 
     const pageRoot = screen.getByTestId("scheduler-page-root");
     expect(pageRoot.className).toContain("px-4");
-    expect(pageRoot.className).toContain("py-10");
+    expect(pageRoot.className).toContain("pt-7");
     expect(pageRoot.className).toContain("md:px-8");
     expect(screen.getByTestId("scheduler-primary-header")).toBeInTheDocument();
     const calendarPanel = screen.getByTestId("scheduler-calendar-panel");

@@ -19,7 +19,7 @@ export const BrandSection: FunctionComponent<BrandSectionProps> = ({ isMobile, o
     }
 
     return (
-        <div className="flex shrink-0 items-center gap-2 sm:gap-4 md:gap-10">
+        <div className="flex shrink-0 items-center gap-2 sm:gap-4 md:gap-8">
             {isMobile && (
                 <button
                     type="button"
@@ -42,7 +42,7 @@ export const BrandSection: FunctionComponent<BrandSectionProps> = ({ isMobile, o
                 onBlur={() => setBrandActive(false)}
                 className="flex items-center gap-3 cursor-pointer group shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-xl"
             >
-                <div className="relative w-9 h-9 rounded-2xl overflow-hidden ring-1 ring-inset ring-white/[0.06] dark:ring-white/[0.08] shadow-[0_0_22px_rgba(0,224,160,0.22)] transition-shadow duration-500 group-hover:shadow-[0_0_32px_rgba(0,224,160,0.42)]">
+                <div className="relative w-9 h-9 rounded-xl overflow-hidden ring-1 ring-inset ring-white/[0.06] dark:ring-white/[0.08] shadow-[0_0_18px_rgba(0,224,160,0.18)] transition-shadow duration-300 group-hover:shadow-[0_0_26px_rgba(0,224,160,0.3)]">
                     <RobotLogo
                         size={36}
                         rounded={false}

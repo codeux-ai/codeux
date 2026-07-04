@@ -150,7 +150,7 @@ describe("FileBrowserPage", () => {
 
     const pageRoot = screen.getByTestId("file-browser-page-root");
     expect(pageRoot.className).toContain("px-4");
-    expect(pageRoot.className).toContain("py-10");
+    expect(pageRoot.className).toContain("pt-7");
     expect(pageRoot.className).toContain("md:px-8");
     expect(screen.getByTestId("file-browser-page-header")).toBeInTheDocument();
     expect(screen.getByText("Sprint File Browser")).toBeInTheDocument();
