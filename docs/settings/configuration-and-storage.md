@@ -447,9 +447,9 @@ Container execution notes:
   - `"ALWAYS"`: attempt auto-merge without waiting for CI, while still respecting merge conflicts and configured review-comment blockers
 - `mainBranchAutoMergeMode` (default `"CREATE_PR"`):
   - `"OFF"`: Code UX does not automatically open or merge the final `feature -> default` PR
-  - `"CREATE_PR"`: when sprint work is complete, Code UX opens or resolves the main PR but does not auto-merge it
-  - `"WHEN_GREEN"`: when sprint work is complete, Code UX opens or resolves the main PR if needed, then auto-merges after the main merge gate is green
-  - `"ALWAYS"`: when sprint work is complete, Code UX opens or resolves the main PR if needed and attempts the merge without waiting for CI
+  - `"CREATE_PR"`: when sprint work is complete, Code UX opens or resolves the main PR but does not auto-merge it; the sprint run pauses until a human merges the PR and resumes the sprint
+  - `"WHEN_GREEN"`: when sprint work is complete, Code UX opens or resolves the main PR if needed, auto-merges after the main merge gate is green, and keeps the sprint active until GitHub reports the PR as merged
+  - `"ALWAYS"`: when sprint work is complete, Code UX opens or resolves the main PR if needed, attempts the merge without waiting for CI, and keeps the sprint active until GitHub reports the PR as merged
 
 `mcpTools` contains:
 - `name` (MCP tool name from `src/contracts/mcp-tool-definitions.ts`)

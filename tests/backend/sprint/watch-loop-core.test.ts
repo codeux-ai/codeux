@@ -595,7 +595,7 @@ describe("WatchLoopRunner", () => {
 
     const renderMergeFeedbackMock = vi.fn().mockResolvedValue({
       text: "MERGE_FEEDBACK",
-      state: "automerge_succeeded",
+      state: "merged",
       prNumber: 101,
       prUrl: "https://github.com/example/repo/pull/101",
       hasMergeConflict: false,
@@ -1335,6 +1335,109 @@ describe("WatchLoopRunner", () => {
     nowSpy.mockRestore();
   });
 
+  it("waits for observed main PR merge after auto-merge reports success", async () => {
+    const deps = buildDeps();
+    const cycleRunner = buildCycleRunner();
+    const nowValues = [0, 1_000, 2_000, 61_000];
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => nowValues.shift() ?? 61_000);
+
+    deps.renderInstruction.mockImplementation(async (id) => {
+      if (id === "watchHeader") return "HEADER";
+      if (id === "cleanupAllMerged") return "CLEANUP_MERGED";
+      return "";
+    });
+    deps.executionRepository.getSprintRun = vi
+      .fn()
+      .mockReturnValueOnce({ status: "running" })
+      .mockReturnValueOnce({ status: "running" })
+      .mockReturnValueOnce({ status: "running" });
+
+    cycleRunner.run
+      .mockResolvedValueOnce({
+        subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true, worker_branch: "worker/task-1" })],
+        reportText: "REPORT_1",
+        statusTable: "TABLE_1",
+        instructions: "",
+        awaitingMerge: [],
+        manualMergeTasks: [],
+        workerEscalatedMergeConflictTasks: [],
+      })
+      .mockResolvedValueOnce({
+        subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true, worker_branch: "worker/task-1" })],
+        reportText: "REPORT_2",
+        statusTable: "TABLE_2",
+        instructions: "",
+        awaitingMerge: [],
+        manualMergeTasks: [],
+        workerEscalatedMergeConflictTasks: [],
+      });
+
+    const renderMergeFeedbackMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        text: "AUTO_MERGE_SUCCEEDED",
+        state: "automerge_succeeded",
+        prNumber: 268,
+        prUrl: "https://github.com/example/repo/pull/268",
+        hasMergeConflict: false,
+        mergeStateStatus: "CLEAN",
+        hasFailedChecks: false,
+        hasPendingChecks: false,
+        hasReviewBlockers: false,
+        failedChecks: [],
+      })
+      .mockResolvedValueOnce({
+        text: "MAIN_MERGED",
+        state: "merged",
+        prNumber: 268,
+        prUrl: "https://github.com/example/repo/pull/268",
+        hasMergeConflict: false,
+        mergeStateStatus: null,
+        hasFailedChecks: false,
+        hasPendingChecks: false,
+        hasReviewBlockers: false,
+        failedChecks: [],
+      });
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, renderMergeFeedbackMock);
+    const result = await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      githubMode: "REMOTE",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 1 } as any,
+      ciIntelligence: { mainBranchAutoMergeMode: "WHEN_GREEN" } as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+    });
+
+    expect(cycleRunner.run).toHaveBeenCalledTimes(2);
+    expect(result).toContain("AUTO_MERGE_SUCCEEDED");
+    expect(result).toContain("Waiting for the final main-branch merge to finish");
+    expect(result).toContain("Sprint Execution Finished");
+    expect(deps.executionRepository.appendSprintRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "sprint_completed",
+      "system",
+      expect.objectContaining({ taskCount: 1 }),
+      expect.any(Object),
+    );
+    nowSpy.mockRestore();
+  });
+
   it("pauses instead of completing when main auto-merge is blocked by failed checks", async () => {
     const deps = buildDeps();
     const cycleRunner = buildCycleRunner();
@@ -1846,6 +1949,73 @@ describe("WatchLoopRunner", () => {
     expect(deps.completedSprints.size).toBe(0);
   });
 
+  it("pauses remote completion in CREATE_PR mode until the final PR is merged", async () => {
+    const deps = buildDeps();
+    deps.renderInstruction.mockImplementation(async (id) => {
+      if (id === "completionSteps") return "COMPLETION_STEPS";
+      return "";
+    });
+    const renderMainMergeFeedback = vi.fn().mockResolvedValue({
+      text: "READY_FINAL_PR",
+      state: "ready_for_merge",
+      prNumber: 42,
+      prUrl: "https://example.com/pr/42",
+      hasMergeConflict: false,
+      mergeStateStatus: "CLEAN",
+      hasFailedChecks: false,
+      hasPendingChecks: false,
+      hasReviewBlockers: false,
+      failedChecks: [],
+    });
+
+    const runner = new WatchLoopRunner(
+      deps as any,
+      buildCycleRunner() as any,
+      renderMainMergeFeedback,
+    );
+
+    const result = await (runner as any).finalizeSprintRun({
+      scopedExecutionContext: {
+        project: { id: "project-1", name: "Project 1" },
+        sprint: { id: "sprint-1", name: "Sprint 1", goal: "Ship safely" },
+        sprintNumber: 1,
+        repoPath: "/tmp",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      sprintRunId: "run-1",
+      repoPath: "/tmp",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      githubMode: "REMOTE",
+      ciIntelligence: { mainBranchAutoMergeMode: "CREATE_PR", resolveMainMergeConflicts: false } as any,
+      subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true, id: "T1" })],
+      runningTasks: [],
+      readyTasks: [],
+      manualMergeTasks: [],
+      needsManualMerge: false,
+      allTerminal: true,
+      noMoreActionPossible: false,
+      activeMainMergeAttentionItems: [],
+    });
+
+    expect(result.status).toBe("exit");
+    expect(result.report).toContain("Final completion PR is not merged");
+    expect(deps.executionRepository.updateSprintRun).toHaveBeenCalledWith(
+      "run-1",
+      expect.objectContaining({ status: "paused" }),
+    );
+    expect(deps.executionRepository.appendSprintRunEvent).not.toHaveBeenCalledWith(
+      "run-1",
+      "sprint_completed",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(deps.completedSprints.size).toBe(0);
+  });
+
   it("runs sprint QA before main merge evaluation and blocks merge while QA is pending", async () => {
     const deps = buildDeps();
     deps.qualityAssuranceService = {
@@ -2125,6 +2295,31 @@ describe("Watch Loop Policies", () => {
           mergeStateStatus: "CLEAN",
           hasFailedChecks: false,
           hasPendingChecks: true,
+          hasReviewBlockers: false,
+          failedChecks: [],
+        },
+        attentionItems: [],
+        mainMergeMode: "WHEN_GREEN",
+        sprintNumber: 5,
+      });
+
+      expect(decision).toEqual({
+        status: "wait",
+        reportModifier: expect.stringContaining("Sprint Still Active"),
+      });
+    });
+
+    it("returns wait decision after auto-merge succeeds until merged state is observed", () => {
+      const decision = decideMainMergeWaitOrPause({
+        mergeFeedback: {
+          text: "",
+          state: "automerge_succeeded",
+          prNumber: 1,
+          prUrl: "url",
+          hasMergeConflict: false,
+          mergeStateStatus: "CLEAN",
+          hasFailedChecks: false,
+          hasPendingChecks: false,
           hasReviewBlockers: false,
           failedChecks: [],
         },
