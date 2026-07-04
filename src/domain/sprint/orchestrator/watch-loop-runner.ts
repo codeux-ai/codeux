@@ -817,6 +817,40 @@ export class WatchLoopRunner {
             };
           }
         }
+        if (githubMode === "REMOTE" && mergeFeedback.state !== "merged") {
+          report += completionGuidance;
+          report += mergeFeedback.text;
+
+          const remoteFinalMergeCanProgress =
+            ciIntelligence.mainBranchAutoMergeMode === "WHEN_GREEN"
+            || ciIntelligence.mainBranchAutoMergeMode === "ALWAYS";
+
+          if (remoteFinalMergeCanProgress) {
+            return {
+              status: "wait",
+              report: report + "\n⏳ **Sprint Still Active:** Waiting for GitHub to report the final completion PR as merged before completing the sprint.\n",
+            };
+          }
+
+          transitionSprintRun(
+            this.deps.executionRepository,
+            sprintRunId,
+            "paused",
+            "sprint_paused",
+            {
+              reason: "main_merge_blocked",
+              mainMergeState: mergeFeedback.state,
+              prNumber: mergeFeedback.prNumber,
+              prUrl: mergeFeedback.prUrl,
+            },
+            `sprint-paused:${sprintRunId}:remote-main-merge-not-merged:${mergeFeedback.state}:${mergeFeedback.prNumber || "none"}`
+          );
+
+          return {
+            status: "exit",
+            report: report + "\n⏸️ **Sprint Paused:** Final completion PR is not merged. Merge the PR into the default branch, then resume the sprint.\n",
+          };
+        }
         this.deps.completedSprints.add(`${scopedExecutionContext.project.id}:${scopedExecutionContext.sprint.id}`);
         transitionSprintRun(
           this.deps.executionRepository,

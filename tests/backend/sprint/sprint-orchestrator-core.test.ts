@@ -105,6 +105,23 @@ describe("SprintOrchestrator core execution", () => {
       const subtasksDir = path.join(tmpRoot, ".code-ux", "sprints", "sprint1-subtasks");
       await fs.mkdir(subtasksDir, { recursive: true });
       await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\nprompt:\nDo it\n", "utf-8");
+      deps.getCiStatusForScope = vi.fn().mockResolvedValue({
+        available: true,
+        openPullRequests: [],
+        mergedPullRequests: [{
+          number: 101,
+          title: "Sprint 1",
+          url: "https://github.com/example/repo/pull/101",
+          state: "MERGED",
+          isDraft: false,
+          headRefName: "feature/sprint1-implementation",
+          baseRefName: "main",
+          reviewDecision: null,
+          comments: 0,
+          checks: [],
+        }],
+        recentCiRuns: [],
+      });
 
       subtaskRepository.loadSubtasks
         .mockResolvedValueOnce([
