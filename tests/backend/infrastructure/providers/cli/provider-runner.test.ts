@@ -92,6 +92,109 @@ describe("ProviderRunner", () => {
     expect(result.text).toBe("keep this line");
   });
 
+  it("sanitizes provider streams, transcript fallback text, API keys, Git tokens, and auth paths before callbacks and text output", async () => {
+    const onActivity = vi.fn();
+    dockerRunner.readWorkspaceFile.mockResolvedValueOnce("");
+    dockerRunner.runProviderInDocker.mockImplementationOnce(async (opts: any) => {
+      opts.onActivity("stdout OPENAI_API_KEY=sk-live providerAuthPath=/home/me/.codex/auth.json", "agent");
+      opts.onActivity("stderr ghp_123456789012345678901234567890123456 authPath=/home/me/.config/qwen", "provider");
+      return {
+        ok: false,
+        stdout: "stdout OPENAI_API_KEY=sk-live providerAuthPath=/home/me/.codex/auth.json",
+        stderr: "stderr ghp_123456789012345678901234567890123456 authPath=/home/me/.config/qwen",
+        code: 2,
+        signal: null,
+      };
+    });
+
+    const result = await runner.runProviderForText({
+      provider: "codex",
+      prompt: "hello",
+      cwd: "/repo",
+      model: "default",
+      apiKey: "sk-live",
+      githubToken: "ghp_123456789012345678901234567890123456",
+      providerAuthPath: "/home/me/.codex/auth.json",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity,
+    });
+
+    const combined = [
+      result.stdout,
+      result.stderr,
+      result.text,
+      result.usageTelemetry.transcriptText,
+      ...onActivity.mock.calls.map((call) => call[0]),
+    ].join("\n");
+
+    expect(combined).toContain("OPENAI_API_KEY=[REDACTED]");
+    expect(combined).toContain("providerAuthPath=[REDACTED]");
+    expect(combined).toContain("authPath=[REDACTED]");
+    expect(combined).not.toContain("sk-live");
+    expect(combined).not.toContain("ghp_123456789012345678901234567890123456");
+    expect(combined).not.toContain("/home/me/.codex/auth.json");
+    expect(combined).not.toContain("/home/me/.config/qwen");
+  });
+
+  it("records a Docker workspace mount failure through a deterministic Docker stub without invoking Docker", async () => {
+    const onActivity = vi.fn();
+    dockerRunner.ensureWorkspace.mockResolvedValueOnce({ cwd: "/workspace", cleanup: vi.fn() });
+    dockerRunner.runProviderInDocker.mockResolvedValueOnce({
+      ok: false,
+      stdout: "",
+      stderr: 'docker: invalid mount config for type "bind": bind source path does not exist: /workspace',
+      code: 125,
+      signal: null,
+    });
+
+    const result = await runner.runProvider({
+      provider: "gemini",
+      prompt: "hello",
+      cwd: "/workspace",
+      model: "gemini-2.5-pro",
+      apiKey: "key",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/workspace",
+      onActivity,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(dockerRunner.runProviderInDocker).toHaveBeenCalledTimes(1);
+    expect(onActivity).toHaveBeenCalledWith(
+      "Docker could not mount workspace path (/workspace) even though it exists locally. Path visibility mismatch.",
+      "provider",
+    );
+  });
+
+  it("falls back to sanitized stderr when a text run has no transcript artifact", async () => {
+    dockerRunner.readWorkspaceFile.mockResolvedValue(null);
+    dockerRunner.runProviderInDocker.mockResolvedValueOnce({
+      ok: false,
+      stdout: "",
+      stderr: "missing transcript OPENAI_API_KEY=sk-live authPath=/tmp/provider-auth",
+      code: 1,
+      signal: null,
+    });
+
+    const result = await runner.runProviderForText({
+      provider: "codex",
+      prompt: "hello",
+      cwd: "/repo",
+      model: "default",
+      apiKey: "sk-live",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.text).toBe("missing transcript OPENAI_API_KEY=[REDACTED] authPath=[REDACTED]");
+  });
+
   it("persists the fresh Claude session id after missing-conversation fallback", async () => {
     const oldNativeSessionId = "66e95743-e82e-445d-891a-ac01b27ddcb9";
     dockerRunner.readWorkspaceFile.mockResolvedValue("");
