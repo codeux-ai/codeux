@@ -117,10 +117,17 @@ describe("InvocationsTable", () => {
     expect(textContent).toContain("S4");
     expect(textContent).toContain("T-12");
     expect(textContent).toContain("Latest failure");
-    expect(textContent).toContain("running");
+    expect(textContent).toContain("Running");
 
-    const runningRow = within(root).getByText("running").closest("tr");
-    expect(runningRow?.textContent).toContain("running");
+    expect(root.querySelector(".backdrop-blur-sm")).toBeNull();
+
+    const runningChip = within(root).getByText("Running").closest("div");
+    expect(runningChip?.className).toContain("stats-surface-chip");
+    expect(runningChip?.className).toContain("stats-accent-signal-fill");
+
+    const runningRow = within(root).getByText("Running").closest("tr");
+    expect(runningRow?.className).toContain("stats-surface-subpanel");
+    expect(runningRow?.textContent).toContain("Running");
     const failedRow = within(root).getByText("Latest failure").closest("tr");
     expect(failedRow?.textContent).toContain("Latest failure");
 
@@ -167,7 +174,9 @@ describe("InvocationsTable", () => {
     expect(screen.getByText(/Invocation ledger with sortable time/i)).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: /Total/i }).getAttribute("aria-sort")).toBe("descending");
     expect(screen.getByRole("button", { name: /Sort invocations by total tokens, currently sorted descending/i })).toBeTruthy();
-    expect(screen.getAllByRole("button", { name: "Expand invocation inv-headers" }).length).toBeGreaterThan(0);
+    const expandButton = screen.getAllByRole("button", { name: "Expand invocation inv-headers" })[0];
+    expect(expandButton.getAttribute("aria-expanded")).toBe("false");
+    expect(expandButton.getAttribute("aria-controls")).toBe("invocation-messages-inv-headers");
   });
 
   it("renders the expansion placeholder row", async () => {
@@ -219,5 +228,6 @@ describe("InvocationsTable", () => {
     );
 
     expect(container.querySelectorAll(".motion-safe\\:animate-pulse").length).toBe(6);
+    expect(container.querySelectorAll(".stats-surface-subpanel").length).toBe(6);
   });
 });
