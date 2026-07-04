@@ -116,6 +116,7 @@ Tests are expected to pass on Windows, macOS, and Linux. Keep fixtures and asser
 - Normalize Git working-tree text fixtures for CRLF when assertions only care about logical file contents.
 - Stub both `HOME` and `USERPROFILE` when tests need to control `os.homedir()` across platforms.
 - Pin date, time, and number formatting to an explicit locale and time zone for UI text that is asserted in tests.
+- SQLite repository tests should prefer `tests/backend/helpers/temp-db.ts` for file-backed databases. The helper creates an isolated temp home, tracks adapters/storage for close, removes SQLite sidecar files after close, and then removes the temp root so leaked handles fail deterministically.
 - Close SQLite databases before cleanup when possible. Windows can briefly hold SQLite sidecar files open during teardown, so the Vitest setup tolerates transient temp-directory `EBUSY` and `EPERM` removal errors without weakening application lifecycle cleanup.
 - When PowerShell execution policy blocks package-manager scripts, run commands through `pnpm.cmd` on Windows.
 

@@ -1,27 +1,29 @@
 process.env.VITEST_IN_MEMORY_DB = "false";
 
 import { afterEach, describe, expect, it } from "vitest";
-import * as fs from "fs/promises";
-import * as os from "os";
 import * as path from "path";
 import { AppDbStorage, resolveAppDbPath } from "../../../src/repositories/app-db-storage.js";
+import { createTempDbContext } from "../helpers/temp-db.js";
+import type { TempDbContext } from "../helpers/temp-db.js";
 
-const tempDirs: string[] = [];
+const tempContexts: TempDbContext[] = [];
 
-async function createTempDbPath(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-app-db-"));
-  tempDirs.push(dir);
-  return path.join(dir, "app.db");
+async function createTempStorage(): Promise<{ context: TempDbContext; dbPath: string; storage: AppDbStorage }> {
+  const context = await createTempDbContext("code-ux-app-db-");
+  tempContexts.push(context);
+  const dbPath = context.dbPath();
+  return { context, dbPath, storage: context.createStorage(dbPath) };
 }
 
-afterEach(async () => {
-  await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
+afterEach(() => {
+  for (const context of tempContexts.splice(0)) {
+    context.cleanup();
+  }
 });
 
 describe("AppDbStorage", () => {
   it("creates the phase 1 foundation tables", async () => {
-    const dbPath = await createTempDbPath();
-    const storage = new AppDbStorage(dbPath);
+    const { dbPath, storage } = await createTempStorage();
 
     expect(storage.getPath()).toBe(dbPath);
     expect(storage.hasTable("schema_migrations")).toBe(true);
@@ -65,14 +67,24 @@ describe("AppDbStorage", () => {
   });
 
   it("uses the explicit dbPath when provided", async () => {
-    const dbPath = await createTempDbPath();
+    const context = await createTempDbContext("code-ux-app-db-");
+    tempContexts.push(context);
+    const dbPath = context.dbPath();
 
     expect(resolveAppDbPath(dbPath)).toBe(dbPath);
   });
 
+  it("uses the isolated test home for the default db path", async () => {
+    const context = await createTempDbContext("code-ux-app-db-home-");
+    tempContexts.push(context);
+
+    const storage = context.createStorage();
+
+    expect(storage.getPath()).toBe(path.join(context.homeDir, ".code-ux", "app.db"));
+  });
+
   it("closes the underlying sqlite connection", async () => {
-    const dbPath = await createTempDbPath();
-    const storage = new AppDbStorage(dbPath);
+    const { storage } = await createTempStorage();
 
     storage.close();
 
@@ -80,8 +92,7 @@ describe("AppDbStorage", () => {
   });
 
   it("backfills estimated Docker CLI usage from persisted character counts", async () => {
-    const dbPath = await createTempDbPath();
-    const storage = new AppDbStorage(dbPath);
+    const { context, dbPath, storage } = await createTempStorage();
     const db = storage.getDatabase();
     const now = new Date().toISOString();
 
@@ -119,7 +130,7 @@ describe("AppDbStorage", () => {
     );
 
     // Re-opening the storage runs migrations against existing data.
-    new AppDbStorage(dbPath);
+    context.createStorage(dbPath);
 
     const row = db.prepare(`
       SELECT input_tokens, output_tokens, total_tokens, usage_source, raw_usage_json
@@ -145,8 +156,7 @@ describe("AppDbStorage", () => {
   });
 
   it("normalizes legacy cached-token accounting rows once", async () => {
-    const dbPath = await createTempDbPath();
-    const storage = new AppDbStorage(dbPath);
+    const { context, dbPath, storage } = await createTempStorage();
     const db = storage.getDatabase();
     const now = new Date().toISOString();
 
@@ -209,8 +219,8 @@ describe("AppDbStorage", () => {
       now,
     );
 
-    new AppDbStorage(dbPath);
-    new AppDbStorage(dbPath);
+    context.createStorage(dbPath);
+    context.createStorage(dbPath);
 
     const rows = db.prepare(`
       SELECT id, input_tokens, cached_input_tokens, output_tokens, total_tokens, token_accounting_version
@@ -247,8 +257,7 @@ describe("AppDbStorage", () => {
   });
 
   it("resets all application tables while preserving the schema", async () => {
-    const dbPath = await createTempDbPath();
-    const storage = new AppDbStorage(dbPath);
+    const { storage } = await createTempStorage();
     const db = storage.getDatabase();
     const now = new Date().toISOString();
 
