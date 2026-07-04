@@ -4,7 +4,10 @@ import * as os from "os";
 import * as path from "path";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { DashboardRealtimeEventRepository } from "../../../src/repositories/dashboard-realtime-event-repository.js";
-import { DashboardRealtimeService } from "../../../src/services/dashboard-realtime-service.js";
+import {
+  computeDashboardRealtimePayloadFingerprint,
+  DashboardRealtimeService,
+} from "../../../src/services/dashboard-realtime-service.js";
 
 const tempDirs: string[] = [];
 
@@ -422,6 +425,84 @@ describe("DashboardRealtimeService extracted publisher helper", () => {
       "skipping_duplicate_realtime_snapshot",
       expect.objectContaining({ type: "project.live.updated" })
     );
+  });
+
+  it("skips timestamp-only live snapshot changes but publishes semantic status changes", async () => {
+    const loggerMock = { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn(), child: vi.fn() };
+    const eventRepoMock = {
+      getLatestSequence: () => 1,
+      appendEvent: vi.fn().mockImplementation((event) => ({ sequence: 2, ...event })),
+    };
+
+    let dispatchStatus = "queued";
+    let timestampIndex = 0;
+    const service = new DashboardRealtimeService(eventRepoMock as any, loggerMock as any);
+    service.setSnapshotLoaders({
+      getProjectLiveSnapshot: vi.fn().mockImplementation(async () => {
+        timestampIndex += 1;
+        return {
+          projectId: "proj-1",
+          selectedSprintId: "sprint-1",
+          status: {
+            project_id: "proj-1",
+            sprint_id: "sprint-1",
+            subtasks: [],
+            timestamp: `2026-03-30T09:00:0${timestampIndex}.000Z`,
+          },
+          execution: {
+            projectId: "proj-1",
+            projectName: "Project 1",
+            sprintRuns: [{ id: "run-1", status: "running" }],
+            taskDispatches: [{ id: "dispatch-1", status: dispatchStatus, taskRunState: dispatchStatus }],
+            connections: [],
+            primaryAssignedWorker: null,
+            overflowAssignedWorkers: [],
+            attentionItems: [],
+            recentEvents: [],
+            updatedAt: `2026-03-30T09:00:0${timestampIndex}.000Z`,
+          },
+          gitStatus: null,
+          gitStatusError: null,
+          updatedAt: `2026-03-30T09:00:0${timestampIndex}.000Z`,
+        };
+      }),
+    } as any);
+
+    const livePublishes = () =>
+      eventRepoMock.appendEvent.mock.calls.filter((call) => call[0].eventType === "project.live.updated").length;
+
+    service.scheduleProjectLiveRefresh("proj-1");
+    await vi.advanceTimersByTimeAsync(100);
+    expect(livePublishes()).toBe(1);
+
+    service.scheduleProjectLiveRefresh("proj-1");
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(livePublishes()).toBe(1);
+    expect(service.getMetrics("project.live.updated").unchanged).toBe(1);
+
+    dispatchStatus = "running";
+    service.scheduleProjectLiveRefresh("proj-1");
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(livePublishes()).toBe(2);
+  });
+
+  it("builds bounded fingerprints for large unknown payloads without JSON stringification", () => {
+    const largePayload = {
+      id: "large",
+      updatedAt: "2026-03-30T09:00:00.000Z",
+      chunks: Array.from({ length: 250 }, (_, index) => ({
+        id: `chunk-${index}`,
+        body: "x".repeat(10_000),
+      })),
+    };
+    const stringifySpy = vi.spyOn(JSON, "stringify");
+
+    const fingerprint = computeDashboardRealtimePayloadFingerprint("unknown.snapshot.updated", largePayload);
+
+    expect(stringifySpy).not.toHaveBeenCalled();
+    expect(fingerprint).toMatch(/^dashboard-realtime-fingerprint:v2:generic-bounded:/);
+    expect(fingerprint.length).toBeLessThan(140);
+    stringifySpy.mockRestore();
   });
 
   it("expediteProjectLiveRefresh bypasses the live throttle for an immediate publish", async () => {
