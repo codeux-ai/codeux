@@ -313,6 +313,13 @@ export const MemoryPage: FunctionComponent = () => {
         };
     }, [lobotomize]);
     const inspectorOpen = activeMemoryIdSignal.value !== null;
+    const activeMemory = activeMemoryIdSignal.value
+        ? S.current.graph.nodes.find((node) => node.id === activeMemoryIdSignal.value && node.alive)
+        : null;
+    const activeMemoryCategory = activeMemory ? (CAT[activeMemory.category] || CAT.context).label : null;
+    const selectionStatus = activeMemory
+        ? `Selected ${activeMemoryCategory} memory: ${activeMemory.content}`
+        : "No memory selected";
 
     /* ── Fetch agent presets on project change ─────────────── */
     useEffect(() => {
@@ -1008,6 +1015,30 @@ export const MemoryPage: FunctionComponent = () => {
                     ))}
                     </div>
 
+                    <div
+                        className={`absolute z-20 max-w-[min(100%-2rem,26rem)] rounded-xl border px-3 py-2 text-xs font-semibold shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur-2xl ${
+                            activeMemory
+                                ? "border-signal-500/25 bg-signal-500/[0.12] text-signal-700 dark:text-signal-300"
+                                : "border-black/[0.06] bg-white/75 text-slate-500 dark:border-white/[0.06] dark:bg-void-800/75 dark:text-slate-300"
+                        } ${
+                            inspectorOpen
+                                ? "left-4 top-16 lg:left-5 lg:top-5"
+                                : "left-5 top-5"
+                        }`}
+                        role="status"
+                        aria-live="polite"
+                        aria-atomic="true"
+                    >
+                        <span className="block text-[9px] font-bold uppercase tracking-[0.14em] opacity-70">
+                            Selection
+                        </span>
+                        <span className="mt-0.5 line-clamp-2 break-words">
+                            {activeMemory
+                                ? `${activeMemoryCategory}: ${activeMemory.content}`
+                                : "No memory selected"}
+                        </span>
+                    </div>
+
                     {/* Legend */}
                     <div
                         className={`absolute z-20 flex max-w-[min(100%-2rem,48rem)] flex-wrap gap-x-4 gap-y-1.5 ${
@@ -1038,6 +1069,7 @@ export const MemoryPage: FunctionComponent = () => {
                     <span className="text-[9px] font-mono text-slate-300 dark:text-slate-600">
                         {memoryCount} nodes
                     </span>
+                    <span className="sr-only">{selectionStatus}</span>
                     </div>
 
                 {/* Empty state */}

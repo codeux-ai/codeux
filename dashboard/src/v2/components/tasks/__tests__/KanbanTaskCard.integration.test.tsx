@@ -79,13 +79,47 @@ describe("KanbanTaskCard Integration", () => {
       { recordId: "rec_2", id: "TASK-124", title: "Backend API", status: "completed" },
       { recordId: "rec_3", id: "TASK-125", title: "Database schema", status: "pending" }
     ],
+    dependencyActionLabel: "1 dependency blocker",
+    qaReviewLabel: "QA not reviewed",
+    optimisticSavingLabel: null,
+    dragStateLabel: "Pointer drag only; keyboard reordering is not supported",
+    actions: [
+      {
+        kind: "rerun",
+        label: "Rerun",
+        ariaLabel: "Rerun task TASK-123: Implement new feature",
+        title: "Rerun is available from the Live task detail workflow.",
+        disabledReason: "Open Live to rerun",
+      },
+      {
+        kind: "preview",
+        label: "Preview",
+        ariaLabel: "Open sprint preview for task TASK-123: Implement new feature",
+        title: "Open the sprint preview workspace.",
+        href: "/browser?sprintId=sprint-1",
+      },
+      {
+        kind: "pull_request",
+        label: "PR pending",
+        ariaLabel: "Pull request pending for task TASK-123: Implement new feature",
+        title: "No pull request is available yet.",
+        disabledReason: "No PR yet",
+      },
+      {
+        kind: "live_runtime",
+        label: "Live idle",
+        ariaLabel: "Live runtime not started for task TASK-123: Implement new feature",
+        title: "Runtime has not started for this task.",
+        disabledReason: "Runtime idle",
+      },
+    ],
   };
 
   const onEdit = vi.fn();
   const onDelete = vi.fn();
 
   it("renders correctly with full telemetry and dependencies", () => {
-    const { getByText } = render(
+    const { getByRole, getByText } = render(
       <KanbanTaskCard
         viewModel={mockViewModel}
         onEdit={onEdit}
@@ -123,6 +157,11 @@ describe("KanbanTaskCard Integration", () => {
     humanizedCreatedAt: "5m ago",
     executorLabel: "CLI",
     dependencyIndicators: [],
+    dependencyActionLabel: "Dependencies clear",
+    qaReviewLabel: "QA not reviewed",
+    optimisticSavingLabel: null,
+    dragStateLabel: "Pointer drag only; keyboard reordering is not supported",
+    actions: [],
   };
 
   it("renders correctly with CLI execution mode", () => {
@@ -154,6 +193,11 @@ describe("KanbanTaskCard Integration", () => {
     humanizedCreatedAt: "--",
     executorLabel: "Auto",
     dependencyIndicators: [],
+    dependencyActionLabel: "Dependencies clear",
+    qaReviewLabel: "QA not reviewed",
+    optimisticSavingLabel: null,
+    dragStateLabel: "Pointer drag only; keyboard reordering is not supported",
+    actions: [],
   };
 
   it("renders correctly with missing telemetry data", () => {
@@ -175,10 +219,28 @@ describe("KanbanTaskCard Integration", () => {
     sessionState: "ACTIVE",
     prUrl: "https://github.com/org/repo/pull/42",
     liveRunningTime: "4m 12s",
+    actions: [
+      ...mockViewModel.actions!.filter((action) => action.kind !== "pull_request" && action.kind !== "live_runtime"),
+      {
+        kind: "pull_request",
+        label: "PR",
+        ariaLabel: "Open pull request for task TASK-123: Implement new feature",
+        title: "Open pull request in a new tab.",
+        href: "https://github.com/org/repo/pull/42",
+        external: true,
+      },
+      {
+        kind: "live_runtime",
+        label: "Live",
+        ariaLabel: "Open live runtime for task TASK-123: Implement new feature",
+        title: "Open the live runtime page.",
+        href: "/live",
+      },
+    ],
   };
 
   it("renders correctly with live execution fields", () => {
-    const { getByText } = render(
+    const { getByRole, getByText } = render(
       <KanbanTaskCard
         viewModel={mockLiveViewModel}
         onEdit={onEdit}
@@ -190,7 +252,7 @@ describe("KanbanTaskCard Integration", () => {
     expect(getByText("ACTIVE")).toBeInTheDocument();
     expect(getByText("4m 12s")).toBeInTheDocument();
 
-    expect(getByText("Live")).toBeInTheDocument();
+    expect(getByRole("link", { name: /Open live runtime for task TASK-123: Implement new feature/i })).toHaveTextContent("Live");
 
     // Test that the PR link anchor tag exists by checking for "PR ready"
     const prLink = getByText("PR ready").closest('a');
@@ -200,7 +262,7 @@ describe("KanbanTaskCard Integration", () => {
 
   it("provides accessible interaction targets and structure", async () => {
     const user = userEvent.setup();
-    const { getByTitle, container, getByText } = render(
+    const { getByRole, getByTitle, container, getByText } = render(
       <KanbanTaskCard
         viewModel={mockViewModel}
         onEdit={onEdit}
@@ -235,6 +297,10 @@ describe("KanbanTaskCard Integration", () => {
     const actionsContainer = editBtn.parentElement;
     expect(actionsContainer).toHaveClass("kanban-card__actions");
     expect(actionsContainer).toHaveAttribute("aria-label", "Actions for task TASK-123");
+    expect(getByText("Rerun")).toBeVisible();
+    expect(getByText("Preview")).toBeVisible();
+    expect(getByRole("button", { name: /Pull request pending for task TASK-123: Implement new feature/i })).toHaveTextContent("PR pending");
+    expect(getByRole("button", { name: /Live runtime not started for task TASK-123: Implement new feature/i })).toHaveTextContent("Live idle");
 
     // Simulate delete click to ensure confirm dialog is requested
     await user.click(deleteBtn);
@@ -305,6 +371,7 @@ describe("KanbanTaskCard Integration", () => {
     const srText = getByText("Draggable reordering is disabled in reduced motion mode.");
     expect(srText).toBeInTheDocument();
     expect(getByText("Drag disabled: reduced motion")).toBeInTheDocument();
+    expect(card).toHaveTextContent("Drag disabled: reduced motion");
   });
 
   it("ensures dependency indicators have clear screen-reader support", () => {
@@ -378,6 +445,16 @@ describe("KanbanTaskCard Integration", () => {
     const { getByRole } = render(<KanbanTaskCard viewModel={mockViewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
     expect(getByRole('button', { name: /Edit task TASK-123: Implement new feature/i })).toBeInTheDocument();
     expect(getByRole('button', { name: /Delete task TASK-123: Implement new feature/i })).toBeInTheDocument();
+  });
+
+  it("keeps unavailable task actions keyboard reachable with explanatory labels", () => {
+    const { getByRole, getByText } = render(<KanbanTaskCard viewModel={mockViewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
+
+    expect(getByRole("button", { name: /Rerun task TASK-123: Implement new feature. Open Live to rerun/i })).toHaveAttribute("aria-disabled", "true");
+    expect(getByRole("button", { name: /Pull request pending for task TASK-123: Implement new feature. No PR yet/i })).toHaveAttribute("aria-disabled", "true");
+    expect(getByRole("button", { name: /Live runtime not started for task TASK-123: Implement new feature. Runtime idle/i })).toHaveAttribute("aria-disabled", "true");
+    expect(getByText("1 dependency blocker")).toBeInTheDocument();
+    expect(getByText("QA not reviewed")).toBeInTheDocument();
   });
 
   it("prevents long metadata strings from overflowing the card horizontally", () => {

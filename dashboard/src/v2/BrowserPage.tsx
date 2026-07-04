@@ -61,8 +61,10 @@ export const BrowserPage: FunctionComponent = () => {
   const [script, setScript] = useState<SprintPreviewScript | null>(null);
   const [scriptDraft, setScriptDraft] = useState("");
   const [logs, setLogs] = useState("");
+  const [logsSessionId, setLogsSessionId] = useState<string | null>(null);
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsError, setLogsError] = useState<string | null>(null);
+  const [logsStale, setLogsStale] = useState(false);
 
   const [launching, setLaunching] = useState(false);
   const [pendingSessionAction, setPendingSessionAction] = useState<"rebuild" | "stop" | null>(null);
@@ -76,7 +78,6 @@ export const BrowserPage: FunctionComponent = () => {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [launchSprintId, setLaunchSprintId] = useState("");
   const [frameSrc, setFrameSrc] = useState("");
-  const [actionFeedback, setActionFeedback] = useState<{status: 'idle' | 'pending' | 'success' | 'error', message: string | null}>({status: 'idle', message: null});
 
   const browserFeedback = useActionFeedback();
   const navigationPendingTimerRef = useRef<number | null>(null);
@@ -85,6 +86,7 @@ export const BrowserPage: FunctionComponent = () => {
   const pendingSessionActionRef = useRef<"rebuild" | "stop" | null>(null);
   const savingScriptRef = useRef(false);
   const removingSessionIdsRef = useRef<Set<string>>(new Set());
+  const logsCacheRef = useRef<Map<string, string>>(new Map());
 
   const { sessions, selectedSession, loading, error: fetchError, refresh: refreshSessions } = usePreviewSessions({
     projectId: selectedProject?.id || null,
@@ -136,12 +138,18 @@ export const BrowserPage: FunctionComponent = () => {
   const logsStatusMessage = visibleSelectedSession
     ? logsLoading
       ? logs
-        ? "Refreshing preview logs. Existing logs remain visible."
+        ? logsSessionId === visibleSelectedSession.id
+          ? "Refreshing preview logs. Existing logs remain visible."
+          : `Loading preview logs for ${visibleSelectedSession.sprintName}. Previous logs remain visible until new logs arrive.`
         : "Loading preview logs."
       : logsError
-        ? `Preview logs could not be loaded: ${logsError}`
+        ? logs
+          ? `Preview logs could not be refreshed: ${logsError}. Showing last available logs.`
+          : `Preview logs could not be loaded: ${logsError}`
       : logs
-        ? "Preview logs loaded. Logs refresh automatically and may be slightly stale."
+        ? logsStale
+          ? "Showing last available preview logs. New logs are pending."
+          : "Preview logs loaded. Logs refresh automatically and may be slightly stale."
         : "No preview logs are available yet."
     : "No preview session selected for logs.";
 
@@ -217,12 +225,18 @@ export const BrowserPage: FunctionComponent = () => {
 
   useEffect(() => {
     if (!visibleSelectedSession) {
-      setLogs("");
       setLogsLoading(false);
       setLogsError(null);
       return;
     }
-    setLogs("");
+    const cachedLogs = logsCacheRef.current.get(visibleSelectedSession.id);
+    if (cachedLogs !== undefined) {
+      setLogs(cachedLogs);
+      setLogsSessionId(visibleSelectedSession.id);
+      setLogsStale(false);
+    } else if (logs) {
+      setLogsStale(true);
+    }
     setLogsLoading(true);
     setLogsError(null);
     let cancelled = false;
@@ -230,7 +244,21 @@ export const BrowserPage: FunctionComponent = () => {
       void fetchPreviewLogs(visibleSelectedSession.id, 160)
         .then((result) => {
           if (!cancelled) {
-            setLogs(result.logs);
+            const nextLogs = result.logs;
+            if (nextLogs) {
+              logsCacheRef.current.set(visibleSelectedSession.id, nextLogs);
+              setLogs(nextLogs);
+              setLogsSessionId(visibleSelectedSession.id);
+              setLogsStale(false);
+            } else if (!logsCacheRef.current.has(visibleSelectedSession.id)) {
+              setLogs((current) => current || "");
+              setLogsSessionId((current) => current || visibleSelectedSession.id);
+              setLogsStale(Boolean(logs));
+            } else {
+              setLogs(logsCacheRef.current.get(visibleSelectedSession.id) || "");
+              setLogsSessionId(visibleSelectedSession.id);
+              setLogsStale(true);
+            }
             setLogsError(null);
           }
         })
@@ -260,7 +288,19 @@ export const BrowserPage: FunctionComponent = () => {
       setLogsError(null);
       void fetchPreviewLogs(visibleSelectedSession.id, 160)
         .then((result) => {
-          setLogs(result.logs);
+          if (result.logs) {
+            logsCacheRef.current.set(visibleSelectedSession.id, result.logs);
+            setLogs(result.logs);
+            setLogsSessionId(visibleSelectedSession.id);
+            setLogsStale(false);
+          } else {
+            const cachedLogs = logsCacheRef.current.get(visibleSelectedSession.id);
+            if (cachedLogs) {
+              setLogs(cachedLogs);
+              setLogsSessionId(visibleSelectedSession.id);
+              setLogsStale(true);
+            }
+          }
           setLogsError(null);
         })
         .catch((fetchLogsError) => {
@@ -331,12 +371,16 @@ export const BrowserPage: FunctionComponent = () => {
     }, 350);
   };
 
-  const runNavigationAction = (action: () => void) => {
+  const runNavigationAction = (action: () => void, pendingMessage: string, successMessage: string) => {
     if (!navigationEnabled || navigationPendingRef.current) {
       return;
     }
+    browserFeedback.setPending(pendingMessage);
     markNavigationPending();
     action();
+    window.setTimeout(() => {
+      browserFeedback.setSuccess(successMessage);
+    }, 360);
   };
 
   const handleStart = async (sprintId = launchSprintId) => {
@@ -413,13 +457,14 @@ export const BrowserPage: FunctionComponent = () => {
     setRemovingSessionIds((current) => [...current, sessionId]);
     if (activeSessionId === sessionId) {
       setActiveSessionId(null);
-      setLogs("");
       setCurrentPath("/");
       setAddressValue("/");
     }
+    browserFeedback.setPending("Removing preview session...");
     try {
       await removePreviewSession(sessionId);
       await refreshSessions(true);
+      browserFeedback.setSuccess("Preview session removed successfully");
     } catch (actionError) {
       browserFeedback.setError(`Failed to remove session: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
     } finally {
@@ -454,10 +499,14 @@ export const BrowserPage: FunctionComponent = () => {
       return;
     }
     const nextPath = normalizePath(addressValue);
+    browserFeedback.setPending(`Navigating preview to ${nextPath}...`);
     markNavigationPending();
     setCurrentPath(nextPath);
     setAddressValue(nextPath);
     postNavigationCommand("push", nextPath);
+    window.setTimeout(() => {
+      browserFeedback.setSuccess(`Navigation sent for ${nextPath}`);
+    }, 360);
   };
 
   if (!selectedProject) {
@@ -484,7 +533,10 @@ export const BrowserPage: FunctionComponent = () => {
             type="button"
             onClick={() => {
               if (!loading) {
-                void refreshSessions();
+                browserFeedback.setPending("Refreshing preview sessions...");
+                void refreshSessions()
+                  .then(() => browserFeedback.setSuccess("Preview sessions refreshed"))
+                  .catch((refreshError) => browserFeedback.setError(`Failed to refresh preview sessions: ${refreshError instanceof Error ? refreshError.message : String(refreshError)}`));
               }
             }}
           disabled={loading}
@@ -504,25 +556,6 @@ export const BrowserPage: FunctionComponent = () => {
           {error}
         </div>
       )}
-
-      {actionFeedback.status !== "idle" && actionFeedback.message && (
-        <div className="mb-5 flex items-start gap-3 p-3 rounded-xl border bg-black/[0.02] dark:bg-white/[0.03] border-black/[0.06] dark:border-white/[0.06]" role={actionFeedback.status === "error" ? "alert" : "status"} aria-live="polite">
-          <div className={`flex-1 text-sm font-medium mt-0.5 ${actionFeedback.status === 'error' ? 'text-status-red' : actionFeedback.status === 'success' ? 'text-status-green' : 'text-signal-700 dark:text-signal-400'}`}>
-            {actionFeedback.status === 'pending' && <span className="mr-2 inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />}
-            {actionFeedback.message}
-          </div>
-          <button
-            type="button"
-            onClick={() => setActionFeedback({status: 'idle', message: null})}
-            aria-label="Dismiss action message"
-            className="shrink-0 p-1 rounded-md opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-          >
-            <span className="sr-only">Dismiss</span>
-            ✕
-          </button>
-        </div>
-      )}
-
 
       {browserFeedback.feedback.status !== "idle" && (
         <div className="mb-5">
@@ -546,7 +579,16 @@ export const BrowserPage: FunctionComponent = () => {
         <PreviewSessionSlider
           sessions={sessionCards}
           selectedSessionId={activeSessionId}
-          onSelectSession={setActiveSessionId}
+          onSelectSession={(sessionId) => {
+            if (sessionId === activeSessionId) {
+              return;
+            }
+            const nextSession = sessionCards.find((session) => session.id === sessionId);
+            setActiveSessionId(sessionId);
+            if (nextSession) {
+              browserFeedback.setSuccess(`Selected preview session ${nextSession.sprintName}`);
+            }
+          }}
           onRemoveSession={(sessionId) => void handleRemove(sessionId)}
           removingSessionIds={removingSessionIds}
         />
@@ -570,9 +612,21 @@ export const BrowserPage: FunctionComponent = () => {
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]" data-testid="browser-main-tool-panel">
         <PreviewWindowChrome
           session={visibleSelectedSession}
-          onNavigateBack={() => runNavigationAction(() => postNavigationCommand("back"))}
-          onNavigateForward={() => runNavigationAction(() => postNavigationCommand("forward"))}
-          onReload={() => runNavigationAction(() => postNavigationCommand("reload"))}
+          onNavigateBack={() => runNavigationAction(
+            () => postNavigationCommand("back"),
+            `Going back in ${visibleSelectedSession?.sprintName || "selected preview"}...`,
+            `Back navigation sent for ${visibleSelectedSession?.sprintName || "selected preview"}`
+          )}
+          onNavigateForward={() => runNavigationAction(
+            () => postNavigationCommand("forward"),
+            `Going forward in ${visibleSelectedSession?.sprintName || "selected preview"}...`,
+            `Forward navigation sent for ${visibleSelectedSession?.sprintName || "selected preview"}`
+          )}
+          onReload={() => runNavigationAction(
+            () => postNavigationCommand("reload"),
+            `Reloading ${normalizePath(currentPath)} in ${visibleSelectedSession?.sprintName || "selected preview"}...`,
+            `Reload sent for ${normalizePath(currentPath)}`
+          )}
           addressValue={addressValue}
           onAddressChange={setAddressValue}
           onAddressSubmit={(_value) => navigate()}

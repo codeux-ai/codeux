@@ -5,7 +5,7 @@ import gsap from "gsap";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
-import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { GSAP_INTERACTION_TOKENS, useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import type { ConfirmDialogOptions } from "../../hooks/use-confirm-dialog.js";
 
@@ -119,7 +119,7 @@ function DestructiveConfirmButton({
           { x: 0, duration: gsapTokens.inlineValidation.duration, ease: gsapTokens.inlineValidation.ease }
         );
       }
-      const resetDelay = tokenSecondsToMs(gsapTokens.controlFeedback.duration);
+      const resetDelay = tokenSecondsToMs(gsapTokens.controlFeedback.duration || GSAP_INTERACTION_TOKENS.controlFeedback.duration);
       if (resetDelay === 0) {
         setConfirmState("idle");
       } else {

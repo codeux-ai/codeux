@@ -1,5 +1,5 @@
 /** @vitest-environment happy-dom */
-import { render, screen, cleanup } from '@testing-library/preact';
+import { render, screen, cleanup, fireEvent } from '@testing-library/preact';
 import { expect, test, afterEach, vi } from 'vitest';
 import * as matchers from '@testing-library/jest-dom/matchers';
 import { Button } from '../Button.js';
@@ -26,7 +26,6 @@ test('handles pending state and aria-attributes', () => {
 });
 
 test('applies pending width adjustments correctly via style', () => {
-    // Note: in happy-dom, layout styles like offsetWidth are 0, so style.width will be 0px
     render(
         <ProjectDataProvider>
             <Button pending>Fixed width check</Button>
@@ -34,7 +33,8 @@ test('applies pending width adjustments correctly via style', () => {
     );
 
     const btn = screen.getByRole('button', { name: /Fixed width check/i });
-    expect(btn).toHaveStyle('width: 0px');
+    expect(btn).not.toHaveStyle('width: 0px');
+    expect(btn).toHaveTextContent('Fixed width check');
 });
 
 test('renders custom icon', () => {
@@ -64,4 +64,62 @@ test('uses signal focus by default and danger focus only for danger variant', ()
 
     expect(screen.getByRole('button', { name: /Default focus/i })).toHaveClass('focus-visible:ring-[var(--focus-ring-signal)]');
     expect(screen.getByRole('button', { name: /Delete/i })).toHaveClass('focus-visible:ring-[var(--focus-ring-danger)]');
+});
+
+test('suppresses activation while pending, native disabled, or aria-disabled', () => {
+    const onClick = vi.fn();
+    const { rerender } = render(
+        <ProjectDataProvider>
+            <Button pending onClick={onClick}>Save changes</Button>
+        </ProjectDataProvider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
+    expect(onClick).not.toHaveBeenCalled();
+
+    rerender(
+        <ProjectDataProvider>
+            <Button disabled onClick={onClick}>Save changes</Button>
+        </ProjectDataProvider>
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
+    expect(onClick).not.toHaveBeenCalled();
+
+    rerender(
+        <ProjectDataProvider>
+            <Button aria-disabled="true" onClick={onClick}>Save changes</Button>
+        </ProjectDataProvider>
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
+    expect(onClick).not.toHaveBeenCalled();
+});
+
+test('reduced motion snaps pending feedback while preserving static cues', () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation(query => ({
+        matches: query === '(prefers-reduced-motion: reduce)',
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+    }));
+
+    render(
+        <ProjectDataProvider>
+            <Button pending icon={Check}>Sync project</Button>
+        </ProjectDataProvider>
+    );
+
+    const btn = screen.getByRole('button', { name: /Sync project/i });
+    expect(btn).toHaveAttribute('aria-busy', 'true');
+    expect(btn).toHaveStyle({
+        transitionDuration: '0ms',
+        transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)'
+    });
+    expect(btn.querySelector('.motion-reduce\\:animate-none')).toBeInTheDocument();
+
+    window.matchMedia = originalMatchMedia;
 });

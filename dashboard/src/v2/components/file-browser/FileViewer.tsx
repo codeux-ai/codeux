@@ -20,7 +20,7 @@ const ViewerShell: FunctionComponent<{ children: preact.ComponentChildren }> = (
 );
 
 export const FileViewer: FunctionComponent<FileViewerProps> = ({ file, loading, error, isDark }) => {
-  if (loading) {
+  if (loading && !file) {
     return (
       <ViewerShell>
         <span class="inline-flex items-center gap-2 text-balance break-words" role="status" aria-live="polite">
@@ -31,7 +31,7 @@ export const FileViewer: FunctionComponent<FileViewerProps> = ({ file, loading, 
     );
   }
 
-  if (error) {
+  if (error && !file) {
     return (
       <ViewerShell>
         <span class="inline-flex flex-col items-center gap-2 text-status-red text-balance break-words" role="alert">
@@ -72,7 +72,18 @@ export const FileViewer: FunctionComponent<FileViewerProps> = ({ file, loading, 
   }
 
   return (
-    <section class="min-w-0 flex-1 h-full w-full" aria-label={`File contents for ${file.path}`}>
+    <section class="relative min-w-0 flex-1 h-full w-full" aria-label={`File contents for ${file.path}`} aria-busy={loading}>
+      {loading && (
+        <div class="absolute right-3 top-3 z-10 inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-white/92 px-3 py-1.5 text-[11px] font-semibold text-signal-700 shadow-sm backdrop-blur-md dark:bg-void-900/92 dark:text-signal-300" role="status" aria-live="polite">
+          <Loader2 class="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
+          Refreshing file
+        </div>
+      )}
+      {error && (
+        <div class="absolute left-3 right-3 top-3 z-10 rounded-xl border border-status-red/25 bg-white/94 px-3 py-2 text-xs text-status-red shadow-sm backdrop-blur-md dark:bg-void-900/94" role="alert">
+          Failed to refresh file contents. Showing cached copy. {error}
+        </div>
+      )}
       <Editor
         height="100%"
         theme={isDark ? MONACO_DARK_THEME : MONACO_LIGHT_THEME}

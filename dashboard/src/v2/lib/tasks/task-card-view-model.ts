@@ -14,11 +14,28 @@ export interface TaskCardViewModel {
   humanizedCreatedAt: string;
   executorLabel: string;
   dependencyIndicators: DependencyIndicator[];
+  dependencyActionLabel?: string;
+  qaReviewLabel?: string;
+  optimisticSavingLabel?: string | null;
+  dragStateLabel?: string;
+  actions?: TaskCardActionDescriptor[];
   sessionId?: string;
   sessionState?: string;
   prUrl?: string;
   liveRunningTime?: string;
   liveStartedAt?: string | null;
+}
+
+export type TaskCardActionKind = "rerun" | "preview" | "pull_request" | "live_runtime";
+
+export interface TaskCardActionDescriptor {
+  kind: TaskCardActionKind;
+  label: string;
+  ariaLabel: string;
+  title: string;
+  href?: string;
+  external?: boolean;
+  disabledReason?: string;
 }
 
 const EXECUTOR_LABEL: Record<TaskExecutorType, string> = {
@@ -45,6 +62,65 @@ export function getExecutorLabel(executorType: TaskExecutorType): string {
   return EXECUTOR_LABEL[executorType] || "Unknown";
 }
 
+function buildDependencyActionLabel(indicators: DependencyIndicator[]): string {
+  if (indicators.length === 0) {
+    return "Dependencies clear";
+  }
+
+  const blockerCount = indicators.filter((dep) => dep.status !== "completed").length;
+  if (blockerCount === 0) {
+    return `${indicators.length} dependencies clear`;
+  }
+
+  return `${blockerCount} dependency ${blockerCount === 1 ? "blocker" : "blockers"}`;
+}
+
+function buildQaReviewLabel(task: Task): string {
+  if (!task.latestReview) {
+    return "QA not reviewed";
+  }
+
+  const outcome = task.latestReview.outcome ? `, ${task.latestReview.outcome}` : "";
+  return `QA ${task.latestReview.status}${outcome}`;
+}
+
+function buildTaskCardActions(task: Task, prUrl?: string, hasLiveRuntime = false): TaskCardActionDescriptor[] {
+  return [
+    {
+      kind: "rerun",
+      label: "Rerun",
+      ariaLabel: `Rerun task ${task.id}: ${task.title}`,
+      title: "Rerun is available from the Live task detail workflow.",
+      disabledReason: "Open Live to rerun",
+    },
+    {
+      kind: "preview",
+      label: "Preview",
+      ariaLabel: `Open sprint preview for task ${task.id}: ${task.title}`,
+      title: task.sprintId ? "Open the sprint preview workspace." : "Select a sprint before opening preview.",
+      href: task.sprintId ? `/browser?sprintId=${encodeURIComponent(task.sprintId)}` : undefined,
+      disabledReason: task.sprintId ? undefined : "No sprint preview",
+    },
+    {
+      kind: "pull_request",
+      label: prUrl ? "PR" : "PR pending",
+      ariaLabel: prUrl ? `Open pull request for task ${task.id}: ${task.title}` : `Pull request pending for task ${task.id}: ${task.title}`,
+      title: prUrl ? "Open pull request in a new tab." : "No pull request is available yet.",
+      href: prUrl,
+      external: true,
+      disabledReason: prUrl ? undefined : "No PR yet",
+    },
+    {
+      kind: "live_runtime",
+      label: hasLiveRuntime ? "Live" : "Live idle",
+      ariaLabel: hasLiveRuntime ? `Open live runtime for task ${task.id}: ${task.title}` : `Live runtime not started for task ${task.id}: ${task.title}`,
+      title: hasLiveRuntime ? "Open the live runtime page." : "Runtime has not started for this task.",
+      href: hasLiveRuntime ? "/live" : undefined,
+      disabledReason: hasLiveRuntime ? undefined : "Runtime idle",
+    },
+  ];
+}
+
 export function buildTaskCardViewModel(
   task: Task,
   taskLookup: Map<string, Task>,
@@ -67,18 +143,26 @@ export function buildTaskCardViewModel(
       status: depTask.status,
     };
   });
+  const liveRunningTime = liveEnrichment?.liveTotalSeconds && liveEnrichment.liveTotalSeconds > 0
+    ? formatDuration(liveEnrichment.liveTotalSeconds)
+    : undefined;
+  const hasLiveRuntime = Boolean(liveEnrichment?.sessionId || liveEnrichment?.sessionState || liveRunningTime);
+  const prUrl = liveEnrichment?.prUrl || undefined;
 
   return {
     task,
     humanizedCreatedAt: formatTimeAgo(task.createdAt),
     executorLabel: getExecutorLabel(task.executorType),
     dependencyIndicators,
+    dependencyActionLabel: buildDependencyActionLabel(dependencyIndicators),
+    qaReviewLabel: buildQaReviewLabel(task),
+    optimisticSavingLabel: task.isOptimistic ? "Saving task changes" : null,
+    dragStateLabel: "Pointer drag only; keyboard reordering is not supported",
+    actions: buildTaskCardActions(task, prUrl, hasLiveRuntime),
     sessionId: liveEnrichment?.sessionId,
     sessionState: liveEnrichment?.sessionState,
-    prUrl: liveEnrichment?.prUrl,
-    liveRunningTime: liveEnrichment?.liveTotalSeconds && liveEnrichment.liveTotalSeconds > 0
-      ? formatDuration(liveEnrichment.liveTotalSeconds)
-      : undefined,
+    prUrl,
+    liveRunningTime,
     liveStartedAt: liveEnrichment?.liveStartedAt,
   };
 }

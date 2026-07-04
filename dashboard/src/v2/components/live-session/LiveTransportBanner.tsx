@@ -11,8 +11,6 @@ import {
   type LiveTransportBannerViewModel,
 } from "../../lib/live-session-view-model.js";
 
-const LIVE_SNAPSHOT_STALE_MS = 60_000;
-
 export interface LiveTransportBannerProps {
   transportState: TransportState;
   isRecovering: boolean;
@@ -32,45 +30,8 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
   const isReducedMotion = useReducedMotion();
   const motionTokens = useGsapInteractionTokens();
   const [shouldRender, setShouldRender] = useState(false);
-  const derivedBannerState = deriveLiveTransportBannerViewModel({ transportState, isRecovering, error });
-  const snapshotAgeMs = snapshotUpdatedAt ? Date.now() - new Date(snapshotUpdatedAt).getTime() : null;
-  const staleSnapshotState: LiveTransportBannerViewModel | null = (
-    !derivedBannerState
-    && transportState === "connected"
-    && snapshotAgeMs !== null
-    && Number.isFinite(snapshotAgeMs)
-    && snapshotAgeMs > LIVE_SNAPSHOT_STALE_MS
-  ) ? {
-    isVisible: true,
-    title: "Stale Data",
-    message: "Live runtime content is still visible, but the latest snapshot is more than a minute old.",
-    wrapperClass: "bg-status-amber/10 border-status-amber/20 text-status-amber",
-    iconClass: "text-status-amber",
-    icon: "reconnecting",
-    isUrgent: false,
-    ariaLive: "polite",
-    role: "status",
-    ariaBusy: false,
-  } : null;
-  const refreshingState: LiveTransportBannerViewModel | null = (
-    !derivedBannerState
-    && transportState === "connected"
-    && isRecovering
-  ) ? {
-    isVisible: true,
-    title: snapshotUpdatedAt ? "Refreshing Live Data" : "Recovering Live Data",
-    message: snapshotUpdatedAt
-      ? "Keeping the current runtime snapshot visible while the live stream catches up."
-      : "Waiting for the first runtime snapshot after transport recovery.",
-    wrapperClass: "bg-signal-500/10 border-signal-500/20 text-signal-700 dark:text-signal-300",
-    iconClass: "text-signal-600 dark:text-signal-300",
-    icon: "reconnecting",
-    isUrgent: false,
-    ariaLive: "polite",
-    role: "status",
-    ariaBusy: true,
-  } : null;
-  const bannerState = viewModel ?? derivedBannerState ?? refreshingState ?? staleSnapshotState;
+  const derivedBannerState = deriveLiveTransportBannerViewModel({ transportState, isRecovering, error, snapshotUpdatedAt });
+  const bannerState = viewModel ?? derivedBannerState;
   const isVisible = bannerState?.isVisible === true;
 
   useLayoutEffect(() => {

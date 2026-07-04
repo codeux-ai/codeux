@@ -69,6 +69,8 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
   const addressLabelId = "preview-address-label";
   const controlsDisabled = !navigationEnabled || navigationBusy;
   const disabledDescriptionId = navigationBusy ? navigationPendingDescriptionId : containerDescriptionId;
+  const sessionName = session?.sprintName || "selected preview";
+  const normalizedPath = addressValue || "/";
   const windowStateMessage = windowState === "normal"
     ? "Preview window is open."
     : windowState === "fullscreen"
@@ -238,7 +240,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             disabled={controlsDisabled}
             aria-disabled={controlsDisabled}
             aria-busy={navigationBusy || (!navigationEnabled && session?.status === 'starting')}
-            aria-label="Go back in preview"
+            aria-label={`Go back in preview session ${sessionName}`}
             aria-describedby={controlsDisabled ? disabledDescriptionId : undefined}
             title={controlsDisabled ? navigationDescription : "Go back"}
             className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
@@ -257,7 +259,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             disabled={controlsDisabled}
             aria-disabled={controlsDisabled}
             aria-busy={navigationBusy || (!navigationEnabled && session?.status === 'starting')}
-            aria-label="Go forward in preview"
+            aria-label={`Go forward in preview session ${sessionName}`}
             aria-describedby={controlsDisabled ? disabledDescriptionId : undefined}
             title={controlsDisabled ? navigationDescription : "Go forward"}
             className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
@@ -276,7 +278,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             disabled={controlsDisabled}
             aria-disabled={controlsDisabled}
             aria-busy={navigationBusy || (!navigationEnabled && session?.status === 'starting')}
-            aria-label="Reload preview"
+            aria-label={`Reload preview session ${sessionName} at ${normalizedPath}`}
             aria-describedby={controlsDisabled ? disabledDescriptionId : undefined}
             title={controlsDisabled ? navigationDescription : "Reload preview"}
             className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
@@ -295,7 +297,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             }}
           >
             <label id={addressLabelId} className="sr-only" htmlFor="preview-address-input">
-              Preview address
+              Preview address for {sessionName}
             </label>
             <input
               id="preview-address-input"
@@ -304,6 +306,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
               disabled={controlsDisabled}
               aria-disabled={controlsDisabled}
               aria-busy={navigationBusy || (!navigationEnabled && session?.status === 'starting')}
+              aria-label={`Preview address for ${sessionName}`}
               aria-describedby={controlsDisabled ? disabledDescriptionId : undefined}
               title={controlsDisabled ? navigationDescription : "Preview address"}
               placeholder={controlsDisabled ? "Preview navigation unavailable..." : "Enter path..."}
@@ -312,6 +315,11 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             />
           </form>
         </div>
+        {controlsDisabled && (
+          <div className="mt-2 rounded-2xl border border-slate-400/20 bg-slate-500/10 px-3 py-2 text-xs font-medium text-slate-600 dark:border-slate-500/30 dark:bg-slate-500/15 dark:text-slate-300">
+            {navigationDescription}
+          </div>
+        )}
       </div>
       <div
         className={

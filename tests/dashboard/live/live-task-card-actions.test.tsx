@@ -1,7 +1,7 @@
 /** @jsx h */
 // @vitest-environment happy-dom
 import { h } from "preact";
-import { render, screen, cleanup, waitFor } from "@testing-library/preact";
+import { render, screen, cleanup, waitFor, within } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
@@ -178,6 +178,31 @@ describe("live task card actions", () => {
     expect(await screen.findByText("Task marked as completed.")).toBeInTheDocument();
   });
 
+  it("shows inline optimistic pending feedback and suppresses duplicate force-complete activation", async () => {
+    let resolveForceComplete: (() => void) | null = null;
+    forceCompleteLiveTaskMock.mockReturnValueOnce(new Promise<void>((resolve) => {
+      resolveForceComplete = resolve;
+    }));
+
+    render(<LiveSessionPage />);
+    const forceButton = screen.getAllByRole("button", { name: /Force complete task T1/ })[0]!;
+    const card = forceButton.closest('[tabindex="0"]') as HTMLElement;
+
+    await userEvent.dblClick(forceButton);
+
+    expect(forceCompleteLiveTaskMock).toHaveBeenCalledTimes(1);
+    expect(within(card).getAllByText(/Marking this task complete/).length).toBeGreaterThan(0);
+    expect(within(card).getByText("Completed")).toBeInTheDocument();
+    const pendingButton = within(card).getByRole("button", { name: /Force complete task T1/ });
+    expect(pendingButton).toHaveAttribute("aria-busy", "true");
+    expect(pendingButton).toHaveAttribute("aria-disabled", "true");
+
+    resolveForceComplete?.();
+    await waitFor(() => {
+      expect(refreshRuntimeStatusMock).toHaveBeenCalled();
+    });
+  });
+
   it("uses responsive flex wrapping on task header", () => {
     render(<LiveSessionPage />);
     const forceButtons = screen.getAllByRole("button", { name: /Force complete task/ });
@@ -192,7 +217,10 @@ describe("live task card actions", () => {
     forceCompleteLiveTaskMock.mockRejectedValueOnce(new Error("force complete failed"));
     render(<LiveSessionPage />);
     const buttons = screen.getAllByRole("button", { name: /Force complete task/ });
+    const card = buttons[0]!.closest('[tabindex="0"]') as HTMLElement;
     await userEvent.click(buttons[0]!);
     expect(await screen.findByText("force complete failed")).toBeInTheDocument();
+    expect(within(card).getByText("Running")).toBeInTheDocument();
+    expect(within(card).queryByText(/Marking this task complete/)).not.toBeInTheDocument();
   });
 });

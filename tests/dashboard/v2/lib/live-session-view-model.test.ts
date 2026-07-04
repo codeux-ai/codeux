@@ -266,6 +266,8 @@ describe("live-session-view-model", () => {
       transportState: "connected",
       isRecovering: false,
       error: null,
+      snapshotUpdatedAt: "2026-03-27T10:03:00.000Z",
+      nowMs: new Date("2026-03-27T10:03:30.000Z").getTime(),
     })).toBeNull();
 
     expect(deriveLiveTransportBannerViewModel({
@@ -290,5 +292,84 @@ describe("live-session-view-model", () => {
       ariaBusy: true,
       isVisible: true,
     });
+
+    expect(deriveLiveTransportBannerViewModel({
+      transportState: "connected",
+      isRecovering: true,
+      error: null,
+      snapshotUpdatedAt: "2026-03-27T10:03:00.000Z",
+    })).toMatchObject({
+      title: "Refreshing Live Data",
+      message: expect.stringContaining("current runtime snapshot visible"),
+      role: "status",
+      ariaLive: "polite",
+      ariaBusy: true,
+      isVisible: true,
+    });
+
+    expect(deriveLiveTransportBannerViewModel({
+      transportState: "connected",
+      isRecovering: true,
+      error: null,
+      snapshotUpdatedAt: null,
+    })).toMatchObject({
+      title: "Recovering Live Data",
+      message: expect.stringContaining("first runtime snapshot"),
+      role: "status",
+      ariaLive: "polite",
+      ariaBusy: true,
+      isVisible: true,
+    });
+
+    expect(deriveLiveTransportBannerViewModel({
+      transportState: "connected",
+      isRecovering: false,
+      error: null,
+      snapshotUpdatedAt: "2026-03-27T10:03:00.000Z",
+      nowMs: new Date("2026-03-27T10:04:01.000Z").getTime(),
+    })).toMatchObject({
+      title: "Stale Data",
+      message: expect.stringContaining("snapshot is more than a minute old"),
+      role: "status",
+      ariaLive: "polite",
+      ariaBusy: false,
+      isVisible: true,
+    });
+  });
+
+  it("keeps force-complete optimistic state task-scoped and rolls back from explicit errors", () => {
+    const [pendingItem] = deriveLiveSessionTaskCardItems({
+      filteredTasks: [createTask({ record_id: "task-record-1", id: "TASK-1", status: "RUNNING" })],
+      dispatches: [],
+      events: [],
+      invocations: [],
+      taskTimingMap: new Map(),
+      rerunningIds: new Set(),
+      forceCompletePendingIds: new Set(["task-record-1"]),
+      forceCompleteErrorByTaskId: new Map(),
+      optimisticallyCompletedTaskIds: new Set(["task-record-1"]),
+    });
+
+    expect(pendingItem?.task.status).toBe("COMPLETED");
+    expect(pendingItem?.phase).toBe("COMPLETED");
+    expect(pendingItem?.isForceCompleting).toBe(true);
+    expect(pendingItem?.forceCompleteError).toBeNull();
+
+    const [rolledBackItem] = deriveLiveSessionTaskCardItems({
+      filteredTasks: [createTask({ record_id: "task-record-1", id: "TASK-1", status: "RUNNING" })],
+      dispatches: [],
+      events: [],
+      invocations: [],
+      taskTimingMap: new Map(),
+      rerunningIds: new Set(),
+      forceCompletePendingIds: new Set(),
+      forceCompleteErrorByTaskId: new Map([["task-record-1", "force complete failed"]]),
+      optimisticallyCompletedTaskIds: new Set(),
+    });
+
+    expect(rolledBackItem?.task.status).toBe("RUNNING");
+    expect(rolledBackItem?.phase).toBe("RUNNING");
+    expect(rolledBackItem?.isForceCompleting).toBe(false);
+    expect(rolledBackItem?.forceCompleteError).toBe("force complete failed");
   });
 });

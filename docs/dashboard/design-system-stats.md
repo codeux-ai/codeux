@@ -43,7 +43,8 @@ The redesigned Stats page uses a stable top-to-bottom shell:
 5. Feedback states
    - No-project, first-load loading, first-load error, empty, refresh, and reduced-data states preserve the shell rhythm.
    - Loading states use polite status semantics. Error states use alert semantics and expose retry when recovery is available.
-   - Refresh states keep existing analytics visible where cached data exists. Mark the affected chart, table, transcript, or page region with `aria-busy` and add visible/polite status text instead of using animation alone.
+- Refresh states keep existing analytics visible where cached data exists. Mark the affected chart, table, transcript, or page region with `aria-busy` and add visible/polite status text instead of using animation alone.
+- Background refresh states for mode workspaces and invocation ledgers keep cached rows/cards on screen. They add visible polite copy that says the data is updating from cache, while first-load states may still use skeleton or empty loading panels.
 
 ## Visual Modes
 
@@ -107,6 +108,7 @@ Ledgers contains operational records for tasks, sprints, and Git.
 - Git rows keep churn separate from token flow. Use `ChurnFlowBar` for insertions and deletions, and keep pull requests, merges, files, conflicts, visible share, and leader share readable.
 - Search, sort, and progressive rendering preserve the `useProgressiveList` flow: visible items, scroll container, and sentinel stay wired together.
 - Sort controls use buttons with `aria-pressed` when they represent local ordering choices.
+- Sort controls expose the current direction in both visible icon state and accessible names such as `Tokens, sorted descending` or `Latest, not sorted`.
 - Ledger tab indicators and selected records use `selectionMovement`; progressive rendering, sorting, and visible-row changes use `listReveal` or `listReorder` depending on whether rows are entering or moving. Reduced motion snaps these changes while leaving count badges, selected states, and row labels visible.
 
 ### System
@@ -181,6 +183,7 @@ See [Mobile Responsiveness](./mobile-responsiveness.md) for dashboard-wide const
 - Microvisuals such as sparklines, donuts, ribbons, token flow bars, churn bars, and status bars either expose a concise `role="img"` label or are paired with nearby text that communicates the same data.
 - Date inputs have visible labels, programmatic labels, validation state, and inline alert text for invalid custom ranges.
 - Invocation tables provide captions, active `aria-sort` only on the sorted column, explicit sort button labels, mobile cell labels, and wrapping-safe cells for long provider, model, error, and transcript text.
+- Shared table primitives may announce result counts through polite status text and mark background refreshes with `aria-busy` without replacing cached rows. Sortable shared headers show a direction glyph and include `sorted ascending`, `sorted descending`, or `not sorted` in the control name.
 - System controls are grouped by purpose. Mode controls, time presets, record views, status filters, purpose filters, provider filters, error-category filters, and pagination controls use named groups rather than anonymous button clusters.
 - System record-view buttons use `aria-pressed`, not tab semantics, because they are command-style filters for the records work area. Arrow, Home, and End handling should keep focus inside the group.
 - System invocation tables preserve semantic header relationships: desktop headers use `scope="col"`, sortable headers set `aria-sort` only when active, and body cells reference their headers.
@@ -199,6 +202,7 @@ Motion is for orientation only: shell entrance, mode transitions, card detail re
 - Use `selectionMovement` for mode detail movement, active tab indicators, selected ledger views, metric-card detail refreshes, and small micrograph emphasis.
 - Use `listReveal` for progressive ledger and invocation row entrance.
 - Use `listReorder` when sorting or filtering repositions existing rows.
+- List-window controls use `listReorder` timing for visible-count changes and a static polite range announcement such as `Showing 1 to 20 of 45 tasks`; under reduced motion, the state text remains while transition classes snap.
 - Use `inlineValidation` for custom date range errors.
 - Use `asyncFeedback` for chart refresh overlays and `ActionFeedbackRegion` states in usage graph loading/error/empty surfaces.
 

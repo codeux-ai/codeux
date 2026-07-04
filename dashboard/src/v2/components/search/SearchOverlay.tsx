@@ -52,6 +52,26 @@ type CategorizedSearchItem =
     | (AgentSearchItem & { category: "agents" })
     | (ContainerSearchItem & { category: "containers" });
 
+const inactiveResultStatuses = new Set(["unavailable", "disabled"]);
+
+function isResultInactive(item: SearchItem): boolean {
+    return Boolean(item.status && inactiveResultStatuses.has(item.status));
+}
+
+function findNextActiveIndex(items: CategorizedSearchItem[], startIndex: number, direction: 1 | -1): number {
+    if (items.length === 0) return -1;
+
+    let index = startIndex;
+    for (let checked = 0; checked < items.length; checked += 1) {
+        if (index < 0) index = items.length - 1;
+        if (index >= items.length) index = 0;
+        if (!isResultInactive(items[index])) return index;
+        index += direction;
+    }
+
+    return -1;
+}
+
 export interface SearchResults {
     sprints: SprintSearchItem[];
     tasks: TaskSearchItem[];
@@ -111,7 +131,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
 
     const allItems: CategorizedSearchItem[] = CATEGORIES.flatMap(c => c.items?.map(item => ({ ...item, category: c.id } as CategorizedSearchItem)));
     const activeItem = focusedIndex >= 0 ? allItems[focusedIndex] : undefined;
-    const activeDescendantId = activeItem ? `search-result-${activeItem.id}` : undefined;
+    const activeDescendantId = activeItem && !isResultInactive(activeItem) ? `search-result-${activeItem.id}` : undefined;
     const hasResults = allItems.length > 0;
     const hasStaleResults = Boolean(isLoading && hasResults);
     const statusMessage = searchQuery.length === 0
@@ -232,10 +252,11 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
     useEffect(() => {
         setFocusedIndex(prev => {
             if (allItems.length === 0) return -1;
-            if (prev >= allItems.length) return allItems.length - 1;
+            if (prev >= allItems.length) return findNextActiveIndex(allItems, allItems.length - 1, -1);
+            if (prev >= 0 && isResultInactive(allItems[prev])) return findNextActiveIndex(allItems, prev + 1, 1);
             return prev;
         });
-    }, [allItems.length]);
+    }, [allItems]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -247,20 +268,20 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                 onClose();
             } else if (e.key === 'Home') {
                 e.preventDefault();
-                setFocusedIndex(itemCount > 0 ? 0 : -1);
+                setFocusedIndex(findNextActiveIndex(allItems, 0, 1));
             } else if (e.key === 'End') {
                 e.preventDefault();
-                setFocusedIndex(itemCount > 0 ? itemCount - 1 : -1);
+                setFocusedIndex(findNextActiveIndex(allItems, itemCount - 1, -1));
             } else if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                setFocusedIndex(prev => itemCount > 0 ? (prev < itemCount - 1 ? prev + 1 : 0) : -1);
+                setFocusedIndex(prev => findNextActiveIndex(allItems, prev < itemCount - 1 ? prev + 1 : 0, 1));
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                setFocusedIndex(prev => itemCount > 0 ? (prev > 0 ? prev - 1 : itemCount - 1) : -1);
+                setFocusedIndex(prev => findNextActiveIndex(allItems, prev > 0 ? prev - 1 : itemCount - 1, -1));
             } else if (e.key === 'Enter' && focusedIndex >= 0) {
                 e.preventDefault();
                 const selectedItem = allItems[focusedIndex];
-                if (selectedItem) {
+                if (selectedItem && !isResultInactive(selectedItem)) {
                     handleSelect(selectedItem);
                 }
             }
@@ -340,6 +361,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                     <button
                         onClick={onClose}
                         aria-label="Close search"
+                        style={{ transitionDuration: interactionTokens.controlFeedback.duration, transitionTimingFunction: interactionTokens.controlFeedback.ease }}
                         className="ml-0 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:hover:bg-white/[0.06] dark:hover:text-slate-100"
                     >
                         <X className="h-[18px] w-[18px]" aria-hidden="true" />
@@ -423,8 +445,8 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                             aria-live="polite"
                             aria-label="Search results"
                             style={{
-                                transitionDuration: interactionTokens.controlFeedback.duration,
-                                transitionTimingFunction: interactionTokens.controlFeedback.ease
+                                transitionDuration: interactionTokens.listReveal.duration,
+                                transitionTimingFunction: interactionTokens.listReveal.ease
                             }}
                             className={`relative grid grid-cols-1 gap-3 transition-[filter,opacity] lg:grid-cols-2 ${hasStaleResults ? 'opacity-75 saturate-[0.82]' : ''}`}
                         >
@@ -462,7 +484,9 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                                                         searchQuery={searchQuery}
                                                         globalItemIndex={currentIndex}
                                                         isFocused={isFocused}
-                                                        onFocus={() => setFocusedIndex(currentIndex)}
+                                                        onFocus={() => {
+                                                            if (!isResultInactive(item)) setFocusedIndex(currentIndex);
+                                                        }}
                                                         activeItemRef={isFocused ? activeItemRef : null}
                                                         onClick={() => handleSelect({ ...item, category: category.id } as CategorizedSearchItem)}
                                                     />

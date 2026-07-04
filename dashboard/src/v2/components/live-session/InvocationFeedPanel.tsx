@@ -70,7 +70,7 @@ const InvocationFeedRow: FunctionComponent<{
       <div className="flex items-start justify-between gap-3 min-w-0">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
-            <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${dotClass} ${invocation.status === "running" ? "motion-safe:animate-pulse" : ""}`} aria-hidden="true" />
+            <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${dotClass} ${invocation.status === "running" ? "motion-safe:animate-pulse motion-reduce:ring-2 motion-reduce:ring-signal-500/25" : ""}`} aria-hidden="true" />
             <span className="sr-only">Invocation status: {invocation.status}.</span>
             <span className="min-w-0 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
               {purposeLabel}

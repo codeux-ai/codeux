@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useRef } from "preact/hooks";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { useGsapInteractionTokens } from "../lib/motion/constants.js";
 import { CheckCheck, RefreshCw, X } from "lucide-preact";
@@ -35,10 +35,10 @@ const severityClasses: Record<DashboardNotification["severity"], {
 export const NotificationPanel: FunctionComponent<{
   notifications: DashboardNotification[];
   unreadCount: number;
-  onMarkAllRead: () => void;
+  onMarkAllRead: () => void | Promise<void>;
   onMarkRead: (id: string) => void;
   onDismiss: (id: string) => void;
-  onRefresh: () => void;
+  onRefresh: () => void | Promise<void>;
 }> = ({
   notifications,
   unreadCount,
@@ -48,7 +48,82 @@ export const NotificationPanel: FunctionComponent<{
   onRefresh,
 }) => {
   const panelRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const hasMountedListRef = useRef(false);
+  const previousNotificationIdsRef = useRef<string>("");
   const motionTokens = useGsapInteractionTokens();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
+  const [announcement, setAnnouncement] = useState("");
+
+  const visibleNotifications = useMemo(() => {
+    return [...notifications].sort((left, right) => {
+      if (left.severity === right.severity) {
+        return 0;
+      }
+      if (left.severity === "critical") {
+        return -1;
+      }
+      if (right.severity === "critical") {
+        return 1;
+      }
+      return 0;
+    });
+  }, [notifications]);
+
+  const notificationIds = useMemo(
+    () => visibleNotifications.map((notification) => notification.id).join("|"),
+    [visibleNotifications],
+  );
+
+  const focusPanel = useCallback(() => {
+    const panel = panelRef.current;
+    if (panel) {
+      panel.focus();
+      return;
+    }
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+  }, []);
+
+  const focusPanelAfterUpdate = useCallback(() => {
+    queueMicrotask(focusPanel);
+  }, [focusPanel]);
+
+  const handleRefresh = useCallback(async (): Promise<void> => {
+    if (isRefreshing) {
+      return;
+    }
+
+    setIsRefreshing(true);
+    setAnnouncement("Refreshing notifications.");
+    try {
+      await onRefresh();
+      setAnnouncement("Notifications refreshed.");
+    } catch {
+      setAnnouncement("Notifications could not be refreshed.");
+    } finally {
+      setIsRefreshing(false);
+      focusPanelAfterUpdate();
+    }
+  }, [focusPanelAfterUpdate, isRefreshing, onRefresh]);
+
+  const handleMarkAllRead = useCallback(async (): Promise<void> => {
+    if (isMarkingAllRead || unreadCount === 0) {
+      return;
+    }
+
+    setIsMarkingAllRead(true);
+    setAnnouncement(`Marking ${unreadCount} notification${unreadCount === 1 ? "" : "s"} read.`);
+    try {
+      await onMarkAllRead();
+      setAnnouncement("All notifications marked read.");
+    } finally {
+      setIsMarkingAllRead(false);
+      focusPanelAfterUpdate();
+    }
+  }, [focusPanelAfterUpdate, isMarkingAllRead, onMarkAllRead, unreadCount]);
 
   useLayoutEffect(() => {
     if (!panelRef.current) return;
@@ -65,26 +140,70 @@ export const NotificationPanel: FunctionComponent<{
           ease: motionTokens.enterExit.ease,
         },
       );
-      gsap.fromTo(
-        panelRef.current?.querySelectorAll("[data-notification-item]") || [],
-        { opacity: 0, x: 10 },
-        { opacity: 1, x: 0, duration: motionTokens.listReveal.duration, stagger: motionTokens.listReveal.duration / 5, ease: motionTokens.listReveal.ease },
-      );
     });
 
     return () => ctx.revert();
-  }, [motionTokens.enterExit.duration, motionTokens.enterExit.ease, motionTokens.listReveal.duration, motionTokens.listReveal.ease, notifications.length]);
+  }, [motionTokens.enterExit.duration, motionTokens.enterExit.ease]);
+
+  useLayoutEffect(() => {
+    if (!listRef.current) return;
+
+    const items = listRef.current.querySelectorAll("[data-notification-item]");
+    if (items.length === 0) {
+      previousNotificationIdsRef.current = notificationIds;
+      hasMountedListRef.current = true;
+      return;
+    }
+
+    const contract = hasMountedListRef.current ? motionTokens.listReorder : motionTokens.listReveal;
+    const previousIds = previousNotificationIdsRef.current;
+    previousNotificationIdsRef.current = notificationIds;
+    hasMountedListRef.current = true;
+
+    if (contract.duration === 0 || previousIds === notificationIds) {
+      return;
+    }
+
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        items,
+        hasMountedListRef.current && previousIds ? { opacity: 0.84, y: -4 } : { opacity: 0, x: 10 },
+        {
+          opacity: 1,
+          x: 0,
+          y: 0,
+          duration: contract.duration,
+          stagger: contract.duration / 5,
+          ease: contract.ease,
+          overwrite: "auto",
+        },
+      );
+    }, listRef);
+
+    return () => ctx.revert();
+  }, [motionTokens.listReveal.duration, motionTokens.listReveal.ease, motionTokens.listReorder.duration, motionTokens.listReorder.ease, notificationIds]);
+
+  const busy = isRefreshing || isMarkingAllRead;
+  const markAllReadDisabledReason = isMarkingAllRead
+    ? "Marking all notifications read"
+    : unreadCount === 0
+      ? "All notifications are already read"
+      : "";
 
   return (
     <div
       ref={panelRef}
       role="dialog"
       aria-label="Notifications Panel"
+      aria-busy={busy ? "true" : "false"}
       tabIndex={-1}
       className="fixed inset-x-4 top-[72px] sm:inset-auto sm:absolute sm:top-full sm:right-0 mt-2 w-[23rem] max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-5rem)] overflow-hidden rounded-2xl border border-black/[0.08] dark:border-white/[0.08] bg-white/95 shadow-2xl backdrop-blur-2xl dark:bg-void-800/95 z-50 flex flex-col"
     >
       <div className="sr-only" aria-live="polite" aria-atomic="true">
         {unreadCount} unread notification{unreadCount !== 1 ? 's' : ''}. Notifications are current after the latest refresh request.
+      </div>
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {announcement}
       </div>
 
       <div className="absolute left-0 right-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-signal-500/40 to-transparent" />
@@ -95,32 +214,40 @@ export const NotificationPanel: FunctionComponent<{
             Notifications
           </div>
           <div className="mt-0.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
-            Startup checks and operator attention
+            {isRefreshing ? "Refreshing notifications" : isMarkingAllRead ? "Marking notifications read" : unreadCount === 0 ? "All notifications are read" : "Startup checks and operator attention"}
           </div>
         </div>
         <div className="flex items-center gap-1.5">
           <button
             type="button"
-            onClick={onRefresh}
+            onClick={() => void handleRefresh()}
+            disabled={isRefreshing}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors motion-reduce:transition-none hover:bg-black/[0.05] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
-            aria-label="Refresh notifications"
+            aria-label={isRefreshing ? "Refreshing notifications" : "Refresh notifications"}
+            aria-disabled={isRefreshing ? "true" : "false"}
           >
-            <RefreshCw className="h-3.5 w-3.5" />
+            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin motion-reduce:animate-none" : ""}`} />
           </button>
           <button
             type="button"
-            onClick={onMarkAllRead}
-            disabled={unreadCount === 0}
+            onClick={() => void handleMarkAllRead()}
+            disabled={unreadCount === 0 || isMarkingAllRead}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors motion-reduce:transition-none hover:bg-black/[0.05] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
-            aria-label="Mark all notifications read"
+            aria-label={markAllReadDisabledReason || "Mark all notifications read"}
+            aria-describedby={markAllReadDisabledReason ? "notification-mark-all-read-reason" : undefined}
           >
             <CheckCheck className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
+      {markAllReadDisabledReason ? (
+        <div id="notification-mark-all-read-reason" className="border-b border-black/[0.06] px-4 py-2 text-[11px] font-medium text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
+          {markAllReadDisabledReason}
+        </div>
+      ) : null}
 
-      <ul className="dashboard-scrollbar flex-1 min-h-0 overflow-y-auto p-2 m-0 list-none" aria-live="polite" aria-label="Notifications list" aria-busy="false">
-        {notifications.length === 0 ? (
+      <ul ref={listRef} className="dashboard-scrollbar flex-1 min-h-0 overflow-y-auto p-2 m-0 list-none" aria-live="polite" aria-label="Notifications list" aria-busy={busy ? "true" : "false"}>
+        {visibleNotifications.length === 0 ? (
           <li role="status" className="flex flex-col items-center justify-center px-5 py-10 text-center">
             <div className="rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-700 dark:text-signal-300">
               Clear
@@ -130,7 +257,7 @@ export const NotificationPanel: FunctionComponent<{
               Startup checks are healthy and there is nothing waiting for operator attention.
             </div>
           </li>
-        ) : notifications.map((notification) => {
+        ) : visibleNotifications.map((notification) => {
           const classes = severityClasses[notification.severity];
           const Icon = notification.icon;
           const details = notification.body ?? notification.subtitle;
@@ -141,6 +268,7 @@ export const NotificationPanel: FunctionComponent<{
             <li
               key={notification.id}
               data-notification-item
+              data-motion-contract="listReorder"
               tabIndex={0}
               onFocus={() => onMarkRead(notification.id)}
               className="group relative mb-2 rounded-2xl border border-black/[0.05] bg-white/75 p-3 text-left transition-colors motion-reduce:transition-none hover:border-black/[0.1] hover:bg-black/[0.025] last:mb-0 dark:border-white/[0.06] dark:bg-white/[0.04] dark:hover:border-white/[0.1] dark:hover:bg-white/[0.06]"
@@ -157,6 +285,11 @@ export const NotificationPanel: FunctionComponent<{
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="break-words text-sm font-bold text-slate-800 dark:text-slate-100">{notification.title}</div>
+                      <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                        <span aria-label={notification.unread ? "Unread notification" : "Read notification"}>
+                          {notification.unread ? "Unread" : "Read"}
+                        </span>
+                      </div>
                       {details ? (
                         <div className="mt-1 break-words text-xs leading-relaxed text-slate-500 dark:text-slate-400">{details}</div>
                       ) : null}
@@ -168,6 +301,7 @@ export const NotificationPanel: FunctionComponent<{
                       type="button"
                       onClick={() => onMarkRead(notification.id)}
                       className="rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 hover:bg-black/[0.04] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
+                      aria-label={`${notification.unread ? "Mark read" : "Read"} ${notification.title}`}
                     >
                       {notification.unread ? "Mark read" : "Read"}
                     </button>
@@ -177,14 +311,16 @@ export const NotificationPanel: FunctionComponent<{
                           type="button"
                           onClick={(e) => {
                             if (document.activeElement === e.currentTarget) {
-                              panelRef.current?.focus();
+                              focusPanel();
                               (e.currentTarget as HTMLElement).blur();
                             }
                             onMarkRead(notification.id);
                             notification.onAction?.();
+                            setAnnouncement(`${notification.actionLabel} opened for ${notification.title}.`);
+                            focusPanelAfterUpdate();
                           }}
                           className="rounded-full border border-black/10 bg-black/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 hover:bg-black/10 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white transition-colors motion-reduce:transition-none"
-                          aria-label={`${notification.actionLabel} for ${notification.title}`}
+                          aria-label={`${notification.actionLabel} ${notification.title}`}
                         >
                           {notification.actionLabel}
                         </button>
@@ -194,10 +330,12 @@ export const NotificationPanel: FunctionComponent<{
                           type="button"
                           onClick={(e) => {
                             if (document.activeElement === e.currentTarget) {
-                              panelRef.current?.focus();
+                              focusPanel();
                               (e.currentTarget as HTMLElement).blur();
                             }
                             onDismiss(notification.id);
+                            setAnnouncement(`${notification.title} dismissed.`);
+                            focusPanelAfterUpdate();
                           }}
                           className="flex h-7 w-7 items-center justify-center rounded-full text-slate-400 hover:bg-black/[0.05] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
                           aria-label={`Dismiss ${notification.title}`}

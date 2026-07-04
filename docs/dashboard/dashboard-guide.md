@@ -197,6 +197,10 @@ Legacy runtime:
 
 ### Navigation
 - The top-nav workspace search trigger uses a more opaque glass surface in light and dark mode so it stays readable against page content while preserving the existing blur treatment.
+- The notification panel announces refresh, mark-read, dismiss, and action outcomes through polite live regions. Refresh and mark-all-read controls expose pending state with `aria-busy`, disabled controls include visible reasons, and every repeated row action includes the notification title in its accessible name.
+- Notification rows include textual read/unread state in addition to the severity accent rail. Initial rows use the `listReveal` motion contract, read/dismiss compaction uses `listReorder`, and reduced-motion users receive immediate static state changes without transitional movement.
+- Critical notifications are rendered ahead of non-critical items so scroll overflow cannot push blocking startup issues behind lower-priority messages. They remain visible until the notification source clears or the user explicitly dismisses a dismissible critical item.
+- Action and dismiss clicks return focus to the notification panel after the row state changes, giving keyboard users a stable fallback when an item leaves the list.
 
 ### Stats page
 - The Stats page is available at `/stats` and is scoped to the selected project. Without a selected project, it renders the Stats shell with a polite no-project state instead of attempting to fetch telemetry.
@@ -269,7 +273,7 @@ Legacy runtime:
 - The organic sprint bubble cells use the same live start/stop control path as the registry list, so the hover play/stop action is now functional instead of decorative
 - Sprint cells now surface a QA-reviewed indicator with an expandable overlay section inside the created column, and allow marking sprints completed directly from the cell menu
 - Task rows and Live task cards now surface task-level QA review badges from the latest task QA run, including a running indicator while QA review is in progress.
-- The Tasks page sprint scope selector uses a keyboard-accessible listbox pattern with selected option state, arrow/Home/End navigation, outside-click close, and trigger focus restoration. Task board lanes render as named regions with count summaries, polite count updates, and status regions for loading, empty, and error states; Kanban cards expose task id/title/status/priority, dependency, session, PR, duration, and QA review context in stable accessible text while keeping drag-and-drop pointer-only.
+- The Tasks page sprint scope selector uses a keyboard-accessible listbox pattern with selected, open, loading, and empty option state, arrow/Home/End navigation, Escape close, outside-click close, and trigger focus restoration. Task board status and priority filters keep the current cards visible during the short filter transition, then announce the settled result count through a polite live region. Task board lanes render as named regions with count summaries, drop-target feedback, reduced-motion drag-disabled copy, and status regions for loading, empty, and error states; Kanban cards expose task id/title/status/priority, dependency blockers, optimistic saving, session, preview, PR, live runtime, rerun availability, duration, and QA review context in stable accessible text while keeping drag-and-drop pointer-only.
 - Rendered markdown previews use near-black body, heading, list, blockquote, and table text in light mode while preserving slate/white dark-mode text and signal-colored links/code.
 - Live task cards now include `Edit` and `Force complete` actions:
   - `Edit` deep-links to `/tasks?taskId=<taskId>&sprintId=<sprintId>` so operators can open the task editor directly from the live surface.
@@ -307,7 +311,7 @@ Legacy runtime:
 - Jira support is available from Integrations with system-scoped site URL, account email, API token, default project key, close transition, and Jira-specific auto-close controls. The Sprints page Jira import opens directly from the Import menu and uses the same sprint composer flow as GitHub/GitLab imports, with advanced exact-key, user, label, date-window, sort, limit, and JQL override filters plus optional special-task routing for security and quality follow-ups.
 - Sprint data now hydrates cache-first when revisiting the page and refreshes in the background, so the showcase and ledger do not flash empty while the latest data loads. First-hydration uses skeleton placeholders while background refreshes continue, preserving existing data without reintroducing blocking loaders
 - Sprint and task list windows support selectable page size options (`10`, `20`, `50`, `100`, `All`) with a default of `20` (a frontend-only view change with no API contract change)
-- The Tasks board applies status and priority filters before list-windowing; lane headers and aggregate stats count the full filtered set, while only the visible card arrays are capped by the selected window. `coding_completed` and `QA_REVIEW_FAILED` tasks continue to render in the `in_progress` lane.
+- The Tasks board applies status and priority filters before list-windowing; lane headers and aggregate stats count the full filtered set, while only the visible card arrays are capped by the selected window. Filter changes preserve the previous board content until the settled result is ready to announce. `coding_completed` and `QA_REVIEW_FAILED` tasks continue to render in the `in_progress` lane.
 - The Sprints page gallery show/hide control persists its browser-local visibility preference, so the gallery remains hidden or shown after navigation and reloads
 - `Improve with AI` is worker-backed through the Planning agent and only rewrites the sprint prompt
 - Sprint planning is also worker-backed through the Planning agent and automatically creates task records from the returned plan
@@ -350,9 +354,10 @@ Legacy runtime:
 - Heavy WebGL-only dashboard surfaces are now lazy-loaded, including the global ocean background and the agent avatar scene, so the initial dashboard route no longer eagerly pulls those renderer modules into the first page chunk
 - Tasks page is project-scoped and uses a three-column board state (`Queued`, `In Progress`, `Completed`), where `coding_completed` acts as active work.
 - Tasks page renders create/edit inline through the new `TaskComposer` replacing the modal flow.
+- Legacy create/edit task modals still announce validation through the shared action feedback region, focus and scroll the first invalid required field into view, and expose status, priority, executor, and dependency choices with native radio or checkbox semantics. Dependency filtering reports result-count changes through a polite live region and preserves selected dependencies when the current filter hides them.
 - On a fresh installation, the Tasks page replaces the old generic project/sprint/task database message with a polished task-scope placeholder; the project action opens the shared Add Project dialog and the sprint action routes operators to the Sprints page before the kanban controls appear.
 - Task cards now explicitly show downstream dependent tasks as readable metadata tags.
-- Task cards keep the premium glass layout with pointer-driven tilt, status wave, border trace, compact executor/time metadata, and dependency status badges.
+- Task cards keep the premium glass layout with pointer-driven tilt, status wave, border trace, compact executor/time metadata, dependency status badges, and always-visible inline actions. Edit, delete, rerun, preview, PR, live runtime, dependency blockers, QA review, optimistic saving, and drag-disabled states remain visible or keyboard reachable without hover-only disclosure.
 - Navigating from a sprint cell into `View Tasks` now preselects that sprint instead of leaving the board on `All Sprints`
 - Tasks page sprint deep links are now local route filters; they no longer rewrite the project-wide selected sprint until the operator explicitly changes sprint scope from the selector
 - Tasks page now refreshes from the same project-structure realtime invalidation path as sprints
@@ -389,6 +394,9 @@ Legacy runtime:
   - restrained panel surfaces for sidebar and viewer regions using shared neutral/light-dark borders and backgrounds
   - launch state card matching Browser Preview container-launch conventions (accent icon treatment, selector styling, and primary action button)
   - file tree, change list, loading, empty, and error states expose explicit roles and selected-state semantics so keyboard and screen-reader users can browse without pointer hover
+  - background refreshes keep cached tree, selected file, changed-file list, and selected diff content visible when available, then layer polite refreshing or cached-copy recovery messages over the stale data instead of replacing the workbench with spinner-only panels
+  - file tree search and file/changes mode switches announce result counts plus the active file or change selection through polite live regions
+  - start, rebuild, and stop actions expose pending and success feedback; rebuild/stop controls suppress duplicate activation with `aria-busy` and provide disabled-state reasons when no selected or running session is available
   - long sprint names, branch names, file paths, and diff labels wrap inside their panels instead of forcing page-level horizontal overflow
   - file browsing/diff behavior remains unchanged (`files` and `changes` modes, selected path display, side-by-side toggle, and status semantics)
 - Stats page uses a flatter project analytics workspace with light/dark support and responsive behavior across screen sizes:
@@ -448,6 +456,9 @@ Legacy runtime:
 - Automatic toggle between inline and side-by-side diff modes based on viewport width
 - Resilient long-path wrapping in action bar, file tree rows, change-list rows, and active file viewer controls
 - File tree rows expose treeitem selection/expanded state, change rows expose listbox option selection, and loading/error/empty regions announce their state
+- Search, mode-switch, and selection changes are summarized in polite live regions with result counts, so operators hear whether they are in Files or Changes mode and which file/change remains selected
+- Tree, file, change-list, and diff refreshes preserve matching cached content with visible stale/refreshing copy; first-load states still use centered loading panels, and failed refreshes keep stale content visible with recovery messaging
+- Rebuild and Stop controls disable while pending, set `aria-busy`, and describe why they are unavailable when there is no selected or running file-browser session
 - Automatic Monaco viewer layout recalculation to prevent hidden or overflowing code views
 
 ### Dashboard view
@@ -463,6 +474,7 @@ Legacy runtime:
   - if the operator chooses `Reset downstream tasks`, Code UX writes fresh pending execution snapshots for every dependent task so completed/running descendants no longer keep stale PR or session state during a clean rerun
   - if `Clear worktree` is enabled, the existing task worktree is removed before the reset so the next run starts from a clean workspace
 - Rerun confirmation now warns when the selected task, or the selected downstream reset chain, already merged code; operators can use the **Undo the Git merge** checkbox to programmatically revert the merge commit in the feature branch before restarting the task cleanly.
+- Rerun confirmation keeps provider/model loading, downstream reset, clear worktree, and undo-merge options visible and keyboard reachable. Pending, success, retry, and error recovery stay inside the modal through the shared action feedback region so failed reruns can be retried without losing context.
 - Reruns now reuse the same dispatch model as normal dashboard orchestration instead of bypassing execution state
 - Task cards now open a DB-backed runtime feed sourced from `task_run_events`
 - Task cards now expose a task-scoped invocation feed sourced from the Live snapshot's `recentInvocations`, matching by task, dispatch, and task-run identity and linking each row to the full Chat invocation transcript

@@ -1,6 +1,6 @@
 import { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
-import { X } from "lucide-react";
+import { X } from "lucide-preact";
 import gsap from "gsap";
 import type { MemNode, Edge } from "../../lib/memory-graph.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
@@ -64,6 +64,9 @@ export const Inspector: FunctionComponent<{
 
     return (
         <div
+            role="region"
+            aria-label={node ? "Selected memory details" : "Memory inspector"}
+            aria-live="polite"
             className="absolute inset-x-0 bottom-0 z-30 flex h-[min(56dvh,34rem)] w-full flex-col gap-4 overflow-hidden rounded-t-[1.5rem]
                        border-t border-black/[0.06] bg-white/90 p-5 pt-12 shadow-[0_-24px_70px_rgba(0,0,0,0.12)]
                        backdrop-blur-3xl transition-transform duration-500 dark:border-white/[0.06] dark:bg-void-800/88
@@ -86,8 +89,14 @@ export const Inspector: FunctionComponent<{
             >
                 <X className="w-3.5 h-3.5 text-slate-500" strokeWidth={2} />
             </button>
+            {!node && (
+                <p className="sr-only">No memory selected. Select a memory from the graph or list to inspect its details.</p>
+            )}
             {node && (
                 <div ref={contentRef} className="flex min-h-0 flex-col gap-4 overflow-y-auto overflow-x-hidden pr-1 will-change-[opacity,transform] dashboard-scrollbar">
+                    <div className="rounded-xl border border-signal-500/20 bg-signal-500/[0.08] px-3 py-2 text-[11px] font-bold text-signal-700 dark:text-signal-300">
+                        Selected memory open in inspector
+                    </div>
                     <div className="flex items-center gap-2 pt-1">
                         <div className="w-2.5 h-2.5 rounded-full" style={{ background: cat.hex, boxShadow: `0 0 10px ${cat.hex}` }} />
                         <span className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono" style={{ color: cat.hex }}>
@@ -146,9 +155,14 @@ export const Inspector: FunctionComponent<{
                         </div>
                     )}
                     {lobotomize && (
+                        <div className="mt-auto flex flex-col gap-2">
+                        <p className="rounded-xl border border-status-red/20 bg-status-red/[0.07] px-3 py-2 text-[11px] font-semibold leading-4 text-status-red">
+                            Danger delete is armed. Deleting this memory happens immediately without another confirmation.
+                        </p>
                         <button
                             type="button"
                             onClick={handleDeleteClick}
+                            aria-describedby="inspector-danger-delete-copy"
                             className="mt-auto flex w-full items-center justify-center gap-2 rounded-xl py-3
                                        bg-status-red text-white font-bold text-xs cursor-pointer
                                        shadow-[0_0_20px_rgba(227,0,15,0.3)] hover:bg-status-red/90 hover:shadow-[0_0_30px_rgba(227,0,15,0.5)]
@@ -156,6 +170,8 @@ export const Inspector: FunctionComponent<{
                             <X className="w-3.5 h-3.5" strokeWidth={2.5} />
                             Delete Immediately
                         </button>
+                        <span id="inspector-danger-delete-copy" className="sr-only">Danger delete is armed. This action deletes immediately without confirmation.</span>
+                        </div>
                     )}
                 </div>
             )}

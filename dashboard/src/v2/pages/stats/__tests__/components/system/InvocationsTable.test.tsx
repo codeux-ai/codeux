@@ -272,6 +272,23 @@ describe("InvocationsTable", () => {
     expect(screen.getByText("Refreshing the ledger rows and transcript expansion targets.")).toBeTruthy();
   });
 
+  it("keeps cached invocation rows visible during background refresh", () => {
+    render(
+      <InvocationsTable
+        invocations={[createInvocation({ id: "inv-cached" })]}
+        sort={{ key: "startedAt", dir: "desc" }}
+        onSortChange={vi.fn()}
+        expandedId={null}
+        onRowExpand={vi.fn()}
+        loading
+      />,
+    );
+
+    expect(screen.getByText("Updating invocation records. Showing cached rows while the latest ledger loads.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Expand invocation inv-cached" })).toBeTruthy();
+    expect(screen.getByText("Showing 1 of 1 invocation records.")).toBeTruthy();
+  });
+
   it("renders blocking load failures as named alerts", () => {
     render(
       <InvocationsTable

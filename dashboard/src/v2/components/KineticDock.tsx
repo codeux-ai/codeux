@@ -69,7 +69,8 @@ export const KineticDock: FunctionComponent = () => {
 
     const matches     = useRouterState({ select: (s) => s.matches });
     const currentPath = (matches && matches.length > 0) ? (matches[matches.length - 1]?.pathname || "/") : "/";
-    const activeIndex = Math.max(0, allItems.findIndex(i => i.path === currentPath));
+    const activeIndex = Math.max(0, allItems.findIndex((item) => item.path === currentPath || (item.path !== "/" && currentPath.startsWith(`${item.path}/`))));
+    const activeItem = allItems[activeIndex];
 
     /* Active indicator position update */
     const updateIndicatorPosition = useCallback(() => {
@@ -201,16 +202,24 @@ export const KineticDock: FunctionComponent = () => {
                 to={item.path}
                 aria-label={item.label}
                 aria-current={isActive ? 'page' : undefined}
+                data-active={isActive ? "true" : "false"}
                 ref={(el: HTMLAnchorElement | null) => { itemRefs.current[globalIndex] = el; }}
                 onMouseEnter={() => prefetchRoute(item.path)}
                 onPointerDown={() => prefetchRoute(item.path)}
                 onFocus={() => prefetchRoute(item.path)}
                 data-tour-id={`nav-${item.label.toLowerCase()}`}
-                className="relative group flex flex-col items-center justify-center w-[52px] h-[52px] min-w-[44px] min-h-[44px] shrink-0 snap-center rounded-[1.4rem] transition-colors motion-reduce:transition-none duration-300 decoration-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F9F8F4] dark:focus-visible:ring-offset-void-800"
+                className={`relative group flex flex-col items-center justify-center w-[52px] h-[52px] min-w-[44px] min-h-[44px] shrink-0 snap-center rounded-[1.4rem] transition-[background-color,border-color,box-shadow] motion-reduce:transition-none duration-300 decoration-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F9F8F4] dark:focus-visible:ring-offset-void-800 ${
+                    isActive
+                        ? "bg-signal-500/[0.12] shadow-[inset_0_0_0_1px_rgba(0,224,160,0.32),0_10px_24px_rgba(0,224,160,0.12)]"
+                        : "bg-transparent active:bg-black/[0.06] dark:active:bg-white/[0.08]"
+                }`}
             >
-                <div className="absolute inset-0 bg-transparent group-hover:bg-black/[0.04] dark:group-hover:bg-white/[0.05] group-focus-visible:bg-black/[0.04] dark:group-focus-visible:bg-white/[0.05] rounded-[1.4rem] pointer-events-none transition-colors duration-300" />
+                <div className={`absolute inset-0 rounded-[1.4rem] pointer-events-none transition-colors duration-300 motion-reduce:transition-none ${isActive ? "bg-signal-500/[0.08]" : "bg-transparent group-hover:bg-black/[0.04] dark:group-hover:bg-white/[0.05] group-focus-visible:bg-black/[0.04] dark:group-focus-visible:bg-white/[0.05]"}`} />
 
                 <DockItemIcon item={item} isActive={isActive} />
+                {isActive ? (
+                    <span aria-hidden="true" className="absolute bottom-1.5 h-1.5 w-1.5 rounded-full bg-signal-500 shadow-[0_0_10px_rgba(0,224,160,0.85)]" />
+                ) : null}
 
                 {/* Tooltip */}
                 <span className="absolute -top-11 px-2.5 py-1
@@ -234,6 +243,7 @@ export const KineticDock: FunctionComponent = () => {
         <div style={{ paddingBottom: 'env(safe-area-inset-bottom)' }} className="fixed bottom-0 left-0 right-0 z-50 flex justify-center items-end h-[calc(7rem+env(safe-area-inset-bottom))] pointer-events-none px-4 max-w-[100vw] overflow-hidden">
             <nav
                 aria-label="Dock navigation"
+                aria-describedby="dock-route-status"
                 ref={dockRef}
                 onPointerMove={handlePointerMove}
                 onPointerLeave={handlePointerLeave}
@@ -269,6 +279,9 @@ export const KineticDock: FunctionComponent = () => {
 
                 {/* Right edge scroll spacer */}
                 <div className="w-[1px] shrink-0" aria-hidden="true" />
+                <span id="dock-route-status" role="status" aria-live="polite" className="sr-only">
+                    Active route: {activeItem?.label ?? "Overview"}
+                </span>
             </nav>
         </div>
     );

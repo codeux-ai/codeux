@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
-import { buildTaskBoardViewModel } from "../../../dashboard/src/v2/lib/tasks/task-board-view-model.js";
-import type { Task } from "../../../dashboard/src/v2/types.js";
+import { buildTaskBoardSprintScopeState, buildTaskBoardViewModel } from "../../../dashboard/src/v2/lib/tasks/task-board-view-model.js";
+import type { Sprint, Task } from "../../../dashboard/src/v2/types.js";
 import type { ExecutionTaskDispatchSummary, Subtask } from "../../../dashboard/src/types.js";
 
 function createMockTask(id: string, overrides: Partial<Task> = {}): Task {
@@ -232,4 +232,42 @@ test("buildTaskBoardViewModel carries dependency blockers and live duration into
   ]);
   expect(taskVm?.liveRunningTime).toBe("2m 5s");
   expect(taskVm?.liveStartedAt).toBe("2026-07-03T10:00:00.000Z");
+  expect(taskVm?.dependencyActionLabel).toBe("1 dependency blocker");
+  expect(taskVm?.actions.find((action) => action.kind === "live_runtime")).toMatchObject({
+    href: "/live",
+    label: "Live",
+  });
+});
+
+test("buildTaskBoardSprintScopeState exposes selected, loading, and empty scope states", () => {
+  const sprints = [
+    { id: "sprint-1", number: 1, name: "Sprint One", date: "Jan 1", tasksCount: 2, completion: 50, status: "running" },
+  ] as Sprint[];
+
+  expect(buildTaskBoardSprintScopeState({
+    sprints,
+    selectedSprintId: "sprint-1",
+    selectedSprintLabel: "SPR-1: Sprint One",
+    loading: false,
+  })).toEqual({
+    label: "SPR-1: Sprint One",
+    description: "Task board scoped to SPR-1: Sprint One.",
+    isScoped: true,
+    isLoading: false,
+    isEmpty: false,
+  });
+
+  expect(buildTaskBoardSprintScopeState({
+    sprints: [],
+    selectedSprintId: null,
+    selectedSprintLabel: null,
+    loading: true,
+  })).toMatchObject({ label: "Loading sprints", isLoading: true });
+
+  expect(buildTaskBoardSprintScopeState({
+    sprints: [],
+    selectedSprintId: null,
+    selectedSprintLabel: null,
+    loading: false,
+  })).toMatchObject({ label: "No sprints", isEmpty: true });
 });

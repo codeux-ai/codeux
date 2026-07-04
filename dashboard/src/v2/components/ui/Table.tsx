@@ -4,6 +4,7 @@ import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { type ComponentChildren } from "preact";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-preact";
 
 interface TableProps {
   children: ComponentChildren;
@@ -11,15 +12,25 @@ interface TableProps {
   caption?: string;
   ariaLabel?: string;
   ariaLabelledBy?: string;
+  resultCount?: number;
+  resultLabel?: string;
+  busy?: boolean;
 }
 
-export function Table({ children, className = "", caption, ariaLabel, ariaLabelledBy }: TableProps) {
+export function Table({ children, className = "", caption, ariaLabel, ariaLabelledBy, resultCount, resultLabel = "rows", busy }: TableProps) {
+  const hasResultCount = typeof resultCount === "number";
   return (
     <div className={`overflow-x-hidden lg:overflow-visible ${className}`}>
+      {hasResultCount && (
+        <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          {busy ? "Updating " : ""}{resultCount.toLocaleString()} {resultLabel} shown.
+        </div>
+      )}
       <table
         className="block w-full border-separate border-spacing-y-4 text-left lg:table"
         aria-label={ariaLabel}
         aria-labelledby={ariaLabelledBy}
+        aria-busy={busy ? "true" : undefined}
         role="table"
       >
         {caption && <caption className="sr-only">{caption}</caption>}
@@ -108,14 +119,32 @@ interface TableCellProps {
   colSpan?: number;
   mobileLabel?: string;
   onSort?: () => void;
+  sortLabel?: string;
 }
 
-export function TableCell({ children, className = "", isFirst, isLast, isHeader, align = "left", colSpan, mobileLabel, ariaSort, onSort }: TableCellProps) {
+function getSortCopy(ariaSort?: TableCellProps["ariaSort"]): string {
+  if (ariaSort === "ascending") return "sorted ascending";
+  if (ariaSort === "descending") return "sorted descending";
+  return "not sorted";
+}
+
+function SortIcon({ ariaSort }: { ariaSort?: TableCellProps["ariaSort"] }) {
+  if (ariaSort === "ascending") {
+    return <ArrowUp className="h-3 w-3 shrink-0" aria-hidden="true" />;
+  }
+  if (ariaSort === "descending") {
+    return <ArrowDown className="h-3 w-3 shrink-0" aria-hidden="true" />;
+  }
+  return <ArrowUpDown className="h-3 w-3 shrink-0 opacity-55" aria-hidden="true" />;
+}
+
+export function TableCell({ children, className = "", isFirst, isLast, isHeader, align = "left", colSpan, mobileLabel, ariaSort, onSort, sortLabel }: TableCellProps) {
   const alignClass = align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left";
 
   if (isHeader) {
     const roundedClass = isFirst ? "rounded-l-2xl border-l" : isLast ? "rounded-r-2xl border-r pr-6" : "";
     const plClass = isFirst ? "pl-6" : "";
+    const sortCopy = getSortCopy(ariaSort);
     return (
       <th scope="col" aria-sort={ariaSort}
         className={`border-y border-[color:var(--border-hairline)] bg-[var(--surface-glass)] px-4 py-2 ${alignClass} ${roundedClass} ${plClass} ${className}`}
@@ -124,9 +153,12 @@ export function TableCell({ children, className = "", isFirst, isLast, isHeader,
           <button
             type="button"
             onClick={onSort}
-            className="inline-flex items-center gap-1 w-full text-inherit font-inherit text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-md bg-transparent border-0 p-0 cursor-pointer"
+            aria-label={sortLabel ? `${sortLabel}, ${sortCopy}` : undefined}
+            className="inline-flex items-center gap-1.5 w-full text-inherit font-inherit text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-md bg-transparent border-0 p-0 cursor-pointer"
           >
-            {children}
+            <span className="min-w-0 truncate">{children}</span>
+            <SortIcon ariaSort={ariaSort} />
+            <span className="sr-only">, {sortCopy}</span>
           </button>
         ) : (
           children

@@ -20,6 +20,7 @@ import { getAccentHex } from "../../lib/agent-avatar.js";
 import { resolveAgentMcpTags } from "../../lib/agent-mcp-display.js";
 import { WaveFluid } from "../ui/WaveFluid.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
+import { ConfirmDialog } from "../ui/ConfirmDialog.js";
 import { MARKDOWN_PROSE_CLASS } from "../ui/MarkdownEditorField.js";
 import { estimateTokens, formatTokenCount } from "../../lib/token-estimate.js";
 import { renderMarkdown } from "../../../lib/markdown.js";
@@ -202,9 +203,11 @@ export const AgentPresetDetailPanel: FunctionComponent<{
   importing,
 }) => {
   const panelRef = useRef<HTMLDivElement>(null);
+  const deleteButtonRef = useRef<HTMLButtonElement>(null);
   const [activeExpression, setActiveExpression] = useState<AgentAvatarExpression>("happy");
   const [instructionExpanded, setInstructionExpanded] = useState(false);
   const [memoryExpanded, setMemoryExpanded] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const accentHex = getAccentHex(preset.avatarConfig?.accent);
   const sync = syncStatusDisplay(preset);
   const selectedProvider = providerOptions.find((option) => option.value === preset.providerConfigId) || null;
@@ -237,6 +240,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
   );
 
   return (
+    <>
     <div
       ref={panelRef}
       className="group relative flex flex-col overflow-hidden rounded-[1.9rem] border border-black/[0.06] bg-white/70 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]"
@@ -505,8 +509,9 @@ export const AgentPresetDetailPanel: FunctionComponent<{
             </button>
           )}
           <button
+            ref={deleteButtonRef}
             type="button"
-            onClick={() => onDelete(preset.id)}
+            onClick={() => setDeleteConfirmOpen(true)}
             disabled={deleting}
             className="inline-flex items-center gap-2 rounded-full border border-status-red/20 bg-status-red/8 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-status-red transition-colors hover:border-status-red/30 hover:bg-status-red/20 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-status-red/30"
           >
@@ -519,5 +524,24 @@ export const AgentPresetDetailPanel: FunctionComponent<{
         </div>
       </div>
     </div>
+    <ConfirmDialog
+      isOpen={deleteConfirmOpen}
+      options={{
+        title: "Delete this agent preset?",
+        body: "This removes the preset from the dashboard and cannot be undone from this screen. Export or sync first if you need a recoverable copy.",
+        confirmLabel: "Delete preset",
+        cancelLabel: "Keep preset",
+        destructive: true,
+      }}
+      onConfirm={() => {
+        setDeleteConfirmOpen(false);
+        onDelete(preset.id);
+      }}
+      onCancel={() => {
+        setDeleteConfirmOpen(false);
+        window.setTimeout(() => deleteButtonRef.current?.focus(), 0);
+      }}
+    />
+    </>
   );
 };

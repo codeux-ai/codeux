@@ -184,7 +184,7 @@ const TaskInvocationRow: FunctionComponent<{ invocation: ExecutionInvocationReco
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                     <div className="flex min-w-0 items-center gap-2">
-                        <span className={`h-2 w-2 shrink-0 rounded-full ${statusDot} ${invocation.status === "running" ? "animate-pulse" : ""}`} />
+                        <span className={`h-2 w-2 shrink-0 rounded-full ${statusDot} ${invocation.status === "running" ? "motion-safe:animate-pulse motion-reduce:ring-2 motion-reduce:ring-signal-500/25" : ""}`} />
                         <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
                             {purposeLabel}
                         </span>
@@ -282,12 +282,23 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     const hasInvocations = invocations.length > 0;
     const mergeCfg = task.merge_indicator ? MERGE_INDICATOR_CFG[task.merge_indicator] : null;
     const sessionLabel = (task.session_id || task.session_name || "").replace(/^sessions\//, "");
+    const isForceCompleteUnavailable = taskPhase === "COMPLETED" || isForceCompleting;
+    const forceCompleteStatusMessage = isForceCompleting
+        ? "Marking this task complete. The live snapshot remains visible while the update is confirmed."
+        : taskPhase === "COMPLETED"
+            ? "Task is already complete."
+            : null;
+    const rerunStatusMessage = isRerunning ? "Rerun request is in progress." : null;
 
     const handleRerunClick = useCallback(() => {
+        if (isRerunning) return;
         setShowRerunModal(true);
-    }, []);
+    }, [isRerunning]);
     const handleEditClick = useCallback(() => onEdit(task), [onEdit, task]);
-    const handleForceCompleteClick = useCallback(() => onForceComplete(task), [onForceComplete, task]);
+    const handleForceCompleteClick = useCallback(() => {
+        if (isForceCompleteUnavailable) return;
+        onForceComplete(task);
+    }, [isForceCompleteUnavailable, onForceComplete, task]);
 
     const handleRerunConfirm = useCallback((options: { provider?: string; providerConfigId?: string; model?: string; clearWorktree: boolean; resetDependents: boolean; undoMerge?: boolean }) => {
         setShowRerunModal(false);
@@ -558,7 +569,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                 <div ref={feedRef} className="overflow-hidden">
                     <div className="mb-5 p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.04]">
                         <div className="flex items-center gap-2 mb-3">
-                            <span className="w-1.5 h-1.5 rounded-full bg-signal-500 animate-pulse" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-signal-500 motion-safe:animate-pulse motion-reduce:ring-2 motion-reduce:ring-signal-500/25" />
                             <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Runtime Feed</span>
                         </div>
                         <RuntimeEventFeed events={events} />
@@ -574,6 +585,11 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                 {forceCompleteError && (
                     <div role="alert" className="mb-4 rounded-xl border border-status-red/20 bg-status-red/[0.06] px-4 py-2.5 text-xs text-status-red">
                         {forceCompleteError}
+                    </div>
+                )}
+                {(forceCompleteStatusMessage || rerunStatusMessage) && (
+                    <div role="status" aria-live="polite" aria-busy={isForceCompleting || isRerunning} className="mb-4 rounded-xl border border-signal-500/15 bg-signal-500/[0.05] px-4 py-2.5 text-xs text-signal-700 dark:text-signal-300">
+                        {forceCompleteStatusMessage || rerunStatusMessage}
                     </div>
                 )}
 
@@ -641,14 +657,15 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                             onClick={handleForceCompleteClick}
                             aria-label={`Force complete task ${task.id}`}
                             isLoading={isForceCompleting}
-                            aria-disabled={taskPhase === "COMPLETED"}
+                            aria-disabled={isForceCompleteUnavailable}
                             aria-busy={isForceCompleting}
+                            title={forceCompleteStatusMessage ?? "Force complete task"}
                             variant="ghost"
                             icon={CheckCheck}
                             className="px-3 py-2.5 min-h-[44px] text-[10px] uppercase tracking-[0.1em] hover:text-status-green hover:border-status-green/15 disabled:opacity-40 disabled:pointer-events-none focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800 aria-disabled:opacity-40 aria-disabled:pointer-events-none"
                         >
                             {isForceCompleting ? "Force completing" : "Force complete"}
-                            {isForceCompleting && <span className="sr-only">Force completing...</span>}
+                            {forceCompleteStatusMessage && <span className="sr-only">{forceCompleteStatusMessage}</span>}
                         </Button>
                         <Button
                             type="button"
@@ -656,12 +673,13 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                             aria-label={`Rerun task ${task.id}`}
                             isLoading={isRerunning}
                             aria-busy={isRerunning}
+                            title={rerunStatusMessage ?? "Rerun task"}
                             variant="ghost"
                             icon={RotateCcw}
                             className="px-3 py-2.5 min-h-[44px] text-[10px] uppercase tracking-[0.1em] hover:text-status-amber hover:border-status-amber/15 disabled:opacity-40 disabled:pointer-events-none focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
                         >
                             {isRerunning ? "Rerunning" : "Rerun"}
-                            {isRerunning && <span className="sr-only">Rerunning task...</span>}
+                            {rerunStatusMessage && <span className="sr-only">{rerunStatusMessage}</span>}
                         </Button>
                     </div>
                     {task.pr_url && (
