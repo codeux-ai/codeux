@@ -144,6 +144,26 @@ describe("FieldWrapper", () => {
     expect(helperElement.getAttribute("id")).toEqual(ariaDescribedby);
   });
 
+  it("keeps helper and error messaging in one stable layout region", () => {
+    const { container } = render(
+      <FieldWrapper
+        label="Long helper"
+        htmlFor="long-helper-input"
+        helperText="This helper text can be lengthy and should remain in the reserved feedback row without shifting sibling controls."
+      >
+        <Input id="long-helper-input" />
+      </FieldWrapper>
+    );
+
+    const helperElement = screen.getByText(/This helper text can be lengthy/);
+    const feedbackRegion = helperElement.parentElement;
+
+    expect(feedbackRegion).toHaveClass("grid");
+    expect(feedbackRegion).toHaveClass("overflow-hidden");
+    expect(feedbackRegion).toHaveClass("relative");
+    expect(container.querySelector("label")).toHaveClass("flex");
+  });
+
   it("hides helperText when error is present and touched", () => {
     const { rerender } = render(
       <FieldWrapper label="Test Label" htmlFor="test-input" helperText="Helper" error="Error msg">

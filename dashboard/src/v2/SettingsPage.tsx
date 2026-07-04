@@ -60,7 +60,7 @@ export const SettingsPage: FunctionComponent = () => {
     return () => ctx.revert();
   }, [prefersReducedMotion]);
 
-    const switchCategory = useCallback((categoryId: typeof activeCategory): void => {
+  const switchCategory = useCallback((categoryId: typeof activeCategory): void => {
     if (!contentRef.current || categoryId === activeCategory) {
       return;
     }
@@ -105,11 +105,17 @@ export const SettingsPage: FunctionComponent = () => {
           />
 
           <div className="flex flex-wrap items-center gap-3">
-            <div className="rounded-2xl border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-1 backdrop-blur-2xl shadow-[var(--elevation-base)]">
+            <div
+              className="inline-flex min-w-0 rounded-[1.15rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-1 backdrop-blur-2xl shadow-[var(--elevation-base)]"
+              role="radiogroup"
+              aria-label="Settings scope"
+            >
               <button
                 type="button"
                 onClick={() => setActiveScope("system")}
-                className={`h-8 rounded-[1rem] px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] transition-colors ${
+                role="radio"
+                aria-checked={activeScope === "system"}
+                className={`h-8 rounded-[0.9rem] px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] transition-colors ${
                   activeScope === "system"
                     ? "bg-signal-500/[0.12] text-signal-700 dark:text-signal-300"
                     : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
@@ -121,7 +127,9 @@ export const SettingsPage: FunctionComponent = () => {
                 type="button"
                 onClick={() => selectedProject && setActiveScope("project")}
                 disabled={!selectedProject}
-                className={`h-8 rounded-[1rem] px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] transition-colors disabled:cursor-not-allowed disabled:opacity-50 disabled:pointer-events-none ${
+                role="radio"
+                aria-checked={activeScope === "project"}
+                className={`h-8 rounded-[0.9rem] px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] transition-colors disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 ${
                   activeScope === "project"
                     ? "bg-signal-500/[0.12] text-signal-700 dark:text-signal-300"
                     : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
@@ -131,32 +139,37 @@ export const SettingsPage: FunctionComponent = () => {
               </button>
             </div>
 
-            <div className="rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-xs font-semibold text-slate-500 backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:text-slate-300">
+            <div className="min-w-0 max-w-full rounded-[1rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] px-4 py-2 text-xs font-semibold leading-relaxed text-slate-500 shadow-[var(--elevation-base)] backdrop-blur-2xl dark:text-slate-300 sm:max-w-[min(100%,34rem)]">
               {activeScope === "system"
                 ? "Editing live system defaults"
                 : selectedProject
-                  ? `Editing overrides for ${selectedProject.name}`
+                  ? (
+                    <>
+                      Editing overrides for{" "}
+                      <span className="font-bold text-slate-700 dark:text-slate-100">{selectedProject.name}</span>
+                    </>
+                  )
                   : "Select a project to edit overrides"}
             </div>
 
-            <div className="rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-xs font-semibold text-slate-500 backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:text-slate-300">
+            <div className="rounded-[1rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] px-4 py-2 text-xs font-semibold text-slate-500 shadow-[var(--elevation-base)] backdrop-blur-2xl dark:text-slate-300">
               {filteredCategories.length} visible categor{filteredCategories.length === 1 ? "y" : "ies"}
             </div>
 
             {activeDirty ? (
-              <div className="rounded-full border border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-700 backdrop-blur-2xl dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-200">
+              <div className="rounded-[1rem] border border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-700 shadow-[var(--elevation-base)] backdrop-blur-2xl dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-200">
                 Unsaved edits
               </div>
             ) : null}
           </div>
         </div>
 
-        <div className="rounded-[1.75rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-4 backdrop-blur-2xl shadow-[var(--elevation-base)]">
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+        <div className="rounded-[1.5rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-4 backdrop-blur-2xl shadow-[var(--elevation-base)]">
+          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-300">
             <Compass className="h-3.5 w-3.5" strokeWidth={2.2} />
             Smart Find
           </div>
-          <div className="mt-3 flex items-center gap-3 rounded-[1rem] border border-black/[0.06] bg-black/[0.03] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
+          <div className="mt-3 flex items-center gap-3 rounded-[1rem] border border-[color:var(--border-hairline)] bg-[var(--fill-muted)] px-4 py-3 transition-colors focus-within:border-signal-500/40 focus-within:ring-2 focus-within:ring-[var(--accent-focus-ring)]">
             <Search className="h-4 w-4 shrink-0 text-slate-400" strokeWidth={2.1} />
             <input
               ref={state.searchInputRef}
@@ -166,7 +179,7 @@ export const SettingsPage: FunctionComponent = () => {
               placeholder="Search categories, providers, CI, auth, prompts"
               className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200"
             />
-            <div className="rounded-full border border-black/[0.06] bg-white/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.04]">
+            <div className="rounded-full border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
               /
             </div>
           </div>
@@ -179,10 +192,10 @@ export const SettingsPage: FunctionComponent = () => {
                 key={`quick-${category.id}`}
                 type="button"
                 onClick={() => switchCategory(category.id)}
-                className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                className={`max-w-full rounded-full border px-3 py-1.5 text-[11px] font-semibold leading-snug transition-colors ${
                   activeCategory === category.id
                     ? "border-signal-500/25 bg-signal-500/[0.12] text-signal-700 dark:border-signal-400/25 dark:bg-signal-400/[0.12] dark:text-signal-200"
-                    : "border-black/[0.06] bg-white/80 text-slate-500 hover:text-slate-800 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:text-slate-200"
+                    : "border-[color:var(--border-hairline)] bg-[var(--surface-glass)] text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
                 }`}
               >
                 {category.label}
@@ -203,7 +216,7 @@ export const SettingsPage: FunctionComponent = () => {
               type="button"
               onClick={() => void handleSave()}
               disabled={!activeDirty || activeSaving || loading || (activeScope === "project" && !selectedProject)}
-              className={`group inline-flex items-center gap-2.5 rounded-2xl px-5 py-3 text-sm font-bold transition-[background-color,box-shadow,transform] duration-300 hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 ${
+              className={`group inline-flex items-center gap-2.5 rounded-xl px-5 py-3 text-sm font-bold transition-[background-color,box-shadow,transform] duration-300 hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 ${
                 saveMessage && !error
                   ? "bg-status-green text-white shadow-[var(--elevation-raised)]"
                   : "bg-slate-900 text-white shadow-[var(--elevation-raised)] hover:bg-slate-700 dark:bg-white dark:text-void-900 dark:hover:bg-slate-100"
@@ -239,7 +252,7 @@ export const SettingsPage: FunctionComponent = () => {
         />
 
         <div ref={contentRef} className="flex min-w-0 flex-col gap-5">
-          <div className="mb-1 flex flex-wrap items-center gap-3">
+          <div className="mb-1 flex min-w-0 flex-wrap items-center gap-3">
             <activeCategoryConfig.icon
               className={`h-4 w-4 ${activeCategoryConfig.danger ? "text-status-red" : "text-signal-500"}`}
               strokeWidth={2}
@@ -250,7 +263,7 @@ export const SettingsPage: FunctionComponent = () => {
             >
               {activeCategoryConfig.label}
             </span>
-            <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+            <span className="min-w-0 max-w-full rounded-full border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] px-3 py-1 text-[10px] font-bold uppercase leading-relaxed tracking-[0.14em] text-slate-500 dark:text-slate-300 sm:max-w-[min(100%,42rem)]">
               {activeCategoryConfig.description}
             </span>
             <div className="h-px flex-1 bg-gradient-to-r from-black/[0.06] to-transparent dark:from-white/[0.06]" />
