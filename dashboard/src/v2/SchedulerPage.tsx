@@ -46,6 +46,9 @@ type FeedbackState = { tone: "idle" | "success" | "error"; message: string | nul
 
 const SCHEDULER_FIELD_CLASS = "scheduler-field rounded-[var(--radius-ui)] border border-[color:var(--color-border-muted)] dark:border-white/[0.06] hover:border-[color:var(--color-border-muted)] dark:hover:border-white/[0.12] bg-white/80 dark:bg-white/[0.05] px-3.5 text-sm font-semibold text-slate-700 dark:text-slate-200 placeholder-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] outline-none transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:border-signal-500/40 focus:outline-none focus:ring-2 focus:ring-signal-500/20";
 const SCHEDULER_COMPACT_FIELD_CLASS = `${SCHEDULER_FIELD_CLASS} min-h-[40px]`;
+const SCHEDULER_PANEL_CLASS = "relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/72 shadow-[0_16px_44px_rgba(15,23,42,0.06)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/62 dark:shadow-[0_18px_48px_rgba(0,0,0,0.24)]";
+const SCHEDULER_INSET_CLASS = "rounded-2xl border border-black/[0.06] bg-white/58 shadow-sm backdrop-blur-xl dark:border-white/[0.06] dark:bg-white/[0.035]";
+const SCHEDULER_META_CLASS = "text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500";
 
 const TARGET_OPTIONS: Array<{
   value: ScheduleTargetType;
@@ -123,9 +126,24 @@ const formatTimeLabel = (iso: string): string => (
   new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
 );
 
+const formatDateTimeLabel = (iso: string | null | undefined): string => (
+  iso ? new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "Not scheduled"
+);
+
 const targetLabel = (targetType: ScheduleTargetType): string => (
   targetType === "sprint" ? "Sprint" : targetType === "quicksprint" ? "Quicksprint" : targetType === "memory_remediation" ? "Memory" : "Chat"
 );
+
+const statusLabel = (status: SchedulerEntryRecord["status"]): string => (
+  status.charAt(0).toUpperCase() + status.slice(1)
+);
+
+const statusClassName = (status: SchedulerEntryRecord["status"]): string => {
+  if (status === "scheduled") return "border-signal-500/20 bg-signal-500/10 text-signal-700 dark:text-signal-400";
+  if (status === "paused") return "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  if (status === "failed") return "border-status-red/20 bg-status-red/[0.08] text-status-red";
+  return "border-black/[0.06] bg-white/70 text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400";
+};
 
 const recurrenceSummary = (recurrence: ScheduleRecurrenceRule): string => {
   if (recurrence.frequency === "none") {
@@ -141,8 +159,24 @@ const recurrenceSummary = (recurrence: ScheduleRecurrenceRule): string => {
   return `Every ${every}`;
 };
 
+const entryScopeLabel = (entry: SchedulerEntryRecord, sprints: SprintRecord[], templates: QuicksprintTemplateRecord[]): string => {
+  if (entry.targetType === "sprint") {
+    const sprintName = sprints.find((sprint) => sprint.id === entry.sprintTarget?.sprintId)?.name;
+    return sprintName ? `Sprint: ${sprintName}` : "Sprint scope";
+  }
+  if (entry.targetType === "quicksprint") {
+    const templateName = templates.find((template) => template.id === entry.quicksprintTarget?.templateId)?.name;
+    const taskCount = entry.quicksprintTarget?.taskCount;
+    return `${templateName ? `Template: ${templateName}` : "Quicksprint template"}${taskCount ? ` · ${taskCount} tasks` : ""}`;
+  }
+  if (entry.targetType === "memory_remediation") {
+    return `${entry.memoryRemediationTarget?.mode === "ai" ? "AI-routed" : "Deterministic"} memory cleanup`;
+  }
+  return entry.chatTarget?.bodyMarkdown ? entry.chatTarget.bodyMarkdown : "Project chat message";
+};
+
 const ProjectPlaceholder: FunctionComponent = () => (
-  <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-6 md:p-8 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+  <div className={`${SCHEDULER_PANEL_CLASS} p-6 md:p-8`}>
     <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-signal-500/20 bg-signal-500/[0.08] text-signal-500 shadow-[0_0_15px_rgba(0,224,160,0.08)]">
       <CalendarDays className="h-5 w-5" />
     </div>
@@ -414,7 +448,7 @@ export const SchedulerPage: FunctionComponent = () => {
       }
     }
 
-    const input: any = {
+    const input: CreateSchedulerEntryInput = {
       title: finalTitle,
       targetType,
       scheduledFor: new Date(scheduledFor).toISOString(),
@@ -498,6 +532,7 @@ export const SchedulerPage: FunctionComponent = () => {
             variant="secondary"
             size="md"
             onClick={() => setSelectedDate(addDays(selectedDate, -7))}
+            aria-label="Show previous scheduler week"
           >
             Previous
           </Button>
@@ -505,6 +540,7 @@ export const SchedulerPage: FunctionComponent = () => {
             variant="primary"
             size="md"
             onClick={() => setSelectedDate(startOfDay(new Date()))}
+            aria-label="Show current scheduler week"
           >
             Today
           </Button>
@@ -512,16 +548,20 @@ export const SchedulerPage: FunctionComponent = () => {
             variant="secondary"
             size="md"
             onClick={() => setSelectedDate(addDays(selectedDate, 7))}
+            aria-label="Show next scheduler week"
           >
             Next
           </Button>
-          <div className="ml-0 flex rounded-full border border-[color:var(--color-border-muted)] bg-white/72 p-1 dark:border-white/[0.06] dark:bg-white/[0.03] backdrop-blur-md lg:ml-2">
+          <div className="ml-0 flex rounded-full border border-[color:var(--color-border-muted)] bg-white/72 p-1 dark:border-white/[0.06] dark:bg-white/[0.03] backdrop-blur-md lg:ml-2" role="tablist" aria-label="Scheduler view">
             {(["calendar", "day"] as SchedulerView[]).map((item) => (
               <button
                 key={item}
                 type="button"
                 onClick={() => setView(item)}
-                className={`min-h-[34px] rounded-full px-4 text-[10px] font-bold uppercase tracking-[0.14em] transition-all duration-150 ${
+                role="tab"
+                aria-selected={view === item}
+                aria-label={item === "calendar" ? "Calendar view" : "24 hour view"}
+                className={`min-h-[34px] rounded-full px-4 text-[10px] font-bold uppercase tracking-[0.14em] transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 ${
                   view === item ? "bg-signal-500 text-void-900 shadow-[0_2px_8px_rgba(0,224,160,0.2)]" : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
                 }`}
               >
@@ -545,13 +585,13 @@ export const SchedulerPage: FunctionComponent = () => {
             tone: "text-ember-500",
           },
         ].map((item) => (
-          <div key={item.label} className="relative overflow-hidden rounded-2xl border border-black/[0.06] bg-white/70 p-4 shadow-[0_2px_12px_rgba(0,0,0,0.02)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_16px_rgba(0,0,0,0.1)]">
+          <div key={item.label} className={`${SCHEDULER_PANEL_CLASS} rounded-2xl p-4`}>
             <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/80 to-transparent dark:via-white/10" />
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
-                <div className="text-[10px] font-mono font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">{item.label}</div>
-                <div className="mt-1 truncate font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{item.value}</div>
-                <div className="mt-0.5 truncate text-[11px] font-medium text-slate-500 dark:text-slate-400">{item.detail}</div>
+                <div className={SCHEDULER_META_CLASS}>{item.label}</div>
+                <div className="mt-1 min-w-0 truncate font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{item.value}</div>
+                <div className="mt-0.5 min-w-0 truncate text-[11px] font-medium text-slate-500 dark:text-slate-400">{item.detail}</div>
               </div>
               <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black/[0.03] dark:bg-white/[0.03] ${item.tone}`}>
                 <item.icon className="h-4.5 w-4.5" strokeWidth={2} />
@@ -562,7 +602,7 @@ export const SchedulerPage: FunctionComponent = () => {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[24rem_minmax(0,1fr)]">
-        <aside data-testid="scheduler-form-panel" className="rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+        <aside data-testid="scheduler-form-panel" className={`${SCHEDULER_PANEL_CLASS} p-5`}>
           <div className="mb-5 flex items-center justify-between gap-3">
             <div>
               <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
@@ -583,10 +623,11 @@ export const SchedulerPage: FunctionComponent = () => {
                 key={option.value}
                 type="button"
                 onClick={() => setTargetType(option.value)}
+                aria-pressed={targetType === option.value}
                 className={`min-h-[70px] rounded-2xl border p-3 text-left transition-all duration-150 ${
                   targetType === option.value
                     ? option.activeClassName
-                    : "border-black/[0.06] bg-black/[0.025] hover:bg-black/[0.04] dark:border-white/[0.06] dark:bg-white/[0.035] dark:hover:bg-white/[0.06]"
+                    : "border-black/[0.06] bg-white/55 hover:bg-white/75 dark:border-white/[0.06] dark:bg-white/[0.035] dark:hover:bg-white/[0.06]"
                 }`}
               >
                 <option.icon className={`mb-2 h-4 w-4 ${option.tone}`} />
@@ -597,20 +638,22 @@ export const SchedulerPage: FunctionComponent = () => {
 
           <div className="mt-5 space-y-4">
             <label className="block">
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Title</span>
+              <span className={SCHEDULER_META_CLASS}>Title</span>
               <input
                 type="text"
                 value={entryTitle}
                 onInput={(event) => setEntryTitle(event.currentTarget.value)}
                 className={`mt-2 min-h-[44px] w-full ${SCHEDULER_FIELD_CLASS}`}
                 placeholder="Optional description/title"
+                aria-label="Schedule title"
               />
             </label>
 
             {targetType === "sprint" && (
               <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Sprint</span>
+                <span className={SCHEDULER_META_CLASS}>Sprint</span>
                 <AvantgardeSelect
+                  aria-label="Sprint to schedule"
                   value={selectedSprintId}
                   onChange={setSelectedSprintId}
                   searchable={true}
@@ -630,8 +673,9 @@ export const SchedulerPage: FunctionComponent = () => {
             {targetType === "quicksprint" && (
               <div className="grid gap-3">
                 <label className="block">
-                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Quicksprint</span>
+                  <span className={SCHEDULER_META_CLASS}>Quicksprint</span>
                   <AvantgardeSelect
+                    aria-label="Quicksprint template to schedule"
                     value={selectedTemplateId}
                     onChange={setSelectedTemplateId}
                     searchable={true}
@@ -643,7 +687,7 @@ export const SchedulerPage: FunctionComponent = () => {
                   />
                 </label>
                 <label className="block">
-                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Task count</span>
+                  <span className={SCHEDULER_META_CLASS}>Task count</span>
                   <input
                     type="number"
                     min={1}
@@ -651,6 +695,7 @@ export const SchedulerPage: FunctionComponent = () => {
                     value={taskCount}
                     onInput={(event) => setTaskCount(Number(event.currentTarget.value))}
                     className={`mt-2 min-h-[44px] w-full ${SCHEDULER_FIELD_CLASS}`}
+                    aria-label="Quicksprint task count"
                   />
                 </label>
               </div>
@@ -658,24 +703,26 @@ export const SchedulerPage: FunctionComponent = () => {
 
             {targetType === "chat" && (
               <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Message to /chat</span>
+                <span className={SCHEDULER_META_CLASS}>Message to /chat</span>
                 <textarea
                   value={chatMessage}
                   onInput={(event) => setChatMessage(event.currentTarget.value)}
                   rows={5}
                   className={`mt-2 w-full resize-none py-3 font-medium ${SCHEDULER_FIELD_CLASS}`}
                   placeholder="Ask the chat agent to check status, prepare a summary, or start a timed coordination step."
+                  aria-label="Scheduled chat message"
                 />
               </label>
             )}
 
             {targetType === "memory_remediation" && (
               <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Long-term remediation mode</span>
+                <span className={SCHEDULER_META_CLASS}>Long-term remediation mode</span>
                 <select
                   value={memoryRemediationMode}
                   onChange={(event) => setMemoryRemediationMode(event.currentTarget.value === "ai" ? "ai" : "deterministic")}
                   className={`mt-2 min-h-[44px] w-full ${SCHEDULER_FIELD_CLASS}`}
+                  aria-label="Long-term memory remediation mode"
                 >
                   <option value="deterministic">Deterministic cleanup</option>
                   <option value="ai">AI-routed review</option>
@@ -687,12 +734,13 @@ export const SchedulerPage: FunctionComponent = () => {
             )}
 
             <label className="block">
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Date and time</span>
+              <span className={SCHEDULER_META_CLASS}>Date and time</span>
               <input
                 type="datetime-local"
                 value={scheduledFor}
                 onInput={(event) => setScheduledFor(event.currentTarget.value)}
                 className={`mt-2 min-h-[44px] w-full ${SCHEDULER_FIELD_CLASS}`}
+                aria-label="Scheduled date and time"
               />
               <div className="mt-2 grid grid-cols-3 gap-2">
                 {[
@@ -704,7 +752,7 @@ export const SchedulerPage: FunctionComponent = () => {
                     key={preset.label}
                     type="button"
                     onClick={() => setScheduledFor(toDateInputValue(preset.date()))}
-                    className="min-h-[32px] rounded-full border border-black/[0.06] bg-black/[0.025] px-2 text-[10px] font-black uppercase tracking-[0.11em] text-slate-500 transition hover:border-signal-500/20 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-slate-400 dark:hover:text-white"
+                    className="min-h-[32px] rounded-full border border-black/[0.06] bg-white/55 px-2 text-[10px] font-black uppercase tracking-[0.11em] text-slate-500 transition hover:border-signal-500/20 hover:bg-white/80 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-slate-400 dark:hover:bg-white/[0.06] dark:hover:text-white"
                   >
                     {preset.label}
                   </button>
@@ -712,7 +760,7 @@ export const SchedulerPage: FunctionComponent = () => {
               </div>
             </label>
 
-            <div className="rounded-2xl border border-black/[0.06] bg-black/[0.015] p-4 dark:border-white/[0.06] dark:bg-white/[0.02]">
+            <div className={`${SCHEDULER_INSET_CLASS} p-4`}>
               <label className="flex items-center justify-between gap-3">
                 <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-600 dark:text-slate-300">
                   <Repeat className="h-4 w-4 text-signal-500" />
@@ -723,6 +771,7 @@ export const SchedulerPage: FunctionComponent = () => {
                   checked={repeatEnabled}
                   onChange={(event) => setRepeatEnabled(event.currentTarget.checked)}
                   className="h-5 w-5 accent-signal-500 rounded border-black/[0.08] dark:border-white/[0.08]"
+                  aria-label="Repeat schedule"
                 />
               </label>
 
@@ -735,8 +784,10 @@ export const SchedulerPage: FunctionComponent = () => {
                       value={interval}
                       onInput={(event) => setIntervalValue(Number(event.currentTarget.value))}
                       className={SCHEDULER_COMPACT_FIELD_CLASS}
+                      aria-label="Recurrence interval"
                     />
                     <AvantgardeSelect
+                      aria-label="Recurrence frequency"
                       value={frequency}
                       onChange={(value) => setFrequency(value as ScheduleRecurrenceRule["frequency"])}
                       options={[
@@ -749,6 +800,7 @@ export const SchedulerPage: FunctionComponent = () => {
                   </div>
 
                   <AvantgardeSelect
+                    aria-label="Recurrence end mode"
                     value={endMode}
                     onChange={(value) => setEndMode(value as ScheduleRecurrenceRule["endMode"])}
                     options={[
@@ -765,6 +817,7 @@ export const SchedulerPage: FunctionComponent = () => {
                       value={count}
                       onInput={(event) => setCount(Number(event.currentTarget.value))}
                       className={SCHEDULER_COMPACT_FIELD_CLASS}
+                      aria-label="Recurrence run count"
                     />
                   )}
 
@@ -774,6 +827,7 @@ export const SchedulerPage: FunctionComponent = () => {
                       value={until}
                       onInput={(event) => setUntil(event.currentTarget.value)}
                       className={SCHEDULER_COMPACT_FIELD_CLASS}
+                      aria-label="Recurrence end date and time"
                     />
                   )}
                 </div>
@@ -803,7 +857,7 @@ export const SchedulerPage: FunctionComponent = () => {
             </div>
 
             {feedback.message && (
-              <div className={`rounded-[var(--radius-ui)] border px-4 py-3 text-xs font-semibold backdrop-blur-md transition-all duration-150 ${
+              <div role={feedback.tone === "error" ? "alert" : "status"} aria-live="polite" className={`rounded-[var(--radius-ui)] border px-4 py-3 text-xs font-semibold backdrop-blur-md transition-all duration-150 ${
                 feedback.tone === "error"
                   ? "border-status-red/20 bg-status-red/[0.06] text-status-red"
                   : "border-signal-500/20 bg-signal-500/[0.06] text-signal-600 dark:text-signal-400"
@@ -815,13 +869,13 @@ export const SchedulerPage: FunctionComponent = () => {
         </aside>
 
         <div className="min-w-0 space-y-6">
-          <section data-testid="scheduler-calendar-panel" className="rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-4 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] md:p-5">
+          <section data-testid="scheduler-calendar-panel" className={`${SCHEDULER_PANEL_CLASS} p-4 md:p-5`} aria-busy={loading}>
             <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
                 <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
                   {view === "calendar" ? "Calendar view" : "24 hour view"}
                 </h3>
-                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400" role="status" aria-live="polite">
                   {loading ? "Refreshing schedule..." : `${schedulerStats.visibleCount} visible occurrences · ${formatDayLabel(range.from)} to ${formatDayLabel(range.to)}`}
                 </p>
               </div>
@@ -831,19 +885,35 @@ export const SchedulerPage: FunctionComponent = () => {
                 onClick={() => void refresh()}
                 icon={RefreshCw}
                 className="uppercase tracking-[0.14em]"
+                aria-label="Refresh scheduler"
               >
                 Refresh
               </Button>
             </div>
 
-            {view === "calendar" ? (
+            {loading && !schedule && (
+              <div role="status" aria-label="Loading scheduler" className="grid gap-3 md:grid-cols-3 lg:grid-cols-7">
+                {Array.from({ length: 7 }, (_item, index) => (
+                  <div key={index} className={`${SCHEDULER_INSET_CLASS} min-h-[13rem] animate-pulse p-4`}>
+                    <div className="h-3 w-24 rounded-full bg-slate-200/80 dark:bg-white/[0.08]" />
+                    <div className="mt-5 space-y-3">
+                      <div className="h-12 rounded-xl bg-slate-200/70 dark:bg-white/[0.06]" />
+                      <div className="h-12 rounded-xl bg-slate-200/50 dark:bg-white/[0.04]" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!loading || schedule ? view === "calendar" ? (
               <>
                 {(isMobileView || (isTabletView && !isMobileView)) && (
-                  <div className="mb-4 flex items-center justify-between rounded-xl border border-black/[0.06] bg-black/[0.02] p-2 dark:border-white/[0.06] dark:bg-white/[0.02]">
+                  <div className="mb-4 flex items-center justify-between rounded-xl border border-black/[0.06] bg-white/55 p-2 dark:border-white/[0.06] dark:bg-white/[0.035]">
                     <button
                       type="button"
                       onClick={() => setSelectedDayIndex((prev) => Math.max(0, prev - 1))}
                       disabled={selectedDayIndex === 0}
+                      aria-label="Show previous visible scheduler day"
                       className="px-3 py-1.5 text-xs font-bold text-slate-600 rounded-[var(--radius-ui)] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] hover:text-slate-900 hover:bg-[var(--surface-glass-hover)] disabled:opacity-50 disabled:cursor-not-allowed dark:text-slate-300 dark:hover:text-white"
                     >
                       Previous
@@ -855,6 +925,7 @@ export const SchedulerPage: FunctionComponent = () => {
                       type="button"
                       onClick={() => setSelectedDayIndex((prev) => Math.min(6, prev + 1))}
                       disabled={selectedDayIndex === 6}
+                      aria-label="Show next visible scheduler day"
                       className="px-3 py-1.5 text-xs font-bold text-slate-600 rounded-[var(--radius-ui)] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] hover:text-slate-900 hover:bg-[var(--surface-glass-hover)] disabled:opacity-50 disabled:cursor-not-allowed dark:text-slate-300 dark:hover:text-white"
                     >
                       Next
@@ -884,10 +955,11 @@ export const SchedulerPage: FunctionComponent = () => {
                       key={key}
                       type="button"
                       onClick={() => setSelectedDate(day)}
+                      aria-label={`${formatDayLabel(day)} scheduler day with ${dayItems.length} occurrence${dayItems.length === 1 ? "" : "s"}`}
                       className={`min-h-[13rem] rounded-2xl border p-3.5 text-left transition-all duration-150 ${
                         selected
                           ? "border-signal-500/35 bg-signal-500/[0.08] shadow-[0_4px_16px_rgba(0,224,160,0.08)]"
-                          : "border-black/[0.06] bg-black/[0.015] hover:-translate-y-0.5 hover:bg-black/[0.03] dark:border-white/[0.06] dark:bg-white/[0.02] dark:hover:bg-white/[0.04]"
+                          : "border-black/[0.06] bg-white/48 hover:-translate-y-0.5 hover:bg-white/72 dark:border-white/[0.06] dark:bg-white/[0.025] dark:hover:bg-white/[0.05]"
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
@@ -898,11 +970,13 @@ export const SchedulerPage: FunctionComponent = () => {
                         {dayItems.slice(0, 5).map((occurrence) => {
                           const option = targetOptionByType.get(occurrence.targetType);
                           return (
-                            <div key={occurrence.id} className="rounded-xl border border-black/[0.04] bg-white/80 p-2 text-xs shadow-sm dark:border-white/[0.05] dark:bg-white/[0.04]">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="font-bold text-slate-800 dark:text-white">{formatTimeLabel(occurrence.startsAt)}</span>
+                            <div key={occurrence.id} className="rounded-xl border border-black/[0.04] bg-white/85 p-2 text-xs shadow-sm dark:border-white/[0.05] dark:bg-white/[0.04]">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <span className="block font-bold text-slate-800 dark:text-white">{formatTimeLabel(occurrence.startsAt)}</span>
+                                  <span className={`mt-1 inline-flex rounded-full px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] ${option?.chipClassName || "bg-slate-500/10 text-slate-500"}`}>{targetLabel(occurrence.targetType)}</span>
+                                </div>
                                 <div className="flex items-center gap-1">
-                                  <span className={`rounded-full px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] ${option?.chipClassName || "bg-slate-500/10 text-slate-500"}`}>{targetLabel(occurrence.targetType)}</span>
                                   <button
                                     type="button"
                                     onClick={(e) => {
@@ -920,6 +994,11 @@ export const SchedulerPage: FunctionComponent = () => {
                             </div>
                           );
                         })}
+                        {dayItems.length === 0 && (
+                          <div className="rounded-xl border border-dashed border-black/[0.06] bg-white/35 px-3 py-8 text-center text-xs font-semibold text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.015] dark:text-slate-500">
+                            Open
+                          </div>
+                        )}
                         {dayItems.length > 5 && (
                           <div className="text-[10px] font-bold text-slate-400">+{dayItems.length - 5} more</div>
                         )}
@@ -934,7 +1013,7 @@ export const SchedulerPage: FunctionComponent = () => {
                 {Array.from({ length: 24 }, (_item, hour) => {
                   const hourItems = dayOccurrences.filter((occurrence) => new Date(occurrence.startsAt).getHours() === hour);
                   return (
-                    <div key={hour} className="grid min-h-[64px] grid-cols-[4.5rem_minmax(0,1fr)] gap-3 rounded-xl border border-black/[0.04] bg-black/[0.01] p-2 dark:border-white/[0.04] dark:bg-white/[0.01]">
+                    <div key={hour} className="grid min-h-[64px] grid-cols-[4.5rem_minmax(0,1fr)] gap-3 rounded-xl border border-black/[0.04] bg-white/35 p-2 dark:border-white/[0.04] dark:bg-white/[0.015]">
                       <div className="pt-2 text-right text-[11px] font-mono font-bold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">{pad(hour)}:00</div>
                       <div className="space-y-2 border-l border-black/[0.05] pl-3 dark:border-white/[0.05]">
                         {hourItems.length === 0 && (
@@ -943,7 +1022,7 @@ export const SchedulerPage: FunctionComponent = () => {
                         {hourItems.map((occurrence) => {
                           const option = targetOptionByType.get(occurrence.targetType);
                           return (
-                            <div key={occurrence.id} className="rounded-xl border border-black/[0.04] bg-white/80 p-3 shadow-sm dark:border-white/[0.05] dark:bg-white/[0.04]">
+                            <div key={occurrence.id} className="rounded-xl border border-black/[0.04] bg-white/85 p-3 shadow-sm dark:border-white/[0.05] dark:bg-white/[0.04]">
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <span className="inline-flex items-center gap-2 text-xs font-black text-slate-900 dark:text-white">
                                   <Clock3 className={`h-3.5 w-3.5 ${option?.tone || "text-signal-500"}`} />
@@ -963,7 +1042,7 @@ export const SchedulerPage: FunctionComponent = () => {
                                   </button>
                                 </div>
                               </div>
-                              <div className="mt-2 text-sm font-bold text-slate-700 dark:text-slate-200">{occurrence.title}</div>
+                              <div className="mt-2 break-words text-sm font-bold text-slate-700 dark:text-slate-200">{occurrence.title}</div>
                             </div>
                           );
                         })}
@@ -972,54 +1051,84 @@ export const SchedulerPage: FunctionComponent = () => {
                   );
                 })}
               </div>
-            )}
+            ) : null}
           </section>
 
-          <section className="rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-4 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] md:p-5">
+          <section className={`${SCHEDULER_PANEL_CLASS} p-4 md:p-5`}>
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">Scheduled entries</h3>
-                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Pause, resume, or remove future automation.</p>
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Pause, resume, edit, or remove future automation.</p>
               </div>
               <Check className="h-5 w-5 text-signal-500" />
             </div>
 
             <div className="space-y-3">
-              {(schedule?.entries || []).length === 0 && (
-                <div className="rounded-2xl border border-dashed border-black/[0.10] p-6 text-sm font-semibold text-slate-500 dark:border-white/[0.10] dark:text-slate-400">
-                  No scheduled entries yet.
+              {loading && !schedule && (
+                <div role="status" aria-label="Loading scheduled entries" className="space-y-3">
+                  {Array.from({ length: 3 }, (_item, index) => (
+                    <div key={index} className={`${SCHEDULER_INSET_CLASS} animate-pulse p-4`}>
+                      <div className="h-3 w-44 rounded-full bg-slate-200/80 dark:bg-white/[0.08]" />
+                      <div className="mt-4 h-5 w-2/3 rounded-full bg-slate-200/70 dark:bg-white/[0.06]" />
+                      <div className="mt-3 h-3 w-5/6 rounded-full bg-slate-200/50 dark:bg-white/[0.04]" />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {(!loading || schedule) && (schedule?.entries || []).length === 0 && (
+                <div className="rounded-2xl border border-dashed border-black/[0.10] bg-white/35 p-8 text-center dark:border-white/[0.10] dark:bg-white/[0.015]">
+                  <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl border border-signal-500/20 bg-signal-500/[0.08] text-signal-500">
+                    <CalendarDays className="h-5 w-5" />
+                  </div>
+                  <h4 className="mt-4 font-display text-lg font-black tracking-tight text-slate-900 dark:text-white">No scheduled entries yet</h4>
+                  <p className="mx-auto mt-2 max-w-md text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+                    Create a sprint, quicksprint, chat, or memory remediation entry to make future automation visible here.
+                  </p>
                 </div>
               )}
 
               {(schedule?.entries || []).map((entry) => {
                 const option = targetOptionByType.get(entry.targetType);
                 return (
-                  <div key={entry.id} className="grid gap-3 rounded-2xl border border-black/[0.05] bg-white/60 p-4 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)] dark:border-white/[0.05] dark:bg-white/[0.03] md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                  <div key={entry.id} className="grid gap-4 rounded-2xl border border-black/[0.05] bg-white/66 p-4 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:bg-white/78 hover:shadow-[0_8px_24px_rgba(15,23,42,0.06)] dark:border-white/[0.05] dark:bg-white/[0.035] dark:hover:bg-white/[0.055] md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
                     <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] ${option?.chipClassName || "bg-slate-500/10 text-slate-500"}`}>
+                      <div className="flex flex-wrap items-center gap-2 align-baseline">
+                        <span className={`inline-flex min-h-6 items-center rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] ${option?.chipClassName || "bg-slate-500/10 text-slate-500"}`}>
                           {targetLabel(entry.targetType)}
                         </span>
-                        <span className="rounded-full bg-black/[0.04] px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-slate-500 dark:bg-white/[0.06] dark:text-slate-400">
-                          {entry.status}
+                        <span className={`inline-flex min-h-6 items-center rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] ${statusClassName(entry.status)}`}>
+                          {statusLabel(entry.status)}
                         </span>
                         {entry.runCount > 0 && (
-                          <span className="rounded-full border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-signal-600 dark:text-signal-400">
+                          <span className="inline-flex min-h-6 items-center rounded-full border border-signal-500/20 bg-signal-500/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-signal-600 dark:text-signal-400">
                             Fired ({entry.runCount})
                           </span>
                         )}
-                        <span className="text-[11px] font-bold text-slate-400">{recurrenceSummary(entry.recurrence)}</span>
                       </div>
-                      <h4 className="mt-2 truncate text-sm font-black text-slate-900 dark:text-white">{entry.title}</h4>
-                      <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-                        Next run: {entry.nextRunAt ? new Date(entry.nextRunAt).toLocaleString() : "none"}
-                        {entry.lastRunAt && ` · Last fired: ${new Date(entry.lastRunAt).toLocaleString()}`}
+                      <h4 className="mt-3 break-words text-base font-black leading-snug text-slate-900 dark:text-white">{entry.title}</h4>
+                      <p className="mt-1 line-clamp-2 break-words text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+                        {entryScopeLabel(entry, sprints, templates)}
                       </p>
+                      <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
+                        <div className="min-w-0">
+                          <dt className={SCHEDULER_META_CLASS}>Cadence</dt>
+                          <dd className="mt-1 break-words font-semibold text-slate-600 dark:text-slate-300">{recurrenceSummary(entry.recurrence)}</dd>
+                        </div>
+                        <div className="min-w-0">
+                          <dt className={SCHEDULER_META_CLASS}>Next run</dt>
+                          <dd className="mt-1 break-words font-semibold text-slate-600 dark:text-slate-300">{formatDateTimeLabel(entry.nextRunAt)}</dd>
+                        </div>
+                        <div className="min-w-0">
+                          <dt className={SCHEDULER_META_CLASS}>Last run</dt>
+                          <dd className="mt-1 break-words font-semibold text-slate-600 dark:text-slate-300">{entry.lastRunAt ? formatDateTimeLabel(entry.lastRunAt) : "Not fired"}</dd>
+                        </div>
+                      </dl>
                       {entry.lastError && (
-                        <p className="mt-2 text-xs font-bold text-status-red">{entry.lastError}</p>
+                        <p role="alert" className="mt-3 rounded-xl border border-status-red/20 bg-status-red/[0.06] px-3 py-2 text-xs font-bold leading-relaxed text-status-red">{entry.lastError}</p>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 md:justify-end">
                       <button
                         type="button"
                         onClick={() => startEdit(entry)}
