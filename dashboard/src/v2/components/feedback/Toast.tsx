@@ -34,10 +34,17 @@ const icons: Record<ToastType, FunctionComponent<any>> = {
 };
 
 const colors: Record<ToastType, string> = {
-  success: "bg-status-green/10 text-status-green border-status-green/20",
-  error: "bg-status-red/10 text-status-red border-status-red/20",
-  warning: "bg-status-amber/10 text-status-amber border-status-amber/20",
-  info: "bg-sky-500/10 text-sky-500 border-sky-500/20",
+  success: "text-status-green border-status-green/20",
+  error: "text-status-red border-status-red/25",
+  warning: "text-status-amber border-status-amber/25",
+  info: "text-signal-700 dark:text-signal-300 border-signal-500/20",
+};
+
+const iconSurfaces: Record<ToastType, string> = {
+  success: "bg-status-green/10 border-status-green/20",
+  error: "bg-status-red/10 border-status-red/25",
+  warning: "bg-status-amber/10 border-status-amber/25",
+  info: "bg-signal-500/10 border-signal-500/20",
 };
 
 export const Toast: FunctionComponent<ToastProps> = ({
@@ -124,40 +131,46 @@ export const Toast: FunctionComponent<ToastProps> = ({
         containerRef.current = el;
         if (toastRef) toastRef(el);
       }}
-      className={`pointer-events-auto flex items-start gap-3 w-full max-w-sm p-4 rounded-2xl shadow-2xl border border-black/[0.08] dark:border-white/[0.08] backdrop-blur-md bg-white/95 dark:bg-void-900/95 ${colorClass} ${className}`}
+      className={`pointer-events-auto flex w-full max-w-sm items-start gap-3 overflow-hidden rounded-2xl border bg-white/95 p-3 shadow-[0_16px_36px_rgba(15,23,42,0.14)] backdrop-blur-md dark:bg-void-800/95 dark:shadow-[0_16px_36px_rgba(0,0,0,0.4)] sm:p-4 ${colorClass} ${className}`}
     >
-      <Icon aria-hidden="true" className="w-5 h-5 shrink-0 mt-0.5" />
+      <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border ${iconSurfaces[type]}`}>
+        <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />
+      </div>
       <span className="sr-only">{type}</span>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium leading-relaxed dark:text-slate-200">
+      <div className="min-w-0 flex-1">
+        <p className="break-words text-sm font-medium leading-relaxed text-slate-700 dark:text-slate-200">
           {message}
         </p>
-        {retryAction && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              retryAction();
-              handleDismiss();
-            }}
-            className="mt-2 text-xs font-bold uppercase tracking-wider underline hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current rounded mr-3"
-          >
-            {retryLabel || "Retry"}
-          </button>
-        )}
-        {action && (
-          <button
-            ref={actionButtonRef}
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              action.onClick();
-              handleDismiss();
-            }}
-            className="mt-2 text-xs font-bold uppercase tracking-wider underline hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current rounded"
-          >
-            {action.label}
-          </button>
+        {(retryAction || action) && (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {retryAction && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  retryAction();
+                  handleDismiss();
+                }}
+                className="inline-flex min-h-8 max-w-full items-center rounded-lg border border-current/20 px-2.5 py-1 text-xs font-bold uppercase tracking-wider transition-colors hover:bg-current/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current"
+              >
+                <span className="truncate">{retryLabel || "Retry"}</span>
+              </button>
+            )}
+            {action && (
+              <button
+                ref={actionButtonRef}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  action.onClick();
+                  handleDismiss();
+                }}
+                className="inline-flex min-h-8 max-w-full items-center rounded-lg border border-current/20 px-2.5 py-1 text-xs font-bold uppercase tracking-wider transition-colors hover:bg-current/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current"
+              >
+                <span className="truncate">{action.label}</span>
+              </button>
+            )}
+          </div>
         )}
       </div>
       <button
@@ -167,7 +180,7 @@ export const Toast: FunctionComponent<ToastProps> = ({
           e.preventDefault();
           handleDismiss();
         }}
-        className="shrink-0 p-1 rounded-md opacity-70 hover:opacity-100 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg opacity-70 transition-colors hover:bg-black/[0.05] hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current dark:hover:bg-white/[0.06]"
         aria-label="Dismiss toast"
       >
         <X className="w-4 h-4" />

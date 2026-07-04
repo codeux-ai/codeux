@@ -87,9 +87,10 @@ export const Modal: FunctionComponent<ModalProps> = ({
 
   if (!shouldRender) return null;
 
+  const surfaceClassName = "relative z-50 bg-white dark:bg-void-800 rounded-2xl shadow-[0_24px_80px_rgba(15,23,42,0.22)] dark:shadow-[0_28px_90px_rgba(0,0,0,0.56)] border border-black/[0.08] dark:border-white/[0.08] outline-none max-w-[calc(100vw-2rem)] max-h-[min(calc(100dvh-2rem),85vh)] overflow-y-auto overscroll-contain";
+
   return (
-    <Overlay isOpen={isOpen} onClose={disableBackdropClick ? undefined : onClose} blur exitDuration={150} className="!items-end sm:!items-center pb-4 sm:pb-0">
-      <div className="absolute inset-0 bg-slate-900/50 pointer-events-none" />
+    <Overlay isOpen={isOpen} onClose={disableBackdropClick ? undefined : onClose} blur exitDuration={150} className="!items-end sm:!items-center p-4 sm:p-6">
       <div
         ref={(el) => {
           (cardRef as any).current = el;
@@ -102,7 +103,7 @@ export const Modal: FunctionComponent<ModalProps> = ({
         aria-describedby={ariaDescribedBy || ariaDescribedby || undefined}
         tabIndex={-1}
         inert={!isOpen ? true : undefined}
-        className={`relative z-50 bg-white dark:bg-void-800 rounded-[12px] shadow-lg border border-black/[0.06] dark:border-white/[0.06] outline-none max-w-[calc(100vw-2rem)] max-h-[min(calc(100dvh-2rem),85vh)] overflow-y-auto overscroll-contain ${className}`}
+        className={`${surfaceClassName} ${className}`}
         onClick={(e) => e.stopPropagation()}
       >
         {toChildArray(children).map((child) => {

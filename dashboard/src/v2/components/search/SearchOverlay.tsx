@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import gsap from "gsap";
-import { Search, X, Layers, Activity, Cpu, Box, ArrowRight, Inbox, Loader2, FileX } from "lucide-preact";
+import { Search, X, Layers, Activity, Cpu, Box, Inbox, Loader2, FileX } from "lucide-preact";
 import { useNavigate, Link } from "@tanstack/react-router";
 import { SearchResultRow } from "./SearchResultRow";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
@@ -200,7 +200,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
     // Track active item ref to ensure it's in view
     const activeItemRef = useRef<HTMLButtonElement>(null);
     useEffect(() => {
-        if (activeItemRef.current) {
+        if (activeItemRef.current && typeof activeItemRef.current.closest === 'function') {
             const el = activeItemRef.current;
             const container = el.closest('.overflow-y-auto') as HTMLElement;
             if (container) {
@@ -223,11 +223,11 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
     return (
         <div
             ref={overlayRef}
-            className={anchorRef && !isMobileFallback ? "fixed inset-0 z-[100] hidden items-start justify-center px-4 sm:px-6 sm:pt-16" : "fixed inset-0 z-[100] hidden items-start justify-center pt-16 px-4 sm:px-6"}
+            className={anchorRef && !isMobileFallback ? "fixed inset-0 z-[100] hidden items-start justify-center px-4 sm:px-6 sm:pt-16" : "fixed inset-0 z-[100] hidden items-start justify-center px-4 pt-4 sm:px-6 sm:pt-16"}
             style={{ display: 'none' }}
         >
             <div
-                className="absolute inset-0 cursor-pointer bg-void-900/80 dark:bg-void-900/90 backdrop-blur-3xl"
+                className="absolute inset-0 cursor-pointer bg-void-900/50 backdrop-blur-sm"
                 onClick={onClose}
             />
 
@@ -236,12 +236,12 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                 aria-label="Search"
                 aria-modal="true"
                 ref={containerRef}
-                className={anchorRef && !isMobileFallback ? "flex flex-col bg-white dark:bg-void-800 rounded-2xl shadow-2xl overflow-hidden border border-black/5 dark:border-white/10 max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)]" : "relative w-full max-w-4xl mx-auto flex flex-col bg-white dark:bg-void-800 rounded-2xl shadow-2xl overflow-hidden border border-black/5 dark:border-white/10 max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)]"}
+                className={anchorRef && !isMobileFallback ? "flex max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)] outline-none dark:border-white/[0.08] dark:bg-void-800 dark:shadow-[0_28px_90px_rgba(0,0,0,0.56)]" : "relative mx-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100vw-2rem)] sm:max-w-4xl flex-col overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)] outline-none dark:border-white/[0.08] dark:bg-void-800 dark:shadow-[0_28px_90px_rgba(0,0,0,0.56)]"}
                 style={anchorRef && !isMobileFallback ? modalStyle : {}}
             >
                 {/* Search Header */}
-                <div className="flex items-center px-4 py-4 border-b border-black/5 dark:border-white/5">
-                    <Search className="w-5 h-5 text-slate-400 mr-3" />
+                <div className="flex items-center border-b border-black/[0.06] bg-white/95 px-3 py-3 dark:border-white/[0.08] dark:bg-void-800/95 sm:px-4 sm:py-4">
+                    <Search className="mr-3 h-5 w-5 shrink-0 text-slate-400" />
                     <input
                         ref={inputRef}
                         type="text"
@@ -254,13 +254,13 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                         placeholder="Search sprints, tasks, agents..."
                         value={searchQuery}
                         onInput={(e) => onSearchChange(e.currentTarget.value)}
-                        className="flex-1 min-w-0 bg-transparent border-none outline-none text-lg text-slate-900 dark:text-white placeholder-slate-400"
+                        className="min-w-0 flex-1 border-none bg-transparent text-base text-slate-900 outline-none placeholder-slate-400 dark:text-white sm:text-lg"
                     />
-                    {isLoading && <Loader2 className="w-5 h-5 animate-spin text-slate-400 mr-2" />}
+                    {isLoading && <Loader2 className="mr-2 h-5 w-5 shrink-0 motion-safe:animate-spin text-slate-400 motion-reduce:animate-none" />}
                     <button
                         onClick={onClose}
                         aria-label="Close search"
-                        className="p-2 ml-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 transition-colors cursor-pointer"
+                        className="ml-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
                     >
                         <X className="w-5 h-5" />
                     </button>
@@ -271,17 +271,17 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                 </div>
 
                 {/* Results Area */}
-                <div className="flex-1 max-h-[60vh] overflow-y-auto dashboard-scrollbar p-2">
+                <div className="dashboard-scrollbar min-h-0 flex-1 overflow-y-auto p-2">
                     {searchQuery.length === 0 ? (
                         <div className="flex flex-col">
-                            <h3 className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 px-3 py-2">
+                            <h3 className="px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
                                 Quick navigation
                             </h3>
                             <div className="flex flex-wrap gap-2 px-3 pb-4">
                                 <Link
                                     to="/sprints"
                                     onClick={onClose}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-black/[0.06] dark:border-white/[0.06] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-signal-500/30 transition-colors"
+                                    className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-black/[0.08] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:bg-white/[0.06]"
                                 >
                                     <Layers className="w-4 h-4" />
                                     Sprints
@@ -289,7 +289,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                                 <Link
                                     to="/tasks"
                                     onClick={onClose}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-black/[0.06] dark:border-white/[0.06] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-signal-500/30 transition-colors"
+                                    className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-black/[0.08] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:bg-white/[0.06]"
                                 >
                                     <Activity className="w-4 h-4" />
                                     Tasks
@@ -297,7 +297,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                                 <Link
                                     to="/agents"
                                     onClick={onClose}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-black/[0.06] dark:border-white/[0.06] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-signal-500/30 transition-colors"
+                                    className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-black/[0.08] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:bg-white/[0.06]"
                                 >
                                     <Cpu className="w-4 h-4" />
                                     Agents
@@ -306,28 +306,32 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                         </div>
                     ) : allItems.length === 0 && !isLoading ? (
                         !hasProjectData ? (
-                            <div className="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400" aria-live="polite" role="status">
-                                <FileX className="w-8 h-8 mb-4 opacity-50 text-status-red" />
-                                <span className="text-sm font-medium text-slate-900 dark:text-slate-100">Project data unavailable</span>
-                                <span className="text-xs mt-1 text-slate-500 dark:text-slate-400">Unable to load project search results.</span>
+                            <div className="flex flex-col items-center justify-center px-4 py-12 text-center text-slate-500 dark:text-slate-400" aria-live="polite" role="status">
+                                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl border border-status-red/20 bg-status-red/10 text-status-red">
+                                    <FileX className="h-5 w-5" />
+                                </div>
+                                <span className="break-words text-sm font-semibold text-slate-900 dark:text-slate-100">Project data unavailable</span>
+                                <span className="mt-1 max-w-sm break-words text-xs leading-relaxed text-slate-500 dark:text-slate-400">Unable to load project search results.</span>
                             </div>
                         ) : (
-                            <div className="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400" aria-live="polite" role="status">
-                                <Inbox className="w-8 h-8 mb-4 opacity-50" />
-                                <span className="text-sm font-medium text-slate-900 dark:text-slate-100">No results found for '{searchQuery}'</span>
-                                <span className="text-xs mt-1 text-slate-500 dark:text-slate-400">Try adjusting your search terms or checking for typos.</span>
+                            <div className="flex flex-col items-center justify-center px-4 py-12 text-center text-slate-500 dark:text-slate-400" aria-live="polite" role="status">
+                                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl border border-black/[0.08] bg-black/[0.03] text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.05]">
+                                    <Inbox className="h-5 w-5" />
+                                </div>
+                                <span className="max-w-full break-words text-sm font-semibold text-slate-900 dark:text-slate-100">No results found for '{searchQuery}'</span>
+                                <span className="mt-1 max-w-sm break-words text-xs leading-relaxed text-slate-500 dark:text-slate-400">Try adjusting your search terms or checking for typos.</span>
                             </div>
                         )
                     ) : (
-                        <div id="search-results-list" role="listbox" className={`grid grid-cols-1 lg:grid-cols-2 gap-4 p-2 transition-opacity duration-200 ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}>
+                        <div id="search-results-list" role="listbox" className={`grid grid-cols-1 gap-3 p-1 transition-opacity duration-200 lg:grid-cols-2 lg:gap-4 sm:p-2 ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}>
                             {CATEGORIES.map((category) => {
                                 if (category.items?.length === 0) return null;
                                 return (
                                     <div key={category.id} className="flex flex-col">
-                                        <div className="flex items-center justify-between px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                                            <div className="flex items-center gap-2">
+                                        <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                                            <div className="flex min-w-0 items-center gap-2">
                                                 <category.icon className="w-4 h-4" />
-                                                {category.title}
+                                                <span className="truncate">{category.title}</span>
                                             </div>
                                             <span className="text-[10px] font-mono opacity-60 bg-black/5 dark:bg-white/5 px-1.5 py-0.5 rounded-md">
                                                 {category.items.length}
@@ -361,7 +365,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                 </div>
 
                 {/* Footer hints */}
-                <div className="px-4 py-3 bg-slate-50 dark:bg-white/5 border-t border-black/5 dark:border-white/5 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-black/[0.06] bg-void-50/80 px-4 py-3 text-xs text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04]">
                     <div className="flex flex-wrap items-center gap-4">
                         <span className="flex items-center gap-1">
                             <kbd className="px-1.5 py-0.5 rounded-md bg-white dark:bg-void-800 border border-black/10 dark:border-white/10 shadow-sm font-mono text-[10px]">↑</kbd>

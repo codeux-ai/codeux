@@ -244,7 +244,7 @@ export const Popover = ({
             role={isTooltip ? "tooltip" : "dialog"}
             aria-label={ariaLabel || (!isTooltip ? "Dialog" : undefined)}
             tabIndex={-1}
-            className={`fixed z-[9999] bg-white dark:bg-void-800 border border-black/[0.08] dark:border-white/[0.08] shadow-[0_16px_36px_rgba(15,23,42,0.14)] dark:shadow-[0_16px_36px_rgba(0,0,0,0.4)] rounded-2xl p-4 ${!isOpen ? "pointer-events-none" : ""} ${className}`}
+            className={`fixed z-[9999] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-black/[0.08] bg-white p-4 shadow-[0_16px_36px_rgba(15,23,42,0.14)] outline-none dark:border-white/[0.08] dark:bg-void-800 dark:shadow-[0_16px_36px_rgba(0,0,0,0.4)] ${!isOpen ? "pointer-events-none" : ""} ${className}`}
             style={{ top: coords.top, left: coords.left }}
           >
             {content}

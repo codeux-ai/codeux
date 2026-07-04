@@ -82,7 +82,7 @@ export const NotificationPanel: FunctionComponent<{
       ref={panelRef}
       aria-label="Notifications Panel"
       tabIndex={-1}
-      className="fixed inset-x-4 top-[72px] sm:inset-auto sm:absolute sm:top-full sm:right-0 mt-2 w-[23rem] max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-5rem)] overflow-hidden rounded-2xl border border-black/[0.08] dark:border-white/[0.08] bg-white/95 shadow-2xl backdrop-blur-2xl dark:bg-void-800/95 z-50 flex flex-col"
+      className="fixed inset-x-4 top-[72px] z-50 mt-2 flex max-h-[calc(100dvh-5rem)] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-black/[0.08] bg-white/95 shadow-[0_24px_80px_rgba(15,23,42,0.22)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/95 dark:shadow-[0_28px_90px_rgba(0,0,0,0.56)] sm:inset-auto sm:absolute sm:right-0 sm:top-full sm:w-[23rem]"
     >
       <div className="sr-only" aria-live="polite" aria-atomic="true">
         {unreadCount} unread notification{unreadCount !== 1 ? 's' : ''}
@@ -90,12 +90,12 @@ export const NotificationPanel: FunctionComponent<{
 
       <div className="absolute left-0 right-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-signal-500/40 to-transparent" />
 
-      <div className="flex items-center justify-between gap-2 shrink-0 border-b border-black/[0.06] bg-black/[0.02] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.02]">
-        <div>
+      <div className="flex shrink-0 items-start justify-between gap-3 border-b border-black/[0.06] bg-void-50/80 px-4 py-3 dark:border-white/[0.08] dark:bg-white/[0.04]">
+        <div className="min-w-0">
           <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
             Notifications
           </div>
-          <div className="mt-0.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+          <div className="mt-0.5 break-words text-[11px] font-medium leading-relaxed text-slate-500 dark:text-slate-400">
             Startup checks and operator attention
           </div>
         </div>
@@ -120,14 +120,14 @@ export const NotificationPanel: FunctionComponent<{
         </div>
       </div>
 
-      <ul className="dashboard-scrollbar flex-1 min-h-0 overflow-y-auto p-2 m-0 list-none">
+      <ul className="dashboard-scrollbar m-0 min-h-0 flex-1 list-none overflow-y-auto p-2">
         {notifications.length === 0 ? (
           <li className="flex flex-col items-center justify-center px-5 py-10 text-center">
-            <div className="rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-700 dark:text-signal-300">
+            <div className="rounded-xl border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-700 dark:text-signal-300">
               Clear
             </div>
             <div className="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">No notifications</div>
-            <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+            <div className="mt-1 max-w-xs break-words text-xs leading-relaxed text-slate-500 dark:text-slate-400">
               Startup checks are healthy and there is nothing waiting for operator attention.
             </div>
           </li>
@@ -144,7 +144,7 @@ export const NotificationPanel: FunctionComponent<{
               data-notification-item
               tabIndex={0}
               onFocus={() => onMarkRead(notification.id)}
-              className="group relative mb-2 rounded-2xl border border-black/[0.05] bg-white/75 p-3 text-left transition-colors hover:border-black/[0.1] hover:bg-black/[0.025] last:mb-0 dark:border-white/[0.06] dark:bg-white/[0.04] dark:hover:border-white/[0.1] dark:hover:bg-white/[0.06]"
+              className="group relative mb-2 rounded-xl border border-black/[0.06] bg-white/75 p-3 text-left transition-colors hover:border-black/[0.1] hover:bg-black/[0.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 last:mb-0 dark:border-white/[0.08] dark:bg-white/[0.04] dark:hover:border-white/[0.12] dark:hover:bg-white/[0.06]"
             >
               {notification.unread ? (
                 <div className={`absolute bottom-3 left-0 top-3 w-[3px] rounded-r-full ${accentClass}`} />
@@ -156,18 +156,18 @@ export const NotificationPanel: FunctionComponent<{
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">{notification.title}</div>
+                      <div className="break-words text-sm font-bold leading-snug text-slate-800 dark:text-slate-100">{notification.title}</div>
                       {details ? (
-                        <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{details}</div>
+                        <div className="mt-1 break-words text-xs leading-relaxed text-slate-500 dark:text-slate-400">{details}</div>
                       ) : null}
                     </div>
-                    <div className="shrink-0 text-[10px] font-medium text-slate-400">{notification.time}</div>
+                    <div className="shrink-0 text-right text-[10px] font-medium text-slate-400">{notification.time}</div>
                   </div>
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                     <button
                       type="button"
                       onClick={() => onMarkRead(notification.id)}
-                      className="rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 hover:bg-black/[0.04] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
+                      className="min-h-7 rounded-lg px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 hover:bg-black/[0.04] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
                     >
                       {notification.unread ? "Mark read" : "Read"}
                     </button>
@@ -183,9 +183,9 @@ export const NotificationPanel: FunctionComponent<{
                             onMarkRead(notification.id);
                             notification.onAction?.();
                           }}
-                          className="rounded-full border border-black/10 bg-black/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 hover:bg-black/10 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white transition-colors"
+                          className="min-h-7 max-w-full rounded-lg border border-black/10 bg-black/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-black/10 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white"
                         >
-                          {notification.actionLabel}
+                          <span className="break-words">{notification.actionLabel}</span>
                         </button>
                       ) : null}
                       {notification.dismissible ? (
