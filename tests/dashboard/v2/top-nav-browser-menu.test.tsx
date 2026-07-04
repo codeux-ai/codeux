@@ -272,8 +272,8 @@ describe("BrowserSessionsMenu", () => {
         expect(links[0]).toHaveAttribute("href", "http://preview-sess-1.localhost/login");
         expect(links[0]).toHaveAttribute("target", "_blank");
 
-        expect(links[1]).toHaveAttribute("href", "http://preview-sess-2.localhost/");
-        expect(links[1]).toHaveAttribute("target", "_blank");
+        expect(links[1]).not.toHaveAttribute("href");
+        expect(links[1]).toHaveAttribute("aria-disabled", "true");
 
         expect(browserApi.fetchPreviewSessions).toHaveBeenCalledWith("proj-1");
     });
@@ -321,7 +321,7 @@ describe("BrowserSessionsMenu", () => {
 
         const mockSessions = [
             { id: "sess-1", sprintId: "sprint-1", sprintName: "Add auth", status: "running", containerAppPort: 3000, hostPort: 8080 },
-            { id: "sess-2", sprintId: "sprint-2", sprintName: "Update dashboard", status: "running", containerAppPort: 5173 }
+            { id: "sess-2", sprintId: "sprint-2", sprintName: "Update dashboard", status: "running", containerAppPort: 5173, hostPort: 8081 }
         ];
 
         vi.mocked(browserApi.fetchPreviewSessions).mockResolvedValue(mockSessions as any);
