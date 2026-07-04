@@ -558,7 +558,7 @@ describe("dashboard accessibility quality regressions", () => {
       new RegExp(previewSession.sprintName),
     );
     expect(screen.getByLabelText("Close preview window")).toBeInTheDocument();
-    expect(screen.getByLabelText("Preview address")).toBeInTheDocument();
+    expect(screen.getByLabelText(`Preview address for ${previewSession.sprintName}`)).toBeInTheDocument();
 
     const caption = screen.getByText(/Invocation ledger with sortable time/i);
     expect(caption.tagName.toLowerCase()).toBe("caption");
