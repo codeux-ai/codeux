@@ -144,6 +144,14 @@ Behavior:
 - reconnect recovery for the Live page now means re-fetching `/api/live` on `snapshot_required`, not running parallel status/execution repair logic in the browser
 - polling remains a recovery tool for other websocket-backed dashboard surfaces, but the Live page no longer keeps its own steady-state poll loop
 
+### Client live snapshot cache scope
+
+The browser keeps a small LRU cache for `/api/live` snapshots to make project and page transitions feel immediate. The cache is scoped by project and, when known, by the selected sprint identity carried in the live snapshot or supplied by the caller. A project-only lookup is still allowed when no sprint scope is known, so initial Live page hydration can reuse a matching recent snapshot without adding a new backend request path.
+
+When a dashboard surface knows the active selected sprint, it must request cached live data with that sprint scope. `useDashboardRuntimeData` rejects any cached or freshly fetched snapshot whose embedded project id or selected sprint id conflicts with the active runtime scope, falling back to an empty scoped snapshot until REST or websocket hydration provides matching data.
+
+Sprint selection changes invalidate every cached `/api/live` entry for that project. This keeps Live and Tasks pages from rendering a previous selected sprint's payload after `useSprints().selectSprint` updates the project selection, while preserving direct websocket replacement from `project.live.updated` for steady-state updates.
+
 ## Current Backend Integration Points
 
 Realtime refresh scheduling is currently wired from:
