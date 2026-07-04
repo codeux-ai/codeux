@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { DashboardStatus, ExecutionDashboardSnapshot } from "../../../dashboard/src/types.js";
 import {
   areExecutionSnapshotsEquivalent,
+  areStatusSnapshotsEquivalent,
   hasActiveExecutionSnapshot,
   stabilizeExecutionSnapshot,
   stabilizeStatusSnapshot,
@@ -290,5 +291,25 @@ describe("runtime snapshot stability", () => {
     });
 
     expect(areExecutionSnapshotsEquivalent(previousExecution, nextExecution)).toBe(true);
+  });
+
+  it("treats status snapshots with only fetch timestamp changes as equivalent", () => {
+    const previousStatus = createStatus({
+      timestamp: "2026-03-26T10:00:00.000Z",
+      subtasks: [{
+        id: "TASK-1",
+        title: "Ship it",
+        prompt: "Do the work",
+        depends_on: [],
+        status: "RUNNING",
+        is_independent: true,
+      }],
+    });
+    const nextStatus = createStatus({
+      ...previousStatus,
+      timestamp: "2026-03-26T10:00:05.000Z",
+    });
+
+    expect(areStatusSnapshotsEquivalent(previousStatus, nextStatus)).toBe(true);
   });
 });
