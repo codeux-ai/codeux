@@ -40,6 +40,7 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
     const interactionTokens = useInteractionTokens();
     const scopeLabel = scope || "unknown";
     const strengthPercent = Math.round(strength * 100);
+    const selectedState = isSelected.value ? "Currently open in inspector." : isBatchSelected.value ? "Selected for batch action." : "Not selected.";
 
     const handleDelete = (e: Event) => {
         e.stopPropagation();
@@ -56,7 +57,7 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
             role="option"
             tabIndex={0}
             aria-selected={isSelected.value}
-            aria-label={`${cat.label} memory, scope ${scopeLabel}, strength ${strengthPercent}%. ${content}`}
+            aria-label={`${cat.label} memory, scope ${scopeLabel}, strength ${strengthPercent}%. ${selectedState} ${content}`}
             onClick={onClick}
             onMouseEnter={() => { hoveredMemoryIdSignal.value = id; }}
             onMouseLeave={() => { hoveredMemoryIdSignal.value = null; }}
@@ -71,7 +72,7 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
             }}
             style={{
                 transitionProperty: "background-color, border-color, box-shadow, transform",
-                transitionDuration: `${interactionTokens.enterExit.duration}s`,
+                transitionDuration: interactionTokens.enterExit.duration,
                 transitionTimingFunction: interactionTokens.enterExit.ease,
             }}
             className={`
@@ -103,9 +104,16 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
                             {scopeLabel} scope
                         </span>
                     </div>
-                    <span className="shrink-0 rounded-md border border-black/[0.06] bg-black/[0.03] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
-                        {strengthPercent}%
-                    </span>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                        <span className="rounded-md border border-black/[0.06] bg-black/[0.03] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+                            {strengthPercent}%
+                        </span>
+                        {(isSelected.value || isBatchSelected.value) && (
+                            <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${isSelected.value ? "bg-signal-500 text-void-950" : "bg-signal-500/[0.12] text-signal-600 dark:text-signal-300"}`}>
+                                {isSelected.value ? "Open" : "Selected"}
+                            </span>
+                        )}
+                    </div>
                 </div>
 
                 <p className="line-clamp-3 break-words text-[13px] font-semibold leading-snug text-slate-700 dark:text-void-100">
@@ -144,6 +152,7 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
                             <button
                                 type="button"
                                 aria-label={`Delete ${cat.label} memory: ${content.substring(0, 30)}...`}
+                                aria-describedby={`danger-delete-${id}`}
                                 onClick={handleDelete}
                                 className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-status-red/30 bg-status-red/[0.08] text-status-red transition-colors duration-150 hover:border-status-red hover:bg-status-red hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 active:bg-status-red/90 dark:focus-visible:ring-offset-void-900"
                             >
@@ -154,6 +163,9 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
                 </div>
             </div>
             <span className="sr-only">Press Enter to open details.</span>
+            {lobotomizeModeSignal.value && (
+                <span id={`danger-delete-${id}`} className="sr-only">Danger delete is armed. This deletes immediately without confirmation.</span>
+            )}
         </div>
     );
 }, (prevProps, nextProps) => {

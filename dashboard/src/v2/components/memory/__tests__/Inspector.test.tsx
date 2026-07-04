@@ -54,9 +54,27 @@ describe("Inspector", () => {
             />
         );
 
+        expect(getByRole("region", { name: "Selected memory details" })).toBeInTheDocument();
+        expect(getByText("Selected memory open in inspector")).toBeInTheDocument();
         expect(getByRole("button", { name: "Close memory inspector" })).toBeInTheDocument();
         expect(getByText("Beta related memory")).toBeInTheDocument();
         expect(getByText("Codebase")).toBeInTheDocument();
         expect(getByText("82%")).toBeInTheDocument();
+    });
+
+    test("danger delete mode explains immediate inspector deletion", () => {
+        const { getByRole, getByText } = render(
+            <Inspector
+                node={buildNode()}
+                allNodes={[buildNode()]}
+                edges={[]}
+                lobotomize={true}
+                onClose={vi.fn()}
+                onDelete={vi.fn()}
+            />
+        );
+
+        expect(getByText("Danger delete is armed. Deleting this memory happens immediately without another confirmation.")).toBeInTheDocument();
+        expect(getByRole("button", { name: "Delete Immediately" })).toHaveAccessibleDescription("Danger delete is armed. This action deletes immediately without confirmation.");
     });
 });

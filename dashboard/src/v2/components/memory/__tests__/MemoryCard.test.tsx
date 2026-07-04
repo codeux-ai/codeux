@@ -42,7 +42,7 @@ describe("MemoryCard", () => {
     test("shows Danger button when lobotomizeModeSignal is true and deletes on click", async () => {
         lobotomizeModeSignal.value = true;
 
-        const { getByRole } = render(
+        const { getByRole, getAllByText } = render(
             <MemoryCard
                 id="test-id"
                 content="test-content"
@@ -64,7 +64,7 @@ describe("MemoryCard", () => {
         lobotomizeModeSignal.value = true;
         const onClick = vi.fn();
 
-        const { getByRole } = render(
+        const { getByRole, getByText } = render(
             <MemoryCard
                 id="test-id"
                 content="test-content"
@@ -163,14 +163,14 @@ describe("MemoryCard", () => {
             />
         );
 
-        const card = getByRole("option", { name: "Architecture memory, scope project, strength 75%. accessible-test-content" });
+        const card = getByRole("option", { name: "Architecture memory, scope project, strength 75%. Not selected. accessible-test-content" });
         expect(card).toBeInTheDocument();
         expect(card).toHaveAttribute("aria-selected", "false");
     });
 
     test("sets aria-selected when activeMemoryIdSignal matches id", () => {
         activeMemoryIdSignal.value = "test-id";
-        const { getByRole } = render(
+        const { getByRole, getAllByText } = render(
             <MemoryCard
                 id="test-id"
                 content="accessible-test-content"
@@ -181,8 +181,9 @@ describe("MemoryCard", () => {
             />
         );
 
-        const card = getByRole("option", { name: "Architecture memory, scope project, strength 75%. accessible-test-content" });
+        const card = getByRole("option", { name: "Architecture memory, scope project, strength 75%. Currently open in inspector. accessible-test-content" });
         expect(card).toHaveAttribute("aria-selected", "true");
+        expect(getAllByText("Open").length).toBeGreaterThan(0);
         activeMemoryIdSignal.value = null; // cleanup
     });
 });
