@@ -2,6 +2,12 @@ import { useCallback, useMemo, useState } from "preact/hooks";
 import { isDeepEqual } from "../v2/lib/resource-equality.js";
 import { computeStats, processDashboardTasks } from "../lib/status.js";
 import { fetchLivePayload, getCachedLivePayload } from "../lib/api/dashboard-api.js";
+import {
+  areExecutionSnapshotsEquivalent,
+  areStatusSnapshotsEquivalent,
+  stabilizeExecutionSnapshot,
+  stabilizeStatusSnapshot,
+} from "../lib/runtime-snapshot-stability.js";
 import type {
   DashboardStatus,
   ExecutionDashboardSnapshot,
@@ -69,11 +75,33 @@ export const useDashboardRuntimeData = (projectIdHint: string | null = null, ena
     }
   }, [enabled, projectIdHint]);
 
-  // Use deep equality, ignoring metadata timestamps that cause unnecessary re-renders
   const isEqual = useCallback((prev: ProjectLiveDashboardSnapshot, next: ProjectLiveDashboardSnapshot) => {
-    const prevNoMeta = { ...prev, updatedAt: null, execution: { ...prev.execution, updatedAt: null } };
-    const nextNoMeta = { ...next, updatedAt: null, execution: { ...next.execution, updatedAt: null } };
-    return isDeepEqual(prevNoMeta, nextNoMeta);
+    return (
+      prev.projectId === next.projectId
+      && prev.selectedSprintId === next.selectedSprintId
+      && areStatusSnapshotsEquivalent(prev.status, next.status)
+      && areExecutionSnapshotsEquivalent(prev.execution, next.execution)
+      && isDeepEqual(prev.gitStatus, next.gitStatus)
+      && prev.gitStatusError === next.gitStatusError
+    );
+  }, []);
+
+  const stabilizeSnapshot = useCallback((
+    prev: ProjectLiveDashboardSnapshot,
+    next: ProjectLiveDashboardSnapshot,
+  ): ProjectLiveDashboardSnapshot => {
+    const execution = stabilizeExecutionSnapshot(prev.execution, next.execution);
+    const status = stabilizeStatusSnapshot(prev.status, next.status, execution);
+
+    if (execution === next.execution && status === next.status) {
+      return next;
+    }
+
+    return {
+      ...next,
+      status,
+      execution,
+    };
   }, []);
 
   // Use state to track the realtime project ID so it can be updated
@@ -108,6 +136,7 @@ export const useDashboardRuntimeData = (projectIdHint: string | null = null, ena
     initialData,
     fetchResource: fetchResourceWithProjectExtraction,
     isEqual,
+    stabilizeNext: stabilizeSnapshot,
     realtime: activeProjectId ? {
       // Dedicated sub-scope: the heavy live payload is delivered only here, so
       // pages on the plain `project:<id>` scope never receive these ~0.5MB frames.

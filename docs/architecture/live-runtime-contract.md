@@ -16,6 +16,7 @@ The Live snapshot (`ProjectLiveDashboardSnapshot`) serves as the authoritative b
 4. **The Browser Renders (No Reconciling):**
    The browser UI renders the exact snapshot it receives over HTTP `/api/live` or websockets. It does not attempt to reconcile competing sources, merge partial updates manually, or maintain local hidden state that contradicts the snapshot.
    Live task cards may still derive display-only task runtime fields such as the latest session id, PR URL, worker branch, and display phase from the current sprint-scoped dispatch/event history that already exists inside the same snapshot. This is a projection step inside the snapshot boundary, not a second source of truth.
+   The Live runtime hook may also stabilize semantically equivalent snapshots before committing them to Preact state: top-level `updatedAt`, `status.timestamp`, and `execution.updatedAt` are treated as render metadata, unchanged execution/status sub-collections keep their prior references, and transient empty execution/status payloads for the same active project are ignored until the backend sends a semantically real change. This stabilization is strictly a render-thrash guard over complete server snapshots; it must not synthesize browser-only runtime facts or override real server state changes.
 
 ## Field Ownership & Mutation Triggers
 
