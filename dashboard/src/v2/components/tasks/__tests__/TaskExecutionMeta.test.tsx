@@ -12,7 +12,7 @@ describe("TaskExecutionMeta", () => {
   });
 
   it("renders all fields populated correctly", () => {
-    const { getByText, container } = render(
+    const { getByText, getByLabelText, container } = render(
       <TaskExecutionMeta
         time="2m 30s"
         executorType="jules"
@@ -28,10 +28,10 @@ describe("TaskExecutionMeta", () => {
     const chips = container.querySelectorAll(".flex.items-center.gap-1\\.5");
     expect(chips.length).toBe(3);
 
-    // Verify explicit accessible text
-    expect(getByText("Duration:")).toBeTruthy();
-    expect(getByText("Executor:")).toBeTruthy();
-    expect(getByText("Mode:")).toBeTruthy();
+    // Verify explicit accessible labels
+    expect(getByLabelText("Duration: 2m 30s")).toBeTruthy();
+    expect(getByLabelText("Executor: Jules")).toBeTruthy();
+    expect(getByLabelText("Mode: custom")).toBeTruthy();
   });
 
   it("renders gracefully with missing time", () => {

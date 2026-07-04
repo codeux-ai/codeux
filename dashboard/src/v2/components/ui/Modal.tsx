@@ -85,7 +85,7 @@ export const Modal: FunctionComponent<ModalProps> = ({
   if (!shouldRender) return null;
 
   return (
-    <Overlay isOpen={isOpen} onClose={disableBackdropClick ? undefined : onClose} blur exitDuration={150} className="!items-end sm:!items-center pb-4 sm:pb-0">
+    <Overlay isOpen={isOpen} onClose={disableBackdropClick ? undefined : onClose} blur className="!items-end sm:!items-center pb-4 sm:pb-0">
       <div className="absolute inset-0 bg-slate-900/50 pointer-events-none" />
       <div
         ref={(el) => {

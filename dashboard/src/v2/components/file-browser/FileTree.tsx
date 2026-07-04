@@ -7,6 +7,19 @@ import { useMemo } from "preact/hooks";
 import type { FileBrowserTreeNode } from "../../../types.js";
 
 
+const countMatchingNodes = (nodes: FileBrowserTreeNode[], searchTerm?: string): number => {
+  const normalizedTerm = searchTerm?.trim().toLowerCase() ?? "";
+  let count = 0;
+  const visit = (node: FileBrowserTreeNode) => {
+    if (!normalizedTerm || node.name.toLowerCase().includes(normalizedTerm)) {
+      count += 1;
+    }
+    node.children?.forEach(visit);
+  };
+  nodes.forEach(visit);
+  return count;
+};
+
 const HighlightMatch = ({ text, term }: { text: string; term?: string }) => {
   if (!term) return <span>{text}</span>;
   const index = text.toLowerCase().indexOf(term.toLowerCase());
@@ -90,6 +103,7 @@ const TreeNodeRow: FunctionComponent<NodeRendererProps<FileBrowserTreeNode>> = (
 export const FileTree: FunctionComponent<FileTreeProps> = ({ nodes, selectedPath, onSelectFile, searchTerm }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 320, height: 480 });
+  const resultCount = useMemo(() => countMatchingNodes(nodes, searchTerm), [nodes, searchTerm]);
 
   useEffect(() => {
     if (!containerRef.current || typeof ResizeObserver === "undefined") {
@@ -115,6 +129,13 @@ export const FileTree: FunctionComponent<FileTreeProps> = ({ nodes, selectedPath
       aria-label="Sprint file tree"
       class="h-full w-full overflow-hidden"
     >
+      <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {searchTerm?.trim()
+          ? `${resultCount} file tree ${resultCount === 1 ? "result" : "results"} match ${searchTerm}.`
+          : `${resultCount} file tree ${resultCount === 1 ? "entry" : "entries"} available.`}
+        {" "}
+        {selectedPath ? `Selected file ${selectedPath}.` : "No file selected."}
+      </div>
       <Tree<FileBrowserTreeNode>
         data={nodes}
         idAccessor="id"

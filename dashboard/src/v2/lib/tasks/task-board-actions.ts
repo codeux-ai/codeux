@@ -23,3 +23,30 @@ export function resolveTaskDropStatus(
   return DROP_TARGET_STATUS_BY_LANE[normalizedTargetLane];
 }
 
+export function getTaskDragInstruction(isReducedMotion: boolean): string {
+  return isReducedMotion
+    ? "Drag disabled because reduced motion is enabled."
+    : "Pointer drag only. Keyboard reordering is not supported.";
+}
+
+export function getTaskDropFeedback(args: {
+  isReducedMotion: boolean;
+  isDragging: boolean;
+  targetLane: TaskStatus;
+  currentStatus?: TaskStatus;
+}): string {
+  if (args.isReducedMotion) {
+    return getTaskDragInstruction(true);
+  }
+
+  if (!args.isDragging || !args.currentStatus) {
+    return "Drop target inactive.";
+  }
+
+  const targetStatus = resolveTaskDropStatus(args.currentStatus, args.targetLane);
+  if (!targetStatus) {
+    return "Drop target is the current lane.";
+  }
+
+  return `Drop will move task to ${targetStatus.replace(/_/g, " ")}.`;
+}

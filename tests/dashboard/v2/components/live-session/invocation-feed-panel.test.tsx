@@ -3,7 +3,7 @@ import { h, Fragment } from "preact";
 /** @jsx h */
 /** @jsxFrag Fragment */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 
 expect.extend(matchers);
@@ -121,7 +121,9 @@ describe("InvocationFeedPanel", () => {
     expect(screen.getByText("Task Coding")).toBeInTheDocument();
     expect(screen.getByText("QA Review")).toBeInTheDocument();
     expect(screen.getByText("Provider timed out")).toBeInTheDocument();
+    expect(screen.getByText("1 invocation failed. Open the transcript for details.")).toHaveAttribute("role", "alert");
     expect(screen.getByText("Invocation status: running.")).toBeInTheDocument();
+    expect(document.querySelector(".motion-reduce\\:ring-2")).toBeInTheDocument();
 
     const feed = screen.getByRole("log", { name: "Live invocation feed" });
     expect(feed).toHaveAttribute("aria-live", "polite");
@@ -188,5 +190,27 @@ describe("InvocationFeedPanel", () => {
     expect(screen.getByText("completed")).toBeInTheDocument();
     vi.runOnlyPendingTimers();
     vi.useRealTimers();
+  });
+
+  it("exposes collapsible feed state and preserves focus in reduced motion", () => {
+    vi.mocked(useExecutionTimeline).mockReturnValue({
+      execution: createSnapshot([createInvocation({ status: "completed", finishedAt: "2024-01-01T10:02:00.000Z" })]),
+    } as never);
+
+    render(<InvocationFeedPanel collapsible defaultOpen={false} />);
+
+    const toggle = screen.getByRole("button", { name: /Invocation Feed/i });
+    const panelId = toggle.getAttribute("aria-controls");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(panelId).toBeTruthy();
+    expect(document.getElementById(panelId ?? "")).toHaveAttribute("aria-hidden", "true");
+    expect(gsap.set).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ height: 0, overflow: "hidden" }));
+
+    toggle.focus();
+    fireEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(document.activeElement).toBe(toggle);
+    expect(screen.getByRole("status")).toHaveTextContent("Invocation feed is current.");
   });
 });

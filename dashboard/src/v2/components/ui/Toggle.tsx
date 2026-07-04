@@ -11,12 +11,14 @@ export type ToggleProps = Omit<ComponentProps<"button">, "value" | "onChange" | 
   danger?: boolean;
 } & ({ "aria-label": string } | { "aria-labelledby": string });
 
-export const Toggle: FunctionComponent<ToggleProps> = ({ value, onChange, danger, disabled, className = "", ...props }) => {
+export const Toggle: FunctionComponent<ToggleProps> = ({ value, onChange, danger, disabled, className = "", style, ...props }) => {
   const thumbRef = useRef<HTMLSpanElement>(null);
   const gsapTokens = useGsapInteractionTokens();
   const reducedMotion = useReducedMotion();
   const tokens = useInteractionTokens();
   const isInitialMount = useRef(true);
+  const isAriaDisabled = props["aria-disabled"] === true || props["aria-disabled"] === "true";
+  const isDisabled = !!disabled || isAriaDisabled;
 
   useLayoutEffect(() => {
     gsap.set(thumbRef.current, { x: value ? 20 : 0 });
@@ -30,20 +32,28 @@ export const Toggle: FunctionComponent<ToggleProps> = ({ value, onChange, danger
     gsap.to(thumbRef.current, {
       x: value ? 20 : 0,
       duration: gsapTokens.controlFeedback.duration,
-      ease: reducedMotion ? 'none' : gsapTokens.controlFeedback.ease,
+      ease: reducedMotion ? "none" : gsapTokens.controlFeedback.ease,
       overwrite: true
     });
   }, [value, reducedMotion, gsapTokens.controlFeedback.duration, gsapTokens.controlFeedback.ease]);
 
+  const handleClick = () => {
+    if (isDisabled) {
+      return;
+    }
+    onChange(!value);
+  };
+
   return (
     <button
       {...props}
-      style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
+      style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease, ...(typeof style === "object" ? style : {}) }}
       type="button"
       role="switch"
-      onClick={() => onChange(!value)}
+      onClick={handleClick}
       disabled={disabled}
-      className={`group relative h-7 w-12 shrink-0 overflow-hidden rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${danger ? "focus-visible:ring-[var(--focus-ring-danger)]" : "focus-visible:ring-[var(--focus-ring-signal)]"} disabled:cursor-not-allowed disabled:opacity-50 motion-safe:enabled:active:scale-[0.98] enabled:active:brightness-95 dark:enabled:active:brightness-110 ${
+      aria-disabled={isDisabled}
+      className={`group relative h-7 w-12 shrink-0 overflow-hidden rounded-full border transition-[background-color,border-color,box-shadow,filter,transform,opacity] motion-reduce:duration-0 motion-reduce:ease-none focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${danger ? "focus-visible:ring-[var(--focus-ring-danger)]" : "focus-visible:ring-[var(--focus-ring-signal)]"} disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:cursor-not-allowed aria-disabled:opacity-50 motion-safe:enabled:active:scale-[0.98] enabled:active:brightness-95 dark:enabled:active:brightness-110 ${
         value
           ? danger
             ? "border-status-red/40 bg-status-red shadow-[0_0_16px_var(--status-static-failed-aura)] enabled:hover:bg-status-red/90"
@@ -60,7 +70,7 @@ export const Toggle: FunctionComponent<ToggleProps> = ({ value, onChange, danger
       />
       <span
         ref={thumbRef}
-        className={`absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-[0_2px_7px_rgba(0,0,0,0.18)] motion-safe:transition-[width] motion-reduce:transition-none ${!disabled ? "group-enabled:group-active:w-6" : ""} ${
+        className={`absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-[0_2px_7px_rgba(0,0,0,0.18)] motion-safe:transition-[width] motion-reduce:transition-none ${!isDisabled ? "group-enabled:group-active:w-6" : ""} ${
           value ? "group-enabled:group-active:translate-x-4" : ""
         }`}
         style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}

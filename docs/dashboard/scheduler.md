@@ -11,6 +11,8 @@ The page has two schedule surfaces:
 - `Calendar` shows recurring entries on every visible day, not only on the original entry date.
 - `24 Hours` shows the selected day as an hour-by-hour timeline.
 
+The `Calendar` / `24 Hours` switcher is implemented as a two-tab control. It exposes the active surface with `aria-selected`, points both tabs at the scheduler view panel with `aria-controls`, and supports arrow, Home, and End keyboard movement. During refresh, the view panel keeps cached schedule entries and occurrences visible, marks the panel busy, and announces that cached data is being shown while the latest schedule loads.
+
 Operators can create entries for:
 - Sprints whose status is not `completed`.
 - Built-in or custom quicksprint templates available to the selected project.
@@ -20,6 +22,8 @@ Operators can create entries for:
 The Memory settings panel can also manage one project-scoped long-term remediation entry. That entry is marked with `memoryRemediationTarget.source = "memory_settings"` so the settings shortcut does not overwrite manually created Scheduler page remediation entries.
 
 Scheduler target selectors, recurrence indicators, and repeating-count summary icons use the dashboard signal jade palette for interactive accents. Sprint and next-run status tones remain differentiated with their existing ember/status colors.
+
+Target-type choices in the add/edit form are pressed controls. The selected target is exposed through `aria-pressed` and a polite selected-target announcement so operators can confirm mode changes without relying on color alone.
 
 Repeating entries support:
 - no recurrence

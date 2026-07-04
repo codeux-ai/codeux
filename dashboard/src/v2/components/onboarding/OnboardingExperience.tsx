@@ -35,6 +35,8 @@ import { ONBOARDING_OPEN_EVENT, ONBOARDING_STORAGE_KEY, startDashboardTour } fro
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useOnboardingState } from "../../hooks/useOnboardingState.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { OnboardingIntro } from "./OnboardingIntro.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { ProviderInstanceCard } from "../settings/ProviderInstanceCard.js";
@@ -198,6 +200,7 @@ export const OnboardingExperience: FunctionComponent = () => {
     dispatch,
     open,
     activeStep,
+    lastStep,
     readiness,
     settings,
     selectedProviders,
@@ -212,7 +215,12 @@ export const OnboardingExperience: FunctionComponent = () => {
     updateSettings,
   } = useOnboardingStepFlow();
   const [introPhase, setIntroPhase] = useState<IntroPhase>("intro");
+  const [checkingReadiness, setCheckingReadiness] = useState(false);
+  const [validationMessage, setValidationMessage] = useState<string | null>(null);
   const reducedMotion = useReducedMotion();
+  const gsapTokens = useGsapInteractionTokens();
+  const interactionTokens = useInteractionTokens();
+  const validationRef = useRef<HTMLDivElement>(null);
   const {
     state: onboardingUserState,
     loading: onboardingStateLoading,
@@ -261,6 +269,7 @@ export const OnboardingExperience: FunctionComponent = () => {
   };
 
   const load = async () => {
+    setCheckingReadiness(true);
     try {
       const [nextReadiness, nextSettings] = await Promise.all([
         fetchOnboardingReadiness(),
@@ -269,6 +278,8 @@ export const OnboardingExperience: FunctionComponent = () => {
       dispatch({ type: "load-success", readiness: nextReadiness, settings: nextSettings });
     } catch (loadError) {
       dispatch({ type: "load-failure", error: loadError instanceof Error ? loadError.message : String(loadError) });
+    } finally {
+      setCheckingReadiness(false);
     }
   };
 
@@ -321,15 +332,20 @@ export const OnboardingExperience: FunctionComponent = () => {
     if (!contentRef.current) {
       return;
     }
+    const direction = activeStep >= lastStep ? 1 : -1;
     const ctx = gsap.context(() => {
       gsap.fromTo(
         contentRef.current!.querySelectorAll("[data-onboarding-card]"),
-        { opacity: 0, y: reducedMotion ? 0 : 22, scale: reducedMotion ? 1 : 0.985 },
-        { opacity: 1, y: 0, scale: 1, duration: reducedMotion ? 0 : 0.55, stagger: reducedMotion ? 0 : 0.055, ease: "power3.out" },
+        { opacity: reducedMotion ? 1 : 0, y: reducedMotion ? 0 : 18 * direction, scale: 1 },
+        { opacity: 1, y: 0, scale: 1, duration: gsapTokens.enterExit.duration, stagger: reducedMotion ? 0 : 0.045, ease: gsapTokens.enterExit.ease },
       );
     });
     return () => ctx.revert();
-  }, [activeStep, selectedProviders.length, settings, reducedMotion]);
+  }, [activeStep, lastStep, selectedProviders.length, settings, reducedMotion, gsapTokens.enterExit.duration, gsapTokens.enterExit.ease]);
+
+  useEffect(() => {
+    setValidationMessage(null);
+  }, [activeStep]);
 
   const readinessByProvider = useMemo(
     () => Object.fromEntries(readiness.providers.map((provider) => [provider.provider, provider])) as Partial<Record<ProviderId, OnboardingProviderCredentialStatus>>,
@@ -505,7 +521,46 @@ export const OnboardingExperience: FunctionComponent = () => {
 
   const gitMode = settings?.defaults.cliWorkflow.gitMode === "local" ? "local" : "remote";
 
+  const enabledProviderInstances = settings
+    ? sortProviderConfigEntries(Object.entries(settings.defaults.aiProvider.providers))
+      .filter(([, provider]) => provider.enabled)
+    : [];
+
+  const validateActiveStep = (): boolean => {
+    if (!settings) {
+      return true;
+    }
+    let message: string | null = null;
+    if (active.id === "jira") {
+      const jiraHasAnyValue = Boolean(jiraSettings.host.trim() || jiraSettings.email.trim() || jiraSettings.apiToken.trim() || jiraSettings.defaultProject.trim());
+      const jiraMissingRequiredPair = jiraHasAnyValue && (!jiraSettings.host.trim() || !jiraSettings.apiToken.trim());
+      if (jiraMissingRequiredPair) {
+        message = "Enter both Jira site URL and API token, or clear the Jira fields to configure it later.";
+      }
+    } else if (active.id === "defaults" && enabledProviderInstances.length === 0) {
+      message = "Enable at least one provider instance before choosing defaults.";
+    }
+    if (!message) {
+      return true;
+    }
+    setValidationMessage(message);
+    window.setTimeout(() => {
+      validationRef.current?.focus({ preventScroll: true });
+      validationRef.current?.scrollIntoView?.({ block: "nearest", behavior: reducedMotion ? "auto" : "smooth" });
+    }, 0);
+    return false;
+  };
+
+  const handleContinue = () => {
+    if (validateActiveStep()) {
+      goToNextStep();
+    }
+  };
+
   const applyAndClose = async () => {
+    if (!validateActiveStep()) {
+      return;
+    }
     if (!settings) {
       await markOnboardingCompleted("complete");
       window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
@@ -599,10 +654,6 @@ export const OnboardingExperience: FunctionComponent = () => {
   const clusterReady = readiness.cluster.status === "ready";
   const dockerExecutionEnabled = settings?.defaults.cliWorkflow.executionMode === "DOCKER";
   const jiraSettings = settings?.integrations.jira || DEFAULT_JIRA_SETTINGS;
-  const enabledProviderInstances = settings
-    ? sortProviderConfigEntries(Object.entries(settings.defaults.aiProvider.providers))
-      .filter(([, provider]) => provider.enabled)
-    : [];
   const providerInstanceOptions = enabledProviderInstances.map(([providerConfigId, provider]) => ({
     value: providerConfigId,
     label: getProviderInstanceLabel(provider),
@@ -615,6 +666,23 @@ export const OnboardingExperience: FunctionComponent = () => {
       label: getProviderInstanceLabel(provider),
       icon: <ProviderBrandIcon id={provider.provider} />,
     }));
+  const stepProgressValue = Math.round(((activeStep + 1) / steps.length) * 100);
+  const stepProgressLabel = `Step ${activeStep + 1} of ${steps.length}: ${active.label}`;
+  const saveStatusText = saving
+    ? "Saving onboarding settings"
+    : error
+      ? "Onboarding save failed. Review the error and retry."
+      : checkingReadiness
+        ? "Checking runtime readiness"
+        : "Draft changes are ready to save when onboarding is finished.";
+  const motionStyle = {
+    "--onboarding-enter-exit-duration": interactionTokens.enterExit.duration,
+    "--onboarding-enter-exit-ease": interactionTokens.enterExit.ease,
+    "--onboarding-selection-duration": interactionTokens.selectionMovement.duration,
+    "--onboarding-selection-ease": interactionTokens.selectionMovement.ease,
+    "--onboarding-validation-duration": interactionTokens.inlineValidation.duration,
+    "--onboarding-validation-ease": interactionTokens.inlineValidation.ease,
+  };
 
   return (
     <>
@@ -622,7 +690,7 @@ export const OnboardingExperience: FunctionComponent = () => {
         <OnboardingIntro onExitStart={handleIntroExitStart} onComplete={handleIntroComplete} />
       )}
       {introPhase !== "intro" && (
-    <div ref={backdropRef} className="fixed inset-0 z-[200] flex items-center justify-center overflow-hidden bg-[#060A0D] px-3 py-4 md:px-6 md:py-8">
+    <div ref={backdropRef} style={motionStyle} className="fixed inset-0 z-[200] flex items-center justify-center overflow-hidden bg-[#060A0D] px-3 py-4 md:px-6 md:py-8">
       <div aria-hidden className="pointer-events-none absolute inset-0">
         <Suspense fallback={<div className="absolute inset-0 bg-[#060A0D]" />}>
           <DeepOceanBackground forceDark className="opacity-75 saturate-[0.86] contrast-[0.92]" />
@@ -769,6 +837,12 @@ export const OnboardingExperience: FunctionComponent = () => {
                   : `Step ${activeStep - 2} of 6`}
               </div>
               <h3 className="mt-1 font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{active.label}</h3>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-white/[0.08]" role="progressbar" aria-label={stepProgressLabel} aria-valuemin={1} aria-valuemax={steps.length} aria-valuenow={activeStep + 1}>
+                <div
+                  className="h-full rounded-full bg-signal-500 transition-[width] motion-reduce:transition-none"
+                  style={{ width: `${stepProgressValue}%`, transitionDuration: "var(--onboarding-selection-duration)", transitionTimingFunction: "var(--onboarding-selection-ease)" }}
+                />
+              </div>
             </div>
             <button
               type="button"
@@ -785,9 +859,24 @@ export const OnboardingExperience: FunctionComponent = () => {
           </header>
 
           <div ref={contentRef} className="dashboard-scrollbar relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6 dark:text-slate-100 md:px-8">
+            <div className="sr-only" role="status" aria-live="polite">{stepProgressLabel}. {saveStatusText}</div>
             {error ? (
-              <div className="mb-4 rounded-2xl border border-status-red/20 bg-status-red/10 px-4 py-3 text-sm font-semibold text-status-red">
-                {error}
+              <div className="mb-4 rounded-2xl border border-status-red/20 bg-status-red/10 px-4 py-3 text-sm font-semibold text-status-red" role="alert">
+                <div>{error}</div>
+                <button type="button" onClick={() => void applyAndClose()} className="mt-3 rounded-xl border border-status-red/30 px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em]">
+                  Retry save
+                </button>
+              </div>
+            ) : null}
+            {validationMessage ? (
+              <div
+                ref={validationRef}
+                tabIndex={-1}
+                role="alert"
+                className="mb-4 rounded-2xl border border-status-red/25 bg-status-red/10 px-4 py-3 text-sm font-semibold text-status-red outline-none focus-visible:ring-2 focus-visible:ring-status-red/40"
+                style={{ transitionDuration: "var(--onboarding-validation-duration)", transitionTimingFunction: "var(--onboarding-validation-ease)" }}
+              >
+                {validationMessage}
               </div>
             ) : null}
 
@@ -860,9 +949,9 @@ export const OnboardingExperience: FunctionComponent = () => {
                     </div>
                   ))}
                 </div>
-                <button type="button" onClick={() => void load()} className="inline-flex items-center gap-2 rounded-2xl border border-black/[0.08] bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-200">
-                  <RefreshCw className="h-4 w-4" />
-                  Recheck
+                <button type="button" onClick={() => void load()} disabled={checkingReadiness} aria-describedby="onboarding-status" className="inline-flex items-center gap-2 rounded-2xl border border-black/[0.08] bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-200">
+                  <RefreshCw className={`h-4 w-4 ${checkingReadiness ? "animate-spin motion-reduce:animate-none" : ""}`} />
+                  {checkingReadiness ? "Checking" : "Recheck"}
                 </button>
               </div>
             ) : null}
@@ -1181,19 +1270,19 @@ export const OnboardingExperience: FunctionComponent = () => {
                 <div data-onboarding-card>
                   <SectionCard title="Jira Configuration" watermark="JRA" icon={<ClipboardList strokeWidth={2.4} />}>
                     <Row label="Jira site URL" description="Base URL for Jira Cloud or Data Center, for example `https://company.atlassian.net`.">
-                      <TextInput value={jiraSettings.host} onChange={(value) => updateJira({ host: value })} mono />
+                      <TextInput aria-label="Jira site URL" value={jiraSettings.host} onChange={(value) => updateJira({ host: value })} mono />
                     </Row>
                     <Row label="Account email" description="Email used with Jira Cloud API tokens. Leave empty for bearer-token Jira deployments.">
-                      <TextInput value={jiraSettings.email} onChange={(value) => updateJira({ email: value })} mono />
+                      <TextInput aria-label="Jira account email" value={jiraSettings.email} onChange={(value) => updateJira({ email: value })} mono />
                     </Row>
                     <Row label="API token" description="Jira API token used for issue search, issue context loading, and transitions.">
-                      <TextInput value={jiraSettings.apiToken} onChange={(value) => updateJira({ apiToken: value })} mono />
+                      <TextInput aria-label="Jira API token" value={jiraSettings.apiToken} onChange={(value) => updateJira({ apiToken: value })} mono />
                     </Row>
                     <Row label="Default project" description="Project key used to prefill the Jira import JQL.">
-                      <TextInput value={jiraSettings.defaultProject} onChange={(value) => updateJira({ defaultProject: value.toUpperCase() })} mono />
+                      <TextInput aria-label="Jira default project" value={jiraSettings.defaultProject} onChange={(value) => updateJira({ defaultProject: value.toUpperCase() })} mono />
                     </Row>
                     <Row label="Close transition" description="Transition name used when auto-closing linked Jira issues after sprint completion.">
-                      <TextInput value={jiraSettings.closeTransitionName} onChange={(value) => updateJira({ closeTransitionName: value })} />
+                      <TextInput aria-label="Jira close transition" value={jiraSettings.closeTransitionName} onChange={(value) => updateJira({ closeTransitionName: value })} />
                     </Row>
                     <Row label="Auto-close Jira issues" description="Move linked Jira issues through the configured transition after the sprint completes." last>
                       <Toggle aria-label="Toggle setting" value={jiraSettings.autoCloseLinkedIssues} onChange={() => updateJira({ autoCloseLinkedIssues: !jiraSettings.autoCloseLinkedIssues })} />
@@ -1445,7 +1534,10 @@ export const OnboardingExperience: FunctionComponent = () => {
               <ArrowLeft className="h-4 w-4" />
               Back
             </button>
-            <div className="flex items-center gap-2">
+            <div id="onboarding-status" role="status" aria-live="polite" className="hidden min-w-0 flex-1 truncate text-center text-xs font-semibold text-slate-500 dark:text-slate-400 sm:block">
+              {saveStatusText}
+            </div>
+            <div className="flex items-center gap-2" aria-label="Onboarding step shortcuts">
               {[
                 { active: activeStep === 0, onClick: () => setActiveStep(0), label: "Installation" },
                 { active: activeStep === 1, onClick: () => setActiveStep(1), label: "Introduction" },
@@ -1459,7 +1551,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                   type="button"
                   aria-label={`Go to ${dot.label}`}
                   onClick={dot.onClick}
-                  className={`h-2 rounded-full transition-all ${dot.active ? "w-8 bg-signal-500" : "w-2 bg-slate-300 dark:bg-slate-700"}`}
+                  className={`h-2 rounded-full transition-all motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 ${dot.active ? "w-8 bg-signal-500" : "w-2 bg-slate-300 dark:bg-slate-700"}`}
                 />
               ))}
             </div>
@@ -1468,16 +1560,18 @@ export const OnboardingExperience: FunctionComponent = () => {
                 type="button"
                 onClick={() => void applyAndClose()}
                 disabled={saving}
+                aria-describedby="onboarding-status"
                 className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.18)] transition-colors hover:bg-slate-700 disabled:opacity-60 dark:bg-white dark:text-void-900"
               >
                 {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                Finish
+                {saving ? "Saving" : "Finish"}
               </button>
             ) : (
               <button
                 type="button"
                 disabled={!canGoNext}
-                onClick={goToNextStep}
+                onClick={handleContinue}
+                aria-describedby="onboarding-status"
                 className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.18)] transition-colors hover:bg-slate-700 disabled:opacity-60 dark:bg-white dark:text-void-900"
               >
                 Next

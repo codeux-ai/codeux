@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { h } from "preact";
-import { render } from "@testing-library/preact";
+import { fireEvent, render, waitFor } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { expect, test, describe, vi, afterEach } from "vitest";
 import { MemoryList } from "../MemoryList.js";
@@ -9,8 +9,10 @@ import type { MemNode } from "../../../lib/memory-graph.js";
 
 expect.extend(matchers);
 
+let mockReducedMotion = false;
+
 vi.mock("../../../hooks/use-reduced-motion.js", () => ({
-    useReducedMotion: () => false,
+    useReducedMotion: () => mockReducedMotion,
     useResolvedMotionDuration: (duration: number) => duration,
 }));
 
@@ -37,6 +39,7 @@ describe("MemoryList", () => {
         document.body.innerHTML = "";
         searchQuerySignal.value = "";
         selectedMemoryIdsSignal.value = [];
+        mockReducedMotion = false;
     });
 
     memoryMutationsSignal.value = {
@@ -53,7 +56,9 @@ describe("MemoryList", () => {
         const { getAllByText } = render(
             <MemoryList nodes={[]} onSelectNode={vi.fn()} />
         );
-        const announcement = getAllByText("No memories exist").find((element) => element.classList.contains("sr-only"));
+        const announcement = getAllByText("No memories exist")
+            .map((element) => element.closest(".sr-only"))
+            .find(Boolean);
         expect(announcement).toBeInTheDocument();
         expect(announcement).toHaveClass("sr-only");
     });
@@ -75,7 +80,7 @@ describe("MemoryList", () => {
         expect(getByText("Beta note")).toBeInTheDocument();
         expect(queryByText("Archived note")).toBeNull();
         expect(getByText("Showing 2 of 2 memories")).toBeInTheDocument();
-        expect(getByText("2 memories found")).toHaveClass("sr-only");
+        expect(getByText("2 memories shown")).toHaveClass("sr-only");
     });
 
     test("renders true empty state when no alive memories exist", () => {
@@ -83,7 +88,9 @@ describe("MemoryList", () => {
             <MemoryList nodes={[buildNode({ alive: false })]} onSelectNode={vi.fn()} />
         );
 
-        const announcement = getAllByText("No memories exist").find((element) => element.classList.contains("sr-only"));
+        const announcement = getAllByText("No memories exist")
+            .map((element) => element.closest(".sr-only"))
+            .find(Boolean);
         expect(announcement).toBeInTheDocument();
         expect(announcement).toHaveClass("sr-only");
     });
@@ -97,7 +104,7 @@ describe("MemoryList", () => {
             />
         );
 
-        expect(getByText("Showing 1 of 2 memories")).toBeInTheDocument();
+        expect(getByText(/Showing 1 of 2 memories/)).toBeInTheDocument();
     });
 
     test("filters memories by category while preserving listbox options", () => {
@@ -116,7 +123,7 @@ describe("MemoryList", () => {
         expect(getAllByRole("option")).toHaveLength(1);
         expect(getByText("Release tradeoff")).toBeInTheDocument();
         expect(queryByText("Alpha project memory")).toBeNull();
-        expect(getByText("1 memory found")).toHaveClass("sr-only");
+        expect(getByText(/1 memory shown/)).toHaveClass("sr-only");
     });
 
     test("select all visible only targets currently filtered nodes", () => {
@@ -137,5 +144,55 @@ describe("MemoryList", () => {
         selectAll.click();
 
         expect(selectedMemoryIdsSignal.value).toEqual(["memory-1"]);
+    });
+
+    test("announces selected count and updates batch delete copy", async () => {
+        const { getByRole, getByText } = render(
+            <MemoryList
+                nodes={[
+                    buildNode({ id: "memory-1", content: "Alpha project memory" }),
+                    buildNode({ id: "memory-2", content: "Beta note" }),
+                ]}
+                onSelectNode={vi.fn()}
+            />
+        );
+
+        fireEvent.click(getByRole("button", { name: "Select all visible" }));
+
+        await waitFor(() => {
+            expect(getByText("2 memories selected")).toHaveClass("sr-only");
+        });
+        expect(getByText("2 selected")).toBeInTheDocument();
+        expect(getByRole("button", { name: "Delete 2 selected" })).toBeInTheDocument();
+    });
+
+    test("reduced motion applies static list updates without hiding visible cues", () => {
+        mockReducedMotion = true;
+        const { getByText, queryByText, rerender } = render(
+            <MemoryList
+                nodes={[
+                    buildNode({ id: "memory-1", content: "Alpha project memory" }),
+                    buildNode({ id: "memory-2", content: "Beta note" }),
+                ]}
+                onSelectNode={vi.fn()}
+            />
+        );
+
+        expect(getByText("Alpha project memory")).toBeInTheDocument();
+
+        searchQuerySignal.value = "beta";
+        rerender(
+            <MemoryList
+                nodes={[
+                    buildNode({ id: "memory-1", content: "Alpha project memory" }),
+                    buildNode({ id: "memory-2", content: "Beta note" }),
+                ]}
+                onSelectNode={vi.fn()}
+            />
+        );
+
+        expect(queryByText("Alpha project memory")).toBeNull();
+        expect(getByText(/Showing 1 of 2 memories/)).toBeInTheDocument();
+        expect(getByText(/1 memory shown/)).toHaveClass("sr-only");
     });
 });

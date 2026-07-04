@@ -40830,6 +40830,39 @@
         "temperature": true,
         "tool_call": true
       },
+      "MiniMaxAI/MiniMax-M3": {
+        "attachment": true,
+        "cost": {
+          "cache_read": 0.06,
+          "input": 0.3,
+          "output": 1.2
+        },
+        "description": "MiniMax multimodal model for long-context coding, perception, and agent planning",
+        "family": "minimax",
+        "id": "MiniMaxAI/MiniMax-M3",
+        "last_updated": "2026-06-01",
+        "limit": {
+          "context": 524288,
+          "output": 128000
+        },
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "video"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "MiniMax-M3",
+        "open_weights": true,
+        "reasoning": true,
+        "reasoning_options": [],
+        "release_date": "2026-06-01",
+        "temperature": true,
+        "tool_call": true
+      },
       "Qwen/Qwen3-32B": {
         "attachment": false,
         "cost": {
@@ -41427,9 +41460,9 @@
       "deepseek-ai/DeepSeek-V4-Flash": {
         "attachment": false,
         "cost": {
-          "cache_read": 0.02,
-          "input": 0.1,
-          "output": 0.2
+          "cache_read": 0.018,
+          "input": 0.09,
+          "output": 0.18
         },
         "description": "Fast DeepSeek V4 lane for economical reasoning, coding, and long-context work",
         "family": "deepseek-flash",
@@ -41913,7 +41946,7 @@
         "attachment": false,
         "cost": {
           "input": 0.039,
-          "output": 0.19
+          "output": 0.17
         },
         "description": "Open-weight GPT model for self-hosted reasoning and instruction-following workloads",
         "family": "gpt-oss",
@@ -42189,7 +42222,7 @@
         "attachment": false,
         "cost": {
           "cache_read": 0.18,
-          "input": 0.95,
+          "input": 0.93,
           "output": 3
         },
         "description": "Open flagship GLM for long-horizon coding agents and million-token context work",
@@ -87070,6 +87103,56 @@
       }
     },
     "name": "LMStudio",
+    "npm": "@ai-sdk/openai-compatible"
+  },
+  "longcat": {
+    "api": "https://api.longcat.chat/openai",
+    "doc": "https://longcat.chat/platform/docs/",
+    "env": [
+      "LONGCAT_API_KEY"
+    ],
+    "id": "longcat",
+    "models": {
+      "LongCat-2.0": {
+        "attachment": false,
+        "cost": {
+          "cache_read": 0.015,
+          "input": 0.75,
+          "output": 2.95
+        },
+        "description": "Meituan LongCat-2.0, a reasoning model with tool calling and a 1M-token context window",
+        "family": "longcat",
+        "id": "LongCat-2.0",
+        "interleaved": {
+          "field": "reasoning_content"
+        },
+        "last_updated": "2026-06-30",
+        "limit": {
+          "context": 1000000,
+          "output": 131072
+        },
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "LongCat-2.0",
+        "open_weights": false,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          }
+        ],
+        "release_date": "2026-06-30",
+        "temperature": true,
+        "tool_call": true
+      }
+    },
+    "name": "LongCat",
     "npm": "@ai-sdk/openai-compatible"
   },
   "lucidquery": {
@@ -145252,9 +145335,9 @@
       "z-ai/glm-5.2": {
         "attachment": false,
         "cost": {
-          "cache_read": 0.156,
-          "input": 0.84,
-          "output": 2.64
+          "cache_read": 0.143,
+          "input": 0.77,
+          "output": 2.42
         },
         "description": "Open flagship GLM for long-horizon coding agents and million-token context work",
         "family": "glm",
@@ -145264,8 +145347,8 @@
         },
         "last_updated": "2026-06-13",
         "limit": {
-          "context": 1048576,
-          "output": 131072
+          "context": 1024000,
+          "output": 128000
         },
         "modalities": {
           "input": [

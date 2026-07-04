@@ -2,10 +2,12 @@ import { FunctionComponent } from "preact";
 import { useState, useEffect, useLayoutEffect, useRef } from "preact/hooks";
 import { ActionFeedbackRegion } from "../ui/ActionFeedbackRegion.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
+import { Loader2 } from "lucide-preact";
 
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import gsap from "gsap";
-import { GSAP_INTERACTION_TOKENS } from "../../lib/motion/constants.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { useInteractionTokens } from "../../lib/motion/index.js";
 import { useComputed } from "@preact/signals";
 import { MemoryCard } from "./MemoryCard.js";
 import { clearSelectedMemoryIds, searchQuerySignal, selectVisibleMemoryIds, selectedMemoryIdsSignal, activeTierSignal, memoryMutationsSignal } from "./memoryState.js";
@@ -35,28 +37,16 @@ export const MemoryList: FunctionComponent<{
     });
 
     const reducedMotion = useReducedMotion();
+    const gsapTokens = useGsapInteractionTokens();
+    const interactionTokens = useInteractionTokens();
     const listRef = useRef<HTMLDivElement>(null);
+    const selectAllRef = useRef<HTMLButtonElement>(null);
     const [renderedNodes, setRenderedNodes] = useState(filteredNodes.value);
     const prevRenderedIds = useRef<Set<string>>(new Set());
     const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
 
     useEffect(() => {
         if (reducedMotion) {
-            const currentIds = new Set(filteredNodes.value.map((n: { node: MemNode }) => n.node.id));
-            const renderedIds = new Set(renderedNodes.map((n: { node: MemNode }) => n.node.id));
-            const removedIds = Array.from(renderedIds).filter(id => !currentIds.has(id));
-            if (removedIds.length > 0 && listRef.current) {
-                const elementsToRemove = removedIds.map(id => listRef.current?.querySelector(`[data-memory-id="${id}"]`)).filter(Boolean);
-                if (elementsToRemove.length > 0) {
-                    gsap.set(elementsToRemove, {
-                        opacity: 0,
-                        scale: 0.95,
-                        height: 0,
-                        marginBottom: 0,
-                        padding: 0
-                    });
-                }
-            }
             setRenderedNodes(filteredNodes.value);
             return;
         }
@@ -74,8 +64,8 @@ export const MemoryList: FunctionComponent<{
                     height: 0,
                     marginBottom: 0,
                     padding: 0,
-                    duration: GSAP_INTERACTION_TOKENS.expansionCollapse.duration,
-                    ease: GSAP_INTERACTION_TOKENS.expansionCollapse.ease,
+                    duration: gsapTokens.expansionCollapse.duration,
+                    ease: gsapTokens.expansionCollapse.ease,
                     onComplete: () => {
                         setRenderedNodes(filteredNodes.value);
                     }
@@ -84,7 +74,7 @@ export const MemoryList: FunctionComponent<{
             }
         }
         setRenderedNodes(filteredNodes.value);
-    }, [filteredNodes.value, reducedMotion, renderedNodes]);
+    }, [filteredNodes.value, reducedMotion, renderedNodes, gsapTokens.expansionCollapse.duration, gsapTokens.expansionCollapse.ease]);
 
     useEffect(() => {
         const visibleIds = new Set(filteredNodes.value.map(({ node }) => node.id));
@@ -126,16 +116,16 @@ export const MemoryList: FunctionComponent<{
                 }, {
                     opacity: 1,
                     y: 0,
-                    duration: GSAP_INTERACTION_TOKENS.enterExit.duration,
+                    duration: gsapTokens.listReveal.duration,
                     stagger: 0.05,
-                    ease: GSAP_INTERACTION_TOKENS.enterExit.ease,
+                    ease: gsapTokens.listReveal.ease,
                     clearProps: "all"
                 });
             }
         }
 
         prevRenderedIds.current = currentRenderedIds as unknown as Set<string>;
-    }, [renderedNodes, reducedMotion]);
+    }, [renderedNodes, reducedMotion, gsapTokens.listReveal.duration, gsapTokens.listReveal.ease]);
 
     const resultCount = renderedNodes.length;
     const totalAliveCount = nodes.filter((node) => node.alive).length;
@@ -144,6 +134,12 @@ export const MemoryList: FunctionComponent<{
     const selectedCount = selectedIds.length;
     const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
     const activeTier = useComputed(() => activeTierSignal.value);
+    const mutationFeedback = memoryMutationsSignal.value.feedback;
+    const isDeleting = mutationFeedback?.status === "pending" && Boolean(mutationFeedback.message?.toLowerCase().includes("deleting"));
+    const countLabel = `${resultCount} ${resultCount === 1 ? "memory" : "memories"} shown`;
+    const selectionLabel = selectedCount > 0
+        ? `${selectedCount} ${selectedCount === 1 ? "memory" : "memories"} selected`
+        : "No memories selected";
 
     const handleVisibleSelect = () => {
         selectVisibleMemoryIds(visibleIds);
@@ -164,16 +160,36 @@ export const MemoryList: FunctionComponent<{
             if (!confirmed) return;
         }
 
-        void memoryMutationsSignal.value.removeMemories(selectedIds);
+        const idsToDelete = [...selectedIds];
+        await memoryMutationsSignal.value.removeMemories(idsToDelete);
+        requestAnimationFrame(() => {
+            const target = selectAllRef.current || listRef.current?.querySelector<HTMLElement>('[role="option"]');
+            target?.focus();
+        });
     };
 
     if (renderedNodes.length === 0) {
         const isEmpty = totalAliveCount === 0;
         const message = isEmpty ? "No memories exist" : "No memories match your search or filters";
+        const query = searchQuerySignal.value.trim();
         return (
-            <div className="flex min-h-0 min-w-0 flex-col items-center justify-center p-8 text-center text-slate-400">
-                <div className="sr-only" aria-live="polite" aria-atomic="true">{message}</div>
+            <div
+                id="memory-panel"
+                aria-labelledby={`tab-${activeTier.value}`}
+                className="flex min-h-0 min-w-0 flex-col items-center justify-center p-8 text-center text-slate-400"
+                role="listbox"
+                aria-label="Memory List"
+            >
+                <div className="sr-only" aria-live="polite" aria-atomic="true">
+                    <span>{message}</span>
+                    <span>. Showing 0 of {totalAliveCount} memories.</span>
+                </div>
                 <p className="max-w-full break-words text-sm font-medium">{message}</p>
+                {!isEmpty && (
+                    <p className="mt-2 max-w-full break-words text-xs font-medium text-slate-400 dark:text-slate-500">
+                        Showing 0 of {totalAliveCount} memories{query ? ` for "${query}"` : ""}
+                    </p>
+                )}
             </div>
         );
     }
@@ -185,21 +201,29 @@ export const MemoryList: FunctionComponent<{
             className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto overflow-x-hidden p-2 dashboard-scrollbar"
             role="listbox"
             aria-label="Memory List"
+            aria-describedby="memory-list-status memory-list-selection-status"
         >
-            <div className="sr-only" aria-live="polite" aria-atomic="true">
-                {resultCount} {resultCount === 1 ? "memory" : "memories"} found
+            <div id="memory-list-status" className="sr-only" aria-live="polite" aria-atomic="true">
+                {countLabel}
+                {searchQuerySignal.value.trim() ? ` for ${searchQuerySignal.value.trim()}` : ""}
+            </div>
+            <div id="memory-list-selection-status" className="sr-only" aria-live="polite" aria-atomic="true">
+                {selectionLabel}
             </div>
             <div className="sticky top-0 z-10 flex min-w-0 flex-col gap-2">
                 <div className="inline-flex max-w-full items-center gap-1.5 self-start rounded-lg border border-black/[0.04] bg-black/[0.02] px-2 py-1 text-xs font-medium text-slate-500 dark:border-white/[0.04] dark:bg-white/[0.02] dark:text-slate-400">
                     <span className="truncate">
                         Showing {resultCount} of {totalAliveCount} memories
+                        {searchQuerySignal.value.trim() ? ` for "${searchQuerySignal.value.trim()}"` : ""}
                     </span>
                 </div>
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <button
+                        ref={selectAllRef}
                         type="button"
                         onClick={handleVisibleSelect}
                         disabled={visibleIds.length === 0 || allVisibleSelected}
+                        title={allVisibleSelected ? "All currently visible memories are already selected." : undefined}
                         className="rounded-lg border border-black/[0.06] bg-black/[0.04] px-2.5 py-1 text-[11px] font-semibold text-slate-500 transition-colors duration-150 hover:bg-black/[0.08] hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white"
                     >
                         {allVisibleSelected ? "All visible selected" : "Select all visible"}
@@ -210,6 +234,7 @@ export const MemoryList: FunctionComponent<{
                             <button
                                 type="button"
                                 onClick={clearSelectedMemoryIds}
+                                disabled={isDeleting}
                                 className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-slate-500 transition-colors hover:bg-black/[0.04] hover:text-slate-700 dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white"
                             >
                                 Clear
@@ -217,23 +242,34 @@ export const MemoryList: FunctionComponent<{
                             <button
                                 type="button"
                                 onClick={() => { void handleBatchDelete(); }}
-                                className="rounded-md bg-status-red px-2 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-status-red/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900"
+                                disabled={isDeleting}
+                                aria-describedby="memory-list-selection-status"
+                                className="inline-flex items-center gap-1.5 rounded-md bg-status-red px-2 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-status-red/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70 dark:focus-visible:ring-offset-void-900"
                             >
-                                Delete selected
+                                {isDeleting && <Loader2 size={12} className="motion-safe:animate-spin" aria-hidden="true" />}
+                                {isDeleting ? "Deleting..." : selectedCount > 1 ? `Delete ${selectedCount} selected` : "Delete selected"}
                             </button>
                         </div>
                     )}
                 </div>
                 <ActionFeedbackRegion
-                    status={memoryMutationsSignal.value.feedback?.status || "idle"}
-                    message={memoryMutationsSignal.value.feedback?.message}
+                    status={mutationFeedback?.status || "idle"}
+                    message={mutationFeedback?.message}
                     onDismiss={memoryMutationsSignal.value.clearFeedback}
                     clearError={memoryMutationsSignal.value.clearError}
-                    retryAction={memoryMutationsSignal.value.feedback?.retryAction}
-                    retryLabel={memoryMutationsSignal.value.feedback?.retryLabel}
+                    retryAction={mutationFeedback?.retryAction}
+                    retryLabel={mutationFeedback?.retryLabel}
                 />
             </div>
-            <div className="flex min-w-0 flex-col gap-3" ref={listRef}>
+            <div
+                className="flex min-w-0 flex-col gap-3 transition-[gap] motion-reduce:transition-none"
+                style={{
+                    transitionDuration: interactionTokens.listReorder.duration,
+                    transitionTimingFunction: interactionTokens.listReorder.ease,
+                }}
+                ref={listRef}
+                data-reduced-motion={reducedMotion ? "true" : "false"}
+            >
                 {renderedNodes.map(({ node, index }: { node: MemNode; index: number }) => (
                     <div key={node.id} data-memory-id={node.id} className="min-w-0 will-change-transform transform-gpu">
                         <MemoryCard

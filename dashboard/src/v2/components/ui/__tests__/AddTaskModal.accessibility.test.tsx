@@ -51,10 +51,49 @@ describe("AddTaskModal Accessibility", () => {
 
     const titleInput = document.getElementById("add-task-title") as HTMLInputElement;
     await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent(/Review required fields/i);
       expect(titleInput).toHaveAttribute("aria-invalid", "true");
       expect(titleInput.getAttribute("aria-errormessage")).toContain("add-task-title-error");
       expect(document.activeElement).toBe(titleInput);
       expect(scrollTo).toHaveBeenCalled();
+    });
+  });
+
+  test("status, priority, and executor choices expose radio semantics", () => {
+    render(<AddTaskModal sprints={dummySprints as any} availableTasks={dummyTasks as any} onClose={() => {}} onSubmit={() => {}} />);
+
+    expect(screen.getByRole("radiogroup", { name: /status/i })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /pending/i })).toBeChecked();
+    expect(screen.getByRole("radiogroup", { name: /priority/i })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /medium/i })).toBeChecked();
+    expect(screen.getByRole("radiogroup", { name: /executor/i })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /auto/i })).toBeChecked();
+  });
+
+  test("dependency filtering announces result counts and preserves selected dependencies", async () => {
+    const dependencyTasks = Array.from({ length: 6 }, (_, index) => ({
+      recordId: `task-${index + 1}`,
+      id: `T-${index + 1}`,
+      sprintId: "1",
+      title: index === 0 ? "Database migration" : `Follow up ${index + 1}`,
+      priority: "medium",
+    }));
+
+    render(<AddTaskModal sprints={dummySprints as any} availableTasks={dependencyTasks as any} onClose={() => {}} onSubmit={() => {}} />);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /Database migration/i }));
+    expect(screen.getByRole("status", { name: "" })).toHaveTextContent(/6 dependency options available. 1 selected./i);
+
+    fireEvent.input(screen.getByLabelText(/Filter dependencies/i), { target: { value: "follow" } });
+
+    await waitFor(() => {
+      expect(screen.getByText(/5 dependency results match "follow". 1 selected./i)).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("checkbox", { name: /Database migration/i })).not.toBeInTheDocument();
+
+    fireEvent.input(screen.getByLabelText(/Filter dependencies/i), { target: { value: "" } });
+    await waitFor(() => {
+      expect(screen.getByRole("checkbox", { name: /Database migration/i })).toBeChecked();
     });
   });
 });

@@ -198,7 +198,8 @@ export const ViewToggle: FunctionComponent<{
   onChange: (value: StatsVisualMode) => void;
   ariaLabel?: string;
   className?: string;
-}> = ({ value, onChange, ariaLabel = "Analytics modes", className = "" }) => {
+  controlsId?: string;
+}> = ({ value, onChange, ariaLabel = "Analytics modes", className = "", controlsId }) => {
   const buttonRefs = useRef<Partial<Record<StatsVisualMode, HTMLButtonElement | null>>>({});
   const modes: Array<{ id: StatsVisualMode; label: string; accessibleLabel: string; icon: LucideIcon }> = [
     { id: "trend", label: "Trend", accessibleLabel: "Trend", icon: BarChart3 },
@@ -262,6 +263,7 @@ export const ViewToggle: FunctionComponent<{
             }}
             onClick={() => onChange(mode.id)}
             aria-pressed={selected}
+            aria-controls={controlsId}
             aria-label={mode.accessibleLabel}
             title={mode.label}
             className={`${CONTROL_BASE_CLASS} min-h-10 min-w-10 flex-[1_1_calc(33.333%-0.25rem)] gap-2 px-2 py-2 sm:min-w-[7rem] sm:flex-[1_1_auto] sm:px-4 ${
@@ -316,7 +318,7 @@ export const TokenChip: FunctionComponent<{
   value: number | string;
   tone: string;
 }> = ({ icon: Icon, label, value, tone }) => (
-  <div className={`relative inline-flex min-w-0 items-center gap-2 overflow-hidden rounded-[var(--stats-chip-radius)] border px-3 py-1.5 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-md transition-[background-color,border-color,color,box-shadow] duration-200 motion-reduce:transition-none ${tone}`}>
+  <div className={`relative inline-flex min-w-0 items-center gap-2 overflow-hidden rounded-[var(--stats-chip-radius)] border px-3 py-1.5 shadow-[var(--stats-subpanel-shadow)] transition-[background-color,border-color,color,box-shadow] duration-200 motion-reduce:transition-none ${tone}`}>
     <div className="relative flex min-w-0 items-center gap-1.5 opacity-85">
       <Icon className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden="true" />
       <span className="truncate text-[10px] font-bold uppercase tracking-[0.14em]">{label}</span>
@@ -402,7 +404,7 @@ export const SeriesLegendButton: FunctionComponent<{
     className={`rounded-[1.25rem] border px-4 py-3 text-left transition-[background-color,border-color,box-shadow,opacity] duration-200 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS} ${
       active
         ? `${SUBPANEL_CLASS} border-[color:var(--stats-control-border-active)]`
-        : "border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-subpanel)] opacity-75 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-subpanel-hover)] hover:opacity-100"
+        : "border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-subpanel)] opacity-75 shadow-[var(--stats-subpanel-shadow)] hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-subpanel-hover)] hover:opacity-100"
     } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
   >
     <div className="flex items-center gap-3">
@@ -536,7 +538,7 @@ export const DonutCard: FunctionComponent<{
                   );
                 })}
               </svg>
-              <div className="pointer-events-none absolute inset-[24%] rounded-full border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-panel)] shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl" />
+              <div className="pointer-events-none absolute inset-[24%] rounded-full border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-panel)] shadow-[var(--stats-subpanel-shadow)]" />
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                 <div className="text-3xl font-black tracking-tight text-[color:var(--stats-value-color)]">
                   {activeSegment ? formatTokens(activeSegment.value) : centerValue}
@@ -698,11 +700,14 @@ export const SortButton: FunctionComponent<{
   active: boolean;
   direction?: "asc" | "desc" | null;
   onClick: () => void;
-}> = ({ label, active, direction = null, onClick }) => (
+}> = ({ label, active, direction = null, onClick }) => {
+  const directionLabel = active && direction ? `, sorted ${direction === "asc" ? "ascending" : "descending"}` : ", not sorted";
+  return (
   <button
     type="button"
     onClick={onClick}
     aria-pressed={active}
+    aria-label={`${label}${directionLabel}`}
     className={`${CONTROL_BASE_CLASS} gap-1 px-3 py-2 text-[10px] tracking-[0.16em] ${
       active
         ? CONTROL_ACTIVE_STRONG_CLASS
@@ -712,8 +717,10 @@ export const SortButton: FunctionComponent<{
     {label}
     {active && direction ? (
       direction === "desc"
-        ? <ArrowDown className="h-3 w-3" strokeWidth={2.6} />
-        : <ArrowUp className="h-3 w-3" strokeWidth={2.6} />
+        ? <ArrowDown className="h-3 w-3" strokeWidth={2.6} aria-hidden="true" />
+        : <ArrowUp className="h-3 w-3" strokeWidth={2.6} aria-hidden="true" />
     ) : null}
+    <span className="sr-only">{directionLabel}</span>
   </button>
-);
+  );
+};

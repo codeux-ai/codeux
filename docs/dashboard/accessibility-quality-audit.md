@@ -13,6 +13,7 @@ The contracts below are implemented across `dashboard/src/v2/components/ui/*`, `
 - Top navigation must keep `nav` landmarks for primary navigation and stable accessible names for project, sprint, worker, Docker, notification, and theme controls.
 - Dropdown-like selectors use the role that matches their behavior: `listbox`/`option` for project, sprint, task-sprint, and file/change selection; `menu`/`menuitem` for command menus; `tablist`/`tab`/`tabpanel` for ledgers and mode panels; `radiogroup`/`radio` for mutually exclusive Settings choices.
 - Data tables and ledger-like displays must use native table semantics or the shared `Table` primitive. Tables need a descriptive caption or accessible label, sortable headers need `aria-sort`, and stacked mobile rows need mobile labels for each meaningful cell.
+- Sprint-style ledgers must pair sortable/filterable table state with polite live-region text for sort changes, filtered result counts, selection counts, and bulk-action initiation or completion. Pending row work must expose `aria-busy`, a stable visible label or badge, and disabled control names that explain whether start/stop, pause/resume, pin, delete, or bulk work is blocking the action.
 - Feed-like runtime timelines should use named `region` or `log` containers. `role="log"` is appropriate for append-only timeline entries; use `role="status"` for discrete state changes.
 
 ## Keyboard And Focus
@@ -21,6 +22,7 @@ The contracts below are implemented across `dashboard/src/v2/components/ui/*`, `
 - Dialogs, alert dialogs, popovers that act as dialogs, Add Project/Add Task modals, destructive confirmations, and unsaved-change prompts must trap focus while open and restore focus after close. If the trigger disappears, focus falls back to a sensible page landmark.
 - Route changes that originate from dashboard controls should not strand focus in removed DOM. When a control navigates to another route or switches a major workbench surface, the destination page must expose a named landmark that can receive programmatic or natural focus.
 - Destructive actions must require an explicit confirmation pattern. Hold-to-confirm and danger dialogs must expose the destructive target in the accessible name or description and keep progress descriptions stable rather than repeatedly announcing every animation frame.
+- Destructive bulk ledger confirmations must keep the selected count and irreversible impact visible before confirmation. Canceling or completing the dialog should restore focus to the initiating control when it still exists, or to a sensible ledger landmark when it does not.
 - Browser Preview controls must be keyboard reachable for session rail selection, launch/rebuild/stop/open actions, address entry, script save, log viewing, and chrome controls. The embedded preview iframe must have a descriptive title, but dashboard keyboard contracts stop at the dashboard chrome boundary.
 - Pointer-only affordances, such as task-card drag effects, must not trap `Enter` or `Space` unless there is a supported keyboard action with the same result.
 

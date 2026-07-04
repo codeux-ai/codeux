@@ -37,7 +37,7 @@ function setElementScrollSize(element: HTMLElement, clientHeight: number, scroll
   });
 }
 
-function renderBrowseView(): HTMLElement {
+function renderBrowseView(selectedTemplateId: string | null = null): HTMLElement {
   const result = render(
     <div data-testid="scroll-host" style={{ overflowY: "auto" }}>
       <QuicksprintBrowseView
@@ -58,6 +58,7 @@ function renderBrowseView(): HTMLElement {
         }}
         loading={false}
         onClose={vi.fn()}
+        selectedTemplateId={selectedTemplateId}
       />
     </div>,
   );
@@ -107,5 +108,15 @@ describe("QuicksprintBrowseView", () => {
     expect(dispatchResult).toBe(true);
     expect(event.defaultPrevented).toBe(false);
     expect(scrollHost.scrollTop).toBe(100);
+  });
+
+  it("marks the selected template with static context", () => {
+    renderBrowseView("2");
+
+    const selectedLaunch = screen.getByRole("button", { name: "Template 2" });
+    expect(selectedLaunch).toHaveAttribute("aria-pressed", "true");
+    expect(selectedLaunch.closest("article")).toHaveAttribute("aria-current", "true");
+
+    expect(screen.getByRole("button", { name: "Template 1" })).not.toHaveAttribute("aria-pressed");
   });
 });

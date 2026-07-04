@@ -1414,6 +1414,7 @@ describe("VirtualWorkerService", () => {
       payload: { repoPath: "/test", conflictingBranches: { source: "src", target: "tgt" } },
     });
 
+    vi.spyOn((virtualWorkerService as any).dockerService, "isAvailable").mockResolvedValue(true);
     vi.spyOn((virtualWorkerService as any), "isMergeConflictResolvedOnRemote").mockResolvedValue(false);
     // Fail the attempt *after* it has been counted, exercising the catch/escalate path.
     vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree").mockRejectedValue(new Error("boom"));
@@ -1465,6 +1466,7 @@ describe("VirtualWorkerService", () => {
       payload: { repoPath: "/test", conflictingBranches: { source: "feature/sprint-1", target: "main" } },
     });
 
+    vi.spyOn((virtualWorkerService as any).dockerService, "isAvailable").mockResolvedValue(true);
     vi.spyOn((virtualWorkerService as any), "isMergeConflictResolvedOnRemote").mockResolvedValue(false);
     vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree").mockRejectedValue(new Error("boom"));
 
@@ -1786,6 +1788,8 @@ describe("VirtualWorkerService", () => {
       payload: { repoPath: "/test", conflictingBranches: { source: "src", target: "tgt" } },
     });
 
+    vi.spyOn((virtualWorkerService as any).dockerService, "isAvailable").mockResolvedValue(true);
+    vi.spyOn((virtualWorkerService as any), "isMergeConflictResolvedOnRemote").mockResolvedValue(false);
     vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree").mockRejectedValue(new Error("Provider failed"));
 
     await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
@@ -1824,6 +1828,8 @@ describe("VirtualWorkerService", () => {
       },
     });
 
+    vi.spyOn((virtualWorkerService as any).dockerService, "isAvailable").mockResolvedValue(true);
+    vi.spyOn((virtualWorkerService as any), "isMergeConflictResolvedOnRemote").mockResolvedValue(false);
     vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree").mockRejectedValue(new Error("Provider failed"));
 
     await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
@@ -1856,6 +1862,8 @@ describe("VirtualWorkerService", () => {
       payload: { repoPath: "/test", conflictingBranches: { source: "src", target: "tgt" } },
     });
 
+    vi.spyOn((virtualWorkerService as any).dockerService, "isAvailable").mockResolvedValue(true);
+    vi.spyOn((virtualWorkerService as any), "isMergeConflictResolvedOnRemote").mockResolvedValue(false);
     vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree")
       .mockRejectedValue(new Error("Command spawner host exited (code=null, signal=SIGHUP)"));
     vi.spyOn((virtualWorkerService as any).workspaceManager, "removeWorktree").mockResolvedValue(undefined);

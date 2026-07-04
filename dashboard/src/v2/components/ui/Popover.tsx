@@ -4,8 +4,7 @@ import { createPortal } from "preact/compat";
 import gsap from "gsap";
 import { calculatePosition, Position, Alignment } from "../../lib/positioning/index.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
-import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
-import { useFocusTrap } from "../../hooks/use-focus-trap.js";
+import { restoreFocusSafely, useFocusTrap } from "../../hooks/use-focus-trap.js";
 
 interface PopoverProps {
   children: ComponentChildren;
@@ -44,7 +43,6 @@ export const Popover = ({
   ariaLabel,
 }: PopoverProps) => {
   const focusTrapRef = useFocusTrap(!isTooltip && isOpen, { onClose: () => onOpenChange(false), restoreFocus: true });
-  const isReducedMotion = useReducedMotion();
   const gsapTokens = useGsapInteractionTokens();
   const [isRendered, setIsRendered] = useState(false);
   const localTriggerRef = useRef<HTMLButtonElement>(null);
@@ -55,6 +53,12 @@ export const Popover = ({
 
   // Generate a unique ID for ARIA wiring if none exists
   const [popoverId] = useState(() => `popover-${Math.random().toString(36).substr(2, 9)}`);
+
+  const restoreFocus = useCallback(() => {
+    if (isTooltip) return;
+    restoreFocusSafely(previousFocusRef.current, triggerRef.current);
+    previousFocusRef.current = null;
+  }, [isTooltip, triggerRef]);
 
   const updatePosition = useCallback(() => {
     if (!triggerRef.current || !popoverRef.current) return;
@@ -76,24 +80,10 @@ export const Popover = ({
       if (!isTooltip) {
         previousFocusRef.current = document.activeElement as HTMLElement | null;
       }
-    } else if (isRendered) { // Only restore if it was previously open
-      // Restore focus on close
-      if (!isTooltip && !focusTrapRef.current) {
-        if (
-          !document.activeElement ||
-          document.activeElement === document.body ||
-          (popoverRef.current && popoverRef.current.contains(document.activeElement))
-        ) {
-          if (previousFocusRef.current?.isConnected) {
-            previousFocusRef.current.focus({ preventScroll: true });
-            previousFocusRef.current = null;
-          } else if (triggerRef.current?.isConnected) {
-            triggerRef.current.focus({ preventScroll: true });
-          }
-        }
-      }
+    } else if (isRendered) {
+      restoreFocus();
     }
-  }, [isOpen, isTooltip]);
+  }, [isOpen, isRendered, isTooltip, restoreFocus]);
 
   // Position once the portal has actually mounted. `isRendered` flips in a
   // separate effect after `isOpen`, so depending on it here guarantees the
@@ -132,7 +122,7 @@ export const Popover = ({
           opacity: 1,
           scale: 1,
           y: 0,
-          duration: isReducedMotion ? 0 : gsapTokens.enterExit.duration,
+          duration: gsapTokens.enterExit.duration,
           ease: gsapTokens.enterExit.ease,
         }
       );
@@ -141,12 +131,12 @@ export const Popover = ({
         opacity: 0,
         scale: 0.95,
         y: position === "bottom" ? -5 : position === "top" ? 5 : 0,
-        duration: isReducedMotion ? 0 : gsapTokens.enterExit.duration,
+        duration: gsapTokens.enterExit.duration,
         ease: gsapTokens.enterExit.ease,
         onComplete: () => setIsRendered(false),
       });
     }
-  }, [isOpen, isRendered, position, isReducedMotion]);
+  }, [isOpen, isRendered, position, gsapTokens.enterExit.duration, gsapTokens.enterExit.ease]);
 
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
@@ -154,8 +144,7 @@ export const Popover = ({
         isOpen &&
         popoverRef.current &&
         !popoverRef.current.contains(e.target as Node) &&
-        triggerRef.current &&
-        !triggerRef.current.contains(e.target as Node)
+        (!triggerRef.current || !triggerRef.current.contains(e.target as Node))
       ) {
         onOpenChange(false);
       }
@@ -163,6 +152,8 @@ export const Popover = ({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && isOpen) {
+        e.preventDefault();
+        e.stopPropagation();
         onOpenChange(false);
       }
     };

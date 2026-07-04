@@ -265,8 +265,10 @@ describe("SprintLedger Component", () => {
     fireEvent.click(sprintHeader);
 
     expect(sprintColumn).toHaveAttribute("aria-sort", "ascending");
+    expect(screen.getByText(/Sorted by Sprint ascending\. 2 sprints remain visible\./i)).toBeInTheDocument();
     fireEvent.click(sprintHeader);
     expect(sprintColumn).toHaveAttribute("aria-sort", "descending");
+    expect(screen.getByText(/Sorted by Sprint descending\. 2 sprints remain visible\./i)).toBeInTheDocument();
   });
 
   it("locks rows properly when specific pending actions occur", async () => {
@@ -431,6 +433,25 @@ describe("SprintLedger Component", () => {
       expect(screen.queryByText("1 of 2 selected")).not.toBeInTheDocument();
     });
     expect(screen.getByRole("row", { name: /Alpha Design/i })).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByText(/Filter results updated: showing 1 of 2 sprints\./i)).toBeInTheDocument();
+    expect(screen.getAllByText(/No sprints selected\./i).length).toBeGreaterThan(0);
+  });
+
+  it("disables row actions with explicit labels during pending bulk work", async () => {
+    const pendingBulkActionIds = new Set(["sprint-start:sprint-2"]);
+    render(<SprintLedger {...defaultProps} pendingActionIds={pendingBulkActionIds} listWindow="all" />);
+
+    await waitFor(() => expect(screen.getByText("Beta API")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Select sprint Beta API" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Bulk action pending")).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole("row", { name: /Alpha Design/i })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: /Cannot start Alpha Design while a bulk action is in progress/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Cannot change showcase pin for sprint Alpha Design while a bulk action is in progress/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Cannot open actions menu for sprint Alpha Design while a bulk action is in progress/i })).toBeDisabled();
   });
 
   it("opens row action menus from the keyboard and restores focus after close", async () => {

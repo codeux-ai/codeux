@@ -33,6 +33,7 @@ async function createFixture(): Promise<{
   const activeDispatchRegistry = new ActiveDispatchRegistry();
   const service = new ExecutionInvocationControlService({
     executionRepository,
+    projectManagementRepository: projectRepository,
     activeDispatchRegistry,
   });
 
@@ -141,6 +142,14 @@ describe("ExecutionInvocationControlService", () => {
     expect(runCommandStrict).toHaveBeenCalledWith("docker", ["kill", "container-1"], process.cwd());
     expect(executionRepository.getExecutionInvocation(invocation.id)?.status).toBe("cancelled");
     expect(executionRepository.getProviderInvocationUsage(providerInvocation.id)?.status).toBe("cancelled");
+    expect(executionRepository.getTaskDispatch(dispatch.id)).toMatchObject({
+      status: "cancelled",
+      errorMessage: "Invocation cancelled from Chat -> Invocations.",
+    });
+    expect(executionRepository.getTaskRun(taskRun.id)).toMatchObject({
+      state: "BLOCKED",
+    });
+    expect(projectRepository.getTask(task.id)?.status).toBe("pending");
     expect(executionRepository.listExecutionInvocationMessages(invocation.id).at(-1)?.contentMarkdown)
       .toContain("Invocation cancelled from Chat -> Invocations.");
   });

@@ -48,6 +48,7 @@ import { GitCIStatusPanel } from "./components/GitCIStatusPanel.js";
 import { useProjectData } from "./context/project-data.js";
 import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
 import { useReducedMotion } from "./hooks/use-reduced-motion.js";
+import { useInteractionTokens } from "./lib/motion/tokens.js";
 import { fetchAgentPresets } from "./lib/agent-preset-api.js";
 import type { AgentPreset } from "./types.js";
 import { useConfirmDialog } from "./hooks/use-confirm-dialog.js";
@@ -80,6 +81,7 @@ export const LiveSessionPage: FunctionComponent = () => {
 
     const contentRef = useRef<HTMLDivElement>(null);
     const prefersReducedMotion = useReducedMotion();
+    const interactionTokens = useInteractionTokens();
     const { selectedProjectId, loading: projectsLoading } = useProjectData();
     const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProjectId);
     const sprintKeyPrefix = effectiveSettings?.settings?.git?.sprintKeyPrefix || "SPR";
@@ -234,6 +236,15 @@ export const LiveSessionPage: FunctionComponent = () => {
         () => deriveFilteredLiveSessionTasks(visibleTasksWithLiveActivities, visibleStats, activeFilter),
         [activeFilter, visibleStats, visibleTasksWithLiveActivities],
     );
+    const filterResultAnnouncement = `${filteredTasks.length} ${activeFilter.toLowerCase()} task${filteredTasks.length === 1 ? "" : "s"} shown.`;
+    const selectionMovementStyle = useMemo(() => ({
+        transitionDuration: interactionTokens.selectionMovement.duration,
+        transitionTimingFunction: interactionTokens.selectionMovement.ease,
+    }), [interactionTokens.selectionMovement.duration, interactionTokens.selectionMovement.ease]);
+    const listReorderStyle = useMemo(() => ({
+        transitionDuration: interactionTokens.listReorder.duration,
+        transitionTimingFunction: interactionTokens.listReorder.ease,
+    }), [interactionTokens.listReorder.duration, interactionTokens.listReorder.ease]);
 
     const taskCardItems = useMemo(() => (
         deriveLiveSessionTaskCardItems({
@@ -250,8 +261,8 @@ export const LiveSessionPage: FunctionComponent = () => {
     ), [filteredTasks, forceCompleteErrorByTaskId, forceCompletePendingIds, optimisticallyCompletedTaskIds, rerunningIds, sprintDispatches, sprintEvents, sprintInvocations, taskTimingMap]);
 
     const transportBannerViewModel = useMemo(
-        () => deriveLiveTransportBannerViewModel({ transportState, isRecovering, error }),
-        [error, isRecovering, transportState],
+        () => deriveLiveTransportBannerViewModel({ transportState, isRecovering, error, snapshotUpdatedAt }),
+        [error, isRecovering, snapshotUpdatedAt, transportState],
     );
 
     const handleEditTask = (task: Subtask): void => {
@@ -266,6 +277,9 @@ export const LiveSessionPage: FunctionComponent = () => {
     const handleForceCompleteTask = async (task: Subtask): Promise<void> => {
         const taskRuntimeId = task.record_id || task.id;
         if (!realtimeProjectId || !taskRuntimeId) {
+            return;
+        }
+        if (forceCompletePendingIds.has(taskRuntimeId)) {
             return;
         }
         setForceCompletePendingIds((prev) => new Set(prev).add(taskRuntimeId));
@@ -332,6 +346,9 @@ export const LiveSessionPage: FunctionComponent = () => {
                 selectedSession={selectedSession}
                 statusTimestamp={status.timestamp}
             />
+            <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+                {headerView === "stats" ? "Stats view selected." : headerView === "race" ? "Race view selected." : "DAG view selected."}
+            </div>
 
             {/* ── Header View: Stats or Boat Race ─────────────────────── */}
             {headerView === "stats" ? (
@@ -388,6 +405,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                                 prevTab?.focus();
                             }
                         }}
+                        style={selectionMovementStyle}
                         className={`min-w-0 rounded-lg px-4 py-1.5 text-xs font-semibold
                                    transition-all duration-200 flex items-center gap-2
                                    ${activeFilter === filter
@@ -406,12 +424,15 @@ export const LiveSessionPage: FunctionComponent = () => {
                     </button>
                 ))}
             </div>
+            <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+                {filterResultAnnouncement}
+            </div>
 
             {/* ── Main Content Grid ───────────────────────────────────── */}
             <div ref={contentRef} className="grid grid-cols-1 xl:grid-cols-12 gap-6 md:gap-10 xl:gap-16">
 
                 {/* Task cards */}
-                <div className="xl:col-span-8 flex flex-col gap-5 min-w-0">
+                <div className="xl:col-span-8 flex flex-col gap-5 min-w-0" style={listReorderStyle}>
                     {!hasSprintContext && !initialLoadComplete ? (
                         /* Initial load in progress — render nothing to avoid flashing idle placeholder */
                         null

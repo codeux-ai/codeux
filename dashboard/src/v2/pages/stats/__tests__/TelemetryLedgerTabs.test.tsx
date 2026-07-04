@@ -200,12 +200,12 @@ describe("TelemetryLedgerTabs", () => {
     expect(screen.getByPlaceholderText("Search tasks")).toHaveFocus();
 
     await user.tab();
-    const latestSort = screen.getByRole("button", { name: "Latest" });
+    const latestSort = screen.getByRole("button", { name: "Latest, not sorted" });
     expect(latestSort).toHaveFocus();
     expect(latestSort).toHaveAttribute("aria-pressed", "false");
 
     await user.tab();
-    const tokensSort = screen.getByRole("button", { name: "Tokens" });
+    const tokensSort = screen.getByRole("button", { name: "Tokens, sorted descending" });
     expect(tokensSort).toHaveFocus();
     expect(tokensSort).toHaveAttribute("aria-pressed", "true");
   });

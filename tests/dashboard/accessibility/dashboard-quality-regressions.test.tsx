@@ -1,5 +1,8 @@
 /** @vitest-environment jsdom */
 /** @jsx h */
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { h } from "preact";
 import { useRef, useState } from "preact/hooks";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -92,6 +95,11 @@ import { InvocationsTable } from "../../../dashboard/src/v2/pages/stats/componen
 import { WaveFluid } from "../../../dashboard/src/v2/components/ui/WaveFluid.js";
 
 const mockedUseReducedMotion = vi.mocked(useReducedMotion);
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+
+function readSource(relativePath: string): string {
+  return readFileSync(resolve(repoRoot, relativePath), "utf8");
+}
 
 class ResizeObserverMock {
   observe(): void {}
@@ -459,11 +467,11 @@ describe("dashboard accessibility quality regressions", () => {
     const table = render(
       <InvocationsTable invocations={[]} sort={{ key: "startedAt", dir: "desc" }} onSortChange={vi.fn()} expandedId={null} onRowExpand={vi.fn()} loading />,
     );
-    expect(screen.getByRole("status", { name: "Loading invocations" })).toHaveTextContent("Loading invocations");
+    expect(screen.getByRole("status", { name: "Loading invocation records" })).toHaveTextContent("Loading invocation records");
     table.rerender(
       <InvocationsTable invocations={[]} sort={{ key: "startedAt", dir: "desc" }} onSortChange={vi.fn()} expandedId={null} onRowExpand={vi.fn()} />,
     );
-    expect(screen.getByRole("status", { name: "Empty invocations table" })).toHaveTextContent("No invocations match");
+    expect(screen.getByRole("status", { name: "No invocation records" })).toHaveTextContent("No invocation records to show");
     table.rerender(
       <InvocationsTable invocations={[]} sort={{ key: "startedAt", dir: "desc" }} onSortChange={vi.fn()} expandedId={null} onRowExpand={vi.fn()} error="network down" />,
     );
@@ -550,7 +558,7 @@ describe("dashboard accessibility quality regressions", () => {
       new RegExp(previewSession.sprintName),
     );
     expect(screen.getByLabelText("Close preview window")).toBeInTheDocument();
-    expect(screen.getByLabelText("Preview address")).toBeInTheDocument();
+    expect(screen.getByLabelText(`Preview address for ${previewSession.sprintName}`)).toBeInTheDocument();
 
     const caption = screen.getByText(/Invocation ledger with sortable time/i);
     expect(caption.tagName.toLowerCase()).toBe("caption");
@@ -583,5 +591,89 @@ describe("dashboard accessibility quality regressions", () => {
     expect(card).toHaveClass("kanban-card-reduced-motion");
     expect(card).not.toHaveAttribute("draggable", "true");
     expect(screen.getByText("Draggable reordering is disabled in reduced motion mode.")).toHaveClass("sr-only");
+  });
+
+  it("guards refined interaction surfaces against hardcoded motion timing", () => {
+    const refinedSources = [
+      "dashboard/src/v2/components/ui/ActionFeedbackRegion.tsx",
+      "dashboard/src/v2/components/ui/ConfirmDialog.tsx",
+      "dashboard/src/v2/components/sprints/SprintLedger.tsx",
+      "dashboard/src/v2/components/sprints/SprintLedgerBulkActions.tsx",
+      "dashboard/src/v2/components/sprints/SprintLedgerRow.tsx",
+      "dashboard/src/v2/components/quicksprint/QuicksprintPanel.tsx",
+      "dashboard/src/v2/components/settings/SettingsContentPanels.tsx",
+      "dashboard/src/v2/components/settings/SettingsCategoryRail.tsx",
+      "dashboard/src/v2/components/live-session/LiveTransportBanner.tsx",
+      "dashboard/src/v2/components/search/SearchOverlay.tsx",
+      "dashboard/src/v2/components/search/SearchResultRow.tsx",
+    ];
+
+    for (const relativePath of refinedSources) {
+      const source = readSource(relativePath);
+      expect(source, `${relativePath} must resolve motion through interaction tokens`).toMatch(
+        /useInteractionTokens|useGsapInteractionTokens|INTERACTION_TOKENS/,
+      );
+      expect(source, `${relativePath} must not use fixed Tailwind duration utilities on refined interactions`).not.toMatch(
+        /\bduration-(?:75|100|150|200|300|500|700|1000|\[(?!var\()[^\]]+\])/,
+      );
+    }
+
+    expect(readSource("dashboard/src/v2/components/sprints/SprintLedger.tsx")).toMatch(/listReorder/);
+    expect(readSource("dashboard/src/v2/components/sprints/SprintLedgerRow.tsx")).toMatch(/selectionMovement/);
+    expect(readSource("dashboard/src/v2/components/ui/ActionFeedbackRegion.tsx")).toMatch(/asyncFeedback/);
+    expect(readSource("dashboard/src/v2/components/quicksprint/QuicksprintExecutionView.tsx")).toMatch(
+      /var\(--interaction-expansion-collapse-duration\)/,
+    );
+  });
+
+  it("guards async feedback surfaces with busy, live, and stale-data semantics", () => {
+    const actionFeedback = readSource("dashboard/src/v2/components/ui/ActionFeedbackRegion.tsx");
+    expect(actionFeedback).toMatch(/role=\{isError \? "alert" : "status"\}/);
+    expect(actionFeedback).toMatch(/aria-live=\{isError \? "assertive" : isPending \? "polite" : "off"\}/);
+    expect(actionFeedback).toMatch(/aria-busy=\{isPending \? "true" : undefined\}/);
+
+    const quicksprint = readSource("dashboard/src/v2/components/quicksprint/QuicksprintExecutionView.tsx");
+    expect(quicksprint).toMatch(/aria-busy=\{isBusy \? "true" : "false"\}/);
+    expect(quicksprint).toMatch(/role="status"/);
+    expect(quicksprint).toMatch(/aria-describedby=\{isBusy \? busyDescriptionId : undefined\}/);
+
+    const settings = readSource("dashboard/src/v2/components/settings/SettingsContentPanels.tsx");
+    expect(settings).toMatch(/aria-busy=\{activeSaving \|\| loading \? "true" : undefined\}/);
+    expect(settings).toMatch(/role=\{error \? "alert" : "status"\}/);
+    expect(settings).toMatch(/Current values remain visible/);
+
+    const liveSessionViewModel = readSource("dashboard/src/v2/lib/live-session-view-model.ts");
+    expect(liveSessionViewModel).toMatch(/Stale Data/);
+    expect(liveSessionViewModel).toMatch(/role: "status"/);
+    expect(liveSessionViewModel).toMatch(/ariaLive: "polite"/);
+    expect(liveSessionViewModel).toMatch(/ariaBusy: true/);
+
+    const searchOverlay = readSource("dashboard/src/v2/components/search/SearchOverlay.tsx");
+    expect(searchOverlay).toMatch(/current results remain available/);
+    expect(searchOverlay).toMatch(/aria-busy=\{isLoading \? "true" : undefined\}/);
+    expect(searchOverlay).toMatch(/aria-activedescendant=\{activeDescendantId\}/);
+  });
+
+  it("guards disabled reasons and non-hover action access on refined controls", () => {
+    const sprintRow = readSource("dashboard/src/v2/components/sprints/SprintLedgerRow.tsx");
+    expect(sprintRow).toMatch(/title=\{selectionDisabledTitle\}/);
+    expect(sprintRow).toMatch(/title=\{pinDisabledTitle\}/);
+    expect(sprintRow).toMatch(/while a bulk action is in progress/);
+    expect(sprintRow).not.toMatch(/group-hover:opacity-100/);
+
+    const bulkActions = readSource("dashboard/src/v2/components/sprints/SprintLedgerBulkActions.tsx");
+    expect(bulkActions).toMatch(/title=\{disabledTitle\}/);
+    expect(bulkActions).toMatch(/aria-disabled=\{isAnyPending\}/);
+    expect(bulkActions).toMatch(/aria-live="polite"/);
+
+    const settingsRail = readSource("dashboard/src/v2/components/settings/SettingsCategoryRail.tsx");
+    expect(settingsRail).toMatch(/title=\{disabled && disabledCategoryReason \? disabledCategoryReason : undefined\}/);
+    expect(settingsRail).toMatch(/aria-disabled=\{disabled\}/);
+    expect(settingsRail).toMatch(/Disabled/);
+
+    const taskCard = readSource("dashboard/src/v2/components/tasks/KanbanTaskCard.tsx");
+    expect(taskCard).toMatch(/Edit task \$\{task\.id\}/);
+    expect(taskCard).toMatch(/Delete task \$\{task\.id\}/);
+    expect(taskCard).not.toMatch(/group-hover:opacity-100/);
   });
 });

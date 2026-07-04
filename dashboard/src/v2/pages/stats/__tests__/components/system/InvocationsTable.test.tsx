@@ -150,7 +150,7 @@ describe("InvocationsTable", () => {
   });
 
   it("preserves semantic invocation table headers and row expand labels", () => {
-    render(
+    const { container } = render(
       <InvocationsTable
         invocations={[createInvocation({ id: "inv-headers" })]}
         sort={{ key: "totalTokens", dir: "desc" }}
@@ -168,6 +168,54 @@ describe("InvocationsTable", () => {
     expect(screen.getByRole("columnheader", { name: /Total/i }).getAttribute("aria-sort")).toBe("descending");
     expect(screen.getByRole("button", { name: /Sort invocations by total tokens, currently sorted descending/i })).toBeTruthy();
     expect(screen.getAllByRole("button", { name: "Expand invocation inv-headers" }).length).toBeGreaterThan(0);
+
+    const table = container as HTMLElement;
+    expect(table.querySelector('[class*="backdrop-blur"]')).toBeNull();
+    expect(table.querySelector('td[headers="invocations-time"]')).toBeTruthy();
+    expect(table.querySelector('td[headers="invocations-model"]')).toBeTruthy();
+    expect(table.querySelector('td[headers="invocations-expand"] button[aria-controls="invocation-messages-inv-headers"]')).toBeTruthy();
+    expect(table.querySelector('td[headers="invocations-model"]')?.className).toContain("break-words");
+    expect(table.querySelector('td[headers="invocations-model"]')?.className).toContain("[overflow-wrap:anywhere]");
+  });
+
+  it("keeps long provider, model, error, and task identifiers visible inside wrapping cells", () => {
+    const longModel = "provider-family/super-long-model-identifier-with-routing-suffix-and-context-window-2026-07-04";
+    const longProvider = "provider_with_unusually_long_gateway_identifier";
+    const longError = "Provider gateway returned an exceptionally long retryable error message that should wrap inside the status cell instead of hiding behind hover-only affordances.";
+    const longTaskKey = "TASK-LONG-OPERATIONAL-IDENTIFIER-2026-07-04-ALPHA-BETA";
+
+    const { container } = render(
+      <InvocationsTable
+        invocations={[createInvocation({
+          id: "inv-long-copy",
+          status: "failed",
+          provider: longProvider,
+          model: longModel,
+          taskKey: longTaskKey,
+          lastErrorMessage: longError,
+          errorMessage: longError,
+        })]}
+        sort={{ key: "startedAt", dir: "desc" }}
+        onSortChange={vi.fn()}
+        expandedId={null}
+        onRowExpand={vi.fn()}
+      />,
+    );
+
+    const root = container as HTMLElement;
+    expect(root.textContent).toContain("provider with unusually long gateway identifier");
+    expect(root.textContent).toContain(longModel);
+    expect(root.textContent).toContain(longError);
+    expect(root.textContent).toContain(longTaskKey);
+
+    const statusCell = root.querySelector('td[headers="invocations-status"]');
+    const modelCell = root.querySelector('td[headers="invocations-model"]');
+    const contextCell = root.querySelector('td[headers="invocations-context"]');
+    expect(statusCell?.className).toContain("break-words");
+    expect(modelCell?.className).toContain("break-words");
+    expect(contextCell?.className).toContain("break-words");
+    expect(modelCell?.querySelector("span")?.className).toContain("[overflow-wrap:anywhere]");
+    expect(statusCell?.querySelector("span")?.className).toContain("[overflow-wrap:anywhere]");
   });
 
   it("renders the expansion placeholder row", async () => {
@@ -185,17 +233,17 @@ describe("InvocationsTable", () => {
     );
     const root = container as HTMLElement;
 
-    expect(within(root).getByText("Loading messages")).toBeTruthy();
+    expect(within(root).getByRole("status", { name: "Loading transcript messages" })).toBeTruthy();
     await waitFor(() => {
-      expect(within(root).getByText("No messages recorded for this invocation")).toBeTruthy();
+      expect(within(root).getByRole("status", { name: "No transcript messages" })).toBeTruthy();
     });
 
     fireEvent.click(within(root).getAllByRole("button", { name: "Collapse invocation inv-expand" })[0]);
     expect(onRowExpand).toHaveBeenCalledWith(null);
   });
 
-  it("renders the empty state and loading skeletons", () => {
-    const { rerender, container } = render(
+  it("renders the empty state and loading skeletons with polite status semantics", () => {
+    const { rerender } = render(
       <InvocationsTable
         invocations={[]}
         sort={{ key: "startedAt", dir: "desc" }}
@@ -205,7 +253,9 @@ describe("InvocationsTable", () => {
       />,
     );
 
-    expect(screen.getByText("No invocations match the current filters")).toBeTruthy();
+    expect(screen.getByRole("status", { name: "No invocation records" })).toBeTruthy();
+    expect(screen.getByText("No invocation records to show")).toBeTruthy();
+    expect(screen.getByText("No records match the current filters or record view.")).toBeTruthy();
 
     rerender(
       <InvocationsTable
@@ -217,7 +267,42 @@ describe("InvocationsTable", () => {
         loading
       />,
     );
+    expect(screen.getByRole("status", { name: "Loading invocation records" })).toBeTruthy();
+    expect(screen.getByText("Loading invocation records")).toBeTruthy();
+    expect(screen.getByText("Refreshing the ledger rows and transcript expansion targets.")).toBeTruthy();
+  });
 
-    expect(container.querySelectorAll(".motion-safe\\:animate-pulse").length).toBe(6);
+  it("keeps cached invocation rows visible during background refresh", () => {
+    render(
+      <InvocationsTable
+        invocations={[createInvocation({ id: "inv-cached" })]}
+        sort={{ key: "startedAt", dir: "desc" }}
+        onSortChange={vi.fn()}
+        expandedId={null}
+        onRowExpand={vi.fn()}
+        loading
+      />,
+    );
+
+    expect(screen.getByText("Updating invocation records. Showing cached rows while the latest ledger loads.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Expand invocation inv-cached" })).toBeTruthy();
+    expect(screen.getByText("Showing 1 of 1 invocation records.")).toBeTruthy();
+  });
+
+  it("renders blocking load failures as named alerts", () => {
+    render(
+      <InvocationsTable
+        invocations={[]}
+        sort={{ key: "startedAt", dir: "desc" }}
+        onSortChange={vi.fn()}
+        expandedId={null}
+        onRowExpand={vi.fn()}
+        error="network down"
+      />,
+    );
+
+    expect(screen.getByRole("alert", { name: "Invocation records failed to load" })).toBeTruthy();
+    expect(screen.getByText("Failed to load invocation records")).toBeTruthy();
+    expect(screen.getByText("network down")).toBeTruthy();
   });
 });

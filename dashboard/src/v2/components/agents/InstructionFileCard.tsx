@@ -5,6 +5,7 @@ import { ChevronRight, FileText, Plus, Check } from "lucide-preact";
 import type { InstructionFileSummary } from "../../lib/instruction-file-api.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { getInstructionAccentHex, formatBytes } from "../../lib/instruction-file-display.js";
+import { INTERACTION_CSS_VARIABLES } from "../../lib/motion/tokens.js";
 
 export const InstructionFileCard: FunctionComponent<{
   file: InstructionFileSummary;
@@ -36,6 +37,10 @@ export const InstructionFileCard: FunctionComponent<{
             ? "border-black/[0.06] bg-white/55 hover:-translate-y-0.5 hover:border-signal-500/30 hover:bg-white/80 hover:shadow-[0_8px_24px_rgba(0,224,160,0.06)] dark:border-white/[0.06] dark:bg-void-800/40 dark:hover:border-signal-500/30 dark:hover:bg-void-800/60 dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.25)]"
             : "border-dashed border-black/[0.1] bg-white/30 hover:-translate-y-0.5 hover:border-signal-500/40 hover:bg-white/55 hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)] dark:border-white/[0.1] dark:bg-void-800/25 dark:hover:border-signal-500/40 dark:hover:bg-void-800/45 dark:hover:shadow-[0_4px_16px_rgba(0,0,0,0.2)]"
       }`}
+      style={{
+        transitionDuration: INTERACTION_CSS_VARIABLES.selectionMovement.duration,
+        transitionTimingFunction: INTERACTION_CSS_VARIABLES.selectionMovement.ease,
+      }}
     >
       {/* Left accent strip */}
       <div
@@ -94,6 +99,11 @@ export const InstructionFileCard: FunctionComponent<{
             >
               {file.exists ? formatBytes(file.size) : (<><Plus className="h-2.5 w-2.5" strokeWidth={2.6} />New</>)}
             </span>
+            {isSelected && (
+              <span className="inline-flex items-center rounded-md border border-signal-500/25 bg-signal-500/[0.08] px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.1em] text-signal-600 dark:text-signal-400">
+                Selected
+              </span>
+            )}
           </div>
         </div>
 

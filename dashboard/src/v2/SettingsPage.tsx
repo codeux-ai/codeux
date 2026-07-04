@@ -1,13 +1,15 @@
 import type { FunctionComponent } from "preact";
-import { useCallback, useEffect, useLayoutEffect, useRef } from "preact/hooks";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { Check, Compass, RefreshCw, Search, Settings, Zap } from "lucide-preact";
-import { ActionButton, NoticePanel } from "./components/settings/SettingsSurface.js";
+import { Check, Compass, RefreshCw, Search, Settings, ShieldCheck, Zap } from "lucide-preact";
+import { ActionButton } from "./components/settings/SettingsSurface.js";
 import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 import { useSettingsPageState } from "./hooks/use-settings-page-state.js";
 import { SettingsCategoryRail, CATEGORIES } from "./components/settings/SettingsCategoryRail.js";
 import { SettingsContentPanels } from "./components/settings/SettingsContentPanels.js";
 import { useReducedMotion } from "./hooks/use-reduced-motion.js";
+import { useGsapInteractionTokens } from "./lib/motion/constants.js";
+import { useInteractionTokens } from "./lib/motion/tokens.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
 import { PageHeader } from "./components/layout/PageHeader.js";
 import { UnsavedChangesModal } from "./components/ui/UnsavedChangesModal.js";
@@ -16,7 +18,12 @@ import { getSettingsSearchMatchPreview } from "./lib/settings-search-index.js";
 export const SettingsPage: FunctionComponent = () => {
   const headerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const contentTweenRef = useRef<ReturnType<typeof gsap.to> | null>(null);
+  const mountedRef = useRef(true);
   const prefersReducedMotion = useReducedMotion();
+  const gsapTokens = useGsapInteractionTokens();
+  const interactionTokens = useInteractionTokens();
+  const [pendingCategory, setPendingCategory] = useState<typeof CATEGORIES[number]["id"] | null>(null);
 
   const state = useSettingsPageState(CATEGORIES);
   const {
@@ -35,19 +42,44 @@ export const SettingsPage: FunctionComponent = () => {
     activeSaving,
     loading,
     saveMessage,
-    resettingProject,
     handleSave,
     handleResetProject,
+    resettingProject,
     showUnsavedModal,
     confirmDiscard,
     cancelDiscard,
     saveAndLeave,
   } = state;
 
-  const smartFindPreview = filteredCategories
-    .flatMap((category) => getSettingsSearchMatchPreview(settingsSearchMatches[category.id], 2))
-    .filter((match, index, matches) => matches.indexOf(match) === index)
-    .slice(0, 3);
+  const normalizedSearch = settingsSearch.trim();
+  const smartFindPreview = useMemo(() => (
+    filteredCategories
+      .flatMap((category) => getSettingsSearchMatchPreview(settingsSearchMatches[category.id], 2))
+      .filter((match, index, matches) => matches.indexOf(match) === index)
+      .slice(0, 4)
+  ), [filteredCategories, settingsSearchMatches]);
+  const activeMatchPreview = getSettingsSearchMatchPreview(settingsSearchMatches[activeCategory], 3);
+  const smartFindMatchCount = useMemo(() => (
+    Object.values(settingsSearchMatches).reduce((count, match) => (
+      count + match.matchedLabels.length + match.matchedDescriptions.length + match.matchedTerms.length
+    ), 0)
+  ), [settingsSearchMatches]);
+  const quickCategories = useMemo(() => (
+    (filteredCategories.length > 0 ? filteredCategories : CATEGORIES)
+      .filter((category) => !["general", "models", "sprint", "browser"].includes(category.id))
+      .slice(0, 4)
+  ), [filteredCategories]);
+  const scopeControlStyle = {
+    transitionDuration: interactionTokens.controlFeedback.duration,
+    transitionTimingFunction: interactionTokens.controlFeedback.ease,
+  };
+
+  useEffect(() => () => {
+    mountedRef.current = false;
+    if (contentTweenRef.current && typeof contentTweenRef.current.kill === "function") {
+      contentTweenRef.current.kill();
+    }
+  }, []);
 
   useLayoutEffect(() => {
     const ctx = gsap.context(() => {
@@ -67,33 +99,60 @@ export const SettingsPage: FunctionComponent = () => {
     return () => ctx.revert();
   }, [prefersReducedMotion]);
 
-    const switchCategory = useCallback((categoryId: typeof activeCategory): void => {
+  const switchCategory = useCallback((categoryId: typeof activeCategory): void => {
     if (!contentRef.current || categoryId === activeCategory) {
       return;
     }
     if (prefersReducedMotion) {
+      if (typeof gsap.killTweensOf === "function") {
+        gsap.killTweensOf(contentRef.current);
+      }
+      if (contentTweenRef.current && typeof contentTweenRef.current.kill === "function") {
+        contentTweenRef.current.kill();
+      }
       state.setActiveCategory(categoryId);
       gsap.set(contentRef.current, { opacity: 1, y: 0 });
+      setPendingCategory(null);
     } else {
-      gsap.to(contentRef.current, {
+      setPendingCategory(categoryId);
+      if (contentTweenRef.current && typeof contentTweenRef.current.kill === "function") {
+        contentTweenRef.current.kill();
+      }
+      contentTweenRef.current = gsap.to(contentRef.current, {
         opacity: 0,
         y: 12,
-        duration: 0.18,
-        ease: "power2.in",
+        duration: gsapTokens.selectionMovement.duration,
+        ease: gsapTokens.selectionMovement.ease,
+        overwrite: "auto",
         onComplete: () => {
-          state.setActiveCategory(categoryId);
-          if (!contentRef.current) {
+          if (!mountedRef.current) {
             return;
           }
-          gsap.fromTo(
+          state.setActiveCategory(categoryId);
+          if (!contentRef.current) {
+            setPendingCategory(null);
+            return;
+          }
+          contentTweenRef.current = gsap.fromTo(
             contentRef.current,
             { opacity: 0, y: 12 },
-            { opacity: 1, y: 0, duration: 0.35, ease: "power3.out" },
+            {
+              opacity: 1,
+              y: 0,
+              duration: gsapTokens.enterExit.duration,
+              ease: gsapTokens.enterExit.ease,
+              overwrite: "auto",
+              onComplete: () => {
+                if (mountedRef.current) {
+                  setPendingCategory(null);
+                }
+              },
+            },
           );
         },
       });
     }
-  }, [activeCategory, state, prefersReducedMotion]);
+  }, [activeCategory, state, prefersReducedMotion, gsapTokens.selectionMovement.duration, gsapTokens.selectionMovement.ease, gsapTokens.enterExit.duration, gsapTokens.enterExit.ease]);
 
   return (
     <PageContainer aria-label="Settings" padding="settings" className="gap-10">
@@ -115,6 +174,7 @@ export const SettingsPage: FunctionComponent = () => {
             <div
               role="radiogroup"
               aria-label="Settings scope"
+              aria-describedby="settings-scope-context settings-project-scope-disabled"
               className="rounded-2xl border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-1 backdrop-blur-2xl shadow-[var(--elevation-base)]"
             >
               <button
@@ -122,37 +182,51 @@ export const SettingsPage: FunctionComponent = () => {
                 role="radio"
                 aria-checked={activeScope === "system"}
                 onClick={() => setActiveScope("system")}
-                className={`h-8 rounded-[1rem] px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] transition-colors ${
+                style={scopeControlStyle}
+                className={`h-8 rounded-[1rem] px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
                   activeScope === "system"
                     ? "bg-signal-500/[0.12] text-signal-700 dark:text-signal-300"
                     : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
                 }`}
               >
                 System
+                {activeScope === "system" ? <span aria-hidden="true" className="ml-1 normal-case tracking-normal text-[10px]">(selected)</span> : null}
               </button>
               <button
                 type="button"
                 role="radio"
                 aria-checked={activeScope === "project"}
+                aria-describedby={!selectedProject ? "settings-project-scope-disabled" : undefined}
                 onClick={() => selectedProject && setActiveScope("project")}
                 disabled={!selectedProject}
-                className={`h-8 rounded-[1rem] px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] transition-colors disabled:cursor-not-allowed disabled:opacity-50 disabled:pointer-events-none ${
+                style={scopeControlStyle}
+                className={`h-8 rounded-[1rem] px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-50 disabled:pointer-events-none dark:focus-visible:ring-offset-void-900 ${
                   activeScope === "project"
                     ? "bg-signal-500/[0.12] text-signal-700 dark:text-signal-300"
                     : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
                 }`}
               >
                 Project
+                {activeScope === "project" ? <span aria-hidden="true" className="ml-1 normal-case tracking-normal text-[10px]">(selected)</span> : null}
               </button>
             </div>
 
-            <div className="max-w-full break-words rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-xs font-semibold text-slate-500 backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:text-slate-300">
+            <div id="settings-scope-context" className="max-w-full break-words rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-xs font-semibold text-slate-500 backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:text-slate-300">
               {activeScope === "system"
                 ? "Editing live system defaults"
                 : selectedProject
                   ? `Editing overrides for ${selectedProject.name}`
                   : "Select a project to edit overrides"}
             </div>
+            {!selectedProject ? (
+              <div id="settings-project-scope-disabled" className="max-w-full break-words rounded-full border border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-700 backdrop-blur-2xl dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-200">
+                Project scope unlocks after selecting a project.
+              </div>
+            ) : (
+              <div id="settings-project-scope-disabled" className="sr-only">
+                Project scope is available for the selected project.
+              </div>
+            )}
 
             <div className="rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-xs font-semibold text-slate-500 backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:text-slate-300">
               {filteredCategories.length} visible categor{filteredCategories.length === 1 ? "y" : "ies"}
@@ -161,6 +235,12 @@ export const SettingsPage: FunctionComponent = () => {
             {activeDirty ? (
               <div className="rounded-full border border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-700 backdrop-blur-2xl dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-200">
                 Unsaved edits
+              </div>
+            ) : null}
+            {!activeDirty && !activeSaving && saveMessage && !error ? (
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-status-green/20 bg-status-green/10 px-4 py-2 text-xs font-semibold text-status-green backdrop-blur-2xl">
+                <ShieldCheck className="h-3.5 w-3.5" strokeWidth={2.2} />
+                Saved
               </div>
             ) : null}
           </div>
@@ -197,22 +277,31 @@ export const SettingsPage: FunctionComponent = () => {
             aria-atomic="true"
             className="mt-2 text-xs font-semibold text-slate-500 dark:text-slate-400"
           >
-            {settingsSearch.trim()
-              ? `${filteredCategories.length} matching categor${filteredCategories.length === 1 ? "y" : "ies"} for ${settingsSearch.trim()}${smartFindPreview.length ? `: ${smartFindPreview.join(", ")}.` : "."}`
-              : `${filteredCategories.length} settings categories available.`}
+            {normalizedSearch
+              ? filteredCategories.length > 0
+                ? `${smartFindMatchCount} result${smartFindMatchCount === 1 ? "" : "s"} across ${filteredCategories.length} categor${filteredCategories.length === 1 ? "y" : "ies"} for ${normalizedSearch}. Active: ${activeCategoryConfig.label}${activeMatchPreview.length ? ` (${activeMatchPreview.join(", ")})` : ""}.`
+                : `No settings match ${normalizedSearch}. Clear the search or try routing, provider, auth, CI, agent, or memory.`
+              : `${filteredCategories.length} settings categories available. Press slash to search.`}
           </div>
+          {normalizedSearch && smartFindPreview.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Smart Find match previews">
+              {smartFindPreview.map((match) => (
+                <span key={match} className="max-w-full truncate rounded-full border border-signal-500/20 bg-signal-500/[0.06] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-700 dark:text-signal-200">
+                  {match}
+                </span>
+              ))}
+            </div>
+          ) : null}
           <div className="mt-3 flex flex-wrap gap-2">
-            {filteredCategories
-              .filter((c) => !["general", "models", "sprint", "browser"].includes(c.id))
-              .slice(0, 4)
-              .map((category) => (
+            {quickCategories.map((category) => (
               <button
                 key={`quick-${category.id}`}
                 type="button"
                 onClick={() => switchCategory(category.id)}
                 aria-pressed={activeCategory === category.id}
                 aria-controls="settings-active-category-panel"
-                className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                style={scopeControlStyle}
+                className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-signal)] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
                   activeCategory === category.id
                     ? "border-signal-500/25 bg-signal-500/[0.12] text-signal-700 dark:border-signal-400/25 dark:bg-signal-400/[0.12] dark:text-signal-200"
                     : "border-black/[0.06] bg-white/80 text-slate-500 hover:text-slate-800 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:text-slate-200"
@@ -225,17 +314,20 @@ export const SettingsPage: FunctionComponent = () => {
           <div className="mt-4 flex flex-wrap items-center gap-3">
             {activeScope === "project" ? (
               <ActionButton
-                label="Reset Project"
+                label={resettingProject ? "Resetting Project" : "Reset Project"}
                 onClick={() => void handleResetProject()}
                 tone="danger"
                 busy={resettingProject}
                 disabled={!selectedProject}
+                disabledReason={!selectedProject ? "Select a project before resetting overrides." : undefined}
               />
             ) : null}
             <button
               type="button"
               onClick={() => void handleSave()}
               disabled={!activeDirty || activeSaving || loading || (activeScope === "project" && !selectedProject)}
+              aria-busy={activeSaving ? "true" : undefined}
+              aria-disabled={!activeDirty || activeSaving || loading || (activeScope === "project" && !selectedProject)}
               className={`group inline-flex items-center gap-2.5 rounded-2xl px-5 py-3 text-sm font-bold transition-[background-color,box-shadow,transform] duration-300 hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 ${
                 saveMessage && !error
                   ? "bg-status-green text-white shadow-[var(--elevation-raised)]"
@@ -270,9 +362,10 @@ export const SettingsPage: FunctionComponent = () => {
           settingsSearch={settingsSearch}
           settingsSearchMatches={settingsSearchMatches}
           onSwitchCategory={switchCategory}
+          pendingCategory={pendingCategory}
         />
 
-        <div id="settings-active-category-panel" ref={contentRef} className="flex min-w-0 flex-col gap-5">
+        <div id="settings-active-category-panel" ref={contentRef} aria-busy={activeSaving || loading || resettingProject ? "true" : undefined} className="flex min-w-0 flex-col gap-5">
           <div className="mb-1 flex flex-wrap items-center gap-3">
             <activeCategoryConfig.icon
               className={`h-4 w-4 ${activeCategoryConfig.danger ? "text-status-red" : "text-signal-500"}`}
@@ -292,8 +385,8 @@ export const SettingsPage: FunctionComponent = () => {
 
           <div className="flex flex-col gap-3">
             <ActionFeedbackRegion
-              status={error ? "error" : activeSaving ? "pending" : saveMessage ? "success" : activeDirty ? "warning" : "idle"}
-              message={error || (activeSaving ? "Saving changes..." : saveMessage ? "Changes saved." : activeDirty ? "You have unsaved changes." : null)}
+              status={error ? "error" : activeSaving || resettingProject ? "pending" : saveMessage ? "success" : activeDirty ? "warning" : "idle"}
+              message={error || (resettingProject ? "Resetting project overrides..." : activeSaving ? "Saving changes..." : saveMessage ? "Changes saved." : activeDirty ? "You have unsaved changes." : null)}
               onDismiss={clearFeedback}
             />
           </div>
@@ -308,6 +401,7 @@ export const SettingsPage: FunctionComponent = () => {
           onCancel={cancelDiscard}
           onSave={() => void saveAndLeave()}
           saving={activeSaving}
+          discarding={false}
         />
       )}
     </PageContainer>

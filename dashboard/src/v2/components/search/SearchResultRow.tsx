@@ -1,10 +1,9 @@
 import { FunctionComponent } from "preact";
-import { Target, ListChecks, Cpu, Compass, ArrowRight } from "lucide-preact";
+import { Target, ListChecks, Cpu, Compass, ArrowRight, Ban } from "lucide-preact";
 import { Link } from "@tanstack/react-router";
 import { AgentAvatarSvg } from "../agents/AgentAvatarSvg.js";
 import type { AgentSearchItem, ContainerSearchItem, SearchCategoryId, SearchItem, SprintSearchItem, TaskSearchItem } from "./SearchOverlay";
-import { INTERACTION_TOKENS } from "../../lib/motion/tokens.js";
-import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 interface SearchResultRowProps {
     item: SearchItem;
@@ -17,6 +16,13 @@ interface SearchResultRowProps {
     onClick?: () => void;
 }
 
+const disabledStatuses = new Set(["unavailable", "disabled"]);
+
+function getDisabledReason(item: SearchItem): string | undefined {
+    if (!item.status || !disabledStatuses.has(item.status)) return undefined;
+    return item.status === "disabled" ? "Disabled" : "Unavailable";
+}
+
 export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
     item,
     categoryType,
@@ -27,10 +33,13 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
     activeItemRef,
     onClick,
 }) => {
-    const reducedMotion = useReducedMotion();
-    const transitionDuration = reducedMotion ? "0ms" : INTERACTION_TOKENS.selectionMovement.duration;
-    const transitionTimingFunction = reducedMotion ? "none" : INTERACTION_TOKENS.selectionMovement.ease;
+    const interactionTokens = useInteractionTokens();
+    const transitionDuration = interactionTokens.selectionMovement.duration;
+    const transitionTimingFunction = interactionTokens.selectionMovement.ease;
     const avatarConfig = "avatarConfig" in item ? item.avatarConfig : null;
+    const disabledReason = getDisabledReason(item);
+    const isDisabled = Boolean(disabledReason);
+    const disabledDescriptionId = isDisabled ? `search-result-${item.id}-disabled-reason` : undefined;
     let Icon = Target;
     let itemId = item.id;
     let title = 'title' in item ? item.title : item.name;
@@ -118,30 +127,55 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
         <Link
             to={targetTo as any}
             search={targetSearch as any}
-            onClick={item.status === 'unavailable' || item.status === 'disabled' ? (e: any) => e.preventDefault() : onClick}
+            onClick={(e: MouseEvent) => {
+                if (isDisabled) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return;
+                }
+                onClick?.();
+            }}
             id={`search-result-${item.id}`}
             ref={activeItemRef as any}
-            onMouseEnter={onFocus}
-            aria-disabled={item.status === 'unavailable' || item.status === 'disabled' ? 'true' : undefined}
-            aria-label={`${categoryType} result: ${itemId} ${title}${badgeText ? `, ${badgeText}` : ''}`}
+            onMouseEnter={() => {
+                if (!isDisabled) onFocus();
+            }}
+            tabIndex={-1}
+            data-result-index={globalItemIndex}
+            data-selected={isFocused ? "true" : undefined}
+            aria-disabled={isDisabled ? 'true' : undefined}
+            aria-describedby={disabledDescriptionId}
+            aria-label={`${categoryType} result: ${itemId} ${title}${badgeText ? `, ${badgeText}` : ''}${disabledReason ? `, ${disabledReason}` : ''}`}
             role="option"
-            aria-selected={isFocused}
+            aria-selected={isFocused && !isDisabled}
             style={{ transitionDuration, transitionTimingFunction }}
-            className={`group relative flex w-full min-w-0 items-stretch text-left rounded-[1.25rem] border px-3.5 py-3 transition-all sm:px-4 ${
-                isFocused
-                    ? 'border-signal-500/30 bg-signal-500/[0.07] shadow-[0_12px_32px_rgba(0,224,160,0.10)] backdrop-blur-2xl dark:bg-signal-500/[0.09]'
+            className={`group relative flex w-full min-w-0 items-stretch overflow-hidden text-left rounded-[1.25rem] border px-3.5 py-3 transition-[background-color,border-color,box-shadow,color,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800 sm:px-4 ${
+                isDisabled
+                    ? 'border-black/[0.06] bg-black/[0.025] text-slate-500 shadow-none dark:border-white/[0.06] dark:bg-white/[0.025] dark:text-slate-500'
+                    : isFocused
+                    ? 'translate-y-[-1px] border-signal-500/55 bg-signal-500/[0.09] shadow-[0_12px_32px_rgba(0,224,160,0.13),inset_0_0_0_1px_rgba(0,224,160,0.14)] backdrop-blur-2xl motion-reduce:translate-y-0 dark:bg-signal-500/[0.11]'
                     : 'border-black/[0.06] bg-white/58 backdrop-blur-xl hover:border-black/[0.1] hover:bg-white/86 dark:border-white/[0.06] dark:bg-white/[0.035] dark:hover:border-white/[0.11] dark:hover:bg-white/[0.06]'
-            } aria-disabled:pointer-events-none aria-disabled:opacity-50`}
+            } aria-disabled:cursor-not-allowed aria-disabled:opacity-75`}
         >
-            {/* Hover/Focus Background Glow */}
-            {isFocused && (
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-signal-500/[0.06] to-transparent" />
-            )}
+            <span
+                aria-hidden="true"
+                className={`pointer-events-none absolute inset-y-3 left-2 w-1 rounded-full bg-signal-500 transition-opacity ${
+                    isFocused && !isDisabled ? 'opacity-100' : 'opacity-0 group-focus-visible:opacity-80'
+                }`}
+                style={{ transitionDuration, transitionTimingFunction }}
+            />
+            <span
+                aria-hidden="true"
+                className={`pointer-events-none absolute inset-0 bg-signal-500/[0.045] transition-opacity ${
+                    isFocused && !isDisabled ? 'opacity-100' : 'opacity-0'
+                }`}
+                style={{ transitionDuration, transitionTimingFunction }}
+            />
 
             <div className="relative z-10 flex w-full min-w-0 items-start gap-3">
-                <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-colors duration-200 ${
-                    isFocused ? 'border-signal-500/25 bg-signal-500/12 text-signal-500' : 'border-black/[0.05] bg-black/[0.04] text-slate-500 group-hover:text-slate-700 dark:border-white/[0.06] dark:bg-white/[0.05] dark:text-slate-400 dark:group-hover:text-slate-200'
-                }`}>
+                <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-colors ${
+                    isDisabled ? 'border-black/[0.05] bg-black/[0.035] text-slate-400 dark:border-white/[0.05] dark:bg-white/[0.035] dark:text-slate-500' : isFocused ? 'border-signal-500/25 bg-signal-500/12 text-signal-500' : 'border-black/[0.05] bg-black/[0.04] text-slate-500 group-hover:text-slate-700 dark:border-white/[0.06] dark:bg-white/[0.05] dark:text-slate-400 dark:group-hover:text-slate-200'
+                }`} style={{ transitionDuration, transitionTimingFunction }}>
                     {avatarConfig ? (
                         <div className="flex h-5 w-5 shrink-0 items-center justify-center">
                             <AgentAvatarSvg config={avatarConfig} expression="happy" size={20} static />
@@ -162,9 +196,9 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
                     </div>
 
                     <div className="flex min-w-0 items-start justify-between gap-3">
-                        <span className={`min-w-0 flex-1 break-words text-sm font-semibold leading-5 transition-colors duration-200 [overflow-wrap:anywhere] ${
-                            isFocused ? 'text-signal-700 dark:text-signal-400' : 'text-slate-800 group-hover:text-slate-950 dark:text-slate-200 dark:group-hover:text-white'
-                        }`}>
+                        <span className={`min-w-0 flex-1 break-words text-sm font-semibold leading-5 transition-colors [overflow-wrap:anywhere] ${
+                            isDisabled ? 'text-slate-500 dark:text-slate-500' : isFocused ? 'text-signal-700 dark:text-signal-400' : 'text-slate-800 group-hover:text-slate-950 dark:text-slate-200 dark:group-hover:text-white'
+                        }`} style={{ transitionDuration, transitionTimingFunction }}>
                             {renderTitle()}
                         </span>
 
@@ -185,9 +219,21 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
                                     {badgeText}
                                 </span>
                             )}
-                            <span className={`hidden shrink-0 transition-all duration-300 sm:block ${
-                                isFocused ? 'translate-x-0 text-signal-500 opacity-100' : '-translate-x-1 text-slate-400 opacity-0 group-hover:translate-x-0 group-hover:opacity-70'
-                            }`}>
+                            {disabledReason && (
+                                <span
+                                    id={disabledDescriptionId}
+                                    className="inline-flex shrink-0 items-center gap-1 rounded-full border border-status-red/20 bg-status-red/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-status-red"
+                                >
+                                    <Ban className="h-3 w-3" aria-hidden="true" />
+                                    {disabledReason}
+                                </span>
+                            )}
+                            <span
+                                className={`shrink-0 transition-[color,opacity,transform] ${
+                                    isDisabled ? 'text-slate-300 opacity-35 dark:text-slate-600' : isFocused ? 'translate-x-0 text-signal-500 opacity-100' : 'translate-x-0 text-slate-400 opacity-60 group-hover:opacity-80'
+                                } motion-reduce:translate-x-0`}
+                                style={{ transitionDuration, transitionTimingFunction }}
+                            >
                                 <ArrowRight className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden="true" />
                             </span>
                         </div>

@@ -1,20 +1,26 @@
 // @vitest-environment jsdom
 import { h } from "preact";
-import { render, screen, cleanup } from "@testing-library/preact";
+import { useState } from "preact/hooks";
+import { render, screen, cleanup, waitFor, fireEvent } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { expect, describe, it, vi, beforeEach, afterEach } from "vitest";
 
 expect.extend(matchers);
 
+const gsapFromTo = vi.fn();
+const gsapTo = vi.fn();
+const gsapSet = vi.fn();
+const gsapKillTweensOf = vi.fn();
+
 // Mock GSAP to prevent animation issues in test environment
 vi.mock("gsap", () => ({
     default: {
-        killTweensOf: vi.fn(),
-        set: vi.fn(),
+        killTweensOf: gsapKillTweensOf,
+        set: gsapSet,
         timeline: () => ({
-            fromTo: vi.fn(),
-            to: vi.fn(),
+            fromTo: gsapFromTo,
+            to: gsapTo,
         }),
     },
 }));
@@ -22,11 +28,7 @@ vi.mock("gsap", () => ({
 // Mock use-reduced-motion to return true so tests don't wait for animations
 vi.mock("../../hooks/use-reduced-motion.js", () => ({
     useReducedMotion: () => true,
-}));
-
-// Mock use-focus-trap to prevent focus interference during jsdom testing
-vi.mock("../../hooks/use-focus-trap.js", () => ({
-    useFocusTrap: () => ({ current: document.createElement("div") }),
+    useResolvedMotionDuration: () => 0,
 }));
 
 // Provide mocked components
@@ -50,6 +52,7 @@ describe("SearchOverlay Accessibility", () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        document.body.innerHTML = "";
         window.HTMLElement.prototype.scrollIntoView = vi.fn();
         window.Element.prototype.scrollIntoView = vi.fn();
     });
@@ -105,7 +108,7 @@ describe("SearchOverlay Accessibility", () => {
                 results={{ sprints: [], tasks: [], agents: [], containers: [] }}
             />
         );
-        expect(statusRegion.textContent).toBe("Searching...");
+        expect(statusRegion.textContent).toBe("Searching workspace");
 
         // Rerender with results
         rerender(
@@ -165,7 +168,45 @@ describe("SearchOverlay Accessibility", () => {
         expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-spr-1");
     });
 
-                    it("supports Home and End keyboard navigation", async () => {
+    it("does not expose an active descendant when no results are available", async () => {
+        const user = userEvent.setup();
+        render(
+            <SearchOverlay
+                isOpen={true}
+                onClose={mockOnClose}
+                searchQuery="missing"
+                onSearchChange={mockOnSearchChange}
+                results={{ sprints: [], tasks: [], agents: [], containers: [] }}
+            />
+        );
+
+        const combobox = screen.getAllByRole("combobox", { name: "Global search", hidden: true })[0];
+        combobox.focus();
+
+        await user.keyboard("{ArrowDown}{End}{Home}{ArrowUp}");
+
+        expect(combobox).not.toHaveAttribute("aria-activedescendant");
+    });
+
+    it("marks stale result lists busy while keeping options available", () => {
+        render(
+            <SearchOverlay
+                isOpen={true}
+                onClose={mockOnClose}
+                searchQuery="t"
+                isLoading={true}
+                onSearchChange={mockOnSearchChange}
+                results={mockResults}
+            />
+        );
+
+        expect(screen.getByRole("listbox", { hidden: true })).toHaveAttribute("aria-busy", "true");
+        expect(screen.getAllByRole("option", { hidden: true })).toHaveLength(2);
+        expect(screen.getByRole("status", { hidden: true })).toHaveTextContent("Updating results for 't'. 2 current results remain available.");
+        expect(screen.getByText("Updating")).toBeInTheDocument();
+    });
+
+    it("supports Home and End keyboard navigation", async () => {
         const user = userEvent.setup();
         render(
             <SearchOverlay
@@ -193,22 +234,36 @@ describe("SearchOverlay Accessibility", () => {
         expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-spr-1");
     });
 
-    it("closes on Escape", async () => {
+    it("closes on Escape and restores focus to the opener", async () => {
         const user = userEvent.setup();
-        render(
-            <SearchOverlay
-                isOpen={true}
-                onClose={mockOnClose}
-                searchQuery="t"
-                onSearchChange={mockOnSearchChange}
-                results={mockResults}
-            />
-        );
+        const opener = document.createElement("button");
+        opener.textContent = "Open search";
+        document.body.append(opener);
+        opener.focus();
+
+        const ControlledSearch = () => {
+            const [isOpen, setIsOpen] = useState(true);
+            return (
+                <SearchOverlay
+                    isOpen={isOpen}
+                    onClose={() => {
+                        mockOnClose();
+                        setIsOpen(false);
+                    }}
+                    searchQuery="t"
+                    onSearchChange={mockOnSearchChange}
+                    results={mockResults}
+                />
+            );
+        };
+
+        render(<ControlledSearch />);
 
         const combobox = screen.getAllByRole("combobox", { name: "Global search", hidden: true })[0];
         combobox.focus();
         await user.keyboard("{Escape}");
         expect(mockOnClose).toHaveBeenCalled();
+        await waitFor(() => expect(opener).toHaveFocus());
     });
 
     it("selects focused option on Enter", async () => {
@@ -233,6 +288,124 @@ describe("SearchOverlay Accessibility", () => {
 
         // mockOnClose is called on select in handleSelect logic? Yes, but handleSelect does navigate + onClose
         expect(mockOnClose).toHaveBeenCalled();
+    });
+
+    it("keeps unavailable results visible but skips keyboard and mouse activation", async () => {
+        const user = userEvent.setup();
+        const resultsWithUnavailable = {
+            sprints: [
+                { id: "spr-offline", title: "Offline Sprint", displayKey: "SPR-OFF", sprintKey: "SPR-OFF", routeSprintId: "spr-offline", status: "unavailable" },
+                { id: "spr-ready", title: "Ready Sprint", displayKey: "SPR-RDY", sprintKey: "SPR-RDY", routeSprintId: "spr-ready", status: "active" },
+            ],
+            tasks: [],
+            agents: [],
+            containers: [
+                { id: "preview-disabled", name: "Disabled Preview", routeContainerId: "preview-disabled", status: "disabled" },
+            ],
+        };
+
+        render(
+            <SearchOverlay
+                isOpen={true}
+                onClose={mockOnClose}
+                searchQuery="sprint"
+                onSearchChange={mockOnSearchChange}
+                results={resultsWithUnavailable}
+            />
+        );
+
+        const combobox = screen.getAllByRole("combobox", { name: "Global search", hidden: true })[0];
+        combobox.focus();
+
+        const unavailable = screen.getByRole("option", { name: /offline sprint/i, hidden: true });
+        const disabled = screen.getByRole("option", { name: /disabled preview/i, hidden: true });
+        expect(unavailable).toHaveAttribute("aria-disabled", "true");
+        expect(unavailable).toHaveAttribute("aria-describedby", "search-result-spr-offline-disabled-reason");
+        expect(screen.getByText("Unavailable")).toBeInTheDocument();
+        expect(disabled).toHaveAttribute("aria-disabled", "true");
+        expect(screen.getByText("Disabled")).toBeInTheDocument();
+
+        await user.keyboard("{ArrowDown}");
+        expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-spr-ready");
+        await user.keyboard("{Enter}");
+        expect(mockOnClose).toHaveBeenCalledTimes(1);
+
+        mockOnClose.mockClear();
+        fireEvent.click(unavailable);
+        fireEvent.click(disabled);
+        expect(mockOnClose).not.toHaveBeenCalled();
+    });
+
+    it("does not activate keyboard selection when every result is unavailable", async () => {
+        const user = userEvent.setup();
+        render(
+            <SearchOverlay
+                isOpen={true}
+                onClose={mockOnClose}
+                searchQuery="offline"
+                onSearchChange={mockOnSearchChange}
+                results={{
+                    sprints: [{ id: "spr-offline", title: "Offline Sprint", displayKey: "SPR-OFF", sprintKey: "SPR-OFF", routeSprintId: "spr-offline", status: "unavailable" }],
+                    tasks: [],
+                    agents: [],
+                    containers: [],
+                }}
+            />
+        );
+
+        const combobox = screen.getAllByRole("combobox", { name: "Global search", hidden: true })[0];
+        combobox.focus();
+        await user.keyboard("{ArrowDown}{Enter}");
+
+        expect(combobox).not.toHaveAttribute("aria-activedescendant");
+        expect(mockOnClose).not.toHaveBeenCalled();
+    });
+
+    it("keeps active row scrolling inside the results container", async () => {
+        const user = userEvent.setup();
+        render(
+            <SearchOverlay
+                isOpen={true}
+                onClose={mockOnClose}
+                searchQuery="t"
+                onSearchChange={mockOnSearchChange}
+                results={mockResults}
+            />
+        );
+
+        const combobox = screen.getAllByRole("combobox", { name: "Global search", hidden: true })[0];
+        const resultsRegion = screen.getByRole("listbox", { hidden: true }).parentElement as HTMLElement;
+        const secondOption = screen.getByRole("option", { name: /task 1/i, hidden: true });
+        resultsRegion.scrollTop = 0;
+        resultsRegion.getBoundingClientRect = () => ({ top: 0, bottom: 100, left: 0, right: 100, width: 100, height: 100, x: 0, y: 0, toJSON: () => ({}) });
+        secondOption.getBoundingClientRect = () => ({ top: 120, bottom: 160, left: 0, right: 100, width: 100, height: 40, x: 0, y: 120, toJSON: () => ({}) });
+
+        combobox.focus();
+        await user.keyboard("{End}");
+
+        expect(resultsRegion.scrollTop).toBe(60);
+        expect(window.HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
+    });
+
+    it("uses reduced-motion interaction token values for overlay and result transitions", () => {
+        render(
+            <SearchOverlay
+                isOpen={true}
+                onClose={mockOnClose}
+                searchQuery="t"
+                onSearchChange={mockOnSearchChange}
+                results={mockResults}
+            />
+        );
+
+        const listbox = screen.getByRole("listbox", { hidden: true });
+        const firstOption = screen.getAllByRole("option", { hidden: true })[0];
+        const closeButton = screen.getByRole("button", { name: "Close search", hidden: true });
+
+        expect(listbox).toHaveStyle({ transitionDuration: "0ms" });
+        expect(firstOption).toHaveStyle({ transitionDuration: "0ms" });
+        expect(closeButton).toHaveStyle({ transitionDuration: "0ms" });
+        expect(gsapFromTo).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ duration: 0, ease: expect.any(String) }));
     });
 
     it("renders in unanchored/fallback mobile mode gracefully", () => {

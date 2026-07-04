@@ -60,15 +60,6 @@ export const SprintStreamRow: FunctionComponent<SprintStreamRowProps> = ({
             <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
               {taskCount} task{taskCount === 1 ? "" : "s"}
             </span>
-            <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${
-              state.isPaused
-                ? "border-status-amber/25 bg-status-amber/10 text-status-amber"
-                : state.isActive
-                  ? "border-status-green/20 bg-status-green/[0.08] text-status-green"
-                  : "border-slate-400/20 bg-slate-400/[0.08] text-slate-500 dark:text-slate-400"
-            }`}>
-              {statusLabel}
-            </span>
           </div>
           <h3 className="mt-0.5 truncate font-display text-base font-black tracking-tight text-slate-900 dark:text-white">
             {sprint.name}

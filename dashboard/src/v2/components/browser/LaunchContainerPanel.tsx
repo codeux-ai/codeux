@@ -24,11 +24,13 @@ export const LaunchContainerPanel: FunctionComponent<LaunchContainerPanelProps> 
 }) => {
   const disabledReason = launchBusy
     ? "A preview is already launching."
-    : !launchEnabled
-      ? "Select a project with Browser Preview enabled to start a container."
-      : sprints.length === 0
-        ? "No sprint is available to launch."
-        : null;
+    : sprints.length === 0
+      ? "No sprint is available to launch."
+      : !launchEnabled
+        ? "Select a project with Browser Preview enabled to start a container."
+        : !launchSprintId
+          ? "Select a sprint before launching a preview container."
+          : null;
   const selectUnavailable = !launchEnabled || launchBusy || sprints.length === 0;
   const launchUnavailable = selectUnavailable || !launchSprintId;
   const statusMessage = launchBusy
@@ -102,11 +104,19 @@ export const LaunchContainerPanel: FunctionComponent<LaunchContainerPanelProps> 
           style={{ transition: controlTransition }}
         >
           {launchBusy ? (
-            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" strokeWidth={2.5} />
+            <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" strokeWidth={2.5} />
           ) : (
-            <Play className="h-4 w-4" strokeWidth={2.2} />
+            <Play aria-hidden="true" className="h-4 w-4" strokeWidth={2.2} />
           )}
-          {launchBusy ? "Launching..." : !launchEnabled ? "Disabled: No Project" : sprints.length === 0 ? "Disabled: No Sprint" : "Launch Container"}
+          {launchBusy
+            ? "Launching..."
+            : sprints.length === 0
+              ? "Disabled: No Sprint"
+              : !launchEnabled
+                ? "Disabled: No Project"
+                : !launchSprintId
+                  ? "Disabled: Select Sprint"
+                  : "Launch Container"}
         </button>
       </div>
     </div>

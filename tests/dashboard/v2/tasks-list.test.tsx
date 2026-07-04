@@ -256,7 +256,7 @@ const baseProps: any = {
         }
     });
 
-    it("keeps active stream actions visible and keyboard focusable without hover", () => {
+    it("keeps compact active stream actions accessible and keyboard focusable", () => {
         render(<ProjectDataProvider initialData={null as any}><TasksList pageData={pageData} /></ProjectDataProvider>);
 
         const stopButton = screen.getByRole("button", { name: /Stop task task-1: Test Task/i });
@@ -264,11 +264,11 @@ const baseProps: any = {
         const liveLink = screen.getByRole("link", { name: /Open live session for task task-1: Test Task/i });
 
         expect(stopButton).toBeVisible();
-        expect(stopButton).toHaveTextContent("Stop");
+        expect(stopButton).toHaveTextContent("");
         expect(configureLink).toBeVisible();
-        expect(configureLink).toHaveTextContent("Configure");
+        expect(configureLink).toHaveTextContent("");
         expect(liveLink).toBeVisible();
-        expect(liveLink).toHaveTextContent("Live");
+        expect(liveLink).toHaveTextContent("");
 
         liveLink.focus();
         expect(liveLink.className).toMatch(/focus-visible:ring-2/);
@@ -279,7 +279,6 @@ const baseProps: any = {
 
         const sprintRegion = screen.getByRole("region", { name: /Sprint One active stream. Running. 42% complete./i });
         expect(sprintRegion).toBeInTheDocument();
-        expect(sprintRegion).toHaveTextContent("Running");
         expect(screen.getByRole("progressbar", { name: /Sprint One progress/i })).toHaveAttribute("aria-valuenow", "42");
     });
 

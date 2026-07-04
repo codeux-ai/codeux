@@ -221,7 +221,7 @@ describe("SprintJiraImportModal", () => {
     });
   });
 
-  it("preserves stored special-task mode through refreshed results and emits special payloads", async () => {
+  it("keeps Jira selections linked by default and only emits special payloads after explicit mode selection", async () => {
     vi.mocked(fetchProjectEffectiveSettings).mockResolvedValue({
       settings: { jira: { defaultProject: "OPS" } },
     } as never);
@@ -288,7 +288,15 @@ describe("SprintJiraImportModal", () => {
       expect(screen.getByText("Security hardening follow-up")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /select all visible/i }));
+    fireEvent.click(screen.getByText("Security hardening follow-up"));
+    expect(screen.getByText(/1 selected issue will be imported\. 1 linked, 0 special tasks\./i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /security task/i }));
+    expect(screen.getByText(/1 selected issue will be imported\. 0 linked, 1 special task\./i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Import Jira backlog"));
+    expect(screen.getByText(/2 selected issues will be imported\. 1 linked, 1 special task\./i)).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("button", { name: /^search$/i }));
 
     await waitFor(() => {

@@ -1959,6 +1959,56 @@ describe("runSessionSyncStep", () => {
     });
   });
 
+  it("requeues cancelled quota sessions instead of leaving the task parked in QUOTA", async () => {
+    const subtasks: Subtask[] = [
+      {
+        id: "T01",
+        record_id: "task-rec-1",
+        project_id: "project-1",
+        sprint_id: "sprint-1",
+        title: "Cancelled quota retry",
+        prompt: "",
+        depends_on: [],
+        is_independent: true,
+        status: "QUOTA",
+        session_id: "quota-session",
+        session_name: "sessions/quota-session",
+        provider: "antigravity",
+      },
+    ];
+
+    const result = await runSessionSyncStep(
+      subtasks,
+      {
+        listSessions: vi.fn().mockResolvedValue({
+          sessions: [
+            {
+              id: "quota-session",
+              name: "sessions/quota-session",
+              title: "Sprint 1: [run:my-repo/s1/t01] [T01] Cancelled quota retry",
+              state: "CANCELLED",
+              provider: "antigravity",
+            },
+          ],
+        }),
+        resolveSessionName: (session: { name?: string }) => session.name,
+        extractSessionId: (session: { id?: string }) => session.id,
+        fetchRecentActivities: vi.fn().mockResolvedValue([]),
+        isActionRequiredState: vi.fn().mockReturnValue(false),
+        logger: { warn: vi.fn() },
+      } as any,
+      true,
+      { repoPath: "/tmp/my-repo", sprintNumber: 1 },
+    );
+
+    expect(result.subtasks[0]).toMatchObject({
+      status: "PENDING",
+      provider: "antigravity",
+    });
+    expect(result.subtasks[0]?.session_id).toBeUndefined();
+    expect(result.subtasks[0]?.session_state).toBeUndefined();
+  });
+
   it("requeues quota sessions with missing cooldown metadata even when failed-task retries are disabled", async () => {
     const subtasks: Subtask[] = [
       {

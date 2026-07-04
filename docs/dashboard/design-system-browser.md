@@ -14,6 +14,7 @@ The browser workbench is a premium, specialized surface inside the Code UX dashb
 ## Disabled States
 - Disabled buttons, inputs, and actions should primarily use `disabled:cursor-not-allowed disabled:opacity-50` rather than substituting entire background colors, keeping the design cleaner and indicating the action is structurally there but currently unavailable.
 - In `PreviewWindowChrome` address bar inputs: ensure disabled states retain the core styling but apply `opacity-50` to signal the state visually without implying a broken UI.
+- Disabled preview controls must keep their accessible names stable and expose the unavailable reason through visible status copy, `title`, or helper text when the reason is not obvious from the current session state.
 
 ## Layout and Sizing
 - Avoid fixed heights on dynamic content areas like textareas. Use `min-h-[Xrem] w-full` where applicable to ensure contents fit flexibly without breaking layout.
@@ -25,3 +26,9 @@ The browser workbench is a premium, specialized surface inside the Code UX dashb
 - **Stopped:** `slate-500`
 - **Error / Unreachable:** `status-red`
 - **Starting / Building:** `ember-500` or `amber-400`
+
+## Interaction And Feedback
+
+- Browser chrome, session rails, file viewers, and diff viewers use `controlFeedback` for local controls, `enterExit` for window/session state changes, and `asyncFeedback` for loading, unavailable, or failed operations.
+- Loading and empty file/diff states use polite `role="status"` regions; read or diff failures use `role="alert"`. Reduced motion must keep the visible loading, empty, unavailable, and error text even when spinner or window movement is removed.
+- Session and address controls must stay keyboard reachable without hover-only disclosure. Stale preview data should remain visible with a polite refresh/status message when a previous session snapshot exists.

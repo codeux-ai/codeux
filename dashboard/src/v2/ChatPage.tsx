@@ -28,6 +28,7 @@ import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 import { ProviderLogo } from "./components/ui/ProviderLogo.js";
 import { AgentAvatarSvg } from "./components/agents/AgentAvatarSvg.js";
 import { generateRandomAgentAvatar } from "./lib/agent-avatar.js";
+import { formatInvocationRetryAt } from "./lib/invocation-retry-time.js";
 import type { ExecutionInvocationRecord } from "./types.js";
 import { cancelExecutionInvocation, restartExecutionInvocation, type InvocationRestartMode } from "./lib/invocation-api.js";
 import { useActionFeedback } from "./hooks/use-action-feedback.js";
@@ -114,9 +115,14 @@ export const ChatPage: FunctionComponent = () => {
 
   const effectiveSettings = useProjectEffectiveSettings(selectedProject?.id ?? null);
   const sprintKeyPrefix = effectiveSettings.data?.settings?.git?.sprintKeyPrefix || "SPR";
+  const projectThreads = useMemo(() => threads.filter((thread) => thread.scope === "project"), [threads]);
+  const runningInvocationCount = useMemo(
+    () => invocations.filter((invocation) => invocation.status === "running" || invocation.id.startsWith("optimistic:")).length,
+    [invocations],
+  );
 
   const handleRestartInvocation = useCallback(async (mode: InvocationRestartMode = "retry_full_prompt") => {
-    if (!selectedInvocation || selectedInvocation.status !== "failed") {
+    if (!selectedInvocation || selectedInvocation.status !== "failed" || restartingInvocation || cancellingInvocationId) {
       return;
     }
     setRestartingInvocation({ id: selectedInvocation.id, mode });
@@ -137,10 +143,10 @@ export const ChatPage: FunctionComponent = () => {
     } finally {
       setRestartingInvocation(null);
     }
-  }, [activateInvocation, invocationFeedback, refreshThreads, selectedInvocation]);
+  }, [activateInvocation, cancellingInvocationId, invocationFeedback, refreshThreads, restartingInvocation, selectedInvocation]);
 
   const handleCancelInvocation = useCallback(async () => {
-    if (!selectedInvocation || selectedInvocation.status !== "running") {
+    if (!selectedInvocation || selectedInvocation.status !== "running" || cancellingInvocationId || restartingInvocation) {
       return;
     }
     setCancellingInvocationId(selectedInvocation.id);
@@ -159,7 +165,7 @@ export const ChatPage: FunctionComponent = () => {
     } finally {
       setCancellingInvocationId(null);
     }
-  }, [activateInvocation, invocationFeedback, refreshThreads, selectedInvocation]);
+  }, [activateInvocation, cancellingInvocationId, invocationFeedback, refreshThreads, restartingInvocation, selectedInvocation]);
 
   const requestRestartInvocation = useCallback(async (mode: InvocationRestartMode) => {
     if (!selectedInvocation || selectedInvocation.status !== "failed") {
@@ -278,19 +284,19 @@ export const ChatPage: FunctionComponent = () => {
       return (
         <ChatRail
           title="Threads"
-          count={threads.filter((t) => t.scope === "project").length}
+          count={projectThreads.length}
           secondaryTitle="Listeners"
           secondaryCount={connections.length}
         >
           {threadsLoading ? (
             <LoadingChat label="Loading threads" />
-          ) : threads.filter((t) => t.scope === "project").length === 0 ? (
+          ) : projectThreads.length === 0 ? (
             <ChatRailPlaceholder
               message="Fresh installs start with a quiet rail. Create the first thread and Code UX will keep routing, pending replies, and history organized here."
             />
           ) : (
             <ThreadListCard
-              threads={threads.filter((t) => t.scope === "project")}
+              threads={projectThreads}
               selectedThreadId={selectedThreadId}
               onSelect={(threadId) => {
                 const preferredThread = threadIndex.get(threadId) || null;
@@ -456,7 +462,8 @@ export const ChatPage: FunctionComponent = () => {
                   {error ? `Failed: ${error}` : ""}
                 </div>
                 <button
-                  aria-label="Send message"
+                  aria-label={sending ? "Sending message" : "Send message"}
+                  aria-busy={sending}
                   type="button"
                   onClick={() => void handleSend()}
                   disabled={!selectedProject || !input.trim() || sending}
@@ -468,7 +475,7 @@ export const ChatPage: FunctionComponent = () => {
                         : "bg-signal-500 text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] hover:bg-signal-400 hover:scale-105 active:scale-95"
                   }`}
                 >
-                  {sending ? <RefreshCw className="h-4 w-4 animate-spin text-void-900/70" /> : <ArrowUp className="h-5 w-5" strokeWidth={2.5} />}
+                  {sending ? <RefreshCw className="h-4 w-4 animate-spin text-void-900/70 motion-reduce:animate-none" /> : <ArrowUp className="h-5 w-5" strokeWidth={2.5} />}
                 </button>
               </div>
             </div>
@@ -493,6 +500,7 @@ export const ChatPage: FunctionComponent = () => {
       : null;
     const headerDuration = inv ? formatInvocationDuration(inv.startedAt || inv.createdAt, inv.finishedAt) : null;
     const headerTotalTokens = inv ? (inv.totalTokens ?? ((inv.inputTokens ?? 0) + (inv.outputTokens ?? 0))) : 0;
+    const retryAtLabel = formatInvocationRetryAt(inv?.lastRetryAfterIso);
     const headerStats: Array<{ label: string; value: ComponentChildren; tone?: string }> = [];
     if (inv && headerStatus) {
       headerStats.push({
@@ -567,10 +575,12 @@ export const ChatPage: FunctionComponent = () => {
                         type="button"
                         onClick={() => void requestCancelInvocation()}
                         disabled={cancellingInvocationId === inv.id}
+                        aria-busy={cancellingInvocationId === inv.id}
+                        aria-label={cancellingInvocationId === inv.id ? "Cancelling invocation" : "Cancel invocation"}
                         className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-status-red/25 bg-status-red/10 px-3 py-2 text-[12px] font-bold text-status-red transition hover:border-status-red/40 hover:bg-status-red/15 disabled:cursor-wait disabled:opacity-60"
                       >
-                        <Ban className={`h-3.5 w-3.5 ${cancellingInvocationId === inv.id ? "animate-pulse" : ""}`} />
-                        Cancel
+                        <Ban className={`h-3.5 w-3.5 ${cancellingInvocationId === inv.id ? "animate-pulse motion-reduce:animate-none" : ""}`} />
+                        {cancellingInvocationId === inv.id ? "Cancelling..." : "Cancel"}
                       </button>
                     )}
                     {canRestartInvocation && (
@@ -579,19 +589,23 @@ export const ChatPage: FunctionComponent = () => {
                       type="button"
                       onClick={() => void requestRestartInvocation("retry_full_prompt")}
                       disabled={restartingInvocation?.id === inv.id}
+                      aria-busy={restartingInvocation?.id === inv.id && restartingInvocation.mode === "retry_full_prompt"}
+                      aria-label={restartingInvocation?.id === inv.id && restartingInvocation.mode === "retry_full_prompt" ? "Restarting invocation" : "Restart invocation"}
                       className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-status-amber/25 bg-status-amber/10 px-3 py-2 text-[12px] font-bold text-status-amber transition hover:border-status-amber/40 hover:bg-status-amber/15 disabled:cursor-wait disabled:opacity-60"
                     >
-                      <RefreshCw className={`h-3.5 w-3.5 ${restartingInvocation?.id === inv.id && restartingInvocation.mode === "retry_full_prompt" ? "animate-spin" : ""}`} />
-                      Restart
+                      <RefreshCw className={`h-3.5 w-3.5 ${restartingInvocation?.id === inv.id && restartingInvocation.mode === "retry_full_prompt" ? "animate-spin motion-reduce:animate-none" : ""}`} />
+                      {restartingInvocation?.id === inv.id && restartingInvocation.mode === "retry_full_prompt" ? "Restarting..." : "Restart"}
                     </button>
                     <button
                       type="button"
                       onClick={() => void requestRestartInvocation("continue_session")}
                       disabled={restartingInvocation?.id === inv.id}
+                      aria-busy={restartingInvocation?.id === inv.id && restartingInvocation.mode === "continue_session"}
+                      aria-label={restartingInvocation?.id === inv.id && restartingInvocation.mode === "continue_session" ? "Continuing invocation" : "Continue invocation"}
                       className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-signal-500/25 bg-signal-500/10 px-3 py-2 text-[12px] font-bold text-signal-700 transition hover:border-signal-500/40 hover:bg-signal-500/15 disabled:cursor-wait disabled:opacity-60 dark:text-signal-400"
                     >
-                      <RefreshCw className={`h-3.5 w-3.5 ${restartingInvocation?.id === inv.id && restartingInvocation.mode === "continue_session" ? "animate-spin" : ""}`} />
-                      Continue
+                      <RefreshCw className={`h-3.5 w-3.5 ${restartingInvocation?.id === inv.id && restartingInvocation.mode === "continue_session" ? "animate-spin motion-reduce:animate-none" : ""}`} />
+                      {restartingInvocation?.id === inv.id && restartingInvocation.mode === "continue_session" ? "Continuing..." : "Continue"}
                     </button>
                       </>
                     )}
@@ -647,7 +661,12 @@ export const ChatPage: FunctionComponent = () => {
               {selectedInvocation?.lastErrorMessage && (
                 <div className="mt-3 max-w-2xl text-sm leading-relaxed text-status-amber">
                   {selectedInvocation.lastErrorMessage}
-                  {selectedInvocation.lastRetryAfterIso && ` Retry at ${selectedInvocation.lastRetryAfterIso}.`}
+                  {retryAtLabel && ` Retry at ${retryAtLabel}.`}
+                  {canRestartInvocation && (
+                    <span className="ml-1 font-medium text-status-amber/90">
+                      Restart or continue is available.
+                    </span>
+                  )}
                 </div>
               )}
 
@@ -663,17 +682,22 @@ export const ChatPage: FunctionComponent = () => {
 
         <div id="chat-panel" role="tabpanel" aria-labelledby="tab-invocations" className="flex-1 min-h-0 flex flex-col overflow-y-auto">
           <div role="log" aria-label="Message history" aria-live={messages.length > 0 && !threadsLoading && !threadMessagesLoading ? "polite" : "off"} aria-atomic="false" aria-relevant="additions" ref={messagesRef} className="flex-1 min-h-0 space-y-6 px-6 py-6">
-          {invocationsLoading ? (
+          {invocationsLoading && !selectedInvocation ? (
             <LoadingChat label="Loading invocations" />
           ) : !selectedInvocation ? (
             <EmptyChat
               tone="invocations"
               message="Select an execution invocation to inspect the exact runtime transcript, retry state, and provider response trail."
             />
-          ) : invocationMessagesLoading ? (
+          ) : invocationMessagesLoading && invocationMessages.length === 0 ? (
             <LoadingChat label="Loading messages" />
           ) : (
             <>
+              {invocationMessagesLoading && invocationMessages.length > 0 && (
+                <div role="status" aria-live="polite" className="rounded-xl border border-black/[0.06] bg-white/75 px-3 py-2 text-xs font-medium text-slate-500 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+                  Refreshing transcript while keeping the current messages visible.
+                </div>
+              )}
               <InvocationRoutingWidget
                 provider={selectedInvocation.provider}
                 model={selectedInvocation.model}
@@ -741,6 +765,9 @@ export const ChatPage: FunctionComponent = () => {
         onSetChatMode={setChatMode}
         onCreateThread={() => void createThreadForCompose()}
         pendingDashboardMessages={pendingDashboardMessages}
+        threadCount={projectThreads.length}
+        invocationCount={invocations.length}
+        runningInvocationCount={runningInvocationCount}
         error={error}
         railSlot={(
           <ChatRail title="Threads" count={0} secondaryTitle="Listeners" secondaryCount={0}>
@@ -769,6 +796,9 @@ export const ChatPage: FunctionComponent = () => {
       onSetChatMode={setChatMode}
       onCreateThread={() => void createThreadForCompose()}
       pendingDashboardMessages={pendingDashboardMessages}
+      threadCount={projectThreads.length}
+      invocationCount={invocations.length}
+      runningInvocationCount={runningInvocationCount}
       error={error}
       railSlot={renderRail()}
       detailSlot={renderDetail()}
