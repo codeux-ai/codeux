@@ -44,7 +44,7 @@ export interface SprintActionMenuProps {
 }
 
 const SectionSeparator: FunctionComponent = () => (
-  <div role="separator" className="my-1 h-px bg-black/[0.06] dark:bg-white/[0.07]" />
+  <div role="separator" className="my-1 h-px bg-[color:var(--border-hairline)]" />
 );
 
 export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
@@ -70,18 +70,9 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
   onClose,
   markCompletedIcon = "circle",
   role,
-  buttonClassName = "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2",
+  buttonClassName = "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-slate-600 transition-colors hover:bg-[color:var(--fill-muted-hover)] hover:text-slate-900 dark:text-slate-300 dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2",
 }) => {
-  const handleDeleteClassName = buttonClassName.replace(
-    /text-slate-600 transition-colors hover:bg-black\/\[0\.04\] hover:text-slate-900/,
-    "text-status-red hover:bg-status-red/10"
-  ).replace(
-    /dark:text-slate-300 dark:hover:bg-white\/\[0\.05\] dark:hover:text-white/,
-    ""
-  ).replace(
-    /focus-visible:ring-signal-500\/30/,
-    "focus-visible:ring-status-red/30"
-  );
+  const handleDeleteClassName = `${buttonClassName} !text-status-red hover:bg-status-red/10 hover:!text-status-red dark:!text-status-red dark:hover:!text-status-red focus-visible:!ring-status-red/30`;
   const disabledClassName = `${buttonClassName} disabled:cursor-not-allowed disabled:opacity-40`;
 
   const canPauseResume = Boolean(onPauseResume) && (isRunning || isPaused);
@@ -210,10 +201,15 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
           onToggleShowcase?.();
         }}
         disabled={showcaseBusy}
+        aria-busy={showcaseBusy}
         className={disabledClassName}
       >
-        <Heart className="h-3.5 w-3.5" fill={sprint.showcasePinned ? "currentColor" : "none"} strokeWidth={2.1} />
-        {sprint.showcasePinned ? "Remove" : "Add"}
+        {showcaseBusy ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.1} />
+        ) : (
+          <Heart className="h-3.5 w-3.5" fill={sprint.showcasePinned ? "currentColor" : "none"} strokeWidth={2.1} />
+        )}
+        {showcaseBusy ? "Updating..." : sprint.showcasePinned ? "Remove" : "Add"}
       </button>
 
       <SectionSeparator />

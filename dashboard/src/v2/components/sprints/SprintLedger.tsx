@@ -305,8 +305,8 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
       />
 
       <div className="min-h-[20rem] px-3 py-4 sm:px-4 lg:px-5">
-        <div className="overflow-x-auto w-full overscroll-x-contain -mx-3 px-3 sm:-mx-4 sm:px-4 lg:-mx-5 lg:px-5">
-          <div className="min-w-max">
+        <div className="w-full overscroll-x-contain -mx-3 px-3 sm:-mx-4 sm:px-4 lg:-mx-5 lg:overflow-x-auto lg:px-5">
+          <div className="min-w-0 lg:min-w-max">
             <Table caption="Sprint ledger with selection, sorting, and bulk actions.">
               <TableHeader>
             <TableCell isHeader isFirst className="w-[80px] min-w-[80px]">
@@ -315,7 +315,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
                 type="button"
                 disabled={windowedSprints.length === 0 || isAnyBulkPending}
                 onClick={handleToggleSelectAll}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-black/[0.04] hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:bg-white/[0.05] dark:hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-[color:var(--fill-muted-hover)] hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
                 title={allFilteredSelected ? "Deselect all visible sprints" : "Select all visible sprints"}
                 aria-label={allFilteredSelected ? "Deselect all visible sprints" : "Select all visible sprints"}
               >
@@ -415,8 +415,8 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
             ) : windowedSprints.length === 0 ? (
               <tr className="block lg:table-row">
                 <TableCell colSpan={9}>
-                  <div className="flex min-h-[16rem] flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-black/[0.08] bg-white/50 px-6 py-10 text-center dark:border-white/[0.08] dark:bg-white/[0.03]">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-black/[0.06] bg-white/80 text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.05]">
+                  <div className="flex min-h-[16rem] flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-[color:var(--border-hairline)] bg-[var(--surface-glass)] px-6 py-10 text-center shadow-[var(--elevation-base)]">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[color:var(--border-hairline)] bg-[color:var(--fill-muted)] text-slate-400">
                       <Inbox className="h-5 w-5" strokeWidth={2.1} />
                     </div>
                     <div aria-live="polite" className="mt-4 font-display text-xl font-bold text-slate-800 dark:text-white">

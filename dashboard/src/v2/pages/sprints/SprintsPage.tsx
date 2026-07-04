@@ -70,7 +70,7 @@ const SprintsProjectPlaceholder: FunctionComponent<{
   hasProjects: boolean;
   onAddProject: () => void;
 }> = ({ hasProjects, onAddProject }) => (
-  <div className="relative overflow-hidden rounded-[2.2rem] border border-black/[0.06] bg-white/72 p-8 shadow-[0_18px_48px_rgba(15,23,42,0.07)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/62 dark:shadow-[0_18px_48px_rgba(0,0,0,0.28)] md:p-10">
+  <div className="relative overflow-hidden rounded-[2.2rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-8 shadow-[var(--elevation-base)] backdrop-blur-2xl md:p-10">
     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_55%_at_50%_30%,rgba(0,224,160,0.09),transparent_62%)] dark:bg-[radial-gradient(ellipse_70%_55%_at_50%_30%,rgba(0,224,160,0.13),transparent_62%)]" />
     <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
       <div className="h-56 w-56 rounded-full border border-signal-500/14 animate-[ping_5.2s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
@@ -113,7 +113,7 @@ const SprintsProjectPlaceholder: FunctionComponent<{
         </div>
       </div>
 
-      <div className="relative overflow-hidden rounded-[1.7rem] border border-black/[0.06] bg-black/[0.025] p-5 dark:border-white/[0.06] dark:bg-white/[0.035]">
+      <div className="relative overflow-hidden rounded-[1.7rem] border border-[color:var(--border-hairline)] bg-[color:var(--fill-muted)] p-5 shadow-[var(--elevation-base)]">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_85%_65%_at_50%_0%,rgba(255,184,0,0.12),transparent_68%)]" />
         <div className="relative z-10 space-y-3">
           {[
@@ -123,11 +123,11 @@ const SprintsProjectPlaceholder: FunctionComponent<{
           ].map((item, index) => (
             <div
               key={item.label}
-              className="rounded-[1.15rem] border border-white/60 bg-white/72 p-4 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.04]"
+              className="rounded-[1.15rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-4 shadow-[var(--elevation-base)]"
             >
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">{item.label}</div>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[color:var(--text-metadata)]">{item.label}</div>
                   <div className={`mt-1 text-xs font-bold uppercase tracking-[0.12em] ${item.tone}`}>{item.value}</div>
                 </div>
                 <div className={`h-2.5 w-2.5 rounded-full ${index === 0 ? "bg-ember-500" : index === 1 ? "bg-signal-500" : "bg-slate-300 dark:bg-slate-600"}`}>
@@ -457,7 +457,7 @@ export const SprintsPage: FunctionComponent = () => {
             ].map(({ label, value, icon: Icon }) => (
               <div
                 key={label}
-                className="inline-flex items-center gap-3 rounded-full border border-black/[0.06] bg-white/72 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300"
+                className="inline-flex items-center gap-3 rounded-full border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--text-metadata)] shadow-[var(--elevation-base)]"
               >
                 <Icon className="h-3.5 w-3.5 text-signal-500" strokeWidth={2} />
                 {label} <span className="font-mono text-slate-700 dark:text-white">{value}</span>
@@ -468,7 +468,7 @@ export const SprintsPage: FunctionComponent = () => {
               onClick={() => setShowSprintGallery((current) => !current)}
               disabled={!selectedProject}
               aria-pressed={showSprintGallery}
-              className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/40 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-400 dark:hover:bg-white/[0.05] dark:hover:text-white"
+              className="inline-flex items-center gap-2 rounded-full border border-transparent px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--text-metadata)] transition-colors hover:border-[color:var(--border-hairline)] hover:bg-[var(--surface-glass-hover)] hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/40 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:text-white"
             >
               {showSprintGallery ? (
                 <EyeOff className="h-3.5 w-3.5 text-ember-500" strokeWidth={2.2} />
@@ -622,7 +622,7 @@ export const SprintsPage: FunctionComponent = () => {
                     className="group relative flex h-72 w-72 shrink-0 cursor-pointer items-center justify-center perspective-1000 lg:h-80 lg:w-80"
                   >
                     <div
-                      className="absolute inset-0 animate-organic border-2 border-dashed border-signal-500/25 transition-all duration-500 group-hover:border-signal-500/60"
+                      className="absolute inset-0 animate-organic border border-dashed border-signal-500/25 bg-[var(--surface-glass)] shadow-[var(--elevation-base)] backdrop-blur-md transition-all duration-500 group-hover:border-signal-500/60 group-hover:bg-[var(--surface-glass-hover)]"
                       style={{ borderRadius: "40% 60% 70% 30% / 40% 50% 60% 50%" }}
                     />
                     <div
@@ -729,7 +729,7 @@ export const SprintsPage: FunctionComponent = () => {
               </div>
             </div>
 
-            <div className="rounded-[2.2rem] border border-black/[0.06] bg-white/70 shadow-[0_12px_36px_rgba(15,23,42,0.05)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/62 dark:shadow-[0_14px_40px_rgba(0,0,0,0.22)]">
+            <div className="rounded-[2.2rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] shadow-[var(--elevation-base)] backdrop-blur-2xl">
               <SprintLedger
                 initialQuery={deepLinkSprintKey}
                 sprints={sortedSprints}
@@ -853,7 +853,7 @@ export const SprintsPage: FunctionComponent = () => {
           }}
           onClick={(event) => event.stopPropagation()}
         >
-          <div className="min-w-[11.5rem] rounded-[1.2rem] border border-black/[0.08] bg-white p-2 shadow-[0_18px_38px_rgba(15,23,42,0.18)] ring-1 ring-black/[0.03] dark:border-white/[0.08] dark:bg-void-800 dark:ring-white/[0.03]">
+          <div className="min-w-[11.5rem] rounded-[1.2rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-2 shadow-[var(--elevation-floating)] ring-1 ring-black/[0.03] backdrop-blur-2xl dark:ring-white/[0.03]">
             <SprintActionMenu
               sprint={activeRowMenuSprint}
               isCompleted={activeRowMenuSprint.status === "completed"}
@@ -891,7 +891,7 @@ export const SprintsPage: FunctionComponent = () => {
               }}
               onClose={() => setRowMenu(null)}
               markCompletedIcon="square"
-              buttonClassName="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white focus:outline-none"
+              buttonClassName="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-semibold text-slate-600 transition-colors hover:bg-[color:var(--fill-muted-hover)] hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-slate-300 dark:hover:text-white focus:outline-none"
             />
           </div>
         </div>,

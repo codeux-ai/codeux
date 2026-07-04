@@ -55,11 +55,11 @@ export const SprintLedgerHeader: FunctionComponent<SprintLedgerHeaderProps> = ({
     <div
       role="region"
       aria-label="Sprint Ledger"
-      className="relative overflow-visible border-b border-black/[0.06] px-4 py-5 dark:border-white/[0.06] sm:px-6 lg:px-7"
+      className="relative overflow-visible border-b border-[color:var(--border-hairline)] px-4 py-5 sm:px-6 lg:px-7"
     >
       <div className="relative grid gap-5 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
         <div className="min-w-0">
-          <div className="inline-flex items-center gap-2 rounded-full border border-ember-500/20 bg-ember-500/10 px-3 py-1 text-[11px] font-bold text-ember-600 dark:text-ember-400">
+          <div className="inline-flex items-center gap-2 rounded-full border border-ember-500/20 bg-ember-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-ember-600 dark:text-ember-400">
             <Heart className="h-3.5 w-3.5" strokeWidth={2.3} />
             Sprint Ledger
           </div>
@@ -80,8 +80,8 @@ export const SprintLedgerHeader: FunctionComponent<SprintLedgerHeaderProps> = ({
           ].map((item) => {
             const Icon = item.icon;
             return (
-              <div key={item.label} className="rounded-2xl border border-black/[0.06] bg-white/70 p-3 shadow-[0_10px_24px_rgba(15,23,42,0.05)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-white/[0.04]">
-                <div className={`flex items-center gap-2 text-xs font-semibold ${item.tone}`}>
+            <div key={item.label} className="rounded-2xl border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-3 shadow-[var(--elevation-base)] backdrop-blur-xl">
+                <div className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] ${item.tone}`}>
                   <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
                   {item.label}
                 </div>
@@ -101,13 +101,13 @@ export const SprintLedgerHeader: FunctionComponent<SprintLedgerHeaderProps> = ({
               value={filters.query}
               onInput={(e) => onFiltersChange({ ...filters, query: (e.target as HTMLInputElement).value })}
               placeholder="Search sprints…"
-              className="h-12 w-full rounded-2xl border border-black/[0.08] bg-white/85 pl-11 pr-11 text-sm text-slate-800 shadow-[0_10px_24px_rgba(15,23,42,0.04)] placeholder:text-slate-400 focus:border-signal-500/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/20 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-white dark:placeholder:text-slate-500"
+              className="h-12 w-full rounded-2xl border border-[color:var(--border-hairline)] bg-[color:var(--fill-muted)] pl-11 pr-11 text-sm text-slate-800 shadow-[var(--elevation-base)] placeholder:text-slate-400 focus:border-signal-500/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/20 dark:text-white dark:placeholder:text-slate-500"
             />
             {filters.query && (
               <button
                 type="button"
                 onClick={() => onFiltersChange({ ...filters, query: "" })}
-                className="absolute right-3.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-black/[0.04] hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
+                className="absolute right-3.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-[color:var(--fill-muted-hover)] hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
                 title="Clear search" aria-label="Clear search"
               >
                 <X className="h-3.5 w-3.5" strokeWidth={2.2} />
@@ -120,7 +120,7 @@ export const SprintLedgerHeader: FunctionComponent<SprintLedgerHeaderProps> = ({
               onChange={onListWindowChange}
               label="Show"
             />
-            <span className="rounded-full border border-black/[0.06] bg-white/70 px-3 py-1.5 font-mono text-xs text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400" aria-live="polite" aria-atomic="true" aria-label={`Showing ${ledgerSprintsCount} of ${sprintsCount} sprints`}>
+            <span className="rounded-full border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] px-3 py-1.5 font-mono text-xs text-[color:var(--text-metadata)] shadow-[var(--elevation-base)]" aria-live="polite" aria-atomic="true" aria-label={`Showing ${ledgerSprintsCount} of ${sprintsCount} sprints`}>
               {ledgerSprintsCount} / {sprintsCount}
             </span>
             {hasFilters ? (

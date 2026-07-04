@@ -51,9 +51,9 @@ const statusMap: Record<SprintStatus, {
 };
 
 const ATTENTION_OVERRIDE_MAP: Partial<Record<string, { label: string; text: string; accentHex: string }>> = {
-  merge_required: { label: "Merge", text: "text-purple-600 dark:text-purple-400", accentHex: "#A855F7" },
+  merge_required: { label: "Merge", text: "text-ember-600 dark:text-ember-400", accentHex: "#FFB800" },
   merge_conflict: { label: "Conflict", text: "text-status-red", accentHex: "#E3000F" },
-  ci_fix_required: { label: "CI", text: "text-blue-600 dark:text-blue-400", accentHex: "#3B82F6" },
+  ci_fix_required: { label: "CI", text: "text-signal-600 dark:text-signal-300", accentHex: "#00E0A0" },
 };
 
 interface SprintCellProps {
@@ -140,8 +140,8 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
     effectiveAccentHex = "#F59E0B";
     StatusIcon = Activity;
   } else if (effectiveLabel === "Merge") {
-    effectiveTextTone = "text-purple-600 dark:text-purple-400";
-    effectiveAccentHex = "#A855F7";
+    effectiveTextTone = "text-ember-600 dark:text-ember-400";
+    effectiveAccentHex = "#FFB800";
     StatusIcon = Activity;
   } else if (effectiveLabel === "Merge Conflict") {
     effectiveTextTone = "text-status-red";
@@ -198,12 +198,12 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
       className={`group relative flex h-72 w-72 shrink-0 cursor-pointer items-center justify-center perspective-1000 lg:h-80 lg:w-80 transition-[box-shadow,transform] duration-150 [@media(hover:hover)]:hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)] [@media(hover:hover)]:hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:transform-none`}
     >
       <div
-        className={`pointer-events-none absolute inset-0 rounded-[1.75rem] shadow-[0_24px_48px_rgba(0,0,0,0.07)] transition-all duration-700 dark:shadow-[0_24px_48px_rgba(0,0,0,0.5)] ${animationClass} ${isCompleted ? "opacity-80" : ""}`}
+        className={`pointer-events-none absolute inset-0 rounded-[1.75rem] shadow-[var(--elevation-base)] transition-all duration-700 ${animationClass} ${isCompleted ? "opacity-80" : ""}`}
 
       />
 
       <div
-        className={`absolute inset-0 rounded-[1.75rem] overflow-hidden border border-white/70 backdrop-blur-md transition-all duration-700 transform-gpu dark:border-white/[0.06] ${animationClass} ${isCompleted ? "opacity-80" : ""} ${isRunning ? "bg-white/72 dark:bg-void-800/82" : "bg-white/55 dark:bg-void-800/65"}`}
+        className={`absolute inset-0 rounded-[1.75rem] overflow-hidden border border-[color:var(--border-hairline)] backdrop-blur-md transition-all duration-700 transform-gpu ${animationClass} ${isCompleted ? "opacity-80" : ""} ${isRunning ? "bg-[var(--surface-glass-hover)]" : "bg-[var(--surface-glass)]"}`}
         style={{
 
           WebkitMaskImage: "-webkit-radial-gradient(white, black)",
@@ -222,14 +222,12 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
             zIndex: 10,
           }}
         >
-          {/* High-fidelity outer accent border */}
           <div
             className="absolute inset-0 rounded-[inherit] border border-status-green/50 dark:mix-blend-screen"
             style={{
               borderColor: `${effectiveAccentHex}70`,
             }}
           />
-          {/* Breathtaking ambient breathing glow */}
           <div
             className="absolute inset-0 rounded-[inherit] animate-[pulse_3.5s_ease-in-out_infinite]"
             style={{
@@ -247,7 +245,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
           }}
         >
           <div
-            className="absolute inset-0 rounded-[inherit] border-2 border-blue-400/55"
+            className="absolute inset-0 rounded-[inherit] border-2 border-signal-500/45"
           />
         </div>
       )}
@@ -286,7 +284,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
           </div>
         )}
 
-        <div className={`inline-flex items-center gap-1.5 rounded-full border border-black/[0.06] bg-black/[0.03] px-4 py-1.5 font-mono text-[11px] font-bold tracking-[0.14em] transition-transform duration-300 group-hover:-translate-y-3 dark:border-white/[0.06] dark:bg-white/[0.03] ${accentColor}`}>
+        <div className={`inline-flex items-center gap-1.5 rounded-full border border-[color:var(--border-hairline)] bg-[color:var(--fill-muted)] px-4 py-1.5 font-mono text-[11px] font-bold tracking-[0.14em] transition-transform duration-300 group-hover:-translate-y-3 ${accentColor}`}>
           <Sparkles className="h-3.5 w-3.5" strokeWidth={2.2} />
           {formatSprintKey(sprint, sprintKeyPrefix)}
         </div>
@@ -300,12 +298,12 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
         <div className="mt-6 flex items-center justify-center gap-7 text-center transition-transform duration-300 group-hover:-translate-y-3">
           <div className="flex flex-col items-center">
             <div className="font-mono text-[2rem] font-black text-[var(--text-primary)]">{sprint.tasksCount}</div>
-            <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Tasks</div>
+            <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--text-metadata)]">Tasks</div>
           </div>
           <div className="h-10 w-px bg-black/[0.08] dark:bg-white/[0.08]" />
           <div className="flex flex-col items-center">
             <div className="font-mono text-[2rem] font-black text-[var(--text-primary)]">{sprint.completion}%</div>
-            <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Done</div>
+            <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[color:var(--text-metadata)]">Done</div>
           </div>
         </div>
 
@@ -373,7 +371,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
                 onClose={() => setMenuOpen(false)}
                 markCompletedIcon="circle"
                 role="menuitem"
-                buttonClassName="flex w-full items-center gap-2 rounded-[1rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
+                buttonClassName="flex w-full items-center gap-2 rounded-[1rem] px-3 py-2 text-left text-xs font-semibold text-slate-600 transition-colors hover:bg-[color:var(--fill-muted-hover)] hover:text-slate-900 dark:text-slate-300 dark:hover:text-white focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
               />
             }
           >

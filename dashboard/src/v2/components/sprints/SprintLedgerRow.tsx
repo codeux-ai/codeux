@@ -43,7 +43,7 @@ const STATUS_BADGE_TONES: Record<SprintStatus, string> = {
 
 const ATTENTION_BADGE_OVERRIDES: Partial<Record<string, { tone: string; label: string }>> = {
   merge_required: {
-    tone: "border-purple-500/25 bg-purple-500/10 text-purple-600 dark:text-purple-300",
+    tone: "border-ember-500/25 bg-ember-500/10 text-ember-600 dark:text-ember-400",
     label: "Merge",
   },
   merge_conflict: {
@@ -51,7 +51,7 @@ const ATTENTION_BADGE_OVERRIDES: Partial<Record<string, { tone: string; label: s
     label: "Conflict",
   },
   ci_fix_required: {
-    tone: "border-blue-500/25 bg-blue-500/10 text-blue-600 dark:text-blue-300",
+    tone: "border-signal-500/25 bg-signal-500/10 text-signal-700 dark:text-signal-300",
     label: "CI",
   },
 };
@@ -177,15 +177,15 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   const ease = INTERACTION_TOKENS.selectionMovement.ease;
 
   const rowTone = isSelected
-    ? "border-signal-500/35 bg-signal-500/[0.08] shadow-[0_18px_44px_rgba(0,224,160,0.12)]"
+    ? "border-signal-500/45 bg-signal-500/[0.07] shadow-[0_18px_44px_rgba(0,224,160,0.12)] ring-1 ring-inset ring-signal-500/25"
     : isEven
-      ? "border-black/[0.06] bg-white/80 dark:border-white/[0.07] dark:bg-white/[0.045]"
-      : "border-black/[0.06] bg-slate-50/80 dark:border-white/[0.07] dark:bg-white/[0.03]";
+      ? "border-[color:var(--border-hairline)] bg-[var(--surface-glass)]"
+      : "border-[color:var(--border-hairline)] bg-[color:var(--fill-muted)]";
   const desktopCellTone = isSelected
-    ? "lg:border-signal-500/25 lg:bg-signal-500/[0.08]"
+    ? "lg:border-signal-500/25 lg:bg-signal-500/[0.07]"
     : isEven
-      ? "lg:border-black/[0.06] lg:bg-white/80 dark:lg:border-white/[0.07] dark:lg:bg-white/[0.045]"
-      : "lg:border-black/[0.06] lg:bg-slate-50/80 dark:lg:border-white/[0.07] dark:lg:bg-white/[0.03]";
+      ? "lg:border-[color:var(--border-hairline)] lg:bg-[var(--surface-glass)]"
+      : "lg:border-[color:var(--border-hairline)] lg:bg-[color:var(--fill-muted)]";
   const progressTone = PROGRESS_TONES[sprint.status];
 
   const attentionOverride = humanIntervention?.attentionType
@@ -198,7 +198,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   if (badgeLabel === "QA") {
     badgeTone = "border-status-amber/25 bg-status-amber/10 text-status-amber";
   } else if (badgeLabel === "Merge") {
-    badgeTone = "border-purple-500/25 bg-purple-500/10 text-purple-600 dark:text-purple-300";
+    badgeTone = "border-ember-500/25 bg-ember-500/10 text-ember-600 dark:text-ember-400";
   } else if (badgeLabel === "Merge Conflict") {
     badgeTone = "border-status-red/25 bg-status-red/10 text-status-red";
   } else if (attentionOverride) {
@@ -216,8 +216,9 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
 
   return (
     <TableRow
+      selected={isSelected}
       aria-busy={isRowPending || isTogglePending || isPauseResumePending}
-      className={`group transition-all focus-within:ring-2 focus-within:ring-signal-500/20 ${rowTone} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""} ${pendingRowClass} hover:bg-[var(--bg-hover-subtle)] transition-[box-shadow,transform] duration-150 [@media(hover:hover)]:hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)] [@media(hover:hover)]:hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:transform-none`}
+      className={`group relative transition-all focus-within:ring-2 focus-within:ring-signal-500/20 lg:before:absolute lg:before:left-0 lg:before:top-3 lg:before:h-[calc(100%-1.5rem)] lg:before:w-1 lg:before:rounded-full ${isSelected ? "lg:before:bg-signal-500" : "lg:before:bg-transparent"} ${rowTone} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""} ${pendingRowClass} hover:bg-[var(--fill-muted-hover)] transition-[box-shadow,transform] duration-150 [@media(hover:hover)]:hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)] [@media(hover:hover)]:hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:transform-none`}
       style={{ transitionDuration: typeof duration === 'number' ? `${duration}s` : duration, transitionTimingFunction: ease }}
     >
       <TableCell isFirst className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`} mobileLabel="Select">
@@ -225,7 +226,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           type="button"
           onClick={() => onToggleRow(sprint.id)}
           disabled={isDeletePending || isAnyBulkPending}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-black/[0.06] bg-white/72 text-slate-400 transition-colors hover:border-signal-500/25 hover:text-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.07] dark:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
+          className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed disabled:opacity-50 ${isSelected ? "border-signal-500/35 bg-signal-500/10 text-signal-600 dark:text-signal-300" : "border-[color:var(--border-hairline)] bg-[var(--surface-glass)] text-slate-400 hover:border-signal-500/25 hover:text-signal-500"}`}
           title={isDeletePending ? "Wait for the current action to finish" : isSelected ? "Deselect sprint" : "Select sprint"}
           aria-label={isDeletePending ? `Cannot select sprint ${sprint.name} while deleting` : isSelected ? `Deselect sprint ${sprint.name}` : `Select sprint ${sprint.name}`}
         >
@@ -242,7 +243,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl border transition-all focus-visible:ring-2 focus-visible:ring-signal-500/30 ${
             sprint.showcasePinned
               ? "border-status-red/20 bg-status-red/10 text-status-red shadow-[0_8px_20px_rgba(239,68,68,0.10)]"
-              : "border-black/[0.06] bg-white/70 text-slate-400 hover:border-status-red/20 hover:text-status-red dark:border-white/[0.07] dark:bg-white/[0.04]"
+              : "border-[color:var(--border-hairline)] bg-[var(--surface-glass)] text-slate-400 hover:border-status-red/20 hover:text-status-red"
           } disabled:cursor-not-allowed disabled:opacity-50`}
           title={sprint.showcasePinned ? "Remove from showcase" : "Pin to showcase"}
           aria-label={sprint.showcasePinned ? `Remove sprint ${sprint.name} from showcase` : `Pin sprint ${sprint.name} to showcase`}
@@ -267,12 +268,12 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
             <SprintReviewBadge summary={sprint.latestReview} compact align="left" />
           )}
         </div>
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-mono text-slate-400">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.05] bg-black/[0.025] px-2 py-1 dark:border-white/[0.06] dark:bg-white/[0.03]">
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-mono text-[color:var(--text-metadata)]">
+          <span className="inline-flex items-center gap-1.5">
             <Calendar className="h-3 w-3" strokeWidth={2.1} />
             Updated {formatMetaDate(sprint.updatedAt)}
           </span>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.05] bg-black/[0.025] px-2 py-1 dark:border-white/[0.06] dark:bg-white/[0.03]">
+          <span className="inline-flex items-center gap-1.5">
             Created {formatTableDate(sprint.createdAt)} <span className="ml-1 font-mono text-[10px] text-slate-400">{formatTableTime(sprint.createdAt)}</span>
           </span>
         </div>
@@ -313,7 +314,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
               <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.2} /> {sprint.status === "paused" ? "Resuming" : "Pausing"}
             </span>
           ) : (
-            <span className={`inline-flex rounded-full border px-4 py-1.5 text-[11px] font-bold ${badgeTone}`}>
+            <span className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] ${badgeTone}`}>
               {badgeLabel}
             </span>
           )}
@@ -326,13 +327,13 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           </div>
           <div>
             <div className="font-mono text-lg font-bold text-[var(--text-primary)]">{sprint.tasksCount}</div>
-            <div className="text-[11px] text-slate-400">planned tasks</div>
+            <div className="text-[11px] text-[color:var(--text-metadata)]">planned tasks</div>
           </div>
         </div>
       </TableCell>
       <TableCell align="right" className={`min-w-[12rem] lg:w-[140px] lg:min-w-[140px] ${desktopCellTone}`} mobileLabel="Completion">
-        <div className="flex items-center justify-end gap-3">
-          <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-black/10 ring-1 ring-black/[0.03] dark:bg-white/[0.08] dark:ring-white/[0.04]">
+        <div className="flex min-w-0 items-center justify-end gap-3">
+          <div className="h-2 flex-1 overflow-hidden rounded-full bg-[color:var(--fill-muted-hover)] ring-1 ring-[color:var(--border-hairline)]">
             <div
               className={`h-full rounded-full bg-gradient-to-r ${progressTone} transition-[width] duration-500 ease-out`}
               style={{ width: `${sprint.completion}%` }}
@@ -346,7 +347,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           {formatTableDate(sprint.createdAt)}
           <span className="ml-1.5 font-mono text-[10px] text-slate-400">{formatTableTime(sprint.createdAt)}</span>
         </div>
-        <div className="mt-1 text-[11px] text-slate-400">created</div>
+        <div className="mt-1 text-[11px] text-[color:var(--text-metadata)]">created</div>
         <div className="mt-1.5 inline-flex items-center gap-1">
           {sprint.latestReview?.status === 'running' ? (
             <>
@@ -377,7 +378,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           <a
             href={`/tasks?sprintId=${encodeURIComponent(sprint.id)}`}
             aria-label={`Open sprint ${sprint.name}`}
-            className="inline-flex h-10 min-w-[5rem] flex-1 items-center justify-center gap-2 rounded-xl border border-black/[0.06] bg-white/80 px-4 text-xs font-bold text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white sm:flex-none"
+            className="inline-flex h-9 min-w-[5rem] flex-1 items-center justify-center gap-2 rounded-xl border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] px-4 text-xs font-bold text-slate-600 shadow-[var(--elevation-base)] transition-colors hover:bg-[var(--surface-glass-hover)] hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:text-slate-300 dark:hover:text-white sm:flex-none"
           >
             Open
             <Maximize2 className="h-3.5 w-3.5" />
@@ -387,7 +388,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
               type="button"
               disabled={isDeletePending}
               onClick={(e) => onOpenRowMenu(e, sprint.id)}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-black/[0.06] bg-white/80 text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] text-slate-600 shadow-[var(--elevation-base)] transition-colors hover:bg-[var(--surface-glass-hover)] hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:text-slate-300 dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
               title="Open sprint actions" aria-label={`Open actions menu for sprint ${sprint.name}`}
             >
               {isDeletePending ? (
@@ -419,7 +420,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
                   onClose={() => setMenuOpen(false)}
                   markCompletedIcon="square"
                   role="menuitem"
-                  buttonClassName="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white focus:outline-none"
+                  buttonClassName="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-slate-600 transition-colors hover:bg-[color:var(--fill-muted-hover)] hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-slate-300 dark:hover:text-white focus:outline-none"
                 />
               }
             >
@@ -428,7 +429,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
                 disabled={isDeletePending}
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-black/[0.06] bg-white/80 text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] text-slate-600 shadow-[var(--elevation-base)] transition-colors hover:bg-[var(--surface-glass-hover)] hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:text-slate-300 dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                 title="Open sprint actions" aria-label={`Open actions menu for sprint ${sprint.name}`}
               >
                 {isDeletePending ? (
