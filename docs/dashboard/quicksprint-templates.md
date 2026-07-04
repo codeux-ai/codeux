@@ -60,7 +60,7 @@ The browse panel renders templates as a horizontally scrollable rail so large ca
 
 The rail exposes left and right controls for page-style scrolling. These controls move the rail contents without changing the selected template or interfering with keyboard focus. Horizontal wheel, trackpad, and touch movement can still scroll the rail directly. Vertical wheel movement over the rail is forwarded to the surrounding dashboard page scroller, so the composer never traps normal page scrolling.
 
-Template selection, back navigation, and template editor entry keep the operator's context visible. Browse and configure views move focus to their heading when they appear, selected templates keep a static selected cue when returning to browse, and phase changes are announced through a polite status region instead of relying on motion alone.
+Template selection, back navigation, template editor entry, and delete decisions keep the operator's context visible. Browse and configure views move focus to their heading when they appear, selected templates keep a static selected cue when returning to browse, destructive template deletion opens the shared confirmation dialog instead of a browser-native prompt, and phase changes are announced through a polite status region instead of relying on motion alone.
 
 This browse-slider treatment only changes how templates are discovered and selected. Template execution still uses the same quicksprint planning flow, subtask-count controls, and `Plan Only` / `Plan & Start` behavior as before.
 
@@ -68,7 +68,9 @@ The execution sidebar now lets operators raise the subtask count up to 30 or swi
 
 The combined prompt preview is a real expandable region tied to its trigger with `aria-expanded` and `aria-controls`. It uses stable max-height behavior, keeps the prompt text selectable and scrollable when expanded, and shows a non-animation selected/open cue so reduced-motion users receive the same state information.
 
-During quicksprint planning, route/model selectors, prompt edits, task controls, back navigation, and competing submit actions are disabled until the active request finishes or is cancelled. The sidebar and planning overlay both expose pending state, elapsed time, ETA/progress feedback, and cancellation controls; cancellation is announced as operator-requested warning feedback while preserving the existing execution semantics.
+During quicksprint planning, route/model selectors, prompt edits, task controls, back navigation, and competing submit actions are disabled until the active request finishes or is cancelled. The sidebar and planning overlay both expose pending state, elapsed time, ETA/progress feedback, and cancellation controls; cancellation and starting a fresh quicksprint are announced as operator-requested feedback while preserving the existing execution semantics.
+
+The template editor's icon and color pickers use the dashboard interaction tokens for open, selection, and control feedback. Picker triggers and options expose stable accessible names and selected state, close with Escape or outside click, and keep static selected cues when reduced motion is enabled.
 
 Current built-in purpose set:
 - `Fullstack JS App`

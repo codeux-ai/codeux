@@ -65,6 +65,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
   const isBusy = executingMode !== null;
   const [statusMessage, setStatusMessage] = useState("");
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const pendingExecuteClickRef = useRef(false);
   const promptRegionId = selectedTemplateId ? `quicksprint-combined-prompt-${selectedTemplateId}` : "quicksprint-combined-prompt";
   const busyDescriptionId = selectedTemplateId ? `quicksprint-busy-status-${selectedTemplateId}` : "quicksprint-busy-status";
   const interactionTokens = useInteractionTokens();
@@ -90,6 +91,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
 
   useEffect(() => {
     if (!executingMode || !selectedTemplate) {
+      pendingExecuteClickRef.current = false;
       return;
     }
     const actionLabel = executingMode === "plan_and_start" ? "Plan and start" : "Plan only";
@@ -113,6 +115,26 @@ export const QuicksprintExecutionView: FunctionComponent<{
   if (!selectedTemplate) return null;
   const TemplateIcon = IconMap[selectedTemplate.icon] || Zap;
   const tagColor = selectedTemplate.categoryColor || "slate";
+  const handlePlanningExecute = (mode: "plan_only" | "plan_and_start") => {
+    if (isBusy || pendingExecuteClickRef.current) {
+      return;
+    }
+    pendingExecuteClickRef.current = true;
+    handleExecute(mode);
+  };
+  const announceCancel = () => {
+    const message = `Cancelled ${executingMode === "plan_and_start" ? "plan and start" : "plan only"} request for ${selectedTemplate.name}.`;
+    handleCancelExecute();
+    setStatusMessage(message);
+    announcePhaseStatus?.(message);
+  };
+  const announceNewQuicksprint = () => {
+    handleNewQuicksprint();
+    setPhase("browse");
+    const message = `Opened a new quicksprint while the previous ${executingMode === "plan_and_start" ? "plan and start" : "plan only"} request continues in the background.`;
+    setStatusMessage(message);
+    announcePhaseStatus?.(message);
+  };
 
   return (
     <>
@@ -321,12 +343,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
                     </p>
                     <button
                       type="button"
-                      onClick={() => {
-                        handleCancelExecute();
-                        const message = `Cancelled ${executingMode === "plan_and_start" ? "plan and start" : "plan only"} request for ${selectedTemplate.name}.`;
-                        setStatusMessage(message);
-                        announcePhaseStatus?.(message);
-                      }}
+                      onClick={announceCancel}
                       className="mt-3 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full border border-status-red/20 bg-status-red/[0.06] px-4 py-2 text-xs font-semibold text-status-red transition-colors duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] hover:bg-status-red/[0.12] motion-reduce:transition-none"
                     >
                       <X className="h-3.5 w-3.5" />
@@ -340,7 +357,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   </div>
                 )}
                 <button
-                  onClick={() => handleExecute("plan_and_start")}
+                  onClick={() => handlePlanningExecute("plan_and_start")}
                   disabled={isBusy}
                   aria-busy={executingMode === "plan_and_start" ? "true" : "false"}
                   aria-describedby={isBusy ? busyDescriptionId : undefined}
@@ -350,7 +367,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   {executingMode === "plan_and_start" ? "Planning & Starting" : "Plan & Start"}
                 </button>
                 <button
-                  onClick={() => handleExecute("plan_only")}
+                  onClick={() => handlePlanningExecute("plan_only")}
                   disabled={isBusy}
                   aria-busy={executingMode === "plan_only" ? "true" : "false"}
                   aria-describedby={isBusy ? busyDescriptionId : undefined}
@@ -375,9 +392,9 @@ export const QuicksprintExecutionView: FunctionComponent<{
           actionType="quicksprint"
           themeAccent="ember"
           onDismiss={() => setIsOverlayDismissed(true)}
-          onCancel={handleCancelExecute}
+          onCancel={announceCancel}
           secondaryActionLabel="New Quicksprint"
-          onSecondaryAction={() => { handleNewQuicksprint(); setPhase("browse"); }}
+          onSecondaryAction={announceNewQuicksprint}
         />
       )}
     </>
