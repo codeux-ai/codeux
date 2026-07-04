@@ -13,7 +13,8 @@ import type { MemoryRecord } from "../../../memory-types.js";
 expect.extend(matchers);
 
 vi.mock("../../../hooks/use-reduced-motion.js", () => ({
-    useReducedMotion: () => false
+    useReducedMotion: () => false,
+    useResolvedMotionDuration: (duration: number) => duration,
 }));
 
 vi.mock("../../../components/ui/ConfirmDialog.js", () => ({
@@ -126,7 +127,7 @@ describe("Memory batch delete", () => {
         fireEvent.click(getByRole("button", { name: "Select all visible" }));
         expect(selectedMemoryIdsSignal.value).toEqual(["memory-1", "memory-2"]);
 
-        fireEvent.click(getByRole("button", { name: "Delete selected" }));
+        fireEvent.click(getByRole("button", { name: "Delete 2 selected" }));
         expect(screen.getByRole("dialog", { name: "Delete Selected Memories" })).toBeInTheDocument();
         expect(removeMemories).not.toHaveBeenCalled();
 
@@ -136,6 +137,56 @@ describe("Memory batch delete", () => {
         });
 
         expect(getAllByRole("option")).toHaveLength(2);
+    });
+
+    test("shows pending mutation feedback while deleting selected memories", () => {
+        memoryMutationsSignal.value = {
+            ...memoryMutationsSignal.value,
+            feedback: { status: "pending", message: "Deleting 2 memories..." },
+        };
+        selectedMemoryIdsSignal.value = ["memory-1", "memory-2"];
+
+        render(
+            <MemoryList
+                nodes={[
+                    buildNode({ id: "memory-1", content: "Alpha project memory" }),
+                    buildNode({ id: "memory-2", content: "Beta project memory" }),
+                ]}
+                onSelectNode={vi.fn()}
+            />
+        );
+
+        expect(screen.getByRole("status")).toHaveTextContent("Deleting 2 memories...");
+        expect(screen.getByRole("button", { name: "Deleting..." })).toBeDisabled();
+    });
+
+    test("surfaces retry action when batch delete mutation fails", async () => {
+        const retryAction = vi.fn();
+        memoryMutationsSignal.value = {
+            ...memoryMutationsSignal.value,
+            feedback: {
+                status: "error",
+                message: "Deleted 1 memory, but 1 memory failed to delete.",
+                retryAction,
+                retryLabel: "Retry delete",
+            },
+        };
+        selectedMemoryIdsSignal.value = ["memory-2"];
+
+        render(
+            <MemoryList
+                nodes={[
+                    buildNode({ id: "memory-1", content: "Alpha project memory" }),
+                    buildNode({ id: "memory-2", content: "Beta project memory" }),
+                ]}
+                onSelectNode={vi.fn()}
+            />
+        );
+
+        const retry = await screen.findByRole("button", { name: "Retry delete" });
+        fireEvent.click(retry);
+
+        expect(retryAction).toHaveBeenCalledTimes(1);
     });
 
     test("optimistically removes selected memories and restores partial failures", async () => {
