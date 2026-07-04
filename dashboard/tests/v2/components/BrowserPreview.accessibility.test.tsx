@@ -203,7 +203,44 @@ describe("Browser Preview Accessibility", () => {
     const nextButton = screen.getByTitle("Scroll right");
     expect(nextButton).toHaveClass("focus:opacity-100");
     expect(nextButton).toHaveClass("group-focus-within:opacity-100");
-    expect(screen.getAllByLabelText("Remove preview container")[0]).toBeInTheDocument();
+    expect(screen.getAllByLabelText(/Remove preview session/i)[0]).toBeInTheDocument();
+  });
+
+  it("keeps unavailable preview links keyboard reachable with a disabled reason", () => {
+    const sessions = [
+      { id: "pending", sprintId: "1", sprintName: "Pending Sprint", status: "starting", healthStatus: "unknown", containerAppPort: 3000, hostPort: null, lastKnownPath: "/" },
+    ] as any;
+
+    render(
+      <PreviewSessionSlider sessions={sessions} selectedSessionId="pending" onSelectSession={vi.fn()} onRemoveSession={vi.fn()} />
+    );
+
+    const unavailableLink = screen.getByRole("link", { name: "Open preview session Pending Sprint unavailable" });
+    expect(unavailableLink).not.toHaveAttribute("href");
+    expect(unavailableLink).toHaveAttribute("aria-disabled", "true");
+    expect(unavailableLink).toHaveAttribute("tabindex", "0");
+    expect(unavailableLink).toHaveAccessibleDescription("Preview link unavailable until the container finishes starting and receives a routed host port.");
+  });
+
+  it("announces removal pending state on the disabled remove action", () => {
+    const sessions = [
+      { id: "removing", sprintId: "1", sprintName: "Removing Sprint", status: "running", healthStatus: "healthy", containerAppPort: 3000, hostPort: 3001, lastKnownPath: "/" },
+    ] as any;
+
+    render(
+      <PreviewSessionSlider
+        sessions={sessions}
+        selectedSessionId="removing"
+        onSelectSession={vi.fn()}
+        onRemoveSession={vi.fn()}
+        removingSessionIds={["removing"]}
+      />
+    );
+
+    const removeButton = screen.getByRole("button", { name: "Removing preview session Removing Sprint" });
+    expect(removeButton).toBeDisabled();
+    expect(removeButton).toHaveAttribute("aria-busy", "true");
+    expect(removeButton).toHaveAccessibleDescription("Preview session Removing Sprint is already being removed.");
   });
 
   it("session menu is keyboard accessible", async () => {

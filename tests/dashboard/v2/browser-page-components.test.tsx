@@ -150,9 +150,10 @@ describe("PreviewSessionSlider", () => {
     expect(screen.getByText("Selected")).toBeInTheDocument();
     expect(screen.getByText("removing session")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Selected preview session Sprint Alpha. Status Running.");
-    const removingButton = screen.getByRole("button", { name: "Remove preview session Sprint Beta" });
+    const removingButton = screen.getByRole("button", { name: "Removing preview session Sprint Beta" });
     expect(removingButton).toBeDisabled();
     expect(removingButton).toHaveAttribute("aria-busy", "true");
+    expect(removingButton).toHaveAccessibleDescription("Preview session Sprint Beta is already being removed.");
 
     fireEvent.click(removingButton);
     expect(onRemoveSession).not.toHaveBeenCalled();
@@ -200,7 +201,7 @@ describe("PreviewSessionSlider", () => {
     expect(scrollBy).toHaveBeenCalledWith({ left: 320, behavior: "auto" });
   });
 
-  it("keeps unavailable preview links out of the focusable link path", () => {
+  it("keeps unavailable preview links focusable with disabled reason text", () => {
     render(
       <PreviewSessionSlider
         sessions={[
@@ -225,7 +226,8 @@ describe("PreviewSessionSlider", () => {
     expect(unavailableLink).toBeInTheDocument();
     expect(unavailableLink).not.toHaveAttribute("href");
     expect(unavailableLink).toHaveAttribute("aria-disabled", "true");
-    expect(unavailableLink).toHaveAttribute("tabindex", "-1");
+    expect(unavailableLink).toHaveAttribute("tabindex", "0");
+    expect(unavailableLink).toHaveAccessibleDescription("Preview link unavailable until the container finishes starting and receives a routed host port.");
     expect(screen.getByText("Preview link unavailable until the container finishes starting and receives a routed host port.")).toBeInTheDocument();
   });
 });
@@ -432,7 +434,7 @@ describe("LaunchContainerPanel", () => {
     );
 
     expect(screen.getByText("Launching")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Launching preview container. Launch controls are temporarily unavailable.");
+    expect(screen.getByRole("status")).toHaveTextContent("Launching preview container for Sprint 1. Launch controls are temporarily unavailable and the selected sprint is preserved.");
     expect(screen.getByRole("combobox")).toBeDisabled();
     const button = screen.getByRole("button", { name: "Launching preview container" });
     expect(button).toBeDisabled();

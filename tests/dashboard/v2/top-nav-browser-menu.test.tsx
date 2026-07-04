@@ -366,6 +366,98 @@ describe("BrowserSessionsMenu", () => {
             fireEvent.keyDown(menu, { key: "ArrowUp" });
         });
         expect(document.activeElement).toBe(links[1]);
+
+        await act(async () => {
+            fireEvent.keyDown(menu, { key: "Home" });
+        });
+        expect(document.activeElement).toBe(links[0]);
+
+        await act(async () => {
+            fireEvent.keyDown(menu, { key: "End" });
+        });
+        expect(document.activeElement).toBe(links[1]);
+    });
+
+    it("restores trigger focus after outside click closes the menu", async () => {
+        vi.mocked(useProjectData).mockReturnValue({
+            selectedProject: null,
+        } as any);
+
+        render(
+            <div>
+                <BrowserSessionsMenu />
+                <button type="button">Outside target</button>
+            </div>
+        );
+
+        const button = screen.getByRole("button", { name: /Browser Sessions:/i });
+        fireEvent.click(button);
+
+        await waitFor(() => {
+            expect(screen.getByRole("menu")).toBeInTheDocument();
+        });
+
+        fireEvent.mouseDown(screen.getByRole("button", { name: "Outside target" }));
+
+        await waitFor(() => {
+            expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+            expect(document.activeElement).toBe(button);
+        });
+    });
+
+    it("keeps stale sessions visible while refresh is pending and downgrades refresh errors to polite status", async () => {
+        vi.mocked(useProjectData).mockReturnValue({
+            selectedProject: { id: "proj-1" },
+        } as any);
+
+        const firstSessions = [
+            {
+                id: "sess-1",
+                sprintId: "sprint-1",
+                projectId: "proj-1",
+                sprintName: "Cached preview",
+                status: "running",
+                healthStatus: "healthy",
+                containerAppPort: 3000,
+                hostPort: 8080,
+                lastKnownPath: "/"
+            }
+        ];
+        let rejectRefresh: ((error: Error) => void) | null = null;
+        vi.mocked(browserApi.fetchPreviewSessions)
+            .mockResolvedValueOnce(firstSessions as any)
+            .mockImplementationOnce(() => new Promise((_resolve, reject) => {
+                rejectRefresh = reject;
+            }));
+
+        render(<BrowserSessionsMenu />);
+
+        const button = screen.getByRole("button", { name: /Browser Sessions:/i });
+        fireEvent.click(button);
+
+        await waitFor(() => {
+            expect(screen.getByText("Cached preview")).toBeInTheDocument();
+        });
+
+        fireEvent.keyDown(document, { key: "Escape" });
+        await waitFor(() => {
+            expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+        });
+
+        fireEvent.click(button);
+        await waitFor(() => {
+            expect(screen.getByText("Cached preview")).toBeInTheDocument();
+            expect(screen.getByRole("menu")).toHaveAttribute("aria-busy", "true");
+            expect(screen.getByRole("status")).toHaveTextContent("Refreshing sessions. Current sessions remain available.");
+        });
+
+        rejectRefresh?.(new Error("refresh failed"));
+
+        await waitFor(() => {
+            expect(screen.getByText("Cached preview")).toBeInTheDocument();
+            expect(screen.getByRole("status")).toHaveTextContent("Could not refresh sessions. Showing last loaded sessions. refresh failed");
+            expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+        });
     });
 });
 
