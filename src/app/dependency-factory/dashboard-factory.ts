@@ -17,6 +17,7 @@ import { ChatManagementActionService } from "../../services/chat-management-acti
 import { ProviderExecutionService } from "../../services/provider-execution-service.js";
 import { SchedulerService } from "../../services/scheduler-service.js";
 import { ExecutionInvocationControlService } from "../../services/execution-invocation-control-service.js";
+import { createLateBoundDependency } from "../../shared/late-bound-dependency.js";
 
 export interface DashboardDependencies {
   chatThreadRuntimeService: ChatThreadRuntimeService;
@@ -55,12 +56,17 @@ export function createDashboardDependencies(
     providerRunner,
   } = coreDeps;
   const { sprintTaskDispatchService, sprintOrchestrator, taskService, memoryRemediationService } = sprintDeps;
+  const taskRerunServiceRef = createLateBoundDependency<TaskRerunService>("dashboard task rerun service");
+  const planningAgentServiceRef = createLateBoundDependency<PlanningAgentService>("dashboard planning agent service");
+  const quicksprintServiceRef = createLateBoundDependency<QuicksprintService>("dashboard quicksprint service");
+  const projectSetupServiceRef = createLateBoundDependency<ProjectSetupService>("dashboard project setup service");
+  const schedulerServiceRef = createLateBoundDependency<SchedulerService>("dashboard scheduler service");
 
   const executionControlService = new ExecutionControlService({
     projectManagementRepository,
     executionRepository,
     projectAttentionService,
-    taskRerunService: {} as any, // Will link below
+    taskRerunService: taskRerunServiceRef,
     sprintOrchestrator,
     julesApi,
     activeDispatchRegistry,
@@ -78,16 +84,18 @@ export function createDashboardDependencies(
     getDashboardSettings: () => settingsRepository.getDefaultDashboardSettings(),
     projectManagementRepository: coreDeps.projectManagementRepository,
     executionControlService,
-    taskRerunService: {} as any, // Will link below
+    taskRerunService: taskRerunServiceRef,
     settingsRepository: coreDeps.settingsRepository,
     agentPresetSyncService: coreDeps.agentPresetSyncService,
     memoryService: coreDeps.memoryService,
     memoryPromotionService: coreDeps.memoryPromotionService,
     embeddingModelManager: coreDeps.embeddingModelManager,
     knowledgeService: coreDeps.knowledgeService,
-    planningAgentService: {} as any, // Will link below
-    projectSetupService: undefined,
+    planningAgentService: planningAgentServiceRef,
+    projectSetupService: projectSetupServiceRef,
     sprintIssueService: coreDeps.sprintIssueService,
+    quicksprintService: quicksprintServiceRef,
+    schedulerService: schedulerServiceRef,
   });
 
   const providerExecutionService = new ProviderExecutionService({
@@ -373,9 +381,7 @@ export function createDashboardDependencies(
     logger: logger.child({ component: "task-rerun-service" }),
   });
 
-  // Link the taskRerunService to the executionControlService and managementToolHandler
-  (executionControlService as any).deps.taskRerunService = taskRerunService;
-  (managementToolHandler as any).deps.taskRerunService = taskRerunService;
+  taskRerunServiceRef.set(taskRerunService);
 
   const planningAgentService = new PlanningAgentService({
     projectManagementRepository,
@@ -389,7 +395,7 @@ export function createDashboardDependencies(
     logger: logger.child({ component: "planning-agent-service" }),
   });
 
-  (managementToolHandler as any).deps.planningAgentService = planningAgentService;
+  planningAgentServiceRef.set(planningAgentService);
 
   const quicksprintService = new QuicksprintService(
     (projectId) => {
@@ -407,7 +413,7 @@ export function createDashboardDependencies(
       logger: logger.child({ component: "quicksprint-service" }),
     },
   );
-  (managementToolHandler as any).deps.quicksprintService = quicksprintService;
+  quicksprintServiceRef.set(quicksprintService);
 
   const projectSetupService = new ProjectSetupService({
     projectManagementRepository,
@@ -421,7 +427,7 @@ export function createDashboardDependencies(
     getGithubToken: () => context.getEffectiveGithubToken(),
     logger: logger.child({ component: "project-setup-service" }),
   });
-  (managementToolHandler as any).deps.projectSetupService = projectSetupService;
+  projectSetupServiceRef.set(projectSetupService);
 
   const schedulerService = new SchedulerService({
     schedulerRepository: coreDeps.schedulerRepository,
@@ -432,7 +438,7 @@ export function createDashboardDependencies(
     memoryRemediationService,
     logger: logger.child({ component: "scheduler-service" }),
   });
-  (managementToolHandler as any).deps.schedulerService = schedulerService;
+  schedulerServiceRef.set(schedulerService);
 
   return {
     chatThreadRuntimeService,
