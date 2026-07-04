@@ -108,6 +108,49 @@ describe("ChatThreadRuntimeService", () => {
     });
   });
 
+  it("passes a Docker snapshot checkout for dashboard chat replies", async () => {
+    deps.getDashboardSettings.mockReturnValue({
+      git: { defaultBranch: "release" },
+      cliWorkflow: { executionMode: "DOCKER" },
+    });
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-checkout", threadId: "t1", bodyMarkdown: "hello" });
+    deps.connectionChatRepository.getThread.mockReturnValue({
+      id: "t1",
+      connectionId: null,
+      runtimeState: {},
+    });
+    deps.projectManagementRepository.getProject.mockReturnValue({
+      id: "p1",
+      name: "test project",
+      baseDir: "/tmp/test-project",
+      defaultBranch: "stable",
+    });
+    deps.taskService.resolveInvocationProvider.mockReturnValue({
+      provider: "codex",
+      providers: { codex: { model: "gpt-5.3-codex", apiKey: "codex-key" } },
+    });
+    deps.connectionChatRepository.listMessages.mockReturnValue([
+      { authorType: "dashboard_user", bodyMarkdown: "hello" },
+    ]);
+    deps.chatManagementActionService.processManagementAction.mockResolvedValue({
+      replyMarkdown: "reply",
+      action: null,
+      approvalRequired: false,
+    });
+
+    await service.postMessage("p1", { bodyMarkdown: "hello" });
+
+    expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repoPath: "/tmp/test-project",
+        settings: expect.objectContaining({
+          cliWorkflow: expect.objectContaining({ executionMode: "DOCKER" }),
+        }),
+        snapshotCheckout: { branch: "stable" },
+      }),
+    );
+  });
+
   it("folds a provider instance's customModel into the executed model so local-redirect instances do not hit the real subscription", async () => {
     deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-cm", threadId: "t1", bodyMarkdown: "hello" });
     deps.connectionChatRepository.getThread.mockReturnValue({
