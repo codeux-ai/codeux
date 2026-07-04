@@ -239,6 +239,37 @@ export const runBranchPreflightStep = async (
   };
 };
 
+export const resolveUniqueSprintBranchName = async (
+  repoPath: string,
+  candidateBranch: string,
+  options?: BranchPreflightOptions,
+): Promise<string> => {
+  const candidate = candidateBranch.trim();
+  if (!candidate) {
+    return candidateBranch;
+  }
+
+  const remoteUrl = shouldResolveAuthEnv(options) && !options?.authEnv
+    ? await getRemoteOriginUrl(repoPath)
+    : null;
+  const resolvedOptions = shouldResolveAuthEnv(options)
+    ? await withResolvedAuthEnv(remoteUrl, options)
+    : undefined;
+
+  await fetchOrigin(repoPath, resolvedOptions);
+
+  for (let index = 0; index < 1_000; index += 1) {
+    const branch = index === 0 ? candidate : `${candidate}-${index}`;
+    const existsLocal = await hasLocalBranch(repoPath, branch);
+    const existsRemote = await hasRemoteBranch(repoPath, branch, resolvedOptions);
+    if (!existsLocal && !existsRemote) {
+      return branch;
+    }
+  }
+
+  return `${candidate}-${Date.now().toString(36)}`;
+};
+
 export const prepareBranchForOrchestration = async (
   repoPath: string,
   branch: string,

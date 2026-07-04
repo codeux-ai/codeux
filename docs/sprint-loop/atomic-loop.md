@@ -117,6 +117,7 @@ For `status` and `orchestrate`, each cycle can run:
 - `start-ready-tasks-step.ts`
 - Provider is selected per task using `aiProvider` strategy.
 - For CLI providers the workflow is:
+  - allocate a unique sprint feature branch name when the sprint has not persisted one yet, checking local and remote refs so restarted sprint numbers do not reuse old branch history
   - create child task branch from sprint feature branch
   - run CLI in background
   - commit/push branch
