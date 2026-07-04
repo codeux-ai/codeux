@@ -16,6 +16,7 @@ export function useMemoryPageData(
     enabled = true
 ) {
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [records, setRecords] = useState<MemoryRecord[]>([]);
     const [memoryCount, setMemoryCount] = useState(0);
     const [initialModels, setInitialModels] = useState<EmbeddingModelWithStatus[]>([]);
@@ -218,6 +219,7 @@ export function useMemoryPageData(
     const loadData = useCallback(async () => {
         if (!pid || !enabled) return;
         setLoading(true);
+        setLoadError(null);
         try {
             const memoryParams: { projectId: string; scope: MemoryScope; sprintId?: string; agentPresetId?: string; limit: number } = {
                 projectId: pid, scope: activeScope, limit: 200,
@@ -248,7 +250,9 @@ export function useMemoryPageData(
 
             const graph = prepareMemoryGraph(memoriesData, mapData);
             setGraphData({ graph, map: mapData });
-        } catch { /* ignore */ }
+        } catch (error) {
+            setLoadError(error instanceof Error ? error.message : "Failed to load memories");
+        }
         setLoading(false);
     }, [pid, activeScope, activeTier, selectedSprintId, selectedAgentPresetId, enabled]);
 
@@ -256,6 +260,7 @@ export function useMemoryPageData(
 
     return {
         loading,
+        loadError,
         records,
         memoryCount,
         setMemoryCount,

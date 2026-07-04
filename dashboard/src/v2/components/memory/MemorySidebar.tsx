@@ -9,9 +9,13 @@ import type { MemNode } from "../../lib/memory-graph.js";
 interface MemorySidebarProps {
   nodes: MemNode[];
   onSelectNode: (idx: number) => void;
+  refreshing?: boolean;
+  loadError?: string | null;
+  onRetry?: () => void;
+  onAddMemory?: () => void;
 }
 
-const MemorySidebar = ({ nodes, onSelectNode }: MemorySidebarProps) => {
+const MemorySidebar = ({ nodes, onSelectNode, refreshing = false, loadError = null, onRetry, onAddMemory }: MemorySidebarProps) => {
   const isExpanded = memorySidebarExpandedSignal.value;
   const previousExpanded = useRef(isExpanded);
 
@@ -88,7 +92,14 @@ const MemorySidebar = ({ nodes, onSelectNode }: MemorySidebarProps) => {
                     <div className="shrink-0 border-b border-void-700 p-3">
                         <MemorySearch />
                     </div>
-                    <MemoryList nodes={nodes} onSelectNode={onSelectNode} />
+                    <MemoryList
+                        nodes={nodes}
+                        onSelectNode={onSelectNode}
+                        refreshing={refreshing}
+                        loadError={loadError}
+                        onRetry={onRetry}
+                        onAddMemory={onAddMemory}
+                    />
                 </div>
             </div>
         </div>
