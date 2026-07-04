@@ -40,6 +40,11 @@ This map explains where major responsibilities live.
   - Live-activity + git-status caching for dashboard endpoints.
   - `dashboard-server.ts`
   - Express routes for dashboard APIs and static assets.
+- `app/dependency-factory/`
+  - `dashboard-factory.ts`
+  - Dashboard service graph assembly. It constructs dashboard runtime services and links circular dashboard dependencies through typed late-binding methods on `ExecutionControlService` and `ManagementToolHandler`.
+  - `core-factory.ts`, `sprint-factory.ts`, `mcp-factory.ts`
+  - Focused composition boundaries for core repositories/services, sprint orchestration, and MCP handler registration.
 - `repositories/`
   - `execution-repository.ts`
   - Delegates snapshot projection to `execution/project-execution-snapshot-query.ts` while keeping validation boundary.
@@ -61,6 +66,8 @@ This map explains where major responsibilities live.
   - `core-tool-handler.ts`
   - `agent-tool-handler.ts`
 - `services/`
+  - `dashboard-realtime-service.ts`, `dashboard-realtime-fingerprint.ts`
+  - Dashboard websocket publishing, snapshot coalescing/throttling, and semantic fingerprint helpers for duplicate suppression.
   - `task-service.ts`
   - `git-status-service.ts`
   - `cli-workflow-service.ts`
