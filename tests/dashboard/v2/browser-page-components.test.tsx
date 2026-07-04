@@ -267,10 +267,10 @@ describe("PreviewWindowChrome", () => {
     expect(screen.getByLabelText("Close preview window")).toBeInTheDocument();
     expect(screen.getByLabelText("Minimize preview window")).toBeInTheDocument();
     expect(screen.getByLabelText("Enter preview fullscreen")).toBeInTheDocument();
-    expect(screen.getByLabelText("Go back in preview")).toBeInTheDocument();
-    expect(screen.getByLabelText("Go forward in preview")).toBeInTheDocument();
-    expect(screen.getByLabelText("Reload preview")).toBeInTheDocument();
-    expect(screen.getByLabelText("Preview address")).toBeInTheDocument();
+    expect(screen.getByLabelText("Go back in preview session Chrome Sprint")).toBeInTheDocument();
+    expect(screen.getByLabelText("Go forward in preview session Chrome Sprint")).toBeInTheDocument();
+    expect(screen.getByLabelText("Reload preview session Chrome Sprint at /")).toBeInTheDocument();
+    expect(screen.getByLabelText("Preview address for Chrome Sprint")).toBeInTheDocument();
   });
 
   it("toggles fullscreen mode", async () => {
@@ -355,10 +355,11 @@ describe("PreviewWindowChrome", () => {
       </PreviewWindowChrome>
     );
 
-    const address = screen.getByLabelText("Preview address");
+    const address = screen.getByLabelText("Preview address for Chrome Sprint");
     expect(address).toBeDisabled();
     expect(address).toHaveAccessibleDescription("Preview navigation controls are disabled until the selected container is running and has a routed host port.");
-    expect(screen.getByRole("button", { name: "Go back in preview" })).toBeDisabled();
+    expect(screen.getAllByText("Preview navigation controls are disabled until the selected container is running and has a routed host port.").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Go back in preview session Chrome Sprint" })).toBeDisabled();
   });
 
   it("prevents duplicate navigation while a command is pending", () => {
@@ -369,7 +370,7 @@ describe("PreviewWindowChrome", () => {
       </PreviewWindowChrome>
     );
 
-    const reload = screen.getByRole("button", { name: "Reload preview" });
+    const reload = screen.getByRole("button", { name: "Reload preview session Chrome Sprint at /" });
     expect(reload).toBeDisabled();
     expect(reload).toHaveAttribute("aria-busy", "true");
     expect(reload).toHaveAccessibleDescription("Preview navigation is sending the previous command. Wait for the control to become available before submitting another navigation command.");

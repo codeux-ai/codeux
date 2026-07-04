@@ -118,20 +118,33 @@ vi.mock("../../../dashboard/src/v2/components/browser/PreviewWindowChrome.js", (
   PreviewWindowChrome: ({
     addressValue,
     onAddressChange,
+    onAddressSubmit,
+    onReload,
     navigationEnabled = true,
+    navigationBusy = false,
     children,
   }: {
     addressValue: string;
     onAddressChange: (value: string) => void;
+    onAddressSubmit: (value: string) => void;
+    onReload: () => void;
     navigationEnabled?: boolean;
+    navigationBusy?: boolean;
     children: ComponentChildren;
   }) => (
     <div>
       <input
+        aria-label="Preview address"
         value={addressValue}
-        disabled={!navigationEnabled}
+        disabled={!navigationEnabled || navigationBusy}
         onInput={(event) => onAddressChange((event.currentTarget as HTMLInputElement).value)}
       />
+      <button type="button" disabled={!navigationEnabled || navigationBusy} aria-busy={navigationBusy} onClick={() => onReload()}>
+        Reload preview
+      </button>
+      <button type="button" disabled={!navigationEnabled || navigationBusy} onClick={() => onAddressSubmit(addressValue)}>
+        Navigate preview
+      </button>
       {children}
     </div>
   ),
@@ -337,6 +350,63 @@ describe("BrowserPage", () => {
     }
   });
 
+  it("keeps stale logs visible when a polling refresh returns no new content", async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetchPreviewLogs)
+      .mockResolvedValueOnce({ logs: "first useful log line" })
+      .mockResolvedValueOnce({ logs: "" });
+
+    try {
+      render(<BrowserPage />);
+
+      await act(async () => {
+        vi.advanceTimersByTime(250);
+        await Promise.resolve();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByLabelText("Preview container logs")).toHaveTextContent("first useful log line");
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(8000);
+        await Promise.resolve();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByLabelText("Preview container logs")).toHaveTextContent("first useful log line");
+      });
+      expect(screen.getAllByText("Showing last available preview logs. New logs are pending.").length).toBeGreaterThan(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("suppresses duplicate reload navigation while navigation is pending", async () => {
+    vi.useFakeTimers();
+    try {
+      render(<BrowserPage />);
+
+      const reloadButton = screen.getByRole("button", { name: "Reload preview" });
+      fireEvent.click(reloadButton);
+      fireEvent.click(reloadButton);
+
+      expect(screen.getByText("Reloading / in Sprint 1...")).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Reload preview" })).toBeDisabled();
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(360);
+        await Promise.resolve();
+      });
+
+      expect(screen.getByText("Reload sent for /")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("shows script save success feedback and prevents duplicate save submissions", async () => {
     const user = userEvent.setup();
     let resolveSave: ((value: { content: string; mode: "script"; path: string }) => void) | null = null;
@@ -476,6 +546,7 @@ describe("BrowserPage", () => {
 
     expect(mockStartPreviewSession).toHaveBeenCalledWith("p1", "s3");
     expect(mockRefreshSessions).toHaveBeenCalled();
+    expect(screen.getByText("Container launched successfully")).toBeInTheDocument();
   });
 
   it("removes a preview session from the session card", async () => {
