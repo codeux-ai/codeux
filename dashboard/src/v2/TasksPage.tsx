@@ -22,8 +22,6 @@ import {
   ArrowRight,
   AlertCircle,
 } from "lucide-preact";
-import { WaveFluid } from "./components/ui/WaveFluid.js";
-import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { TaskComposer } from "./components/ui/TaskComposer.js";
 import { AddProjectModal } from "./components/ui/AddProjectModal.js";
 import type { AddProjectModalSubmission } from "./components/ui/AddProjectModal.js";
@@ -72,17 +70,12 @@ const TaskScopePlaceholder: FunctionComponent<{
     : "Tasks are organized inside sprint scope. Create or select a sprint before adding implementation work to the board.";
 
   return (
-    <section className="relative overflow-hidden rounded-[2.2rem] border border-black/[0.06] bg-white/72 p-8 shadow-[0_18px_48px_rgba(15,23,42,0.07)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/62 dark:shadow-[0_18px_48px_rgba(0,0,0,0.28)] md:p-10">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_72%_58%_at_48%_25%,rgba(0,224,160,0.09),transparent_64%)] dark:bg-[radial-gradient(ellipse_72%_58%_at_48%_25%,rgba(0,224,160,0.13),transparent_64%)]" />
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <div className="h-52 w-52 rounded-full border border-signal-500/14 animate-[ping_5.8s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
-        <div className="absolute h-80 w-80 rounded-full border border-ember-500/10 animate-[ping_8.4s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
-        <div className="absolute h-[28rem] w-[28rem] rounded-full border border-black/[0.035] animate-[ping_11s_cubic-bezier(0.1,0.5,0.8,1)_infinite] dark:border-white/[0.04]" />
-      </div>
+    <section className="relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/[0.74] p-7 shadow-[0_12px_36px_rgba(15,23,42,0.06)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/[0.62] dark:shadow-[0_16px_42px_rgba(0,0,0,0.24)] md:p-9">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-signal-500/[0.28] to-transparent" />
 
-      <div className="relative z-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-center">
+      <div className="relative z-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-center">
         <div>
-          <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-[1.35rem] border border-signal-500/20 bg-signal-500/10 text-signal-500 shadow-[0_0_32px_rgba(0,224,160,0.16)]">
+          <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-[1rem] border border-signal-500/[0.18] bg-signal-500/[0.08] text-signal-500">
             <ListChecks className="h-7 w-7" strokeWidth={1.7} />
           </div>
           <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-signal-500">
@@ -126,8 +119,7 @@ const TaskScopePlaceholder: FunctionComponent<{
           </div>
         </div>
 
-        <div className="relative overflow-hidden rounded-[1.7rem] border border-black/[0.06] bg-black/[0.025] p-5 dark:border-white/[0.06] dark:bg-white/[0.035]">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_85%_65%_at_50%_0%,rgba(255,184,0,0.12),transparent_68%)]" />
+        <div className="relative overflow-hidden rounded-[1.35rem] border border-black/[0.06] bg-black/[0.02] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
           <div className="relative z-10 space-y-3">
             {[
               { label: "Project", value: isProjectMode ? "required" : "ready", tone: isProjectMode ? "text-ember-500" : "text-status-green" },
@@ -136,16 +128,14 @@ const TaskScopePlaceholder: FunctionComponent<{
             ].map((item, index) => (
               <div
                 key={item.label}
-                className="rounded-[1.15rem] border border-white/60 bg-white/72 p-4 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.04]"
+                className="rounded-[1rem] border border-black/[0.04] bg-white/[0.68] p-4 dark:border-white/[0.06] dark:bg-white/[0.04]"
               >
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">{item.label}</div>
                     <div className={`mt-1 text-xs font-bold uppercase tracking-[0.12em] ${item.tone}`}>{item.value}</div>
                   </div>
-                  <div className={`h-2.5 w-2.5 rounded-full ${index === 0 ? "bg-ember-500" : index === 1 ? "bg-signal-500" : "bg-slate-300 dark:bg-slate-600"}`}>
-                    <span className="block h-full w-full rounded-full animate-ping bg-current opacity-40" />
-                  </div>
+                  <div className={`h-2 w-2 rounded-full ${index === 0 ? "bg-ember-500" : index === 1 ? "bg-signal-500" : "bg-slate-300 dark:bg-slate-600"}`} />
                 </div>
               </div>
             ))}
@@ -161,12 +151,14 @@ const ColumnHeader: FunctionComponent<{ status: TaskStatus; count: number }> = m
   const Icon = cfg.icon;
 
   return (
-    <div className="flex items-center justify-between mb-6">
-      <div className="flex items-center gap-2.5">
-        <Icon className={`w-5 h-5 ${cfg.color}`} strokeWidth={2} />
-        <span className={`font-display text-lg font-bold tracking-tight ${cfg.color}`}>{cfg.label}</span>
+    <div className="mb-3 flex min-w-0 items-center justify-between gap-3 px-1">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-black/[0.05] bg-black/[0.025] dark:border-white/[0.06] dark:bg-white/[0.03]">
+          <Icon className={`h-4 w-4 ${cfg.color}`} strokeWidth={2} />
+        </span>
+        <span className={`min-w-0 break-words font-display text-base font-bold tracking-tight ${cfg.color}`}>{cfg.label}</span>
       </div>
-      <span className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg bg-black/[0.03] dark:bg-white/[0.03] ${cfg.color}`}>
+      <span className={`shrink-0 rounded-full border border-black/[0.05] bg-black/[0.025] px-2.5 py-1 text-[10px] font-bold font-mono dark:border-white/[0.06] dark:bg-white/[0.03] ${cfg.color}`}>
         {count}
       </span>
     </div>
@@ -183,17 +175,17 @@ const SprintSelector: FunctionComponent<{
   const selected = selectedId ? sprints.find((sprint: Sprint) => sprint.id === selectedId) : null;
 
   return (
-    <div className="relative">
+    <div className="relative min-w-0">
       <button
         onClick={() => setOpen((current) => !current)}
-        className={`group flex items-center gap-3 px-5 py-3 rounded-2xl border transition-all duration-300 min-w-0 max-w-full ${
+        className={`group flex min-w-0 max-w-full items-center gap-3 rounded-2xl border px-4 py-3 transition-all duration-300 ${
           selected
             ? "bg-ember-500/[0.06] dark:bg-ember-500/[0.08] border-ember-500/20 dark:border-ember-500/25 shadow-[0_0_20px_rgba(255,184,0,0.06)]"
             : "bg-black/[0.03] dark:bg-white/[0.03] border-black/[0.06] dark:border-white/[0.06]"
         } hover:border-ember-500/40 dark:hover:border-ember-500/40`}
       >
         <Target className={`w-4 h-4 shrink-0 ${selected ? "text-ember-500" : "text-slate-400"} transition-colors`} strokeWidth={2} />
-        <span className={`text-sm font-bold tracking-tight truncate min-w-0 ${selected ? "text-ember-600 dark:text-ember-400" : "text-slate-600 dark:text-slate-400"}`}>
+        <span className={`min-w-0 truncate text-sm font-bold tracking-tight ${selected ? "text-ember-600 dark:text-ember-400" : "text-slate-600 dark:text-slate-400"}`}>
           {selected ? formatSprintDisplay(selected, sprintKeyPrefix) : "All Sprints"}
         </span>
         <ChevronDown className={`w-4 h-4 shrink-0 text-slate-400 transition-transform duration-300 ${open ? "rotate-180" : ""}`} strokeWidth={2} />
@@ -792,7 +784,7 @@ export const TasksPage: FunctionComponent = () => {
       />
 
       {isTaskScopeReady && (
-        <div className="flex flex-wrap items-center gap-4 mt-2 sm:-mt-4">
+        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-3 rounded-[1.35rem] border border-black/[0.05] bg-white/[0.58] p-3 shadow-[0_2px_18px_rgba(15,23,42,0.04)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-white/[0.025] sm:-mt-4">
           <div className="min-w-0 flex-shrink">
             <SprintSelector sprints={sprints} selectedId={taskScopeSprintId} onSelect={handleSprintScopeSelect} sprintKeyPrefix={sprintKeyPrefix} />
           </div>
@@ -820,7 +812,7 @@ export const TasksPage: FunctionComponent = () => {
             onChange={(val) => setPriorityFilter(val as PriorityFilter)}
           />
 
-          <div className="ml-auto w-full sm:w-auto">
+          <div className="ml-auto w-full min-w-0 sm:w-auto">
             <ListWindowSelector value={listWindow} onChange={setListWindow} label="Show" />
           </div>
         </div>
@@ -872,16 +864,16 @@ export const TasksPage: FunctionComponent = () => {
       )}
 
       {isTaskScopeReady && (
-        <div ref={boardRef} className={`grid gap-6 ${
+        <div ref={boardRef} className={`grid items-start gap-5 ${
           columns.length === 1 ? "grid-cols-1" :
           columns.length === 2 ? "grid-cols-1 lg:grid-cols-2" :
           "grid-cols-1 lg:grid-cols-2 xl:grid-cols-3"
         }`}>
           {columns.map(({ status, count, tasks: columnTasks }) => (
-            <div key={status} className="flex flex-col">
+            <div key={status} className="flex min-w-0 flex-col">
               <ColumnHeader status={status} count={count} />
               <div
-              className={`flex-1 grid grid-cols-1 grid-rows-1 p-4 rounded-[1.5rem] min-h-[200px] bg-black/[0.015] dark:bg-white/[0.015] border relative transition-colors duration-300 ${dropTargetContext?.status === status ? "border-signal-500/50 bg-signal-500/5" : "border-black/[0.03] dark:border-white/[0.03]"}`}
+              className={`relative grid min-h-[220px] flex-1 grid-cols-1 grid-rows-1 rounded-[1.35rem] border p-3 transition-colors duration-300 sm:p-4 ${dropTargetContext?.status === status ? "border-signal-500/50 bg-signal-500/[0.05]" : "border-black/[0.05] bg-black/[0.012] dark:border-white/[0.05] dark:bg-white/[0.014]"}`}
               onDragOver={(e) => handleDragOver(status, columnTasks.length, e)}
               onDrop={(e) => handleDrop(status, columnTasks.length, e)}
             >
@@ -897,13 +889,13 @@ export const TasksPage: FunctionComponent = () => {
                   )}
                 >
                 {!loading && columnTasks.length === 0 ? (
-                  <div className={`col-start-1 row-start-1 flex items-center justify-center text-center p-6 text-xs font-medium text-slate-400 dark:text-slate-500 border-2 border-dashed rounded-[1.5rem] bg-black/[0.015] dark:bg-white/[0.015] transition-colors ${dropTargetContext?.status === status ? "border-signal-500/30" : "border-black/[0.05] dark:border-white/[0.05]"}`}>
-                    No {status.replace("_", " ")} tasks
-                    <br />
-                    {statusFilter !== "all" || priorityFilter !== "all" ? "matching current filters" : taskScopeSprintId ? "in this sprint" : "in this project"}.
+                  <div className={`col-start-1 row-start-1 flex min-h-[168px] items-center justify-center rounded-[1.15rem] border border-dashed p-6 text-center text-xs font-medium leading-relaxed text-slate-400 transition-colors dark:text-slate-500 ${dropTargetContext?.status === status ? "border-signal-500/30 bg-signal-500/[0.03]" : "border-black/[0.06] bg-white/[0.38] dark:border-white/[0.06] dark:bg-white/[0.018]"}`}>
+                    <span className="max-w-[16rem] break-words">
+                      No {status.replace("_", " ")} tasks {statusFilter !== "all" || priorityFilter !== "all" ? "matching current filters" : taskScopeSprintId ? "in this sprint" : "in this project"}.
+                    </span>
                   </div>
                 ) : !loading ? (
-                  <div className="col-start-1 row-start-1 flex flex-col gap-4">
+                  <div className="col-start-1 row-start-1 flex min-w-0 flex-col gap-3">
                     {columnTasks.map((task, index) => {
                       const isDraggedOver = dropTargetContext?.status === status && dropTargetContext?.index === index;
                       const viewModel = taskViewModels.get(task.recordId);
@@ -912,11 +904,11 @@ export const TasksPage: FunctionComponent = () => {
                       return (
                         <div key={task.recordId} className="contents">
                           {isDraggedOver && draggedTaskId !== task.recordId && (
-                        <div className="h-24 mb-4 rounded-[1.5rem] border-2 border-dashed border-signal-500/50 bg-signal-500/10 transition-all duration-300" />
+                        <div className="mb-3 h-24 rounded-[1.15rem] border border-dashed border-signal-500/50 bg-signal-500/10 transition-all duration-300" />
                       )}
                       <div
                         key={task.recordId}
-                        className="task-card-entry"
+                        className="task-card-entry min-w-0"
                         data-task-id={task.recordId}
                         onDragOver={(e) => { e.stopPropagation(); handleDragOver(status, index, e); }}
                         onDrop={(e) => { e.stopPropagation(); handleDrop(status, index, e); }}
@@ -937,7 +929,7 @@ export const TasksPage: FunctionComponent = () => {
                       );
                     })}
                     {dropTargetContext?.status === status && dropTargetContext?.index === columnTasks.length && (
-                        <div className="h-24 mt-4 rounded-[1.5rem] border-2 border-dashed border-signal-500/50 bg-signal-500/10 transition-all duration-300" />
+                        <div className="mt-3 h-24 rounded-[1.15rem] border border-dashed border-signal-500/50 bg-signal-500/10 transition-all duration-300" />
                       )}
                   </div>
                 ) : null}

@@ -9,7 +9,11 @@ export const DependencyStatusIndicators: FunctionComponent<{
   if (!indicators || indicators.length === 0) return null;
 
   return (
-    <div className="relative z-10 mt-3 flex flex-wrap gap-1.5">
+    <div className="relative z-10 mt-3 min-w-0">
+      <div className="mb-1.5 text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+        Dependencies
+      </div>
+      <div className="flex min-w-0 flex-wrap gap-1.5">
       {indicators.map((dep) => {
         const isUnknown = dep.title.startsWith("Unknown Task");
         const statusText = dep.status.replace('_', ' ');
@@ -28,15 +32,19 @@ export const DependencyStatusIndicators: FunctionComponent<{
         return (
           <div
             key={dep.recordId}
-            className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[9px] font-bold uppercase tracking-[0.14em] ${containerClass}`}
+            className={`inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] ${containerClass}`}
             title={`Depends on ${dep.title} (${statusText})`}
+            aria-label={`Depends on task ${dep.id}, status: ${statusText}. Title: ${dep.title}`}
           >
             <span className="sr-only">Dependency {dep.id} ({dep.title}) is {statusText}</span>
             <ArrowRight className="w-2.5 h-2.5" strokeWidth={2.5} aria-hidden="true" />
-            <span aria-hidden="true">{dep.id}</span>
+            <span className="min-w-0 truncate font-mono" aria-hidden="true">{dep.id}</span>
+            <span className="text-current/70" aria-hidden="true">/</span>
+            <span className="min-w-0 truncate" aria-hidden="true">{statusText}</span>
           </div>
         );
       })}
+      </div>
     </div>
   );
 });

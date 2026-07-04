@@ -137,6 +137,8 @@ describe("TasksPage.cards Integration", () => {
 
     // Additional dependency text verification
     expect(getByText("Foundation Setup")).toBeInTheDocument();
+    expect(getAllByText("Executor").length).toBeGreaterThan(0);
+    expect(getByText("Dependencies")).toBeInTheDocument();
   });
 
   it("verifies optimistic task rendering and layout stability", () => {
@@ -177,5 +179,37 @@ describe("TasksPage.cards Integration", () => {
     expect(card).toHaveClass("border-dashed");
     expect(card).toHaveClass("opacity-60");
     expect(card).toHaveClass("pointer-events-none");
+  });
+
+  it("renders quiet board placeholders when lanes have no visible tasks", () => {
+    (useProjectData as unknown as any).mockReturnValue({
+      projects: [{ id: "proj_1", name: "Project Alpha" }],
+      selectedProject: { id: "proj_1", name: "Project Alpha" },
+    });
+    (useSprints as unknown as any).mockReturnValue({
+      data: [{ id: "sprint_1", number: 1, active: true }],
+      loading: false,
+      selectedSprintId: "sprint_1",
+      selectSprint: vi.fn(),
+      refetch: vi.fn(),
+    });
+    (useProjectTasks as any).mockReturnValue({
+      tasks: [],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    const { getByText } = render(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "proj_1", name: "Project Alpha" } as any], selectedProject: { id: "proj_1", name: "Project Alpha" } as any } as any}>
+        <TasksPage />
+      </ProjectDataContext.Provider>
+    );
+
+    expect(getByText("No pending tasks in this sprint.")).toBeInTheDocument();
+    expect(getByText("No in progress tasks in this sprint.")).toBeInTheDocument();
+    expect(getByText("No completed tasks in this sprint.")).toBeInTheDocument();
+    expect(getByText("SPR-1: Sprint 1")).toBeInTheDocument();
+    expect(getByText("Any Priority")).toBeInTheDocument();
   });
 });
