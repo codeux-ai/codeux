@@ -209,6 +209,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   }, [phase, showPrompt]);
 
   const overflowClass = phase === "editor" && (editorState.showIconPicker || editorState.showColorPicker) ? "" : "overflow-hidden";
+  const bodyOverflowClass = phase === "editor" && (editorState.showIconPicker || editorState.showColorPicker) ? "" : "overflow-y-auto";
 
   /* ── Render ─────────────────────────────────────────────────── */
   return (
@@ -218,7 +219,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,107,0,0.07),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(0,224,160,0.06),transparent_34%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(255,107,0,0.09),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(0,224,160,0.07),transparent_34%)]" />
 
-      <div className="relative min-h-[480px] max-h-[calc(100dvh-12rem)]" ref={fieldsRef}>
+      <div className={`relative min-h-[480px] max-h-[calc(100dvh-12rem)] ${bodyOverflowClass}`} ref={fieldsRef}>
         {phase === "browse" && (
           <QuicksprintBrowseView
             templates={templates}

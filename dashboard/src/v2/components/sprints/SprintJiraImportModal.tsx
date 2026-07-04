@@ -34,6 +34,9 @@ const STATUS_OPTIONS: Array<{ value: JiraStatusFilter; label: string }> = [
   { value: "all", label: "All" },
 ];
 
+const JIRA_FIELD_CLASS = "h-12 min-w-0 rounded-[1.1rem] border border-black/[0.07] bg-white/62 px-4 text-sm text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:border-[#0052CC] focus:ring-4 focus:ring-[#0052CC]/12 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-200 dark:placeholder:text-slate-600";
+const JIRA_CARD_BASE = "group rounded-[1.25rem] border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#0052CC]/15";
+
 export const SprintJiraImportModal = ({ projectId, onClose, onImport }: SprintJiraImportModalProps) => {
   const [projectKey, setProjectKey] = useState("");
   const [search, setSearch] = useState("");
@@ -172,7 +175,7 @@ export const SprintJiraImportModal = ({ projectId, onClose, onImport }: SprintJi
 
   return (
     <div className="fixed inset-0 z-[230] flex items-center justify-center bg-black/55 px-4 py-6 backdrop-blur-xl dark:bg-black/75">
-      <div className="flex max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-[2.25rem] border border-white/70 bg-white shadow-[0_48px_120px_rgba(15,23,42,0.28)] dark:border-white/[0.08] dark:bg-void-800 dark:shadow-[0_48px_120px_rgba(0,0,0,0.72)]">
+      <div className="flex max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-[1.75rem] border border-white/70 bg-white shadow-[0_48px_120px_rgba(15,23,42,0.28)] dark:border-white/[0.08] dark:bg-void-800 dark:shadow-[0_48px_120px_rgba(0,0,0,0.72)]" role="dialog" aria-modal="true" aria-labelledby="jira-import-title">
         <aside className="relative hidden w-72 shrink-0 flex-col justify-between overflow-hidden bg-slate-950 p-7 text-white lg:flex">
           <span className="pointer-events-none absolute -left-5 -top-3 select-none font-display text-[7.4rem] font-black leading-none tracking-tighter text-white/[0.035]">
             JIRA
@@ -196,9 +199,9 @@ export const SprintJiraImportModal = ({ projectId, onClose, onImport }: SprintJi
               ["Project", projectKey || "all projects"],
               ["Selected", String(selectedIssues.length)],
             ].map(([label, value]) => (
-              <div key={label} className="rounded-[1.1rem] border border-white/10 bg-white/[0.04] p-4">
+              <div key={label} className="rounded-[1rem] border border-white/10 bg-white/[0.04] p-3.5">
                 <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/34">{label}</div>
-                <div className="mt-1 truncate text-xs font-bold text-white">{value}</div>
+                <div className="mt-1 break-words text-xs font-bold text-white [overflow-wrap:anywhere]">{value}</div>
               </div>
             ))}
           </div>
@@ -210,7 +213,7 @@ export const SprintJiraImportModal = ({ projectId, onClose, onImport }: SprintJi
               <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#0052CC] dark:text-[#4C9AFF]">
                 Jira Issues
               </div>
-              <h2 className="mt-2 font-display text-3xl font-black leading-none text-slate-900 dark:text-white">
+              <h2 id="jira-import-title" className="mt-2 font-display text-3xl font-black leading-none text-slate-900 dark:text-white">
                 Import Backlog Scope
               </h2>
             </div>
@@ -226,24 +229,26 @@ export const SprintJiraImportModal = ({ projectId, onClose, onImport }: SprintJi
 
           <div className="grid gap-4 border-b border-black/[0.06] p-5 dark:border-white/[0.06] sm:p-7 lg:grid-cols-[8rem_minmax(0,1fr)_10rem_minmax(10rem,13rem)_auto]">
             <input
+              aria-label="Jira project key"
               value={projectKey}
               onInput={(event) => setProjectKey((event.target as HTMLInputElement).value.toUpperCase())}
               onKeyDown={(event) => {
                 if (event.key === "Enter") void runSearch();
               }}
               placeholder="PROJ"
-              className="h-12 rounded-[1.1rem] border border-black/[0.07] bg-black/[0.025] px-4 text-sm font-black uppercase tracking-[0.08em] text-slate-700 outline-none transition-colors focus:border-[#0052CC] dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-200"
+              className={`${JIRA_FIELD_CLASS} font-black uppercase tracking-[0.08em]`}
             />
             <div className="relative">
               <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
+                aria-label="Search Jira issues"
                 value={search}
                 onInput={(event) => setSearch((event.target as HTMLInputElement).value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") void runSearch();
                 }}
                 placeholder="Search title, description, or key"
-                className="h-12 w-full rounded-[1.1rem] border border-black/[0.07] bg-black/[0.025] pl-11 pr-4 text-sm text-slate-700 outline-none transition-colors focus:border-[#0052CC] dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-200"
+                className={`${JIRA_FIELD_CLASS} w-full pl-11 pr-4`}
               />
             </div>
             <select
@@ -251,7 +256,7 @@ export const SprintJiraImportModal = ({ projectId, onClose, onImport }: SprintJi
               value={status}
               onChange={(event) => setStatus((event.target as HTMLSelectElement).value as JiraStatusFilter)}
               onInput={(event) => setStatus((event.target as HTMLSelectElement).value as JiraStatusFilter)}
-              className="h-12 rounded-[1.1rem] border border-black/[0.07] bg-black/[0.025] px-3 text-xs font-bold uppercase tracking-[0.12em] text-slate-500 outline-none focus:border-[#0052CC] dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-300"
+              className="h-12 rounded-[1.1rem] border border-black/[0.07] bg-white/62 px-3 text-xs font-bold uppercase tracking-[0.12em] text-slate-500 outline-none focus:border-[#0052CC] focus:ring-4 focus:ring-[#0052CC]/12 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-300"
             >
               {STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
@@ -263,7 +268,7 @@ export const SprintJiraImportModal = ({ projectId, onClose, onImport }: SprintJi
                 if (event.key === "Enter") void runSearch();
               }}
               placeholder="Assignee name, email, or ID"
-              className="h-12 rounded-[1.1rem] border border-black/[0.07] bg-black/[0.025] px-4 text-sm text-slate-700 outline-none transition-colors focus:border-[#0052CC] dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-200"
+              className={JIRA_FIELD_CLASS}
             />
             <button
               type="button"
@@ -285,7 +290,7 @@ export const SprintJiraImportModal = ({ projectId, onClose, onImport }: SprintJi
 
           <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-7">
             {error && (
-              <div className="mb-4 rounded-[1.1rem] border border-status-red/20 bg-status-red/[0.08] px-4 py-3 text-sm font-semibold text-status-red">
+              <div className="mb-4 rounded-[1.1rem] border border-status-red/20 bg-status-red/[0.08] px-4 py-3 text-sm font-semibold text-status-red" role="alert">
                 {error}
               </div>
             )}
@@ -296,8 +301,9 @@ export const SprintJiraImportModal = ({ projectId, onClose, onImport }: SprintJi
                 ))}
               </div>
             ) : hasSearched && results.length === 0 ? (
-              <div className="rounded-[1.5rem] border border-dashed border-black/[0.1] p-10 text-center text-sm font-semibold text-slate-400 dark:border-white/[0.1]">
-                No Jira issues found for the current filters.
+              <div className="flex min-h-56 flex-col items-center justify-center rounded-[1.35rem] border border-dashed border-black/[0.1] bg-black/[0.015] p-10 text-center text-sm font-semibold text-slate-400 dark:border-white/[0.1] dark:bg-white/[0.02]" role="status">
+                <Search className="mb-3 h-7 w-7 text-slate-300 dark:text-slate-600" strokeWidth={1.8} />
+                <span>No Jira issues found for the current filters.</span>
               </div>
             ) : (
               <div className="grid gap-3">
@@ -308,9 +314,10 @@ export const SprintJiraImportModal = ({ projectId, onClose, onImport }: SprintJi
                       key={issue.key}
                       type="button"
                       onClick={() => toggleIssue(issue)}
-                      className={`group rounded-[1.35rem] border p-4 text-left transition-all ${
+                      aria-pressed={selected}
+                      className={`${JIRA_CARD_BASE} ${
                         selected
-                          ? "border-[#0052CC]/35 bg-[#0052CC]/[0.08] shadow-[0_14px_32px_rgba(0,82,204,0.08)] dark:border-[#4C9AFF]/35 dark:bg-[#4C9AFF]/[0.12]"
+                          ? "border-[#0052CC]/40 bg-[#0052CC]/[0.095] shadow-[0_14px_32px_rgba(0,82,204,0.1)] dark:border-[#4C9AFF]/40 dark:bg-[#4C9AFF]/[0.13]"
                           : "border-black/[0.06] bg-black/[0.02] hover:-translate-y-0.5 hover:border-black/[0.12] hover:bg-white/82 dark:border-white/[0.07] dark:bg-white/[0.03] dark:hover:border-white/[0.14] dark:hover:bg-white/[0.055]"
                       }`}
                     >
@@ -323,13 +330,13 @@ export const SprintJiraImportModal = ({ projectId, onClose, onImport }: SprintJi
                           {selected ? <Check className="h-4 w-4" strokeWidth={2.5} /> : <JiraIcon className="h-4 w-4" />}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                          <div className="flex min-w-0 flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
                             <span className="font-mono text-[#0052CC] dark:text-[#4C9AFF]">{issue.key}</span>
                             {issue.projectKey && <span>{issue.projectKey}</span>}
                             {issue.issueType && <span>{issue.issueType}</span>}
                             {issue.priority && <span>{issue.priority}</span>}
                           </div>
-                          <div className="mt-1 text-sm font-black leading-snug text-slate-900 dark:text-white">
+                          <div className="mt-1 break-words text-sm font-black leading-snug text-slate-900 [overflow-wrap:anywhere] dark:text-white">
                             {issue.title}
                           </div>
                           {issue.bodyPreview && (
@@ -344,13 +351,13 @@ export const SprintJiraImportModal = ({ projectId, onClose, onImport }: SprintJi
                             {(issue.assignees || []).map((name) => (
                               <span key={name} className="inline-flex max-w-full items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600 ring-1 ring-black/[0.05] dark:bg-white/[0.06] dark:text-slate-300 dark:ring-white/[0.06]">
                                 <UserRound className="h-3 w-3 shrink-0" strokeWidth={2} />
-                                <span className="truncate">{name}</span>
+                                <span className="min-w-0 break-words [overflow-wrap:anywhere]">{name}</span>
                               </span>
                             ))}
                             {(issue.labels || []).slice(0, 6).map((label) => (
                               <span key={label} className="inline-flex max-w-full items-center gap-1 rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-slate-500 ring-1 ring-black/[0.05] dark:bg-white/[0.06] dark:text-slate-300 dark:ring-white/[0.06]">
                                 <Tag className="h-3 w-3 shrink-0" strokeWidth={2} />
-                                <span className="truncate">{label}</span>
+                                <span className="min-w-0 break-words [overflow-wrap:anywhere]">{label}</span>
                               </span>
                             ))}
                           </div>
@@ -362,6 +369,7 @@ export const SprintJiraImportModal = ({ projectId, onClose, onImport }: SprintJi
                               type="checkbox"
                               checked={!conversationDisabledKeys.has(issue.key)}
                               onChange={() => toggleConversation(issue)}
+                              aria-label={`Append conversation for ${issue.key}`}
                               className="h-3.5 w-3.5 rounded border-slate-300 text-[#0052CC] focus:ring-[#0052CC] dark:border-white/[0.18] dark:bg-transparent"
                             />
                             <MessageSquare className="h-3.5 w-3.5" strokeWidth={2.1} />
@@ -387,7 +395,7 @@ export const SprintJiraImportModal = ({ projectId, onClose, onImport }: SprintJi
           </div>
 
           <footer className="flex flex-col gap-3 border-t border-black/[0.06] p-5 dark:border-white/[0.06] sm:flex-row sm:items-center sm:justify-between sm:p-7">
-            <div className="text-xs font-semibold text-slate-400">
+            <div className="text-xs font-semibold text-slate-400" aria-live="polite">
               {selectedIssues.length} selected issue{selectedIssues.length === 1 ? "" : "s"} will be linked to the sprint.
             </div>
             <div className="flex items-center justify-end gap-3">
