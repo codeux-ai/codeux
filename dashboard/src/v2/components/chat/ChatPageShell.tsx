@@ -66,9 +66,9 @@ export const ChatPageShell: FunctionComponent<{
         eyebrow="Dashboard Chat"
         title="Project Conversations"
         actions={
-        <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:justify-end">
+        <div className="flex w-full flex-wrap items-center gap-2 rounded-[1.25rem] border border-black/[0.06] bg-white/72 p-1.5 shadow-[0_10px_32px_rgba(15,23,42,0.06)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-white/[0.045] dark:shadow-[0_18px_48px_rgba(0,0,0,0.22)] xl:w-auto xl:justify-end">
 
-          <div role="tablist" aria-label="Chat Mode" className="relative flex flex-wrap items-center rounded-full border border-black/[0.06] bg-white/70 p-1 dark:border-white/[0.06] dark:bg-white/[0.03]"
+          <div role="tablist" aria-label="Chat Mode" className="relative flex flex-wrap items-center rounded-[1rem] border border-black/[0.06] bg-black/[0.035] p-1 dark:border-white/[0.07] dark:bg-black/20"
             onKeyDown={(e) => {
               if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
                 e.preventDefault();
@@ -82,7 +82,7 @@ export const ChatPageShell: FunctionComponent<{
           >
             <div
               aria-hidden="true"
-              className="absolute inset-y-1 rounded-full bg-slate-900 shadow-[0_1px_2px_rgba(0,0,0,0.08),0_1px_8px_rgba(0,0,0,0.06)] dark:bg-white dark:shadow-[0_1px_8px_rgba(0,0,0,0.35)]"
+              className="absolute inset-y-1 rounded-[0.75rem] bg-slate-950 shadow-[0_1px_2px_rgba(0,0,0,0.08),0_10px_24px_rgba(15,23,42,0.12)] dark:bg-white dark:shadow-[0_1px_8px_rgba(0,0,0,0.35)]"
               style={{
                 left: indicatorRect ? `${indicatorRect.left}px` : 0,
                 width: indicatorRect ? `${indicatorRect.width}px` : 0,
@@ -107,7 +107,7 @@ export const ChatPageShell: FunctionComponent<{
                 transitionDuration: interactionTokens.controlFeedback.duration,
                 transitionTimingFunction: interactionTokens.controlFeedback.ease,
               }}
-              className={`relative z-10 rounded-full px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${
+              className={`relative z-10 min-h-[32px] rounded-[0.75rem] px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${
                 chatMode === "threads"
                   ? "text-white dark:text-void-900"
                   : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
@@ -129,7 +129,7 @@ export const ChatPageShell: FunctionComponent<{
                 transitionDuration: interactionTokens.controlFeedback.duration,
                 transitionTimingFunction: interactionTokens.controlFeedback.ease,
               }}
-              className={`relative z-10 rounded-full px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${
+              className={`relative z-10 min-h-[32px] rounded-[0.75rem] px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${
                 chatMode === "invocations"
                   ? "text-white dark:text-void-900"
                   : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
@@ -144,12 +144,12 @@ export const ChatPageShell: FunctionComponent<{
               transitionDuration: interactionTokens.controlFeedback.duration,
               transitionTimingFunction: interactionTokens.controlFeedback.ease,
             }}
-            className={`flex items-center gap-2 rounded-full border px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] ${
+            className={`flex min-h-[36px] items-center gap-2 rounded-[1rem] border px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] ${
               chatMode !== "threads"
-                ? "border-black/[0.06] bg-white/70 text-slate-400 opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-500"
+                ? "border-black/[0.06] bg-black/[0.025] text-slate-400 opacity-60 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-500"
                 : pendingDashboardMessages > 0
-                  ? "border-status-amber/30 bg-status-amber/10 text-status-amber"
-                  : "border-signal-500/20 bg-signal-500/10 text-signal-500"
+                  ? "border-status-amber/30 bg-status-amber/10 text-status-amber shadow-[0_0_22px_rgba(245,158,11,0.08)]"
+                  : "border-signal-500/20 bg-signal-500/10 text-signal-600 dark:text-signal-400"
             }`}
           >
             {chatMode === "threads" && pendingDashboardMessages > 0 && (
@@ -169,9 +169,9 @@ export const ChatPageShell: FunctionComponent<{
               transitionDuration: interactionTokens.controlFeedback.duration,
               transitionTimingFunction: interactionTokens.controlFeedback.ease,
             }}
-            className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] disabled:cursor-not-allowed ${
+            className={`inline-flex min-h-[36px] items-center gap-2 rounded-[1rem] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] disabled:cursor-not-allowed ${
               chatMode === "threads"
-                ? "bg-signal-500 text-void-900 hover:bg-signal-400 disabled:opacity-50"
+                ? "bg-slate-950 text-white shadow-[0_10px_26px_rgba(15,23,42,0.18)] hover:bg-slate-800 disabled:opacity-50 dark:bg-signal-500 dark:text-void-900 dark:hover:bg-signal-400"
                 : "bg-black/[0.06] text-slate-400 opacity-50 dark:bg-white/[0.06] dark:text-slate-500"
             }`}
           >
@@ -192,9 +192,9 @@ export const ChatPageShell: FunctionComponent<{
         </div>
       )}
 
-      <div className="flex-1 min-h-0 overflow-hidden flex flex-col md:grid md:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] gap-6 pb-6">
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col md:grid md:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] gap-5 lg:gap-6 pb-6">
         {railSlot}
-        <section className="flex flex-col min-h-0 flex-1 overflow-hidden rounded-3xl border border-black/[0.06] bg-white/80 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+        <section className="flex flex-col min-h-0 flex-1 overflow-hidden rounded-[1.75rem] border border-black/[0.07] bg-white/82 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/78 dark:shadow-[0_22px_70px_rgba(0,0,0,0.28)]">
           {detailSlot}
         </section>
       </div>
