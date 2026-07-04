@@ -53,7 +53,11 @@
 - [Dashboard Accessibility Patterns](./dashboard/dashboard-guide.md#accessibility-patterns)
   - [Dashboard Accessibility Quality Audit](./dashboard/accessibility-quality-audit.md)
   - [Interaction Patterns](./dashboard/interaction-patterns.md)
+    - [Dashboard Interaction Contracts](./dashboard/interaction-patterns.md#implemented-surface-contracts)
+    - [Cross-Surface Interaction Rules](./dashboard/interaction-patterns.md#cross-surface-interaction-rules)
+    - [Dashboard Interaction Verification](./dashboard/interaction-patterns.md#verification-guidance)
 - [Shared Primitive Design System](./dashboard/design-system-shared-primitives.md)
+  - [Shared Data Interaction Primitives](./dashboard/design-system-shared-primitives.md#data-interaction-primitives)
 - [Stats & Analytics Design System](./dashboard/design-system-stats.md) - Warm Void analytics surfaces and System administration
 - [Dashboard Onboarding](./dashboard/onboarding.md)
 - [Project Initialization](./dashboard/project-initialization.md)
