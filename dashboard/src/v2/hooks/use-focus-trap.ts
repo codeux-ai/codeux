@@ -39,6 +39,27 @@ function isUsableFocusTarget(element: HTMLElement | null): element is HTMLElemen
   return style.display !== "none" && style.visibility !== "hidden";
 }
 
+function makeProgrammaticFocusTarget(element: HTMLElement): HTMLElement {
+  const focusableByDefault = /^(A|BUTTON|INPUT|TEXTAREA|SELECT|SUMMARY)$/i.test(element.tagName);
+  if (!focusableByDefault && !element.hasAttribute("tabindex")) {
+    element.setAttribute("tabindex", "-1");
+  }
+  return element;
+}
+
+export function restoreFocusSafely(...candidates: Array<HTMLElement | null | undefined>): void {
+  const focusTarget = candidates.find((candidate): candidate is HTMLElement => isUsableFocusTarget(candidate ?? null));
+  if (focusTarget) {
+    focusWithoutScroll(makeProgrammaticFocusTarget(focusTarget));
+    return;
+  }
+
+  const fallback = document.querySelector<HTMLElement>("[data-overlay-focus-fallback], [data-focus-fallback], main, [role='main'], #root") ?? document.body;
+  if (isUsableFocusTarget(fallback)) {
+    focusWithoutScroll(makeProgrammaticFocusTarget(fallback));
+  }
+}
+
 export interface FocusTrapOptions {
   onClose?: () => void;
   initialFocusRef?: { current: HTMLElement | null };
@@ -134,15 +155,11 @@ export function useFocusTrap(
     return () => {
       window.clearTimeout(focusTimer);
       document.removeEventListener("keydown", handleKeyDown);
-      if (restoreFocus && triggerRef.current) {
+      if (restoreFocus) {
         // Defer focus restoration to ensure element is re-enabled or DOM is updated
         const trigger = triggerRef.current;
         window.setTimeout(() => {
-          if (isUsableFocusTarget(trigger)) {
-            focusWithoutScroll(trigger);
-          } else if (document.activeElement && !document.body.contains(document.activeElement)) {
-            focusWithoutScroll(document.body);
-          }
+          restoreFocusSafely(trigger);
         }, 0);
       }
     };
