@@ -66,5 +66,7 @@ The goal is to ensure all primitives align with the signal-and-ember operational
 - Use `listReveal` when a primitive reveals a batch of menu or list items, and `listReorder` when visible items shift after sorting, filtering, removal, or toast stack compaction.
 - Reduced-motion behavior must snap these states to their final positions and preserve static cues such as visible labels, badges, status colors, outlines, `aria-busy`, and live-region text.
 - Dropdown and confirm-dialog keyboard paths must skip disabled or `aria-disabled` menu items, preserve focus restoration to the trigger or page fallback, and expose destructive hold progress through visible percent text plus progress semantics instead of relying on motion alone.
+- Shared async primitives must reserve stable icon/spinner slots and avoid changing the control's accessible name during pending, success, or error feedback. If a disabled control needs explanation, expose the reason through helper text, `aria-describedby`, `title`, or nearby status copy.
+- Source-level guardrails should catch hardcoded timing on refined primitives. New primitive motion should use `useInteractionTokens`, `useGsapInteractionTokens`, `INTERACTION_CSS_VARIABLES`, or `buildInteractionTransition`, not fixed `duration-*` utilities.
 
 For route-level verification, see the [Dashboard Accessibility Quality Audit](./accessibility-quality-audit.md).
