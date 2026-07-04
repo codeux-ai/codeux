@@ -5,6 +5,7 @@ import {
   getBuiltinPurposeOptions,
   getActiveBuiltinPurpose,
   getVisibleBuiltinTemplates,
+  getBrowseTemplates,
   getCombinedPrompt,
 } from "../../../../dashboard/src/v2/lib/quicksprint-panel-state.js";
 import type { QuicksprintTemplateRecord } from "../../../../src/contracts/quicksprint-types.js";
@@ -100,6 +101,15 @@ describe("Quicksprint Panel State", () => {
       expect(getVisibleBuiltinTemplates(templates, { value: "a", label: "A" })).toHaveLength(1);
       expect(getVisibleBuiltinTemplates(templates, { value: "b", label: "B" })).toHaveLength(1);
       expect(getVisibleBuiltinTemplates(templates, { value: "general", label: "General" })).toHaveLength(1);
+    });
+  });
+
+  describe("getBrowseTemplates", () => {
+    it("combines visible built-in templates and custom templates into one browse rail", () => {
+      const builtIn = createTemplate({ id: "builtin", isBuiltIn: true });
+      const custom = createTemplate({ id: "custom", isBuiltIn: false });
+
+      expect(getBrowseTemplates([builtIn], [custom]).map((template) => template.id)).toEqual(["builtin", "custom"]);
     });
   });
 

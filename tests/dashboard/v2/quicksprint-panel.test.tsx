@@ -29,6 +29,10 @@ import { QuicksprintPanel } from "../../../dashboard/src/v2/components/quickspri
 describe("QuicksprintPanel", () => {
   beforeEach(() => {
     cleanup();
+    Object.defineProperty(window, "confirm", {
+      configurable: true,
+      value: vi.fn(() => true),
+    });
   });
 
   const fullstackPurpose = {
@@ -231,54 +235,55 @@ describe("QuicksprintPanel", () => {
   it("renders the large default template catalog in an accessible scroll rail", () => {
     const { getByRole, getByText, queryByText } = render(<QuicksprintPanel {...defaultProps} />);
 
-    const defaultRail = getByRole("region", { name: "default templates" });
-    expect(defaultRail).toBeInTheDocument();
-    expect(defaultRail).toHaveAttribute("tabindex", "0");
+    const templateRail = getByRole("region", { name: "quicksprint templates" });
+    expect(templateRail).toBeInTheDocument();
+    expect(templateRail).toHaveAttribute("tabindex", "0");
+    expect(templateRail).not.toHaveClass("touch-pan-x");
+    expect(templateRail).not.toHaveClass("overscroll-x-contain");
 
-    const scrollLeft = getByRole("button", { name: "Scroll default templates left" });
-    const scrollRight = getByRole("button", { name: "Scroll default templates right" });
+    const scrollLeft = getByRole("button", { name: "Scroll quicksprint templates left" });
+    const scrollRight = getByRole("button", { name: "Scroll quicksprint templates right" });
     expect(scrollLeft).toBeDisabled();
     expect(scrollRight).not.toBeDisabled();
 
-    expect(within(defaultRail).getAllByRole("button")).toHaveLength(13);
-    expect(within(defaultRail).getByRole("button", { name: "API Tests" })).toBeInTheDocument();
+    expect(within(templateRail).getByRole("button", { name: "API Tests" })).toBeInTheDocument();
     for (let index = 2; index <= 13; index += 1) {
-      expect(within(defaultRail).getByRole("button", { name: `Default Template ${index}` })).toBeInTheDocument();
+      expect(within(templateRail).getByRole("button", { name: `Default Template ${index}` })).toBeInTheDocument();
     }
+    expect(within(templateRail).getByRole("button", { name: "Custom Sprint Flow" })).toBeInTheDocument();
+    expect(within(templateRail).getByRole("button", { name: "Custom Review Flow" })).toBeInTheDocument();
 
-    fireEvent.click(within(defaultRail).getByRole("button", { name: "Default Template 13" }));
+    fireEvent.click(within(templateRail).getByRole("button", { name: "Default Template 13" }));
 
     expect(queryByText("Launch A Quicksprint.")).not.toBeInTheDocument();
     expect(getByText("Configure Quicksprint")).toBeInTheDocument();
   });
 
-  it("scrolls the built-in rail without triggering template selection", () => {
+  it("scrolls the template rail without triggering template selection", () => {
     const { container, getByRole, queryByText } = render(<QuicksprintPanel {...defaultProps} />);
-    const builtinRail = container.querySelector('[data-qs-template-rail="builtin-template-rail"]') as HTMLDivElement;
+    const builtinRail = container.querySelector('[data-qs-template-rail="quicksprint-template-rail"]') as HTMLDivElement;
     const scrollBy = vi.fn();
     Object.defineProperty(builtinRail, "scrollBy", {
       value: scrollBy,
       configurable: true,
     });
 
-    fireEvent.click(getByRole("button", { name: "Scroll default templates right" }));
+    fireEvent.click(getByRole("button", { name: "Scroll quicksprint templates right" }));
 
     expect(scrollBy).toHaveBeenCalled();
     expect(queryByText("Configure Quicksprint")).not.toBeInTheDocument();
   });
 
-  it("renders custom templates in an accessible rail with edit and selection affordances", async () => {
+  it("renders custom templates in the shared rail with edit and selection affordances", async () => {
     const { getByRole, getByText, queryByText } = render(<QuicksprintPanel {...defaultProps} />);
 
-    const customRail = getByRole("region", { name: "custom templates" });
-    expect(customRail).toBeInTheDocument();
+    const templateRail = getByRole("region", { name: "quicksprint templates" });
+    expect(templateRail).toBeInTheDocument();
 
-    expect(getByRole("button", { name: "Scroll custom templates left" })).toBeDisabled();
-    expect(getByRole("button", { name: "Scroll custom templates right" })).toBeDisabled();
-    expect(within(customRail).getByRole("button", { name: "Custom Sprint Flow" })).toBeInTheDocument();
-    expect(within(customRail).getByRole("button", { name: "Custom Review Flow" })).toBeInTheDocument();
+    expect(within(templateRail).getByRole("button", { name: "Custom Sprint Flow" })).toBeInTheDocument();
+    expect(within(templateRail).getByRole("button", { name: "Custom Review Flow" })).toBeInTheDocument();
 
-    const editCustomSprint = within(customRail).getByRole("button", { name: "Edit Custom Sprint Flow template" });
+    const editCustomSprint = within(templateRail).getByRole("button", { name: "Edit Custom Sprint Flow template" });
     expect(editCustomSprint).toHaveAttribute("title", "Edit template");
 
     fireEvent.click(editCustomSprint);
@@ -298,9 +303,10 @@ describe("QuicksprintPanel", () => {
 
     expect(queryByText("Default Templates")).not.toBeInTheDocument();
     expect(queryByRole("region", { name: "default templates" })).not.toBeInTheDocument();
+    expect(queryByRole("region", { name: "custom templates" })).not.toBeInTheDocument();
 
-    const customRail = getByRole("region", { name: "custom templates" });
-    expect(customRail).toBeInTheDocument();
+    const templateRail = getByRole("region", { name: "quicksprint templates" });
+    expect(templateRail).toBeInTheDocument();
     expect(getByText("Custom Sprint Flow")).toBeInTheDocument();
     expect(getByText("Custom Review Flow")).toBeInTheDocument();
   });
@@ -308,20 +314,37 @@ describe("QuicksprintPanel", () => {
   it("selects custom templates from the rail", () => {
     const { getByRole, getByText, queryByText } = render(<QuicksprintPanel {...defaultProps} />);
 
-    fireEvent.click(within(getByRole("region", { name: "custom templates" })).getByRole("button", { name: "Custom Review Flow" }));
+    fireEvent.click(within(getByRole("region", { name: "quicksprint templates" })).getByRole("button", { name: "Custom Review Flow" }));
 
     expect(queryByText("Launch A Quicksprint.")).not.toBeInTheDocument();
     expect(getByText("Configure Quicksprint")).toBeInTheDocument();
   });
 
-  it("preserves the empty custom template browse path", () => {
+  it("preserves the empty template browse path", () => {
     const { getByRole, getByText, queryByRole } = render(
-      <QuicksprintPanel {...defaultProps} templates={mockTemplates.filter((template) => template.isBuiltIn)} />
+      <QuicksprintPanel {...defaultProps} templates={[]} />
     );
 
-    expect(queryByRole("region", { name: "custom templates" })).not.toBeInTheDocument();
+    expect(queryByRole("region", { name: "quicksprint templates" })).not.toBeInTheDocument();
     expect(getByText("Create your first custom template")).toBeInTheDocument();
     expect(getByRole("button", { name: "New Template" })).toBeInTheDocument();
+  });
+
+  it("deletes custom and default templates from the shared rail", async () => {
+    const onDeleteTemplate = vi.fn().mockResolvedValue(undefined);
+    const { getByRole } = render(
+      <QuicksprintPanel {...defaultProps} onDeleteTemplate={onDeleteTemplate} />
+    );
+    const templateRail = getByRole("region", { name: "quicksprint templates" });
+
+    fireEvent.click(within(templateRail).getByRole("button", { name: "Delete Custom Sprint Flow template" }));
+    fireEvent.click(within(templateRail).getByRole("button", { name: "Delete API Tests template" }));
+
+    await waitFor(() => {
+      expect(onDeleteTemplate).toHaveBeenCalledWith("tpl-custom-1");
+      expect(onDeleteTemplate).toHaveBeenCalledWith("tpl-1");
+    });
+    expect(window.confirm).toHaveBeenCalledTimes(2);
   });
 
   it("shows planning overlay on execute and allows dismiss", async () => {

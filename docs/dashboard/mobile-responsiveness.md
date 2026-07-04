@@ -58,7 +58,7 @@ The Stats page combines fixed header-adjacent navigation, chart controls, tabbed
 
 Horizontally overflowing dashboard surfaces, including Quicksprint template rails, should contain their own horizontal scrolling within the component boundary. The page itself must not gain horizontal scroll at mobile, tablet, or desktop widths.
 
-For Quicksprint templates, keep the three-row rail layout reachable on narrow screens by allowing native touch and trackpad scrolling inside the rail. Left and right controls may remain available where space allows, but they should supplement native scrolling rather than replace it. Use viewport-safe max widths, `min-w-0` on rail containers, and scroll padding or end spacers when needed so the first and last cards, focus rings, and controls are not clipped.
+For Quicksprint templates, keep the two-row rail layout reachable on narrow screens without trapping normal page movement. Left and right controls may remain available where space allows, but the rail must not claim touch panning in a way that blocks vertical scrolling. Use viewport-safe max widths, `min-w-0` on rail containers, and scroll padding or end spacers when needed so the first and last cards, focus rings, and controls are not clipped.
 
 ## Long-Form Modal Scrolling
 
