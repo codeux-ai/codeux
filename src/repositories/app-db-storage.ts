@@ -11,8 +11,6 @@ interface TableRow {
   name: string;
 }
 
-const APP_DB_PATH = getHomeCodeUxPath("app.db");
-
 export function resolveAppDbPath(dbPath?: string): string {
   if (process.env.VITEST_IN_MEMORY_DB === "true") {
     return ":memory:";
@@ -21,8 +19,9 @@ export function resolveAppDbPath(dbPath?: string): string {
     return dbPath;
   }
 
-  fs.mkdirSync(path.dirname(APP_DB_PATH), { recursive: true });
-  return APP_DB_PATH;
+  const appDbPath = getHomeCodeUxPath("app.db");
+  fs.mkdirSync(path.dirname(appDbPath), { recursive: true });
+  return appDbPath;
 }
 
 export class AppDbStorage {
