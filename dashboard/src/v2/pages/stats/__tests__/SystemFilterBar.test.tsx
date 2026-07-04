@@ -52,9 +52,12 @@ function Harness({
 
 describe("SystemFilterBar", () => {
   it("toggles filter groups and updates search and clear state", () => {
-    const { getByRole, getByLabelText, getByPlaceholderText } = render(
+    const { container, getByRole, getByLabelText, getByPlaceholderText } = render(
       <Harness initialFilters={{ status: [], purpose: [], provider: [] }} initialSearch="alpha" />
     );
+
+    expect(container.querySelector(".stats-surface-panel")).toBeTruthy();
+    expect(getByLabelText("Search")).toBe(getByPlaceholderText("Search system stats"));
 
     const runningButton = getByRole("button", { name: "Running" });
     expect(runningButton).toHaveAttribute("aria-pressed", "false");
@@ -131,5 +134,25 @@ describe("SystemFilterBar", () => {
 
     expect(queryByText("Purposes")).toBeNull();
     expect(queryByText("Providers")).toBeNull();
+  });
+
+  it("keeps long secondary filter labels constrained inside chip controls", () => {
+    render(
+      <Harness
+        initialFilters={{ status: [], purpose: [], provider: [], errorCategories: [] }}
+        availablePurposes={["cli_task_coding_with_a_long_operational_label"]}
+        availableProviders={["provider_with_a_long_gateway_identifier"]}
+      />
+    );
+
+    const purpose = screen.getByRole("button", { name: "Cli Task Coding With A Long Operational Label" });
+    const provider = screen.getByRole("button", { name: "Provider With A Long Gateway Identifier" });
+
+    expect(purpose.className).toContain("max-w-full");
+    expect(purpose.className).toContain("min-w-0");
+    expect(provider.className).toContain("max-w-full");
+    expect(provider.className).toContain("min-w-0");
+    expect(purpose.querySelector("span")?.className).toContain("truncate");
+    expect(provider.querySelector("span")?.className).toContain("truncate");
   });
 });

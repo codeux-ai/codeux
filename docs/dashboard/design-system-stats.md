@@ -115,7 +115,7 @@ System is the invocation workbench.
 - `useSystemViewData(projectId)` owns filters, sorting, summaries, pagination, request cancellation, and the legacy array fallback used by older tests.
 - Summary sections are Sprint State, Invocation Health, External API Activity, and Error Categories.
 - The record view control is a wrapped button group for `All`, `Errors`, and `System Msgs`.
-- `SystemFilterBar` groups search, status, purpose, provider, error-category, clear-all, active-filter count, result count, and pagination controls into responsive panels.
+- `SystemFilterBar` presents search and status as the primary row, then groups purpose, provider, and error-category chips below inside one composed Warm Void administrative control surface with quiet result, active-filter, clear-all, and pagination metadata.
 - Invocation tables preserve semantic headers with `scope="col"` and per-cell header relationships while allowing mobile rows to expose dense labels.
 - Expand controls name the target invocation, point at the transcript panel, and remain keyboard-accessible.
 - Transcript detail surfaces role, created time, token totals, optional message metadata, errors, and long content with safe wrapping.
