@@ -1,20 +1,29 @@
-import { Subtask, JulesSession } from "../../../contracts/app-types.js";
+import type { Subtask, JulesSession } from "../../../contracts/app-types.js";
 
 import { buildTaskRunKey } from "../../../services/task-run-key.js";
-import { SessionSyncDependencies } from "../../../sprint/sprint-types.js";
+import type { SessionSyncDependencies } from "../../../sprint/sprint-types.js";
 
 /**
  * Predicate to determine if a session is locally terminal in the execution system.
  * True indicates we no longer need to fetch active activities for it.
  */
 export type LocalTerminalPredicate = (sessionName: string, task: Subtask) => boolean;
+export type SessionActivityFetchPlanDependencies = Pick<
+  SessionSyncDependencies,
+  "resolveSessionName" | "extractSessionId" | "logger" | "executionRepository"
+>;
+export type ForeignSessionPredicate = (
+  deps: SessionActivityFetchPlanDependencies,
+  task: Subtask,
+  session: JulesSession,
+) => boolean;
 
 export function planSessionActivityFetches(
   subtasks: Subtask[],
   sessionMap: Map<string, JulesSession>,
   context: { repoPath: string; sprintNumber: number; githubMode?: "LOCAL" | "REMOTE" },
-  deps: Pick<SessionSyncDependencies, "resolveSessionName" | "extractSessionId" | "logger">,
-  isForeignSessionMatch: (deps: any, task: Subtask, session: JulesSession) => boolean,
+  deps: SessionActivityFetchPlanDependencies,
+  isForeignSessionMatch: ForeignSessionPredicate,
   isLocallyTerminal?: LocalTerminalPredicate
 ): string[] {
   const uniqueSessionNames = new Set<string>();
@@ -24,7 +33,7 @@ export function planSessionActivityFetches(
     const match = sessionMap.get(expectedRunKey);
 
     if (match) {
-      if (isForeignSessionMatch(deps as any, task, match)) {
+      if (isForeignSessionMatch(deps, task, match)) {
         deps.logger.warn("Skipping foreign provider session matched by task run key", {
           taskId: task.record_id || task.id,
           projectId: task.project_id,
@@ -40,7 +49,7 @@ export function planSessionActivityFetches(
         let isFullySynced = false;
 
         if (isLocallyTerminal && isLocallyTerminal(sessionName, task)) {
-            isFullySynced = true;
+          isFullySynced = true;
         }
 
         const isRemoteTerminal = match.state === "COMPLETED" || match.state === "FAILED";

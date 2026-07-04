@@ -3,10 +3,14 @@ import type { TaskRunRecord, TaskDispatchStatus, TaskRunState } from "../../cont
 import type { SessionSyncDependencies } from "../sprint-types.js";
 import { buildTaskRunKey, extractTaskRunKeyFromTitle } from "../../services/task-run-key.js";
 import { planSessionActivityFetches } from "../../domain/sprint/session-sync/activity-fetch-plan.js";
+import type { SessionActivityFetchPlanDependencies } from "../../domain/sprint/session-sync/activity-fetch-plan.js";
 import type { ProviderInvocationUsageRecord } from "../../contracts/execution-types.js";
 import { applyPendingTaskRuntimeReset } from "../../domain/sprint/task-reset-state.js";
 import { isCompletedTaskSettled } from "../../domain/sprint/task-merge-state.js";
-import { fetchActivitiesBounded } from "../../domain/sprint/session-sync/bounded-activity-fetch.js";
+import {
+  DEFAULT_ACTIVITY_FETCH_TIMEOUT_MS,
+  fetchActivitiesBounded,
+} from "../../domain/sprint/session-sync/bounded-activity-fetch.js";
 import { hasUserReplyAfterLatestAgentRequest } from "../action-required-automation.js";
 import {
   extractProviderErrorCategory,
@@ -185,8 +189,10 @@ const buildProviderActivityEventPayload = (
   sessionCompleted: activity.sessionCompleted ?? null,
 });
 
+const SESSION_SYNC_ACTIVITY_FETCH_PHASE = "session_sync_step";
+
 const isForeignSessionMatch = (
-  deps: SessionSyncDependencies,
+  deps: SessionActivityFetchPlanDependencies,
   task: Subtask,
   session: JulesSession,
 ): boolean => {
@@ -572,7 +578,11 @@ export const runSessionSyncStep = async (
     5, // concurrency
     5, // pageSize
     deps.fetchRecentActivities,
-    deps.logger
+    deps.logger,
+    {
+      timeoutMs: DEFAULT_ACTIVITY_FETCH_TIMEOUT_MS,
+      fetchPhase: SESSION_SYNC_ACTIVITY_FETCH_PHASE,
+    },
   );
 
   for (const task of subtasks) {
