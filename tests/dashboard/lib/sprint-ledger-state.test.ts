@@ -12,6 +12,8 @@ import {
   getLedgerSelectionSummary,
   getLedgerViewStateKey,
   getBulkActionMessage,
+  getSortAriaSort,
+  getSortButtonLabel,
   nextSort,
   formatSprintKey,
   STATUS_LABELS,
@@ -400,6 +402,17 @@ describe("sprint-ledger-state", () => {
       expect(getBulkActionMessage("start", 2, false)).toBe("Start will apply to 2 selected sprints.");
       expect(getBulkActionMessage("delete", 1, true)).toBe("Deleting 1 selected sprint.");
       expect(getBulkActionMessage("unpin", 3, true)).toBe("Unpinning 3 selected sprints.");
+    });
+  });
+
+  describe("sort accessibility helpers", () => {
+    it("returns explicit aria-sort values and stable button labels", () => {
+      const sort = { key: "createdAt", direction: "desc" } as const;
+
+      expect(getSortAriaSort(sort, "createdAt")).toBe("descending");
+      expect(getSortAriaSort(sort, "name")).toBe("none");
+      expect(getSortButtonLabel(sort, "createdAt")).toBe("Sort by Created");
+      expect(getSortButtonLabel(sort, "name")).toBe("Sort by Sprint");
     });
   });
 
