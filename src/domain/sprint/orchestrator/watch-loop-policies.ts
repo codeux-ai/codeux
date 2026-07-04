@@ -91,6 +91,7 @@ export function decideMainMergeWaitOrPause(params: {
     (mergeFeedback.state === "missing_pr" ||
       mergeFeedback.state === "pending_checks" ||
       mergeFeedback.state === "ready_for_merge" ||
+      mergeFeedback.state === "automerge_succeeded" ||
       mergeFeedback.state === "automerge_scheduled" ||
       mergeFeedback.state === "automerge_failed");
 

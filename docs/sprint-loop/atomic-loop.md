@@ -117,6 +117,7 @@ For `status` and `orchestrate`, each cycle can run:
 - `start-ready-tasks-step.ts`
 - Provider is selected per task using `aiProvider` strategy.
 - For CLI providers the workflow is:
+  - allocate a unique sprint feature branch name when the sprint has not persisted one yet, checking local and remote refs so restarted sprint numbers do not reuse old branch history
   - create child task branch from sprint feature branch
   - run CLI in background
   - commit/push branch
@@ -158,7 +159,7 @@ When `action=orchestrate`, `wait` is true, and `watchLoop` is enabled:
 - Dashboard live snapshots are optimized for high sprint concurrency: selected-sprint checks use targeted project/sprint lookups instead of hydrating every sprint, recent provider activities are cached until the project's latest provider activity event changes, and provider activity event reads use partial sqlite indexes for the activity-only paths.
 - Preview reconciliation also avoids full project execution snapshots in the common running-session path. It queries running sprint runs directly and memoizes that result while reconciling preview sessions and auto-starting previews.
 - Loop exits when:
-  - all tasks terminal (`COMPLETED+merged` or `FAILED`), or
+  - all tasks terminal (`COMPLETED+merged` or `FAILED`) and, in remote-git mode, the final `feature -> default` completion PR is observed as merged, or
   - no runnable tasks remain, or
   - merge-required tasks are detected.
 - The watch loop uses the same `task-transition-state.ts` helper as the cycle
@@ -199,6 +200,8 @@ For `action=status`:
 - In local-git mode, when a task completed without a PR and then receives QA fixes, the QA follow-up process continues by attempting to recover the worker branch from task/task run metadata, open/merged PR metadata, or git branch name matching. If the preserved resume workspace is missing, Code UX prepares/recreates the expected worktree on the recovered branch and continues the QA follow-up run without failing. If no branch can be recovered and no safe workspace can be prepared, the orchestrator fails fast.
 - Feature-PR auto-merge mode `WHEN_GREEN` waits for a green gate before attempting the merge.
 - Main-branch auto-merge mode `ALWAYS` intentionally bypasses the main CI wait gate and attempts the final `feature -> default` merge as soon as the PR is not conflicted or review-blocked.
+- Remote-git sprint completion is fail-closed on the final main merge: Code UX does not mark the sprint run `completed` until GitHub polling reports the completion PR as merged. A successful auto-merge command only keeps the sprint active for another poll; it is not enough to finish the sprint by itself.
+- Main-branch auto-merge mode `CREATE_PR` opens or reuses the final completion PR, then pauses for a human handoff until that PR is merged and the sprint is resumed.
 - Before creating the final `feature -> default` merge PR, Code UX now verifies that the configured default branch exists on `origin`. If it is missing, Code UX creates it from the repository's actual `origin/HEAD` branch, pushes it, and then creates the final PR against the configured target.
 - Main-branch PR creation failures are logged and surfaced in the final merge gate feedback instead of being reduced to an unexplained missing-PR wait state.
 - When the watch loop waits or exits at the final main-merge gate, the dashboard status snapshot is republished with the finalization report so operators can see the current blocker without waiting for a later cycle.
