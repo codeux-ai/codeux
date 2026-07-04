@@ -144,8 +144,8 @@ To support the dashboard resource layer and page-scoped module boundaries, the b
 
 - Sprint runs are fetched as active expanded runs plus a bounded inactive tail, preserving the dashboard status/recency ordering.
 - Task dispatches are fetched as a recent-project slice plus an expanded sprint-run slice and then collapsed in memory to the latest dispatch per task.
-- Runtime events are fetched from bounded recent-project and expanded sprint-run feeds, deduplicated by event ID, sorted by timestamp, and capped for realtime payload size.
-- Invocations are fetched with one snapshot-specific query that unions the bounded project-recent feed, expanded sprint-run IDs, and optional selected sprint scope through a single SQL predicate. This preserves the existing merged feed semantics, including provider-usage fallback scope fields, without issuing separate invocation scans for each feed.
+- Runtime events are fetched as explicit bounded slices: a project-recent task-event slice, a project-recent sprint-run-event slice, and an expanded sprint-run task-event slice with a per-run cap. Expanded task events are excluded from the project-recent task slice to avoid duplicate SQL work, then all slices are deduplicated by event ID, sorted by timestamp, and capped for realtime payload size.
+- Invocations are fetched as explicit bounded slices for project-recent invocations, expanded sprint-run invocations, and the optional selected sprint. The slices use the indexed `execution_invocations` project/recency, project/sprint-run/recency, and project/sprint/recency paths, then merge and deduplicate in memory by invocation ID using the same `started_at DESC, rowid DESC` recency rule. This preserves selected-sprint and expanded-run visibility, including inactive selected sprints, while keeping provider-usage fallback joins in the invocation rows.
 - Usage and wall-time rollups deduplicate sprint-run IDs and task IDs before executing chunked `IN` aggregations, then map totals by ID for the final DTO mapping.
 
 The hot live snapshot reads are backed by explicit startup-safe sqlite indexes in both fresh schema initialization and migrations for existing databases:
