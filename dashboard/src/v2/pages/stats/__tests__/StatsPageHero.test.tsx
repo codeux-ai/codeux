@@ -155,6 +155,13 @@ describe('StatsPageHero', () => {
       />,
     );
 
+    expect(screen.getByRole('heading', { name: 'Stats' })).toBeTruthy();
+    expect(screen.getByLabelText('Stats active lens')).toHaveTextContent('Window');
+    expect(screen.getByLabelText('Stats active lens')).toHaveTextContent('24h');
+    expect(screen.getByLabelText('Stats active lens')).toHaveTextContent('Mode');
+    expect(screen.getByLabelText('Stats active lens')).toHaveTextContent('Models');
+    expect(screen.getByLabelText('Stats project context')).toHaveTextContent('Project');
+    expect(screen.getByLabelText('Stats project context')).toHaveTextContent('Project 1');
     expect(screen.getByRole('group', { name: 'Time window presets' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '24h' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Custom' })).toHaveAttribute('aria-pressed', 'false');

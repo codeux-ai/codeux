@@ -22,7 +22,8 @@ Do not document or render speculative metrics. Missing telemetry is a first-clas
 The redesigned Stats page uses a stable top-to-bottom shell:
 
 1. Header command band
-   - The hero names the Stats workspace with a Stats-native command masthead rather than the generic dashboard page header. It uses the Stats token palette, a compact current-state pill, and active lens chips for the selected time window and mode.
+   - The hero names the Stats workspace with a Stats-native command masthead rather than the generic dashboard page header. It uses solid Warm Void panel, subpanel, chip, and input primitives, a compact current-state pill, and active lens chips for the selected time window and mode.
+   - The command controls are flat administrative rows inside the subpanel surface. Avoid nested framed glass panels, decorative gradients, or extra wrappers around the preset, custom range, and mode controls.
    - Keep only selected project, sprint lens, time window, and active visual mode controls visible in the command band.
    - Time presets are `1h`, `24h`, `7d`, `30d`, `All time`, and `Custom`.
    - Choosing `Custom` opens start and end date fields. The selected range changes only after `Apply` succeeds.
@@ -153,7 +154,7 @@ Dense analytics layouts should stay calm: restrained contrast, low-opacity fills
 ## Responsive Behavior
 
 - The hero uses a two-zone command band on wide screens and stacks project context, time controls, and mode navigation on narrow screens.
-- Fixed or sticky header-adjacent navigation must wrap before it clips. Use `min-w-0`, bounded grids, and component-local overflow only when wrapping can no longer preserve button labels.
+- Fixed or sticky header-adjacent navigation must wrap before it clips. Header preset and mode controls should use bounded grids that move from compact multi-row layouts to a single row only when the command column has enough width; use `min-w-0`, wrapping labels, and component-local overflow only when wrapping can no longer preserve button labels.
 - Metric grids collapse from desktop multi-column layouts to two-column and single-column layouts without changing order.
 - Trend places focused-bucket and series context below the chart on narrow screens.
 - Ledgers and system rows include mobile labels when the header row is visually unavailable.
