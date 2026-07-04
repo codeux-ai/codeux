@@ -394,6 +394,9 @@ Legacy runtime:
   - restrained panel surfaces for sidebar and viewer regions using shared neutral/light-dark borders and backgrounds
   - launch state card matching Browser Preview container-launch conventions (accent icon treatment, selector styling, and primary action button)
   - file tree, change list, loading, empty, and error states expose explicit roles and selected-state semantics so keyboard and screen-reader users can browse without pointer hover
+  - background refreshes keep cached tree, selected file, changed-file list, and selected diff content visible when available, then layer polite refreshing or cached-copy recovery messages over the stale data instead of replacing the workbench with spinner-only panels
+  - file tree search and file/changes mode switches announce result counts plus the active file or change selection through polite live regions
+  - start, rebuild, and stop actions expose pending and success feedback; rebuild/stop controls suppress duplicate activation with `aria-busy` and provide disabled-state reasons when no selected or running session is available
   - long sprint names, branch names, file paths, and diff labels wrap inside their panels instead of forcing page-level horizontal overflow
   - file browsing/diff behavior remains unchanged (`files` and `changes` modes, selected path display, side-by-side toggle, and status semantics)
 - Stats page uses a flatter project analytics workspace with light/dark support and responsive behavior across screen sizes:
@@ -453,6 +456,9 @@ Legacy runtime:
 - Automatic toggle between inline and side-by-side diff modes based on viewport width
 - Resilient long-path wrapping in action bar, file tree rows, change-list rows, and active file viewer controls
 - File tree rows expose treeitem selection/expanded state, change rows expose listbox option selection, and loading/error/empty regions announce their state
+- Search, mode-switch, and selection changes are summarized in polite live regions with result counts, so operators hear whether they are in Files or Changes mode and which file/change remains selected
+- Tree, file, change-list, and diff refreshes preserve matching cached content with visible stale/refreshing copy; first-load states still use centered loading panels, and failed refreshes keep stale content visible with recovery messaging
+- Rebuild and Stop controls disable while pending, set `aria-busy`, and describe why they are unavailable when there is no selected or running file-browser session
 - Automatic Monaco viewer layout recalculation to prevent hidden or overflowing code views
 
 ### Dashboard view
