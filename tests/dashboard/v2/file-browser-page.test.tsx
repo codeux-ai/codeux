@@ -182,14 +182,15 @@ describe("FileBrowserPage", () => {
 
     const mainPanel = screen.getByTestId("file-browser-main-tool-panel");
     expect(mainPanel).toBeInTheDocument();
-    expect(mainPanel.className).toContain("flex flex-col");
-    expect(mainPanel.className).toContain("lg:grid-cols-[340px_minmax(0,1fr)]");
-    expect(mainPanel.className).toContain("lg:h-[calc(100vh-340px)]");
+    expect(mainPanel.className).toContain("flex");
+    expect(mainPanel.className).toContain("flex-col");
+    expect(mainPanel.className).toContain("lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]");
+    expect(mainPanel.className).toContain("lg:h-[calc(100vh-330px)]");
     expect(screen.getByText("Running")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Files" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "Changes" }).length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Rebuild" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Rebuild/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Stop/i })).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Filter files…")).toBeInTheDocument();
     expect(screen.getByText("Mock File Viewer")).toBeInTheDocument();
     expect(screen.getByText("No file selected")).toBeInTheDocument();

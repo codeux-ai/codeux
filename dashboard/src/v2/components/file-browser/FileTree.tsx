@@ -36,6 +36,7 @@ const TreeNodeRow: FunctionComponent<NodeRendererProps<FileBrowserTreeNode>> = (
   const isDirectory = node.data.type === "directory";
   const searchTerm = tree.props.searchTerm;
   const isSelected = node.isSelected && !isDirectory;
+  const isEmptyDirectory = isDirectory && (node.data.children?.length ?? 0) === 0;
 
   return (
     <div
@@ -49,6 +50,10 @@ const TreeNodeRow: FunctionComponent<NodeRendererProps<FileBrowserTreeNode>> = (
         }
       }}
       tabIndex={0}
+      role="treeitem"
+      aria-label={`${isDirectory ? "Folder" : "File"} ${node.data.path}${isEmptyDirectory ? ", empty" : ""}`}
+      aria-selected={isSelected ? "true" : "false"}
+      title={node.data.path}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
@@ -56,7 +61,7 @@ const TreeNodeRow: FunctionComponent<NodeRendererProps<FileBrowserTreeNode>> = (
           else node.select();
         }
       }}
-      class={`group flex min-w-0 h-full items-center gap-1.5 rounded-lg pr-2 text-[13px] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-inset ${
+      class={`group flex min-w-0 h-full items-center gap-1.5 rounded-lg pr-2 text-[13px] leading-tight transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-inset ${
         isSelected
           ? "bg-signal-500/[0.14] text-slate-900 ring-1 ring-inset ring-signal-500/25 dark:text-white"
           : "text-slate-600 hover:bg-black/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.05]"
@@ -70,14 +75,21 @@ const TreeNodeRow: FunctionComponent<NodeRendererProps<FileBrowserTreeNode>> = (
           />
         ) : null}
       </span>
-      <span class={`flex h-4 w-4 shrink-0 items-center justify-center ${isDirectory ? "text-ember-500" : "text-sky-500"}`}>
+      <span class={`flex h-4 w-4 shrink-0 items-center justify-center ${isDirectory ? "text-ember-500" : "text-signal-600 dark:text-signal-400"}`}>
         {isDirectory ? (
           node.isOpen ? <FolderOpen class="h-4 w-4" strokeWidth={1.8} /> : <Folder class="h-4 w-4" strokeWidth={1.8} />
         ) : (
           <FileIcon class="h-3.5 w-3.5" strokeWidth={1.8} />
         )}
       </span>
-      <span class="truncate font-medium"><HighlightMatch text={node.data.name} term={searchTerm} /></span>
+      <span class="min-w-0 flex-1 break-all font-medium">
+        <HighlightMatch text={node.data.name} term={searchTerm} />
+      </span>
+      {isEmptyDirectory && (
+        <span class="shrink-0 rounded-full border border-black/[0.06] bg-black/[0.025] px-1.5 py-0.5 text-[10px] font-semibold text-slate-400 dark:border-white/[0.07] dark:bg-white/[0.04] dark:text-slate-500">
+          Empty
+        </span>
+      )}
     </div>
   );
 };
@@ -104,7 +116,7 @@ export const FileTree: FunctionComponent<FileTreeProps> = ({ nodes, selectedPath
   }, []);
 
   return (
-    <div ref={containerRef} class="h-full w-full overflow-hidden">
+    <div ref={containerRef} class="h-full w-full overflow-hidden" aria-label="File tree">
       <Tree<FileBrowserTreeNode>
         data={nodes}
         idAccessor="id"
@@ -113,7 +125,7 @@ export const FileTree: FunctionComponent<FileTreeProps> = ({ nodes, selectedPath
         width={dimensions.width}
         height={dimensions.height}
         indent={14}
-        rowHeight={30}
+        rowHeight={36}
         searchTerm={searchTerm}
         searchMatch={(node, term) => node.data.name.toLowerCase().includes(term.toLowerCase())}
         selection={selectedPath ?? undefined}
