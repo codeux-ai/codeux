@@ -150,7 +150,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
     return (
         <>
             {/* Search Bar */}
-            <div ref={searchBarContainerRef} role="search" className="relative group w-full max-w-[140px] sm:max-w-[220px] hidden md:block rounded-xl">
+            <div ref={searchBarContainerRef} role="search" className="relative group hidden w-full max-w-[140px] rounded-xl md:block lg:max-w-[220px]">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
                     <Search aria-hidden="true" className="w-3.5 h-3.5 text-slate-400 group-focus-within:text-signal-500 transition-colors" strokeWidth={2} />
                 </div>
@@ -162,7 +162,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
                     onMouseLeave={handleSearchLeave}
                     onFocus={handleSearchEnter}
                     onBlur={handleSearchLeave}
-                    className="w-full h-9 pl-10 pr-4 sm:pr-12 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl text-sm text-left text-slate-400 focus:outline-none focus-visible:outline-none transition-all relative z-0"
+                    className="w-full h-9 pl-10 pr-4 sm:pr-12 bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.06] dark:border-white/[0.06] hover:bg-black/[0.05] dark:hover:bg-white/[0.05] hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl text-sm text-left text-slate-500 dark:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 transition-colors relative z-0"
                     aria-expanded={isSearchOpen}
                     aria-haspopup="dialog"
                 >

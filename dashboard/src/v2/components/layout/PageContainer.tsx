@@ -6,7 +6,7 @@ const PAGE_CONTAINER_WIDTH = "max-w-none";
 // Consistent horizontal rhythm across every page, with a unified top offset so
 // page intro sections all start at the same distance from the top nav.
 const PAGE_CONTAINER_X = "px-4 sm:px-6 md:px-8 lg:px-12 xl:px-16";
-const PAGE_CONTAINER_Y = "py-10 md:py-14";
+const PAGE_CONTAINER_Y = "pt-7 pb-24 sm:pt-8 md:pt-10 md:pb-14";
 
 const pageContainerPadding = {
   overview: `${PAGE_CONTAINER_X} ${PAGE_CONTAINER_Y}`,
@@ -15,7 +15,7 @@ const pageContainerPadding = {
   stats: `${PAGE_CONTAINER_X} ${PAGE_CONTAINER_Y}`,
   settings: `px-4 sm:px-6 md:px-8 xl:px-12 ${PAGE_CONTAINER_Y}`,
   agents: `${PAGE_CONTAINER_X} ${PAGE_CONTAINER_Y}`,
-  browser: "px-4 sm:px-6 md:px-8 py-6",
+  browser: "px-4 sm:px-6 md:px-8 pt-6 pb-24 md:pb-10",
   workbench: `${PAGE_CONTAINER_X} ${PAGE_CONTAINER_Y}`,
   chat: `${PAGE_CONTAINER_X} ${PAGE_CONTAINER_Y}`,
   sprintsEmpty: `${PAGE_CONTAINER_X} ${PAGE_CONTAINER_Y}`,
@@ -56,4 +56,3 @@ export const PageContainer: FunctionComponent<PageContainerProps> = ({
     </Component>
   );
 };
-

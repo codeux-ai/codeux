@@ -29,6 +29,10 @@ const ALL_NAV_ITEMS = [
     { icon: Zap,      label: "Live",     path: "/live" },
 ];
 
+const SHELL_FOCUS_CLASS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:z-10";
+const SHELL_HOVER_FILL_CLASS = "bg-black/[0.05] dark:bg-white/[0.05]";
+const SHELL_RADIUS_CLASS = "rounded-xl";
+
 interface SidebarProps {
     isMobile?: boolean;
     isOpen?: boolean;
@@ -148,7 +152,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
             aria-modal={isMobile && isOpen ? "true" : undefined}
             tabIndex={-1}
             ref={(el) => { (sidebarRef as any).current = el; (trapRef as any).current = el; }}
-            className={`${isMobile ? 'h-dvh' : 'h-full'} shrink-0 border-r border-black/[0.06] dark:border-white/[0.06] bg-[#F9F8F4]/80 dark:bg-void-900/80 backdrop-blur-xl flex flex-col justify-between pt-8 pb-[max(2rem,env(safe-area-inset-bottom))] z-50 transition-all duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${
+            className={`${isMobile ? 'h-dvh' : 'h-full'} shrink-0 border-r border-black/[0.06] dark:border-white/[0.06] bg-[#F9F8F4]/80 dark:bg-void-900/80 backdrop-blur-xl flex flex-col justify-between pt-6 sm:pt-8 pb-[max(1.25rem,env(safe-area-inset-bottom))] z-50 transition-all duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${
                 isMobile 
                     ? `fixed left-0 top-0 w-[260px] shadow-2xl bg-[#F9F8F4] dark:bg-void-900 overflow-y-auto overflow-x-hidden transition-transform duration-300 ease-out ${isOpen ? 'translate-x-0' : '-translate-x-full'}`
                     : (isMinimized ? 'relative w-[88px]' : 'relative w-[260px]')
@@ -161,9 +165,9 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                 onMouseLeave={() => setBrandActive(false)}
                 onFocus={() => setBrandActive(true)}
                 onBlur={() => setBrandActive(false)}
-                className={`mb-10 flex items-center group cursor-pointer relative z-10 w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 rounded-xl transition-all duration-500 ${isMinimized && !isMobile ? 'px-0 w-full justify-center' : 'px-7 gap-3'}`}
+                className={`mb-8 flex items-center group cursor-pointer relative z-10 w-fit ${SHELL_FOCUS_CLASS} ${SHELL_RADIUS_CLASS} transition-all duration-300 ${isMinimized && !isMobile ? 'px-0 w-full justify-center' : 'px-6 sm:px-7 gap-3'}`}
             >
-                <div aria-hidden="true" className="relative w-10 h-10 rounded-2xl overflow-hidden ring-1 ring-inset ring-white/[0.06] dark:ring-white/[0.08] shadow-[0_0_22px_rgba(0,224,160,0.22)] group-hover:shadow-[0_0_34px_rgba(0,224,160,0.42)] transition-shadow duration-500 shrink-0">
+                <div aria-hidden="true" className="relative w-10 h-10 rounded-xl overflow-hidden ring-1 ring-inset ring-white/[0.06] dark:ring-white/[0.08] shadow-[0_0_18px_rgba(0,224,160,0.18)] group-hover:shadow-[0_0_26px_rgba(0,224,160,0.3)] transition-shadow duration-300 shrink-0">
                     <RobotLogo size={40} rounded={false} active={brandActive} className="transition-transform duration-500 ease-out group-hover:scale-[1.06]" />
                 </div>
                 <div className={`overflow-hidden transition-all duration-500 ${isMinimized && !isMobile ? 'w-0 opacity-0' : 'w-auto opacity-100'}`}>
@@ -181,7 +185,8 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
 
                 {/* Sliding Active Indicator */}
                 <div
-                    className="absolute left-4 right-4 z-0 rounded-2xl bg-signal-500/[0.10] dark:bg-signal-500/[0.10] pointer-events-none transition-all"
+                    className="absolute left-4 right-4 z-0 rounded-xl bg-signal-500/[0.10] dark:bg-signal-500/[0.10] pointer-events-none transition-all"
+                    data-active-indicator="fill"
                     style={indicator.style as any}
                 >
                 </div>
@@ -189,6 +194,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                 <div
                     ref={indicatorRef}
                     className="absolute left-0 w-0.5 bg-signal-500 rounded-r-full pointer-events-none z-10"
+                    data-active-indicator="rail"
                     style={{ height: "24px" }}
                 />
 
@@ -215,17 +221,17 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                     onFocus={() => prefetchRoute("/config")}
                     aria-label="Settings"
                     data-tour-id="nav-config" 
-                    className={`relative flex items-center ${isMinimized && !isMobile ? 'justify-center mx-4' : 'gap-3.5 px-5 mx-4'} py-2 min-h-[40px] rounded-2xl transition-all duration-300 group mb-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-2xl focus-visible:z-10 decoration-none`}
+                    className={`relative flex items-center ${isMinimized && !isMobile ? 'justify-center mx-4' : 'gap-3 px-5 mx-4'} py-2 min-h-[40px] ${SHELL_RADIUS_CLASS} transition-all duration-300 group mb-0.5 ${SHELL_FOCUS_CLASS} decoration-none`}
                 >
-                    <div className="absolute inset-0 rounded-2xl bg-black/[0.05] dark:bg-white/[0.05] transition-all duration-300 pointer-events-none origin-left opacity-0 -translate-x-full group-hover:translate-x-0 group-hover:opacity-100" />
-                    <Settings aria-hidden="true" className="relative z-10 w-4 h-4 shrink-0 text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 group-hover:rotate-90 transition-all duration-700 ease-in-out" strokeWidth={1.5} />
+                    <div className={`absolute inset-0 ${SHELL_RADIUS_CLASS} ${SHELL_HOVER_FILL_CLASS} transition-colors duration-200 pointer-events-none opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100`} />
+                    <Settings aria-hidden="true" className="relative z-10 w-4 h-4 shrink-0 text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors duration-200" strokeWidth={1.5} />
                     <div className={`relative z-10 overflow-hidden transition-all duration-500 ${isMinimized && !isMobile ? 'w-0 opacity-0' : 'opacity-100'}`}>
-                        <span className="font-medium text-sm tracking-wide text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors duration-300 whitespace-nowrap">
+                        <span className="font-medium text-sm text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors duration-200 whitespace-nowrap">
                             Settings
                         </span>
                     </div>
                     {isMinimized && !isMobile && (
-                        <div aria-hidden="true" className="absolute left-[calc(100%+16px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-white/95 dark:bg-void-800/95 backdrop-blur-xl border border-black/[0.08] dark:border-white/[0.08] text-slate-800 dark:text-slate-100 text-xs font-bold tracking-wide rounded-2xl opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-focus-visible:opacity-100 group-focus-visible:translate-x-0 transition-all duration-300 pointer-events-none shadow-2xl z-[100] max-w-[calc(100vw-6rem)] text-wrap break-words whitespace-normal flex items-center gap-2">
+                        <div aria-hidden="true" className="absolute left-[calc(100%+14px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] text-slate-800 dark:text-slate-100 text-[11px] font-semibold rounded-xl opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-focus-visible:opacity-100 group-focus-visible:translate-x-0 transition-all duration-200 pointer-events-none shadow-2xl z-[100] max-w-[calc(100vw-6rem)] text-wrap break-words whitespace-normal flex items-center gap-2">
                             <span className="w-1.5 h-1.5 rounded-full bg-slate-500/80 shrink-0"></span>
                             Settings
                         </div>
@@ -235,23 +241,23 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                 {!isMobile && (
                     <button
                         onClick={toggleMinimize}
-                        className={`mt-2 relative flex items-center ${isMinimized ? 'justify-center mx-4' : 'gap-3.5 px-5 mx-4'} py-2 min-h-[40px] rounded-2xl transition-all duration-300 group focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-2xl focus-visible:z-10 bg-transparent border-0 cursor-pointer`}
+                        className={`mt-2 relative flex items-center ${isMinimized ? 'justify-center mx-4' : 'gap-3 px-5 mx-4'} py-2 min-h-[40px] ${SHELL_RADIUS_CLASS} transition-all duration-300 group ${SHELL_FOCUS_CLASS} bg-transparent border-0 cursor-pointer`}
                         aria-label={isMinimized ? "Expand sidebar" : "Collapse sidebar"}
                     >
-                        <div className="absolute inset-0 rounded-2xl bg-black/[0.05] dark:bg-white/[0.05] transition-all duration-300 pointer-events-none origin-left opacity-0 -translate-x-full group-hover:translate-x-0 group-hover:opacity-100" />
+                        <div className={`absolute inset-0 ${SHELL_RADIUS_CLASS} ${SHELL_HOVER_FILL_CLASS} transition-colors duration-200 pointer-events-none opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100`} />
                         {isMinimized ? (
                             <ChevronRight aria-hidden="true" className="relative z-10 w-4 h-4 shrink-0 text-slate-400 dark:text-slate-500 group-hover:text-signal-500 transition-colors duration-300" strokeWidth={1.5} />
                         ) : (
                             <ChevronLeft aria-hidden="true" className="relative z-10 w-4 h-4 shrink-0 text-slate-400 dark:text-slate-500 group-hover:text-signal-500 transition-colors duration-300" strokeWidth={1.5} />
                         )}
                         <div className={`relative z-10 overflow-hidden transition-all duration-500 text-left ${isMinimized ? 'w-0 opacity-0 pointer-events-none' : 'flex-1 opacity-100'}`}>
-                            <span className="font-medium text-sm tracking-wide text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors duration-300 whitespace-nowrap">
+                            <span className="font-medium text-sm text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors duration-200 whitespace-nowrap">
                                 Collapse
                             </span>
                         </div>
                         
                         {isMinimized && (
-                            <div aria-hidden="true" className="absolute left-[calc(100%+16px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-white/95 dark:bg-void-800/95 backdrop-blur-xl border border-black/[0.08] dark:border-white/[0.08] text-slate-800 dark:text-slate-100 text-xs font-bold tracking-wide rounded-2xl opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-focus-visible:opacity-100 group-focus-visible:translate-x-0 transition-all duration-300 pointer-events-none shadow-2xl z-[100] max-w-[calc(100vw-6rem)] text-wrap break-words whitespace-normal flex items-center gap-2">
+                            <div aria-hidden="true" className="absolute left-[calc(100%+14px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] text-slate-800 dark:text-slate-100 text-[11px] font-semibold rounded-xl opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-focus-visible:opacity-100 group-focus-visible:translate-x-0 transition-all duration-200 pointer-events-none shadow-2xl z-[100] max-w-[calc(100vw-6rem)] text-wrap break-words whitespace-normal flex items-center gap-2">
                                 <span className="w-1.5 h-1.5 rounded-full bg-slate-500/80 shrink-0"></span>
                                 Expand
                             </div>

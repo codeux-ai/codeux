@@ -41,11 +41,11 @@ export const PageHeader: FunctionComponent<PageHeaderProps> = ({
     <header
       {...rest}
       ref={containerRef as any}
-      className={`flex w-full flex-col gap-5 sm:flex-row sm:items-end sm:justify-between ${className}`.trim()}
+      className={`flex w-full flex-col gap-4 sm:gap-5 md:flex-row md:items-end md:justify-between ${className}`.trim()}
     >
-      <div className="flex min-w-0 flex-col gap-2.5">
+      <div className="flex min-w-0 max-w-3xl flex-col gap-2.5">
         {eyebrow && (
-          <div className="flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
+          <div className="flex min-w-0 items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-signal-500">
             {Icon && <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} aria-hidden="true" />}
             {eyebrow}
           </div>
@@ -60,7 +60,7 @@ export const PageHeader: FunctionComponent<PageHeaderProps> = ({
         )}
       </div>
       {actions && (
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:shrink-0 md:justify-end">
           {actions}
         </div>
       )}

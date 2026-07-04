@@ -42,7 +42,7 @@ const DockItemIcon: FunctionComponent<{ item: DockItem; isActive: boolean }> = (
                     aria-hidden="true"
                     className={`w-5 h-5 relative z-10 transition-all duration-300 ease-out group-focus-visible:-translate-y-1.5 group-focus-visible:scale-[1.15] group-active:-translate-y-1.5 group-active:scale-[1.15]
                         ${isActive
-                            ? item.color
+                            ? 'text-signal-600 dark:text-signal-400'
                             : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-200 group-focus-visible:text-slate-700 dark:group-focus-visible:text-slate-200'
                         }`}
                     strokeWidth={isActive ? 2 : 1.5}
@@ -199,30 +199,32 @@ export const KineticDock: FunctionComponent = () => {
             <Link
                 key={item.label}
                 to={item.path}
+                aria-label={item.label}
                 aria-current={isActive ? 'page' : undefined}
                 ref={(el: HTMLAnchorElement | null) => { itemRefs.current[globalIndex] = el; }}
                 onMouseEnter={() => prefetchRoute(item.path)}
                 onPointerDown={() => prefetchRoute(item.path)}
                 onFocus={() => prefetchRoute(item.path)}
                 data-tour-id={`nav-${item.label.toLowerCase()}`}
-                className="relative group flex flex-col items-center justify-center w-[52px] h-[52px] min-w-[44px] min-h-[44px] shrink-0 snap-center rounded-[1.4rem] transition-colors duration-300 decoration-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
+                className="relative group flex flex-col items-center justify-center w-[52px] h-[52px] min-w-[44px] min-h-[44px] shrink-0 snap-center rounded-xl transition-colors duration-300 decoration-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
             >
-                <div className="absolute inset-0 bg-transparent group-hover:bg-black/[0.04] dark:group-hover:bg-white/[0.05] group-focus-visible:bg-black/[0.04] dark:group-focus-visible:bg-white/[0.05] rounded-[1.4rem] pointer-events-none transition-colors duration-300" />
+                <div className={`absolute inset-0 bg-transparent ${isActive ? 'bg-signal-500/[0.10] dark:bg-signal-500/[0.10]' : 'group-hover:bg-black/[0.05] dark:group-hover:bg-white/[0.05] group-focus-visible:bg-black/[0.05] dark:group-focus-visible:bg-white/[0.05]'} rounded-xl pointer-events-none transition-colors duration-200`} />
 
                 <DockItemIcon item={item} isActive={isActive} />
 
                 {/* Tooltip */}
-                <span className="absolute -top-11 px-2.5 py-1
-                                 bg-void-900/95 dark:bg-white/95
-                                 text-white dark:text-void-900
-                                 text-[11px] font-bold tracking-wide rounded-xl
+                <span aria-hidden="true" className="absolute -top-11 px-2.5 py-1
+                                 bg-white/95 dark:bg-void-800/95
+                                 text-slate-800 dark:text-slate-100
+                                 border border-black/[0.08] dark:border-white/[0.08]
+                                 text-[11px] font-semibold rounded-xl
                                  opacity-0 scale-75
                                  group-hover:opacity-100 group-hover:scale-100
                                  group-focus-visible:opacity-100 group-focus-visible:scale-100
                                  -translate-y-1 group-hover:-translate-y-0 group-focus-visible:-translate-y-0
                                  pointer-events-none
                                  transition-all duration-200 ease-out
-                                 shadow-xl backdrop-blur-md whitespace-nowrap">
+                                 shadow-2xl backdrop-blur-2xl whitespace-nowrap">
                     {item.label}
                 </span>
             </Link>
@@ -241,9 +243,9 @@ export const KineticDock: FunctionComponent = () => {
                 className="relative pointer-events-auto flex items-center gap-1.5 p-2.5
                            bg-white/90 dark:bg-void-800/90 backdrop-blur-xl
                            border border-black/[0.06] dark:border-white/[0.08]
-                           rounded-[2rem] max-w-full overflow-x-auto scroll-px-2.5 scrollbar-hide touch-pan-x snap-x snap-mandatory
+                           rounded-2xl max-w-full overflow-x-auto scroll-px-2.5 scrollbar-hide touch-pan-x snap-x snap-mandatory
                            shadow-[0_20px_50px_rgba(0,0,0,0.08)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.5)]
-                           before:absolute before:inset-0 before:rounded-[2rem]
+                           before:absolute before:inset-0 before:rounded-2xl
                            before:shadow-[inset_0_1px_1px_rgba(255,255,255,0.6)] dark:before:shadow-[inset_0_1px_1px_rgba(255,255,255,0.06)]"
             >
                 {/* Active Signal Indicator */}
@@ -251,7 +253,7 @@ export const KineticDock: FunctionComponent = () => {
                     ref={indicatorRef}
                     style={{ left: `${indicatorState.left}px` }}
                     className={`absolute bottom-2 h-[3px] w-7 rounded-full
-                               bg-signal-500 shadow-[0_0_12px_rgba(0,224,160,0.8)]
+                               bg-signal-500
                                ${prefersReducedMotion ? "transition-none" : "transition-[left,opacity] duration-[400ms] ease-[cubic-bezier(0.175,0.885,0.32,1.275)]"}
                                ${indicatorState.initialized ? "opacity-100" : "opacity-0"}`}
 
