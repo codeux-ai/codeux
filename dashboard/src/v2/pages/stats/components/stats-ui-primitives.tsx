@@ -316,7 +316,7 @@ export const TokenChip: FunctionComponent<{
   value: number | string;
   tone: string;
 }> = ({ icon: Icon, label, value, tone }) => (
-  <div className={`relative inline-flex min-w-0 items-center gap-2 overflow-hidden rounded-[var(--stats-chip-radius)] border px-3 py-1.5 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-md transition-[background-color,border-color,color,box-shadow] duration-200 motion-reduce:transition-none ${tone}`}>
+  <div className={`relative inline-flex min-w-0 items-center gap-2 overflow-hidden rounded-[var(--stats-chip-radius)] border px-3 py-1.5 shadow-[var(--stats-subpanel-shadow)] transition-[background-color,border-color,color,box-shadow] duration-200 motion-reduce:transition-none ${tone}`}>
     <div className="relative flex min-w-0 items-center gap-1.5 opacity-85">
       <Icon className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden="true" />
       <span className="truncate text-[10px] font-bold uppercase tracking-[0.14em]">{label}</span>
@@ -402,7 +402,7 @@ export const SeriesLegendButton: FunctionComponent<{
     className={`rounded-[1.25rem] border px-4 py-3 text-left transition-[background-color,border-color,box-shadow,opacity] duration-200 motion-reduce:transition-none ${CONTROL_FOCUS_CLASS} ${
       active
         ? `${SUBPANEL_CLASS} border-[color:var(--stats-control-border-active)]`
-        : "border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-subpanel)] opacity-75 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-subpanel-hover)] hover:opacity-100"
+        : "border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-subpanel)] opacity-75 shadow-[var(--stats-subpanel-shadow)] hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-subpanel-hover)] hover:opacity-100"
     } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
   >
     <div className="flex items-center gap-3">
@@ -536,7 +536,7 @@ export const DonutCard: FunctionComponent<{
                   );
                 })}
               </svg>
-              <div className="pointer-events-none absolute inset-[24%] rounded-full border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-panel)] shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl" />
+              <div className="pointer-events-none absolute inset-[24%] rounded-full border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-panel)] shadow-[var(--stats-subpanel-shadow)]" />
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                 <div className="text-3xl font-black tracking-tight text-[color:var(--stats-value-color)]">
                   {activeSegment ? formatTokens(activeSegment.value) : centerValue}
