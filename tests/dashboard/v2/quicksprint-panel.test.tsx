@@ -239,7 +239,8 @@ describe("QuicksprintPanel", () => {
     expect(templateRail).toBeInTheDocument();
     expect(templateRail).toHaveAttribute("tabindex", "0");
     expect(templateRail).not.toHaveClass("touch-pan-x");
-    expect(templateRail).not.toHaveClass("overscroll-x-contain");
+    expect(templateRail).toHaveClass("touch-auto");
+    expect(templateRail).toHaveClass("overscroll-x-contain");
 
     const scrollLeft = getByRole("button", { name: "Scroll quicksprint templates left" });
     const scrollRight = getByRole("button", { name: "Scroll quicksprint templates right" });
@@ -274,26 +275,19 @@ describe("QuicksprintPanel", () => {
     expect(queryByText("Configure Quicksprint")).not.toBeInTheDocument();
   });
 
-  it("passes vertical wheel gestures over the template rail to the panel scroller", () => {
-    const { container, getByRole } = render(<QuicksprintPanel {...defaultProps} />);
+  it("passes vertical wheel gestures over the template rail to the page scroller", () => {
+    const { getByRole } = render(<QuicksprintPanel {...defaultProps} />);
     const templateRail = getByRole("region", { name: "quicksprint templates" });
-    const panelScroller = container.querySelector(".dashboard-scrollbar.overflow-y-auto") as HTMLDivElement;
-    const panelScrollBy = vi.fn();
-
-    panelScroller.style.overflowY = "auto";
-    Object.defineProperty(panelScroller, "scrollHeight", { value: 1200, configurable: true });
-    Object.defineProperty(panelScroller, "clientHeight", { value: 480, configurable: true });
-    Object.defineProperty(panelScroller, "scrollBy", {
-      value: panelScrollBy,
-      configurable: true,
-    });
+    const pageScroller = document.scrollingElement as HTMLElement;
+    Object.defineProperty(pageScroller, "scrollHeight", { value: 1200, configurable: true });
+    Object.defineProperty(pageScroller, "clientHeight", { value: 480, configurable: true });
+    pageScroller.scrollTop = 100;
 
     fireEvent.wheel(templateRail, { deltaY: 96, deltaX: 0, deltaMode: 0 });
-    expect(panelScrollBy).toHaveBeenCalledWith({ top: 96, behavior: "auto" });
+    expect(pageScroller.scrollTop).toBe(196);
 
-    panelScrollBy.mockClear();
     fireEvent.wheel(templateRail, { deltaY: 0, deltaX: 96, deltaMode: 0 });
-    expect(panelScrollBy).not.toHaveBeenCalled();
+    expect(pageScroller.scrollTop).toBe(196);
   });
 
   it("renders custom templates in the shared rail with edit and selection affordances", async () => {
