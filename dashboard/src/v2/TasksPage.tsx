@@ -48,11 +48,15 @@ import { fetchAgentPresets } from "./lib/agent-preset-api.js";
 import type { AgentPreset } from "./types.js";
 import { STATUS_CFG } from "./lib/tasks-constants.js";
 import { buildTaskCardViewModel } from "./lib/tasks/task-card-view-model.js";
-import { buildTaskBoardViewModel } from "./lib/tasks/task-board-view-model.js";
-import { resolveTaskDropStatus } from "./lib/tasks/task-board-actions.js";
+import {
+  buildTaskBoardSprintScopeState,
+  buildTaskBoardViewModel,
+  type TaskBoardViewModel,
+} from "./lib/tasks/task-board-view-model.js";
+import { getTaskDropFeedback, resolveTaskDropStatus } from "./lib/tasks/task-board-actions.js";
 import { useDashboardRuntimeData } from "../hooks/use-dashboard-runtime-data.js";
-import { buildLiveTaskEnrichmentMap } from "./lib/tasks/live-task-enrichment.js";
 import { useReducedMotion } from "./hooks/use-reduced-motion.js";
+import { useInteractionTokens } from "./lib/motion/tokens.js";
 
 const STATUS_ORDER: TaskStatus[] = ["pending", "in_progress", "coding_completed", "QA_REVIEW_FAILED", "completed"];
 
@@ -181,14 +185,24 @@ const SprintSelector: FunctionComponent<{
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   sprintKeyPrefix: string;
-}> = memo(({ sprints, selectedId, onSelect, sprintKeyPrefix }) => {
+  loading: boolean;
+}> = memo(({ sprints, selectedId, onSelect, sprintKeyPrefix, loading }) => {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const interactionTokens = useInteractionTokens();
   const listboxId = "tasks-sprint-selector-listbox";
+  const statusId = "tasks-sprint-selector-status";
   const selected = selectedId ? sprints.find((sprint: Sprint) => sprint.id === selectedId) : null;
+  const selectedLabel = selected ? formatSprintDisplay(selected, sprintKeyPrefix) : null;
+  const scopeState = buildTaskBoardSprintScopeState({
+    sprints,
+    selectedSprintId: selectedId,
+    selectedSprintLabel: selectedLabel,
+    loading,
+  });
   const options = useMemo(() => [
     {
       id: null as string | null,
@@ -313,13 +327,18 @@ const SprintSelector: FunctionComponent<{
 
   return (
     <div className="relative" ref={rootRef}>
+      <div id={statusId} className="sr-only" aria-live="polite" aria-atomic="true">
+        {open ? `Sprint scope list open. ${scopeState.description}` : scopeState.description}
+      </div>
       <button
         ref={triggerRef}
         type="button"
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={listboxId}
-        aria-label={`Task sprint scope: ${selected ? formatSprintDisplay(selected, sprintKeyPrefix) : "All Sprints"}`}
+        aria-describedby={statusId}
+        aria-busy={loading}
+        aria-label={`Task sprint scope: ${scopeState.label}`}
         onClick={() => {
           if (open) {
             closeListbox(false);
@@ -328,15 +347,25 @@ const SprintSelector: FunctionComponent<{
           }
         }}
         onKeyDown={(event) => handleTriggerKeyDown(event as KeyboardEvent)}
-        className={`group flex items-center gap-3 px-5 py-3 rounded-2xl border transition-all duration-300 min-w-0 max-w-full ${
+        style={{ transitionDuration: interactionTokens.controlFeedback.duration, transitionTimingFunction: interactionTokens.controlFeedback.ease }}
+        className={`group flex items-center gap-3 px-5 py-3 rounded-2xl border transition-all min-w-0 max-w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
           selected
             ? "bg-ember-500/[0.06] dark:bg-ember-500/[0.08] border-ember-500/20 dark:border-ember-500/25 shadow-[0_0_20px_rgba(255,184,0,0.06)]"
             : "bg-black/[0.03] dark:bg-white/[0.03] border-black/[0.06] dark:border-white/[0.06]"
         } hover:border-ember-500/40 dark:hover:border-ember-500/40`}
       >
-        <Target className={`w-4 h-4 shrink-0 ${selected ? "text-ember-500" : "text-slate-400"} transition-colors`} strokeWidth={2} />
+        <Target className={`w-4 h-4 shrink-0 ${selected || open ? "text-ember-500" : "text-slate-400"} transition-colors`} strokeWidth={2} />
         <span className={`text-sm font-bold tracking-tight truncate min-w-0 ${selected ? "text-ember-600 dark:text-ember-400" : "text-slate-600 dark:text-slate-400"}`}>
-          {selected ? formatSprintDisplay(selected, sprintKeyPrefix) : "All Sprints"}
+          {scopeState.label}
+        </span>
+        <span className={`hidden rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] sm:inline-flex ${
+          scopeState.isLoading
+            ? "border-signal-500/20 bg-signal-500/[0.08] text-signal-600 dark:text-signal-400"
+            : scopeState.isScoped
+              ? "border-ember-500/25 bg-ember-500/[0.08] text-ember-600 dark:text-ember-400"
+              : "border-black/[0.06] bg-black/[0.03] text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03]"
+        }`}>
+          {scopeState.isLoading ? "Loading" : scopeState.isScoped ? "Selected" : scopeState.isEmpty ? "Empty" : "All"}
         </span>
         <ChevronDown className={`w-4 h-4 shrink-0 text-slate-400 transition-transform duration-300 ${open ? "rotate-180" : ""}`} strokeWidth={2} />
       </button>
@@ -347,6 +376,8 @@ const SprintSelector: FunctionComponent<{
           role="listbox"
           aria-label="Task sprint scope"
           aria-activedescendant={`tasks-sprint-option-${activeIndex}`}
+          aria-busy={loading}
+          style={{ transitionDuration: interactionTokens.selectionMovement.duration, transitionTimingFunction: interactionTokens.selectionMovement.ease }}
           className="absolute left-0 top-full mt-2 w-80 max-w-[calc(100vw-2rem)] z-50 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden flex flex-col max-h-[60vh]"
         >
           <button
@@ -358,19 +389,32 @@ const SprintSelector: FunctionComponent<{
             tabIndex={0}
             onClick={() => selectOption(null)}
             onKeyDown={(event) => handleOptionKeyDown(event as KeyboardEvent, 0, null)}
-            className={`w-full flex items-center gap-3 px-5 py-3.5 text-left transition-colors duration-200 ${
+            style={{ transitionDuration: interactionTokens.controlFeedback.duration, transitionTimingFunction: interactionTokens.controlFeedback.ease }}
+            className={`w-full flex items-center gap-3 px-5 py-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 ${
               !selectedId ? "bg-signal-500/[0.06] dark:bg-signal-500/[0.08]" : "hover:bg-black/[0.03] dark:hover:bg-white/[0.03]"
             }`}
           >
             <ListChecks className="w-4 h-4 text-signal-500" strokeWidth={2} />
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <span className="text-sm font-bold text-slate-800 dark:text-white">All Sprints</span>
+              <span className="block truncate text-[9px] font-mono uppercase tracking-[0.1em] text-slate-400">Project-wide scope</span>
             </div>
+            {!selectedId && <span className="rounded-full bg-signal-500/[0.1] px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-signal-600 dark:text-signal-400">Selected</span>}
           </button>
 
           <div className="h-px bg-black/[0.04] dark:bg-white/[0.04] shrink-0" />
 
           <div className="overflow-y-auto min-h-0">
+          {loading && (
+            <div role="status" className="px-5 py-3 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-400">
+              Loading sprint scopes
+            </div>
+          )}
+          {!loading && sprints.length === 0 && (
+            <div role="status" className="px-5 py-3 text-xs font-medium text-slate-500 dark:text-slate-400">
+              No sprints available. All Sprints remains selected until a sprint is created.
+            </div>
+          )}
           {sprints.map((sprint, sprintIndex) => {
             const index = sprintIndex + 1;
             const isActive = selectedId === sprint.id;
@@ -385,7 +429,8 @@ const SprintSelector: FunctionComponent<{
                 tabIndex={-1}
                 onClick={() => selectOption(sprint.id)}
                 onKeyDown={(event) => handleOptionKeyDown(event as KeyboardEvent, index, sprint.id)}
-                className={`w-full flex items-center gap-3 px-5 py-3.5 text-left transition-colors duration-200 ${
+                style={{ transitionDuration: interactionTokens.controlFeedback.duration, transitionTimingFunction: interactionTokens.controlFeedback.ease }}
+                className={`w-full flex items-center gap-3 px-5 py-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/40 ${
                   isActive ? "bg-ember-500/[0.06] dark:bg-ember-500/[0.08]" : "hover:bg-black/[0.03] dark:hover:bg-white/[0.03]"
                 }`}
               >
@@ -407,6 +452,7 @@ const SprintSelector: FunctionComponent<{
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-0.5 shrink-0 pl-2">
+                  {isActive && <span className="rounded-full bg-ember-500/[0.1] px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-ember-600 dark:text-ember-400">Selected</span>}
                   <span className="text-[10px] font-mono font-bold text-slate-500">{sprint.tasksCount}</span>
                   <div className="w-12 h-1 rounded-full bg-black/[0.06] dark:bg-white/[0.06] overflow-hidden">
                     <div className="h-full rounded-full bg-signal-500 transition-all duration-500" style={{ width: `${sprint.completion}%` }} />
@@ -545,6 +591,7 @@ export const TasksPage: FunctionComponent = () => {
   const [optimisticTasks, setOptimisticTasks] = useState<Task[]>([]);
   const [resolvedTaskId, setResolvedTaskId] = useState<string | null>(null);
   const composerRef = useRef<HTMLDivElement>(null);
+  const interactionTokens = useInteractionTokens();
 
   const { tasks, loading, error, refresh: refreshTasks } = useProjectTasks(
     selectedProject?.id || null,
@@ -663,7 +710,7 @@ export const TasksPage: FunctionComponent = () => {
     return () => ctx.revert();
   }, [resolvedTaskId, tasks]);
 
-  const { boardState, taskViewModels } = useMemo(() => {
+  const currentBoardViewModel = useMemo(() => {
     return buildTaskBoardViewModel({
       tasks,
       optimisticTasks,
@@ -686,6 +733,28 @@ export const TasksPage: FunctionComponent = () => {
     execution.recentEvents,
     status.subtasks,
   ]);
+  const [displayBoardViewModel, setDisplayBoardViewModel] = useState<TaskBoardViewModel>(currentBoardViewModel);
+  const [filterTransitionPending, setFilterTransitionPending] = useState(false);
+  const previousFilterKeyRef = useRef(`${statusFilter}|${priorityFilter}`);
+
+  useEffect(() => {
+    const nextFilterKey = `${statusFilter}|${priorityFilter}`;
+    if (previousFilterKeyRef.current !== nextFilterKey) {
+      previousFilterKeyRef.current = nextFilterKey;
+      setFilterTransitionPending(true);
+      const timeoutId = window.setTimeout(() => {
+        setDisplayBoardViewModel(currentBoardViewModel);
+        setFilterTransitionPending(false);
+      }, reducedMotion ? 0 : 160);
+      return () => window.clearTimeout(timeoutId);
+    }
+
+    setDisplayBoardViewModel(currentBoardViewModel);
+    setFilterTransitionPending(false);
+    return undefined;
+  }, [currentBoardViewModel, priorityFilter, reducedMotion, statusFilter]);
+
+  const { boardState, taskViewModels } = displayBoardViewModel;
   const { filteredTasks, stats, columns } = boardState;
   const boardCountSummary = useMemo(() => (
     columns.map(({ status, count }) => `${STATUS_CFG[status].label}: ${count}`).join(", ")
@@ -694,15 +763,15 @@ export const TasksPage: FunctionComponent = () => {
   const previousBoardCountSummaryRef = useRef("");
 
   useEffect(() => {
-    if (loading || showSkeletons || previousBoardCountSummaryRef.current === boardCountSummary) {
+    if (loading || showSkeletons || filterTransitionPending || previousBoardCountSummaryRef.current === boardCountSummary) {
       return;
     }
     previousBoardCountSummaryRef.current = boardCountSummary;
     const timeoutId = window.setTimeout(() => {
-      setBoardCountAnnouncement(`Task board counts updated. ${boardCountSummary}.`);
+      setBoardCountAnnouncement(`${displayBoardViewModel.filterAnnouncement} ${boardCountSummary}.`);
     }, 350);
     return () => window.clearTimeout(timeoutId);
-  }, [boardCountSummary, loading, showSkeletons]);
+  }, [boardCountSummary, displayBoardViewModel.filterAnnouncement, filterTransitionPending, loading, showSkeletons]);
 
   const selectedSprintModel = taskScopeSprintId ? sprints.find((sprint: Sprint) => sprint.id === taskScopeSprintId) || null : null;
   const isTaskScopeReady = !!selectedProject && sprints.length > 0;
@@ -798,13 +867,15 @@ export const TasksPage: FunctionComponent = () => {
   }, []);
 
   const handleDragOver = useCallback((status: TaskStatus, index: number, e: any) => {
+    if (reducedMotion) return;
     e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
     setDropTargetContext({ status, index });
-  }, []);
+  }, [reducedMotion]);
 
   const handleDrop = useCallback(async (status: TaskStatus, e: DragEvent) => {
     e.preventDefault();
+    if (reducedMotion) return;
     if (!draggedTaskId) return;
 
     const draggedTask = tasks.find(t => t.recordId === draggedTaskId);
@@ -827,7 +898,7 @@ export const TasksPage: FunctionComponent = () => {
     }
     setDraggedTaskId(null);
     setDropTargetContext(null);
-  }, [draggedTaskId, tasks, refreshTasks]);
+  }, [draggedTaskId, reducedMotion, tasks, refreshTasks]);
 
   const handleDeleteTask = useCallback(async (task: Task) => {
     await deleteTask(task.recordId);
@@ -937,7 +1008,7 @@ export const TasksPage: FunctionComponent = () => {
       {isTaskScopeReady && (
         <div className="flex flex-wrap items-center gap-4 mt-2 sm:-mt-4">
           <div className="min-w-0 flex-shrink">
-            <SprintSelector sprints={sprints} selectedId={taskScopeSprintId} onSelect={handleSprintScopeSelect} sprintKeyPrefix={sprintKeyPrefix} />
+            <SprintSelector sprints={sprints} selectedId={taskScopeSprintId} onSelect={handleSprintScopeSelect} sprintKeyPrefix={sprintKeyPrefix} loading={sprintsLoading} />
           </div>
 
           <FilterStrip
@@ -1019,8 +1090,20 @@ export const TasksPage: FunctionComponent = () => {
         <div className="sr-only" aria-live="polite" aria-atomic="true">
           {boardCountAnnouncement}
         </div>
+        {filterTransitionPending && (
+          <div role="status" aria-live="polite" className="rounded-2xl border border-signal-500/15 bg-signal-500/[0.06] px-4 py-3 text-xs font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-400">
+            Updating task board filters. Current cards remain visible until results settle.
+          </div>
+        )}
         <h2 id="task-board-heading" className="sr-only">Task board</h2>
-        <div ref={boardRef} className={`grid gap-6 ${
+        <div
+          ref={boardRef}
+          aria-busy={filterTransitionPending}
+          style={{
+            transitionDuration: interactionTokens.listReorder.duration,
+            transitionTimingFunction: interactionTokens.listReorder.ease,
+          }}
+          className={`grid gap-6 transition-opacity ${filterTransitionPending ? "opacity-80" : "opacity-100"} ${
           columns.length === 1 ? "grid-cols-1" :
           columns.length === 2 ? "grid-cols-1 lg:grid-cols-2" :
           "grid-cols-1 lg:grid-cols-2 xl:grid-cols-3"
@@ -1032,17 +1115,26 @@ export const TasksPage: FunctionComponent = () => {
               role="region"
               aria-labelledby={`task-lane-heading-${status}`}
               aria-describedby={`task-lane-summary-${status}`}
-              aria-busy={loading || showSkeletons}
+              aria-busy={loading || showSkeletons || filterTransitionPending}
             >
               <ColumnHeader status={status} count={count} />
               <p id={`task-lane-summary-${status}`} className="sr-only">
                 {STATUS_CFG[status].label} lane contains {count} {count === 1 ? "task" : "tasks"}.
               </p>
               <div
-              className={`flex-1 grid grid-cols-1 grid-rows-1 p-4 rounded-[1.5rem] min-h-[200px] bg-black/[0.015] dark:bg-white/[0.015] border relative transition-colors duration-300 ${dropTargetContext?.status === status ? "border-signal-500/50 bg-signal-500/5" : "border-black/[0.03] dark:border-white/[0.03]"}`}
+              className={`flex-1 grid grid-cols-1 grid-rows-1 p-4 rounded-[1.5rem] min-h-[200px] bg-black/[0.015] dark:bg-white/[0.015] border relative transition-colors duration-300 ${dropTargetContext?.status === status ? "border-signal-500/50 bg-signal-500/5" : "border-black/[0.03] dark:border-white/[0.03]"} ${reducedMotion ? "border-dashed" : ""}`}
               onDragOver={(e) => handleDragOver(status, columnTasks.length, e)}
               onDrop={(e) => handleDrop(status, e)}
+              aria-describedby={`task-lane-summary-${status} task-lane-drop-${status}`}
             >
+                <p id={`task-lane-drop-${status}`} className="sr-only" aria-live="polite" aria-atomic="true">
+                  {getTaskDropFeedback({
+                    isReducedMotion: reducedMotion,
+                    isDragging: draggedTaskId !== null,
+                    targetLane: status,
+                    currentStatus: draggedTaskId ? tasks.find((task) => task.recordId === draggedTaskId)?.status : undefined,
+                  })}
+                </p>
                 {showSkeletons && (
                   <div role="status" aria-live="polite" className="sr-only">
                     Loading {STATUS_CFG[status].label.toLowerCase()} tasks.

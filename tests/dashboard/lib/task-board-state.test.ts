@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import { deriveTaskBoardState, getTaskLane } from "../../../dashboard/src/v2/lib/task-board-state.js";
+import { buildTaskFilterAnnouncement } from "../../../dashboard/src/v2/lib/tasks/task-board-view-model.js";
 import type { Task, TaskPriority, TaskStatus } from "../../../dashboard/src/v2/types.js";
 
 function createTask(id: string, status: TaskStatus, priority: TaskPriority): Task {
@@ -154,4 +155,14 @@ test("getTaskLane: correctly maps statuses to lanes", () => {
   expect(getTaskLane("in_progress")).toBe("in_progress");
   expect(getTaskLane("coding_completed")).toBe("in_progress");
   expect(getTaskLane("QA_REVIEW_FAILED")).toBe("in_progress");
+});
+
+test("buildTaskFilterAnnouncement describes filtered result scope and visible count", () => {
+  expect(buildTaskFilterAnnouncement({
+    totalCount: 3,
+    visibleCount: 2,
+    statusFilter: "in_progress",
+    priorityFilter: "critical",
+    scopeLabel: "selected sprint",
+  })).toBe("Task board now shows 3 tasks, 2 currently visible in selected sprint for In Progress status and critical priority.");
 });
