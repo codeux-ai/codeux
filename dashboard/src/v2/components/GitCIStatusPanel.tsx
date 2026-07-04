@@ -91,12 +91,12 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
   if (error) {
     return (
       // Using aria-live="assertive" here because a Git tracking error prevents the user from understanding their source control state and requires immediate attention.
-      <div role="alert" aria-live="assertive" className="group relative overflow-hidden rounded-[1.75rem] border border-status-red/20 bg-white/80 p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:bg-void-800/75 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+      <div role="alert" aria-live="assertive" className="group relative overflow-hidden rounded-[1.75rem] border border-l-2 border-status-red/20 border-l-status-red bg-white p-5 shadow-sm dark:bg-void-800">
         <div className="flex items-center gap-3">
           <XCircle className="h-5 w-5 text-status-red" strokeWidth={1.5} />
           <div>
             <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-status-red">Git Tracking Error</span>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{error}</p>
+            <p className="mt-1 break-words text-sm text-slate-600 dark:text-slate-400">{error}</p>
           </div>
         </div>
       </div>
@@ -125,8 +125,8 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
               <GitBranch className="h-4 w-4 text-signal-500" strokeWidth={1.5} />
               <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Git / CI / PR</span>
             </div>
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="truncate font-mono text-xs text-slate-700 dark:text-slate-300">{status.branch ?? "no-branch"}</span>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className="break-all font-mono text-xs text-slate-700 dark:text-slate-300">{status.branch ?? "no-branch"}</span>
               <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${
                 status.dirty
                   ? "bg-status-amber/15 text-status-amber"
@@ -153,9 +153,9 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
             { label: "Merges", value: String(status.mergedPullRequests.length) },
             { label: "Updated", value: formatTime(status.lastUpdated) },
           ].map(({ label, value }) => (
-            <div key={label} className="rounded-xl bg-black/[0.02] p-2.5 dark:bg-white/[0.02]">
+            <div key={label} className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-2.5 dark:border-white/[0.04] dark:bg-white/[0.015]">
               <span className="mb-1 block text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400">{label}</span>
-              <span className="block truncate text-[11px] font-mono font-medium text-slate-700 dark:text-slate-300">{value}</span>
+              <span className="block break-words text-[11px] font-mono font-medium text-slate-700 dark:text-slate-300">{value}</span>
             </div>
           ))}
         </div>
@@ -164,7 +164,7 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
           <div className="rounded-xl border border-status-amber/20 bg-status-amber/[0.04] p-4">
             <span className="mb-2 block text-[8px] font-bold uppercase tracking-[0.14em] text-status-amber">Warnings</span>
             {status.warnings.map((warning) => (
-              <p key={warning} className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">{warning}</p>
+              <p key={warning} className="break-words text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">{warning}</p>
             ))}
           </div>
         )}
@@ -190,16 +190,16 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
                   >
                     <div className="mb-1 flex items-start justify-between gap-2">
                       <div className="min-w-0 space-y-1">
-                        <p className="truncate text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                        <p className="break-words text-[11px] font-semibold text-slate-700 dark:text-slate-300">
                           <span className="font-mono text-slate-500">#{pr.number}</span> {pr.title}
                         </p>
-                        <p className="truncate text-[10px] font-mono text-slate-400">{pr.headRefName ?? "?"} → {pr.baseRefName ?? "?"}</p>
+                        <p className="break-all text-[10px] font-mono text-slate-400">{pr.headRefName ?? "?"} → {pr.baseRefName ?? "?"}</p>
                       </div>
                       <ExternalLink className="h-3 w-3 shrink-0 text-slate-300 transition-colors duration-200 group-hover/pr:text-signal-500 dark:text-slate-600" strokeWidth={2} />
                     </div>
                     <p className={`mt-1 flex items-center gap-1.5 text-[10px] font-mono ${statusTone(pr.mergeStateStatus)}`}>
                       <PrIcon className="h-3 w-3 shrink-0" strokeWidth={1.8} />
-                      <span className="truncate">merge: {pr.mergeStateStatus ?? "UNKNOWN"}</span>
+                      <span className="break-words">merge: {pr.mergeStateStatus ?? "UNKNOWN"}</span>
                       <span className="text-slate-400">·</span>
                       <MessageCircle className="h-3 w-3 shrink-0 text-slate-400" strokeWidth={1.8} />
                       <span className="text-slate-400">{pr.comments}</span>
@@ -232,7 +232,7 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
                     className="block rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 transition-all duration-200 hover:border-signal-500/20 dark:border-white/[0.04] dark:bg-white/[0.015]"
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <p className="truncate text-[11px] font-semibold text-slate-700 dark:text-slate-300">{run.workflowName || run.name}</p>
+                      <p className="break-words text-[11px] font-semibold text-slate-700 dark:text-slate-300">{run.workflowName || run.name}</p>
                       <ExternalLink className="h-3 w-3 shrink-0 text-slate-300 dark:text-slate-600" strokeWidth={2} />
                     </div>
                     <p className={`mt-0.5 flex items-center gap-1.5 text-[10px] font-mono ${statusTone(run.conclusion || run.status)}`}>
@@ -240,7 +240,7 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
                         className={`h-3 w-3 shrink-0 ${isActive ? "animate-spin motion-reduce:animate-none" : ""}`}
                         strokeWidth={1.8}
                       />
-                      <span>{run.status}{run.conclusion ? ` / ${run.conclusion}` : ""}</span>
+                      <span className="break-words">{run.status}{run.conclusion ? ` / ${run.conclusion}` : ""}</span>
                     </p>
                   </a>
                 );
@@ -266,10 +266,10 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
                   rel="noopener noreferrer"
                   className="block rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 transition-all duration-200 hover:border-status-green/20 dark:border-white/[0.04] dark:bg-white/[0.015]"
                 >
-                  <p className="truncate text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                  <p className="break-words text-[11px] font-semibold text-slate-700 dark:text-slate-300">
                     <span className="font-mono text-slate-500">#{merged.number}</span> {merged.title}
                   </p>
-                  <p className="mt-0.5 truncate text-[10px] font-mono text-slate-400">{merged.headRefName ?? "?"} → {merged.baseRefName ?? "?"}</p>
+                  <p className="mt-0.5 break-all text-[10px] font-mono text-slate-400">{merged.headRefName ?? "?"} → {merged.baseRefName ?? "?"}</p>
                   <p className="mt-0.5 flex items-center gap-1.5 text-[10px] font-mono text-status-green">
                     <CheckCircle2 className="h-3 w-3" strokeWidth={1.8} />
                     merged {formatTime(merged.mergedAt ?? undefined)}

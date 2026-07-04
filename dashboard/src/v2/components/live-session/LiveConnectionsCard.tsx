@@ -5,27 +5,14 @@ import { Bot, Radio, Server, Wifi } from "lucide-preact";
 import gsap from "gsap";
 import { formatTime } from "../../../lib/time.js";
 import type { ExecutionDashboardSnapshot } from "../../../types.js";
-import { BorderTrace } from "../ui/BorderTrace.js";
-import { WaveFluid } from "../ui/WaveFluid.js";
 import { useReducedMotion, useResolvedMotionDuration } from "../../hooks/use-reduced-motion.js";
 import { INTERACTION_TOKENS } from "../../lib/motion/tokens.js";
+import { statusRailTone, statusTone } from "./ExecutionRuntimePanel.js";
 
 const CONNECTION_ROLE_LABELS: Record<string, string> = {
   listener: "Listener",
   worker: "Worker",
   project_manager: "Manager",
-};
-
-const statusTone = (value: string | null): string => {
-  if (!value) return "text-slate-400";
-  const normalized = value.toUpperCase();
-  if (normalized === "SUCCESS" || normalized === "COMPLETED" || normalized === "MERGED") return "text-status-green";
-  if (normalized === "CANCEL_REQUESTED") return "text-status-amber";
-  if (normalized === "IN_PROGRESS" || normalized === "QUEUED" || normalized === "PENDING" || normalized === "QUOTA") return "text-status-amber";
-  if (normalized === "FAILURE" || normalized === "FAILED" || normalized === "ERROR" || normalized === "CANCELLED") return "text-status-red";
-  if (normalized === "LISTENING") return "text-signal-500";
-  if (normalized === "ONLINE") return "text-status-green";
-  return "text-slate-400";
 };
 
 const ConnectionRow: FunctionComponent<{ connection: ExecutionDashboardSnapshot["connections"][0] }> = memo(({ connection }) => {
@@ -72,34 +59,34 @@ const ConnectionRow: FunctionComponent<{ connection: ExecutionDashboardSnapshot[
   return (
     <section
       ref={rowRef}
-      className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 dark:border-white/[0.05] dark:bg-white/[0.015] transition-colors"
+      className={`rounded-r-xl rounded-l-sm border border-l-2 border-black/[0.04] bg-black/[0.015] p-3 pl-3 transition-colors hover:border-signal-500/25 hover:bg-signal-500/[0.035] dark:border-white/[0.05] dark:bg-white/[0.015] ${statusRailTone(connection.status)}`}
     >
-      <div className="flex items-start justify-between gap-2.5">
+      <div className="flex min-w-0 items-start justify-between gap-2.5">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">{connection.displayName}</span>
-            <span className="rounded-full border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
+            <span className="min-w-0 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">{connection.displayName}</span>
+            <span className="rounded-md border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
               {CONNECTION_ROLE_LABELS[connection.role] || connection.role}
             </span>
             {connection.listenMode && (
-              <span className="rounded-full border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-signal-500">
+              <span className="rounded-md border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-signal-500">
                 Listening
               </span>
             )}
           </div>
 
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
-            <span>{connection.transport}</span>
-            {connection.model ? <span>· {connection.model}</span> : null}
-            <span className="truncate break-all">· {connection.connectionKey}</span>
+            <span className="break-words">{connection.transport}</span>
+            {connection.model ? <span className="break-words">· {connection.model}</span> : null}
+            <span className="break-all">· {connection.connectionKey}</span>
           </div>
 
           {(connection.machineName || connection.platform || connection.arch || connection.localExecutionRuntime) && (
             <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
-              {connection.machineName ? <span>{connection.machineName}</span> : null}
+              {connection.machineName ? <span className="break-all">{connection.machineName}</span> : null}
               {connection.platform ? <span>· {connection.platform}</span> : null}
               {connection.arch ? <span>· {connection.arch}</span> : null}
-              {connection.localExecutionRuntime ? <span>· {connection.localExecutionRuntime}</span> : null}
+              {connection.localExecutionRuntime ? <span className="break-words">· {connection.localExecutionRuntime}</span> : null}
             </div>
           )}
         </div>
@@ -115,16 +102,16 @@ const ConnectionRow: FunctionComponent<{ connection: ExecutionDashboardSnapshot[
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2 text-[9px] font-bold uppercase tracking-[0.14em]">
-        <span className="rounded-full border border-black/[0.05] px-2 py-1 text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
+        <span className="rounded-md border border-black/[0.05] px-2 py-1 text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
           inbox {connection.pendingInboxCount}
         </span>
-        <span className="rounded-full border border-black/[0.05] px-2 py-1 text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
+        <span className="rounded-md border border-black/[0.05] px-2 py-1 text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
           dispatch {connection.activeDispatchCount}
         </span>
-        <span className="rounded-full border border-black/[0.05] px-2 py-1 text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
+        <span className="rounded-md border border-black/[0.05] px-2 py-1 text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
           threads {connection.threadCount}
         </span>
-        <span className="rounded-full border border-black/[0.05] px-2 py-1 text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
+        <span className="rounded-md border border-black/[0.05] px-2 py-1 text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
           runs {connection.tasksRunCount}
         </span>
       </div>
@@ -145,7 +132,7 @@ const ConnectionRow: FunctionComponent<{ connection: ExecutionDashboardSnapshot[
           )}
 
           {connection.instruction && (
-            <p className="line-clamp-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+            <p className="line-clamp-2 break-words text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
               {connection.instruction}
             </p>
           )}
@@ -169,10 +156,7 @@ export const LiveConnectionsCard: FunctionComponent<{
   }, [snapshot.connections, snapshot.connections.length]);
 
   return (
-    <aside className="group relative overflow-hidden rounded-[1.4rem] border border-black/[0.06] bg-white/75 p-4 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/65 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-      <WaveFluid accentHex="#00E0A0" isActive={activeConnections.length > 0} />
-      <BorderTrace accentHex="#00E0A0" />
-
+    <aside className="group relative overflow-hidden rounded-2xl border border-black/[0.08] bg-white p-4 shadow-sm dark:border-white/[0.08] dark:bg-void-800">
       <div className="relative z-10">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">

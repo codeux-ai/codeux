@@ -160,7 +160,7 @@ const DeltaValue: FunctionComponent<{
 };
 
 const SummaryPill: FunctionComponent<Node> = ({ label, value, icon: Icon, accent }) => (
-  <div className="rounded-[1.75rem] border border-black/[0.05] bg-white/65 p-7 shadow-sm backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35">
+  <div className="rounded-2xl border border-black/[0.05] bg-white p-5 shadow-sm dark:border-white/[0.05] dark:bg-void-900/35">
     <div className={`mb-2 flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em] ${accent}`}>
       <Icon className="h-3.5 w-3.5" strokeWidth={1.8} />
       <span>{label}</span>
@@ -172,7 +172,7 @@ const SummaryPill: FunctionComponent<Node> = ({ label, value, icon: Icon, accent
 );
 
 const CounterTile: FunctionComponent<Node & { className?: string }> = ({ label, value, icon: Icon, accent, className }) => (
-  <div className={`rounded-[1.75rem] border border-black/[0.05] bg-white/68 p-7 shadow-sm backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35 ${className || ""}`}>
+  <div className={`rounded-2xl border border-black/[0.05] bg-white p-5 shadow-sm dark:border-white/[0.05] dark:bg-void-900/35 ${className || ""}`}>
     <div className={`mb-2 flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em] ${accent}`}>
       <Icon className="h-3.5 w-3.5" strokeWidth={1.9} />
       <span>{label}</span>
@@ -191,7 +191,7 @@ const StageBand: FunctionComponent<{
   const share = totalSeconds > 0 ? (seconds / totalSeconds) * 100 : 0;
 
   return (
-    <div className="rounded-[1.75rem] border border-black/[0.05] bg-white/65 p-7 shadow-sm backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35">
+    <div className="rounded-2xl border border-black/[0.05] bg-white p-5 shadow-sm dark:border-white/[0.05] dark:bg-void-900/35">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className={`text-[9px] font-bold uppercase tracking-[0.14em] ${meta.tone}`}>{meta.label}</div>
@@ -338,21 +338,6 @@ export const SprintStatsDeck: FunctionComponent<{
 
   return (
     <div className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white p-7 shadow-sm dark:border-white/[0.08] dark:bg-void-800">
-
-
-
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="dag-aurora absolute -left-20 top-8 h-56 w-56 rounded-full" style={{ background: 'radial-gradient(circle, rgba(0,224,160,0.08) 0%, transparent 70%)' }} />
-        <div className="dag-aurora absolute right-[-4rem] top-1/3 h-64 w-64 rounded-full" style={{ background: 'radial-gradient(circle, rgba(255,184,0,0.08) 0%, transparent 70%)', animationDelay: "-4s" }} />
-        <div
-          className="dag-grid-pan absolute inset-0 opacity-30 dark:opacity-35"
-          style={{
-            backgroundImage: "radial-gradient(circle at 1px 1px, rgba(100,116,139,0.18) 1px, transparent 0)",
-            backgroundSize: "26px 26px",
-          }}
-        />
-      </div>
-
       <div className="relative z-10">
         <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
