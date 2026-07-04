@@ -64,6 +64,9 @@ This document defines the visual patterns and rules for the Settings workspace. 
 *   Use `enterExit` for settings modals such as terminal login and pricing dialogs. These dialogs must trap focus, restore focus to the originating control with `preventScroll`, and keep dark-mode contrast strong enough for title, body, status, and action text.
 *   Use `asyncFeedback` for save results, login status, terminal output status, and card-level async results. Loading and successful local progress are polite; failed saves, terminal errors, and blocking provider errors are assertive and persist until recovery or dismissal.
 *   Avoid animation-only state communication. Required, invalid, dirty, saving, saved, inherited, overridden, and destructive-confirmation states need visible labels/badges plus ARIA state. Reduced-motion users must see the same state changes without relying on movement.
+*   Active panel saving/loading sets `aria-busy` at the panel boundary and keeps field values mounted. Background work uses `ActionFeedbackRegion` plus a screen-reader status/alert; do not replace populated panels with placeholder-only loading states.
+*   Category rail selection uses `selectionMovement`, `aria-current`, visible Selected/Pending/Disabled badges, and a polite search/result status. Disabled category switches must retain a stable label and expose the disabled reason through `title` and visible disabled copy.
+*   Save controls and provider-card actions suppress duplicate activation while pending. Destructive provider or danger-zone actions require explicit confirmation and must restore focus to the initiating control or a stable panel fallback.
 
 ## Verification Notes
 
