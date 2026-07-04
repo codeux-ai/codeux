@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import { completeOnboarding, ensureSelectedProject } from './helpers/prepare-app';
 
 const routes = [
@@ -15,6 +15,37 @@ const routes = [
   '/browser',
   '/files',
 ];
+
+function locatorForRouteReady(page: Page, route: string): Locator {
+  switch (route) {
+    case '/':
+      return page.getByRole('heading', { name: 'Overview' });
+    case '/sprints':
+      return page.getByRole('heading', { name: 'Active Sprints' });
+    case '/tasks':
+      return page.locator('h1').filter({ hasText: /^Task Board$/ });
+    case '/projects':
+      return page.getByRole('heading', { name: 'Manage Projects' });
+    case '/chat':
+      return page.getByRole('heading', { name: 'Project Conversations' });
+    case '/agents':
+      return page.getByRole('heading', { name: 'Your Workforce' });
+    case '/stats':
+      return page.getByRole('heading', { name: 'Stats' });
+    case '/scheduler':
+      return page.getByTestId('scheduler-page-root');
+    case '/config':
+      return page.getByRole('heading', { name: 'Settings & Integration' });
+    case '/memory':
+      return page.getByRole('heading', { name: 'Memory Map' });
+    case '/browser':
+      return page.getByTestId('browser-page-root');
+    case '/files':
+      return page.getByTestId('file-browser-page-root');
+    default:
+      throw new Error(`No route readiness locator configured for ${route}`);
+  }
+}
 
 test.beforeEach(async ({ page, request }) => {
   await completeOnboarding(request);
@@ -59,6 +90,7 @@ test('Benchmark Page Load & Fast Navigation', async ({ page }) => {
   await page.goto('/');
   // Wait for the app to settle
   await page.waitForLoadState('networkidle');
+  await expect(locatorForRouteReady(page, '/')).toBeVisible();
   const initialLoadTime = Date.now() - loadStart;
   console.log(`Initial load duration: ${initialLoadTime}ms`);
 
@@ -79,9 +111,8 @@ test('Benchmark Page Load & Fast Navigation', async ({ page }) => {
   for (const route of routes) {
     const navStart = Date.now();
     await page.goto(route);
-    await page.waitForLoadState('domcontentloaded');
-    // Wait for any skeletons or spinners to disappear if they exist
-    await page.waitForTimeout(500); // 500ms stabilization buffer
+    await page.waitForLoadState('networkidle');
+    await expect(locatorForRouteReady(page, route)).toBeVisible();
     const duration = Date.now() - navStart;
     navigationTimes[route] = duration;
     console.log(`Route navigation to ${route}: ${duration}ms`);

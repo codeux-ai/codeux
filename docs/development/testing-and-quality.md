@@ -45,6 +45,7 @@ pnpm exec playwright test
 ```
   - Playwright starts the built app with `node dist/index.js`, so run `pnpm run build` first when validating locally or in CI.
   - E2E tests must use the configured `baseURL` (`http://127.0.0.1:4444`) and avoid external network dependencies.
+  - Prefer assertion-driven synchronization over fixed sleeps. After navigation, wait for load state plus route-specific landmarks, and after responsive viewport changes, wait for the expected visible or hidden layout state.
   - The Playwright web server receives a fresh per-run temp home via both `HOME` and `USERPROFILE`; tests should prepare onboarding and project selection through `tests/e2e/helpers/prepare-app.ts` instead of relying on persisted local state.
   - The configured projects are Chromium-only desktop and mobile-sized viewports. Keep browser coverage narrow unless a workflow explicitly expands it.
   - Trace collection runs on first retry, screenshots are captured on failure, and videos are retained for failures to make retry/failure artifacts useful without assuming a warm browser cache.
