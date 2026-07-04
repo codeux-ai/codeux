@@ -177,6 +177,37 @@ describe("SprintLedger Accessibility", () => {
     expect(getAllByRole("button", { name: /Start Frontend Onboarding/i })[0]).toBeInTheDocument();
   });
 
+  it("exposes selected row state through aria-selected", () => {
+    const { container } = render(
+      <table>
+        <tbody>
+          <SprintLedgerRow
+            sprint={mockSprint}
+            isSelected={true}
+            isEven={false}
+            activeRun={undefined}
+            pauseResumeRun={undefined}
+            humanIntervention={null}
+            isAnyBulkPending={false}
+            pendingActionIds={new Set()}
+            onToggleRow={vi.fn()}
+            onToggleShowcase={vi.fn()}
+            onSprintToggle={vi.fn()}
+            onSprintPauseResume={vi.fn()}
+            onEdit={vi.fn()}
+            onExport={vi.fn()}
+            onOverrides={vi.fn()}
+            onMarkCompleted={vi.fn()}
+            onDelete={vi.fn()}
+          />
+        </tbody>
+      </table>
+    );
+
+    expect(container.querySelector('tr[aria-selected="true"]')).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Deselect sprint Frontend Onboarding/i })[0]).toBeInTheDocument();
+  });
+
   it("announces bulk selection count in a live region", () => {
     render(
       <SprintLedger
@@ -364,6 +395,45 @@ describe("SprintLedger Accessibility", () => {
 
     const statusLabels = screen.getAllByText("Status");
     expect(statusLabels.find(el => el.classList.contains('lg:hidden'))).toBeInTheDocument();
+  });
+
+  it("keeps long sprint names and mobile controls readable in card rows", () => {
+    const longNameSprint: Sprint = {
+      ...mockSprint,
+      id: "sprint-long-name",
+      name: "Internationalization Infrastructure Rollout With Very Long Regional Configuration Names",
+    };
+
+    render(
+      <table>
+        <tbody>
+          <SprintLedgerRow
+            sprint={longNameSprint}
+            isSelected={false}
+            isEven={false}
+            activeRun={undefined}
+            pauseResumeRun={undefined}
+            humanIntervention={null}
+            isAnyBulkPending={false}
+            pendingActionIds={new Set()}
+            onToggleRow={vi.fn()}
+            onToggleShowcase={vi.fn()}
+            onSprintToggle={vi.fn()}
+            onSprintPauseResume={vi.fn()}
+            onEdit={vi.fn()}
+            onExport={vi.fn()}
+            onOverrides={vi.fn()}
+            onMarkCompleted={vi.fn()}
+            onDelete={vi.fn()}
+          />
+        </tbody>
+      </table>
+    );
+
+    const sprintName = screen.getByText(longNameSprint.name);
+    expect(sprintName).toHaveClass("break-words");
+    expect(screen.getAllByRole("button", { name: /Start Internationalization Infrastructure/i })[0]).toHaveClass("whitespace-nowrap");
+    expect(screen.getAllByText("Controls").find(el => el.classList.contains("lg:hidden"))).toBeInTheDocument();
   });
 });
 
