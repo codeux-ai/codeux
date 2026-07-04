@@ -36,6 +36,8 @@ While Code UX trusts the developer and any connected systems, several specific p
 
 ### Redaction
 - **Log and Output Filtering:** Internal API keys, credentials, and sensitive configurations are actively scrubbed and redacted from application logs, debug outputs, and exported execution traces.
+- **Settings Secret Inputs:** Dashboard settings fields that store provider API keys, Git host tokens, Jira API tokens, and external embedding API keys render as masked secret inputs by default. Operators must explicitly use the reveal control to inspect a value.
+- **Docker Secret Transport:** Provider and preview Docker launches write selected host/provider environment variables to temporary `0600` env-files and pass those files via `--env-file`. This keeps API keys and Git tokens out of the host `docker run` argv visible through process listings while preserving the same container environment.
 
 ### Subprocess & Settings Mutation Safety
 - **Shell-Free Command Execution:** Shared subprocess execution validates command names, argument null bytes, and stdin file paths immediately before spawning, then runs with `shell: false` so arguments are not reinterpreted by a shell.

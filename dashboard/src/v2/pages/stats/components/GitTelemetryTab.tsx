@@ -557,16 +557,17 @@ export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSum
         aria-label="Git telemetry leaderboards"
         className="sticky top-3 z-20 grid max-w-full grid-cols-1 gap-1 rounded-[var(--stats-subpanel-radius)] border border-[color:var(--stats-border-hairline)] bg-[color:var(--stats-surface-subpanel)] p-1 shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl sm:grid-cols-2"
         onKeyDown={(event) => {
-          if (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "Home" && event.key !== "End") {
+          if (event.key !== "ArrowRight" && event.key !== "ArrowDown" && event.key !== "ArrowLeft" && event.key !== "ArrowUp" && event.key !== "Home" && event.key !== "End") {
             return;
           }
           event.preventDefault();
-          const currentIndex = leaderboardTabs.findIndex((tab) => tab.id === activeTab);
+          const focusedIndex = leaderboardTabs.findIndex((tab) => tabRefs.current[tab.id] === document.activeElement);
+          const currentIndex = focusedIndex >= 0 ? focusedIndex : leaderboardTabs.findIndex((tab) => tab.id === activeTab);
           const nextIndex = event.key === "Home"
             ? 0
             : event.key === "End"
               ? leaderboardTabs.length - 1
-              : event.key === "ArrowRight"
+              : event.key === "ArrowRight" || event.key === "ArrowDown"
                 ? (currentIndex + 1) % leaderboardTabs.length
                 : (currentIndex - 1 + leaderboardTabs.length) % leaderboardTabs.length;
           const nextTab = leaderboardTabs[nextIndex]?.id ?? "tasks";
@@ -590,6 +591,7 @@ export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSum
               aria-controls={`git-panel-${tab.id}`}
               tabIndex={isActive ? 0 : -1}
               onClick={() => setActiveTab(tab.id)}
+              aria-label={tab.label}
               className={`grid min-h-12 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[calc(var(--stats-subpanel-radius)-0.35rem)] px-3 py-2 text-left text-[11px] font-bold uppercase tracking-[0.18em] transition-all motion-safe:duration-200 ${CONTROL_FOCUS_CLASS} ${
                 isActive ? TAB_ACTIVE_CLASS : TAB_IDLE_CLASS
               }`}

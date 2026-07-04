@@ -247,6 +247,9 @@ export const ViewToggle: FunctionComponent<{
       onKeyDown={handleKeyDown}
       className={`flex w-full max-w-full min-w-0 flex-wrap gap-1 p-1 ${CHIP_CLASS} ${className}`.trim()}
     >
+      <span className="sr-only" aria-live="polite">
+        Selected analytics mode: {modes.find((mode) => mode.id === value)?.accessibleLabel ?? value}.
+      </span>
       {modes.map((mode) => {
         const Icon = mode.icon;
         const selected = value === mode.id;

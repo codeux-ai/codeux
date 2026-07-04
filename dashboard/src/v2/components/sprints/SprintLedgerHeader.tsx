@@ -1,4 +1,5 @@
 import type { FunctionComponent } from "preact";
+import type { JSX } from "preact";
 import { Activity, CheckCircle2, Heart, Layers3, Search, Sparkles, X } from "lucide-preact";
 import { ListWindowSelector } from "../ui/ListWindowSelector.js";
 import type { ListWindowOption } from "../../lib/list-window.js";
@@ -16,6 +17,7 @@ export interface SprintLedgerHeaderProps {
   onListWindowChange: (value: ListWindowOption) => void;
   filters: LedgerFilters;
   onFiltersChange: (filters: LedgerFilters) => void;
+  transitionStyle?: JSX.CSSProperties;
 }
 
 export const SprintLedgerHeader: FunctionComponent<SprintLedgerHeaderProps> = ({
@@ -28,6 +30,7 @@ export const SprintLedgerHeader: FunctionComponent<SprintLedgerHeaderProps> = ({
   onListWindowChange,
   filters,
   onFiltersChange,
+  transitionStyle,
 }) => {
   const statusFilter = filters.status === "all" || filters.status.size !== 1
     ? "all"
@@ -101,13 +104,15 @@ export const SprintLedgerHeader: FunctionComponent<SprintLedgerHeaderProps> = ({
               value={filters.query}
               onInput={(e) => onFiltersChange({ ...filters, query: (e.target as HTMLInputElement).value })}
               placeholder="Search sprints…"
-              className="h-12 w-full rounded-2xl border border-black/[0.08] bg-white/85 pl-11 pr-11 text-sm text-slate-800 shadow-[0_10px_24px_rgba(15,23,42,0.04)] placeholder:text-slate-400 focus:border-signal-500/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/20 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-white dark:placeholder:text-slate-500"
+              className="h-12 w-full rounded-2xl border border-black/[0.08] bg-white/85 pl-11 pr-11 text-sm text-slate-800 shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition-[border-color,box-shadow] placeholder:text-slate-400 focus:border-signal-500/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/20 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-white dark:placeholder:text-slate-500"
+              style={transitionStyle}
             />
             {filters.query && (
               <button
                 type="button"
                 onClick={() => onFiltersChange({ ...filters, query: "" })}
                 className="absolute right-3.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-black/[0.04] hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
+                style={transitionStyle}
                 title="Clear search" aria-label="Clear search"
               >
                 <X className="h-3.5 w-3.5" strokeWidth={2.2} />
@@ -126,11 +131,12 @@ export const SprintLedgerHeader: FunctionComponent<SprintLedgerHeaderProps> = ({
             {hasFilters ? (
               <button
                 type="button"
-                onClick={clearFilters}
-                title="Clear all filters"
-                aria-label="Clear all applied filters to show all sprints"
-                className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1.5 text-xs font-bold text-signal-700 transition-colors hover:bg-signal-500/15 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:text-signal-300"
-              >
+              onClick={clearFilters}
+              title="Clear all filters"
+              aria-label="Clear all applied filters to show all sprints"
+              className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1.5 text-xs font-bold text-signal-700 transition-colors hover:bg-signal-500/15 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:text-signal-300"
+              style={transitionStyle}
+            >
                 <X className="h-3.5 w-3.5" strokeWidth={2.2} />
                 Clear Filters
               </button>

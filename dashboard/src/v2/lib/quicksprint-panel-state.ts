@@ -45,6 +45,13 @@ export function getVisibleBuiltinTemplates(
   return builtinTemplates.filter((template) => (template.purpose || "general") === activePurpose.value);
 }
 
+export function getBrowseTemplates(
+  visibleBuiltinTemplates: QuicksprintTemplateRecord[],
+  customTemplates: QuicksprintTemplateRecord[],
+): QuicksprintTemplateRecord[] {
+  return [...visibleBuiltinTemplates, ...customTemplates];
+}
+
 export function getCombinedPrompt(
   selectedTemplate: QuicksprintTemplateRecord | null,
   agentPresets: AgentPreset[],

@@ -126,6 +126,26 @@ describe("AvantgardeSelect", () => {
     expect(queryByRole("listbox")).toBeNull();
   });
 
+  it("wires selected and expanded state on the trigger", () => {
+    const options = [{ value: "1", label: "Opt" }, { value: "2", label: "Other" }];
+    render(
+      <AvantgardeSelect id="stateful-select" value="1" onChange={() => {}} options={options} aria-label="Stateful select" />
+    );
+
+    const trigger = screen.getByRole("button", { name: "Stateful select" });
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(trigger.getAttribute("aria-selected")).toBe("true");
+    expect(trigger.getAttribute("aria-controls")).toBe("stateful-select-listbox");
+    expect(trigger.className).toContain("focus-visible:ring-[var(--focus-ring-signal)]");
+    expect(trigger.style.transitionDuration).toBe("150ms");
+    expect(trigger.style.transitionTimingFunction).toBe("cubic-bezier(0.4, 0, 0.2, 1)");
+
+    fireEvent.click(trigger);
+
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("listbox").getAttribute("id")).toBe("stateful-select-listbox");
+  });
+
   it("renders different variants", () => {
     const options = [{ value: "1", label: "Opt" }];
     const { rerender, container } = render(<AvantgardeSelect value="1" onChange={() => {}} options={options} variant="compact" />);

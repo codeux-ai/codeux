@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
-import { expect, test, vi } from "vitest";
-import { render, fireEvent, waitFor } from "@testing-library/preact";
+import { afterEach, expect, test, vi } from "vitest";
+import { cleanup, render } from "@testing-library/preact";
 import { Button } from "../ui/Button.js";
 import * as matchers from "@testing-library/jest-dom/matchers";
 
 expect.extend(matchers);
+
+afterEach(() => {
+    cleanup();
+});
 
 vi.mock("gsap", () => ({
     default: {
@@ -34,4 +38,21 @@ test('button locks width during loading and renders spinner', async () => {
     expect(loadingButton.getAttribute('aria-busy')).toBe('true');
     // The width should be locked to offsetWidth
     expect(loadingButton.style.width).toBe('150px');
+});
+
+test('button keeps locked width during success feedback', () => {
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 150 });
+
+    const { getByRole, rerender } = render(
+        <Button success={false}>Saved</Button>
+    );
+
+    const button = getByRole('button');
+    expect(button.style.width).toBe('');
+
+    rerender(
+        <Button success>Saved</Button>
+    );
+
+    expect(getByRole('button').style.width).toBe('150px');
 });

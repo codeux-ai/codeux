@@ -19,6 +19,7 @@ import {
   getBuiltinPurposeOptions,
   getActiveBuiltinPurpose,
   getVisibleBuiltinTemplates,
+  getBrowseTemplates,
 } from "../../lib/quicksprint-panel-state.js";
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
@@ -150,6 +151,11 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     [activeBuiltinPurpose, builtinTemplates]
   );
 
+  const browseTemplates = useMemo(
+    () => getBrowseTemplates(visibleBuiltinTemplates, customTemplates),
+    [customTemplates, visibleBuiltinTemplates],
+  );
+
   /* ── Handlers ────────────────────────────────────────────── */
   const handleSelectTemplate = (t: QuicksprintTemplateRecord) => {
     setSelectedTemplateId(t.id);
@@ -174,6 +180,16 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   const wrappedOpenEditor = (t: QuicksprintTemplateRecord | null) => {
     editorState.openEditor(t);
     setPhase("editor");
+  };
+
+  const handleDeleteTemplate = async (template: QuicksprintTemplateRecord) => {
+    const message = template.isBuiltIn
+      ? `Delete the default template "${template.name}" for this project?`
+      : `Delete the custom template "${template.name}"?`;
+    if (!window.confirm(message)) {
+      return;
+    }
+    await onDeleteTemplate?.(template.id);
   };
 
   const executionState = useQuicksprintExecutionState({
@@ -215,9 +231,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
 
   const pickerOpen = phase === "editor" && (editorState.showIconPicker || editorState.showColorPicker);
   const overflowClass = pickerOpen ? "" : "overflow-hidden";
-  const contentOverflowClass = pickerOpen
-    ? "overflow-visible"
-    : "dashboard-scrollbar overflow-y-auto overscroll-contain";
+  const contentOverflowClass = pickerOpen ? "overflow-visible" : "";
 
   /* ── Render ─────────────────────────────────────────────────── */
   return (
@@ -227,16 +241,16 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,107,0,0.07),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(0,224,160,0.06),transparent_34%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(255,107,0,0.09),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(0,224,160,0.07),transparent_34%)]" />
 
-      <div className={`relative min-h-[480px] max-h-[calc(100dvh-12rem)] ${contentOverflowClass}`} ref={fieldsRef}>
+      <div className={`relative min-h-[480px] ${contentOverflowClass}`} ref={fieldsRef}>
         {phase === "browse" && (
           <QuicksprintBrowseView
-            customTemplates={customTemplates}
-            visibleBuiltinTemplates={visibleBuiltinTemplates}
+            templates={browseTemplates}
             builtinPurposeOptions={builtinPurposeOptions}
             selectedBuiltinPurpose={selectedBuiltinPurpose}
             setSelectedBuiltinPurpose={setSelectedBuiltinPurpose}
             handleSelectTemplate={handleSelectTemplate}
             openEditor={wrappedOpenEditor}
+            handleDeleteTemplate={onDeleteTemplate ? (template) => { void handleDeleteTemplate(template); } : undefined}
             activeBuiltinPurpose={activeBuiltinPurpose}
             loading={loading}
             onClose={onClose}

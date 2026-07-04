@@ -357,7 +357,7 @@ For quicksprint calls:
 - `execute` defaults to `submitMode: "plan_only"` when no submit mode is supplied.
 - `taskCount` is the canonical task-number field for execution. MCP accepts it as a number or numeric string.
 - `noTaskLimit: true` lets the planner choose the number of subtasks and disables the fixed-count prompt.
-- `delete_template` requires approval confirmation and only applies to custom templates; built-in templates remain protected by the quicksprint service.
+- `delete_template` requires approval confirmation. Custom templates are removed from the project template directory; built-in/default templates are hidden for the project by writing a local tombstone marker instead of deleting shared bundled assets.
 
 For scheduler calls:
 - `manage_scheduler` supports `list`, `create`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `update`, `delete`, and `run_due`.

@@ -9,6 +9,61 @@ import type { BuiltinPurposeOption } from "../../lib/quicksprint-panel-state.js"
 const RAIL_SCROLL_STEP_RATIO = 0.88;
 const RAIL_MIN_SCROLL_STEP = 320;
 const RAIL_ROWS = 2;
+const WHEEL_LINE_HEIGHT = 16;
+
+function normalizeWheelDeltaY(event: WheelEvent, fallbackPageHeight: number): number {
+  if (event.deltaMode === 1) {
+    return event.deltaY * WHEEL_LINE_HEIGHT;
+  }
+  if (event.deltaMode === 2) {
+    return event.deltaY * fallbackPageHeight;
+  }
+  return event.deltaY;
+}
+
+function isVerticalScrollContainer(element: HTMLElement): boolean {
+  if (element.scrollHeight <= element.clientHeight) {
+    return false;
+  }
+
+  const overflowY = window.getComputedStyle(element).overflowY;
+  return overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay";
+}
+
+function canScrollVertically(element: HTMLElement, deltaY: number): boolean {
+  const maxScrollTop = Math.max(element.scrollHeight - element.clientHeight, 0);
+  if (deltaY < 0) {
+    return element.scrollTop > 0;
+  }
+  return element.scrollTop < maxScrollTop - 1;
+}
+
+function findVerticalScrollTarget(start: HTMLElement, deltaY: number): HTMLElement | null {
+  let current = start.parentElement;
+  while (current) {
+    if (isVerticalScrollContainer(current) && canScrollVertically(current, deltaY)) {
+      return current;
+    }
+    current = current.parentElement;
+  }
+
+  const documentScroller = document.scrollingElement;
+  if (
+    documentScroller instanceof HTMLElement
+    && documentScroller.scrollHeight > documentScroller.clientHeight
+    && canScrollVertically(documentScroller, deltaY)
+  ) {
+    return documentScroller;
+  }
+
+  return null;
+}
+
+function scrollElementByDeltaY(element: HTMLElement, deltaY: number): void {
+  const maxScrollTop = Math.max(element.scrollHeight - element.clientHeight, 0);
+  const nextScrollTop = Math.min(maxScrollTop, Math.max(0, element.scrollTop + deltaY));
+  element.scrollTop = nextScrollTop;
+}
 
 type TemplateRailProps = {
   railId: string;
@@ -16,6 +71,7 @@ type TemplateRailProps = {
   templates: QuicksprintTemplateRecord[];
   onSelectTemplate: (template: QuicksprintTemplateRecord) => void;
   onEditTemplate?: (template: QuicksprintTemplateRecord) => void;
+  onDeleteTemplate?: (template: QuicksprintTemplateRecord) => void;
 };
 
 const TemplateRail: FunctionComponent<TemplateRailProps> = ({
@@ -24,6 +80,7 @@ const TemplateRail: FunctionComponent<TemplateRailProps> = ({
   templates,
   onSelectTemplate,
   onEditTemplate,
+  onDeleteTemplate,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasPotentialOverflow = templates.length > RAIL_ROWS;
@@ -107,6 +164,37 @@ const TemplateRail: FunctionComponent<TemplateRailProps> = ({
     }
   }, [scrollByDirection]);
 
+  const onRailWheel = useCallback((event: WheelEvent) => {
+    if (event.ctrlKey || event.shiftKey || event.deltaY === 0 || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) {
+      return;
+    }
+
+    const rail = scrollRef.current;
+    if (!rail) {
+      return;
+    }
+
+    const deltaY = normalizeWheelDeltaY(event, rail.clientHeight || window.innerHeight);
+    const target = findVerticalScrollTarget(rail, deltaY);
+    if (!target) {
+      return;
+    }
+
+    event.preventDefault();
+    scrollElementByDeltaY(target, deltaY);
+  }, []);
+
+  useEffect(() => {
+    const rail = scrollRef.current;
+    if (!rail) {
+      return;
+    }
+    rail.addEventListener("wheel", onRailWheel, { passive: false });
+    return () => {
+      rail.removeEventListener("wheel", onRailWheel);
+    };
+  }, [onRailWheel]);
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-end gap-2">
@@ -138,7 +226,7 @@ const TemplateRail: FunctionComponent<TemplateRailProps> = ({
         aria-label={ariaLabel}
         onKeyDown={onRailKeyDown}
         data-qs-template-rail={railId}
-        className="dashboard-scrollbar grid max-w-full grid-flow-col grid-rows-2 gap-4 overflow-x-auto overflow-y-visible overscroll-x-contain pb-4 pr-2 outline-none scrollbar-hide touch-pan-x scroll-smooth auto-cols-[minmax(15rem,calc(100vw-4rem))] sm:auto-cols-[17rem] lg:auto-cols-[18rem]"
+        className="dashboard-scrollbar grid max-w-full grid-flow-col grid-rows-2 gap-4 overflow-x-auto overflow-y-visible overscroll-x-contain pb-4 pr-2 outline-none scrollbar-hide touch-auto scroll-smooth auto-cols-[minmax(19rem,calc(100vw-4rem))] sm:auto-cols-[21rem] lg:auto-cols-[22rem]"
       >
         {templates.map((template) => (
           <TemplateCard
@@ -146,6 +234,7 @@ const TemplateRail: FunctionComponent<TemplateRailProps> = ({
             template={template}
             onSelect={() => onSelectTemplate(template)}
             onEdit={onEditTemplate ? () => onEditTemplate(template) : undefined}
+            onDelete={onDeleteTemplate ? () => onDeleteTemplate(template) : undefined}
           />
         ))}
       </div>
@@ -154,19 +243,18 @@ const TemplateRail: FunctionComponent<TemplateRailProps> = ({
 };
 
 export const QuicksprintBrowseView: FunctionComponent<{
-  customTemplates: QuicksprintTemplateRecord[];
-  visibleBuiltinTemplates: QuicksprintTemplateRecord[];
+  templates: QuicksprintTemplateRecord[];
   builtinPurposeOptions: BuiltinPurposeOption[];
   selectedBuiltinPurpose: string;
   setSelectedBuiltinPurpose: (purpose: string) => void;
   handleSelectTemplate: (t: QuicksprintTemplateRecord) => void;
   openEditor: (t: QuicksprintTemplateRecord | null) => void;
+  handleDeleteTemplate?: (t: QuicksprintTemplateRecord) => void;
   activeBuiltinPurpose: BuiltinPurposeOption | null;
   loading: boolean;
   onClose: () => void;
 }> = ({
-  customTemplates,
-  visibleBuiltinTemplates,
+  templates,
   builtinPurposeOptions,
   selectedBuiltinPurpose,
   setSelectedBuiltinPurpose,
@@ -174,10 +262,10 @@ export const QuicksprintBrowseView: FunctionComponent<{
   activeBuiltinPurpose,
   loading,
   openEditor,
+  handleDeleteTemplate,
   onClose,
 }) => {
-  const hasBuiltinTemplates = visibleBuiltinTemplates.length > 0;
-  const customSectionClass = hasBuiltinTemplates ? "mt-10" : "mt-8";
+  const hasTemplates = templates.length > 0;
 
   return (
     <div className="p-6 sm:p-8 lg:p-10">
@@ -193,7 +281,7 @@ export const QuicksprintBrowseView: FunctionComponent<{
               Launch A Quicksprint.
             </h2>
             <p className="max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400 sm:text-[15px]">
-              Browse purpose-specific default templates or launch your own reusable custom flows to spin up a focused sprint fast.
+              Browse default and custom templates together to spin up a focused sprint fast.
             </p>
           </div>
         </div>
@@ -213,59 +301,50 @@ export const QuicksprintBrowseView: FunctionComponent<{
         </div>
       ) : (
         <>
-          {/* Built-in templates */}
-          {hasBuiltinTemplates && (
           <div data-qs-stagger className="mt-10">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
               <div className="space-y-2">
-                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Default Templates</div>
+                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Templates</div>
                 <p className="max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                  Built-in templates are organized by purpose so the catalog can expand into additional language and product families over time.
+                  Default templates and project templates share one browse rail. The purpose filter narrows the default set while keeping custom templates nearby.
                 </p>
               </div>
-              {builtinPurposeOptions.length > 0 && (
-              <div className="w-full max-w-sm rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Purpose</div>
-                <div className="mt-2">
-                  <AvantgardeSelect
-                    aria-label="Default template purpose"
-                    variant="compact"
-                    value={activeBuiltinPurpose?.value || ""}
-                    onChange={setSelectedBuiltinPurpose}
-                    options={builtinPurposeOptions.map((option) => ({
-                      value: option.value,
-                      label: option.label,
-                    }))}
-                    placeholder="Select Purpose"
-                  />
+              <div className="flex w-full flex-col gap-3 sm:max-w-xl sm:flex-row sm:items-end sm:justify-end">
+                {builtinPurposeOptions.length > 0 && (
+                <div className="w-full rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03] sm:max-w-xs">
+                  <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Default Purpose</div>
+                  <div className="mt-2">
+                    <AvantgardeSelect
+                      aria-label="Default template purpose"
+                      variant="compact"
+                      value={activeBuiltinPurpose?.value || ""}
+                      onChange={setSelectedBuiltinPurpose}
+                      options={builtinPurposeOptions.map((option) => ({
+                        value: option.value,
+                        label: option.label,
+                      }))}
+                      placeholder="Select Purpose"
+                    />
+                  </div>
                 </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => openEditor(null)}
+                  className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-full border border-ember-500/20 bg-ember-500/[0.06] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-ember-600 transition-colors hover:bg-ember-500/[0.12] dark:text-ember-400"
+                >
+                  <Plus className="h-3 w-3" strokeWidth={2.5} />
+                  New Template
+                </button>
               </div>
-              )}
             </div>
             {activeBuiltinPurpose?.description && (
               <p className="mt-4 max-w-3xl text-xs leading-relaxed text-slate-400 dark:text-slate-500">
                 {activeBuiltinPurpose.description}
               </p>
             )}
-            <TemplateRail railId="builtin-template-rail" ariaLabel="default templates" templates={visibleBuiltinTemplates} onSelectTemplate={handleSelectTemplate} />
-          </div>
-          )}
 
-          {/* Custom templates */}
-          <div data-qs-stagger className={customSectionClass}>
-            <div className="flex items-center justify-between gap-3 mb-5">
-              <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Custom Templates</div>
-              <button
-                type="button"
-                onClick={() => openEditor(null)}
-                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-ember-500/20 bg-ember-500/[0.06] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-ember-600 transition-colors hover:bg-ember-500/[0.12] dark:text-ember-400"
-              >
-                <Plus className="h-3 w-3" strokeWidth={2.5} />
-                New Template
-              </button>
-            </div>
-
-            {customTemplates.length === 0 ? (
+            {!hasTemplates ? (
               <button
                 type="button"
                 onClick={() => openEditor(null)}
@@ -279,11 +358,12 @@ export const QuicksprintBrowseView: FunctionComponent<{
               </button>
             ) : (
               <TemplateRail
-                railId="custom-template-rail"
-                ariaLabel="custom templates"
-                templates={customTemplates}
+                railId="quicksprint-template-rail"
+                ariaLabel="quicksprint templates"
+                templates={templates}
                 onSelectTemplate={handleSelectTemplate}
                 onEditTemplate={openEditor}
+                onDeleteTemplate={handleDeleteTemplate}
               />
             )}
           </div>

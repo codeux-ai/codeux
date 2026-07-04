@@ -1,13 +1,18 @@
 // @vitest-environment jsdom
-import { expect, test, vi } from "vitest";
-import { render } from "@testing-library/preact";
+import { afterEach, expect, test, vi } from "vitest";
+import { cleanup, fireEvent, render } from "@testing-library/preact";
 import { Button } from "../ui/Button.js";
+import { IconButton } from "../IconButton.js";
 import { Input } from "../ui/Input.js";
 import { Select } from "../ui/Select.js";
 import { Toggle } from "../ui/Toggle.js";
 import * as matchers from "@testing-library/jest-dom/matchers";
 
 expect.extend(matchers);
+
+afterEach(() => {
+    cleanup();
+});
 
 vi.mock("gsap", () => ({
     default: {
@@ -38,6 +43,53 @@ test('Button sets aria-busy true while loading', () => {
 
     rerender(<Button pending={true}>Action</Button>);
     expect(container.querySelector('button')).toHaveAttribute('aria-busy', 'true');
+});
+
+test('buttons suppress clicks while aria-disabled or pending', () => {
+    const buttonClick = vi.fn();
+    const iconClick = vi.fn();
+
+    const { getByRole, rerender } = render(<Button aria-disabled="true" onClick={buttonClick}>Action</Button>);
+    fireEvent.click(getByRole('button', { name: 'Action' }));
+    expect(buttonClick).not.toHaveBeenCalled();
+
+    rerender(<Button pending onClick={buttonClick}>Action</Button>);
+    fireEvent.click(getByRole('button', { name: 'Action' }));
+    expect(buttonClick).not.toHaveBeenCalled();
+
+    const { getByRole: getIconByRole, rerender: rerenderIcon } = render(
+        <IconButton aria-label="Refresh" aria-disabled="true" onClick={iconClick}><span>R</span></IconButton>
+    );
+    fireEvent.click(getIconByRole('button', { name: 'Refresh' }));
+    expect(iconClick).not.toHaveBeenCalled();
+
+    rerenderIcon(<IconButton aria-label="Refresh" pending onClick={iconClick}><span>R</span></IconButton>);
+    fireEvent.click(getIconByRole('button', { name: 'Refresh' }));
+    expect(iconClick).not.toHaveBeenCalled();
+});
+
+test('shared controls expose visible focus and reduced-motion-safe token classes', () => {
+    const { container } = render(
+        <div>
+            <Button>Save</Button>
+            <IconButton aria-label="Refresh"><span>R</span></IconButton>
+            <Select aria-disabled="true"><option>A</option></Select>
+        </div>
+    );
+
+    const [button, iconButton] = Array.from(container.querySelectorAll('button'));
+    const select = container.querySelector('select');
+
+    expect(button).toHaveClass('focus-visible:ring-[var(--focus-ring-signal)]');
+    expect(iconButton).toHaveClass('focus-visible:ring-[var(--focus-ring-signal)]');
+    expect(iconButton).toHaveClass('motion-reduce:duration-0');
+    expect(iconButton).toHaveStyle({
+        transitionDuration: '150ms',
+        transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)'
+    });
+    expect(select).toHaveAttribute('aria-disabled', 'true');
+    expect(select).toHaveClass('duration-[var(--interaction-control-feedback-duration)]');
+    expect(select).toHaveClass('motion-reduce:duration-0');
 });
 
 test('Toggle maintains explicit aria-checked values', () => {

@@ -7,7 +7,7 @@ import { render, screen, cleanup } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
 import { BranchNameSchemeEditor } from "../BranchNameSchemeEditor";
 import { SprintKeyEditor } from "../SprintKeyEditor";
-import { TextInput, NumberInput, TextAreaInput, PillChoiceGroup } from "../SettingsFormFields";
+import { TextInput, SecretInput, NumberInput, TextAreaInput, PillChoiceGroup } from "../SettingsFormFields";
 
 
 import { SettingsCategoryRail } from "../SettingsCategoryRail";
@@ -149,6 +149,26 @@ describe("SettingsControls Accessibility", () => {
     const input = screen.getByRole("textbox");
     expect(input).toHaveAttribute("aria-label", "Test Label");
     expect(input).toHaveAttribute("aria-description", "Test Description");
+  });
+
+  it("SecretInput masks values by default and reveals only on request", async () => {
+    const user = userEvent.setup();
+    render(
+      <SecretInput
+        value="sk-test-secret"
+        onChange={() => {}}
+        aria-label="API key"
+        aria-description="Secret token"
+      />
+    );
+
+    const input = screen.getByLabelText("API key");
+    expect(input).toHaveAttribute("type", "password");
+    expect(input).toHaveAttribute("aria-description", "Secret token");
+
+    await user.click(screen.getByRole("button", { name: "Show secret" }));
+    expect(input).toHaveAttribute("type", "text");
+    expect(screen.getByRole("button", { name: "Hide secret" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("NumberInput passes aria-label and aria-description", () => {

@@ -40,6 +40,13 @@ describe("series-builders", () => {
     expect(series.wallRuntime).toEqual([0, 0, 0, 0, 0, 0, 0]);
   });
 
+  it("returns stable zero-filled empty series for snapshots without buckets", () => {
+    const series = buildMetricSeries({ chartSeries: [], buckets: [] } as any);
+    expect(series.totalTokens).toHaveLength(7);
+    expect(series.totalTokens.every((point) => point === 0)).toBe(true);
+    expect(series.gitFilesChanged).toEqual([0, 0, 0, 0, 0, 0, 0]);
+  });
+
   it("extracts provider, model, and purpose series without fallback noise", () => {
     expect(extractProviderSeries(mockStats, "codex")).toEqual([12, 16, 20]);
     expect(extractModelSeries(mockStats, "gpt-5")).toEqual([3, 5, 8]);

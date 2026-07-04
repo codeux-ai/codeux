@@ -117,7 +117,7 @@ describe("LiveSessionPage Runtime Status", () => {
     expect(screen.getByRole("alert")).toHaveAttribute("aria-live", "assertive");
   });
 
-  it("does not show a recovering banner (transient state must not flash/shift layout)", () => {
+  it("shows polite background refresh messaging while preserving cached runtime panels", () => {
     vi.mocked(useDashboardRuntimeData).mockReturnValue({
       error: null,
       gitStatus: null,
@@ -136,7 +136,12 @@ describe("LiveSessionPage Runtime Status", () => {
     });
 
     render(<LiveSessionPage />);
-    expect(screen.queryByText("Recovering State")).not.toBeInTheDocument();
+    expect(screen.getByText("Refreshing Live Data")).toBeInTheDocument();
+    expect(screen.getByText(/current runtime snapshot visible/)).toBeInTheDocument();
+    const banner = screen.getByText("Refreshing Live Data").closest('[role="status"]');
+    expect(banner).toHaveAttribute("aria-live", "polite");
+    expect(banner).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("region", { name: "Execution runtime" })).toBeInTheDocument();
   });
 
   it("renders the LiveTransportBanner with an error message", () => {

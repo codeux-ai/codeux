@@ -29,6 +29,7 @@ import {
   pickContainerEnv,
   resolveConfiguredPath,
   toDockerMountArg,
+  writeDockerEnvFile,
 } from "./cli-docker-utils.js";
 import { CONTAINER_SETUP_SCRIPT } from "./cli-workflow-utils.js";
 import {
@@ -257,34 +258,44 @@ export class SprintPreviewService {
           pathPosix.join(containerNpmCache, "pnpm-store"),
         ], project.baseDir);
 
-        const dockerArgs = buildSprintPreviewDockerCreateArgs({
-          projectId,
-          sprintId,
-          sessionId: session.id,
-          containerName,
-          hostPort,
-          containerAppPort: settings.containerAppPort,
-          containerWorkspacePath,
-          containerRuntimeHome,
-          volumeName,
-          userSpec,
-          setupScriptSource: setupScriptPath ? this.mapDockerSourcePathForDaemon(setupScriptPath, project.baseDir) : null,
-          shouldRunSetupScriptAtRuntime,
-          containerGitUserName: workflowSettings.containerGitUserName,
-          containerGitUserEmail: workflowSettings.containerGitUserEmail,
-          credentialMounts: credentialMounts.map((mount) => ({
-            ...mount,
-            source: this.mapDockerSourcePathForDaemon(mount.source, project.baseDir),
-          })),
-          effectiveInstallCommand,
-          buildCommand: preparedScript.buildCommand,
-          runCommand: preparedScript.runCommand,
-          sourceCommit,
-          resolvedImage: resolvedImage.image,
-          bootstrapScript,
-        });
+        const startResult = await (async () => {
+          const envFileTempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-preview-env-"));
+          try {
+            const envFilePath = path.join(envFileTempRoot, "preview.env");
+            await writeDockerEnvFile(envFilePath, pickContainerEnv(process.env));
+            const dockerArgs = buildSprintPreviewDockerCreateArgs({
+              projectId,
+              sprintId,
+              sessionId: session.id,
+              containerName,
+              hostPort,
+              containerAppPort: settings.containerAppPort,
+              containerWorkspacePath,
+              containerRuntimeHome,
+              volumeName,
+              userSpec,
+              setupScriptSource: setupScriptPath ? this.mapDockerSourcePathForDaemon(setupScriptPath, project.baseDir) : null,
+              shouldRunSetupScriptAtRuntime,
+              containerGitUserName: workflowSettings.containerGitUserName,
+              containerGitUserEmail: workflowSettings.containerGitUserEmail,
+              credentialMounts: credentialMounts.map((mount) => ({
+                ...mount,
+                source: this.mapDockerSourcePathForDaemon(mount.source, project.baseDir),
+              })),
+              effectiveInstallCommand,
+              buildCommand: preparedScript.buildCommand,
+              runCommand: preparedScript.runCommand,
+              sourceCommit,
+              envFileSource: this.mapDockerSourcePathForDaemon(envFilePath, project.baseDir),
+              resolvedImage: resolvedImage.image,
+              bootstrapScript,
+            });
 
-        const startResult = await runCommandStrict("docker", dockerArgs, project.baseDir);
+            return await runCommandStrict("docker", dockerArgs, project.baseDir);
+          } finally {
+            await fs.rm(envFileTempRoot, { recursive: true, force: true }).catch(() => undefined);
+          }
+        })();
         const containerId = startResult.stdout.trim();
         if (!containerId) {
           throw new Error("Docker preview container did not return a container id.");
@@ -608,16 +619,18 @@ export class SprintPreviewService {
 
   async reconcileSessions(): Promise<void> {
     const sessions = this.deps.sprintPreviewRepository.listSessions();
-    // Memoize the per-project execution snapshot within this pass; many sessions share a project and
-    // it is an expensive DB rollup, so recomputing it per session was a second N+1.
-    const executionSnapshotByProject = new Map<string, ReturnType<typeof this.deps.executionRepository.getProjectExecutionSnapshot>>();
-    const getExecutionSnapshot = (projectId: string) => {
-      let snapshot = executionSnapshotByProject.get(projectId);
-      if (!snapshot) {
-        snapshot = this.deps.executionRepository.getProjectExecutionSnapshot(projectId);
-        executionSnapshotByProject.set(projectId, snapshot);
+    const runningSprintIdsByProject = new Map<string, Set<string>>();
+    const getRunningSprintIds = (projectId: string) => {
+      let sprintIds = runningSprintIdsByProject.get(projectId);
+      if (!sprintIds) {
+        sprintIds = new Set(
+          this.deps.executionRepository
+            .listSprintRunsByStatus(["running"], { projectId })
+            .map((run) => run.sprintId),
+        );
+        runningSprintIdsByProject.set(projectId, sprintIds);
       }
-      return snapshot;
+      return sprintIds;
     };
 
     if (sessions.length > 0) {
@@ -633,9 +646,7 @@ export class SprintPreviewService {
           continue;
         }
         const refreshed = await this.refreshRuntimeState(session, containers);
-        const activeRun = getExecutionSnapshot(session.projectId)
-          .sprintRuns
-          .some((run) => run.sprintId === session.sprintId && run.status === "running");
+        const activeRun = getRunningSprintIds(session.projectId).has(session.sprintId);
 
         // Prune dead sessions for finished sprints. Once a sprint is terminal and has no running
         // container, the session can never auto-start again, so reconciling it every 15s (settings
@@ -725,23 +736,14 @@ export class SprintPreviewService {
 
     const projects = this.deps.projectManagementRepository.listProjects().projects;
     for (const project of projects) {
-      const execution = getExecutionSnapshot(project.id);
-      const activeSprintRunIds = new Set(
-        execution.sprintRuns
-          .filter((run) => run.status === "running")
-          .map((run) => run.sprintId),
-      );
-      for (const sprint of this.deps.projectManagementRepository.listSprints(project.id).sprints) {
-        if (!activeSprintRunIds.has(sprint.id)) {
-          continue;
-        }
-        const existing = this.deps.sprintPreviewRepository.getSessionByProjectSprint(project.id, sprint.id);
-        const settings = this.resolveSettings(project.id, sprint.id).sprintPreview;
+      for (const sprintId of getRunningSprintIds(project.id)) {
+        const existing = this.deps.sprintPreviewRepository.getSessionByProjectSprint(project.id, sprintId);
+        const settings = this.resolveSettings(project.id, sprintId).sprintPreview;
         if (settings.enabled === false) {
           continue;
         }
         if (!existing && settings.autoStartOnRunningSprint) {
-          await this.startSession(project.id, sprint.id).catch(() => undefined);
+          await this.startSession(project.id, sprintId).catch(() => undefined);
         }
       }
     }

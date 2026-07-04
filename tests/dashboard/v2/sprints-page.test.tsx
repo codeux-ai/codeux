@@ -773,6 +773,66 @@ describe("SprintsPage", () => {
     expect(screen.queryByText("Window Sprint 25")).not.toBeInTheDocument();
   });
 
+  it("keeps sprint ledger bulk actions scoped to filtered rows from the page", () => {
+    const handleBulkToggleShowcase = vi.fn();
+    const handleSprintToggle = vi.fn();
+    const sprints = [
+      makeLedgerSprint(1),
+      { ...makeLedgerSprint(2), status: "completed", name: "Completed Ledger Sprint" },
+      { ...makeLedgerSprint(3), status: "completed", name: "Completed Follow-up Sprint" },
+    ];
+
+    vi.mocked(useSprintsPageData).mockReturnValue({
+      selectedProject: { id: "proj-1", name: "Project One" },
+      planningRoute: { available: true, label: "Codex" },
+      sortedSprints: sprints,
+      showcaseSprints: [],
+      activeRunsBySprintId: new Map(),
+      pauseResumeRunsBySprintId: new Map(),
+      interventionBySprintId: new Map(),
+      nextId: "spr-123",
+      virtualProviders: [],
+      pendingActionIds: new Set(),
+      planningPresets: [],
+      quicksprintTemplates: [],
+      showQuicksprint: false,
+      setShowQuicksprint: vi.fn(),
+      showCreateComposer: false,
+      setShowCreateComposer: vi.fn(),
+      editingSprint: null,
+      setEditingSprint: vi.fn(),
+      showImportModal: false,
+      setShowImportModal: vi.fn(),
+      completedCount: 2,
+      inWorkCount: 0,
+      sprintKeyPrefix: "SPR",
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
+      clearError: vi.fn(),
+      handleSprintToggle,
+      handleSprintPauseResume: vi.fn(),
+      handleToggleShowcase: vi.fn(),
+      handleBulkToggleShowcase,
+      handleOpenAppendTasks: vi.fn(),
+      handleMarkCompleted: vi.fn(),
+      handleOpenExport: vi.fn(),
+      handleDeleteSprint: vi.fn(),
+    } as any);
+
+    render(<SprintsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Filter ledger by sprint status" }));
+    fireEvent.click(screen.getByRole("option", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select all filtered sprints" }));
+
+    expect(screen.getByText("2 of 2 selected")).toBeInTheDocument();
+    expect(screen.getAllByText("Bulk controls apply to 2 selected sprints.").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Pin 2 selected sprints to showcase" }));
+    expect(handleBulkToggleShowcase).toHaveBeenCalledWith(["sprint-3", "sprint-2"], true);
+    expect(handleSprintToggle).not.toHaveBeenCalled();
+  });
+
 
   it("dismisses planning overlays on cancel", () => {
     // This is tested in SprintsComposer implicitly through UI states,

@@ -10,7 +10,7 @@ import {
   Square,
 } from "lucide-preact";
 import { SkeletonRow } from "../layout/SkeletonLoader.js";
-import { INTERACTION_TOKENS } from "../../lib/motion/tokens.js";
+import { INTERACTION_TOKENS, useInteractionTokens } from "../../lib/motion/tokens.js";
 import { useResolvedMotionDuration } from "../../hooks/use-reduced-motion.js";
 import { sliceListWindow, type ListWindowOption } from "../../lib/list-window.js";
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
@@ -24,6 +24,9 @@ import {
   deselectAll,
   pruneSelection,
   getSelectedFilteredSprints,
+  getLedgerSelectionSummary,
+  getLedgerViewStateKey,
+  type BulkLedgerAction,
   nextSort,
   DEFAULT_LEDGER_FILTERS,
   type LedgerSort,
@@ -94,6 +97,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
   const [filters, setFilters] = useState<LedgerFilters>(initialFilters);
   const [sort, setSort] = useState<LedgerSort>({ key: "createdAt", direction: "desc" });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [lastBulkAction, setLastBulkAction] = useState<BulkLedgerAction>(null);
   const { isOpen, options, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
 
   useEffect(() => {
@@ -148,6 +152,10 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
     () => getSelectedFilteredSprints(selectedIds, ledgerSprints),
     [selectedIds, ledgerSprints],
   );
+  const selectionSummary = useMemo(
+    () => getLedgerSelectionSummary(selectedIds, ledgerSprints),
+    [selectedIds, ledgerSprints],
+  );
 
   const {
     isBulkStartPending,
@@ -187,17 +195,26 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
     };
   }, [selectedFiltered, ledgerSprints, activeRunsBySprintId, pendingActionIds]);
 
-  const allFilteredSelected = ledgerSprints.length > 0 && ledgerSprints.every((s) => selectedIds.has(s.id));
+  const isBulkPending = isAnyBulkPending;
+  const viewStateKey = useMemo(
+    () => getLedgerViewStateKey(filters, sort, listWindow),
+    [filters, sort, listWindow],
+  );
 
-  const sortDuration = useResolvedMotionDuration(INTERACTION_TOKENS.controlFeedback.duration);
-  const sortEase = INTERACTION_TOKENS.controlFeedback.ease;
+  const interactionTokens = useInteractionTokens();
+  const sortDuration = useResolvedMotionDuration(INTERACTION_TOKENS.listReorder.duration);
+  const sortEase = INTERACTION_TOKENS.listReorder.ease;
+  const listReorderStyle = {
+    transitionDuration: interactionTokens.listReorder.duration,
+    transitionTimingFunction: interactionTokens.listReorder.ease,
+  };
 
   const handleSort = (key: SprintTableSortKey) => {
     setSort((current) => nextSort(current, key));
   };
 
   const handleToggleSelectAll = () => {
-    if (allFilteredSelected) {
+    if (selectionSummary.allSelected) {
       setSelectedIds(new Set());
     } else {
       const next = new Set(selectedIds);
@@ -214,32 +231,37 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
 
   const handleClearSelection = useCallback(() => {
     setSelectedIds(deselectAll());
+    setLastBulkAction(null);
   }, []);
 
   const handleBulkStart = useCallback(() => {
+    setLastBulkAction("start");
     onBulkStart(selectedFiltered.map((s) => s.id));
   }, [onBulkStart, selectedFiltered]);
 
   const handleBulkDelete = useCallback(async () => {
     const confirmed = await requestConfirm({
       title: "Delete Sprints?",
-      body: `Are you sure you want to delete ${selectedFiltered.length} selected sprint${selectedFiltered.length === 1 ? "" : "s"}? This action is permanent and will cascade to all downstream tasks, logs, and associated git artifacts. Please ensure you have cleaned up your repository branches if needed before proceeding.`,
+      body: `Delete ${selectedFiltered.length} selected sprint${selectedFiltered.length === 1 ? "" : "s"} from the current filtered ledger result? This action is permanent and will cascade to all downstream tasks, logs, and associated git artifacts. Please ensure you have cleaned up your repository branches if needed before proceeding.`,
       confirmLabel: "Delete Sprints",
       cancelLabel: "Cancel",
       destructive: true,
     });
 
     if (confirmed) {
+      setLastBulkAction("delete");
       onBulkDelete(selectedFiltered.map((s) => s.id));
       // Selection clears naturally as items are removed, keeping the pending state visible
     }
   }, [onBulkDelete, selectedFiltered, requestConfirm]);
 
   const handleBulkShowcaseEnable = useCallback(() => {
+    setLastBulkAction("pin");
     onBulkShowcaseEnable(selectedFiltered.map((s) => s.id));
   }, [onBulkShowcaseEnable, selectedFiltered]);
 
   const handleBulkShowcaseDisable = useCallback(() => {
+    setLastBulkAction("unpin");
     onBulkShowcaseDisable(selectedFiltered.map((s) => s.id));
   }, [onBulkShowcaseDisable, selectedFiltered]);
 
@@ -279,12 +301,14 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
         onListWindowChange={onListWindowChange}
         filters={filters}
         onFiltersChange={setFilters}
+        transitionStyle={listReorderStyle}
       />
 
       <SprintLedgerBulkActions
         selectedCount={selectedFiltered.length}
         totalCount={ledgerSprints.length}
-        isAnyPending={isAnyBulkPending}
+        currentAction={lastBulkAction}
+        isAnyPending={isBulkPending}
         isStartPending={isBulkStartPending}
         isDeletePending={isBulkDeletePending}
         isPinPending={isBulkPinPending}
@@ -302,7 +326,11 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
         onCancel={handleCancel}
       />
 
-      <div className="min-h-[20rem] px-3 py-4 sm:px-4 lg:px-5">
+      <div
+        className="min-h-[20rem] px-3 py-4 transition-[opacity,transform] sm:px-4 lg:px-5"
+        data-ledger-view-state={viewStateKey}
+        style={listReorderStyle}
+      >
         <div className="overflow-x-auto w-full overscroll-x-contain -mx-3 px-3 sm:-mx-4 sm:px-4 lg:-mx-5 lg:px-5">
           <div className="min-w-max">
             <Table caption="Sprint ledger with selection, sorting, and bulk actions.">
@@ -314,10 +342,11 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
                 disabled={windowedSprints.length === 0 || isAnyBulkPending}
                 onClick={handleToggleSelectAll}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-black/[0.04] hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:bg-white/[0.05] dark:hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
-                title={allFilteredSelected ? "Deselect all visible sprints" : "Select all visible sprints"}
-                aria-label={allFilteredSelected ? "Deselect all visible sprints" : "Select all visible sprints"}
+                title={isAnyBulkPending ? "Bulk action in progress for selected sprints" : selectionSummary.allSelected ? "Deselect all filtered sprints" : "Select all filtered sprints"}
+                aria-label={selectionSummary.allSelected ? "Deselect all filtered sprints" : "Select all filtered sprints"}
+                aria-pressed={selectionSummary.allSelected}
               >
-                {allFilteredSelected
+                {selectionSummary.allSelected
                   ? <CheckSquare className="h-4 w-4 text-signal-500" strokeWidth={2.2} />
                   : <Square className="h-4 w-4" strokeWidth={2.2} />}
               </button>
@@ -443,6 +472,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
                   sprintKeyPrefix={sprintKeyPrefix}
                   pendingActionIds={pendingActionIds}
                   isAnyBulkPending={isAnyBulkPending}
+                  transitionStyle={listReorderStyle}
                   onToggleRow={handleToggleRow}
                   onToggleShowcase={stableOnToggleShowcase}
                   onSprintToggle={stableOnSprintToggle}

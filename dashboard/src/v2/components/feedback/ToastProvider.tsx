@@ -3,7 +3,7 @@ import { useState, useCallback, useMemo, useContext, useEffect, useRef, useLayou
 import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { Toast, type ToastProps } from "./Toast.js";
-import { GSAP_DURATIONS, GSAP_EASINGS } from "../../lib/motion/constants.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 
 type ToastMessage = Omit<ToastProps, "onDismiss" | "isDismissing">;
 
@@ -27,6 +27,7 @@ export const ToastProvider: FunctionComponent<{ children: ComponentChildren }> =
   const toastRefs = useRef<Map<string, HTMLElement>>(new Map());
   const prevPositions = useRef<Map<string, number>>(new Map());
   const reducedMotion = useReducedMotion();
+  const motionTokens = useGsapInteractionTokens();
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [dismissingIds, setDismissingIds] = useState<Set<string>>(new Set());
@@ -72,12 +73,12 @@ export const ToastProvider: FunctionComponent<{ children: ComponentChildren }> =
         const delta = prevTop - currentTop;
 
         if (delta !== 0 && !reducedMotion) {
-          gsap.fromTo(el, { y: delta }, { y: 0, duration: GSAP_DURATIONS.base, ease: GSAP_EASINGS.smooth });
+          gsap.fromTo(el, { y: delta }, { y: 0, duration: motionTokens.listReorder.duration, ease: motionTokens.listReorder.ease });
         }
       }
     });
     prevPositions.current.clear();
-  }, [toasts, reducedMotion]);
+  }, [toasts, reducedMotion, motionTokens.listReorder.duration, motionTokens.listReorder.ease]);
 
   const requestDismiss = useCallback((id: string) => {
     setDismissingIds((prev) => new Set(prev).add(id));
@@ -88,7 +89,7 @@ export const ToastProvider: FunctionComponent<{ children: ComponentChildren }> =
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
+      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none" aria-label="Toast notifications">
         {toasts.filter(t => t.type !== 'error').map((toast) => (
           <Toast
             key={toast.id}
@@ -102,7 +103,7 @@ export const ToastProvider: FunctionComponent<{ children: ComponentChildren }> =
           />
         ))}
       </div>
-      <div className="fixed bottom-4 left-4 z-[100] flex flex-col gap-2 pointer-events-none">
+      <div className="fixed bottom-4 left-4 z-[100] flex flex-col gap-2 pointer-events-none" aria-label="Error toast notifications">
         {toasts.filter(t => t.type === 'error').map((toast) => (
           <Toast
             key={toast.id}

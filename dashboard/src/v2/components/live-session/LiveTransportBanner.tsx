@@ -11,6 +11,8 @@ import {
   type LiveTransportBannerViewModel,
 } from "../../lib/live-session-view-model.js";
 
+const LIVE_SNAPSHOT_STALE_MS = 60_000;
+
 export interface LiveTransportBannerProps {
   transportState: TransportState;
   isRecovering: boolean;
@@ -22,6 +24,7 @@ export interface LiveTransportBannerProps {
 export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = ({
   transportState,
   isRecovering,
+  snapshotUpdatedAt,
   error,
   viewModel,
 }) => {
@@ -29,7 +32,44 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
   const isReducedMotion = useReducedMotion();
   const enterDuration = useResolvedMotionDuration(parseFloat(INTERACTION_TOKENS.enterExit.duration) / 1000);
   const [shouldRender, setShouldRender] = useState(false);
-  const bannerState = viewModel ?? deriveLiveTransportBannerViewModel({ transportState, isRecovering, error });
+  const derivedBannerState = deriveLiveTransportBannerViewModel({ transportState, isRecovering, error });
+  const snapshotAgeMs = snapshotUpdatedAt ? Date.now() - new Date(snapshotUpdatedAt).getTime() : null;
+  const staleSnapshotState: LiveTransportBannerViewModel | null = (
+    !derivedBannerState
+    && transportState === "connected"
+    && snapshotAgeMs !== null
+    && Number.isFinite(snapshotAgeMs)
+    && snapshotAgeMs > LIVE_SNAPSHOT_STALE_MS
+  ) ? {
+    isVisible: true,
+    title: "Stale Data",
+    message: "Live runtime content is still visible, but the latest snapshot is more than a minute old.",
+    wrapperClass: "bg-status-amber/10 border-status-amber/20 text-status-amber",
+    iconClass: "text-status-amber",
+    icon: "reconnecting",
+    isUrgent: false,
+    ariaLive: "polite",
+    role: "status",
+    ariaBusy: false,
+  } : null;
+  const refreshingState: LiveTransportBannerViewModel | null = (
+    !derivedBannerState
+    && transportState === "connected"
+    && isRecovering
+    && snapshotUpdatedAt
+  ) ? {
+    isVisible: true,
+    title: "Refreshing Live Data",
+    message: "Keeping the current runtime snapshot visible while the live stream catches up.",
+    wrapperClass: "bg-signal-500/10 border-signal-500/20 text-signal-700 dark:text-signal-300",
+    iconClass: "text-signal-600 dark:text-signal-300",
+    icon: "reconnecting",
+    isUrgent: false,
+    ariaLive: "polite",
+    role: "status",
+    ariaBusy: true,
+  } : null;
+  const bannerState = viewModel ?? derivedBannerState ?? refreshingState ?? staleSnapshotState;
   const isVisible = bannerState?.isVisible === true;
 
   useLayoutEffect(() => {

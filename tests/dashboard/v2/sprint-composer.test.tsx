@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, fireEvent, waitFor } from "@testing-library/preact";
+import { render, fireEvent, waitFor, within } from "@testing-library/preact";
 import { h } from "preact";
 import { useState } from "preact/hooks";
 import * as matchers from "@testing-library/jest-dom/matchers";
@@ -226,6 +226,8 @@ describe("SprintComposer", () => {
 
   it("renders imported special tasks with metadata, removal controls, and task-import feedback", async () => {
     const onRemoveImportedTask = vi.fn();
+    const onClearImportedTaskFeedback = vi.fn();
+    const clearImportedTaskError = vi.fn();
     const task = {
       kind: "security" as const,
       title: "Security follow-up: Fix CI",
@@ -242,8 +244,8 @@ describe("SprintComposer", () => {
         importedTasks={[task]}
         onRemoveImportedTask={onRemoveImportedTask}
         importedTaskFeedback={{ status: "error", message: "Special imported tasks were not added: API error" }}
-        onClearImportedTaskFeedback={vi.fn()}
-        clearImportedTaskError={vi.fn()}
+        onClearImportedTaskFeedback={onClearImportedTaskFeedback}
+        clearImportedTaskError={clearImportedTaskError}
       />
     );
 
@@ -255,6 +257,8 @@ describe("SprintComposer", () => {
 
     fireEvent.click(getByRole("button", { name: /remove task/i }));
     expect(onRemoveImportedTask).toHaveBeenCalledWith(task);
+    expect(onClearImportedTaskFeedback).toHaveBeenCalledTimes(1);
+    expect(clearImportedTaskError).toHaveBeenCalledTimes(1);
   });
 
   it("uses default planning and worker agents for new sprint submissions", async () => {
@@ -426,6 +430,99 @@ describe("SprintComposer", () => {
     resolveSubmit!(undefined);
   });
 
+  it("announces submit pending state without clearing stale form content", async () => {
+    let resolveSubmit: (val: any) => void;
+    const submitPromise = new Promise((resolve) => {
+      resolveSubmit = resolve;
+    });
+    const mockOnSubmit = vi.fn(() => submitPromise);
+    const mockOnClose = vi.fn();
+
+    const { getByPlaceholderText, getAllByText, getByRole, getByText } = render(
+      <SprintComposer {...defaultProps} onSubmit={mockOnSubmit} onClose={mockOnClose} />
+    );
+
+    const nameInput = getByPlaceholderText("Runtime hardening") as HTMLInputElement;
+    const promptInput = getByPlaceholderText("Describe the outcome, affected systems, and what done looks like when this sprint lands.") as HTMLTextAreaElement;
+    fireEvent.input(nameInput, { target: { value: "Pending Sprint" } });
+    fireEvent.input(promptInput, { target: { value: "Keep this prompt visible during planning." } });
+
+    const submitBtn = getAllByText("Plan & Start").pop()!;
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(mockOnSubmit).toHaveBeenCalledTimes(1);
+      expect(getByText(/Plan & Start request started/i)).toBeInTheDocument();
+    });
+
+    expect(nameInput.value).toBe("Pending Sprint");
+    expect(promptInput.value).toBe("Keep this prompt visible during planning.");
+    expect(getByRole("form", { name: /sprint composer/i })).toHaveAttribute("aria-busy", "true");
+    expect(submitBtn.closest("button")).toBeDisabled();
+    expect(mockOnClose).not.toHaveBeenCalled();
+
+    resolveSubmit!(undefined);
+  });
+
+  it("shows prompt improvement pending feedback and retry after failure", async () => {
+    let rejectImprove: (error: Error) => void;
+    const improvePromise = new Promise<string>((_, reject) => {
+      rejectImprove = reject;
+    });
+    const onImprovePrompt = vi.fn(() => improvePromise);
+
+    const { getByPlaceholderText, getByRole, getByText } = render(
+      <SprintComposer {...defaultProps} onImprovePrompt={onImprovePrompt} />
+    );
+
+    fireEvent.input(getByPlaceholderText("Runtime hardening"), { target: { value: "Improve Prompt" } });
+    fireEvent.input(getByPlaceholderText("Describe the outcome, affected systems, and what done looks like when this sprint lands."), {
+      target: { value: "Make this implementation-ready." },
+    });
+
+    fireEvent.click(getByRole("button", { name: /plan ahead with ai/i }));
+
+    await waitFor(() => {
+      expect(getByText(/Prompt improvement started/i)).toBeInTheDocument();
+    });
+    expect(getByRole("button", { name: /refining prompt/i })).toBeDisabled();
+
+    rejectImprove!(new Error("planner offline"));
+
+    await waitFor(() => {
+      expect(getByRole("button", { name: /retry improve/i })).toBeInTheDocument();
+    });
+    expect(within(document.body).getAllByRole("alert")[0]).toHaveTextContent(/Prompt improvement failed: planner offline/i);
+    expect(getByRole("button", { name: /retry improve/i })).toBeInTheDocument();
+  });
+
+  it("moves focus to the first invalid required field", async () => {
+    const onImprovePrompt = vi.fn();
+    const { getByPlaceholderText, getByRole, getAllByText } = render(
+      <SprintComposer {...defaultProps} onImprovePrompt={onImprovePrompt} />
+    );
+
+    const nameInput = getByPlaceholderText("Runtime hardening");
+    const promptInput = getByPlaceholderText("Describe the outcome, affected systems, and what done looks like when this sprint lands.");
+
+    fireEvent.click(getAllByText("Plan & Start").pop()!);
+    await waitFor(() => {
+      expect(document.activeElement).toBe(nameInput);
+    });
+
+    fireEvent.click(getByRole("button", { name: /plan ahead with ai/i }));
+    await waitFor(() => {
+      expect(document.activeElement).toBe(nameInput);
+    });
+
+    fireEvent.input(nameInput, { target: { value: "Needs Prompt" } });
+    fireEvent.click(getByRole("button", { name: /plan ahead with ai/i }));
+    await waitFor(() => {
+      expect(document.activeElement).toBe(promptInput);
+    });
+    expect(onImprovePrompt).not.toHaveBeenCalled();
+  });
+
   it("shows planning overlay and cancels through explicit request cancellation", async () => {
     const mockOnCancelPlanningRequest = vi.fn();
     const mockOnSubmit = vi.fn(async () => new Promise(() => undefined));
@@ -458,6 +555,7 @@ describe("SprintComposer", () => {
 
     expect(mockOnCancelPlanningRequest).toHaveBeenCalledTimes(1);
     expect(mockOnCancelPlanningRequest.mock.calls[0]?.[0]).toEqual(expect.any(String));
+    expect(getByText(/Planning request cancelled/i)).toBeInTheDocument();
 
     // Overlay should disappear because state resets when not busy
     await waitFor(() => {

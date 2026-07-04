@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
-import { useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import { Terminal, Trash2 } from "lucide-preact";
-import { PillChoiceGroup, ProviderLogo, Row, SelectInput, TextInput, Toggle } from "./SettingsFormFields.js";
+import { PillChoiceGroup, ProviderLogo, Row, SecretInput, SelectInput, TextInput, Toggle } from "./SettingsFormFields.js";
 import { getProviderDefaultAuthPath, getProviderTypeLabel } from "../../lib/settings-view-models.js";
 import { TerminalLoginModal } from "./TerminalLoginModal.js";
 import { ModelCombobox } from "../ui/ModelCombobox.js";
@@ -38,10 +38,84 @@ export const ProviderInstanceCard: FunctionComponent<{
   total?: number;
 }> = ({ providerConfigId, provider, providerModel, dockerExecutionEnabled, onUpdate, onRemove, isLast = true, enabled, onToggleEnabled, index, total }) => {
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [removeArmed, setRemoveArmed] = useState(false);
+  const [feedback, setFeedback] = useState<{ tone: "success" | "warning" | "error"; message: string } | null>(null);
 
   const currentAuthType = provider.authType || (provider.mountAuth ? "localAuth" : "apiKey");
   const providerInstanceLabel = provider.name || providerConfigId;
   const headingId = `provider-instance-${providerConfigId.replace(/\W/g, "-")}-heading`;
+  const feedbackId = `${headingId}-feedback`;
+  const enabledValue = enabled ?? true;
+
+  useEffect(() => {
+    setRemoveArmed(false);
+    setFeedback(null);
+  }, [providerConfigId]);
+
+  const applyUpdate = (updates: Partial<SystemProviderConfig>, message: string): void => {
+    try {
+      onUpdate(updates);
+      setFeedback({ tone: "warning", message });
+    } catch (updateError) {
+      setFeedback({
+        tone: "error",
+        message: updateError instanceof Error ? updateError.message : "Provider setting could not be updated.",
+      });
+    }
+  };
+
+  const applySanitizedUpdate = (updates: Partial<SystemProviderConfig>, message: string): void => {
+    applyUpdate(sanitizeSystemProviderConfig({ ...provider, ...updates }), message);
+  };
+
+  const updateAuthType = (value: string): void => {
+    const authType = value as "apiKey" | "localAuth" | "dashboardAuth";
+    const updates: Partial<SystemProviderConfig> = {
+      authType,
+      mountAuth: authType !== "apiKey",
+    };
+    if (authType === "dashboardAuth") {
+      updates.authPath = `~/.code-ux/credentials/${providerConfigId}`;
+    } else if (authType === "localAuth") {
+      const existingPath = (provider.authPath || "").includes(".code-ux") ? "" : provider.authPath;
+      updates.authPath = existingPath || getProviderDefaultAuthPath(provider.provider);
+      if (provider.provider === "qwen-code") {
+        updates.qwenAuthMode = "LOCAL_AUTH";
+      } else if (provider.provider === "opencode") {
+        updates.openCodeAuthMode = "LOCAL_AUTH";
+      }
+    } else if (authType === "apiKey") {
+      if (provider.provider === "qwen-code") {
+        updates.qwenAuthMode = "MODEL_PROVIDER";
+      } else if (provider.provider === "opencode") {
+        updates.openCodeAuthMode = "ENV_KEY";
+      }
+    }
+    applySanitizedUpdate(updates, `${providerInstanceLabel} authentication mode changed locally. Save changes to persist it.`);
+  };
+
+  const handleRemove = (): void => {
+    if (!removeArmed) {
+      setRemoveArmed(true);
+      setFeedback({ tone: "warning", message: `Confirm removal of ${providerInstanceLabel}. This stays local until settings are saved.` });
+      return;
+    }
+    try {
+      onRemove?.();
+      setFeedback({ tone: "success", message: `${providerInstanceLabel} removed locally. Save changes to persist it.` });
+    } catch (removeError) {
+      setFeedback({
+        tone: "error",
+        message: removeError instanceof Error ? removeError.message : "Provider instance could not be removed.",
+      });
+    }
+  };
+
+  const feedbackClass = feedback?.tone === "error"
+    ? "border-status-red/25 bg-status-red/[0.08] text-status-red"
+    : feedback?.tone === "success"
+      ? "border-status-green/25 bg-status-green/[0.08] text-status-green"
+      : "border-amber-500/25 bg-amber-500/[0.1] text-amber-700 dark:text-amber-200";
 
   return (
     <section
@@ -65,24 +139,53 @@ export const ProviderInstanceCard: FunctionComponent<{
 
           {onToggleEnabled ? (
             <label className="flex items-center gap-2 rounded-full border border-black/[0.06] bg-black/[0.02] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500  dark:text-slate-300">
-              Enabled
-              <Toggle aria-label={`Enable ${providerInstanceLabel}`} value={enabled ?? true} onChange={() => onToggleEnabled(!(enabled ?? true))} />
+              {enabledValue ? "Enabled" : "Disabled"}
+              <Toggle
+                aria-label={`Enable ${providerInstanceLabel}`}
+                aria-describedby={feedback ? feedbackId : undefined}
+                aria-pressed={enabledValue}
+                value={enabledValue}
+                onChange={(value) => {
+                  onToggleEnabled(value);
+                  setFeedback({
+                    tone: "warning",
+                    message: `${providerInstanceLabel} ${value ? "enabled" : "disabled"} locally. Save changes to persist it.`,
+                  });
+                }}
+              />
             </label>
           ) : null}
           {onRemove ? (
 
             <button
               type="button"
-              onClick={onRemove}
-              aria-label={`Remove ${providerInstanceLabel}`}
-              className="inline-flex items-center gap-2 rounded-full border border-status-red/20 bg-status-red/[0.06] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-status-red"
+              onClick={handleRemove}
+              aria-label={removeArmed ? `Confirm remove ${providerInstanceLabel}` : `Remove ${providerInstanceLabel}`}
+              aria-describedby={feedback ? feedbackId : undefined}
+              aria-pressed={removeArmed}
+              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] focus:outline-none focus-visible:ring-2 focus-visible:ring-status-red/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
+                removeArmed
+                  ? "border-status-red/45 bg-status-red text-white"
+                  : "border-status-red/20 bg-status-red/[0.06] text-status-red hover:bg-status-red/[0.1]"
+              }`}
             >
               <Trash2 className="h-3.5 w-3.5" />
-              Remove
+              {removeArmed ? "Confirm remove" : "Remove"}
             </button>
           ) : null}
         </div>
       </div>
+
+      {feedback ? (
+        <div
+          id={feedbackId}
+          role={feedback.tone === "error" ? "alert" : "status"}
+          aria-live={feedback.tone === "error" ? "assertive" : "polite"}
+          className={`rounded-xl border px-3 py-2 text-xs font-semibold ${feedbackClass}`}
+        >
+          {feedback.message}
+        </div>
+      ) : null}
 
       <Row label="Display name" description="Used throughout AI Models and runtime route summaries.">
         <TextInput value={provider.name} onChange={(value) => onUpdate({ name: value })} aria-label={`${providerInstanceLabel} display name`} />
@@ -93,31 +196,7 @@ export const ProviderInstanceCard: FunctionComponent<{
           <PillChoiceGroup
             aria-label={`${providerInstanceLabel} authentication mode`}
             value={currentAuthType}
-            onChange={(value) => {
-              const authType = value as "apiKey" | "localAuth" | "dashboardAuth";
-              const updates: Partial<SystemProviderConfig> = {
-                authType,
-                mountAuth: authType !== "apiKey",
-              };
-              if (authType === "dashboardAuth") {
-                updates.authPath = `~/.code-ux/credentials/${providerConfigId}`;
-              } else if (authType === "localAuth") {
-                const existingPath = (provider.authPath || "").includes(".code-ux") ? "" : provider.authPath;
-                updates.authPath = existingPath || getProviderDefaultAuthPath(provider.provider);
-                if (provider.provider === "qwen-code") {
-                  updates.qwenAuthMode = "LOCAL_AUTH";
-                } else if (provider.provider === "opencode") {
-                  updates.openCodeAuthMode = "LOCAL_AUTH";
-                }
-              } else if (authType === "apiKey") {
-                if (provider.provider === "qwen-code") {
-                  updates.qwenAuthMode = "MODEL_PROVIDER";
-                } else if (provider.provider === "opencode") {
-                  updates.openCodeAuthMode = "ENV_KEY";
-                }
-              }
-              onUpdate(sanitizeSystemProviderConfig({ ...provider, ...updates }));
-            }}
+            onChange={updateAuthType}
             options={[
               { value: "apiKey", label: "API Key", hint: "API token override" },
               { value: "localAuth", label: "Local Copy", hint: "Copy host files" },
@@ -130,7 +209,7 @@ export const ProviderInstanceCard: FunctionComponent<{
       {/* API Key Panel */}
       {currentAuthType === "apiKey" && (
         <Row label="API key" description="Stored for this named provider instance.">
-          <TextInput value={provider.apiKey} onChange={(value) => onUpdate(sanitizeSystemProviderConfig({ ...provider, apiKey: value }))} aria-label={`${providerInstanceLabel} API key`} mono />
+          <SecretInput value={provider.apiKey} onChange={(value) => onUpdate(sanitizeSystemProviderConfig({ ...provider, apiKey: value }))} aria-label={`${providerInstanceLabel} API key`} mono />
         </Row>
       )}
 
@@ -142,7 +221,11 @@ export const ProviderInstanceCard: FunctionComponent<{
               type="button"
               onClick={() => setShowLoginModal(true)}
               aria-label={`Connect and log in to ${providerInstanceLabel}`}
-              className="group inline-flex items-center gap-2 rounded-xl bg-signal-500 px-4 py-2.5 text-xs font-bold text-void-950 hover:bg-signal-400 transition-colors shadow-lg active:scale-95"
+              aria-haspopup="dialog"
+              aria-expanded={showLoginModal}
+              aria-busy={showLoginModal}
+              aria-describedby={feedback ? feedbackId : undefined}
+              className="group inline-flex items-center gap-2 rounded-xl bg-signal-500 px-4 py-2.5 text-xs font-bold text-void-950 hover:bg-signal-400 transition-colors shadow-lg active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900"
             >
               <Terminal className="h-3.5 w-3.5" />
               Connect & Login
@@ -411,6 +494,7 @@ export const ProviderInstanceCard: FunctionComponent<{
           onSuccess={() => {
             // Trigger an update with a new lastLoginAt timestamp to make the form dirty so the user can Save Changes
             onUpdate({ lastLoginAt: Date.now() });
+            setFeedback({ tone: "success", message: `${providerInstanceLabel} dashboard login completed. Save changes to persist the login timestamp.` });
           }}
         />
       )}

@@ -1,4 +1,5 @@
 import os from "os";
+import * as fs from "fs/promises";
 import * as path from "path";
 import type { CommandResult } from "./cli-process-runner.js";
 import { resolveUserPath } from "../shared/config/home-path.js";
@@ -87,6 +88,29 @@ export const pickContainerEnv = (env: NodeJS.ProcessEnv): Array<{ key: string; v
     result.push({ key, value });
   }
   return result;
+};
+
+const DOCKER_ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+export const writeDockerEnvFile = async (
+  filePath: string,
+  variables: Array<{ key: string; value: string }>,
+): Promise<void> => {
+  const lines: string[] = [];
+  for (const variable of variables) {
+    if (!DOCKER_ENV_KEY_PATTERN.test(variable.key)) {
+      continue;
+    }
+    if (variable.value.includes("\n") || variable.value.includes("\r")) {
+      throw new Error(`Cannot pass multiline Docker env value through env-file: ${variable.key}`);
+    }
+    lines.push(`${variable.key}=${variable.value}`);
+  }
+
+  await fs.writeFile(filePath, `${lines.join("\n")}${lines.length > 0 ? "\n" : ""}`, { encoding: "utf8", mode: 0o600 });
+  if (process.platform !== "win32") {
+    await fs.chmod(filePath, 0o600);
+  }
 };
 
 const isPathWithin = (basePath: string, targetPath: string): boolean => {

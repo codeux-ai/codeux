@@ -9,6 +9,9 @@ import {
   deselectAll,
   pruneSelection,
   getSelectedFilteredSprints,
+  getLedgerSelectionSummary,
+  getLedgerViewStateKey,
+  getBulkActionMessage,
   nextSort,
   formatSprintKey,
   STATUS_LABELS,
@@ -347,6 +350,56 @@ describe("sprint-ledger-state", () => {
 
     it("returns empty when all items are filtered out", () => {
       expect(getSelectedFilteredSprints(new Set(["a"]), [])).toEqual([]);
+    });
+  });
+
+  describe("getLedgerSelectionSummary", () => {
+    it("summarizes selected ids against the filtered ledger result", () => {
+      expect(getLedgerSelectionSummary(new Set(["a", "x"]), [sprints[0], sprints[1]])).toEqual({
+        selectedCount: 1,
+        totalCount: 2,
+        allSelected: false,
+        noneSelected: false,
+      });
+      expect(getLedgerSelectionSummary(new Set(["a", "b"]), [sprints[0], sprints[1]])).toEqual({
+        selectedCount: 2,
+        totalCount: 2,
+        allSelected: true,
+        noneSelected: false,
+      });
+    });
+
+    it("treats an empty filtered result as nothing selectable", () => {
+      expect(getLedgerSelectionSummary(new Set(["a"]), [])).toEqual({
+        selectedCount: 0,
+        totalCount: 0,
+        allSelected: false,
+        noneSelected: true,
+      });
+    });
+  });
+
+  describe("getLedgerViewStateKey", () => {
+    it("changes when sort, filters, or list window change", () => {
+      const base = getLedgerViewStateKey(DEFAULT_LEDGER_FILTERS, { key: "createdAt", direction: "desc" }, 20);
+      expect(getLedgerViewStateKey(DEFAULT_LEDGER_FILTERS, { key: "name", direction: "asc" }, 20)).not.toBe(base);
+      expect(getLedgerViewStateKey({ ...DEFAULT_LEDGER_FILTERS, query: "alpha" }, { key: "createdAt", direction: "desc" }, 20)).not.toBe(base);
+      expect(getLedgerViewStateKey(DEFAULT_LEDGER_FILTERS, { key: "createdAt", direction: "desc" }, "All")).not.toBe(base);
+    });
+
+    it("normalizes multi-status filters for stable keys", () => {
+      const left = getLedgerViewStateKey({ ...DEFAULT_LEDGER_FILTERS, status: new Set(["failed", "running"]) }, { key: "createdAt", direction: "desc" }, 20);
+      const right = getLedgerViewStateKey({ ...DEFAULT_LEDGER_FILTERS, status: new Set(["running", "failed"]) }, { key: "createdAt", direction: "desc" }, 20);
+      expect(left).toBe(right);
+    });
+  });
+
+  describe("getBulkActionMessage", () => {
+    it("communicates scope before and during bulk actions", () => {
+      expect(getBulkActionMessage(null, 2, false)).toBe("Bulk controls apply to 2 selected sprints.");
+      expect(getBulkActionMessage("start", 2, false)).toBe("Start will apply to 2 selected sprints.");
+      expect(getBulkActionMessage("delete", 1, true)).toBe("Deleting 1 selected sprint.");
+      expect(getBulkActionMessage("unpin", 3, true)).toBe("Unpinning 3 selected sprints.");
     });
   });
 

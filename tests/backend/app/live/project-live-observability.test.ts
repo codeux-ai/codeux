@@ -14,7 +14,8 @@ describe("getProjectLiveSnapshot observability", () => {
     const deps: ProjectLiveSnapshotDeps = {
       projectManagementRepository: {
         getSelectedProjectId: () => "proj-1",
-        listSprints: () => ({ sprints: [{ id: "sprint-1", createdAt: "", updatedAt: "", sourcePath: null }], selectedSprintId: "sprint-1" }),
+        getSelectedSprintId: () => "sprint-1",
+        sprintBelongsToProject: () => true,
       } as any,
       projectRuntimeRepository: {
         getProjectStatus: () => ({ subtasks: [], timestamp: null }),
@@ -74,7 +75,8 @@ describe("getProjectLiveSnapshot observability", () => {
     const deps: ProjectLiveSnapshotDeps = {
       projectManagementRepository: {
         getSelectedProjectId: () => "proj-1",
-        listSprints: () => ({ sprints: [], selectedSprintId: null }),
+        getSelectedSprintId: () => null,
+        sprintBelongsToProject: () => true,
       } as any,
       projectRuntimeRepository: { getProjectStatus: () => ({}) } as any,
       getProjectExecutionSnapshot: () => ({
@@ -94,7 +96,8 @@ describe("getProjectLiveSnapshot observability", () => {
     const deps: ProjectLiveSnapshotDeps = {
       projectManagementRepository: {
         getSelectedProjectId: () => "proj-1",
-        listSprints: () => ({ sprints: [{ id: "sprint-2" }], selectedSprintId: "sprint-1" }),
+        getSelectedSprintId: () => "sprint-1",
+        sprintBelongsToProject: () => false,
       } as any,
       projectRuntimeRepository: { getProjectStatus: () => ({}) } as any,
       getProjectExecutionSnapshot: () => ({
@@ -114,7 +117,8 @@ describe("getProjectLiveSnapshot observability", () => {
     const deps: ProjectLiveSnapshotDeps = {
       projectManagementRepository: {
         getSelectedProjectId: () => "proj-1",
-        listSprints: () => ({ sprints: [{ id: "sprint-1" }], selectedSprintId: "sprint-1" }),
+        getSelectedSprintId: () => "sprint-1",
+        sprintBelongsToProject: () => true,
       } as any,
       projectRuntimeRepository: { getProjectStatus: () => ({}) } as any,
       getProjectExecutionSnapshot: () => ({

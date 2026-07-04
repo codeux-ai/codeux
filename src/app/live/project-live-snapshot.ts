@@ -90,10 +90,11 @@ export async function getProjectLiveSnapshot(
   }
 
   const tMgmt = monotonicNowMs();
-  const listSprintsResult = deps.projectManagementRepository.listSprints(projectId);
+  const selectedSprintId = deps.projectManagementRepository.getSelectedSprintId(projectId) ?? null;
+  const selectedSprintBelongsToProject = selectedSprintId
+    ? deps.projectManagementRepository.sprintBelongsToProject(projectId, selectedSprintId)
+    : true;
   const projectMgmtMs = elapsedMs(tMgmt);
-
-  const selectedSprintId = listSprintsResult.selectedSprintId ?? null;
 
   const tGit = monotonicNowMs();
   const gitStatusPromise: Promise<{ result: GitTrackingStatus | null; error: string | null }> = includeGit
@@ -123,7 +124,7 @@ export async function getProjectLiveSnapshot(
     });
   }
 
-  if (selectedSprintId && !listSprintsResult.sprints.some(s => s.id === selectedSprintId)) {
+  if (selectedSprintId && !selectedSprintBelongsToProject) {
     deps.logger.warn("selected_sprint_outside_project", {
       projectId,
       selectedSprintId,
