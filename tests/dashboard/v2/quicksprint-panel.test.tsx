@@ -4,6 +4,7 @@ import { render, fireEvent, waitFor, within } from "@testing-library/preact";
 import { h } from "preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { cleanup } from "@testing-library/preact";
+import gsap from "gsap";
 /** @jsx h */
 
 expect.extend(matchers);
@@ -29,9 +30,23 @@ import { QuicksprintPanel } from "../../../dashboard/src/v2/components/quickspri
 describe("QuicksprintPanel", () => {
   beforeEach(() => {
     cleanup();
+    vi.clearAllMocks();
     Object.defineProperty(window, "confirm", {
       configurable: true,
       value: vi.fn(() => true),
+    });
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
     });
   });
 
@@ -125,6 +140,46 @@ describe("QuicksprintPanel", () => {
     expect(queryByText("Launch A Quicksprint.")).not.toBeInTheDocument();
     expect(getByText("Configure Quicksprint")).toBeInTheDocument();
     expect(getByText("Plan & Start")).toBeInTheDocument();
+  });
+
+  it("keeps template selection context and restores focus when returning to browse", async () => {
+    const { getByRole, getByText } = render(<QuicksprintPanel {...defaultProps} />);
+
+    fireEvent.click(getByText("API Tests"));
+
+    const configureHeading = getByRole("heading", { name: "API Tests" });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(configureHeading);
+    });
+
+    fireEvent.click(getByRole("button", { name: "Back to quicksprint templates" }));
+
+    const browseHeading = await waitFor(() => getByRole("heading", { name: "Launch A Quicksprint." }));
+    await waitFor(() => {
+      expect(document.activeElement).toBe(browseHeading);
+    });
+    expect(getByRole("button", { name: "API Tests" })).toHaveAttribute("aria-pressed", "true");
+    expect(getByText("Returned to templates. API Tests remains selected.")).toBeInTheDocument();
+  });
+
+  it("exposes stable prompt preview expansion semantics", () => {
+    const { getByRole } = render(<QuicksprintPanel {...defaultProps} />);
+
+    fireEvent.click(getByRole("button", { name: "API Tests" }));
+
+    const toggle = getByRole("button", { name: "View Combined Prompt" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveAttribute("aria-controls", "quicksprint-combined-prompt-tpl-1");
+
+    const promptRegion = getByRole("region", { name: "Combined quicksprint prompt" });
+    expect(promptRegion).toHaveAttribute("id", "quicksprint-combined-prompt-tpl-1");
+    expect(promptRegion).toHaveClass("max-h-0");
+
+    fireEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(promptRegion).toHaveClass("max-h-[600px]");
+    expect(promptRegion.textContent).toContain("Write tests");
   });
 
   it("clamps oversized template defaults when the subtask slider loads", async () => {
@@ -401,6 +456,63 @@ describe("QuicksprintPanel", () => {
 
     // We didn't cancel, so we can now resolve the execution
     resolveExecute!();
+  });
+
+  it("disables conflicting controls during planning and announces cancellation", async () => {
+    let capturedSignal: AbortSignal | null = null;
+    const executePromise = new Promise<void>(() => undefined);
+    const mockOnExecute = vi.fn((_templateId, _taskCount, _mode, _prompt, _route, _model, signal: AbortSignal) => {
+      capturedSignal = signal;
+      return executePromise;
+    });
+
+    const { getByRole, getByText, queryByText } = render(
+      <QuicksprintPanel {...defaultProps} onExecute={mockOnExecute} />
+    );
+
+    fireEvent.click(getByRole("button", { name: "API Tests" }));
+    fireEvent.click(getByRole("button", { name: "Plan Only" }));
+
+    await waitFor(() => {
+      expect(mockOnExecute).toHaveBeenCalledTimes(1);
+    });
+
+    expect(getByRole("button", { name: "Plan & Start" })).toBeDisabled();
+    expect(getByRole("button", { name: "Planning Only" })).toBeDisabled();
+    expect(getByRole("button", { name: "Back to quicksprint templates" })).toBeDisabled();
+    expect(getByRole("textbox")).toBeDisabled();
+    expect(getByRole("checkbox", { name: /no limit/i })).toBeDisabled();
+    expect(getByText("Planning only")).toBeInTheDocument();
+    expect(getByRole("button", { name: "Cancel Quicksprint Request" })).toBeInTheDocument();
+
+    fireEvent.click(getByRole("button", { name: "Cancel Request" }));
+
+    await waitFor(() => {
+      expect(capturedSignal?.aborted).toBe(true);
+    });
+    expect(getByText("Cancelled plan only request for API Tests.", { selector: "div:not(.sr-only)" })).toBeInTheDocument();
+    expect(queryByText("Planning only")).not.toBeInTheDocument();
+  });
+
+  it("renders phase animation through reduced-motion-safe tokens", () => {
+    vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
+      matches: query === "(prefers-reduced-motion: reduce)",
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+
+    render(<QuicksprintPanel {...defaultProps} />);
+
+    const gsapCalls = vi.mocked(gsap.fromTo).mock.calls;
+    expect(gsapCalls.some((call) => {
+      const tweenVars = call[2] as { duration?: number };
+      return tweenVars.duration === 0;
+    })).toBe(true);
   });
 
   it("opens a fresh quicksprint without cancelling the previous planning request", async () => {
