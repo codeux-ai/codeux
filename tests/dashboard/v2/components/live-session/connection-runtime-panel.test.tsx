@@ -201,6 +201,9 @@ describe("ConnectionRuntimePanel", () => {
         expect(retry).toHaveAttribute("aria-busy", "true");
         expect(retry).toHaveAttribute("aria-disabled", "true");
         expect(retry).toHaveAttribute("data-action-state", "pending");
+        expect(retry).toHaveAttribute("title", "Retrying is already in progress.");
+        expect(retry.getAttribute("aria-describedby")).toBeTruthy();
         expect(screen.getByText("Retrying in progress.")).toBeInTheDocument();
+        expect(screen.getByText("Retrying is already in progress.")).toBeInTheDocument();
     });
 });

@@ -58,9 +58,27 @@ describe("LiveTransportBanner", () => {
     );
 
     expect(screen.getByText("Reconnecting")).toBeInTheDocument();
-    expect(screen.getByText("Attempting to restore connection...")).toBeInTheDocument();
+    expect(screen.getByText("Attempting to restore connection. Cached runtime data remains visible.")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
     const spinner = document.querySelector('.motion-safe\\:animate-spin');
     expect(spinner).toBeInTheDocument();
+  });
+
+  it("uses assertive feedback for blocking disconnects while saying cached data remains visible", () => {
+    render(
+      <LiveTransportBanner
+        transportState="disconnected"
+        isRecovering={true}
+        snapshotUpdatedAt="2026-03-27T10:03:00.000Z"
+        error={null}
+      />,
+    );
+
+    const banner = screen.getByRole("alert");
+    expect(screen.getByText("Disconnected")).toBeInTheDocument();
+    expect(screen.getByText("Lost connection to the live stream. Cached runtime data remains visible while retrying.")).toBeInTheDocument();
+    expect(banner).toHaveAttribute("aria-live", "assertive");
+    expect(banner).toHaveAttribute("aria-busy", "true");
   });
 
   it("renders LiveTransportBanner with wrapping on small viewports", () => {

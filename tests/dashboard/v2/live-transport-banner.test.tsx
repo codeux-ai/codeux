@@ -64,6 +64,7 @@ describe("LiveTransportBanner", () => {
       />
     );
     expect(screen.getByText("Reconnecting")).toBeInTheDocument();
+    expect(screen.getByText("Attempting to restore connection. Cached runtime data remains visible.")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
   });
 

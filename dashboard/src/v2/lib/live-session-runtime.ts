@@ -109,6 +109,16 @@ export function getLiveActionStatusLabel(state: LiveActionState, labels: LiveAct
   return null;
 }
 
+export function getLiveActionDisabledReason(
+  state: LiveActionState,
+  labels: LiveActionLabels,
+  disabledReason?: string | null,
+): string | null {
+  if (state === "pending") return `${labels.pending} is already in progress.`;
+  if (state === "disabled") return disabledReason || labels.disabled || "Action unavailable.";
+  return null;
+}
+
 export function getLiveActionDisplayProps(
   stateOrPending: LiveActionState | boolean,
   isDisabled: boolean,
