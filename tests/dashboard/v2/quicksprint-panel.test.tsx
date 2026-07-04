@@ -274,6 +274,28 @@ describe("QuicksprintPanel", () => {
     expect(queryByText("Configure Quicksprint")).not.toBeInTheDocument();
   });
 
+  it("passes vertical wheel gestures over the template rail to the panel scroller", () => {
+    const { container, getByRole } = render(<QuicksprintPanel {...defaultProps} />);
+    const templateRail = getByRole("region", { name: "quicksprint templates" });
+    const panelScroller = container.querySelector(".dashboard-scrollbar.overflow-y-auto") as HTMLDivElement;
+    const panelScrollBy = vi.fn();
+
+    panelScroller.style.overflowY = "auto";
+    Object.defineProperty(panelScroller, "scrollHeight", { value: 1200, configurable: true });
+    Object.defineProperty(panelScroller, "clientHeight", { value: 480, configurable: true });
+    Object.defineProperty(panelScroller, "scrollBy", {
+      value: panelScrollBy,
+      configurable: true,
+    });
+
+    fireEvent.wheel(templateRail, { deltaY: 96, deltaX: 0, deltaMode: 0 });
+    expect(panelScrollBy).toHaveBeenCalledWith({ top: 96, behavior: "auto" });
+
+    panelScrollBy.mockClear();
+    fireEvent.wheel(templateRail, { deltaY: 0, deltaX: 96, deltaMode: 0 });
+    expect(panelScrollBy).not.toHaveBeenCalled();
+  });
+
   it("renders custom templates in the shared rail with edit and selection affordances", async () => {
     const { getByRole, getByText, queryByText } = render(<QuicksprintPanel {...defaultProps} />);
 

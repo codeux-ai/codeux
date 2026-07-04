@@ -96,7 +96,7 @@ export const TemplateCard: FunctionComponent<{
 
   return (
     <article
-      className={`${PANEL_CLASS} group grid h-[17.25rem] cursor-pointer grid-rows-[auto_minmax(0,1fr)_auto] gap-4 !overflow-hidden !rounded-[var(--stats-card-radius)] !p-5 transition-[transform,background-color,border-color,box-shadow] hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-panel-hover)] hover:shadow-[var(--stats-card-shadow-hover)] motion-safe:hover:-translate-y-0.5`}
+      className={`${PANEL_CLASS} group grid h-[19rem] cursor-pointer grid-rows-[auto_minmax(0,1fr)_auto] gap-5 !overflow-hidden !rounded-[1.45rem] !p-5 transition-[transform,background-color,border-color,box-shadow] before:absolute before:inset-x-5 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-[color:var(--stats-card-accent,var(--stats-accent-amber))] before:to-transparent before:opacity-30 hover:border-[color:var(--stats-border-strong)] hover:bg-[color:var(--stats-surface-panel-hover)] hover:shadow-[var(--stats-card-shadow-hover)] motion-safe:hover:-translate-y-0.5`}
       onClick={(event) => {
         if ((event.target as HTMLElement).closest("button")) {
           return;
@@ -104,28 +104,28 @@ export const TemplateCard: FunctionComponent<{
         onSelect();
       }}
     >
-      <div className="flex min-w-0 items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--stats-control-radius)] border border-[color:var(--stats-card-border)] bg-[color:var(--stats-accent-amber-fill)] text-[color:var(--stats-accent-amber)] shadow-[var(--stats-subpanel-shadow)]">
-          <Icon className="h-4.5 w-4.5" strokeWidth={2.2} />
+      <div className="relative z-10 flex min-w-0 items-start gap-3.5">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[1rem] border border-[color:var(--stats-card-border)] bg-[color:var(--stats-accent-amber-fill)] text-[color:var(--stats-accent-amber)] shadow-[var(--stats-subpanel-shadow)] transition-colors group-hover:bg-[color:var(--stats-surface-control-active-strong)]">
+          <Icon className="h-5 w-5" strokeWidth={2.2} />
         </div>
         <div className="min-w-0">
           <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">
             {sourceDetail}
           </div>
-          <h3 className="mt-2 line-clamp-3 min-w-0 text-[1.12rem] font-black leading-[1.08] tracking-tight text-[color:var(--stats-value-color)]">
+          <h3 className="mt-2 line-clamp-3 min-w-0 text-[1.2rem] font-black leading-[1.08] tracking-tight text-[color:var(--stats-value-color)]">
             {template.name}
           </h3>
         </div>
       </div>
 
-      <p id={descriptionId} className="line-clamp-3 min-w-0 text-[13px] leading-relaxed text-[color:var(--stats-detail-color)]">
+      <p id={descriptionId} className="relative z-10 line-clamp-4 min-w-0 text-[13px] leading-relaxed text-[color:var(--stats-detail-color)]">
         {template.description}
       </p>
 
-      <div className="grid gap-3 border-t border-[color:var(--stats-card-border)] pt-3">
+      <div className="relative z-10 grid gap-3 border-t border-[color:var(--stats-card-border)] pt-3.5">
         <div id={metaId} className="flex min-w-0 flex-wrap items-center gap-2">
           <span
-            className={`inline-flex min-w-0 max-w-[12rem] items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase leading-tight tracking-[0.1em] ${CHIP_CLASS} ${tagStyles.text}`}
+            className={`inline-flex min-w-0 max-w-[13rem] items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase leading-tight tracking-[0.1em] ${CHIP_CLASS} ${tagStyles.text}`}
             style={tagAccentStyle}
             title={template.category}
           >
@@ -146,13 +146,13 @@ export const TemplateCard: FunctionComponent<{
             aria-label={template.name}
             aria-describedby={`${descriptionId} ${metaId}`}
             onClick={(event) => { event.stopPropagation(); onSelect(); }}
-            className={`inline-flex min-h-10 min-w-0 flex-1 items-center justify-between gap-3 rounded-[var(--stats-control-radius)] border border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-surface-control-active)] px-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-control-text-active)] shadow-[var(--stats-control-shadow)] transition-[background-color,border-color,box-shadow,color] hover:bg-[color:var(--stats-surface-control-active-strong)] hover:text-[color:var(--stats-control-text-active-strong)] ${CONTROL_FOCUS_CLASS}`}
+            className={`inline-flex min-h-11 min-w-0 flex-1 items-center justify-between gap-3 rounded-[var(--stats-control-radius)] border border-[color:var(--stats-control-border-active)] bg-[color:var(--stats-surface-control-active)] px-3.5 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-control-text-active)] shadow-[var(--stats-control-shadow)] transition-[background-color,border-color,box-shadow,color] hover:bg-[color:var(--stats-surface-control-active-strong)] hover:text-[color:var(--stats-control-text-active-strong)] ${CONTROL_FOCUS_CLASS}`}
           >
             <span className="min-w-0 truncate">Launch</span>
             <span className="shrink-0 text-[color:var(--stats-detail-color)]">Enter</span>
           </button>
           {(onEdit || onDelete) && (
-            <div className="flex shrink-0 items-center gap-1 rounded-[var(--stats-control-radius)] border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-chip)] p-1 shadow-[var(--stats-subpanel-shadow)]">
+            <div className="flex shrink-0 items-center gap-1 rounded-[var(--stats-control-radius)] border border-[color:var(--stats-card-border)] bg-[color:var(--stats-surface-chip)] p-1.5 shadow-[var(--stats-subpanel-shadow)]">
               {!template.isBuiltIn && onEdit && (
                 <button
                   type="button"

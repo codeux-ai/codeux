@@ -10,6 +10,31 @@ const RAIL_SCROLL_STEP_RATIO = 0.88;
 const RAIL_MIN_SCROLL_STEP = 320;
 const RAIL_ROWS = 2;
 
+const WHEEL_DELTA_LINE_HEIGHT = 16;
+
+function getVerticalWheelDelta(event: WheelEvent): number {
+  if (event.deltaMode === 1) {
+    return event.deltaY * WHEEL_DELTA_LINE_HEIGHT;
+  }
+  if (event.deltaMode === 2) {
+    return event.deltaY * window.innerHeight;
+  }
+  return event.deltaY;
+}
+
+function findVerticalScrollParent(element: HTMLElement): HTMLElement | null {
+  let parent = element.parentElement;
+  while (parent) {
+    const style = window.getComputedStyle(parent);
+    const canScrollY = /(auto|scroll|overlay)/.test(style.overflowY);
+    if (canScrollY && parent.scrollHeight > parent.clientHeight) {
+      return parent;
+    }
+    parent = parent.parentElement;
+  }
+  return null;
+}
+
 type TemplateRailProps = {
   railId: string;
   ariaLabel: string;
@@ -108,6 +133,37 @@ const TemplateRail: FunctionComponent<TemplateRailProps> = ({
       scrollByDirection(1);
     }
   }, [scrollByDirection]);
+
+  const onRailWheel = useCallback((event: WheelEvent) => {
+    const verticalDelta = getVerticalWheelDelta(event);
+    if (event.shiftKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY) || verticalDelta === 0) {
+      return;
+    }
+
+    const rail = scrollRef.current;
+    if (!rail) {
+      return;
+    }
+
+    const scrollParent = findVerticalScrollParent(rail);
+    event.preventDefault();
+    if (scrollParent) {
+      scrollParent.scrollBy({ top: verticalDelta, behavior: "auto" });
+      return;
+    }
+    window.scrollBy({ top: verticalDelta, behavior: "auto" });
+  }, []);
+
+  useEffect(() => {
+    const rail = scrollRef.current;
+    if (!rail) {
+      return;
+    }
+    rail.addEventListener("wheel", onRailWheel, { passive: false });
+    return () => {
+      rail.removeEventListener("wheel", onRailWheel);
+    };
+  }, [onRailWheel]);
 
   return (
     <div className="space-y-3">

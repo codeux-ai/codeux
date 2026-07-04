@@ -50,13 +50,13 @@ Adding a new `.md` file to a resolved template directory is enough for it to app
 
 ## Dashboard Behavior
 
-The Quicksprint panel presents default and custom templates in one shared browse rail. Template cards use the same stats-surface design language as the dashboard telemetry cards, with high-contrast titles, category/subtask chips, a dedicated launch control, and separate icon controls for edit/delete actions. Cards label their source as `Default Template` or `Custom Template`; custom cards can still be edited, and both sources can be removed from the current project's catalog.
+The Quicksprint panel presents default and custom templates in one shared browse rail. Template cards use the same stats-surface design language as the dashboard telemetry cards, with taller premium surfaces, high-contrast titles, category/subtask chips, a dedicated launch control, and separate icon controls for edit/delete actions. Cards label their source as `Default Template` or `Custom Template`; custom cards can still be edited, and both sources can be removed from the current project's catalog.
 
 Default templates are organized by `purpose`. The purpose selector narrows the visible default templates while custom/project templates remain in the same rail.
 
 Projects can also have generated or project-local templates without any active built-in defaults. In that case the dashboard shows the populated custom/project rail directly, so browse mode never opens on an empty default catalog.
 
-The browse panel renders templates as a horizontally scrollable rail so large catalogs stay readable without cutting off rows on smaller viewports. The rail keeps template cards arranged in exactly two rows by default, then continues horizontally for overflow items instead of adding a third visible row or forcing the whole page to widen. The rail does not claim touch panning, so vertical panel/page scrolling still works when the pointer is over the template area.
+The browse panel renders templates as a horizontally scrollable rail so large catalogs stay readable without cutting off rows on smaller viewports. The rail keeps template cards arranged in exactly two rows by default, then continues horizontally for overflow items instead of adding a third visible row or forcing the whole page to widen. The rail does not claim touch panning, and vertical wheel/trackpad gestures over the template area are handed to the surrounding panel scroller so normal page scrolling still works.
 
 The rail exposes left and right controls for page-style scrolling. These controls move the rail contents without changing the selected template or interfering with keyboard focus. Touch and trackpad users can still use normal browser scrolling gestures; vertical movement continues to scroll the surrounding panel/page instead of being captured by the rail.
 
