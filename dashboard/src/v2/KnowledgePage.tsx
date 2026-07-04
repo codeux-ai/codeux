@@ -6,6 +6,8 @@ import {
 } from "lucide-preact";
 import { PageContainer } from "./components/layout/PageContainer.js";
 import { PageHeader } from "./components/layout/PageHeader.js";
+import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
+import { EmptyState } from "./components/ui/EmptyState.js";
 import { useProjectData } from "./context/project-data.js";
 import { listEmbeddingModels } from "./lib/memory-api.js";
 import { fetchAgentPresets } from "./lib/agent-preset-api.js";
@@ -35,6 +37,22 @@ const formatTokens = (tokens: number): string => {
   if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}k`;
   return String(tokens);
 };
+
+const formatDate = (value: string): string => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown";
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(date);
+};
+
+const sourceTypeLabels: Record<KnowledgeDocument["sourceType"], string> = {
+  upload: "Upload",
+  repo_path: "Repo path",
+  paste: "Pasted note",
+  project: "Project import",
+};
+
+const formatSourceLabel = (doc: KnowledgeDocument): string =>
+  doc.sourceRef || sourceTypeLabels[doc.sourceType];
 
 const docIcon = (doc: KnowledgeDocument) => {
   const ref = (doc.sourceRef || doc.title || "").toLowerCase();
@@ -251,84 +269,129 @@ export const KnowledgePage: FunctionComponent = () => {
         </div>
       )}
 
-      {error && (
-        <div className="flex items-start gap-3 rounded-2xl border border-status-red/25 bg-status-red/[0.06] px-5 py-3 text-sm text-status-red">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.2} />
-          <span className="flex-1">{error}</span>
-          <button type="button" onClick={() => setError(null)} aria-label="Dismiss"><X className="h-4 w-4" /></button>
-        </div>
-      )}
+      <ActionFeedbackRegion status={error ? "error" : "idle"} message={error} onDismiss={() => setError(null)} />
 
-      {/* Search test box */}
+      {/* Retrieval browser */}
       {readyCount > 0 && <KnowledgeSearchBox projectId={pid} agentPresets={agentPresets} />}
 
       {/* Library grid */}
       {!pid ? (
-        <EmptyState icon={BookOpen} title="Select a project" body="Choose a project to manage its knowledge base." />
+        <div className="rounded-[1.5rem] border border-black/[0.06] bg-white/50 shadow-[0_2px_18px_rgba(15,23,42,0.04)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-white/[0.02]">
+          <EmptyState
+            icon={<BookOpen className="h-6 w-6" strokeWidth={2} />}
+            title="Select a project"
+            description="Choose a project to browse its knowledge library and retrieval results."
+          />
+        </div>
       ) : loading && documents.length === 0 ? (
-        <div className="flex items-center justify-center py-24 text-slate-400">
-          <Loader2 className="h-6 w-6 animate-spin" />
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center justify-center gap-3 rounded-[1.5rem] border border-black/[0.06] bg-white/50 px-8 py-20 text-sm font-semibold text-slate-500 shadow-[0_2px_18px_rgba(15,23,42,0.04)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400"
+        >
+          <Loader2 className="h-5 w-5 animate-spin text-signal-500" />
+          Loading knowledge library
         </div>
       ) : documents.length === 0 ? (
         <div
           onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
-          className={`flex flex-col items-center gap-4 rounded-[1.8rem] border-2 border-dashed px-8 py-20 text-center transition-colors ${dragging ? "border-signal-500 bg-signal-500/[0.05]" : "border-black/[0.08] dark:border-white/[0.08]"}`}
+          className={`rounded-[1.5rem] border bg-white/50 shadow-[0_2px_18px_rgba(15,23,42,0.04)] backdrop-blur-xl transition-colors dark:bg-white/[0.02] ${dragging ? "border-signal-500/45 bg-signal-500/[0.06]" : "border-black/[0.06] dark:border-white/[0.06]"}`}
         >
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-signal-500/10 text-signal-500">
-            <Sparkles className="h-7 w-7" strokeWidth={2} />
-          </div>
-          <div className="flex flex-col gap-1">
-            <p className="text-lg font-bold text-slate-700 dark:text-slate-200">Build your knowledge base</p>
-            <p className="text-sm text-slate-400 dark:text-slate-500">Drag files here, or use Upload / Paste / From repo above.</p>
-          </div>
+          <EmptyState
+            icon={<Sparkles className="h-6 w-6" strokeWidth={2} />}
+            title={dragging ? "Drop files to add knowledge" : "Build your knowledge base"}
+            description="Add specs, runbooks, docs, and code references so agents can retrieve grounded passages when they work."
+            primaryAction={
+              <button
+                type="button"
+                onClick={() => setAddMode("upload")}
+                className="inline-flex items-center gap-2 rounded-xl bg-signal-500 px-4 py-2.5 text-sm font-bold text-slate-900 shadow-lg shadow-signal-500/15 transition-colors hover:bg-signal-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:text-void-900 dark:focus-visible:ring-offset-void-900"
+              >
+                <Upload className="h-4 w-4" strokeWidth={2.5} />
+                Upload documents
+              </button>
+            }
+          >
+            <button
+              type="button"
+              onClick={() => setAddMode("paste")}
+              className="text-sm font-bold text-slate-500 transition-colors hover:text-signal-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:text-slate-400 dark:hover:text-signal-400 dark:focus-visible:ring-offset-void-900"
+            >
+              Paste note
+            </button>
+            <button
+              type="button"
+              onClick={() => setAddMode("repo")}
+              className="text-sm font-bold text-slate-500 transition-colors hover:text-signal-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:text-slate-400 dark:hover:text-signal-400 dark:focus-visible:ring-offset-void-900"
+            >
+              Add repo path
+            </button>
+          </EmptyState>
         </div>
       ) : (
         <div
           onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
+          role="list"
+          aria-label="Knowledge documents"
           className={`grid grid-cols-1 gap-4 rounded-[1.5rem] transition-colors sm:grid-cols-2 xl:grid-cols-3 ${dragging ? "ring-2 ring-signal-500/40" : ""}`}
         >
           {documents.map((doc) => {
             const { Icon, cls } = docIcon(doc);
             const subscribers = doc.subscriberAgentIds.map((id) => agentNameById.get(id)?.name).filter(Boolean) as string[];
             return (
-              <div
+              <article
                 key={doc.id}
-                className="group relative flex flex-col gap-3 rounded-2xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_2px_16px_rgba(0,0,0,0.03)] backdrop-blur-xl transition-all hover:shadow-[0_4px_24px_rgba(0,0,0,0.06)] dark:border-white/[0.06] dark:bg-void-800/50"
+                role="listitem"
+                aria-label={`${doc.title}, ${sourceTypeLabels[doc.sourceType]}, ${doc.status}`}
+                className="group relative flex min-h-[220px] flex-col gap-4 rounded-2xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_2px_18px_rgba(15,23,42,0.04)] backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:border-signal-500/20 hover:shadow-[0_10px_30px_rgba(15,23,42,0.08)] dark:border-white/[0.06] dark:bg-void-800/55 dark:hover:border-signal-500/25"
               >
                 <div className="flex items-start gap-3">
                   <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black/[0.04] dark:bg-white/[0.05] ${cls}`}>
                     <Icon className="h-5 w-5" strokeWidth={2.2} />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-bold text-slate-800 dark:text-slate-100" title={doc.title}>{doc.title}</div>
-                    <div className="mt-0.5 truncate font-mono text-[10px] text-slate-400 dark:text-slate-500" title={doc.sourceRef || ""}>
-                      {doc.sourceRef || doc.sourceType}
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-signal-500/[0.08] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-700 dark:text-signal-400">
+                        {sourceTypeLabels[doc.sourceType]}
+                      </span>
+                      <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500">Added {formatDate(doc.createdAt)}</span>
+                    </div>
+                    <h3 className="truncate text-base font-bold leading-snug text-slate-900 dark:text-slate-50" title={doc.title}>{doc.title}</h3>
+                    <div className="mt-1 truncate font-mono text-[11px] text-slate-500 dark:text-slate-400" title={formatSourceLabel(doc)}>
+                      {formatSourceLabel(doc)}
                     </div>
                   </div>
                 </div>
 
                 {doc.summary && (
-                  <p className="line-clamp-2 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">{doc.summary}</p>
+                  <p className="line-clamp-3 text-[13px] leading-relaxed text-slate-600 dark:text-slate-300">{doc.summary}</p>
                 )}
 
-                <div className="mt-auto flex items-center justify-between gap-2 pt-1">
-                  <div className="flex items-center gap-2">
+                <div className="mt-auto flex items-end justify-between gap-3 pt-1">
+                  <div className="flex min-w-0 flex-col gap-2">
                     <StatusPill doc={doc} />
-                    <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500">
-                      {formatBytes(doc.byteSize)} · ~{formatTokens(doc.tokenCount)} tok
-                    </span>
+                    <dl className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
+                      <div className="flex items-center gap-1">
+                        <dt className="sr-only">Size</dt>
+                        <dd>{formatBytes(doc.byteSize)}</dd>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <dt className="sr-only">Token estimate</dt>
+                        <dd>~{formatTokens(doc.tokenCount)} tok</dd>
+                      </div>
+                    </dl>
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                  <div className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
                     {doc.status === "error" && (
-                      <button type="button" onClick={() => reembed(doc.id)} title="Retry embedding" className="rounded-lg p-1.5 text-slate-400 hover:bg-black/[0.05] hover:text-signal-500 dark:hover:bg-white/[0.06]">
+                      <button type="button" onClick={() => reembed(doc.id)} aria-label={`Retry embedding ${doc.title}`} title="Retry embedding" className="rounded-lg p-1.5 text-slate-400 hover:bg-black/[0.05] hover:text-signal-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 dark:hover:bg-white/[0.06]">
                         <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.2} />
                       </button>
                     )}
-                    <button type="button" onClick={() => removeDocument(doc.id)} title="Delete" className="rounded-lg p-1.5 text-slate-400 hover:bg-status-red/10 hover:text-status-red">
+                    <button type="button" onClick={() => removeDocument(doc.id)} aria-label={`Delete ${doc.title}`} title="Delete" className="rounded-lg p-1.5 text-slate-400 hover:bg-status-red/10 hover:text-status-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red">
                       <Trash2 className="h-3.5 w-3.5" strokeWidth={2.2} />
                     </button>
                   </div>
@@ -342,7 +405,7 @@ export const KnowledgePage: FunctionComponent = () => {
                     {subscribers.length > 4 && <span className="text-[10px] font-bold text-slate-400">+{subscribers.length - 4}</span>}
                   </div>
                 )}
-              </div>
+              </article>
             );
           })}
         </div>
@@ -388,7 +451,7 @@ export const KnowledgePage: FunctionComponent = () => {
   );
 };
 
-/* ── Search test box ── */
+/* ── Retrieval browser ── */
 const KnowledgeSearchBox: FunctionComponent<{ projectId: string; agentPresets: AgentPreset[] }> = ({ projectId, agentPresets }) => {
   const [query, setQuery] = useState("");
   const [agentId, setAgentId] = useState("");
@@ -409,19 +472,29 @@ const KnowledgeSearchBox: FunctionComponent<{ projectId: string; agentPresets: A
   }, [projectId, query, agentId]);
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-black/[0.06] bg-white/50 p-4 backdrop-blur-xl dark:border-white/[0.06] dark:bg-white/[0.02]">
+    <section className="flex flex-col gap-4 rounded-2xl border border-black/[0.06] bg-white/60 p-4 shadow-[0_2px_18px_rgba(15,23,42,0.04)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-white/[0.02]" aria-labelledby="knowledge-retrieval-title">
+      <div className="flex flex-col gap-1">
+        <h2 id="knowledge-retrieval-title" className="font-display text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-50">
+          Retrieval browser
+        </h2>
+        <p className="text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+          Search embedded passages exactly as agents do, scoped to the full library or one agent's subscribed documents.
+        </p>
+      </div>
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[220px]">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
+            aria-label="Search knowledge passages"
             value={query}
             onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
             onKeyDown={(e) => { if (e.key === "Enter") void run(); }}
-            placeholder="Test what an agent would retrieve…"
-            className="w-full rounded-xl border border-black/[0.08] bg-white/70 py-2.5 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-200"
+            placeholder="Search specs, runbooks, or code context..."
+            className="w-full rounded-xl border border-black/[0.08] bg-white/70 py-2.5 pl-9 pr-3 font-mono text-sm text-slate-700 outline-none transition-colors focus:border-signal-500/40 focus:bg-signal-500/[0.03] dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-200"
           />
         </div>
         <select
+          aria-label="Knowledge search scope"
           value={agentId}
           onChange={(e) => setAgentId((e.target as HTMLSelectElement).value)}
           className="rounded-xl border border-black/[0.08] bg-white/70 px-3 py-2.5 text-sm font-semibold text-slate-600 outline-none dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300"
@@ -429,29 +502,40 @@ const KnowledgeSearchBox: FunctionComponent<{ projectId: string; agentPresets: A
           <option value="">Whole library</option>
           {agentPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}'s docs</option>)}
         </select>
-        <button type="button" onClick={run} disabled={searching || !query.trim()} className="inline-flex items-center gap-2 rounded-xl bg-signal-500/90 px-4 py-2.5 text-sm font-bold text-slate-900 hover:bg-signal-400 disabled:opacity-50 dark:text-void-900">
+        <button type="button" onClick={run} disabled={searching || !query.trim()} aria-label="Search knowledge passages" className="inline-flex items-center gap-2 rounded-xl bg-signal-500/90 px-4 py-2.5 text-sm font-bold text-slate-900 hover:bg-signal-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 disabled:opacity-50 dark:text-void-900 dark:focus-visible:ring-offset-void-900">
           {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" strokeWidth={2.5} />}
           Search
         </button>
       </div>
       {results && (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2" role="list" aria-label="Knowledge search results" aria-live="polite">
           {results.length === 0 ? (
-            <p className="px-1 py-2 text-sm text-slate-400">No relevant passages found.</p>
-          ) : results.map((r, i) => (
-            <div key={i} className="rounded-xl border border-black/[0.05] bg-white/40 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <span className="truncate text-[11px] font-bold text-signal-600 dark:text-signal-400">
-                  {r.documentTitle}{r.heading ? ` › ${r.heading}` : ""}
-                </span>
-                <span className="shrink-0 font-mono text-[10px] text-slate-400">{Math.round(r.similarity * 100)}%</span>
-              </div>
-              <p className="line-clamp-3 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">{r.content}</p>
+            <div className="rounded-xl border border-black/[0.05] bg-white/45 dark:border-white/[0.05] dark:bg-white/[0.02]">
+              <EmptyState
+                icon={<Search className="h-6 w-6" strokeWidth={2} />}
+                title="No relevant passages found"
+                description="Try a more specific phrase, a different source term, or search the whole library."
+              />
             </div>
+          ) : results.map((r, i) => (
+            <article key={`${r.documentId}-${r.chunkIndex}-${i}`} role="listitem" className="rounded-xl border border-black/[0.05] bg-white/50 p-3.5 dark:border-white/[0.05] dark:bg-white/[0.02]">
+              <div className="mb-2 flex items-start justify-between gap-3">
+                <h3 className="min-w-0 truncate text-sm font-bold text-slate-800 dark:text-slate-100">
+                  {r.documentTitle}{r.heading ? ` › ${r.heading}` : ""}
+                </h3>
+                <span className="shrink-0 rounded-full bg-signal-500/[0.08] px-2 py-0.5 font-mono text-[10px] font-bold text-signal-700 dark:text-signal-400" aria-label={`Similarity ${Math.round(r.similarity * 100)} percent`}>
+                  {Math.round(r.similarity * 100)}%
+                </span>
+              </div>
+              <p className="line-clamp-3 text-[13px] leading-relaxed text-slate-600 dark:text-slate-300">{r.content}</p>
+              <p className="mt-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
+                Chunk {r.chunkIndex + 1}
+              </p>
+            </article>
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 };
 
@@ -675,15 +759,3 @@ const ProjectKnowledgeModal: FunctionComponent<{
     </ModalShell>
   );
 };
-
-const EmptyState: FunctionComponent<{ icon: typeof BookOpen; title: string; body: string }> = ({ icon: Icon, title, body }) => (
-  <div className="flex flex-col items-center gap-4 rounded-[1.8rem] border border-black/[0.06] bg-white/40 px-8 py-20 text-center dark:border-white/[0.06] dark:bg-white/[0.02]">
-    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-black/[0.04] text-slate-400 dark:bg-white/[0.05]">
-      <Icon className="h-6 w-6" strokeWidth={2} />
-    </div>
-    <div className="flex flex-col gap-1">
-      <p className="text-lg font-bold text-slate-700 dark:text-slate-200">{title}</p>
-      <p className="text-sm text-slate-400 dark:text-slate-500">{body}</p>
-    </div>
-  </div>
-);
