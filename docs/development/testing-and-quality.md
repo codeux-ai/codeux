@@ -13,35 +13,31 @@ Temporary experiments, scratch files, or test scripts should be created outside 
 
 ## Core Commands
 
-- Run tests
+- Typecheck server/shared TypeScript
 ```bash
-pnpm test
+pnpm run lint
 ```
+  - `pnpm run typecheck` is the same root TypeScript check; prefer `pnpm run lint` because it is the command used by the local CI script.
 
 - Run backend tests only
 ```bash
 pnpm run test:backend
 ```
+  - For a focused backend file, run Vitest directly: `pnpm exec vitest run tests/backend/path/to/file.test.ts`.
+  - `pnpm run test:backend -- <file>` still starts from the `tests/backend` script target, so use direct Vitest invocation when you need the narrowest possible run.
 
 - Run dashboard tests only
 ```bash
 pnpm run test:dashboard
 ```
+  - For source-adjacent dashboard tests outside `tests/dashboard`, run `pnpm exec vitest run dashboard/src/.../__tests__/file.test.tsx`.
 
-- Run coverage report (verifies configured global thresholds and focused file gates)
-```bash
-pnpm run test:coverage
-```
-
-- Run backend coverage only
+- Run backend coverage report
 ```bash
 pnpm run test:backend:coverage
 ```
-
-- Run the local fast CI mirror (strict TS validation plus tests)
-```bash
-pnpm run ci
-```
+  - This is the coverage command used by `pnpm run ci`.
+  - Use `pnpm run test:coverage` only when you intentionally need coverage for every configured Vitest include.
 
 - Run Playwright E2E browser tests
 ```bash
@@ -73,6 +69,13 @@ pnpm run build
   - The repo-root `vite.config.ts` sets `root: "dashboard"`, so `vite build` and `vite` must keep using that config to resolve `dashboard/index.html`.
   - The dashboard build now uses Vite 8's native `build.rolldownOptions` path instead of the Rollup compatibility key.
 
+- Run the full local CI equivalent
+```bash
+pnpm run ci
+```
+  - The local CI script runs `pnpm run audit`, `pnpm run lint`, `pnpm run test:backend:coverage`, `pnpm run test:dashboard`, and `pnpm run build` in that order.
+  - Playwright E2E is intentionally separate; run `pnpm exec playwright test` when a change affects startup, routing, browser behavior, dashboard accessibility, or responsive flows.
+
 - Run dashboard typecheck only
 ```bash
 pnpm run typecheck:dashboard
@@ -83,7 +86,8 @@ pnpm run typecheck:dashboard
 ### Coverage Guardrails
 - `tests/backend/config/vitest-coverage-config.test.ts` imports the exported Vitest config and verifies coverage settings as data, without executing Vitest from inside the test.
 - Backend source coverage must keep `src/**/*.ts` included, must keep generated/runtime entrypoint exclusions explicit, and must not count dashboard-only files unless the include scope is intentionally expanded later.
-- Global coverage thresholds must stay at or above the configured minimums in `vitest.config.ts`, and `src/server/activity-cache-service.ts` must keep at least an 80% line threshold.
+- Global coverage thresholds must stay at or above the configured minimums in `vitest.config.ts`: 77.4% lines, 71.5% functions, 66.1% branches, and 76.0% statements.
+- `src/server/activity-cache-service.ts` has a dedicated 80% line threshold and must not be weakened when global thresholds move.
 
 ### Backend
 - Sprint orchestration behavior
@@ -95,6 +99,8 @@ pnpm run typecheck:dashboard
 - Polling/orchestration tests should stub the wait primitive so assertions cover state transitions without spending real wall-clock time
 - When socket behavior is under test, let `setupDashboardServer()` bind directly to `port: 0` so the OS assigns the ephemeral port in one step
 - Reuse a shared heavy server fixture inside helper-level unit tests when the assertions only touch private methods or repositories; keep full startup/shutdown isolation for lifecycle tests that call `run()`
+- Provider, Docker, Git, and external API boundaries should be mocked or injected. Use deterministic provider fixtures, fake timers for polling/retry loops, in-memory databases where supported, and temp homes/workspaces that are cleaned after the test.
+- Provider invocation tests should assert both durable usage rows and replayable execution messages when telemetry or transcript behavior changes. Sanitized callback-facing telemetry must not leak secrets even when raw provider artifacts are read for parser input.
 
 ### Dashboard
 - Settings default cloning
@@ -103,6 +109,7 @@ pnpm run typecheck:dashboard
 - Status helpers
 - UI tests that only need DOM events and markup assertions should use `@vitest-environment happy-dom` to reduce environment startup cost
 - Dashboard accessibility and design-system regression tests live under `tests/dashboard/accessibility/`. These tests should assert specific keyboard behavior, accessible names, live-region roles, responsive labels/wrapping, overflow boundaries, and reduced-motion fallbacks without snapshotting full pages or requiring a running backend.
+- Dashboard UI changes should preserve accessible names, keyboard operation, visible focus states, loading/error/empty states, color contrast, reduced-motion behavior, and mobile/desktop layout constraints.
 - Page-shell tests should focus on page-level state and mock expensive visual children instead of importing full chart/editor stacks
 - Live page regression coverage should explicitly assert sidebar composition (`Invocation Feed`, `Runtime Timeline`, `Git / CI / PR`, `Attention Queue`, `Execution Runtime`) and order, while asserting removed cards (`Latest Activity`, `Protocol`, `Live Connections`) stay absent from the default Live sidebar.
 - Live sidebar Git CI coverage should include at least one active CI run and assert both the status text (for example `IN_PROGRESS`) and an active indicator query (`.animate-spin`) so CI-state rendering regressions are detected quickly.
