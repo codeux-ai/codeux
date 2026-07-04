@@ -12,6 +12,9 @@ expect.extend(matchers);
 vi.mock("gsap", () => ({
   default: {
     fromTo: vi.fn(),
+    to: vi.fn((_target: unknown, vars?: { onComplete?: () => void }) => {
+      vars?.onComplete?.();
+    }),
     set: vi.fn(),
     killTweensOf: vi.fn(),
     context: (fn: () => void) => {
@@ -401,21 +404,39 @@ describe("QuicksprintPanel", () => {
     expect(getByRole("button", { name: "New Template" })).toBeInTheDocument();
   });
 
-  it("deletes custom and default templates from the shared rail", async () => {
+  it("confirms destructive template deletion with the shared dialog", async () => {
+    vi.useFakeTimers();
     const onDeleteTemplate = vi.fn().mockResolvedValue(undefined);
-    const { getByRole } = render(
+    const { getByRole, getByText, queryByRole } = render(
       <QuicksprintPanel {...defaultProps} onDeleteTemplate={onDeleteTemplate} />
     );
     const templateRail = getByRole("region", { name: "quicksprint templates" });
 
     fireEvent.click(within(templateRail).getByRole("button", { name: "Delete Custom Sprint Flow template" }));
-    fireEvent.click(within(templateRail).getByRole("button", { name: "Delete API Tests template" }));
 
+    expect(getByRole("dialog", { name: "Delete Custom Sprint Flow?" })).toBeInTheDocument();
+    expect(getByText("This removes the custom template from this project.")).toBeInTheDocument();
+    expect(getByRole("button", { name: "Keep Template" })).toBeInTheDocument();
+    expect(window.confirm).not.toHaveBeenCalled();
+
+    fireEvent.click(getByRole("button", { name: "Keep Template" }));
     await waitFor(() => {
-      expect(onDeleteTemplate).toHaveBeenCalledWith("tpl-custom-1");
+      expect(queryByRole("dialog", { name: "Delete Custom Sprint Flow?" })).not.toBeInTheDocument();
+    });
+    expect(onDeleteTemplate).not.toHaveBeenCalled();
+
+    fireEvent.click(within(templateRail).getByRole("button", { name: "Delete API Tests template" }));
+    expect(getByRole("dialog", { name: "Delete API Tests?" })).toBeInTheDocument();
+    expect(getByText("This hides the default template for this project. The shared bundled template remains available outside this project.")).toBeInTheDocument();
+
+    const confirmButton = getByRole("button", { name: "Hold to Delete Template" });
+    fireEvent.pointerDown(confirmButton, { button: 0, pointerId: 1 });
+    vi.advanceTimersByTime(1000);
+    await waitFor(() => {
       expect(onDeleteTemplate).toHaveBeenCalledWith("tpl-1");
     });
-    expect(window.confirm).toHaveBeenCalledTimes(2);
+    expect(window.confirm).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 
   it("shows planning overlay on execute and allows dismiss", async () => {
@@ -471,7 +492,9 @@ describe("QuicksprintPanel", () => {
     );
 
     fireEvent.click(getByRole("button", { name: "API Tests" }));
-    fireEvent.click(getByRole("button", { name: "Plan Only" }));
+    const planOnlyButton = getByRole("button", { name: "Plan Only" });
+    fireEvent.click(planOnlyButton);
+    fireEvent.click(planOnlyButton);
 
     await waitFor(() => {
       expect(mockOnExecute).toHaveBeenCalledTimes(1);
@@ -492,6 +515,55 @@ describe("QuicksprintPanel", () => {
     });
     expect(getByText("Cancelled plan only request for API Tests.", { selector: "div:not(.sr-only)" })).toBeInTheDocument();
     expect(queryByText("Planning only")).not.toBeInTheDocument();
+  });
+
+  it("opens tokenized reduced-motion-safe template pickers with accessible options", async () => {
+    vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
+      matches: query === "(prefers-reduced-motion: reduce)",
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+
+    const { getByRole, queryByRole } = render(<QuicksprintPanel {...defaultProps} />);
+    const templateRail = getByRole("region", { name: "quicksprint templates" });
+
+    fireEvent.click(within(templateRail).getByRole("button", { name: "Edit Custom Sprint Flow template" }));
+
+    const iconTrigger = await waitFor(() => getByRole("button", { name: "Pick template icon, current icon Zap" }));
+    fireEvent.click(iconTrigger);
+
+    const iconDialog = getByRole("dialog", { name: "Icon picker" });
+    expect(iconDialog).toHaveStyle({ "--qs-picker-enter-duration": "0ms" });
+    expect(iconDialog.getAttribute("style")).not.toContain("qs-picker-in");
+
+    const zapOption = getByRole("button", { name: "Use Zap icon" });
+    expect(zapOption).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => {
+      expect(queryByRole("dialog", { name: "Icon picker" })).not.toBeInTheDocument();
+    });
+
+    const colorTrigger = getByRole("button", { name: "Pick template tag color, current color #f59e0b" });
+    fireEvent.click(colorTrigger);
+
+    const colorDialog = getByRole("dialog", { name: "Color picker" });
+    expect(colorDialog).toHaveStyle({ "--qs-picker-enter-duration": "0ms" });
+    expect(getByRole("button", { name: "Use amber tag color" })).toHaveAttribute("aria-pressed", "false");
+
+    const colorBackdrop = Array.from(document.querySelectorAll('div[aria-hidden="true"]')).find((element) =>
+      element.className.includes("z-[9998]"),
+    );
+    expect(colorBackdrop).toBeDefined();
+    fireEvent.click(colorBackdrop!);
+    await waitFor(() => {
+      expect(queryByRole("dialog", { name: "Color picker" })).not.toBeInTheDocument();
+    });
   });
 
   it("renders phase animation through reduced-motion-safe tokens", () => {
