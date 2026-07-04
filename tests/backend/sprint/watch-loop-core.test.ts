@@ -8,6 +8,7 @@ vi.mock("../../../src/services/cli-process-runner.js", () => ({
 import { runCommandStrict } from "../../../src/services/cli-process-runner.js";
 import { evaluateSprintRunState } from "../../../src/domain/sprint/orchestrator/sprint-state-evaluator.js";
 import { decideMainMergeWaitOrPause, decideTerminalCompletion } from "../../../src/domain/sprint/orchestrator/watch-loop-policies.js";
+import { runStatusDerivationStep } from "../../../src/sprint/steps/status-derivation-step.js";
 import { buildMockSettings } from "../../builders/settings-builder.js";
 import { buildMockSubtask } from "../../builders/subtask-builder.js";
 
@@ -2736,5 +2737,63 @@ describe("evaluateSprintRunState", () => {
     expect(result.noMoreActionPossible).toBe(true);
     expect(result.waitingOnWorkerAttention).toBe(true);
     expect(result.allFinished).toBe(false);
+  });
+});
+
+describe("runStatusDerivationStep provider failure transitions", () => {
+  it("requeues a failed provider task with stale PR/session metadata when retry is enabled", () => {
+    const task = buildMockSubtask({
+      status: "RUNNING",
+      session_id: "session-1",
+      session_state: "FAILED",
+      worker_branch: "worker/task-01",
+      pr_url: "https://example.com/pr/10",
+      is_merged: false,
+    });
+
+    const result = runStatusDerivationStep([task], {
+      retryFailed: true,
+      isActionRequiredState: () => false,
+      githubMode: "REMOTE",
+    });
+
+    expect(result[0].status).toBe("PENDING");
+    expect(result[0].session_id).toBeUndefined();
+    expect(result[0].session_state).toBeUndefined();
+    expect(result[0].pr_url).toBeUndefined();
+    expect(result[0].worker_branch).toBeUndefined();
+  });
+
+  it("blocks a failed provider task with stale PR/session metadata when dependencies are not settled", () => {
+    const dependency = buildMockSubtask({
+      id: "T0",
+      status: "CODING_COMPLETED",
+      worker_branch: "worker/T0",
+      pr_url: "https://example.com/pr/9",
+      is_merged: false,
+    });
+    const task = buildMockSubtask({
+      id: "T1",
+      status: "RUNNING",
+      depends_on: ["T0"],
+      is_independent: false,
+      session_id: "session-1",
+      session_state: "FAILED",
+      worker_branch: "worker/T1",
+      pr_url: "https://example.com/pr/10",
+      is_merged: false,
+    });
+
+    const result = runStatusDerivationStep([dependency, task], {
+      retryFailed: true,
+      isActionRequiredState: () => false,
+      githubMode: "REMOTE",
+    });
+
+    expect(result[1].status).toBe("BLOCKED");
+    expect(result[1].session_id).toBeUndefined();
+    expect(result[1].session_state).toBeUndefined();
+    expect(result[1].pr_url).toBeUndefined();
+    expect(result[1].worker_branch).toBeUndefined();
   });
 });
