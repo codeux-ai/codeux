@@ -35,6 +35,11 @@ interface TemplateCacheEntry {
   templates: QuicksprintTemplateRecord[];
 }
 
+interface TemplateDirectoryReadResult {
+  templates: QuicksprintTemplateRecord[];
+  hiddenTemplateIds: string[];
+}
+
 export class QuicksprintService {
   private templateCache: Map<string, TemplateCacheEntry> = new Map();
 
@@ -63,18 +68,23 @@ export class QuicksprintService {
     }
 
     const templatesById = new Map<string, QuicksprintTemplateRecord>();
+    const hiddenTemplateIds = new Set<string>();
 
     for (const directory of directories) {
-      const templates = await this.readTemplatesFromDirectory(directory);
+      const { templates, hiddenTemplateIds: directoryHiddenTemplateIds } = await this.readTemplatesFromDirectory(directory);
+      for (const hiddenTemplateId of directoryHiddenTemplateIds) {
+        hiddenTemplateIds.add(hiddenTemplateId);
+        templatesById.delete(hiddenTemplateId);
+      }
       for (const template of templates) {
-        if (!templatesById.has(template.id)) {
+        if (!hiddenTemplateIds.has(template.id) && !templatesById.has(template.id)) {
           templatesById.set(template.id, template);
         }
       }
     }
 
     for (const fallbackTemplate of this.fallbackBuiltInTemplates()) {
-      if (!templatesById.has(fallbackTemplate.id)) {
+      if (!hiddenTemplateIds.has(fallbackTemplate.id) && !templatesById.has(fallbackTemplate.id)) {
         templatesById.set(fallbackTemplate.id, fallbackTemplate);
       }
     }
@@ -124,13 +134,14 @@ export class QuicksprintService {
     return parts.join("|");
   }
 
-  private async readTemplatesFromDirectory(source: TemplateDirectory): Promise<QuicksprintTemplateRecord[]> {
+  private async readTemplatesFromDirectory(source: TemplateDirectory): Promise<TemplateDirectoryReadResult> {
     if (source.ensure) {
       await fs.mkdir(source.directory, { recursive: true }).catch(() => undefined);
     }
 
     const files = await fs.readdir(source.directory).catch(() => []);
     const templates: QuicksprintTemplateRecord[] = [];
+    const hiddenTemplateIds: string[] = [];
 
     for (const file of files.filter((entry) => this.isTemplateFile(entry)).sort()) {
       const filePath = path.join(source.directory, file);
@@ -138,9 +149,14 @@ export class QuicksprintService {
         const content = await fs.readFile(filePath, "utf-8");
         const parsed = parseQuicksprintTemplateMarkdown(content);
         const raw = parsed.metadata;
+        const id = typeof raw.id === "string" && raw.id.trim() ? raw.id.trim() : this.stripTemplateExtension(file);
+        if (raw.hidden === true && id) {
+          hiddenTemplateIds.push(id);
+          continue;
+        }
         const template = await this.normalizeTemplate(raw, {
           filePath,
-          fallbackId: this.stripTemplateExtension(file),
+          fallbackId: id,
           agentInstructionMarkdown: parsed.agentInstructionMarkdown,
           source,
         });
@@ -152,7 +168,7 @@ export class QuicksprintService {
       }
     }
 
-    return templates;
+    return { templates, hiddenTemplateIds };
   }
 
   private async normalizeTemplate(raw: Partial<QuicksprintTemplateRecord>, args: {
@@ -255,7 +271,15 @@ export class QuicksprintService {
   async deleteCustomTemplate(projectId: string, templateId: string): Promise<void> {
     const existing = await this.getTemplate(projectId, templateId);
     if (existing?.isBuiltIn) {
-      throw new Error("Cannot delete built-in templates");
+      const dir = await this.getQuicksprintsDir(projectId);
+      const now = new Date().toISOString();
+      await fs.writeFile(path.join(dir, `${templateId}.md`), `---json\n${JSON.stringify({
+        id: templateId,
+        hidden: true,
+        hiddenAt: now,
+      }, null, 2)}\n---\nThis built-in quicksprint template is hidden for this project.\n`, "utf8");
+      this.templateCache.delete(projectId);
+      return;
     }
 
     const dir = await this.getQuicksprintsDir(projectId);

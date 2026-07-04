@@ -2,6 +2,8 @@ import type { QuicksprintTemplateRecord } from "../../contracts/quicksprint-type
 
 type TemplateMetadata = Partial<Omit<QuicksprintTemplateRecord, "agentInstructionMarkdown">> & {
   agentInstructionMarkdown?: string;
+  hidden?: boolean;
+  hiddenAt?: string;
 };
 
 export interface ParsedQuicksprintTemplateMarkdown {
