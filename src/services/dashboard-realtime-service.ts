@@ -12,6 +12,9 @@ import {
   DashboardRealtimeEventRepository,
   type AppendDashboardRealtimeEventInput,
 } from "../repositories/dashboard-realtime-event-repository.js";
+import { computeDashboardRealtimePayloadFingerprint } from "./dashboard-realtime-fingerprint.js";
+
+export { computeDashboardRealtimePayloadFingerprint } from "./dashboard-realtime-fingerprint.js";
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -372,7 +375,7 @@ const task = (async () => {
         let payloadSizeBytes: number | undefined;
 
         if (options.cacheKey && options.skipDuplicate) {
-          const fingerprint = this.getFingerprint(payload);
+          const fingerprint = this.getFingerprint(options.eventType, payload);
           if (this.lastPayloadFingerprints.get(options.cacheKey) === fingerprint) {
             this.logger.debug("skipping_duplicate_realtime_snapshot", {
               type: options.eventType,
@@ -387,7 +390,7 @@ const task = (async () => {
             payloadSizeBytes = Buffer.byteLength(fingerprint, "utf8");
           }
         } else if (options.logPayloadSize) {
-          const fingerprint = this.getFingerprint(payload);
+          const fingerprint = this.getFingerprint(options.eventType, payload);
           payloadSizeBytes = Buffer.byteLength(fingerprint, "utf8");
         }
 
@@ -668,13 +671,8 @@ const task = (async () => {
     return Math.min(currentDelayMs, candidateDelayMs);
   }
 
-  private getFingerprint(payload: unknown): string {
-    return JSON.stringify(payload, (key, value) => {
-      if (key === "updatedAt" || key === "timestamp") {
-        return undefined;
-      }
-      return value;
-    });
+  private getFingerprint(eventType: string, payload: unknown): string {
+    return computeDashboardRealtimePayloadFingerprint(eventType, payload);
   }
 
   private broadcast(event: DashboardRealtimeEvent): void {

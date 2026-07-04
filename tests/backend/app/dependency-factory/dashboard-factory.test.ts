@@ -7,6 +7,7 @@ import { SprintDependencies } from "../../../../src/app/dependency-factory/sprin
 import { ActivityCacheService } from "../../../../src/server/activity-cache-service.js";
 import { TaskRerunService } from "../../../../src/services/task-rerun-service.js";
 import { WorkspaceManager } from "../../../../src/infrastructure/providers/cli/workspace-manager.js";
+import { ManagementToolHandler } from "../../../../src/mcp/management-tool-handler.js";
 
 vi.mock("../../../../src/server/activity-cache-service.js", () => {
   const ActivityCacheService = vi.fn();
@@ -15,7 +16,11 @@ vi.mock("../../../../src/server/activity-cache-service.js", () => {
 });
 
 vi.mock("../../../../src/services/task-rerun-service.js", () => {
-  const TaskRerunService = vi.fn();
+  const TaskRerunService = vi.fn().mockImplementation(function TaskRerunServiceMock() {
+    return {
+      rerunTask: vi.fn().mockResolvedValue({ id: "task1" }),
+    };
+  });
   return { TaskRerunService };
 });
 
@@ -64,6 +69,7 @@ describe("Dashboard Factory", () => {
         getTask: vi.fn().mockReturnValue({ id: "task1", taskKey: "T1", projectId: "project-1", sprintId: "sprint-1" }),
         getSprint: vi.fn().mockReturnValue({ id: "sprint-1", projectId: "project-1", number: 3, featureBranch: "feature/sprint3" }),
         getProject: vi.fn().mockReturnValue({ id: "project-1", baseDir: "/repo" }),
+        listSprints: vi.fn().mockReturnValue([{ id: "sprint-1" }]),
         listTasks: vi.fn().mockReturnValue([
           { id: "task1", dependsOnTaskIds: [] },
           { id: "task2", dependsOnTaskIds: ["task1"] },
@@ -80,6 +86,7 @@ describe("Dashboard Factory", () => {
         createTaskRun: vi.fn().mockReturnValue({ id: "reset-run-1" }),
         appendTaskRunEvent: vi.fn(),
         getTaskRunByDispatchId: vi.fn().mockReturnValue(null),
+        getTaskDispatch: vi.fn(),
       },
       settingsRepository: {
         getDefaultDashboardSettings: vi.fn().mockReturnValue({}),
@@ -112,7 +119,20 @@ describe("Dashboard Factory", () => {
       },
       sprintIssueService: {
         searchJiraIssues: vi.fn(),
+        searchIssues: vi.fn(),
         closeLinkedIssues: vi.fn(),
+      },
+      sessionTracking: {},
+      providerConcurrencyService: {},
+      knowledgeService: {},
+      memoryPromotionService: {},
+      embeddingModelManager: {},
+      schedulerRepository: {},
+      qaReviewRepository: {
+        resetTaskReviewRuns: vi.fn(),
+      },
+      guardrailService: {
+        reset: vi.fn(),
       },
     };
 
@@ -122,6 +142,7 @@ describe("Dashboard Factory", () => {
       },
       sprintOrchestrator: {},
       taskService: {},
+      memoryRemediationService: {},
     };
   });
 
@@ -544,5 +565,81 @@ describe("Dashboard Factory", () => {
     );
     expect(mockCoreDeps.executionRepository.updateTaskRun).toHaveBeenCalledTimes(3);
     expect(mockCoreDeps.executionRepository.appendTaskRunEvent).toHaveBeenCalledTimes(3);
+  });
+
+  it("links task reruns through the execution control typed boundary", async () => {
+    mockCoreDeps.executionRepository.getTaskDispatch.mockReturnValue({
+      id: "dispatch-1",
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      sprintRunId: "run-1",
+      taskId: "task1",
+      status: "failed",
+      queuedAt: "2026-03-09T10:00:00.000Z",
+      finishedAt: "2026-03-09T10:01:00.000Z",
+    });
+    mockCoreDeps.executionRepository.createTaskRun.mockReturnValue({ id: "synthetic-run-1" });
+
+    const result = createDashboardDependencies(
+      mockContext as unknown as ServerContext,
+      mockCoreDeps as unknown as CoreDependencies,
+      mockSprintDeps as unknown as SprintDependencies
+    );
+
+    const task = await result.executionControlService.retryTaskDispatch("dispatch-1");
+    const taskRerunInstance = vi.mocked(TaskRerunService).mock.results.at(-1)?.value;
+
+    expect(taskRerunInstance.rerunTask).toHaveBeenCalledWith("task1");
+    expect(mockCoreDeps.projectAttentionService.resolveItemsForDispatch).toHaveBeenCalledWith(
+      "dispatch-1",
+      "dispatch_retry_requested",
+    );
+    expect(task).toEqual({ id: "task1" });
+  });
+
+  it("keeps management optional services optional while allowing typed late links", async () => {
+    const handler = new ManagementToolHandler({
+      sprintPreviewService: { listSessions: vi.fn() } as any,
+      executionRepository: { listSprintRuns: vi.fn() } as any,
+      getDashboardSettings: vi.fn(),
+      projectManagementRepository: mockCoreDeps.projectManagementRepository,
+      executionControlService: { orchestrateSprint: vi.fn() } as any,
+      settingsRepository: mockCoreDeps.settingsRepository,
+      agentPresetSyncService: mockCoreDeps.agentPresetSyncService,
+      memoryService: mockCoreDeps.memoryService,
+      memoryPromotionService: mockCoreDeps.memoryPromotionService,
+      embeddingModelManager: mockCoreDeps.embeddingModelManager,
+      knowledgeService: mockCoreDeps.knowledgeService,
+      sprintIssueService: mockCoreDeps.sprintIssueService,
+    });
+
+    const missingResponse = await handler.handleManageQuicksprints({
+      action: "list_templates",
+      projectId: "project-1",
+    });
+    expect(JSON.parse(missingResponse.content[0].text).result.message).toBe("Quicksprint service is not enabled.");
+
+    const taskListResponse = await handler.handleManageTasks({
+      action: "list",
+      projectId: "project-1",
+    });
+    expect(JSON.parse(taskListResponse.content[0].text).result.tasks).toHaveLength(2);
+
+    const sprintListResponse = await handler.handleManageSprints({
+      action: "list",
+      projectId: "project-1",
+    });
+    expect(JSON.parse(sprintListResponse.content[0].text).result).toEqual([{ id: "sprint-1" }]);
+
+    const listTemplates = vi.fn().mockResolvedValue([{ id: "template-1" }]);
+    handler.setQuicksprintService({ listTemplates } as any);
+
+    const linkedResponse = await handler.handleManageQuicksprints({
+      action: "list_templates",
+      projectId: "project-1",
+    });
+
+    expect(listTemplates).toHaveBeenCalledWith("project-1");
+    expect(JSON.parse(linkedResponse.content[0].text).result).toEqual({ templates: [{ id: "template-1" }] });
   });
 });

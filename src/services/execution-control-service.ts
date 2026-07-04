@@ -10,11 +10,15 @@ import type { JulesApiClient } from "../integrations/jules-api-client.js";
 import type { ActiveDispatchRegistry } from "./active-dispatch-registry.js";
 import type { Logger } from "../shared/logging/logger.js";
 
+export interface ExecutionControlTaskRerunService {
+  rerunTask: TaskRerunService["rerunTask"];
+}
+
 interface ExecutionControlServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
   executionRepository: ExecutionRepository;
   projectAttentionService: ProjectAttentionService;
-  taskRerunService: TaskRerunService;
+  taskRerunService?: ExecutionControlTaskRerunService;
   sprintOrchestrator: SprintOrchestrator;
   julesApi: JulesApiClient;
   activeDispatchRegistry: ActiveDispatchRegistry;
@@ -23,6 +27,10 @@ interface ExecutionControlServiceDeps {
 
 export class ExecutionControlService {
   constructor(private readonly deps: ExecutionControlServiceDeps) {}
+
+  setTaskRerunService(taskRerunService: ExecutionControlTaskRerunService): void {
+    this.deps.taskRerunService = taskRerunService;
+  }
 
   async forceCompleteTask(projectId: string, taskId: string, reason: string): Promise<void> {
     await forceCompleteTask(
@@ -336,7 +344,11 @@ export class ExecutionControlService {
 
     this.deps.projectAttentionService.resolveItemsForDispatch(dispatchId, "dispatch_retry_requested");
 
-    return await this.deps.taskRerunService.rerunTask(task.id);
+    const taskRerunService = this.deps.taskRerunService;
+    if (!taskRerunService) {
+      throw new Error("Task rerun service is not enabled.");
+    }
+    return await taskRerunService.rerunTask(task.id);
   }
 
   private cancelDispatchInternal(dispatch: TaskDispatchRecord, now: string, message: string): TaskDispatchRecord {

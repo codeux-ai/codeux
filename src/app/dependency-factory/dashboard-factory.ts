@@ -58,7 +58,6 @@ export function createDashboardDependencies(
     projectManagementRepository,
     executionRepository,
     projectAttentionService,
-    taskRerunService: {} as any, // Will link below
     sprintOrchestrator,
     julesApi,
     activeDispatchRegistry,
@@ -71,15 +70,12 @@ export function createDashboardDependencies(
     getDashboardSettings: () => settingsRepository.getDefaultDashboardSettings(),
     projectManagementRepository: coreDeps.projectManagementRepository,
     executionControlService,
-    taskRerunService: {} as any, // Will link below
     settingsRepository: coreDeps.settingsRepository,
     agentPresetSyncService: coreDeps.agentPresetSyncService,
     memoryService: coreDeps.memoryService,
     memoryPromotionService: coreDeps.memoryPromotionService,
     embeddingModelManager: coreDeps.embeddingModelManager,
     knowledgeService: coreDeps.knowledgeService,
-    planningAgentService: {} as any, // Will link below
-    projectSetupService: undefined,
     sprintIssueService: coreDeps.sprintIssueService,
   });
 
@@ -350,9 +346,8 @@ export function createDashboardDependencies(
     logger: logger.child({ component: "task-rerun-service" }),
   });
 
-  // Link the taskRerunService to the executionControlService and managementToolHandler
-  (executionControlService as any).deps.taskRerunService = taskRerunService;
-  (managementToolHandler as any).deps.taskRerunService = taskRerunService;
+  executionControlService.setTaskRerunService(taskRerunService);
+  managementToolHandler.setTaskRerunService(taskRerunService);
 
   const planningAgentService = new PlanningAgentService({
     projectManagementRepository,
@@ -366,7 +361,7 @@ export function createDashboardDependencies(
     logger: logger.child({ component: "planning-agent-service" }),
   });
 
-  (managementToolHandler as any).deps.planningAgentService = planningAgentService;
+  managementToolHandler.setPlanningAgentService(planningAgentService);
 
   const quicksprintService = new QuicksprintService(
     (projectId) => {
@@ -384,7 +379,7 @@ export function createDashboardDependencies(
       logger: logger.child({ component: "quicksprint-service" }),
     },
   );
-  (managementToolHandler as any).deps.quicksprintService = quicksprintService;
+  managementToolHandler.setQuicksprintService(quicksprintService);
 
   const projectSetupService = new ProjectSetupService({
     projectManagementRepository,
@@ -398,7 +393,7 @@ export function createDashboardDependencies(
     getGithubToken: () => context.getEffectiveGithubToken(),
     logger: logger.child({ component: "project-setup-service" }),
   });
-  (managementToolHandler as any).deps.projectSetupService = projectSetupService;
+  managementToolHandler.setProjectSetupService(projectSetupService);
 
   const schedulerService = new SchedulerService({
     schedulerRepository: coreDeps.schedulerRepository,
@@ -409,7 +404,7 @@ export function createDashboardDependencies(
     memoryRemediationService,
     logger: logger.child({ component: "scheduler-service" }),
   });
-  (managementToolHandler as any).deps.schedulerService = schedulerService;
+  managementToolHandler.setSchedulerService(schedulerService);
 
   return {
     chatThreadRuntimeService,
