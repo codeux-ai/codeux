@@ -33,6 +33,15 @@ export function useProviderCatalog(): ModelCatalogProviderSummary[] {
   return providers;
 }
 
+function renderProviderMeta(provider: ModelCatalogProviderSummary) {
+  return (
+    <>
+      <span className="font-mono">{provider.id}</span>
+      <span>{provider.apiBaseUrl ? "Published API endpoint" : "SDK default or manual endpoint"}</span>
+    </>
+  );
+}
+
 /**
  * Searchable, icon-enhanced API provider picker sourced from the models.dev catalogue.
  * Selecting a known provider reports its published base API endpoint (when models.dev has
@@ -52,6 +61,8 @@ export const ProviderCombobox: FunctionComponent<{
     const providerOptions: SelectOption[] = providers.map((provider) => ({
       value: provider.id,
       label: provider.name,
+      description: provider.apiBaseUrl || "Uses the provider SDK default unless you enter a custom base URL.",
+      meta: renderProviderMeta(provider),
       icon: (
         <ProviderBrandIcon
           id={provider.id}
@@ -64,13 +75,18 @@ export const ProviderCombobox: FunctionComponent<{
     }));
     const trimmedValue = value.trim();
     if (trimmedValue && !providerOptions.some((option) => option.value === trimmedValue)) {
-      providerOptions.unshift({ value: trimmedValue, label: trimmedValue });
+      providerOptions.unshift({
+        value: trimmedValue,
+        label: trimmedValue,
+        description: "Custom provider or private gateway",
+        meta: <span className="font-mono">{trimmedValue}</span>,
+      });
     }
     return providerOptions;
   }, [providers, value]);
 
   return (
-    <div className="min-w-[220px]">
+    <div className="min-w-0 md:min-w-[220px]">
       <AvantgardeSelect
         value={value}
         onChange={(nextValue) => {

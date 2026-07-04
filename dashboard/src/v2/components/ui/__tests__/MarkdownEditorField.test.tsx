@@ -102,4 +102,29 @@ describe("MarkdownEditorField Accessibility", () => {
       expect(tabs[1]).toHaveAttribute("aria-selected", "false");
     });
   });
+
+  it("applies invalid, valid, and disabled editor states without dropping ARIA wiring", () => {
+    render(
+      <MarkdownEditorField
+        id="instructions"
+        value=""
+        onChange={() => {}}
+        disabled
+        invalid
+        valid
+        ariaErrorId="instructions-error"
+        ariaDescribedBy="instructions-help"
+      />
+    );
+
+    const textarea = screen.getByRole("textbox");
+    expect(textarea).toBeDisabled();
+    expect(textarea).toHaveAttribute("aria-invalid", "true");
+    expect(textarea).toHaveAttribute("aria-errormessage", "instructions-error");
+    expect(textarea).toHaveAttribute("aria-describedby", "instructions-help");
+
+    const frame = textarea.closest("[data-valid='true']");
+    expect(frame?.className).toContain("border-status-red/60");
+    expect(frame?.className).toContain("border-signal-500/50");
+  });
 });

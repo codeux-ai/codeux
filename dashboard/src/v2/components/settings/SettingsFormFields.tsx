@@ -9,6 +9,10 @@ import { Input as UiInput } from "../ui/Input.js";
 
 export const Toggle = UiToggle;
 
+const SETTINGS_CONTROL_WIDTH_CLASS = "w-full min-w-0 md:min-w-[220px]";
+const SETTINGS_FIELD_CLASS =
+  "w-full min-w-0 transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-[var(--fill-muted)] dark:text-slate-200 aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.16)] data-[valid=true]:border-signal-500/50 data-[valid=true]:bg-signal-500/[0.025] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.16)] dark:data-[valid=true]:bg-signal-500/[0.04]";
+
 export const SelectInput: FunctionComponent<{
   value: string;
   onChange: (value: string) => void;
@@ -17,7 +21,7 @@ export const SelectInput: FunctionComponent<{
   "aria-label"?: string;
   "aria-labelledby"?: string;
 }> = ({ value, onChange, options, disabled, "aria-label": ariaLabel, "aria-labelledby": ariaLabelledby }) => (
-  <div className="min-w-[220px]">
+  <div className={SETTINGS_CONTROL_WIDTH_CLASS}>
     <AvantgardeSelect value={value} onChange={onChange} options={options} disabled={disabled} aria-label={ariaLabel} aria-labelledby={ariaLabelledby} />
   </div>
 );
@@ -29,7 +33,7 @@ export const PillChoiceGroup: FunctionComponent<{
   disabled?: boolean;
   invalid?: boolean;
 }> = ({ value, onChange, options, disabled, invalid }) => (
-  <div className="flex flex-wrap gap-2">
+  <div className="flex min-w-0 flex-wrap gap-2">
     {options.map((option) => {
       const active = option.value === value;
       return (
@@ -39,7 +43,7 @@ export const PillChoiceGroup: FunctionComponent<{
           disabled={disabled}
           aria-invalid={invalid}
           onClick={() => onChange(option.value)}
-          className={`group relative min-w-[104px] overflow-hidden rounded-[1rem] border px-4 py-2 text-left transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-signal-500 disabled:cursor-not-allowed disabled:opacity-50 motion-safe:active:scale-[0.98] ${
+          className={`group relative min-h-10 min-w-[104px] max-w-full overflow-hidden rounded-[var(--radius-ui)] border px-3.5 py-2 text-left transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-signal-500 disabled:cursor-not-allowed disabled:opacity-60 motion-safe:active:scale-[0.98] ${
             invalid
               ? "border-status-red/60 bg-status-red/[0.04] text-status-red hover:bg-status-red/[0.08]"
               : active
@@ -52,9 +56,9 @@ export const PillChoiceGroup: FunctionComponent<{
               active ? "opacity-100 transform-none" : "opacity-0 -translate-x-full"
             }`}
           />
-          <div className="text-[11px] font-bold uppercase tracking-[0.14em]">{option.label}</div>
+          <div className="min-w-0 break-words text-[11px] font-bold uppercase tracking-[0.14em]">{option.label}</div>
           {option.hint ? (
-            <div className={`mt-1 text-[11px] leading-relaxed transition-colors duration-200 ${active ? "text-signal-600/80 dark:text-signal-300/80" : "text-slate-400 dark:text-slate-500"}`}>
+            <div className={`mt-1 min-w-0 break-words text-[11px] leading-relaxed transition-colors duration-200 ${active ? "text-signal-600/80 dark:text-signal-300/80" : "text-slate-400 dark:text-slate-500"}`}>
               {option.hint}
             </div>
           ) : null}
@@ -89,7 +93,7 @@ export const TextInput: FunctionComponent<{
     aria-label={ariaLabel}
     aria-description={ariaDescription}
     onInput={(event) => onChange((event.currentTarget as HTMLInputElement).value)}
-    className={`transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:border-signal-500/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-white/[0.05] dark:text-slate-200 aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.14)] data-[valid=true]:border-signal-500/50 data-[valid=true]:bg-signal-500/[0.02] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.15)] dark:data-[valid=true]:bg-signal-500/[0.04] ${mono ? "font-mono" : "font-sans"}`}
+    className={`${SETTINGS_FIELD_CLASS} ${mono ? "font-mono" : "font-sans"}`}
   />
 );
 
@@ -110,7 +114,7 @@ export const TextAreaInput: FunctionComponent<{
     aria-label={ariaLabel}
     aria-description={ariaDescription}
     onInput={(event) => onChange((event.currentTarget as HTMLTextAreaElement).value)}
-    className="min-h-[320px] w-full rounded-[1rem] border border-[var(--border-hairline)] hover:border-[var(--border-hairline)] bg-[var(--fill-muted)] px-4 py-3 text-sm leading-relaxed text-slate-700 placeholder-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:border-signal-500/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-[var(--fill-muted)] dark:text-slate-200 aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.14)] data-[valid=true]:border-signal-500/50 data-[valid=true]:bg-signal-500/[0.02] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.15)] dark:data-[valid=true]:bg-signal-500/[0.04] "
+    className="min-h-[320px] w-full min-w-0 rounded-[var(--radius-ui)] border border-[var(--border-hairline)] bg-[var(--fill-muted)] px-4 py-3 text-sm leading-relaxed text-slate-700 placeholder-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-black/[0.1] hover:bg-[var(--fill-muted-hover)] focus:border-signal-500/40 focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-white/[0.06] dark:bg-[var(--fill-muted)] dark:text-slate-200 dark:hover:border-white/[0.12] dark:focus-visible:ring-offset-void-900 aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.16)] data-[valid=true]:border-signal-500/50 data-[valid=true]:bg-signal-500/[0.025] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.16)] dark:data-[valid=true]:bg-signal-500/[0.04] "
   />
 );
 
@@ -136,7 +140,7 @@ export const NumberInput: FunctionComponent<{
     aria-label={ariaLabel}
     aria-description={ariaDescription}
     onInput={(event) => onChange(Number((event.currentTarget as HTMLInputElement).value))}
-    className="w-32 rounded-[1rem] border border-[var(--border-hairline)] hover:border-[var(--border-hairline)] bg-[var(--fill-muted)] px-3.5 py-2.5 text-sm font-mono text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:border-signal-500/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-[var(--fill-muted)] dark:text-slate-200 aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.14)] data-[valid=true]:border-signal-500/50 data-[valid=true]:bg-signal-500/[0.02] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.15)] dark:data-[valid=true]:bg-signal-500/[0.04] "
+    className="min-h-10 w-32 min-w-0 rounded-[var(--radius-ui)] border border-[var(--border-hairline)] bg-[var(--fill-muted)] px-3.5 py-2.5 text-sm font-mono leading-5 text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-black/[0.1] hover:bg-[var(--fill-muted-hover)] focus:border-signal-500/40 focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.06] dark:bg-[var(--fill-muted)] dark:text-slate-200 dark:hover:border-white/[0.12] dark:focus-visible:ring-offset-void-900 aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.16)] data-[valid=true]:border-signal-500/50 data-[valid=true]:bg-signal-500/[0.025] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.16)] dark:data-[valid=true]:bg-signal-500/[0.04] "
   />
 );
 
@@ -151,8 +155,8 @@ export const MetricPill: FunctionComponent<{
       : "border-black/[0.06] bg-black/[0.03] dark:border-white/[0.06] dark:bg-white/[0.03]"
   }`}
   >
-    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{label}</div>
-    <div className={`mt-1 text-sm font-semibold ${
+    <div className="min-w-0 break-words text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{label}</div>
+    <div className={`mt-1 min-w-0 break-words text-sm font-semibold ${
       tone === "signal" ? "text-signal-700 dark:text-signal-200" : "text-slate-800 dark:text-slate-100"
     }`}
     >
@@ -207,7 +211,7 @@ export const Row: FunctionComponent<{
         <div className="mt-0.5 text-xs font-medium leading-relaxed text-slate-400 group-hover:text-slate-500 dark:text-slate-500 dark:group-hover:text-slate-400 transition-colors duration-200">{description}</div>
       ) : null}
     </div>
-    <div className="w-full shrink-0 md:w-auto md:max-w-[34rem] lg:max-w-none">
+    <div className="w-full min-w-0 shrink-0 md:w-auto md:max-w-[34rem] lg:max-w-none">
       {children}
     </div>
   </div>

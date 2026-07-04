@@ -142,6 +142,8 @@ describe("FieldWrapper", () => {
     const ariaDescribedby = input.getAttribute("aria-describedby");
     expect(ariaDescribedby).not.toBeNull();
     expect(helperElement.getAttribute("id")).toEqual(ariaDescribedby);
+    expect(helperElement.className).toContain("break-words");
+    expect(helperElement.className).toContain("text-[var(--text-metadata)]");
   });
 
   it("hides helperText when error is present and touched", () => {
@@ -177,6 +179,7 @@ describe("FieldWrapper", () => {
 // The error element is only rendered when there is an error, so its presence
 // is what makes it visible; it animates in via the slide-down keyframes.
 expect(errorElement.className).toContain("text-status-red");
+expect(errorElement.className).toContain("break-words");
 expect(errorElement.className).toContain("motion-safe:animate-form-slide-down");
 expect(errorElement.className).not.toContain("pointer-events-none");
   });

@@ -11,6 +11,11 @@ export interface InputProps extends ComponentProps<"input"> {
   helperText?: string;
 }
 
+const CONTROL_SHELL_CLASS =
+  "min-h-10 w-full min-w-0 rounded-[var(--radius-ui)] border border-[color:var(--border-hairline)] bg-[var(--fill-muted)] px-3.5 py-2.5 text-sm leading-5 text-slate-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] transition-all motion-reduce:duration-0 motion-reduce:ease-none placeholder:text-slate-400 hover:border-black/[0.1] hover:bg-[var(--fill-muted-hover)] focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:bg-[var(--fill-muted)] disabled:text-slate-400 disabled:opacity-60 aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.16)] aria-[invalid=true]:focus-visible:ring-status-red/50 data-[valid=true]:border-signal-500/50 data-[valid=true]:bg-signal-500/[0.025] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.16)] dark:text-slate-100 dark:placeholder:text-slate-600 dark:hover:border-white/[0.12] dark:focus-visible:ring-offset-void-900 dark:data-[valid=true]:bg-signal-500/[0.04]";
+const META_TEXT_CLASS = "min-w-0 break-words text-xs font-medium leading-relaxed text-[var(--text-metadata)]";
+const ERROR_TEXT_CLASS = "min-w-0 break-words text-xs font-semibold leading-relaxed text-status-red";
+
 export const Input: FunctionComponent<InputProps> = ({
   className = "",
   disabled,
@@ -86,7 +91,7 @@ export const Input: FunctionComponent<InputProps> = ({
   const errorMessage = [errorId, props["aria-errormessage"]].filter(Boolean).join(" ") || undefined;
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex min-w-0 flex-col gap-1.5">
       <input
         id={generatedId}
         maxLength={maxLength}
@@ -97,15 +102,15 @@ export const Input: FunctionComponent<InputProps> = ({
         style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease, ...(typeof style === "object" ? style : {}) }}
         disabled={disabled}
         data-valid={valid ? 'true' : undefined}
-        className={`min-w-[220px] rounded-[var(--radius-ui)] border border-[color:var(--border-hairline)] bg-[var(--fill-muted)] hover:bg-[var(--fill-muted-hover)] px-3.5 py-2.5 text-sm text-slate-700 dark:text-slate-200 placeholder-slate-400 transition-colors  motion-reduce:duration-0 motion-reduce:ease-none focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-[var(--fill-muted)] aria-[invalid=true]:border-status-red aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.2)] aria-[invalid=true]:focus-visible:ring-status-red/50 ${className} data-[valid=true]:border-signal-500 data-[valid=true]:bg-signal-500/[0.02] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.2)] dark:data-[valid=true]:bg-signal-500/[0.04] `}
+        className={`${CONTROL_SHELL_CLASS} ${className}`}
         {...props}
       />
-            <div className="flex justify-between items-start min-h-[1.25rem] text-xs">
-        <div>
+      <div className="flex min-h-[1.25rem] min-w-0 items-start justify-between gap-3 text-xs">
+        <div className="min-w-0 flex-1">
           {errorText ? (
-            <span id={errorId} className="text-status-red" role="alert">{errorText}</span>
+            <span id={errorId} className={ERROR_TEXT_CLASS} role="alert">{errorText}</span>
           ) : helperText ? (
-            <span id={helperId} className="text-slate-500 dark:text-slate-400">{helperText}</span>
+            <span id={helperId} className={META_TEXT_CLASS}>{helperText}</span>
           ) : null}
         </div>
         {isCounterMounted && (
@@ -113,7 +118,7 @@ export const Input: FunctionComponent<InputProps> = ({
             aria-live="polite"
             onTransitionEnd={handleTransitionEnd}
             style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
-            className={`text-right transition-colors ${isFadingOut ? "opacity-0 transition-opacity" : "animate-form-slide-down motion-reduce:animate-none opacity-100"} ${counterColorClass}`}
+            className={`shrink-0 text-right font-mono text-[11px] leading-relaxed transition-colors ${isFadingOut ? "opacity-0 transition-opacity" : "animate-form-slide-down motion-reduce:animate-none opacity-100"} ${counterColorClass}`}
           >
             {charCount} / {parsedMaxLength}
           </p>

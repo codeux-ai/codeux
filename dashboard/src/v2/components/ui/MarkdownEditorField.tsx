@@ -17,6 +17,9 @@ export const MARKDOWN_PROSE_CLASS =
   "prose-code:text-slate-600 dark:prose-code:text-slate-400 prose-code:bg-slate-500/[0.06] prose-code:px-1 prose-code:rounded-md " +
   "prose-pre:bg-black/[0.04] dark:prose-pre:bg-white/[0.04]";
 
+const EDITOR_FRAME_CLASS =
+  "min-w-0 overflow-hidden rounded-[var(--radius-ui)] border bg-[var(--fill-muted)] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] backdrop-blur-md transition-all focus-within:border-signal-500/50 focus-within:ring-2 focus-within:ring-[var(--accent-focus-ring)] focus-within:ring-offset-2 focus-within:ring-offset-white dark:focus-within:ring-offset-void-900";
+
 /**
  * A markdown field with a Write/Preview toolbar. Defaults to the rendered
  * Preview when seeded with content (it reads much nicer), and falls back to
@@ -74,21 +77,21 @@ export function MarkdownEditorField({
   return (
     <div
       data-valid={valid ? 'true' : undefined}
-      className={`overflow-hidden rounded-2xl border bg-white/40 backdrop-blur-md transition-all focus-within:border-signal-500 focus-within:ring-4 focus-within:ring-signal-500/10 dark:bg-white/[0.03] dark:focus-within:ring-signal-500/15 ${
-        invalid ? "border-status-red/50 shadow-[0_0_0_1px_rgba(211,47,47,0.14)]" : "border-black/[0.05] dark:border-white/[0.07]"
+      className={`${EDITOR_FRAME_CLASS} ${
+        invalid ? "border-status-red/60 bg-status-red/[0.04] shadow-[0_0_0_1px_rgba(211,47,47,0.16)]" : "border-[color:var(--border-hairline)]"
       } ${valid ? "border-signal-500/50 shadow-[0_0_0_1px_rgba(0,224,160,0.15)]" : ""}`}
     >
       {/* Toolbar */}
-      <div className="flex items-center justify-between gap-2 border-b border-black/[0.05] bg-white/40 px-3 py-2 dark:border-white/[0.06] dark:bg-white/[0.02]">
-        <span className="inline-flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-[color:var(--border-hairline)] bg-white/36 px-3 py-2 dark:bg-white/[0.02]">
+        <span className="inline-flex min-w-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--text-metadata)]">
           Markdown
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           {toolbarNote}
           <div
             role="tablist"
             aria-label="Markdown Editor Mode"
-            className="flex items-center gap-0.5 rounded-full border border-black/[0.06] bg-white/50 p-0.5 dark:border-white/[0.06] dark:bg-white/[0.03]"
+            className="flex shrink-0 items-center gap-0.5 rounded-full border border-[color:var(--border-hairline)] bg-[var(--fill-muted)] p-0.5"
             onKeyDown={(e) => {
               const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
               if (!keys.includes(e.key)) return;
@@ -119,7 +122,7 @@ export function MarkdownEditorField({
                   aria-selected={active}
                   tabIndex={active ? 0 : -1}
                   aria-controls={value_ === "write" ? "markdown-editor" : "markdown-preview"}
-                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 ${
+                  className={`inline-flex min-h-7 items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-focus-ring)] ${
                     active
                       ? "bg-signal-500 text-void-900 shadow-[0_0_10px_rgba(0,224,160,0.22)]"
                       : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white"
@@ -149,18 +152,18 @@ export function MarkdownEditorField({
           aria-invalid={invalid}
           aria-errormessage={ariaErrorId}
           aria-describedby={ariaDescribedBy}
-          className={`block w-full resize-none border-0 bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed text-slate-900 outline-none placeholder-slate-400 dark:text-white dark:placeholder-slate-600 ${minHeightClass}`}
+          className={`block w-full resize-none border-0 bg-transparent px-4 py-3 font-mono text-[13px] leading-relaxed text-slate-900 outline-none placeholder-slate-400 disabled:cursor-not-allowed disabled:text-slate-400 dark:text-white dark:placeholder-slate-600 ${minHeightClass}`}
         />
         </div>
       ) : (
         <div role="tabpanel" id="markdown-preview" aria-labelledby="md-tab-preview" tabIndex={0} aria-label="Markdown Preview" className="w-full">
           {value.trim() ? (
             <div
-              className={`overflow-auto px-4 py-3.5 ${minHeightClass} ${MARKDOWN_PROSE_CLASS}`}
+              className={`overflow-auto break-words px-4 py-3.5 ${minHeightClass} ${MARKDOWN_PROSE_CLASS}`}
               dangerouslySetInnerHTML={{ __html: renderMarkdown(value) }}
             />
           ) : (
-            <div className={`flex items-center px-4 py-3.5 text-[13px] italic text-slate-400 dark:text-slate-500 ${minHeightClass}`}>
+            <div className={`flex items-center break-words px-4 py-3.5 text-[13px] italic leading-relaxed text-[var(--text-metadata)] ${minHeightClass}`}>
               {emptyPreviewHint}
             </div>
           )}
