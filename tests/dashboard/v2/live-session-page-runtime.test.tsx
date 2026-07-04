@@ -7,13 +7,17 @@ vi.mock("gsap", () => ({
     killTweensOf: vi.fn(),
     fromTo: vi.fn().mockImplementation((el, config) => { if (config?.onComplete) config.onComplete(); }),
     to: vi.fn().mockImplementation((el, config) => { if (config?.onComplete) config.onComplete(); }),
+    timeline: vi.fn(() => ({
+      fromTo: vi.fn().mockReturnThis(),
+      to: vi.fn().mockReturnThis(),
+    })),
     set: vi.fn(),
     context: vi.fn(() => ({ revert: vi.fn() })),
     registerPlugin: vi.fn()
   }
 }));
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, cleanup } from "@testing-library/preact";
+import { act, fireEvent, render, screen, cleanup, waitFor } from "@testing-library/preact";
 import { within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 
@@ -24,13 +28,23 @@ import { useDashboardRuntimeData } from "../../../dashboard/src/hooks/use-dashbo
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
 import { useProjectGitStatus } from "../../../dashboard/src/v2/hooks/use-project-git-status.js";
 
-
+const liveActionMocks = vi.hoisted(() => ({
+  cancelSprintRun: vi.fn(),
+  forceCancelSprintRun: vi.fn(),
+  cancelTaskDispatch: vi.fn(),
+  forceCancelTaskDispatch: vi.fn(),
+  rerunTask: vi.fn(),
+}));
 
 
 
 vi.mock("gsap", () => ({
   gsap: {
     to: vi.fn(),
+    timeline: vi.fn(() => ({
+      fromTo: vi.fn().mockReturnThis(),
+      to: vi.fn().mockReturnThis(),
+    })),
     fromTo: vi.fn(),
     set: vi.fn(),
     killTweensOf: vi.fn(),
@@ -39,6 +53,10 @@ vi.mock("gsap", () => ({
   },
   default: {
     to: vi.fn(),
+    timeline: vi.fn(() => ({
+      fromTo: vi.fn().mockReturnThis(),
+      to: vi.fn().mockReturnThis(),
+    })),
     fromTo: vi.fn(),
     set: vi.fn(),
     killTweensOf: vi.fn(),
@@ -56,16 +74,56 @@ vi.mock("../../../dashboard/src/v2/hooks/use-preview-sessions.js", () => ({
   usePreviewSessions: () => ({ selectedSession: null }),
 }));
 vi.mock("../../../dashboard/src/v2/hooks/use-live-session-actions.js", () => ({
-  useLiveSessionActions: () => ({
+  useLiveSessionActions: (_refreshRuntimeStatus: any, _refreshGitStatus: any, requestConfirm: any) => ({
     rerunningIds: new Set(),
     pendingActionIds: new Set(),
-    handleRerun: vi.fn(),
+    handleRerun: liveActionMocks.rerunTask,
     handleOrchestrateSprint: vi.fn(),
     handlePauseSprintRun: vi.fn(),
-    handleCancelSprintRun: vi.fn(),
-    handleForceCancelSprintRun: vi.fn(),
-    handleCancelTaskDispatch: vi.fn(),
-    handleForceCancelTaskDispatch: vi.fn(),
+    handleCancelSprintRun: async (sprintRunId: string) => {
+      if (await requestConfirm({
+        title: "Cancel Sprint Run?",
+        body: "Request cancellation for this active sprint run?",
+        confirmLabel: "Cancel Run",
+        cancelLabel: "Keep Running",
+        destructive: true,
+      })) {
+        liveActionMocks.cancelSprintRun(sprintRunId);
+      }
+    },
+    handleForceCancelSprintRun: async (sprintRunId: string) => {
+      if (await requestConfirm({
+        title: "Force Cancel Sprint Run?",
+        body: "Force cancellation for this sprint run?",
+        confirmLabel: "Force Cancel",
+        cancelLabel: "Keep Pending",
+        destructive: true,
+      })) {
+        liveActionMocks.forceCancelSprintRun(sprintRunId);
+      }
+    },
+    handleCancelTaskDispatch: async (dispatchId: string) => {
+      if (await requestConfirm({
+        title: "Cancel Task Dispatch?",
+        body: "Request cancellation for this running task dispatch?",
+        confirmLabel: "Cancel Dispatch",
+        cancelLabel: "Keep Running",
+        destructive: true,
+      })) {
+        liveActionMocks.cancelTaskDispatch(dispatchId);
+      }
+    },
+    handleForceCancelTaskDispatch: async (dispatchId: string) => {
+      if (await requestConfirm({
+        title: "Force Cancel Task Dispatch?",
+        body: "Force cancellation for this dispatch?",
+        confirmLabel: "Force Cancel",
+        cancelLabel: "Keep Pending",
+        destructive: true,
+      })) {
+        liveActionMocks.forceCancelTaskDispatch(dispatchId);
+      }
+    },
     handleRetryTaskDispatch: vi.fn(),
     handleClaimAttentionItem: vi.fn(),
     handleResolveAttentionItem: vi.fn(),
@@ -86,11 +144,184 @@ const mockExecution = {
   updatedAt: "2024-01-01T00:00:00Z",
 };
 
+const createSprintRun = (overrides: Partial<any> = {}) => ({
+  id: "run-1",
+  projectId: "p1",
+  sprintId: "s1",
+  sprintName: "Sprint 1",
+  sprintNumber: 1,
+  status: "running",
+  triggerType: "manual",
+  triggeredBy: null,
+  executorMode: "mixed",
+  startedAt: "2024-01-01T10:00:00Z",
+  finishedAt: null,
+  lastHeartbeatAt: "2024-01-01T10:05:00Z",
+  createdAt: "2024-01-01T10:00:00Z",
+  activeLeaseOwnerKey: null,
+  activeLeaseExpiresAt: null,
+  humanIntervention: null,
+  ...overrides,
+});
+
+const createDispatch = (overrides: Partial<any> = {}) => ({
+  id: "dispatch-1",
+  projectId: "p1",
+  sprintId: "s1",
+  sprintRunId: "run-1",
+  sprintName: "Sprint 1",
+  sprintNumber: 1,
+  taskId: "task-rec-1",
+  taskKey: "T1",
+  taskTitle: "Runtime task",
+  status: "running",
+  executorType: "jules",
+  priority: 0,
+  connectionId: null,
+  connectionDisplayName: null,
+  connectionRole: null,
+  taskRunId: "task-run-1",
+  taskRunState: "RUNNING",
+  provider: "gemini",
+  sessionId: "session-1",
+  sessionName: "session-1",
+  workerBranch: null,
+  prUrl: null,
+  queuedAt: "2024-01-01T10:00:00Z",
+  claimedAt: "2024-01-01T10:01:00Z",
+  startedAt: "2024-01-01T10:02:00Z",
+  finishedAt: null,
+  errorMessage: null,
+  activeLeaseOwnerKey: null,
+  activeLeaseExpiresAt: null,
+  ...overrides,
+});
+
+const createTask = (overrides: Partial<any> = {}) => ({
+  record_id: "task-rec-1",
+  sprint_id: "s1",
+  project_id: "p1",
+  id: "T1",
+  title: "Runtime task",
+  prompt: "Run the task",
+  depends_on: [],
+  is_independent: true,
+  status: "RUNNING",
+  ...overrides,
+});
+
+const renderLiveRuntime = (overrides: { sprintRun?: Partial<any>; dispatch?: Partial<any>; tasks?: any[] } = {}) => {
+  const task = createTask();
+  const tasks = overrides.tasks ?? [task];
+  const sprintRun = createSprintRun(overrides.sprintRun);
+  const dispatch = createDispatch(overrides.dispatch);
+  vi.mocked(useDashboardRuntimeData).mockReturnValue({
+    error: null,
+    gitStatus: null,
+    gitStatusError: null,
+    initialLoadComplete: true,
+    transportState: "connected",
+    isRecovering: false,
+    snapshotUpdatedAt: new Date().toISOString(),
+    refreshGitStatus: vi.fn(),
+    refreshRuntimeStatus: vi.fn(),
+    selectedSprintId: "s1",
+    status: { subtasks: tasks, timestamp: "2024-01-01T00:00:00Z", project_id: "p1", sprint_id: "s1", sprint_number: 1 },
+    execution: {
+      ...mockExecution,
+      sprintRuns: [sprintRun],
+      taskDispatches: [dispatch],
+    },
+    stats: { total: 1 } as any,
+    tasksWithLiveActivities: tasks,
+  });
+
+  render(<LiveSessionPage />);
+};
+
+const expectSafeDialogFocus = async (name: string) => {
+  const dialog = await screen.findByRole("dialog", { name });
+  await waitFor(() => expect(within(dialog).getByRole("button", { name: /Keep/i })).toHaveFocus());
+  return dialog;
+};
+
 describe("LiveSessionPage Runtime Status", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
     vi.mocked(useProjectData).mockReturnValue({ selectedProjectId: "p1" } as any);
+  });
+
+  it("confirms sprint run cancellation with modal focus containment and no side effect on Escape", async () => {
+    renderLiveRuntime();
+
+    fireEvent.click(screen.getByRole("button", { name: /Cancel sprint run Sprint 1/i }));
+    const dialog = await expectSafeDialogFocus("Cancel Sprint Run?");
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+
+    within(dialog).getByRole("button", { name: /Hold to Cancel Run/i }).focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(within(dialog).getByRole("button", { name: /Keep Running/i })).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(liveActionMocks.cancelSprintRun).not.toHaveBeenCalled();
+  });
+
+  it("confirms task dispatch force-cancel exactly once through hold-to-confirm", async () => {
+    vi.useFakeTimers();
+    renderLiveRuntime({
+      sprintRun: { status: "cancel_requested" },
+      dispatch: { status: "cancel_requested", taskRunState: "CANCEL_REQUESTED" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Force cancel dispatch dispatch-1/i }));
+    const dialog = await screen.findByRole("dialog", { name: "Force Cancel Task Dispatch?" });
+    await act(async () => {
+      vi.advanceTimersByTime(60);
+    });
+    await waitFor(() => expect(within(dialog).getByRole("button", { name: /Keep Pending/i })).toHaveFocus());
+
+    const forceButton = within(dialog).getByRole("button", { name: /Hold to Force Cancel/i });
+    fireEvent.pointerDown(forceButton, { button: 0, pointerId: 1 });
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    await waitFor(() => expect(liveActionMocks.forceCancelTaskDispatch).toHaveBeenCalledTimes(1));
+    expect(liveActionMocks.forceCancelTaskDispatch).toHaveBeenCalledWith("dispatch-1");
+    vi.useRealTimers();
+  });
+
+  it("opens rerun confirmation with safe focus and includes reset-downstream side effects once", async () => {
+    const rootTask = createTask({ status: "FAILED" });
+    const downstreamTask = createTask({
+      record_id: "task-rec-2",
+      id: "T2",
+      title: "Downstream task",
+      depends_on: ["T1"],
+      status: "COMPLETED",
+    });
+    renderLiveRuntime({
+      tasks: [rootTask, downstreamTask],
+      dispatch: { status: "failed", taskRunState: "FAILED", errorMessage: "Previous run failed." },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Rerun task T1/i }));
+    const dialog = await screen.findByRole("dialog", { name: "Rerun Task" });
+    await waitFor(() => expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus());
+
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(dialog).toContainElement(document.activeElement);
+
+    fireEvent.click(within(dialog).getByLabelText(/Reset downstream tasks/i));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Rerun Task" }));
+
+    await waitFor(() => expect(liveActionMocks.rerunTask).toHaveBeenCalledTimes(1));
+    expect(liveActionMocks.rerunTask).toHaveBeenCalledWith("task-rec-1", expect.objectContaining({
+      resetDependents: true,
+      clearWorktree: false,
+    }));
   });
 
   it("renders the LiveTransportBanner in a disconnected state", () => {
@@ -561,7 +792,7 @@ describe("LiveSessionPage Integration Isolation", () => {
     // Since we are looking at the older sprint, the task T1 should be shown as COMPLETED.
     // Even though there is a newer sprint running a task with the same key T1.
     // Stats should show 1 completed, 0 running.
-    expect(screen.getByText("Task 1")).toBeInTheDocument();
+    expect(screen.getAllByText("Task 1").length).toBeGreaterThan(0);
     expect(screen.getByText("COMPLETED")).toBeInTheDocument();
     expect(screen.queryByText("Task 1 (New)")).not.toBeInTheDocument();
   });
@@ -702,11 +933,12 @@ describe("LiveSessionPage Integration Isolation", () => {
     });
 
     render(<LiveSessionPage />);
-    const card = screen.getByText("Restarted task").closest('[tabindex="0"]');
+    const pullRequestLink = screen.getByRole("link", { name: /View Pull Request/i });
+    const card = pullRequestLink.closest('[tabindex="0"]');
 
     expect(card).not.toBeNull();
     expect(within(card as HTMLElement).queryByText("Needs clarification before continuing")).not.toBeInTheDocument();
-    expect(within(card as HTMLElement).getByRole("link", { name: /View Pull Request/i })).toHaveAttribute("href", "https://github.com/example/repo/pull/101");
+    expect(pullRequestLink).toHaveAttribute("href", "https://github.com/example/repo/pull/101");
   });
 
   it("does not surface a previous failure banner once the latest dispatch is running", () => {
@@ -845,7 +1077,7 @@ describe("LiveSessionPage Integration Isolation", () => {
     });
 
     render(<LiveSessionPage />);
-    const card = screen.getByText("Running rerun").closest('[tabindex="0"]');
+    const card = screen.getAllByText("Running rerun").find((element) => element.closest('[tabindex="0"]'))?.closest('[tabindex="0"]');
 
     expect(card).not.toBeNull();
     expect(within(card as HTMLElement).queryByText("Restart failure should be hidden")).not.toBeInTheDocument();

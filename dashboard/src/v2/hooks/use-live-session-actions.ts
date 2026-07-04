@@ -90,28 +90,72 @@ export function useLiveSessionActions(
     }, [runControlAction]);
 
     const handleCancelSprintRun = useCallback(async (sprintRunId: string) => {
+        const confirmed = await requestConfirm({
+            title: "Cancel Sprint Run?",
+            body: "Request cancellation for this active sprint run? Running task dispatches may need a separate force-cancel if they do not stop promptly.",
+            confirmLabel: "Cancel Run",
+            cancelLabel: "Keep Running",
+            destructive: true,
+            tone: "danger",
+        });
+        if (!confirmed) {
+            return;
+        }
         await runControlAction(`sprint-cancel:${sprintRunId}`, async () => {
             await cancelSprintRun(sprintRunId);
         });
-    }, [runControlAction]);
+    }, [requestConfirm, runControlAction]);
 
     const handleCancelTaskDispatch = useCallback(async (dispatchId: string) => {
+        const confirmed = await requestConfirm({
+            title: "Cancel Task Dispatch?",
+            body: "Request cancellation for this running task dispatch while keeping the rest of the sprint context visible?",
+            confirmLabel: "Cancel Dispatch",
+            cancelLabel: "Keep Running",
+            destructive: true,
+            tone: "danger",
+        });
+        if (!confirmed) {
+            return;
+        }
         await runControlAction(`dispatch-cancel:${dispatchId}`, async () => {
             await cancelTaskDispatch(dispatchId);
         });
-    }, [runControlAction]);
+    }, [requestConfirm, runControlAction]);
 
     const handleForceCancelSprintRun = useCallback(async (sprintRunId: string) => {
+        const confirmed = await requestConfirm({
+            title: "Force Cancel Sprint Run?",
+            body: "Force cancellation for this sprint run after a normal stop request. Use this only when the run is stuck in cancellation.",
+            confirmLabel: "Force Cancel",
+            cancelLabel: "Keep Pending",
+            destructive: true,
+            tone: "danger",
+        });
+        if (!confirmed) {
+            return;
+        }
         await runControlAction(`sprint-force-cancel:${sprintRunId}`, async () => {
             await forceCancelSprintRun(sprintRunId);
         });
-    }, [runControlAction]);
+    }, [requestConfirm, runControlAction]);
 
     const handleForceCancelTaskDispatch = useCallback(async (dispatchId: string) => {
+        const confirmed = await requestConfirm({
+            title: "Force Cancel Task Dispatch?",
+            body: "Force cancellation for this dispatch after a normal stop request. This is intended for stuck dispatches.",
+            confirmLabel: "Force Cancel",
+            cancelLabel: "Keep Pending",
+            destructive: true,
+            tone: "danger",
+        });
+        if (!confirmed) {
+            return;
+        }
         await runControlAction(`dispatch-force-cancel:${dispatchId}`, async () => {
             await forceCancelTaskDispatch(dispatchId);
         });
-    }, [runControlAction]);
+    }, [requestConfirm, runControlAction]);
 
     const handleRetryTaskDispatch = useCallback(async (dispatchId: string) => {
         await runControlAction(`dispatch-retry:${dispatchId}`, async () => {
