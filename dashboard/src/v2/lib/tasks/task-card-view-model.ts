@@ -48,7 +48,8 @@ export function getExecutorLabel(executorType: TaskExecutorType): string {
 export function buildTaskCardViewModel(
   task: Task,
   taskLookup: Map<string, Task>,
-  liveEnrichment?: LiveTaskEnrichment
+  liveEnrichment?: LiveTaskEnrichment,
+  now: number = Date.now()
 ): TaskCardViewModel {
   const dependencyIndicators: DependencyIndicator[] = (task.dependsOnTaskIds || []).map(depId => {
     const depTask = taskLookup.get(depId);
@@ -70,7 +71,7 @@ export function buildTaskCardViewModel(
 
   return {
     task,
-    humanizedCreatedAt: formatTimeAgo(task.createdAt),
+    humanizedCreatedAt: formatTimeAgo(task.createdAt, now),
     executorLabel: getExecutorLabel(task.executorType),
     dependencyIndicators,
     sessionId: liveEnrichment?.sessionId,
