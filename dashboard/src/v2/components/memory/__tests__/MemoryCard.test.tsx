@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { h } from "preact";
-import { render, fireEvent } from "@testing-library/preact";
+import { render, fireEvent, within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { expect, test, describe, vi, afterEach } from "vitest";
 import { MemoryCard } from "../MemoryCard.js";
@@ -185,5 +185,24 @@ describe("MemoryCard", () => {
         expect(card).toHaveAttribute("aria-selected", "true");
         expect(getAllByText("Open").length).toBeGreaterThan(0);
         activeMemoryIdSignal.value = null; // cleanup
+    });
+
+    test("keeps static selected cues for reduced-motion users", () => {
+        activeMemoryIdSignal.value = "test-id";
+        const { getByRole, getByText } = render(
+            <MemoryCard
+                id="test-id"
+                content="static-selected-content"
+                category="architecture"
+                strength={0.75}
+                scope="project"
+                onClick={vi.fn()}
+            />
+        );
+
+        const card = getByRole("option", { name: /Currently open in inspector/ });
+        expect(card.className).toContain("border-signal-500");
+        expect(card.className).toContain("ring-1");
+        expect(within(card).getAllByText("Open").length).toBeGreaterThan(0);
     });
 });

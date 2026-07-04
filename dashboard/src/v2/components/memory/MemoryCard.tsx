@@ -72,8 +72,8 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
             }}
             style={{
                 transitionProperty: "background-color, border-color, box-shadow, transform",
-                transitionDuration: interactionTokens.enterExit.duration,
-                transitionTimingFunction: interactionTokens.enterExit.ease,
+                transitionDuration: interactionTokens.selectionMovement.duration,
+                transitionTimingFunction: interactionTokens.selectionMovement.ease,
             }}
             className={`
                 group relative w-full cursor-pointer overflow-hidden rounded-xl border p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900

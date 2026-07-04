@@ -14,10 +14,12 @@ export const MemoryDetails: FunctionComponent<{
     // Subscribe directly to signal for the selected node
     const selectedId = activeMemoryIdSignal.value;
     const selectedNode = selectedId ? allNodes.find(n => n.id === selectedId) || null : null;
+    const missingSelectedMemoryId = selectedId && !selectedNode ? selectedId : null;
 
     return (
         <Inspector
             node={selectedNode}
+            missingSelectedMemoryId={missingSelectedMemoryId}
             allNodes={allNodes}
             edges={edges}
             lobotomize={lobotomize}

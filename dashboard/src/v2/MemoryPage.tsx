@@ -268,6 +268,7 @@ export const MemoryPage: FunctionComponent = () => {
 
     const {
         loading,
+        loadError,
         records,
         memoryCount,
         setMemoryCount,
@@ -872,21 +873,27 @@ export const MemoryPage: FunctionComponent = () => {
             await downloadEmbeddingModel(modelId);
             const updated = await listEmbeddingModels();
             setModels(updated);
-        } catch { /* ignore */ }
+        } catch (error) {
+            throw error;
+        }
     }, []);
     const handleSelectModel = useCallback(async (modelId: string) => {
         try {
             await selectEmbeddingModel(modelId);
             const updated = await listEmbeddingModels();
             setModels(updated);
-        } catch { /* ignore */ }
+        } catch (error) {
+            throw error;
+        }
     }, []);
     const handleDeleteModel = useCallback(async (modelId: string) => {
         try {
             await deleteEmbeddingModel(modelId);
             const updated = await listEmbeddingModels();
             setModels(updated);
-        } catch { /* ignore */ }
+        } catch (error) {
+            throw error;
+        }
     }, []);
     const handleReembed = useCallback(async () => {
         if (!pid) return;
@@ -899,7 +906,9 @@ export const MemoryPage: FunctionComponent = () => {
             if (!progress.active) {
                 loadData();
             }
-        } catch { /* ignore */ }
+        } catch (error) {
+            throw error;
+        }
     }, [pid, loadData]);
     const handleSelectModelWithStats = useCallback(async (modelId: string) => {
         try {
@@ -910,7 +919,9 @@ export const MemoryPage: FunctionComponent = () => {
             ]);
             setModels(updated);
             setStats(updatedStats);
-        } catch { /* ignore */ }
+        } catch (error) {
+            throw error;
+        }
     }, [pid, stats]);
 
         const onSelectNode = useCallback((idx: number) => {
@@ -1086,8 +1097,16 @@ export const MemoryPage: FunctionComponent = () => {
                 )}
 
                 {loading && (
-                    <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-                        <Loader2 className="w-8 h-8 text-signal-500/40 animate-spin" strokeWidth={1.5} />
+                    <div
+                        className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none"
+                        role="status"
+                        aria-live="polite"
+                        aria-atomic="true"
+                    >
+                        <div className="flex items-center gap-3 rounded-xl border border-signal-500/15 bg-white/75 px-4 py-3 text-xs font-bold text-signal-700 shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:bg-void-800/75 dark:text-signal-300">
+                            <Loader2 className="w-4 h-4 text-signal-500/70 motion-safe:animate-spin" strokeWidth={1.8} aria-hidden="true" />
+                            <span>{memoryCount > 0 ? "Refreshing memory map. Current memories remain visible." : "Loading memory map..."}</span>
+                        </div>
                     </div>
                 )}
 
@@ -1104,6 +1123,10 @@ export const MemoryPage: FunctionComponent = () => {
                 <MemorySidebar
                     nodes={S.current.graph.nodes}
                     onSelectNode={onSelectNode}
+                    refreshing={loading}
+                    loadError={loadError}
+                    onRetry={loadData}
+                    onAddMemory={() => setShowAddModal(true)}
                 />
             </div>
 
