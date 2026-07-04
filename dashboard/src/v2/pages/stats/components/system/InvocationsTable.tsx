@@ -255,7 +255,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
         <caption className="sr-only">
           Invocation ledger with sortable time, token, and duration columns. Rows include status, type, model, token counts, context, and transcript expansion controls.
         </caption>
-        <thead className="sticky top-0 z-10 hidden bg-[color:var(--stats-surface-panel)] backdrop-blur-sm lg:table-header-group">
+        <thead className="sticky top-0 z-10 hidden bg-[color:var(--stats-surface-panel)] lg:table-header-group">
           <tr className="text-left text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">
             <th id="invocations-time" scope="col" aria-sort={getAriaSort("startedAt")} className="pb-2 pl-6">
               <button

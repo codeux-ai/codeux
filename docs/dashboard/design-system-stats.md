@@ -207,4 +207,6 @@ pnpm run test:dashboard
 pnpm run typecheck:dashboard
 ```
 
+The source-adjacent Stats suite includes System workbench regressions for named regions, grouped command/filter controls, semantic invocation table headers, transcript feedback states, wrapping-safe operational copy, and Warm Void surfaces that avoid backdrop-blur glass utilities in touched System components.
+
 Run `pnpm run build` when changes touch shared contracts, routing, CSS token boundaries, dashboard imports, or production bundling behavior. Do not record a check as passed unless it was run for the current change.

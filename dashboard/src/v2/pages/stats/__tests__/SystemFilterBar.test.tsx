@@ -57,6 +57,7 @@ describe("SystemFilterBar", () => {
     );
 
     expect(container.querySelector(".stats-surface-panel")).toBeTruthy();
+    expect(container.querySelector('[class*="backdrop-blur"]')).toBeNull();
     expect(getByLabelText("Search")).toBe(getByPlaceholderText("Search system stats"));
 
     const runningButton = getByRole("button", { name: "Running" });
@@ -154,5 +155,7 @@ describe("SystemFilterBar", () => {
     expect(provider.className).toContain("min-w-0");
     expect(purpose.querySelector("span")?.className).toContain("truncate");
     expect(provider.querySelector("span")?.className).toContain("truncate");
+    expect(screen.getByText("Cli Task Coding With A Long Operational Label")).toBeTruthy();
+    expect(screen.getByText("Provider With A Long Gateway Identifier")).toBeTruthy();
   });
 });
