@@ -280,7 +280,7 @@ describe("ChatPageShell", () => {
   it("confirms invocation restart with an accessible dialog, safe focus, and one action", async () => {
     render(<ChatPage />);
 
-    fireEvent.click(getPageButton("Restart"));
+    fireEvent.click(getPageButton("Restart invocation"));
     const dialog = await waitForDialogFocus(/Keep Failed Invocation/i);
     expect(dialog).toHaveAccessibleName("Restart Invocation?");
     expect(dialog).toHaveAttribute("aria-modal", "true");
@@ -300,7 +300,7 @@ describe("ChatPageShell", () => {
   it("leaves invocation restart untouched when the confirmation is cancelled with Escape", async () => {
     render(<ChatPage />);
 
-    fireEvent.click(getPageButton("Restart"));
+    fireEvent.click(getPageButton("Restart invocation"));
     await waitForDialogFocus(/Keep Failed Invocation/i);
     fireEvent.keyDown(document, { key: "Escape" });
 
@@ -312,7 +312,7 @@ describe("ChatPageShell", () => {
     chatMocks.restartExecutionInvocation.mockRejectedValueOnce(new Error("Continuation failed"));
     render(<ChatPage />);
 
-    fireEvent.click(getPageButton("Continue"));
+    fireEvent.click(getPageButton("Continue invocation"));
     const dialog = await waitForDialogFocus(/Keep Failed Invocation/i);
     expect(dialog).toHaveAccessibleName("Continue Invocation?");
 
@@ -330,7 +330,7 @@ describe("ChatPageShell", () => {
     });
     render(<ChatPage />);
 
-    fireEvent.click(getPageButton("Cancel"));
+    fireEvent.click(getPageButton("Cancel invocation"));
     const dialog = await waitForDialogFocus(/Keep Running/i);
     expect(dialog).toHaveAccessibleName("Cancel Invocation?");
 
