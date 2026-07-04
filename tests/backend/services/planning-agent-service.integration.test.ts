@@ -266,8 +266,58 @@ describe("PlanningAgentService Integration", () => {
     await service.planSprint(project.id, sprint.id, {});
 
     const updatedSprint = projectRepository.getSprint(sprint.id);
+    const invocations = executionRepository.listExecutionInvocations({ projectId: project.id });
+    const messages = executionRepository.listExecutionInvocationMessages(invocations[0].id);
     expect(sprint.isGeneratedName).toBe(true);
+    expect(messages[0].contentMarkdown).toContain("Sprint Title Status: unset/generated; you may provide a concise title");
     expect(updatedSprint?.name).toBe("API Contract Cleanup");
+    expect(updatedSprint?.isGeneratedName).toBe(false);
+  });
+
+  it("preserves a custom placeholder-like sprint title when planning returns a title", async () => {
+    const {
+      projectRepository,
+      connectionRepository,
+      executionRepository,
+      settingsRepository,
+      syncService,
+      executionControlService,
+      project,
+      sprint,
+    } = await setupTestHarness({ name: "Untitled sprint 1", goal: "Initial Goal" });
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      executionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: executionControlService as any,
+      providerRunner: createPlanningProviderRunner({
+        title: "Provider Suggested Title",
+        goal: "Initial Goal",
+        tasks: [
+          {
+            key: "T01",
+            title: "T1",
+            description: "D1",
+            promptMarkdown: validPromptMarkdown,
+            priority: "high",
+            executorType: "auto",
+            dependsOn: [],
+          },
+        ],
+      }),
+    });
+
+    await service.planSprint(project.id, sprint.id, {});
+
+    const updatedSprint = projectRepository.getSprint(sprint.id);
+    const invocations = executionRepository.listExecutionInvocations({ projectId: project.id });
+    const messages = executionRepository.listExecutionInvocationMessages(invocations[0].id);
+    expect(sprint.isGeneratedName).toBe(false);
+    expect(messages[0].contentMarkdown).toContain("Sprint Title Status: custom user title; do not rename it");
+    expect(updatedSprint?.name).toBe("Untitled sprint 1");
     expect(updatedSprint?.isGeneratedName).toBe(false);
   });
 
