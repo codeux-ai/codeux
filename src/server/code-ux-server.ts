@@ -81,8 +81,12 @@ import { resolveEffectiveDashboardSettings } from "../services/settings-resoluti
 import { ActiveDispatchRegistry } from "../services/active-dispatch-registry.js";
 import { ShutdownContainerService } from "../services/shutdown-container-service.js";
 import { beginRuntimeShutdown } from "../services/shutdown-state.js";
+import {
+  acquireRuntimeProcessLock,
+  type RuntimeProcessLockRelease,
+} from "../services/runtime-process-lock.js";
 import { workspaceVolumeHelperPool } from "../infrastructure/providers/cli/workspace-volume-helper.js";
-import { shutdownGitHelperPool } from "../shared/subprocess/command-runner.js";
+import { disposeCommandSpawner, shutdownGitHelperPool } from "../shared/subprocess/command-runner.js";
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
   const normalized = String(message || "").trim().toLowerCase();
@@ -199,6 +203,7 @@ export class CodeUxServer {
   private closePromise: Promise<void> | null = null;
   private readonly mcpApprovalTracker = new McpApprovalTracker();
   private readonly signalHandler: () => void;
+  private runtimeProcessLockRelease: RuntimeProcessLockRelease | null = null;
 
   constructor(options: CodeUxServerOptions) {
     this.projectRoot = options.projectRoot;
@@ -339,6 +344,7 @@ export class CodeUxServer {
     this.startupTaskTimers.clear();
     this.virtualWorkerService.stop();
     this.schedulerService.stop();
+    disposeCommandSpawner();
     await shutdownGitHelperPool().catch((error) => {
       this.logger.warn("Failed to stop Docker git helper containers during shutdown", {
         error: error instanceof Error ? error.message : String(error),
@@ -377,6 +383,7 @@ export class CodeUxServer {
         CodeUxServer.activeSignalHandlers.delete(signal);
       }
     }
+    await this.releaseProjectManagerRuntimeLock();
   }
 
   private async closeHttpServer(server: HttpServer): Promise<void> {
@@ -1202,6 +1209,41 @@ export class CodeUxServer {
   }
 
   async run(): Promise<void> {
+    await this.acquireProjectManagerRuntimeLock();
+    try {
+      await this.runInternal();
+    } catch (error) {
+      await this.releaseProjectManagerRuntimeLock();
+      throw error;
+    }
+  }
+
+  private async acquireProjectManagerRuntimeLock(): Promise<void> {
+    if (process.env.NODE_ENV === "test" || process.env.VITEST) {
+      return;
+    }
+    if (this.runtimeProcessLockRelease) {
+      return;
+    }
+    this.runtimeProcessLockRelease = await acquireRuntimeProcessLock({
+      projectRoot: this.projectRoot,
+    });
+  }
+
+  private async releaseProjectManagerRuntimeLock(): Promise<void> {
+    const release = this.runtimeProcessLockRelease;
+    this.runtimeProcessLockRelease = null;
+    if (!release) {
+      return;
+    }
+    await release().catch((error) => {
+      this.logger.warn("Failed to release Code UX runtime process lock", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+
+  private async runInternal(): Promise<void> {
     await bootSettings({
       runtimeContext: this.runtimeContext,
       projectRoot: this.projectRoot,
