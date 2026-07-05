@@ -144975,9 +144975,9 @@
       "z-ai/glm-5.2": {
         "attachment": false,
         "cost": {
-          "cache_read": 0.1066,
-          "input": 0.574,
-          "output": 1.804
+          "cache_read": 0.1,
+          "input": 0.18,
+          "output": 2.95
         },
         "description": "Open flagship GLM for long-horizon coding agents and million-token context work",
         "family": "glm",
@@ -144987,8 +144987,8 @@
         },
         "last_updated": "2026-06-13",
         "limit": {
-          "context": 1048576,
-          "output": 131072
+          "context": 202752,
+          "output": 202752
         },
         "modalities": {
           "input": [
@@ -175760,6 +175760,39 @@
         "temperature": true,
         "tool_call": false
       },
+      "anthropic/claude-3-haiku": {
+        "attachment": true,
+        "cost": {
+          "cache_read": 0.03,
+          "cache_write": 0.3,
+          "input": 0.25,
+          "output": 1.25
+        },
+        "description": "Legacy model retained for compatibility with older integrations",
+        "family": "claude-haiku",
+        "id": "anthropic/claude-3-haiku",
+        "knowledge": "2023-08-31",
+        "last_updated": "2024-03-13",
+        "limit": {
+          "context": 200000,
+          "output": 4096
+        },
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Haiku 3",
+        "open_weights": false,
+        "reasoning": false,
+        "release_date": "2024-03-13",
+        "temperature": true,
+        "tool_call": true
+      },
       "anthropic/claude-3.5-haiku": {
         "attachment": true,
         "cost": {
@@ -175883,6 +175916,41 @@
           }
         ],
         "release_date": "2025-10-15",
+        "temperature": true,
+        "tool_call": true
+      },
+      "anthropic/claude-opus-4": {
+        "attachment": true,
+        "cost": {
+          "cache_read": 1.5,
+          "cache_write": 18.75,
+          "input": 15,
+          "output": 75
+        },
+        "description": "Flagship Claude model for deep reasoning, coding, and long-horizon agents",
+        "family": "claude-opus",
+        "id": "anthropic/claude-opus-4",
+        "knowledge": "2025-03-31",
+        "last_updated": "2025-05-22",
+        "limit": {
+          "context": 200000,
+          "output": 32000
+        },
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Opus 4",
+        "open_weights": false,
+        "reasoning": true,
+        "reasoning_options": [],
+        "release_date": "2025-05-22",
         "temperature": true,
         "tool_call": true
       },
@@ -176116,6 +176184,41 @@
           }
         ],
         "release_date": "2026-05-28",
+        "temperature": true,
+        "tool_call": true
+      },
+      "anthropic/claude-sonnet-4": {
+        "attachment": true,
+        "cost": {
+          "cache_read": 0.3,
+          "cache_write": 3.75,
+          "input": 3,
+          "output": 15
+        },
+        "description": "Balanced Claude model for coding, analysis, agent workflows, and cost control",
+        "family": "claude-sonnet",
+        "id": "anthropic/claude-sonnet-4",
+        "knowledge": "2025-03-31",
+        "last_updated": "2025-05-22",
+        "limit": {
+          "context": 1000000,
+          "output": 64000
+        },
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Sonnet 4",
+        "open_weights": false,
+        "reasoning": true,
+        "reasoning_options": [],
+        "release_date": "2025-05-22",
         "temperature": true,
         "tool_call": true
       },
