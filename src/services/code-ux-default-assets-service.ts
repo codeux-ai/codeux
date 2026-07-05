@@ -4,7 +4,7 @@ import { fileURLToPath } from "url";
 import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
 import type { Logger } from "../shared/logging/logger.js";
 
-const DEFAULT_AGENT_FILES = [
+export const DEFAULT_AGENT_FILES = [
   "planning_agent.md",
   "project_manager.md",
   "quality_assurance_agent.md",
@@ -18,6 +18,11 @@ interface EnsureDefaultCodeUxAssetsOptions {
   projectRoot?: string;
   logger?: Pick<Logger, "info" | "warn">;
   skipDefaultAgentFiles?: boolean;
+}
+
+interface ResolveBundledCodeUxDirOptions {
+  projectRoot?: string;
+  requireQuicksprintTemplates?: boolean;
 }
 
 interface InstalledAsset {
@@ -39,7 +44,7 @@ export async function ensureDefaultCodeUxAssetsInstalled(
 export async function readDefaultContainerSetupScript(
   options: Pick<EnsureDefaultCodeUxAssetsOptions, "projectRoot" | "logger"> = {},
 ): Promise<string | null> {
-  const sourceDir = await resolveBundledCodeUxDir(options.projectRoot);
+  const sourceDir = await resolveBundledCodeUxDir({ projectRoot: options.projectRoot });
   if (!sourceDir) {
     options.logger?.warn("Code UX default container setup script was not found.");
     return null;
@@ -63,7 +68,7 @@ async function installDefaultCodeUxAssets(
     return { sourceDir: null, installed: [] };
   }
 
-  const sourceDir = await resolveBundledCodeUxDir(options.projectRoot);
+  const sourceDir = await resolveBundledCodeUxDir({ projectRoot: options.projectRoot });
   if (!sourceDir) {
     options.logger?.warn("Code UX default assets were not found; user defaults were not seeded.");
     return { sourceDir: null, installed: [] };
@@ -111,18 +116,22 @@ async function installDefaultCodeUxAssets(
   return { sourceDir, installed };
 }
 
-async function resolveBundledCodeUxDir(projectRoot?: string): Promise<string | null> {
+export async function resolveBundledCodeUxDir(
+  options: ResolveBundledCodeUxDirOptions = {},
+): Promise<string | null> {
   const serviceDir = path.dirname(fileURLToPath(import.meta.url));
   const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
   const candidates = [
-    projectRoot ? path.join(projectRoot, ".code-ux") : "",
+    options.projectRoot ? path.join(options.projectRoot, ".code-ux") : "",
     path.resolve(serviceDir, "../../.code-ux"),
     resourcesPath ? path.join(resourcesPath, ".code-ux-defaults") : "",
     resourcesPath ? path.join(resourcesPath, ".code-ux") : "",
   ].filter(Boolean);
 
   for (const candidate of candidates) {
-    if (await hasRequiredDefaultAssets(candidate)) {
+    if (await hasRequiredDefaultAssets(candidate, {
+      requireQuicksprintTemplates: options.requireQuicksprintTemplates ?? true,
+    })) {
       return candidate;
     }
   }
@@ -130,12 +139,17 @@ async function resolveBundledCodeUxDir(projectRoot?: string): Promise<string | n
   return null;
 }
 
-async function hasRequiredDefaultAssets(candidate: string): Promise<boolean> {
+async function hasRequiredDefaultAssets(
+  candidate: string,
+  options: { requireQuicksprintTemplates: boolean },
+): Promise<boolean> {
   const requiredPaths = [
     ...DEFAULT_AGENT_FILES.map((fileName) => path.join(candidate, "agents", fileName)),
     path.join(candidate, "container", DEFAULT_CONTAINER_SETUP_FILE),
-    path.join(candidate, DEFAULT_QUICKSPRINT_TEMPLATE_DIR),
   ];
+  if (options.requireQuicksprintTemplates) {
+    requiredPaths.push(path.join(candidate, DEFAULT_QUICKSPRINT_TEMPLATE_DIR));
+  }
 
   for (const requiredPath of requiredPaths) {
     try {

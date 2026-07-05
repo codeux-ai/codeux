@@ -122,7 +122,7 @@ describe("settings-sanitizer", () => {
     expect(settings.git.githubMode).toBe("REMOTE");
     expect(settings.ciIntelligence.waitForJulesCiAutofix).toBe(false);
     expect(settings.ciIntelligence.featurePrAutoMergeMode).toBe("ALWAYS");
-    expect(settings.ciIntelligence.mainBranchAutoMergeMode).toBe("CREATE_PR");
+    expect(settings.ciIntelligence.mainBranchAutoMergeMode).toBe("ALWAYS");
     expect(settings.ciIntelligence.resolveMergeConflicts).toBe(true);
     expect(settings.ciIntelligence.resolveMainMergeConflicts).toBe(true);
     expect(settings.sprintLoopSteps.watchLoopIntervalSeconds).toBe(10);

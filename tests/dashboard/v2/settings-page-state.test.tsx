@@ -93,13 +93,13 @@ describe("useSettingsPageState", () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.systemSettings?.defaults.ciIntelligence.featurePrAutoMergeMode).toBe("ALWAYS");
-    expect(result.current.systemSettings?.defaults.ciIntelligence.mainBranchAutoMergeMode).toBe("CREATE_PR");
+    expect(result.current.systemSettings?.defaults.ciIntelligence.mainBranchAutoMergeMode).toBe("ALWAYS");
     expect(result.current.systemSettings?.defaults.ciIntelligence.resolveMergeConflicts).toBe(true);
     expect(result.current.systemSettings?.defaults.ciIntelligence.resolveMainMergeConflicts).toBe(true);
     expect(result.current.systemSettings?.defaults.memory.enabled).toBe(true);
     expect(result.current.systemSettings?.defaults.agents.qualityAssurance.enabled).toBe(true);
     expect(result.current.editableSettings?.ciIntelligence.featurePrAutoMergeMode).toBe("ALWAYS");
-    expect(result.current.editableSettings?.ciIntelligence.mainBranchAutoMergeMode).toBe("CREATE_PR");
+    expect(result.current.editableSettings?.ciIntelligence.mainBranchAutoMergeMode).toBe("ALWAYS");
     expect(result.current.editableSettings?.ciIntelligence.resolveMergeConflicts).toBe(true);
     expect(result.current.editableSettings?.ciIntelligence.resolveMainMergeConflicts).toBe(true);
     expect(result.current.editableSettings?.memory.enabled).toBe(true);
@@ -115,7 +115,7 @@ describe("useSettingsPageState", () => {
     const mapped = applyEffectiveProjectSettings(effective);
 
     expect(mapped.settings.ciIntelligence.featurePrAutoMergeMode).toBe("ALWAYS");
-    expect(mapped.settings.ciIntelligence.mainBranchAutoMergeMode).toBe("CREATE_PR");
+    expect(mapped.settings.ciIntelligence.mainBranchAutoMergeMode).toBe("ALWAYS");
     expect(mapped.settings.ciIntelligence.resolveMergeConflicts).toBe(true);
     expect(mapped.settings.ciIntelligence.resolveMainMergeConflicts).toBe(true);
     expect(mapped.settings.memory.enabled).toBe(true);
