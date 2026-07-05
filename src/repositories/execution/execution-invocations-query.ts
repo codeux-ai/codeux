@@ -106,6 +106,63 @@ function mergeSnapshotInvocationRows(rowGroups: SnapshotInvocationRow[][]): Snap
   return [...merged.values()].sort(compareSnapshotInvocationRows);
 }
 
+function mergeAndLimitSnapshotInvocationRows(rowGroups: SnapshotInvocationRow[][], limit: number): SnapshotInvocationRow[] {
+  return mergeSnapshotInvocationRows(rowGroups).slice(0, limit);
+}
+
+function querySnapshotExecutionInvocationRows(
+  db: Database,
+  params: {
+    projectId: string;
+    contextPredicate?: string;
+    contextValues?: string[];
+    limit: number;
+  },
+): SnapshotInvocationRow[] {
+  const contextPredicate = params.contextPredicate
+    ? `\n      AND ${params.contextPredicate}`
+    : "";
+
+  return db.prepare(`
+    SELECT${INVOCATION_SELECT}
+    FROM execution_invocations${INVOCATION_JOINS}
+    WHERE execution_invocations.project_id = ?${contextPredicate}
+    ORDER BY execution_invocations.started_at DESC, execution_invocations.rowid DESC
+    LIMIT ?
+  `).all(
+    params.projectId,
+    ...(params.contextValues ?? []),
+    params.limit,
+  ) as SnapshotInvocationRow[];
+}
+
+function querySnapshotProviderContextFallbackRows(
+  db: Database,
+  params: {
+    projectId: string;
+    executionContextColumn: "sprint_id" | "sprint_run_id";
+    providerContextColumn: "sprint_id" | "sprint_run_id";
+    contextId: string;
+    limit: number;
+  },
+): SnapshotInvocationRow[] {
+  return db.prepare(`
+    SELECT${INVOCATION_SELECT}
+    FROM execution_invocations${INVOCATION_JOINS}
+    WHERE provider_invocations.project_id = ?
+      AND provider_invocations.${params.providerContextColumn} = ?
+      AND execution_invocations.project_id = ?
+      AND execution_invocations.${params.executionContextColumn} IS NULL
+    ORDER BY execution_invocations.started_at DESC, execution_invocations.rowid DESC
+    LIMIT ?
+  `).all(
+    params.projectId,
+    params.contextId,
+    params.projectId,
+    params.limit,
+  ) as SnapshotInvocationRow[];
+}
+
 export function queryExecutionInvocations(
   db: Database,
   params: {
@@ -166,50 +223,45 @@ export function queryProjectExecutionSnapshotInvocations(
     selectedSprintId?: string | null;
   },
 ): ExecutionInvocationRecord[] {
-  const projectRecentRows = db.prepare(`
-    SELECT${INVOCATION_SELECT}
-    FROM execution_invocations${INVOCATION_JOINS}
-    WHERE execution_invocations.project_id = ?
-    ORDER BY execution_invocations.started_at DESC, execution_invocations.rowid DESC
-    LIMIT ?
-  `).all(params.projectId, SNAPSHOT_PROJECT_INVOCATION_LIMIT) as SnapshotInvocationRow[];
+  const projectRecentRows = querySnapshotExecutionInvocationRows(db, {
+    projectId: params.projectId,
+    limit: SNAPSHOT_PROJECT_INVOCATION_LIMIT,
+  });
 
   const selectedSprintRows = params.selectedSprintId
-    ? db.prepare(`
-      SELECT${INVOCATION_SELECT}
-      FROM execution_invocations${INVOCATION_JOINS}
-      WHERE execution_invocations.project_id = ?
-        AND COALESCE(execution_invocations.sprint_id, provider_invocations.sprint_id) = ?
-      ORDER BY execution_invocations.started_at DESC, execution_invocations.rowid DESC
-      LIMIT ?
-    `).all(
-      params.projectId,
-      params.selectedSprintId,
-      SNAPSHOT_SELECTED_SPRINT_INVOCATION_LIMIT,
-    ) as SnapshotInvocationRow[]
+    ? mergeAndLimitSnapshotInvocationRows([
+      querySnapshotExecutionInvocationRows(db, {
+        projectId: params.projectId,
+        contextPredicate: "execution_invocations.sprint_id = ?",
+        contextValues: [params.selectedSprintId],
+        limit: SNAPSHOT_SELECTED_SPRINT_INVOCATION_LIMIT,
+      }),
+      querySnapshotProviderContextFallbackRows(db, {
+        projectId: params.projectId,
+        executionContextColumn: "sprint_id",
+        providerContextColumn: "sprint_id",
+        contextId: params.selectedSprintId,
+        limit: SNAPSHOT_SELECTED_SPRINT_INVOCATION_LIMIT,
+      }),
+    ], SNAPSHOT_SELECTED_SPRINT_INVOCATION_LIMIT)
     : [];
 
   const uniqueSprintRunIds = [...new Set(params.sprintRunIds)];
-  const expandedRunRows = uniqueSprintRunIds.length > 0
-    ? db.prepare(`
-      SELECT *
-      FROM (
-        SELECT${INVOCATION_SELECT},
-          ROW_NUMBER() OVER (
-            PARTITION BY COALESCE(execution_invocations.sprint_run_id, provider_invocations.sprint_run_id)
-            ORDER BY execution_invocations.started_at DESC, execution_invocations.rowid DESC
-          ) AS invocation_rank
-        FROM execution_invocations${INVOCATION_JOINS}
-        WHERE execution_invocations.project_id = ?
-          AND COALESCE(execution_invocations.sprint_run_id, provider_invocations.sprint_run_id) IN (${uniqueSprintRunIds.map(() => "?").join(", ")})
-      ) ranked
-      WHERE ranked.invocation_rank <= ?
-    `).all(
-      params.projectId,
-      ...uniqueSprintRunIds,
-      SNAPSHOT_EXPANDED_RUN_INVOCATION_LIMIT,
-    ) as SnapshotInvocationRow[]
-    : [];
+  const expandedRunRows = uniqueSprintRunIds.flatMap((sprintRunId) => mergeAndLimitSnapshotInvocationRows([
+    querySnapshotExecutionInvocationRows(db, {
+      projectId: params.projectId,
+      contextPredicate: "execution_invocations.sprint_run_id = ?",
+      contextValues: [sprintRunId],
+      limit: SNAPSHOT_EXPANDED_RUN_INVOCATION_LIMIT,
+    }),
+    querySnapshotProviderContextFallbackRows(db, {
+      projectId: params.projectId,
+      executionContextColumn: "sprint_run_id",
+      providerContextColumn: "sprint_run_id",
+      contextId: sprintRunId,
+      limit: SNAPSHOT_EXPANDED_RUN_INVOCATION_LIMIT,
+    }),
+  ], SNAPSHOT_EXPANDED_RUN_INVOCATION_LIMIT));
 
   return mergeSnapshotInvocationRows([
     projectRecentRows,
