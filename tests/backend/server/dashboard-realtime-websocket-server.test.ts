@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { EventEmitter } from "events";
 import { bootDashboardRealtimeWebSocketServer } from "../../../src/server/dashboard-realtime-websocket-server.js";
+import type { DashboardRealtimeEvent } from "../../../src/contracts/app-types.js";
 import type { DashboardRealtimeService } from "../../../src/services/dashboard-realtime-service.js";
 import type { Logger } from "../../../src/shared/logging/logger.js";
 import type { Server as HttpServer, IncomingMessage } from "http";
@@ -27,6 +28,42 @@ function encodeFrame(payload: string): Buffer {
   header[1] = 127;
   header.writeBigUInt64BE(BigInt(length), 2);
   return Buffer.concat([header, message]);
+}
+
+function decodeFramePayload(buffer: Buffer): unknown {
+  const length = buffer[1] & 0x7f;
+  let payloadOffset = 2;
+  if (length === 126) {
+    payloadOffset = 4;
+  }
+  if (length === 127) {
+    payloadOffset = 10;
+  }
+  return JSON.parse(buffer.subarray(payloadOffset).toString("utf8"));
+}
+
+function createRealtimeEvent(overrides: Partial<DashboardRealtimeEvent> = {}): DashboardRealtimeEvent {
+  return {
+    sequence: 11,
+    emittedAt: "2026-03-30T09:00:00.000Z",
+    scopeType: "project",
+    scopeId: "p1:live",
+    scope: "project:p1:live",
+    eventType: "project.live.updated",
+    entityType: "project_live",
+    entityId: "p1",
+    projectId: "p1",
+    sprintId: null,
+    threadId: null,
+    taskId: null,
+    dispatchId: null,
+    sprintRunId: null,
+    taskRunId: null,
+    connectionId: null,
+    correlationId: "corr-1",
+    payload: {},
+    ...overrides,
+  };
 }
 
 describe("DashboardRealtimeWebSocketServer", () => {
@@ -117,12 +154,7 @@ describe("DashboardRealtimeWebSocketServer", () => {
       return calls
         .map((call: any[]) => {
           const buffer = call[0] as Buffer;
-          // Extract payload from simple websocket frame (assuming payload < 126 bytes for our test responses)
-          const length = buffer[1] & 0x7f;
-          let payloadOffset = 2;
-          if (length === 126) payloadOffset = 4;
-          if (length === 127) payloadOffset = 10;
-          return JSON.parse(buffer.subarray(payloadOffset).toString("utf8"));
+          return decodeFramePayload(buffer);
         })
         .filter((msg: any) => msg);
     };
@@ -479,6 +511,87 @@ describe("DashboardRealtimeWebSocketServer", () => {
       }),
     );
     expect(socket.destroy).toHaveBeenCalled();
+  });
+
+  it("serializes each realtime event once and sends it only to subscribed clients", () => {
+    const firstLiveClient = setupClient();
+    const secondLiveClient = setupClient();
+    const unrelatedClient = setupClient();
+
+    firstLiveClient.sendClientMessage({
+      type: "set_subscriptions",
+      scopes: ["project:p1:live"],
+      lastSequence: 0,
+    });
+    secondLiveClient.sendClientMessage({
+      type: "set_subscriptions",
+      scopes: ["project:p1:live"],
+      lastSequence: 0,
+    });
+    unrelatedClient.sendClientMessage({
+      type: "set_subscriptions",
+      scopes: ["project:p1:git"],
+      lastSequence: 0,
+    });
+
+    (firstLiveClient.socket.write as any).mockClear();
+    (secondLiveClient.socket.write as any).mockClear();
+    (unrelatedClient.socket.write as any).mockClear();
+
+    const serializePayload = vi.fn(() => ({ blob: "x".repeat(130_000) }));
+    const subscribeCallback = realtimeService.subscribe.mock.calls[0][0];
+    subscribeCallback(createRealtimeEvent({
+      sequence: 12,
+      payload: {
+        toJSON: serializePayload,
+      },
+    }));
+
+    expect(serializePayload).toHaveBeenCalledTimes(1);
+    expect(firstLiveClient.socket.write).toHaveBeenCalledTimes(1);
+    expect(secondLiveClient.socket.write).toHaveBeenCalledTimes(1);
+    expect(unrelatedClient.socket.write).not.toHaveBeenCalled();
+
+    const firstFrame = (firstLiveClient.socket.write as any).mock.calls[0][0] as Buffer;
+    const secondFrame = (secondLiveClient.socket.write as any).mock.calls[0][0] as Buffer;
+    expect(secondFrame).toBe(firstFrame);
+    expect(decodeFramePayload(firstFrame)).toMatchObject({
+      type: "event",
+      event: {
+        sequence: 12,
+        scope: "project:p1:live",
+        payload: {
+          blob: expect.any(String),
+        },
+      },
+    });
+  });
+
+  it("does not serialize realtime event payloads when no clients are subscribed to the scope", () => {
+    const unrelatedClient = setupClient();
+
+    unrelatedClient.sendClientMessage({
+      type: "set_subscriptions",
+      scopes: ["project:p1:git"],
+      lastSequence: 0,
+    });
+    (unrelatedClient.socket.write as any).mockClear();
+
+    const serializePayload = vi.fn(() => {
+      throw new Error("payload should not be serialized");
+    });
+    const subscribeCallback = realtimeService.subscribe.mock.calls[0][0];
+    expect(() => {
+      subscribeCallback(createRealtimeEvent({
+        sequence: 12,
+        payload: {
+          toJSON: serializePayload,
+        },
+      }));
+    }).not.toThrow();
+
+    expect(serializePayload).not.toHaveBeenCalled();
+    expect(unrelatedClient.socket.write).not.toHaveBeenCalled();
   });
 
   it("registers websocket subscription interest with the realtime service", () => {
