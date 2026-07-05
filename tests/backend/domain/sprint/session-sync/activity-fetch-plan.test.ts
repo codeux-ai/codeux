@@ -16,17 +16,23 @@ describe("planSessionActivityFetches", () => {
     extractSessionId: (session: JulesSession) => session.id,
     logger: { warn: vi.fn() } as any,
   };
+  const mockSessionMetadataLookup = {
+    getForSession: (session: JulesSession) => ({
+      sessionId: session.id || null,
+      sessionName: session.name || null,
+    }),
+  };
 
   const isForeignSessionMatch = vi.fn().mockReturnValue(false);
 
   it("should return empty array if no subtasks", () => {
-    const result = planSessionActivityFetches([], new Map(), mockContext, mockDeps, isForeignSessionMatch);
+    const result = planSessionActivityFetches([], new Map(), mockContext, mockSessionMetadataLookup, mockDeps.logger, isForeignSessionMatch);
     expect(result).toEqual([]);
   });
 
   it("should return empty array if no matching sessions", () => {
     const subtasks: Subtask[] = [{ id: "task1" } as Subtask];
-    const result = planSessionActivityFetches(subtasks, new Map(), mockContext, mockDeps, isForeignSessionMatch);
+    const result = planSessionActivityFetches(subtasks, new Map(), mockContext, mockSessionMetadataLookup, mockDeps.logger, isForeignSessionMatch);
     expect(result).toEqual([]);
   });
 
@@ -48,7 +54,7 @@ describe("planSessionActivityFetches", () => {
     const key3 = buildTaskRunKey(mockContext.repoPath, mockContext.sprintNumber, "task3");
     sessionMap.set(key3, { id: "s3", name: "session2", state: "COMPLETED" } as JulesSession);
 
-    const result = planSessionActivityFetches(subtasks, sessionMap, mockContext, mockDeps, isForeignSessionMatch);
+    const result = planSessionActivityFetches(subtasks, sessionMap, mockContext, mockSessionMetadataLookup, mockDeps.logger, isForeignSessionMatch);
 
     expect(result).toEqual(expect.arrayContaining(["session1", "session2"]));
     expect(result.length).toBe(2);
@@ -65,7 +71,7 @@ describe("planSessionActivityFetches", () => {
         return name === "session1";
     });
 
-    const result = planSessionActivityFetches(subtasks, sessionMap, mockContext, mockDeps, isForeignSessionMatch, isLocallyTerminal);
+    const result = planSessionActivityFetches(subtasks, sessionMap, mockContext, mockSessionMetadataLookup, mockDeps.logger, isForeignSessionMatch, isLocallyTerminal);
 
     expect(result).toEqual([]);
   });
@@ -79,7 +85,7 @@ describe("planSessionActivityFetches", () => {
 
     const isLocallyTerminal = vi.fn().mockReturnValue(false);
 
-    const result = planSessionActivityFetches(subtasks, sessionMap, mockContext, mockDeps, isForeignSessionMatch, isLocallyTerminal);
+    const result = planSessionActivityFetches(subtasks, sessionMap, mockContext, mockSessionMetadataLookup, mockDeps.logger, isForeignSessionMatch, isLocallyTerminal);
 
     expect(result).toEqual(["session1"]);
   });
@@ -93,7 +99,7 @@ describe("planSessionActivityFetches", () => {
 
     const isLocallyTerminal = vi.fn().mockReturnValue(true);
 
-    const result = planSessionActivityFetches(subtasks, sessionMap, mockContext, mockDeps, isForeignSessionMatch, isLocallyTerminal);
+    const result = planSessionActivityFetches(subtasks, sessionMap, mockContext, mockSessionMetadataLookup, mockDeps.logger, isForeignSessionMatch, isLocallyTerminal);
 
     expect(result).toEqual(["session1"]);
   });
@@ -107,7 +113,7 @@ describe("planSessionActivityFetches", () => {
 
       const localIsForeignSessionMatch = vi.fn().mockReturnValue(true);
 
-      const result = planSessionActivityFetches(subtasks, sessionMap, mockContext, mockDeps, localIsForeignSessionMatch);
+      const result = planSessionActivityFetches(subtasks, sessionMap, mockContext, mockSessionMetadataLookup, mockDeps.logger, localIsForeignSessionMatch);
 
       expect(result).toEqual([]);
       expect(mockDeps.logger.warn).toHaveBeenCalledWith(

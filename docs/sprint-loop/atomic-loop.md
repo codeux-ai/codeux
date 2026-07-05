@@ -102,8 +102,8 @@ For `status` and `orchestrate`, each cycle can run:
 2. Sync sessions and activities
 - `session-sync-step.ts`
 - Session-sync activity fetch planning is delegated to `src/domain/sprint/session-sync/activity-fetch-plan.ts` to make decisions testable.
-- Session activity fetching uses a bounded concurrency worker pool to prevent overloading the backend, preserving isolated failures per-session.
-- Each session-sync cycle keeps a cycle-local metadata cache keyed by normalized session id/name. The cache resolves session identity, latest task-run ownership, provider/mode ownership, and local terminal state once per session for that cycle only, so activity planning and task sync share the same safety decisions without repeated repository lookups.
+- Session activity fetching uses a bounded concurrency worker pool to prevent overloading the backend, preserving isolated failures per-session. Activity reads also use a timeout guard, so one slow or failed provider activity lookup degrades that session to an empty activity list without blocking unrelated task sync.
+- Each session-sync cycle keeps a cycle-local metadata cache keyed by session object and normalized session id/name. The cache resolves session identity, latest task-run ownership, provider/mode ownership, and local terminal state once per session for that cycle only, so activity planning and task sync share the same safety decisions without repeated dependency or repository lookups.
 - Sync source is provider-agnostic:
   - Jules API sessions (when available)
   - locally tracked CLI sessions (`gemini`/`codex`)

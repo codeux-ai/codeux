@@ -1,7 +1,7 @@
 import { Subtask, JulesSession } from "../../../contracts/app-types.js";
 
 import { buildTaskRunKey } from "../../../services/task-run-key.js";
-import { SessionSyncDependencies } from "../../../sprint/sprint-types.js";
+import type { Logger } from "../../../shared/logging/logger.js";
 
 /**
  * Predicate to determine if a session is locally terminal in the execution system.
@@ -9,12 +9,22 @@ import { SessionSyncDependencies } from "../../../sprint/sprint-types.js";
  */
 export type LocalTerminalPredicate = (sessionName: string, task: Subtask) => boolean;
 
+export interface ActivityFetchSessionMetadata {
+  sessionId: string | null;
+  sessionName: string | null;
+}
+
+export interface ActivityFetchSessionMetadataLookup {
+  getForSession: (session: JulesSession) => ActivityFetchSessionMetadata;
+}
+
 export function planSessionActivityFetches(
   subtasks: Subtask[],
   sessionMap: Map<string, JulesSession>,
   context: { repoPath: string; sprintNumber: number; githubMode?: "LOCAL" | "REMOTE" },
-  deps: Pick<SessionSyncDependencies, "resolveSessionName" | "extractSessionId" | "logger">,
-  isForeignSessionMatch: (deps: any, task: Subtask, session: JulesSession) => boolean,
+  sessionMetadataLookup: ActivityFetchSessionMetadataLookup,
+  logger: Logger,
+  isForeignSessionMatch: (task: Subtask, session: JulesSession) => boolean,
   isLocallyTerminal?: LocalTerminalPredicate
 ): string[] {
   const uniqueSessionNames = new Set<string>();
@@ -24,18 +34,19 @@ export function planSessionActivityFetches(
     const match = sessionMap.get(expectedRunKey);
 
     if (match) {
-      if (isForeignSessionMatch(deps as any, task, match)) {
-        deps.logger.warn("Skipping foreign provider session matched by task run key", {
+      const sessionMetadata = sessionMetadataLookup.getForSession(match);
+      if (isForeignSessionMatch(task, match)) {
+        logger.warn("Skipping foreign provider session matched by task run key", {
           taskId: task.record_id || task.id,
           projectId: task.project_id,
           sprintId: task.sprint_id,
-          sessionId: deps.extractSessionId(match),
-          sessionName: deps.resolveSessionName(match),
+          sessionId: sessionMetadata.sessionId,
+          sessionName: sessionMetadata.sessionName,
         });
         continue;
       }
 
-      const sessionName = deps.resolveSessionName(match);
+      const sessionName = sessionMetadata.sessionName;
       if (sessionName) {
         let isFullySynced = false;
 

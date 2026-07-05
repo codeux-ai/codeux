@@ -222,6 +222,7 @@ interface SessionMetadataLookup {
 
 const createSessionMetadataLookup = (deps: SessionSyncDependencies): SessionMetadataLookup => {
   const cache = new Map<string, SessionSyncSessionMetadata>();
+  const sessionObjectCache = new WeakMap<JulesSession, SessionSyncSessionMetadata>();
 
   const readLocalTerminalState = (sessionName: string | null): boolean => {
     return Boolean(
@@ -246,6 +247,13 @@ const createSessionMetadataLookup = (deps: SessionSyncDependencies): SessionMeta
     sessionRef: string | null,
     session?: JulesSession,
   ): SessionSyncSessionMetadata => {
+    if (session) {
+      const cachedByObject = sessionObjectCache.get(session);
+      if (cachedByObject) {
+        return cachedByObject;
+      }
+    }
+
     const sessionName = session ? deps.resolveSessionName(session) || null : null;
     const sessionId = normalizeSessionRef(
       (session ? deps.extractSessionId(session) : null)
@@ -264,12 +272,19 @@ const createSessionMetadataLookup = (deps: SessionSyncDependencies): SessionMeta
           (sessionName && cached.sessionName !== sessionName)
           || (sessionProvider && cached.provider !== sessionProvider)
         ) {
-          return cacheAliases({
+          const updatedMetadata = cacheAliases({
             ...cached,
             sessionName: cached.sessionName || sessionName,
             provider: sessionProvider || cached.provider,
             isLocallyTerminal: cached.isLocallyTerminal || readLocalTerminalState(cached.sessionName || sessionName),
           });
+          if (session) {
+            sessionObjectCache.set(session, updatedMetadata);
+          }
+          return updatedMetadata;
+        }
+        if (session) {
+          sessionObjectCache.set(session, cached);
         }
         return cached;
       }
@@ -288,13 +303,17 @@ const createSessionMetadataLookup = (deps: SessionSyncDependencies): SessionMeta
       || (sessionRef && sessionRef.startsWith("sessions/") ? sessionRef : null);
     const isLocallyTerminal = readLocalTerminalState(resolvedSessionName);
 
-    return cacheAliases({
+    const metadata = cacheAliases({
       sessionId,
       sessionName: resolvedSessionName,
       latestTaskRunBySessionId,
       provider,
       isLocallyTerminal,
     });
+    if (session) {
+      sessionObjectCache.set(session, metadata);
+    }
+    return metadata;
   };
 
   return {
@@ -563,8 +582,9 @@ const syncExecutionRunState = async (
     return;
   }
 
-  const sessionName = deps.resolveSessionName(session) || taskRun.sessionName;
-  const sessionId = deps.extractSessionId(session) || taskRun.sessionId;
+  const sessionMetadata = sessionMetadataLookup.getForSession(session);
+  const sessionName = sessionMetadata.sessionName || taskRun.sessionName;
+  const sessionId = sessionMetadata.sessionId || taskRun.sessionId;
   const provider = session.provider || taskRun.provider;
   const workerBranch = resolveWorkerBranch(session) || taskRun.workerBranch;
   const prUrl = resolvePrUrl(session) || taskRun.prUrl;
@@ -799,8 +819,9 @@ export const runSessionSyncStep = async (
     subtasks,
     sessionMap,
     context,
-    deps,
-    (_deps, task, session) => isForeignSessionMatch(sessionMetadataLookup, task, session),
+    sessionMetadataLookup,
+    deps.logger,
+    (task, session) => isForeignSessionMatch(sessionMetadataLookup, task, session),
     isLocallyTerminal
   );
 
@@ -809,7 +830,8 @@ export const runSessionSyncStep = async (
     5, // concurrency
     5, // pageSize
     deps.fetchRecentActivities,
-    deps.logger
+    deps.logger,
+    deps.activityFetchTimeoutMs,
   );
 
   for (const task of subtasks) {
@@ -820,28 +842,31 @@ export const runSessionSyncStep = async (
     }
 
     if (isForeignSessionMatch(sessionMetadataLookup, task, match)) {
+      const sessionMetadata = sessionMetadataLookup.getForSession(match);
       deps.logger.warn("Skipping foreign provider session matched by task run key", {
         taskId: task.record_id || task.id,
         projectId: task.project_id,
         sprintId: task.sprint_id,
-        sessionId: deps.extractSessionId(match),
-        sessionName: deps.resolveSessionName(match),
+        sessionId: sessionMetadata.sessionId,
+        sessionName: sessionMetadata.sessionName,
       });
       continue;
     }
     if (isRetiredSessionForPendingRetry(sessionMetadataLookup, task, match)) {
+      const sessionMetadata = sessionMetadataLookup.getForSession(match);
       deps.logger.warn("Skipping retired provider session for pending retry task", {
         taskId: task.record_id || task.id,
         projectId: task.project_id,
         sprintId: task.sprint_id,
-        sessionId: deps.extractSessionId(match),
-        sessionName: deps.resolveSessionName(match),
+        sessionId: sessionMetadata.sessionId,
+        sessionName: sessionMetadata.sessionName,
       });
       continue;
     }
 
-    const sessionName = deps.resolveSessionName(match);
-    const sessionId = deps.extractSessionId(match);
+    const sessionMetadata = sessionMetadataLookup.getForSession(match);
+    const sessionName = sessionMetadata.sessionName || undefined;
+    const sessionId = sessionMetadata.sessionId || undefined;
     task.session_name = sessionName;
     task.session_id = sessionId;
     task.session_state = match.state;
