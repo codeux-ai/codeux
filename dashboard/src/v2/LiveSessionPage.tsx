@@ -2,12 +2,7 @@ import type { FunctionComponent } from "preact";
 import { lazy, Suspense } from "preact/compat";
 import { useLayoutEffect, useRef, useState, useEffect, useMemo } from "preact/hooks";
 import gsap from "gsap";
-import {
-    Zap, Clock, CheckCircle2, XCircle,
-    ChevronDown, Radio,
-    Play, RotateCcw, Bot, Workflow, PauseCircle,
-    Ship, BarChart3,
-} from "lucide-preact";
+import { Play } from "lucide-preact";
 import { SprintStatsDeck, useLiveTaskTimingSummaries } from "./components/SprintStatsDeck.js";
 
 
@@ -15,37 +10,28 @@ import { useDashboardRuntimeData } from "../hooks/use-dashboard-runtime-data.js"
 import { useProjectGitStatus } from "./hooks/use-project-git-status.js";
 import { usePreviewSessions } from "./hooks/use-preview-sessions.js";
 import { useLiveSessionActions } from "./hooks/use-live-session-actions.js";
-import { formatTime } from "../lib/time.js";
-import { renderMarkdown } from "../lib/markdown.js";
 import type { Subtask } from "../types.js";
 import { deriveLiveSessionRuntimeState } from "./lib/live-session-runtime.js";
 import {
-    LIVE_SESSION_TASK_FILTERS,
     deriveFilteredLiveSessionTasks,
     deriveHasLiveDurationTicker,
     deriveLiveSessionStats,
+    deriveLiveSessionSnapshotSurface,
     deriveLiveSessionTaskCardItems,
     deriveLiveTransportBannerViewModel,
     deriveProjectedLiveSessionTasks,
     deriveScopedLiveSessionRuntime,
     type LiveSessionTaskFilter,
 } from "./lib/live-session-view-model.js";
-import { CollapsiblePanel } from "./components/ui/CollapsiblePanel.js";
-import { ExecutionTimelineProvider } from "../hooks/ExecutionTimelineContext.js";
-import type { ExecutionSnapshotSurfaceState } from "../hooks/ExecutionTimelineContext.js";
-import { ExecutionTimeline } from "./components/ExecutionTimeline.js";
-import { AttentionLedger } from "./components/AttentionLedger.js";
-import { ExecutionRuntimePanel } from "./components/live-session/ExecutionRuntimePanel.js";
-import { InvocationFeedPanel } from "./components/live-session/InvocationFeedPanel.js";
 import { StatsHeader } from "./components/StatsHeader.js";
 import { IdleRuntimeState } from "./components/ui/IdleRuntimeState.js";
 import { SkeletonPanel } from "./components/layout/SkeletonLoader.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
 import { SectionDivider } from "./components/ui/SectionDivider.js";
-import { LiveTaskCard, TaskDuration, QuotaCountdown } from "./components/LiveTaskCard.js";
+import { LiveTaskCard } from "./components/LiveTaskCard.js";
 import { LiveTransportBanner } from "./components/live-session/LiveTransportBanner.js";
-import { RuntimeEventFeed } from "./components/RuntimeEventFeed.js";
-import { GitCIStatusPanel } from "./components/GitCIStatusPanel.js";
+import { LiveTaskFilterStrip } from "./components/live-session/LiveTaskFilterStrip.js";
+import { LiveSessionRuntimeSidebar } from "./components/live-session/LiveSessionRuntimeSidebar.js";
 import { useProjectData } from "./context/project-data.js";
 import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
 import { useReducedMotion } from "./hooks/use-reduced-motion.js";
@@ -233,11 +219,10 @@ export const LiveSessionPage: FunctionComponent = () => {
         return () => window.clearInterval(timer);
     }, [hasLiveDurationTicker]);
 
-    const { filteredTasks, taskCounts } = useMemo(
+    const { filteredTasks, taskCounts, announcement: filterResultAnnouncement } = useMemo(
         () => deriveFilteredLiveSessionTasks(visibleTasksWithLiveActivities, visibleStats, activeFilter),
         [activeFilter, visibleStats, visibleTasksWithLiveActivities],
     );
-    const filterResultAnnouncement = `${filteredTasks.length} ${activeFilter.toLowerCase()} task${filteredTasks.length === 1 ? "" : "s"} shown.`;
     const selectionMovementStyle = useMemo(() => ({
         transitionDuration: interactionTokens.selectionMovement.duration,
         transitionTimingFunction: interactionTokens.selectionMovement.ease,
@@ -265,40 +250,15 @@ export const LiveSessionPage: FunctionComponent = () => {
         () => deriveLiveTransportBannerViewModel({ transportState, isRecovering, error, snapshotUpdatedAt }),
         [error, isRecovering, snapshotUpdatedAt, transportState],
     );
-    const snapshotSurface = useMemo<ExecutionSnapshotSurfaceState>(() => {
-        if (transportState === "reconnecting" || transportState === "disconnected") {
-            return {
-                kind: "reconnecting",
-                label: "Reconnecting",
-                description: "Cached runtime snapshot remains visible while the live stream reconnects.",
-                isBusy: true,
-            };
-        }
-        if (isRecovering) {
-            return {
-                kind: "recovering",
-                label: snapshotUpdatedAt ? "Recovering" : "Awaiting Snapshot",
-                description: snapshotUpdatedAt
-                    ? "Cached runtime snapshot remains visible while fresh live data is loading."
-                    : "Waiting for the first runtime snapshot after transport recovery.",
-                isBusy: true,
-            };
-        }
-        if (transportBannerViewModel?.title === "Stale Data") {
-            return {
-                kind: "stale",
-                label: "Stale Snapshot",
-                description: "Cached runtime snapshot remains visible, but it is more than a minute old.",
-                isBusy: true,
-            };
-        }
-        return {
-            kind: "live",
-            label: "Live",
-            description: "Runtime data is current.",
-            isBusy: false,
-        };
-    }, [isRecovering, snapshotUpdatedAt, transportBannerViewModel?.title, transportState]);
+    const snapshotSurface = useMemo(
+        () => deriveLiveSessionSnapshotSurface({
+            transportState,
+            isRecovering,
+            snapshotUpdatedAt,
+            transportBannerTitle: transportBannerViewModel?.title ?? null,
+        }),
+        [isRecovering, snapshotUpdatedAt, transportBannerViewModel?.title, transportState],
+    );
 
     const handleEditTask = (task: Subtask): void => {
         const search = new URLSearchParams();
@@ -416,52 +376,13 @@ export const LiveSessionPage: FunctionComponent = () => {
             <SectionDivider label="Task Pipeline" />
 
             {/* ── Filter Strip ────────────────────────────────────────── */}
-            <div className="flex max-w-full flex-wrap gap-1 rounded-xl bg-black/[0.04] p-1 dark:bg-white/[0.04] sm:w-fit" role="tablist" aria-label="Task status filters">
-                {LIVE_SESSION_TASK_FILTERS.map((filter, index) => (
-                    <button
-                        key={filter}
-                        role="tab"
-                        aria-selected={activeFilter === filter}
-                        tabIndex={activeFilter === filter ? 0 : -1}
-                        onClick={() => setFilter(filter)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-                                e.preventDefault();
-                                const nextFilter = LIVE_SESSION_TASK_FILTERS[(index + 1) % LIVE_SESSION_TASK_FILTERS.length];
-                                setFilter(nextFilter);
-                                const nextTab = e.currentTarget.parentElement?.children[(index + 1) % LIVE_SESSION_TASK_FILTERS.length] as HTMLElement;
-                                nextTab?.focus();
-                            } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-                                e.preventDefault();
-                                const prevIndex = index - 1 < 0 ? LIVE_SESSION_TASK_FILTERS.length - 1 : index - 1;
-                                const prevFilter = LIVE_SESSION_TASK_FILTERS[prevIndex];
-                                setFilter(prevFilter);
-                                const prevTab = e.currentTarget.parentElement?.children[prevIndex] as HTMLElement;
-                                prevTab?.focus();
-                            }
-                        }}
-                        style={selectionMovementStyle}
-                        className={`min-w-0 rounded-lg px-4 py-1.5 text-xs font-semibold
-                                   transition-all duration-200 flex items-center gap-2
-                                   ${activeFilter === filter
-                                       ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)]"
-                                       : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                                   }`}
-                    >
-                        {filter}
-                        <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-mono
-                            ${activeFilter === filter
-                                ? "bg-signal-500/[0.12] text-signal-600 dark:text-signal-400"
-                                : "bg-black/[0.06] dark:bg-white/[0.06] text-slate-400"
-                            }`}>
-                            {taskCounts[filter]}
-                        </span>
-                    </button>
-                ))}
-            </div>
-            <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-                {filterResultAnnouncement}
-            </div>
+            <LiveTaskFilterStrip
+                activeFilter={activeFilter}
+                taskCounts={taskCounts}
+                announcement={filterResultAnnouncement}
+                onFilterChange={setFilter}
+                selectionMovementStyle={selectionMovementStyle}
+            />
 
             {/* ── Main Content Grid ───────────────────────────────────── */}
             <div ref={contentRef} className="grid grid-cols-1 xl:grid-cols-12 gap-6 md:gap-10 xl:gap-16">
@@ -515,9 +436,15 @@ export const LiveSessionPage: FunctionComponent = () => {
 
                 {/* Sidebar */}
                 <div className="xl:col-span-4 flex flex-col gap-5 min-w-0">
-                    <ExecutionTimelineProvider
+                    <LiveSessionRuntimeSidebar
                         execution={execution}
                         snapshotSurface={snapshotSurface}
+                        hasSprintContext={hasSprintContext}
+                        invocations={sprintInvocations}
+                        sprintKeyPrefix={sprintKeyPrefix}
+                        gitStatus={gitStatus}
+                        gitStatusError={gitStatusError}
+                        pendingActionIds={pendingActionIds}
                         onOrchestrateSprint={handleOrchestrateSprint}
                         onPauseSprintRun={handlePauseSprintRun}
                         onCancelSprintRun={handleCancelSprintRun}
@@ -528,22 +455,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                         onClaimAttentionItem={handleClaimAttentionItem}
                         onResolveAttentionItem={handleResolveAttentionItem}
                         onDismissAttentionItem={handleDismissAttentionItem}
-                        pendingActionIds={pendingActionIds}
-                    >
-                        <InvocationFeedPanel
-                            collapsible
-                            defaultOpen={hasSprintContext}
-                            invocations={sprintInvocations}
-                            sprintKeyPrefix={sprintKeyPrefix}
-                        />
-                        <ExecutionTimeline collapsible defaultOpen={hasSprintContext} />
-                        <GitCIStatusPanel status={gitStatus} error={gitStatusError} />
-                        <AttentionLedger collapsible defaultOpen={hasSprintContext} />
-                        <ExecutionRuntimePanel
-                            collapsible
-                            defaultOpen={hasSprintContext}
-                        />
-                    </ExecutionTimelineProvider>
+                    />
                 </div>
             </div>
         </PageContainer>

@@ -1,4 +1,5 @@
 import type { TransportState } from "../../lib/realtime/dashboard-realtime-client.js";
+import type { ExecutionSnapshotSurfaceState } from "../../hooks/ExecutionTimelineContext.js";
 import type {
   DashboardStats,
   ExecutionDashboardSnapshot,
@@ -45,6 +46,7 @@ export interface ScopedLiveSessionRuntime {
 export interface FilteredLiveSessionTasks {
   filteredTasks: Subtask[];
   taskCounts: Record<LiveSessionTaskFilter, number>;
+  announcement: string;
 }
 
 export interface LiveSessionTaskCardItem {
@@ -259,7 +261,15 @@ export function deriveFilteredLiveSessionTasks(
       Failed: stats.failed,
       Pending: pendingCount,
     },
+    announcement: deriveLiveSessionTaskFilterAnnouncement(activeFilter, filteredTasks.length),
   };
+}
+
+export function deriveLiveSessionTaskFilterAnnouncement(
+  activeFilter: LiveSessionTaskFilter,
+  filteredTaskCount: number,
+): string {
+  return `${filteredTaskCount} ${activeFilter.toLowerCase()} task${filteredTaskCount === 1 ? "" : "s"} shown.`;
 }
 
 function buildInvocationIndexes(invocations: ExecutionInvocationRecord[]): {
@@ -463,4 +473,47 @@ export function deriveLiveTransportBannerViewModel(args: {
   }
 
   return null;
+}
+
+export function deriveLiveSessionSnapshotSurface(args: {
+  transportState: TransportState;
+  isRecovering: boolean;
+  snapshotUpdatedAt?: string | null;
+  transportBannerTitle?: LiveTransportBannerViewModel["title"] | null;
+}): ExecutionSnapshotSurfaceState {
+  if (args.transportState === "reconnecting" || args.transportState === "disconnected") {
+    return {
+      kind: "reconnecting",
+      label: "Reconnecting",
+      description: "Cached runtime snapshot remains visible while the live stream reconnects.",
+      isBusy: true,
+    };
+  }
+
+  if (args.isRecovering) {
+    return {
+      kind: "recovering",
+      label: args.snapshotUpdatedAt ? "Recovering" : "Awaiting Snapshot",
+      description: args.snapshotUpdatedAt
+        ? "Cached runtime snapshot remains visible while fresh live data is loading."
+        : "Waiting for the first runtime snapshot after transport recovery.",
+      isBusy: true,
+    };
+  }
+
+  if (args.transportBannerTitle === "Stale Data") {
+    return {
+      kind: "stale",
+      label: "Stale Snapshot",
+      description: "Cached runtime snapshot remains visible, but it is more than a minute old.",
+      isBusy: true,
+    };
+  }
+
+  return {
+    kind: "live",
+    label: "Live",
+    description: "Runtime data is current.",
+    isBusy: false,
+  };
 }

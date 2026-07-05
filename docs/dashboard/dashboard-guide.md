@@ -18,6 +18,8 @@ If the requested port is busy, startup automatically retries the next port (`+1`
 ## Live Data Contracts
 All live fields rendered in the dashboard originate from the SQLite database, are assembled by the backend, and transported via HTTP/WebSockets. The browser does not reconcile competing states. See the [Live Runtime Contract](../architecture/live-runtime-contract.md) for details on ownership of fields like `projectId`, `status`, and `execution`.
 
+The v2 Live Session route keeps runtime data wiring in `LiveSessionPage.tsx`, pure projection/filter derivation in `dashboard/src/v2/lib/live-session-view-model.ts`, and repeated panel markup under `dashboard/src/v2/components/live-session/`. Keep sprint-scoped arrays such as dispatches, events, invocations, and projected task card items memoized from stabilized runtime snapshots so reconnects, stale banners, filters, and pending runtime actions do not force avoidable recomputation or change accessibility semantics.
+
 ## API Endpoints
 
 Implemented in `src/server/dashboard-server.ts`.
