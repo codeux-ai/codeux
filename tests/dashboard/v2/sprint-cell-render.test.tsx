@@ -4,6 +4,7 @@ import { h } from "preact";
 import { describe, it, expect, afterEach } from "vitest";
 import { render, cleanup } from "@testing-library/preact";
 import { SprintCell } from "../../../dashboard/src/v2/components/sprints/SprintCell";
+import { ORGANIC_CELL_SHADOW_CLASS } from "../../../dashboard/src/v2/components/ui/organic-cell-styles";
 
 afterEach(() => { cleanup(); });
 
@@ -22,15 +23,15 @@ describe("SprintCell DOM structure for Verification", () => {
     updatedAt: "2024-01-01T00:00:00.000Z",
   };
 
-  it("uses a shape-following organic shadow instead of a wrapper box shadow", () => {
+  it("uses the shared organic project-cell shadow underlay", () => {
     const { container } = render(<SprintCell sprint={defaultSprint} isEven={true} accentColor="text-blue-500" />);
     const mainDiv = container.firstChild as HTMLDivElement;
-    const shadowShell = Array.from(container.querySelectorAll("div")).find((node) =>
-      node.className.toString().includes("drop-shadow-[0_24px_48px_rgba(0,0,0,0.07)]")
-    );
+    const shadowShell = container.querySelector("[data-organic-cell-shadow]");
 
     expect(mainDiv.className).not.toContain("hover:shadow-");
     expect(shadowShell).toBeTruthy();
+    expect(shadowShell?.className.toString()).toContain(ORGANIC_CELL_SHADOW_CLASS);
+    expect(shadowShell?.className.toString()).not.toContain("drop-shadow");
     expect(shadowShell?.className.toString()).toContain("animate-organic");
   });
 });

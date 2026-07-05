@@ -5,6 +5,7 @@ import { FolderGit2, Activity, AlertTriangle, XCircle } from "lucide-preact";
 import type { Source } from "../../types.js";
 import { useProjectData } from "../../context/project-data.js";
 import { CellActions } from "./CellActions.js";
+import { ORGANIC_CELL_SHADOW_CLASS } from "./organic-cell-styles.js";
 
 const statusMap = {
     running:      { ring: 'border-status-green/50 shadow-[0_0_28px_rgba(0,171,132,0.35)]', text: 'text-status-green', icon: Activity,       label: "Running"     },
@@ -61,7 +62,7 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
             style={{ animationDelay: `${animDelay}s` }}
         >
             {/* Shadow underlay */}
-            <div className={`absolute inset-0 shadow-[0_24px_48px_rgba(0,0,0,0.07)] dark:shadow-[0_24px_48px_rgba(0,0,0,0.5)] transition-all duration-700 pointer-events-none ${anim}`} />
+            <div data-organic-cell-shadow className={`absolute inset-0 ${ORGANIC_CELL_SHADOW_CLASS} transition-all duration-700 pointer-events-none ${anim}`} />
 
             {/* Liquid cell body */}
             <div

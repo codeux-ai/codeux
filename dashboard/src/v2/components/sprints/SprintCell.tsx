@@ -29,6 +29,7 @@ import { getSprintStatusPresentation } from "../../lib/sprint-status-presentatio
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MOTION_TOKENS } from "../../lib/motion/tokens.js";
 import { computeSprintActionMenuPosition } from "../../lib/sprint-menu-positioning.js";
+import { ORGANIC_CELL_SHADOW_CLASS } from "../ui/organic-cell-styles.js";
 
 const CARD_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -197,8 +198,10 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
       onMouseLeave={handleHoverLeave}
       className="group relative flex h-72 w-72 shrink-0 cursor-pointer items-center justify-center perspective-1000 transition-transform duration-150 [@media(hover:hover)]:hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:transform-none lg:h-80 lg:w-80"
     >
+      <div data-organic-cell-shadow className={`pointer-events-none absolute inset-0 ${ORGANIC_CELL_SHADOW_CLASS} transition-all duration-700 ${animationClass}`} />
+
       <div
-        className={`absolute inset-0 rounded-[1.75rem] drop-shadow-[0_24px_48px_rgba(0,0,0,0.07)] transition-[filter,opacity] duration-700 transform-gpu dark:drop-shadow-[0_24px_48px_rgba(0,0,0,0.5)] group-hover:drop-shadow-[0_30px_58px_rgba(0,0,0,0.12)] dark:group-hover:drop-shadow-[0_30px_58px_rgba(0,0,0,0.55)] ${animationClass} ${isCompleted ? "opacity-80" : ""}`}
+        className={`absolute inset-0 rounded-[1.75rem] transition-opacity duration-700 transform-gpu ${animationClass} ${isCompleted ? "opacity-80" : ""}`}
       >
         <div
           className={`absolute inset-0 overflow-hidden rounded-[inherit] border border-white/70 backdrop-blur-md transition-colors duration-700 dark:border-white/[0.06] ${isRunning ? "bg-white/72 dark:bg-void-800/82" : "bg-white/55 dark:bg-void-800/65"}`}
