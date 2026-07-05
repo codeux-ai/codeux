@@ -227,7 +227,7 @@ describe("Global Search", () => {
             expect(listbox).toHaveAttribute("aria-describedby", "search-results-refreshing-note");
             expect(listbox).not.toHaveClass("pointer-events-none");
             expect(screen.getAllByRole("status", { hidden: true })).toHaveLength(1);
-            expect(screen.getByRole("status", { hidden: true })).toHaveTextContent("Updating results for 'generic'. 1 current result remains visible.");
+            expect(screen.getByRole("status", { hidden: true })).toHaveTextContent("Updating results for 'generic'. 1 current result remains available.");
             expect(screen.getByRole("option", { name: /generic sprint/i, hidden: true })).toBeInTheDocument();
             expect(screen.getByText("Updating visible results")).toBeInTheDocument();
         });
@@ -251,7 +251,7 @@ describe("Global Search", () => {
             );
 
             expect(screen.getByRole("listbox", { hidden: true })).toHaveAttribute("aria-busy", "true");
-            expect(screen.getByRole("status", { hidden: true })).toHaveTextContent("Updating results for 'new query'. 1 current result remains visible.");
+            expect(screen.getByRole("status", { hidden: true })).toHaveTextContent("Updating results for 'new query'. 1 current result remains available.");
             expect(screen.getByRole("option", { name: /old query sprint/i, hidden: true })).toBeInTheDocument();
 
             rerender(

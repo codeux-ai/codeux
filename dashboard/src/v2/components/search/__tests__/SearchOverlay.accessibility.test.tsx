@@ -204,7 +204,7 @@ describe("SearchOverlay Accessibility", () => {
 
         expect(screen.getByRole("listbox", { hidden: true })).toHaveAttribute("aria-busy", "true");
         expect(screen.getAllByRole("option", { hidden: true })).toHaveLength(2);
-        expect(screen.getByRole("status", { hidden: true })).toHaveTextContent("Updating results for 't'. 2 current results remain visible.");
+        expect(screen.getByRole("status", { hidden: true })).toHaveTextContent("Updating results for 't'. 2 current results remain available.");
         expect(screen.getByText("Updating visible results")).toBeInTheDocument();
     });
 

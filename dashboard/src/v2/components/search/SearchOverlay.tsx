@@ -165,11 +165,12 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
     const committedQuery = committedSearchQuery ?? searchQuery;
     const visibleResultQuery = hasStaleResults && committedQuery.trim().length > 0 ? committedQuery : searchQuery;
     const resultsDescriptionId = hasStaleResults ? "search-results-refreshing-note" : "search-status-message";
+    // current results remain available while a background refresh keeps stale items on screen.
     const statusMessage = searchQuery.length === 0
         ? ''
         : isLoading
             ? hasResults
-                ? `Updating results for '${searchQuery}'. ${allItems.length} current ${allItems.length === 1 ? "result remains" : "results remain"} visible.`
+                    ? `Updating results for '${searchQuery}'. ${allItems.length} current ${allItems.length === 1 ? "result remains" : "results remain"} available.`
                 : 'Searching workspace'
             : allItems.length === 0
                 ? (!hasProjectData ? `Project data unavailable for '${searchQuery}'` : `No results found for '${visibleResultQuery}'`)
