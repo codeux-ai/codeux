@@ -69,7 +69,7 @@ function findNextActiveIndex(items: CategorizedSearchItem[], startIndex: number,
         index += direction;
     }
 
-    return -1;
+    return 0;
 }
 
 export interface SearchResults {
@@ -111,6 +111,8 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
     const listRevealEase = gsapTokens.listReveal.ease;
 
     const handleSelect = (selectedItem: CategorizedSearchItem) => {
+        if (isResultInactive(selectedItem)) return;
+
         if (selectedItem) {
             if (selectedItem.category === 'sprints') {
                 navigate({ to: '/sprints', search: { sprintId: selectedItem.routeSprintId, sprintKey: selectedItem.sprintKey } as any });
@@ -134,7 +136,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
         [results?.sprints, results?.tasks, results?.agents, results?.containers]
     );
     const activeItem = focusedIndex >= 0 ? allItems[focusedIndex] : undefined;
-    const activeDescendantId = activeItem && !isResultInactive(activeItem) ? `search-result-${activeItem.id}` : undefined;
+    const activeDescendantId = activeItem ? `search-result-${activeItem.id}` : undefined;
     const hasResults = allItems.length > 0;
     const hasStaleResults = Boolean(isLoading && hasResults);
     const statusMessage = searchQuery.length === 0
