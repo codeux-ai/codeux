@@ -43,6 +43,7 @@ const buildDefaultPreviewSessionsResult = () => ({
       healthStatus: "healthy" as const,
       containerAppPort: 3000,
       hostPort: 8080,
+      portMappings: [{ containerPort: 3000, hostPort: 8080, isPrimary: true }],
     },
     {
       id: "sess-2",
@@ -53,6 +54,7 @@ const buildDefaultPreviewSessionsResult = () => ({
       healthStatus: "unknown" as const,
       containerAppPort: 3000,
       hostPort: null,
+      portMappings: [{ containerPort: 3000, hostPort: null, isPrimary: true }],
     },
   ],
   selectedSession: {
@@ -64,6 +66,7 @@ const buildDefaultPreviewSessionsResult = () => ({
     healthStatus: "healthy" as const,
     containerAppPort: 3000,
     hostPort: 8080,
+    portMappings: [{ containerPort: 3000, hostPort: 8080, isPrimary: true }],
   },
   loading: false,
   error: null,
@@ -123,6 +126,9 @@ vi.mock("../../../dashboard/src/v2/components/browser/PreviewWindowChrome.js", (
     navigationEnabled = true,
     navigationBusy = false,
     navigationDisabledReason,
+    portMappings = [],
+    selectedContainerPort,
+    onSelectPort,
     children,
   }: {
     addressValue: string;
@@ -132,9 +138,27 @@ vi.mock("../../../dashboard/src/v2/components/browser/PreviewWindowChrome.js", (
     navigationEnabled?: boolean;
     navigationBusy?: boolean;
     navigationDisabledReason?: string;
+    portMappings?: Array<{ containerPort: number; hostPort: number | null; label?: string }>;
+    selectedContainerPort?: number | null;
+    onSelectPort?: (containerPort: number) => void;
     children: ComponentChildren;
   }) => (
     <div>
+      {portMappings.length > 1 ? (
+        <div role="tablist" aria-label="Preview ports">
+          {portMappings.map((mapping) => (
+            <button
+              key={mapping.containerPort}
+              type="button"
+              role="tab"
+              aria-selected={mapping.containerPort === selectedContainerPort}
+              onClick={() => onSelectPort?.(mapping.containerPort)}
+            >
+              {mapping.label ? `${mapping.label} :${mapping.containerPort}` : `:${mapping.containerPort}`}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <input
         aria-label="Preview address"
         value={addressValue}
@@ -339,7 +363,7 @@ describe("BrowserPage", () => {
 
       expect(screen.getByText("Loading logs...")).toBeInTheDocument();
       expect(screen.getAllByText("Loading preview logs.").length).toBeGreaterThan(0);
-      expect(screen.getByTitle("Preview: Project 1 - Sprint 1")).toBeInTheDocument();
+      expect(screen.getByTitle("Preview: Project 1 - Sprint 1 on port 3000")).toBeInTheDocument();
 
       await act(async () => {
         vi.advanceTimersByTime(250);
@@ -445,6 +469,47 @@ describe("BrowserPage", () => {
     }
   });
 
+  it("clears delayed navigation success timers on unmount", () => {
+    vi.useFakeTimers();
+    const setTimeoutSpy = vi.spyOn(window, "setTimeout");
+    const clearTimeoutSpy = vi.spyOn(window, "clearTimeout");
+    const getLastNavigationSuccessTimerId = () => {
+      const timerIndex = setTimeoutSpy.mock.calls.reduce(
+        (lastMatch, call, index) => (call[1] === 360 ? index : lastMatch),
+        -1
+      );
+      return timerIndex >= 0 ? setTimeoutSpy.mock.results[timerIndex]?.value : undefined;
+    };
+
+    try {
+      const reloadRender = render(<BrowserPage />);
+      fireEvent.click(screen.getByRole("button", { name: "Reload preview" }));
+      const reloadSuccessTimerId = getLastNavigationSuccessTimerId();
+
+      reloadRender.unmount();
+
+      expect(reloadSuccessTimerId).toBeDefined();
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(reloadSuccessTimerId);
+
+      setTimeoutSpy.mockClear();
+      clearTimeoutSpy.mockClear();
+
+      const navigateRender = render(<BrowserPage />);
+      fireEvent.input(screen.getByLabelText("Preview address"), { target: { value: "/docs" } });
+      fireEvent.click(screen.getByRole("button", { name: "Navigate preview" }));
+      const addressSuccessTimerId = getLastNavigationSuccessTimerId();
+
+      navigateRender.unmount();
+
+      expect(addressSuccessTimerId).toBeDefined();
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(addressSuccessTimerId);
+    } finally {
+      setTimeoutSpy.mockRestore();
+      clearTimeoutSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("shows script save success feedback and prevents duplicate save submissions", async () => {
     const user = userEvent.setup();
     let resolveSave: ((value: { content: string; mode: "script"; path: string }) => void) | null = null;
@@ -534,6 +599,143 @@ describe("BrowserPage", () => {
     expect(screen.queryByRole("button", { name: "sprints" })).not.toBeInTheDocument();
   });
 
+  it("defaults multi-port sessions to the primary mapping and switches iframe URLs for secondary ports", async () => {
+    let container!: HTMLElement;
+    vi.mocked(usePreviewSessions).mockImplementation(() => ({
+      sessions: [
+        {
+          id: "sess-multi",
+          projectId: "p1",
+          sprintId: "s1",
+          sprintName: "Sprint Multi",
+          status: "running",
+          healthStatus: "healthy",
+          containerAppPort: 3000,
+          hostPort: 8080,
+          portMappings: [
+            { containerPort: 3000, hostPort: 8080, isPrimary: true },
+            { containerPort: 5173, hostPort: 8081, label: "Vite" },
+          ],
+          lastKnownPath: "/primary",
+        } as any,
+      ],
+      selectedSession: {
+        id: "sess-multi",
+        projectId: "p1",
+        sprintId: "s1",
+        sprintName: "Sprint Multi",
+        status: "running",
+        healthStatus: "healthy",
+        containerAppPort: 3000,
+        hostPort: 8080,
+        portMappings: [
+          { containerPort: 3000, hostPort: 8080, isPrimary: true },
+          { containerPort: 5173, hostPort: 8081, label: "Vite" },
+        ],
+        lastKnownPath: "/primary",
+      } as any,
+      loading: false,
+      error: null,
+      refresh: mockRefreshSessions,
+    }));
+
+    await act(async () => {
+      const result = render(<BrowserPage />);
+      container = result.container;
+    });
+
+    const iframe = () => container.querySelector("iframe");
+    const { protocol, port } = new URL(window.location.origin);
+    const previewOrigin = `${protocol}//preview-sess-multi.localhost${port ? `:${port}` : ""}`;
+    expect(screen.getByRole("tab", { name: ":3000" })).toHaveAttribute("aria-selected", "true");
+    expect(iframe()?.getAttribute("src")).toBe(`${previewOrigin}/primary`);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("tab", { name: "Vite :5173" }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "Vite :5173" })).toHaveAttribute("aria-selected", "true");
+      expect(iframe()?.getAttribute("src")).toBe(`${previewOrigin}/?containerPort=5173`);
+    });
+    expect(screen.getByTitle("Preview: Project 1 - Sprint Multi on port 5173")).toBeInTheDocument();
+  });
+
+  it("preserves current paths separately while switching selected preview ports", async () => {
+    let container!: HTMLElement;
+    vi.mocked(usePreviewSessions).mockImplementation(() => ({
+      sessions: [
+        {
+          id: "sess-multi-paths",
+          projectId: "p1",
+          sprintId: "s1",
+          sprintName: "Sprint Multi Paths",
+          status: "running",
+          healthStatus: "healthy",
+          containerAppPort: 3000,
+          hostPort: 8080,
+          portMappings: [
+            { containerPort: 3000, hostPort: 8080, isPrimary: true },
+            { containerPort: 6006, hostPort: 8082, label: "Storybook" },
+          ],
+          lastKnownPath: "/app",
+        } as any,
+      ],
+      selectedSession: {
+        id: "sess-multi-paths",
+        projectId: "p1",
+        sprintId: "s1",
+        sprintName: "Sprint Multi Paths",
+        status: "running",
+        healthStatus: "healthy",
+        containerAppPort: 3000,
+        hostPort: 8080,
+        portMappings: [
+          { containerPort: 3000, hostPort: 8080, isPrimary: true },
+          { containerPort: 6006, hostPort: 8082, label: "Storybook" },
+        ],
+        lastKnownPath: "/app",
+      } as any,
+      loading: false,
+      error: null,
+      refresh: mockRefreshSessions,
+    }));
+
+    await act(async () => {
+      const result = render(<BrowserPage />);
+      container = result.container;
+    });
+
+    const iframe = () => container.querySelector("iframe");
+    const { protocol, port } = new URL(window.location.origin);
+    const previewOrigin = `${protocol}//preview-sess-multi-paths.localhost${port ? `:${port}` : ""}`;
+    const address = screen.getByLabelText("Preview address");
+    fireEvent.input(address, { target: { value: "/settings" } });
+    fireEvent.click(screen.getByRole("button", { name: "Navigate preview" }));
+
+    expect(iframe()?.getAttribute("src")).toBe(`${previewOrigin}/app`);
+    expect(screen.getByDisplayValue("/settings")).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("tab", { name: "Storybook :6006" }));
+    });
+    await waitFor(() => {
+      expect(iframe()?.getAttribute("src")).toBe(`${previewOrigin}/?containerPort=6006`);
+    });
+
+    fireEvent.input(screen.getByLabelText("Preview address"), { target: { value: "/iframe.html" } });
+    fireEvent.click(screen.getByRole("button", { name: "Navigate preview" }));
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("tab", { name: ":3000" }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("/settings")).toBeInTheDocument();
+      expect(iframe()?.getAttribute("src")).toBe(`${previewOrigin}/settings`);
+    });
+  });
+
   it("keeps the preview iframe mounted for unavailable sessions and disables browser controls", async () => {
     vi.mocked(usePreviewSessions).mockImplementation(() => ({
       sessions: [
@@ -565,7 +767,7 @@ describe("BrowserPage", () => {
 
     render(<BrowserPage />);
 
-    const iframe = screen.getByTitle("Preview: Project 1 - Sprint 2");
+    const iframe = screen.getByTitle("Preview: Project 1 - Sprint 2 on port 3000");
     const { protocol, port } = new URL(window.location.origin);
     expect(iframe).toBeInTheDocument();
     expect(iframe).toHaveAttribute("src", `${protocol}//preview-sess-2.localhost${port ? `:${port}` : ""}/`);

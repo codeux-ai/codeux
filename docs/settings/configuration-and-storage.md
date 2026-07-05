@@ -464,6 +464,8 @@ Container execution notes:
 - `enabled` (whether tool is visible in MCP `list_tools` and callable)
 - `isInternal` (reserved/internal metadata; currently all built-in tools are internal)
 
+`customMcpServers` contains user-configurable provider MCP servers. New and sanitized settings include a default enabled `playwright` stdio server (`npx @playwright/mcp@latest`) for local CLI providers. Settings resolution treats a user or project server with the same stable id or `playwright` name as the same seeded server, so custom edits replace the default instead of creating duplicates.
+
 Repository demo script:
 - `.code-ux/container/setup.sh` is included as a baseline bootstrap script.
 - Packaged desktop installs also ship this script as a default asset. On first use, Code UX copies it to `~/.code-ux/container/setup.sh` when that file does not already exist, so Docker can mount a normal user-directory script instead of relying on a repo checkout.

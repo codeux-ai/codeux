@@ -618,6 +618,7 @@ CREATE TABLE IF NOT EXISTS sprint_preview_sessions (
         status TEXT NOT NULL,
         host_port INTEGER,
         container_app_port INTEGER NOT NULL,
+        port_mappings_json TEXT,
         container_id TEXT,
         container_name TEXT,
         worktree_path TEXT,

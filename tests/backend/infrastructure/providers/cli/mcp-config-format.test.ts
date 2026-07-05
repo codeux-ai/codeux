@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildClaudeMcpServerEntry, buildCodexMcpServerTomlLines, escapeTomlString } from "../../../../../src/infrastructure/providers/cli/mcp-config-format.js";
+import { buildClaudeMcpServerEntry, buildCodexMcpServerTomlLines, buildProviderMcpConfigArtifact, escapeTomlString } from "../../../../../src/infrastructure/providers/cli/mcp-config-format.js";
+import { DEFAULT_PLAYWRIGHT_MCP_SERVER } from "../../../../../src/repositories/settings-defaults.js";
 
 describe("mcp-config-format injection prevention", () => {
   it("escapes quotes and backslashes in TOML strings to prevent structural injection", () => {
@@ -39,5 +40,13 @@ describe("mcp-config-format injection prevention", () => {
     expect(tomlStr).toContain('command = "node"');
     expect(tomlStr).toContain('args = ["--eval=\\"process.exit(0)\\""]');
     expect(tomlStr).toContain('"BAD\\"KEY" = "BAD\\"VALUE"');
+  });
+
+  it("renders the default Playwright MCP server as stdio provider config", () => {
+    const artifact = buildProviderMcpConfigArtifact("codex", null, [DEFAULT_PLAYWRIGHT_MCP_SERVER]);
+
+    expect(artifact?.content).toContain("[mcp_servers.playwright]");
+    expect(artifact?.content).toContain('command = "npx"');
+    expect(artifact?.content).toContain('args = ["@playwright/mcp@latest"]');
   });
 });

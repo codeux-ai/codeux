@@ -31,6 +31,8 @@ The browser preview provides an integrated environment for interacting with runn
 - Startup-script saving sets `aria-busy` on the save button and textarea and pauses editing until the save completes. Script save status is a polite live region connected through `aria-describedby`.
 - Container logs keep stale log text mounted during refresh, set `aria-busy` on the log region, and show a visible Ready/Refreshing/Error badge plus polite live-region copy.
 - Navigation pending state is a short client-side command guard. Back, forward, reload, and address submit controls announce that the navigation command is being sent; the iframe bridge does not acknowledge command completion.
+- Multi-port preview sessions render as one persisted browser session with an accessible port tablist in the browser chrome. The first container-to-host port mapping is the primary tab, tabs support pointer and arrow-key selection, and secondary tabs route through the existing selected-port proxy query while preserving a separate current path per selected port.
+- The Live Preview button uses the same mapping model outside the full browser page. Its primary click opens the primary routed port. When the session exposes additional routed ports, the adjacent arrow menu lists each port mapping so operators can open a secondary port directly; mappings that do not yet have a host port stay visible but disabled with their pending reason.
 
 ## Verification Notes
 
