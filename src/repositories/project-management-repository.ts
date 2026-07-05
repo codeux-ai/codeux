@@ -39,6 +39,18 @@ import { validateTaskDependencies } from "./project-management/task-dependency-g
 import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
 
 const SELECTED_PROJECT_KEY = "selected_project_id";
+const GENERATED_SPRINT_NAME_PREFIX = "Untitled sprint";
+
+export function createGeneratedSprintName(sprintNumber: number | null | undefined): string {
+  return typeof sprintNumber === "number" && Number.isFinite(sprintNumber)
+    ? `${GENERATED_SPRINT_NAME_PREFIX} ${Math.trunc(sprintNumber)}`
+    : GENERATED_SPRINT_NAME_PREFIX;
+}
+
+export function isGeneratedSprintName(name: string | null | undefined): boolean {
+  const trimmed = typeof name === "string" ? name.trim() : "";
+  return trimmed === GENERATED_SPRINT_NAME_PREFIX || /^Untitled sprint \d+$/.test(trimmed);
+}
 
 interface ProjectRow {
   id: string;
@@ -61,6 +73,7 @@ interface SprintRow {
   number: number | string | null;
   slug: string;
   name: string;
+  is_generated_name: number | string;
   original_prompt: string | null;
   goal: string | null;
   status: SprintRecord["status"];
@@ -324,19 +337,22 @@ export class ProjectManagementRepository {
       const number = typeof input.number === "number" && input.number > nextSprintNumber - 1
         ? input.number
         : nextSprintNumber;
-      const name = input.name.trim();
+      const userProvidedName = input.name?.trim() || "";
+      const name = userProvidedName || createGeneratedSprintName(number);
+      const isGeneratedName = userProvidedName.length === 0;
       const slug = input.slug ? input.slug.toLowerCase() : this.createUniqueSprintSlug(projectId, name);
 
       this.db.prepare(`
         INSERT INTO sprints (
-          id, project_id, number, slug, name, original_prompt, goal, status, showcase_pinned, start_date, end_date, feature_branch, base_commit_sha, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          id, project_id, number, slug, name, is_generated_name, original_prompt, goal, status, showcase_pinned, start_date, end_date, feature_branch, base_commit_sha, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id,
         projectId,
         number,
         slug,
         name,
+        Number(isGeneratedName),
         input.originalPrompt?.trim() || null,
         input.goal?.trim() || "",
         input.status || "idle",
@@ -371,18 +387,20 @@ export class ProjectManagementRepository {
       const current = this.requireSprint(sprintId);
       const now = new Date().toISOString();
       const nextName = input.name?.trim() || current.name;
+      const nextIsGeneratedName = input.name === undefined ? current.isGeneratedName : false;
       const nextSlug = input.slug
         ? input.slug.toLowerCase()
         : (nextName === current.name ? current.slug : this.createUniqueSprintSlug(current.projectId, nextName, sprintId));
 
       this.db.prepare(`
         UPDATE sprints
-        SET number = ?, slug = ?, name = ?, original_prompt = ?, goal = ?, status = ?, showcase_pinned = ?, start_date = ?, end_date = ?, feature_branch = ?, base_commit_sha = ?, updated_at = ?
+        SET number = ?, slug = ?, name = ?, is_generated_name = ?, original_prompt = ?, goal = ?, status = ?, showcase_pinned = ?, start_date = ?, end_date = ?, feature_branch = ?, base_commit_sha = ?, updated_at = ?
         WHERE id = ?
       `).run(
         input.number === undefined ? current.number : input.number,
         nextSlug,
         nextName,
+        Number(nextIsGeneratedName),
         input.originalPrompt === undefined ? current.originalPrompt : input.originalPrompt,
         input.goal === undefined ? current.goal : input.goal,
         input.status || current.status,
@@ -1180,6 +1198,7 @@ export class ProjectManagementRepository {
       number: row.number === null ? null : toNumber(row.number),
       slug: row.slug,
       name: row.name,
+      isGeneratedName: toBoolean(row.is_generated_name),
       originalPrompt: row.original_prompt || null,
       goal: row.goal || "",
       status: mapEffectiveSprintStatus(row.status, summaryAggregation.latestRunStatus),

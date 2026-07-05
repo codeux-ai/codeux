@@ -84,7 +84,7 @@ describe("DockerRunner", () => {
       sessionId: "session-1",
     });
 
-    expect(createSnapshotWorkspace).toHaveBeenCalledWith("/repo/project", "session-1");
+    expect(createSnapshotWorkspace).toHaveBeenCalledWith("/repo/project", "session-1", undefined);
     expect(result.cwd).toBe("docker-volume://snapshot-1");
     await result.cleanup();
     expect(removeWorktree).toHaveBeenCalledWith("/repo/project", "docker-volume://snapshot-1");
@@ -104,10 +104,30 @@ describe("DockerRunner", () => {
       reuseExisting: true,
     });
 
-    expect(createOrReuseSnapshotWorkspace).toHaveBeenCalledWith("/repo/project", "chat-thread-1");
+    expect(createOrReuseSnapshotWorkspace).toHaveBeenCalledWith("/repo/project", "chat-thread-1", undefined);
     expect(result.cwd).toBe("docker-volume://qwen-session-1");
     await result.cleanup();
     expect(removeWorktree).not.toHaveBeenCalled();
+  });
+
+  it("forwards snapshot checkout when preparing Docker workspaces", async () => {
+    const createOrReuseSnapshotWorkspace = vi.spyOn<any, any>(Object.getPrototypeOf((runner as any).workspaceManager), "createOrReuseSnapshotWorkspace")
+      .mockResolvedValue("docker-volume://default-branch");
+
+    await runner.ensureWorkspace({
+      cwd: "/repo/project",
+      repoPath: "/repo/project",
+      sessionId: "chat-thread-1",
+      snapshotCheckout: { branch: "develop" },
+      preserve: true,
+      reuseExisting: true,
+    });
+
+    expect(createOrReuseSnapshotWorkspace).toHaveBeenCalledWith(
+      "/repo/project",
+      "chat-thread-1",
+      { branch: "develop" },
+    );
   });
 
   it("runs providers inside isolated Docker volumes", async () => {

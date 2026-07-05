@@ -2,7 +2,7 @@ import { FunctionComponent } from "preact";
 import { useState, useEffect, useLayoutEffect, useRef } from "preact/hooks";
 import { ActionFeedbackRegion } from "../ui/ActionFeedbackRegion.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
-import { Loader2 } from "lucide-preact";
+import { Loader2, Plus, RefreshCw, SearchX } from "lucide-preact";
 
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import gsap from "gsap";
@@ -17,7 +17,11 @@ import type { MemNode } from "../../lib/memory-graph.js";
 export const MemoryList: FunctionComponent<{
     nodes: MemNode[];
     onSelectNode: (idx: number) => void;
-}> = ({ nodes, onSelectNode }) => {
+    refreshing?: boolean;
+    loadError?: string | null;
+    onRetry?: () => void;
+    onAddMemory?: () => void;
+}> = ({ nodes, onSelectNode, refreshing = false, loadError = null, onRetry, onAddMemory }) => {
     const filteredNodes = useComputed(() => {
         const query = searchQuerySignal.value;
         if (!query.trim()) {
@@ -41,17 +45,28 @@ export const MemoryList: FunctionComponent<{
     const interactionTokens = useInteractionTokens();
     const listRef = useRef<HTMLDivElement>(null);
     const selectAllRef = useRef<HTMLButtonElement>(null);
+    const lastUsefulNodes = useRef(filteredNodes.value);
     const [renderedNodes, setRenderedNodes] = useState(filteredNodes.value);
     const prevRenderedIds = useRef<Set<string>>(new Set());
     const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
 
     useEffect(() => {
+        if (filteredNodes.value.length > 0) {
+            lastUsefulNodes.current = filteredNodes.value;
+        }
+    }, [filteredNodes.value]);
+
+    useEffect(() => {
+        const nextNodes = (refreshing || loadError) && filteredNodes.value.length === 0 && lastUsefulNodes.current.length > 0
+            ? lastUsefulNodes.current
+            : filteredNodes.value;
+
         if (reducedMotion) {
-            setRenderedNodes(filteredNodes.value);
+            setRenderedNodes(nextNodes);
             return;
         }
 
-        const currentIds = new Set(filteredNodes.value.map((n: { node: MemNode }) => n.node.id));
+        const currentIds = new Set(nextNodes.map((n: { node: MemNode }) => n.node.id));
         const renderedIds = new Set(renderedNodes.map((n: { node: MemNode }) => n.node.id));
         const removedIds = Array.from(renderedIds).filter(id => !currentIds.has(id));
 
@@ -67,14 +82,14 @@ export const MemoryList: FunctionComponent<{
                     duration: gsapTokens.expansionCollapse.duration,
                     ease: gsapTokens.expansionCollapse.ease,
                     onComplete: () => {
-                        setRenderedNodes(filteredNodes.value);
+                        setRenderedNodes(nextNodes);
                     }
                 });
                 return;
             }
         }
-        setRenderedNodes(filteredNodes.value);
-    }, [filteredNodes.value, reducedMotion, renderedNodes, gsapTokens.expansionCollapse.duration, gsapTokens.expansionCollapse.ease]);
+        setRenderedNodes(nextNodes);
+    }, [filteredNodes.value, refreshing, loadError, reducedMotion, renderedNodes, gsapTokens.expansionCollapse.duration, gsapTokens.expansionCollapse.ease]);
 
     useEffect(() => {
         const visibleIds = new Set(filteredNodes.value.map(({ node }) => node.id));
@@ -137,6 +152,8 @@ export const MemoryList: FunctionComponent<{
     const mutationFeedback = memoryMutationsSignal.value.feedback;
     const isDeleting = mutationFeedback?.status === "pending" && Boolean(mutationFeedback.message?.toLowerCase().includes("deleting"));
     const countLabel = `${resultCount} ${resultCount === 1 ? "memory" : "memories"} shown`;
+    const isShowingStaleResults = (refreshing || Boolean(loadError)) && filteredNodes.value.length === 0 && renderedNodes.length > 0;
+    const query = searchQuerySignal.value.trim();
     const selectionLabel = selectedCount > 0
         ? `${selectedCount} ${selectedCount === 1 ? "memory" : "memories"} selected`
         : "No memories selected";
@@ -170,8 +187,7 @@ export const MemoryList: FunctionComponent<{
 
     if (renderedNodes.length === 0) {
         const isEmpty = totalAliveCount === 0;
-        const message = isEmpty ? "No memories exist" : "No memories match your search or filters";
-        const query = searchQuerySignal.value.trim();
+        const message = loadError ? "Memory list could not refresh" : isEmpty ? "No memories exist" : "No memories match your search or filters";
         return (
             <div
                 id="memory-panel"
@@ -180,12 +196,55 @@ export const MemoryList: FunctionComponent<{
                 role="listbox"
                 aria-label="Memory List"
             >
-                <div className="sr-only" aria-live="polite" aria-atomic="true">
+                <div className="sr-only" aria-live={loadError ? "assertive" : "polite"} aria-atomic="true">
                     <span>{message}</span>
                     <span>. Showing 0 of {totalAliveCount} memories.</span>
                 </div>
+                {loadError ? (
+                    <RefreshCw className="mb-2 h-7 w-7 text-status-red/70" aria-hidden="true" />
+                ) : (
+                    <SearchX className="mb-2 h-7 w-7 text-slate-400/70" aria-hidden="true" />
+                )}
                 <p className="max-w-full break-words text-sm font-medium">{message}</p>
-                {!isEmpty && (
+                <p className="mt-2 max-w-full break-words text-xs font-medium text-slate-400 dark:text-slate-500">
+                    {loadError
+                        ? loadError
+                        : isEmpty
+                            ? "Add a memory manually or run a sprint that captures project context."
+                            : `Clear the search or adjust filters to return to the previous result set${query ? ` for "${query}"` : ""}.`}
+                </p>
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                    {loadError && onRetry && (
+                        <button
+                            type="button"
+                            onClick={onRetry}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-status-red/20 bg-status-red/[0.08] px-3 py-1.5 text-[11px] font-bold text-status-red transition-colors hover:bg-status-red/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900"
+                        >
+                            <RefreshCw size={13} aria-hidden="true" />
+                            Retry
+                        </button>
+                    )}
+                    {!loadError && !isEmpty && query && (
+                        <button
+                            type="button"
+                            onClick={() => { searchQuerySignal.value = ""; }}
+                            className="rounded-lg border border-black/[0.06] bg-black/[0.04] px-3 py-1.5 text-[11px] font-bold text-slate-500 transition-colors hover:bg-black/[0.08] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white dark:focus-visible:ring-offset-void-900"
+                        >
+                            Clear search
+                        </button>
+                    )}
+                    {!loadError && isEmpty && onAddMemory && (
+                        <button
+                            type="button"
+                            onClick={onAddMemory}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-signal-500/20 bg-signal-500/[0.1] px-3 py-1.5 text-[11px] font-bold text-signal-600 transition-colors hover:bg-signal-500/[0.16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:text-signal-300 dark:focus-visible:ring-offset-void-900"
+                        >
+                            <Plus size={13} aria-hidden="true" />
+                            Add memory
+                        </button>
+                    )}
+                </div>
+                {!isEmpty && !loadError && (
                     <p className="mt-2 max-w-full break-words text-xs font-medium text-slate-400 dark:text-slate-500">
                         Showing 0 of {totalAliveCount} memories{query ? ` for "${query}"` : ""}
                     </p>
@@ -206,6 +265,8 @@ export const MemoryList: FunctionComponent<{
             <div id="memory-list-status" className="sr-only" aria-live="polite" aria-atomic="true">
                 {countLabel}
                 {searchQuerySignal.value.trim() ? ` for ${searchQuerySignal.value.trim()}` : ""}
+                {refreshing ? ". Refreshing results." : ""}
+                {loadError ? `. Could not refresh results. Showing the last useful result list.` : ""}
             </div>
             <div id="memory-list-selection-status" className="sr-only" aria-live="polite" aria-atomic="true">
                 {selectionLabel}
@@ -217,6 +278,33 @@ export const MemoryList: FunctionComponent<{
                         {searchQuerySignal.value.trim() ? ` for "${searchQuerySignal.value.trim()}"` : ""}
                     </span>
                 </div>
+                {(refreshing || loadError || isShowingStaleResults) && (
+                    <div
+                        className={`flex max-w-full items-start gap-2 rounded-lg border px-2.5 py-2 text-[11px] font-semibold leading-4 ${
+                            loadError
+                                ? "border-status-red/20 bg-status-red/[0.08] text-status-red"
+                                : "border-signal-500/18 bg-signal-500/[0.08] text-signal-700 dark:text-signal-300"
+                        }`}
+                        role={loadError ? "alert" : "status"}
+                        aria-live={loadError ? "assertive" : "polite"}
+                    >
+                        <RefreshCw size={13} className={refreshing && !loadError ? "mt-0.5 shrink-0 motion-safe:animate-spin" : "mt-0.5 shrink-0"} aria-hidden="true" />
+                        <span className="min-w-0 break-words">
+                            {loadError
+                                ? `Could not refresh memories. Showing the last useful result list. ${loadError}`
+                                : "Refreshing memories. Keeping the last useful result list visible."}
+                        </span>
+                        {loadError && onRetry && (
+                            <button
+                                type="button"
+                                onClick={onRetry}
+                                className="ml-auto shrink-0 rounded-md border border-status-red/25 px-2 py-0.5 text-[10px] font-bold transition-colors hover:bg-status-red/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900"
+                            >
+                                Retry
+                            </button>
+                        )}
+                    </div>
+                )}
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <button
                         ref={selectAllRef}

@@ -96,6 +96,83 @@ describe("CycleStateCoordinator", () => {
       expect(openedItems[1].taskId).toBe("rec-2");
     });
 
+    it("does not convert CI merge waits into human-owned CI-fix attention", async () => {
+      const deps = {
+        projectAttentionService: {
+          openItems: vi.fn(),
+          resolveItems: vi.fn(),
+        },
+      } as any;
+
+      const coordinator = new CycleStateCoordinator(deps);
+      const subtasks = [
+        {
+          id: "task-1",
+          record_id: "rec-1",
+          title: "Task 1",
+          prompt: "Prompt 1",
+          status: "CODING_COMPLETED",
+          merge_indicator: "CI",
+          pr_url: "https://example.com/pr/1",
+        },
+      ] as any[];
+      const protocolResult = {
+        awaitingMerge: subtasks,
+        actionRequiredTasks: [] as any[],
+      };
+      const args = {
+        executionContext: {
+          project: { id: "proj-1" },
+          sprint: { id: "sprint-1" },
+        },
+        sprintRunId: "run-1",
+        defaultFeatureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+        repoPath: "/repo",
+        ciIntelligence: {
+          resolveMergeConflicts: false,
+        },
+      } as any;
+
+      await coordinator.syncProtocolAttentionItems(
+        subtasks,
+        protocolResult,
+        args,
+        {
+          available: true,
+          openPullRequests: [
+            {
+              number: 1,
+              url: "https://example.com/pr/1",
+              headRefName: "worker/task-1",
+              mergeStateStatus: "CLEAN",
+            },
+          ],
+        } as any,
+        new Set(),
+      );
+
+      expect(deps.projectAttentionService.openItems).toHaveBeenCalledWith([
+        expect.objectContaining({
+          attentionType: "merge_required",
+          ownerType: "worker",
+          severity: "medium",
+          title: "Merge required for task-1",
+          taskId: "rec-1",
+          payload: expect.objectContaining({
+            mergeIndicator: "CI",
+            prNumber: 1,
+          }),
+        }),
+      ]);
+      expect(deps.projectAttentionService.resolveItems).toHaveBeenCalledWith(expect.arrayContaining([
+        {
+          filter: { projectId: "proj-1", taskId: "rec-1", attentionTypes: ["merge_conflict"] },
+          resolution: { status: "resolved", reason: "merge_required_attention_replaced" },
+        },
+      ]));
+    });
+
     it("includes the resolved session id on action_required payloads so the virtual worker can intervene", async () => {
       const deps = {
         projectAttentionService: {

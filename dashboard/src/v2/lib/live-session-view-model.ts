@@ -495,7 +495,7 @@ export function deriveLiveTransportBannerViewModel(args: {
     return {
       isVisible: true,
       title: "Disconnected",
-      message: "Lost connection to the live stream. Retrying...",
+      message: "Lost connection to the live stream. Cached runtime data remains visible while retrying.",
       wrapperClass: "bg-status-red/10 border-status-red/20 text-status-red",
       iconClass: "text-status-red",
       icon: "disconnected",
@@ -510,7 +510,7 @@ export function deriveLiveTransportBannerViewModel(args: {
     return {
       isVisible: true,
       title: "Reconnecting",
-      message: "Attempting to restore connection...",
+      message: "Attempting to restore connection. Cached runtime data remains visible.",
       wrapperClass: "bg-status-amber/10 border-status-amber/20 text-status-amber",
       iconClass: "text-status-amber",
       icon: "reconnecting",

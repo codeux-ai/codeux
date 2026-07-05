@@ -182,7 +182,7 @@ const AppLayout = () => {
     applyAppearanceSettings({ zoomLevel });
   }, [zoomLevel]);
 
-  const navMode = appearanceSettings?.navigationMode || "DOCK";
+  const navMode = appearanceSettings?.navigationMode || "SIDEBAR";
   const showSidebar = isMobile || navMode === "SIDEBAR";
 
   return (

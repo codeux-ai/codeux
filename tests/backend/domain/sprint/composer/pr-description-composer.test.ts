@@ -82,6 +82,7 @@ const baseSprintInput: SprintPrComposerInput = {
     { id: "task-1", title: "Add rate limiting", provider: "claude-code", model: "claude-opus-4-6", prUrl: "https://github.com/x/y/pull/1", completed: true },
     { id: "task-2", title: "Add retry queue", provider: "codex", model: "gpt-6-codex", completed: false },
   ],
+  linkedIssues: [],
   planning: {
     provider: "claude-code",
     model: "claude-opus-4-6",
@@ -262,6 +263,70 @@ describe("composeSprintPrBody", () => {
     const body = composeSprintPrBody(baseSprintInput);
     expect(body).toContain("- [x] **task-1**: Add rate limiting — `claude-code` ([PR](https://github.com/x/y/pull/1))");
     expect(body).toContain("- [ ] **task-2**: Add retry queue — `codex`");
+  });
+
+  it("omits the linked issues section when the sprint has no linked issues", () => {
+    const body = composeSprintPrBody(baseSprintInput);
+    expect(body).not.toContain("### 🔗 Linked Issues");
+  });
+
+  it("renders every linked Jira ticket with the stored Jira URL", () => {
+    const body = composeSprintPrBody({
+      ...baseSprintInput,
+      linkedIssues: [
+        {
+          provider: "jira",
+          issueKey: "OPS-123",
+          issueNumber: 123,
+          title: "Fix import status copy",
+          url: "https://jira.example.test/browse/OPS-123",
+        },
+        {
+          provider: "jira",
+          issueKey: "OPS-124",
+          issueNumber: 124,
+          title: "Clarify completion handoff",
+          url: "https://jira.example.test/browse/OPS-124",
+        },
+      ],
+    });
+
+    expect(body).toContain("### 🔗 Linked Issues");
+    expect(body).toContain("- **Jira** [OPS-123](https://jira.example.test/browse/OPS-123): Fix import status copy");
+    expect(body).toContain("- **Jira** [OPS-124](https://jira.example.test/browse/OPS-124): Clarify completion handoff");
+  });
+
+  it("renders mixed Jira, GitHub, and GitLab linked issues", () => {
+    const body = composeSprintPrBody({
+      ...baseSprintInput,
+      linkedIssues: [
+        {
+          provider: "jira",
+          issueKey: "OPS-123",
+          issueNumber: 123,
+          title: "Fix import status copy",
+          url: "https://jira.example.test/browse/OPS-123",
+        },
+        {
+          provider: "github",
+          issueKey: "#42",
+          issueNumber: 42,
+          title: "Restore completion note",
+          url: "https://github.example.test/example/app/issues/42",
+        },
+        {
+          provider: "gitlab",
+          issueKey: "!7",
+          issueNumber: 7,
+          title: "Tighten merge gate wording",
+          url: "https://gitlab.example.test/example/app/-/issues/7",
+        },
+      ],
+    });
+
+    expect(body).toContain("- **Jira** [OPS-123](https://jira.example.test/browse/OPS-123): Fix import status copy");
+    expect(body).toContain("- **GitHub** [#42](https://github.example.test/example/app/issues/42): Restore completion note");
+    expect(body).toContain("- **GitLab** [!7](https://gitlab.example.test/example/app/-/issues/7): Tighten merge gate wording");
   });
 
   for (const key of Object.keys(ALL_SPRINT_SECTIONS_ON) as Array<keyof SprintPrComposerInput["sections"]>) {

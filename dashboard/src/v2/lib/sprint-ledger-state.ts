@@ -8,6 +8,16 @@ export interface LedgerSort {
   direction: SprintTableSortDirection;
 }
 
+export const SPRINT_TABLE_SORT_LABELS: Record<SprintTableSortKey, string> = {
+  showcasePinned: "Showcase",
+  sprintKey: "Sprint ID",
+  name: "Sprint",
+  status: "Status",
+  tasksCount: "Tasks",
+  completion: "Completion",
+  createdAt: "Created",
+};
+
 export type SprintShowcaseFilter = "all" | "pinned" | "unpinned";
 export type SprintQaFilter = "all" | "missing" | "running" | "reviewed";
 
@@ -241,6 +251,15 @@ export function getBulkActionMessage(action: BulkLedgerAction, selectedCount: nu
   }
   const verb = action === "delete" ? "Delete" : action === "start" ? "Start" : action === "pin" ? "Pin" : "Unpin";
   return `${verb} will apply to ${suffix}.`;
+}
+
+export function getSortAriaSort(sort: LedgerSort, key: SprintTableSortKey): "none" | "ascending" | "descending" {
+  if (sort.key !== key) return "none";
+  return sort.direction === "asc" ? "ascending" : "descending";
+}
+
+export function getSortButtonLabel(sort: LedgerSort, key: SprintTableSortKey): string {
+  return `Sort by ${SPRINT_TABLE_SORT_LABELS[key]}`;
 }
 
 /**

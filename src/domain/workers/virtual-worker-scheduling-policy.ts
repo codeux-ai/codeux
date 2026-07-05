@@ -102,7 +102,7 @@ export function peekNextWorkerAttention(
     }
 
     if (item.attentionType === "ci_fix_required") {
-      return settings.ciIntelligence.waitForJulesCiAutofix;
+      return true;
     }
 
     if (item.attentionType === "action_required") {

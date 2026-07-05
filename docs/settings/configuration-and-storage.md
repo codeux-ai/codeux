@@ -188,7 +188,7 @@ Dashboard behavior:
 - the v2 settings page includes a quick-find field (keyboard shortcut `/`) that filters categories without changing the scoped settings model. Smart Find uses a centralized typed settings search index spanning category metadata, provider and integration labels, invocation routes, instruction templates, and important field synonyms, so provider searches such as `claude` surface both AI model routing and Integrations matches with visible match context. The search UI announces live result counts, active-category match previews, no-match recovery suggestions, and keyboard-friendly quick category chips.
 - settings scope selection is a radiogroup with explicit selected state and disabled project-scope guidance when no project is selected. Save, project reset, dirty, saved, and error states are announced in the active settings panel while visible form values stay mounted during pending operations.
 - Settings category transitions use shared interaction motion tokens and snap directly to the selected category for reduced-motion users, avoiding intermediate fade states.
-- settings field controls expose field-level confidence through error text and ready-to-save cues where validation is available. The unsaved-changes dialog keeps focus inside the modal, exposes save/discard pending states, and labels discard as dropping pending edits without saving.
+- settings field controls expose field-level confidence through error text and ready-to-save cues where validation is available. Single-choice pill controls keep radiogroup/radio semantics and wire helper, valid, pending, and error copy through `aria-describedby`, `aria-errormessage`, and `aria-busy` instead of relying on visual styling alone. The unsaved-changes dialog keeps focus inside the modal, exposes save/discard pending states, and labels discard as dropping pending edits without saving.
 - dashboard theme selection is unified through `dashboard/src/v2/hooks/useThemeSetting.ts`: both the top-nav theme toggle and Settings > Appearance theme control persist through `saveSystemSettings` and react to the same `codeux:settings-updated` event stream.
 - the main settings editor is composed of smaller panel modules for better maintainability (e.g., automation, provider, worker, QA controls) instead of one monolithic component.
 - AI provider configuration and catalog metadata are centralized in `settings-view-models.ts` instead of directly within the editor.
@@ -202,6 +202,7 @@ Dashboard behavior:
   - project and sprint scopes edit GitHub auth-copy mounts plus Docker git identity; copying the local `.gitconfig` is available as an opt-in replacement for the editable identity fields
 - Jira integration settings include the site URL, account email, API token, default project key used by sprint import JQL, close transition name, and a Jira-specific linked-issue auto-close toggle. Effective dashboard settings project this system-owned Jira connection into `settings.jira` for Jira search, issue context loading, and completion transitions.
 - integration and AI model provider tiles use vendored, pinned Lobe Icons SVG brand marks for Jules/Google, Gemini, Codex, Claude, Qwen, OpenCode, GitHub, and GitLab identity; Jira uses the in-app Jira mark.
+- provider instance cards keep draft-only feedback visible for display-name edits, auth-mode changes, enable/disable changes, dashboard-login completion, and remove confirmation state until the next local provider change or settings reload. Removing a provider instance uses an explicit local confirmation state with Cancel and Confirm actions, restores focus on cancel, and reminds operators that Save Changes is still required to persist the removal.
 
 `aiProvider` contains:
 - `provider` (`ProviderConfigId|null`)
@@ -271,7 +272,7 @@ Dashboard behavior:
 
 `automationInterventions` contains:
 - `autoApprovePlan` (default `true`): auto-approve `AWAITING_PLAN_APPROVAL` sessions in `SEMI_AUTO`
-- `autoAnswerClarification` (default `false`): auto-answer `AWAITING_USER_FEEDBACK` sessions in `SEMI_AUTO`
+- `autoAnswerClarification` (default `false`): auto-answer Jules `AWAITING_USER_FEEDBACK` sessions in `SEMI_AUTO`; dashboard controls live under Settings -> Integrations -> Jules because this path sends replies back to the Jules session.
 - `autoResumePaused` (default `false`): auto-send resume nudge for `PAUSED` sessions in `SEMI_AUTO`
 - `clarificationAnswerTemplate`: default response body used for clarification auto-replies
 - `clarificationCooldownSeconds` (default `300`): retained as the unresolved-clarification escalation window, while clarification dedupe keys off the latest clarification content and Jules activity identity. Once Code UX starts answering a specific clarification request, repeated cycles skip starting or sending another answer for the same question until Jules emits a different clarification prompt or a new non-user activity. If a user reply exists after the latest Jules request, cooldown escalation is suppressed so the task stays agent-owned while Jules processes the response.
@@ -442,8 +443,8 @@ Container execution notes:
 - when `featurePrAutoMergeMode = "WHEN_GREEN"` but a matched feature PR has no checks, Code UX inspects local `.github/workflows/*.yml` files and skips CI waiting only when it can confidently determine that no `pull_request` or `pull_request_target` workflow applies to that PR base branch.
 - feature PR review blocking treats `CHANGES_REQUESTED` as authoritative and no longer blocks solely because GitHub reports incidental PR comments while `reviewDecision` is empty. This avoids Jules bot introduction comments holding otherwise merge-ready task PRs.
 - remote GitHub polling keeps recorded task PR URLs in scope for merged-PR filtering and asks GraphQL for the maximum merged-PR page size, so older merged task PRs can still settle their tasks instead of falling back to an endless merge-required state.
-- `waitForJulesCiAutofix` (default `false`): when enabled with `featurePrAutoMergeMode = "WHEN_GREEN"`, completed tasks stay in work status while feature PR checks are pending/failed so Jules can apply CI autofix before merge.
-- `julesCiAutofixMaxRetries` (default `3`, clamped to `0..20`): max Jules CI autofix notify attempts before escalation to intervention (`FULL -> AGENT`, `SEMI_AUTO/ALWAYS_ASK -> HUMAN`) with explicit task IDs, PR links, and failed check names.
+- `waitForJulesCiAutofix` (default `false`): shown under Settings -> Integrations -> Jules. When enabled with `featurePrAutoMergeMode = "WHEN_GREEN"`, failed feature-PR checks on Jules-managed tasks are first sent back to the existing Jules session with CI context. When disabled, Code UX skips that Jules-specific notification path and dispatches a worker-owned `ci_fix_required` item instead. Pending/failed CI still keeps the task in work status until checks clear or guardrails escalate.
+- `julesCiAutofixMaxRetries` (default `3`, clamped to `0..20`): shown under Settings -> Integrations -> Jules. Max CI autofix attempts before escalation to intervention (`FULL -> AGENT`, `SEMI_AUTO/ALWAYS_ASK -> HUMAN`) with explicit task IDs, PR links, and failed check names. The retry cap applies to the CI-fix guardrail whether the attempt is a Jules session notification or a worker repair.
 - `featurePrAutoMergeMode` (default `"ALWAYS"`):
   - `"OFF"`: no feature PR auto-merge
   - `"CREATE_PR"`: open or reuse the feature PR, then stop before auto-merge and mark the task settled with `PR_ONLY`
@@ -472,7 +473,7 @@ Repository demo script:
   - workspace and runtime volumes are created with deterministic Code UX names and labels; fresh provider containers should not create anonymous Docker volumes
   - write-back happens via Git patch artifacts applied on the host, not direct file sync from the container
   - patch export preserves raw `git diff --binary` output byte-for-byte so whitespace-only EOF hunks and `\ No newline at end of file` markers still apply cleanly on the host branch
-  - patch export still excludes legacy `/workspace/.code-ux-home` paths as a defense-in-depth guard for older preserved volumes, but fresh Docker workspaces should not contain provider home/cache state
+  - patch export still excludes legacy `/workspace/.code-ux-home` paths and root `/workspace/.pnpm-store` package-cache paths as a defense-in-depth guard for older preserved volumes, and untracked export staging asks Git to discover paths internally so large file sets do not exceed Docker command-line limits; fresh Docker workspaces should not contain provider home/cache state
   - the remaining persistent Docker-side cache is the optional setup-image cache, not per-session provider home directories under `~/.code-ux/runtime/docker`
 - If setup script is missing or does not provide the requested provider CLI, the runner attempts a provider-specific fallback install (`gemini`, `codex`, or `claude`) before failing.
   - CLI model settings continue to flow into Docker-backed providers:

@@ -238,9 +238,9 @@ describe("SprintsPage Integration Regressions", () => {
     render(<SprintsPage />);
 
     // SprintControls disable states check
-    const resumeBtn = screen.getByRole('button', { name: /Resuming/i });
+    const resumeBtn = screen.getByRole('button', { name: /Resume sprint 3 is pending/i });
     expect(resumeBtn).toBeDisabled();
-    expect(resumeBtn).toHaveAttribute('title', 'Wait for the current action to finish');
+    expect(resumeBtn).toHaveAttribute('title', 'Wait for the current sprint action to finish');
   });
 
   it("disables the row actions menu trigger when a delete is pending", async () => {

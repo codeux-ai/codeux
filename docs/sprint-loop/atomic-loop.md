@@ -91,6 +91,7 @@ If `action=plan`:
 - Creates subtask directory if missing.
 - Optionally injects `sprint_agent_guide.md`.
 - Returns templated planning instructions.
+- Planning may apply a provider-suggested sprint title only when the sprint was explicitly stored as generated/auto-named at creation time. Placeholder-looking custom titles such as `Untitled sprint 1` are treated as user titles and are not writable by planning.
 
 ### 4. Orchestration cycle
 For `status` and `orchestrate`, each cycle can run:
@@ -125,6 +126,7 @@ For `status` and `orchestrate`, each cycle can run:
   - open PR back to sprint feature branch
   - track state and activity in sqlite
 - CLI task dispatch carries two task identities through the runtime: the human task key (`T01`, `T02`, ...) stays in branch names, titles, prompts, and task-run tags, while repository/execution lookups use the persisted task record id (`record_id`). Workspace resume targets, task runs, dispatches, and provider invocations must use the record id so normal planned sprint tasks can resume from the correct Docker workspace volume after cancellation or restart.
+- CLI workspace patch export discovers untracked files with Git's `--exclude-standard` filtering, then intent-to-adds only those non-ignored paths in bounded batches before diffing. Ignored workspace caches such as `.pnpm-store`, provider runtime homes, and transient export indexes are export noise and must not turn a completed/no-change provider run into a failed dispatch.
 
 5. Build protocol instructions
 - `protocol-step.ts`
@@ -207,12 +209,13 @@ For `action=status`:
 - Before creating the final `feature -> default` merge PR, Code UX now verifies that the configured default branch exists on `origin`. If it is missing, Code UX creates it from the repository's actual `origin/HEAD` branch, pushes it, and then creates the final PR against the configured target.
 - Main-branch PR creation failures are logged and surfaced in the final merge gate feedback instead of being reduced to an unexplained missing-PR wait state.
 - When the watch loop waits or exits at the final main-merge gate, the dashboard status snapshot is republished with the finalization report so operators can see the current blocker without waiting for a later cycle.
-- If `waitForJulesCiAutofix` is enabled and feature PR checks fail, the sprint loop notifies the Jules session with failed-check context, matched failed run ids/URLs, failed job names, and failed-job log excerpts (when available), then keeps the task in work state.
-- CI autofix retries are capped by `julesCiAutofixMaxRetries`; once exhausted, the task is escalated as intervention-needed with exact task id, PR URL, failed check names, failed run summary, and failed job names (focus: fix CI before merge).
+- If feature PR checks fail, the sprint loop keeps the task in work state and enters the CI-fix guardrail path. When `waitForJulesCiAutofix` is enabled for a Jules-managed task, Code UX first notifies the Jules session with failed-check context, matched failed run ids/URLs, failed job names, and failed-job log excerpts (when available). When that toggle is disabled, or the task is not Jules-managed, Code UX skips the Jules notification and dispatches a worker-owned `ci_fix_required` item.
+- CI autofix retries are capped by `julesCiAutofixMaxRetries`; once exhausted, the task is escalated as intervention-needed with exact task id, PR URL, failed check names, failed run summary, and failed job names (focus: fix CI before merge). The cap applies to the generic CI-fix loop, including worker repairs.
 - Worker-owned CI autofix attempts are de-duplicated across watch-loop cycles. While a matching `ci_fix_required` attention item is still open or claimed, Code UX treats that attempt as in-flight, keeps the task in `RUNNING`, and does not consume another retry until the worker attempt resolves.
 - Watch-loop regression coverage now locks the idempotency contract for repeated cycles over the same sprint state: no duplicate task dispatch, QA review, CI autofix worker attention, or attention item should be created while the prior cycle's work remains active.
 - Provider failures are evaluated before stale PR/session artifacts can settle a task. A failed or cancelled provider session with old PR metadata is reset to retryable `PENDING` when dependencies are satisfied, or `BLOCKED` when dependency policy requires waiting.
 - Task QA gate states remain fail-closed at the merge boundary. `changes_requested`, stale/running QA, and exhausted review budget states keep the task in `CODING_COMPLETED` with `QA_PENDING` at the feature PR gate and must not auto-merge or start a new worker branch unless a later rerun/reset produces fresh code-complete work.
+- Human/agent intervention is opened only after the CI-fix guardrail is exhausted; disabling the Jules notification toggle must not disable worker CI repair.
 
 ## Files and Data Used
 

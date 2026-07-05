@@ -165,15 +165,15 @@ interface ImportIssuesResult {
 }
 
 function normalizeCreateSprintInput(payload: Record<string, unknown>): CreateSprintInput {
-  const input: CreateSprintInput = {
-    name: readRequiredStringAlias(payload, "name", "title"),
-  };
+  const input: CreateSprintInput = {};
+  const name = parseOptionalStringAlias(payload, "name", "title");
   const originalPrompt = parseOptionalNullableString(payload, "originalPrompt");
   const goal = parseOptionalStringAlias(payload, "goal", "goalMarkdown");
   const slug = readString(payload, "slug");
   const status = parseOptionalEnumStrict(payload, "status", VALID_SPRINT_STATUSES);
   const linkedIssues = normalizeLinkedIssues(payload.linkedIssues);
 
+  if (name) input.name = name;
   if (originalPrompt !== undefined) input.originalPrompt = originalPrompt;
   if (goal !== undefined || linkedIssues) input.goal = mergePromptWithLinkedIssues(goal || "", linkedIssues || []);
   if (typeof payload.number === "number") input.number = payload.number;

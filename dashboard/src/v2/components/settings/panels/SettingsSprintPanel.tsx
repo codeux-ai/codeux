@@ -303,18 +303,6 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
             }))}
           />
         </Row>
-        <Row label="Jules CI autofix" description="Allow Jules to attempt CI autofixes before escalating to a worker." badge={getFieldBadge("ciIntelligence.waitForJulesCiAutofix")}>
-          <Toggle aria-label="Toggle setting"             value={editableSettings.git.githubMode === "LOCAL" ? false : editableSettings.ciIntelligence.waitForJulesCiAutofix}
-            disabled={editableSettings.git.githubMode === "LOCAL"}
-            onChange={() => updateEditableSettings((current) => ({
-              ...current,
-              ciIntelligence: {
-                ...current.ciIntelligence,
-                waitForJulesCiAutofix: !current.ciIntelligence.waitForJulesCiAutofix,
-              },
-            }))}
-          />
-        </Row>
         <Row label="Feature PR auto-merge mode" description="Controls whether feature PRs stay at PR creation, auto-merge when green, auto-merge immediately when allowed, or stay off." badge={getFieldBadge("ciIntelligence.featurePrAutoMergeMode")}>
           <PillChoiceGroup
             value={editableSettings.git.githubMode === "LOCAL" ? "OFF" : editableSettings.ciIntelligence.featurePrAutoMergeMode}

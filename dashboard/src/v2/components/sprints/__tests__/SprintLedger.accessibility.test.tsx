@@ -24,11 +24,12 @@ const mockSprint: Sprint = {
   endDate: null,
   featureBranch: null,
   baseCommitSha: null,
-    latestReview: undefined,
+  latestReview: undefined,
   id: "sprint-1",
   number: 1,
   slug: "spr-1",
   name: "Frontend Onboarding",
+  isGeneratedName: false,
   status: "running",
   goal: "Onboard new developers",
   tasksCount: 10,
@@ -136,16 +137,16 @@ describe("SprintLedger Accessibility", () => {
       />
     );
 
-    const createdBtns = screen.getAllByRole("button", { name: /Sort by Created, currently sorted/i });
+    const createdBtns = screen.getAllByRole("button", { name: /Sort by Created/i });
     const createdBtn = createdBtns[0];
     expect(createdBtn).toBeInTheDocument();
 
     const activeCell = createdBtn.closest("th");
     expect(activeCell).toHaveAttribute("aria-sort", "descending");
 
-    const nameBtns = screen.getAllByRole("button", { name: /Sort by Sprint, currently unsorted/i });
+    const nameBtns = screen.getAllByRole("button", { name: /Sort by Sprint/i });
     const inactiveCell = nameBtns[0].closest("th");
-    expect(inactiveCell).not.toHaveAttribute("aria-sort");
+    expect(inactiveCell).toHaveAttribute("aria-sort", "none");
 
     await user.click(nameBtns[0]);
     expect(inactiveCell).toHaveAttribute("aria-sort", "ascending");

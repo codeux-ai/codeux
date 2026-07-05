@@ -117,6 +117,7 @@ describe("settings-sanitizer", () => {
     expect(settings.consoleLogMode).toBe("standard");
     expect(settings.automationLevel).toBe("SEMI_AUTO");
     expect(settings.automationInterventions.autoApprovePlan).toBe(true);
+    expect(settings.appearance.navigationMode).toBe("SIDEBAR");
     expect(settings.aiProvider.provider).toBe("jules");
     expect(settings.git.githubMode).toBe("REMOTE");
     expect(settings.ciIntelligence.waitForJulesCiAutofix).toBe(false);
@@ -152,6 +153,7 @@ describe("settings-sanitizer", () => {
   it("preserves valid appearance background image and pattern settings", () => {
     const settings = sanitizeSettings({
       appearance: {
+        navigationMode: "DOCK",
         backgroundMode: "STATIC",
         animatedBackground: "neon-dreams",
         staticBackgroundColor: "#123456",
@@ -160,6 +162,7 @@ describe("settings-sanitizer", () => {
       },
     });
 
+    expect(settings.appearance.navigationMode).toBe("DOCK");
     expect(settings.appearance.backgroundMode).toBe("STATIC");
     expect(settings.appearance.animatedBackground).toBe("neon-dreams");
     expect(settings.appearance.staticBackgroundColor).toBe("#123456");

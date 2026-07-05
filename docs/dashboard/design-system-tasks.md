@@ -24,6 +24,8 @@ The Tasks page and Kanban board should feel like a 'Refined Production Board'. I
     *   Completed: Green accent (`bg-status-green/[0.08] text-status-green`).
     *   In Progress/Ready: Signal (cyan) accent (`bg-signal-500/[0.08] text-signal-500`).
     *   Blocked/Pending: Muted slate (`bg-slate-400/[0.08] text-slate-500`).
+    *   Unknown dependency records must render a visible `Unknown` label with dashed neutral styling, not only a missing color state.
+    *   QA-failed dependencies must use error semantics and visible `QA failed` copy, while pending dependencies use a visible `Blocked` label and warning semantics.
 *   **Execution Meta:** Use distinct but subtle icons (Cpu, User) and uniform spacing.
 
 ## 4. Compose & Edit Affordances (Modals/Composers)
@@ -33,6 +35,7 @@ The Tasks page and Kanban board should feel like a 'Refined Production Board'. I
 
 ## 5. General Rules
 *   **Accessibility:** Preserve `focus-visible` styles on all interactive elements. Use `sr-only` text for screen readers where visual data is primarily conveyed via color or icons. Task cards must use `aria-live="polite"` regions to announce status changes (optimistic, pending, QA review). Keyboard reordering is not currently supported; if draggable elements are pointer-only, this must be explicitly stated in `.sr-only` text. All hover-revealed action controls must become visible and reachable on keyboard focus (`focus-within`). For row-level action controls, always include the specific item's name or identifier in the `aria-label` and `title` attributes.
+*   **Pending Actions:** Task card and active-stream row controls must suppress duplicate activation while pending or disabled. Expose the target task and reason through native `disabled` where possible, `aria-busy`, `aria-describedby`, visible or screen-reader-readable reason text, and stable hit-target dimensions.
 *   **Layout Constraints:** When configuring responsive grids for dense content like Kanban boards, default to a single-column layout on mobile and delay switching to multiple columns until larger viewports (e.g., `lg:` or `xl:` breakpoints) to ensure individual columns remain wide enough to be readable.
 *   **Motion:** Respect `isReducedMotion` or `prefers-reduced-motion` for hover elevations and transitions. Task cards use `controlFeedback` for local actions/status affordances and `listReorder` for card movement; reduced motion must retain static status badges, QA/dependency copy, edit/delete actions, PR/live metadata, and the drag-disabled message.
 *   **Responsiveness:** Use responsive wrapping (`flex-wrap`) on control bars and footers to ensure labels, metadata, controls, and PR links do not overlap or break layout on narrow viewports. Ensure dropdowns and text elements use `min-w-0` and `truncate` or `break-words` safely so they don't blow out the viewport or board layout. Kanban columns should collapse to a single column on phones and only switch to two columns on larger viewports when readable (e.g. `lg:grid-cols-2`).

@@ -195,4 +195,63 @@ describe("MemoryList", () => {
         expect(getByText(/Showing 1 of 2 memories/)).toBeInTheDocument();
         expect(getByText(/1 memory shown/)).toHaveClass("sr-only");
     });
+
+    test("keeps the last useful result list visible during refresh", () => {
+        const { getByText, queryByText, rerender } = render(
+            <MemoryList
+                nodes={[buildNode({ id: "memory-1", content: "Alpha project memory" })]}
+                onSelectNode={vi.fn()}
+            />
+        );
+
+        expect(getByText("Alpha project memory")).toBeInTheDocument();
+
+        rerender(
+            <MemoryList
+                nodes={[]}
+                onSelectNode={vi.fn()}
+                refreshing={true}
+            />
+        );
+
+        expect(getByText("Alpha project memory")).toBeInTheDocument();
+        expect(getByText("Refreshing memories. Keeping the last useful result list visible.")).toBeInTheDocument();
+        expect(queryByText("No memories exist")).toBeNull();
+    });
+
+    test("shows recovery copy and retry action when refresh fails", () => {
+        const onRetry = vi.fn();
+        const { getByRole, getByText } = render(
+            <MemoryList
+                nodes={[]}
+                onSelectNode={vi.fn()}
+                loadError="Network unavailable"
+                onRetry={onRetry}
+            />
+        );
+
+        expect(getByRole("listbox", { name: "Memory List" })).toHaveTextContent("Memory list could not refresh");
+        expect(getByText("Network unavailable")).toBeInTheDocument();
+
+        fireEvent.click(getByRole("button", { name: "Retry" }));
+
+        expect(onRetry).toHaveBeenCalledTimes(1);
+    });
+
+    test("empty list gives an add-memory next action", () => {
+        const onAddMemory = vi.fn();
+        const { getByRole, getByText } = render(
+            <MemoryList
+                nodes={[]}
+                onSelectNode={vi.fn()}
+                onAddMemory={onAddMemory}
+            />
+        );
+
+        expect(getByText("Add a memory manually or run a sprint that captures project context.")).toBeInTheDocument();
+
+        fireEvent.click(getByRole("button", { name: "Add memory" }));
+
+        expect(onAddMemory).toHaveBeenCalledTimes(1);
+    });
 });

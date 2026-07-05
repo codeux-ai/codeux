@@ -4,7 +4,7 @@
 /** @jsxFrag Fragment */
 import { h, Fragment } from "preact";
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { render, waitFor, screen, fireEvent, cleanup } from "@testing-library/preact";
+import { render, waitFor, screen, fireEvent, cleanup, within } from "@testing-library/preact";
 import { SettingsIntegrationsPanel } from "../../../dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.js";
 
 vi.mock("gsap", () => {
@@ -17,8 +17,13 @@ vi.mock("gsap", () => {
 
   return {
     default: {
+      context: vi.fn((callback: () => void) => {
+        callback();
+        return { revert: vi.fn() };
+      }),
       set: vi.fn((target: unknown, props: Record<string, unknown>) => applyStyles(target, props)),
       to: vi.fn((target: unknown, props: Record<string, unknown>) => applyStyles(target, props)),
+      fromTo: vi.fn((target: unknown, _from: Record<string, unknown>, to: Record<string, unknown>) => applyStyles(target, to)),
       timeline: vi.fn(() => {
         const timeline = {
           to: (target: unknown, props: Record<string, unknown>) => {
@@ -36,6 +41,10 @@ vi.mock("gsap", () => {
 });
 
 describe("SettingsIntegrationsPanel", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it("keeps the selected integration detail in flow so long forms are not clipped", async () => {
     const state = {
       activeScope: "system",
@@ -242,6 +251,107 @@ describe("SettingsIntegrationsPanel", () => {
     const inputValues = Array.from(container.querySelectorAll("input")).map((input) => input.value);
     expect(inputValues).toContain("https://acme.atlassian.net");
     expect(inputValues).toContain("OPS");
+  });
+
+  it("renders Jules-specific automation controls on the Jules integration page", async () => {
+    let updatedSettings: any = null;
+    const editableSettings = {
+      cliWorkflow: {
+        executionMode: "DOCKER",
+        containerMountGithubAuth: false,
+        containerGithubAuthPath: "~/.config/gh",
+        containerMountGitConfig: true,
+      },
+      git: {
+        githubMode: "REMOTE",
+        defaultBranch: "main",
+        featureBranchPrefix: "feature/",
+        sprintBranchScheme: "feature/sprint{sprint}",
+        autoCreatePr: true,
+      },
+      automationInterventions: {
+        autoApprovePlan: true,
+        autoAnswerClarification: true,
+        autoAnswerClarificationMode: "TEMPLATE",
+        clarificationAnswerTemplate: "Use the project manager template.",
+        autoResumePaused: true,
+      },
+      ciIntelligence: {
+        waitForJulesCiAutofix: false,
+        julesCiAutofixMaxRetries: 3,
+      },
+    };
+    const state = {
+      activeScope: "project",
+      selectedProject: { id: "project-1", name: "Project" },
+      editableSettings,
+      systemSettings: {
+        integrations: {
+          providers: {
+            jules: { provider: "jules", name: "Jules Primary", apiKey: "", mountAuth: false, authPath: "" },
+          },
+          githubToken: "",
+          gitlabToken: "",
+        },
+        defaults: {
+          aiProvider: {
+            provider: "jules",
+            providers: {
+              jules: { provider: "jules", name: "Jules Primary", model: "" },
+            },
+            invocationRouting: {},
+          },
+          workers: {
+            virtualWorkerProvider: "jules",
+          },
+        },
+      },
+      projectSources: {
+        "automationInterventions.autoAnswerClarification": "project",
+        "automationInterventions.autoAnswerClarificationMode": "project",
+        "ciIntelligence.waitForJulesCiAutofix": "project",
+      },
+      selectedIntegration: "jules",
+      setSelectedIntegration: vi.fn(),
+      integrations: [
+        { id: "jules", label: "Jules", description: "Hosted provider" },
+      ],
+      importingHints: false,
+      externalHints: {
+        resolved: {
+          julesApiKey: "",
+          githubToken: "",
+          gitlabToken: "",
+        },
+      },
+      handleImportHints: vi.fn(),
+      updateEditableSettings: vi.fn((recipe) => {
+        updatedSettings = recipe(editableSettings);
+      }),
+      updateSystem: vi.fn(),
+      updateProject: vi.fn(),
+    };
+
+    const { container } = render(<SettingsIntegrationsPanel state={state as any} />);
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("Jules Automation");
+    });
+
+    expect(container.textContent).toContain("Auto-answer clarifications");
+    expect(container.textContent).toContain("Clarification answer mode");
+    expect(container.textContent).toContain("Clarification answer template");
+    expect(container.textContent).toContain("Jules CI autofix");
+    expect(container.textContent).toContain("Jules CI autofix max retries");
+    expect(container.textContent).toContain("Project override");
+    expect(container.textContent).not.toContain("Jules Credentials");
+
+    fireEvent.click(screen.getByRole("radio", { name: /Worker/i }));
+    expect(updatedSettings.automationInterventions.autoAnswerClarificationMode).toBe("WORKER");
+
+    const ciRow = screen.getByText("Jules CI autofix").closest(".group") as HTMLElement;
+    fireEvent.click(within(ciRow).getByLabelText("Toggle setting"));
+    expect(updatedSettings.ciIntelligence.waitForJulesCiAutofix).toBe(true);
   });
 
   it("shows editable git identity only when local git config copying is disabled", async () => {
@@ -480,10 +590,10 @@ describe("SettingsIntegrationsPanel", () => {
       });
 
       rerender(<SettingsIntegrationsPanel state={stateLocal as any} />);
-      const inputs = container.querySelectorAll("input");
-      const baseUrlInput = Array.from(inputs).find((inp) => inp.value === "");
-      expect(baseUrlInput).toBeDefined();
-      expect(baseUrlInput?.disabled).toBe(true);
+      const disabledReason = await screen.findByText(/Custom endpoint fields are disabled while local auth is selected/i);
+      const baseUrlInput = screen.getByLabelText("Codex Primary custom base URL");
+      expect(baseUrlInput.getAttribute("aria-disabled")).toBe("true");
+      expect(baseUrlInput.getAttribute("aria-describedby")).toContain(disabledReason.id);
     });
 
     it("clears API key and disables base URL / model fields when switching Claude Code to Local Copy", async () => {

@@ -576,7 +576,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
 
   return {
     appearance: {
-      navigationMode: appearanceInput.navigationMode === "SIDEBAR" ? "SIDEBAR" : "DOCK",
+      navigationMode: appearanceInput.navigationMode === "DOCK" ? "DOCK" : "SIDEBAR",
       theme: appearanceInput.theme === "LIGHT" || appearanceInput.theme === "DARK" ? appearanceInput.theme : "SYSTEM",
       reducedMotion: appearanceInput.reducedMotion === "REDUCE" || appearanceInput.reducedMotion === "NONE" ? appearanceInput.reducedMotion : "AUTO",
       backgroundMode: appearanceInput.backgroundMode === "STATIC" ? "STATIC" : "ANIMATED",

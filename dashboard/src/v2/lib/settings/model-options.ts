@@ -138,6 +138,32 @@ export const getQwenConfiguredModel = (
   return (provider.qwenModelId || fallback || "glm-4.7-flash").trim();
 };
 
+export const getCustomEndpointConfiguredModel = (
+  provider: Pick<SystemProviderCredentialSettings, "provider" | "mountAuth" | "customModel"> | null | undefined,
+): string | null => {
+  if (!provider || provider.mountAuth || (provider.provider !== "codex" && provider.provider !== "claude-code")) {
+    return null;
+  }
+  return provider.customModel?.trim() || null;
+};
+
+export const getConfiguredProviderModel = (
+  providerId: ProviderId,
+  provider: SystemProviderCredentialSettings | null | undefined,
+  fallbackModel?: string | null,
+): string | null => {
+  if (providerId === "codex" || providerId === "claude-code") {
+    return getCustomEndpointConfiguredModel(provider);
+  }
+  if (providerId === "qwen-code") {
+    return getQwenConfiguredModel(provider, fallbackModel || undefined);
+  }
+  if (providerId === "opencode") {
+    return getOpenCodeConfiguredModel(provider, fallbackModel || undefined);
+  }
+  return null;
+};
+
 export const getProviderInstanceModelOptions = (
   providerConfigId: ProviderConfigId,
   provider: Pick<ProjectProviderSettings, "provider" | "model">,
@@ -145,15 +171,9 @@ export const getProviderInstanceModelOptions = (
 ): ProviderModelOption[] => {
   const baseOptions = getProviderModelOptions(provider.provider);
   const systemProvider = getSystemIntegrationProviders(systemSettings)[providerConfigId];
-  const configuredOpenCodeModel = provider.provider === "opencode"
-    ? getOpenCodeConfiguredModel(systemProvider, provider.model)
-    : null;
-  const configuredQwenModel = provider.provider === "qwen-code"
-    ? getQwenConfiguredModel(systemProvider, provider.model)
-    : null;
+  const configuredModel = getConfiguredProviderModel(provider.provider, systemProvider, provider.model);
   const selectedModels = [
-    configuredOpenCodeModel,
-    configuredQwenModel,
+    configuredModel,
     provider.model,
   ].filter((value): value is string => Boolean(value && value.trim().length > 0));
 
@@ -165,7 +185,7 @@ export const getProviderInstanceModelOptions = (
     if (!optionsByValue.has(selectedModel)) {
       optionsByValue.set(selectedModel, {
         value: selectedModel,
-        label: configuredOpenCodeModel === selectedModel || configuredQwenModel === selectedModel
+        label: configuredModel === selectedModel
           ? `${selectedModel} (configured)`
           : selectedModel,
       });

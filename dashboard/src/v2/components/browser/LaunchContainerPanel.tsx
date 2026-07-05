@@ -22,8 +22,9 @@ export const LaunchContainerPanel: FunctionComponent<LaunchContainerPanelProps> 
   launchEnabled,
   launchBusy,
 }) => {
+  const selectedSprintName = sprints.find((sprint) => sprint.id === launchSprintId)?.name || null;
   const disabledReason = launchBusy
-    ? "A preview is already launching."
+    ? `A preview is already launching${selectedSprintName ? ` for ${selectedSprintName}` : ""}.`
     : sprints.length === 0
       ? "No sprint is available to launch."
       : !launchEnabled
@@ -34,7 +35,7 @@ export const LaunchContainerPanel: FunctionComponent<LaunchContainerPanelProps> 
   const selectUnavailable = !launchEnabled || launchBusy || sprints.length === 0;
   const launchUnavailable = selectUnavailable || !launchSprintId;
   const statusMessage = launchBusy
-    ? "Launching preview container. Launch controls are temporarily unavailable."
+    ? `Launching preview container${selectedSprintName ? ` for ${selectedSprintName}` : ""}. Launch controls are temporarily unavailable and the selected sprint is preserved.`
     : disabledReason || "Ready to launch a preview container for the selected sprint.";
 
   return (
@@ -71,6 +72,7 @@ export const LaunchContainerPanel: FunctionComponent<LaunchContainerPanelProps> 
           aria-disabled={selectUnavailable}
           aria-busy={launchBusy}
           aria-describedby="launch-container-status"
+          title={selectUnavailable ? statusMessage : "Choose the sprint to preview"}
           className={`w-full rounded-2xl border border-black/[0.08] bg-white/85 px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-200 ${
             selectUnavailable ? "cursor-not-allowed opacity-50" : ""
           }`}
@@ -96,6 +98,7 @@ export const LaunchContainerPanel: FunctionComponent<LaunchContainerPanelProps> 
           aria-busy={launchBusy}
           aria-describedby="launch-container-status"
           aria-label={launchBusy ? "Launching preview container" : "Launch preview container"}
+          title={launchUnavailable ? statusMessage : "Launch preview container for the selected sprint"}
           className={`inline-flex h-10 w-full items-center justify-center gap-2 rounded-2xl px-4 text-sm font-semibold text-void-900 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 ${
             launchUnavailable
               ? "bg-signal-500 cursor-not-allowed opacity-50"

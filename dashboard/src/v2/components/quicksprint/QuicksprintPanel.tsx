@@ -14,6 +14,8 @@ import { QuicksprintExecutionView } from "./QuicksprintExecutionView.js";
 import { clampSubtaskSliderValue } from "./quicksprint-shared.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { ConfirmDialog } from "../ui/ConfirmDialog.js";
+import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 
 import {
   getBuiltinTemplates,
@@ -98,6 +100,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   const fieldsRef = useRef<HTMLDivElement>(null);
   const gsapTokens = useGsapInteractionTokens();
   const interactionTokens = useInteractionTokens();
+  const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
 
   /* ── Phase / Navigation ─────────────────────────────────────────── */
   const [phase, setPhase] = useState<Phase>("browse");
@@ -199,13 +202,21 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   };
 
   const handleDeleteTemplate = async (template: QuicksprintTemplateRecord) => {
-    const message = template.isBuiltIn
-      ? `Delete the default template "${template.name}" for this project?`
-      : `Delete the custom template "${template.name}"?`;
-    if (!window.confirm(message)) {
+    const confirmed = await requestConfirm({
+      title: `Delete ${template.name}?`,
+      body: template.isBuiltIn
+        ? "This hides the default template for this project. The shared bundled template remains available outside this project."
+        : "This removes the custom template from this project.",
+      confirmLabel: "Delete Template",
+      cancelLabel: "Keep Template",
+      destructive: true,
+    });
+    if (!confirmed) {
+      setPhaseStatus(`Deletion cancelled for ${template.name}.`);
       return;
     }
     await onDeleteTemplate?.(template.id);
+    setPhaseStatus(`${template.name} deleted from quicksprint templates.`);
   };
 
   const executionState = useQuicksprintExecutionState({
@@ -327,6 +338,12 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
           />
         )}
       </div>
+      <ConfirmDialog
+        isOpen={isConfirmOpen}
+        options={confirmOptions}
+        onConfirm={handleConfirm}
+        onCancel={handleCancel}
+      />
     </section>
   );
 };

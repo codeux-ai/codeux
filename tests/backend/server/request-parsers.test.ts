@@ -280,8 +280,10 @@ describe("Request Parsers", () => {
   });
 
   describe("sprint parsers", () => {
-    it("requires a sprint name on create", () => {
-      expect(() => parseCreateSprintInput({})).toThrow(/required field: name/);
+    it("treats missing, null, and blank sprint names as unset on create", () => {
+      expect(parseCreateSprintInput({}).name).toBeUndefined();
+      expect(parseCreateSprintInput({ name: null }).name).toBeUndefined();
+      expect(parseCreateSprintInput({ name: "   " }).name).toBeUndefined();
     });
 
     it("parses create sprint fields including null coercion", () => {

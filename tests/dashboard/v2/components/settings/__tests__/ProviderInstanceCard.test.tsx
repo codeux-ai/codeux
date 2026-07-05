@@ -108,7 +108,7 @@ describe("ProviderInstanceCard", () => {
     expect(screen.getByLabelText("Very Long OpenCode Provider API key")).toBeDefined();
   });
 
-  it("requires confirmation before removing a provider instance and announces the local state", () => {
+  it("requires cancellable confirmation before removing a provider instance and announces the local state", () => {
     const provider: SystemProviderConfig = {
       provider: "codex",
       name: "Codex Removable",
@@ -134,11 +134,72 @@ describe("ProviderInstanceCard", () => {
     fireEvent.click(removeButton);
 
     expect(onRemove).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Confirm remove Codex Removable" }).getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByRole("status").textContent).toContain("Confirm removal of Codex Removable");
+    expect(screen.getByRole("group", { name: "Confirm removal of Codex Removable" })).toBeDefined();
+    expect(screen.getByRole("status").textContent).toContain("Removal is armed for Codex Removable");
+    expect(screen.getByRole("button", { name: "Cancel" })).toBe(document.activeElement);
 
-    fireEvent.click(screen.getByRole("button", { name: "Confirm remove Codex Removable" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onRemove).not.toHaveBeenCalled();
+    expect(screen.queryByRole("group", { name: "Confirm removal of Codex Removable" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Remove Codex Removable" })).toBe(document.activeElement);
+    expect(screen.getByRole("status").textContent).toContain("Removal cancelled for Codex Removable");
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove Codex Removable" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm remove" }));
     expect(onRemove).toHaveBeenCalledTimes(1);
+  });
+
+  it("announces display-name edits as local unsaved settings feedback", () => {
+    const provider: SystemProviderConfig = {
+      provider: "codex",
+      name: "Codex Draft",
+      apiKey: "",
+      mountAuth: false,
+      authPath: "",
+      authType: "apiKey",
+    };
+    const onUpdate = vi.fn();
+
+    render(
+      <ProviderInstanceCard
+        providerConfigId="codex-draft"
+        provider={provider}
+        providerModel="gpt-5.5"
+        dockerExecutionEnabled={false}
+        onUpdate={onUpdate}
+      />
+    );
+
+    fireEvent.input(screen.getByLabelText("Codex Draft display name"), { target: { value: "Codex Edited" } });
+
+    expect(onUpdate).toHaveBeenCalledWith({ name: "Codex Edited" });
+    expect(screen.getByRole("status").textContent).toContain("Codex Draft display name changed locally");
+  });
+
+  it("uses the secret field label in the reveal toggle accessible name", () => {
+    const provider: SystemProviderConfig = {
+      provider: "codex",
+      name: "Codex Secret",
+      apiKey: "secret-value",
+      mountAuth: false,
+      authPath: "",
+      authType: "apiKey",
+    };
+
+    render(
+      <ProviderInstanceCard
+        providerConfigId="codex-secret"
+        provider={provider}
+        providerModel="gpt-5.5"
+        dockerExecutionEnabled={false}
+        onUpdate={vi.fn()}
+      />
+    );
+
+    const revealButton = screen.getByRole("button", { name: "Show Codex Secret API key" });
+    fireEvent.click(revealButton);
+
+    expect(screen.getByRole("button", { name: "Hide Codex Secret API key" })).toBeDefined();
   });
 
   it("announces auth mode changes as local unsaved settings feedback", () => {

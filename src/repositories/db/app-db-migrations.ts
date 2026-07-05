@@ -148,6 +148,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureColumn(db, "sprints", "showcase_pinned", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "sprints", "original_prompt", "TEXT");
   ensureColumn(db, "sprints", "base_commit_sha", "TEXT");
+  ensureColumn(db, "sprints", "is_generated_name", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "tasks", "executor_type", "TEXT NOT NULL DEFAULT 'auto'");
 
   db.exec(`

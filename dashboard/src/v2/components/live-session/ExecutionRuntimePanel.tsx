@@ -15,6 +15,7 @@ import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js
 import { findActiveConcurrencyWait } from "../../../lib/task-progress.js";
 import {
     getLiveActionDisplayProps,
+    getLiveActionDisabledReason,
     getLiveActionLabel,
     getLiveActionStatusLabel,
     getPendingActionState,
@@ -106,25 +107,41 @@ const RuntimeActionButton: FunctionComponent<{
     icon: ComponentChildren;
     disabledReason?: string | null;
 }> = ({ actionState, labels, ariaLabel, toneClassName, onActivate, icon, disabledReason = null }) => {
+    const statusId = useId();
+    const reasonId = useId();
     const label = getLiveActionLabel(actionState, labels);
     const statusLabel = getLiveActionStatusLabel(actionState, labels);
+    const unavailableReason = getLiveActionDisabledReason(actionState, labels, disabledReason);
     const isPending = actionState === "pending";
     const isUnavailable = isPending || actionState === "disabled";
+    const describedBy = [
+        statusLabel ? statusId : null,
+        unavailableReason ? reasonId : null,
+    ].filter(Boolean).join(" ") || undefined;
 
     return (
         <button
             type="button"
-            onClick={() => {
-                if (!isUnavailable) onActivate();
+            onClick={(event) => {
+                if (isUnavailable) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return;
+                }
+                onActivate();
             }}
             aria-label={ariaLabel}
-            title={statusLabel ?? label}
+            aria-describedby={describedBy}
+            title={unavailableReason ?? statusLabel ?? label}
             {...getLiveActionDisplayProps(actionState, actionState === "disabled", disabledReason)}
             className={`inline-flex min-h-6 items-center gap-1.5 rounded-md px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] transition-colors aria-disabled:opacity-60 ${toneClassName}`}
         >
             {icon}
             <span>{label}</span>
-            {statusLabel && <span className="text-[8px] normal-case tracking-normal opacity-80">{statusLabel}</span>}
+            {statusLabel && <span id={statusId} className="text-[8px] normal-case tracking-normal opacity-80">{statusLabel}</span>}
+            {unavailableReason && unavailableReason !== statusLabel && (
+                <span id={reasonId} className={actionState === "disabled" ? "text-[8px] normal-case tracking-normal opacity-80" : "sr-only"}>{unavailableReason}</span>
+            )}
         </button>
     );
 };
@@ -220,7 +237,7 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                 >
                     {header}
                     <ChevronDown
-                        className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-[var(--interaction-enter-exit-duration)] ${open ? "rotate-0" : "-rotate-90"}`}
+                        className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-[var(--interaction-expansion-collapse-duration)] ease-[var(--interaction-expansion-collapse-ease)] ${open ? "rotate-0" : "-rotate-90"}`}
                         strokeWidth={2}
                         aria-hidden="true"
                     />
@@ -431,6 +448,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
         () => (snapshot?.taskDispatches ?? []).filter((dispatch) => dispatch.status === "failed").length,
         [snapshot?.taskDispatches, snapshot?.taskDispatches?.length],
     );
+    const runtimeSummary = `${activeSprintRuns.length} active run${activeSprintRuns.length === 1 ? "" : "s"}, ${activeDispatches.length} active dispatch${activeDispatches.length === 1 ? "" : "es"}, ${blockedAttentionCount} attention item${blockedAttentionCount === 1 ? "" : "s"}, ${failedTaskCount} failed dispatch${failedTaskCount === 1 ? "" : "es"}.`;
 
     if (!snapshot) {
         return (
@@ -457,25 +475,23 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                         <Workflow className="h-4 w-4 text-signal-500" strokeWidth={1.5} aria-hidden="true" />
                         <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Execution Runtime</span>
                         <div className="flex flex-wrap items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em]">
-                            {activeSprintRuns.length > 0 && (
-                                <span className="rounded-md bg-signal-500/10 px-2 py-0.5 font-mono text-signal-500">
-                                    active {activeSprintRuns.length}
-                                </span>
-                            )}
-                            {blockedAttentionCount > 0 && (
-                                <span className="rounded-md bg-status-amber/10 px-2 py-0.5 font-mono text-status-amber">
-                                    attention {blockedAttentionCount}
-                                </span>
-                            )}
-                            {failedTaskCount > 0 && (
-                                <span className="rounded-md bg-status-red/10 px-2 py-0.5 font-mono text-status-red">
-                                    failed {failedTaskCount}
-                                </span>
-                            )}
+                            <span className="rounded-md bg-signal-500/10 px-2 py-0.5 font-mono text-signal-500">
+                                active {activeSprintRuns.length}
+                            </span>
+                            <span className="rounded-md bg-black/[0.03] px-2 py-0.5 font-mono text-slate-500 dark:bg-white/[0.04] dark:text-slate-400">
+                                dispatch {activeDispatches.length}
+                            </span>
+                            <span className="rounded-md bg-status-amber/10 px-2 py-0.5 font-mono text-status-amber">
+                                attention {blockedAttentionCount}
+                            </span>
+                            <span className="rounded-md bg-status-red/10 px-2 py-0.5 font-mono text-status-red">
+                                failed {failedTaskCount}
+                            </span>
                         </div>
+                        <span className="sr-only">{runtimeSummary}</span>
                     </div>
                     <ChevronDown
-                        className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-[var(--interaction-enter-exit-duration)] ${open ? "rotate-0" : "-rotate-90"}`}
+                        className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-[var(--interaction-expansion-collapse-duration)] ease-[var(--interaction-expansion-collapse-ease)] ${open ? "rotate-0" : "-rotate-90"}`}
                         strokeWidth={2}
                         aria-hidden="true"
                     />

@@ -346,6 +346,9 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
       </TableCell>
       <TableCell className={`lg:w-[120px] lg:min-w-[120px] ${desktopCellTone}`} mobileLabel="Status">
         <div className="flex flex-wrap items-center gap-2 lg:flex-col lg:items-start">
+          <span className={`inline-flex rounded-full border px-4 py-1.5 text-[11px] font-bold ${badgeTone}`}>
+            {badgeLabel}
+          </span>
           {isDeletePending ? (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-status-red/25 bg-status-red/10 px-3 py-1.5 text-[11px] font-bold text-status-red">
               <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" strokeWidth={2.2} /> Deleting
@@ -362,11 +365,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
             <span className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/25 bg-signal-500/10 px-3 py-1.5 text-[11px] font-bold text-signal-700 dark:text-signal-300">
               <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" strokeWidth={2.2} /> {sprint.status === "paused" ? "Resuming" : "Pausing"}
             </span>
-          ) : (
-            <span className={`inline-flex rounded-full border px-4 py-1.5 text-[11px] font-bold ${badgeTone}`}>
-              {badgeLabel}
-            </span>
-          )}
+          ) : null}
         </div>
       </TableCell>
       <TableCell align="right" className={`lg:w-[100px] lg:min-w-[100px] ${desktopCellTone}`} mobileLabel="Tasks">

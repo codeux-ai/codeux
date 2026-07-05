@@ -12,6 +12,7 @@ expect.extend(matchers);
 import { TasksList } from "../../../dashboard/src/v2/components/TasksList.js";
 import { ProjectDataProvider } from "../../../dashboard/src/v2/context/project-data.js";
 import gsap from "gsap";
+import * as dashboardApi from "../../../dashboard/src/lib/api/dashboard-api.js";
 
 vi.spyOn(useReducedMotionModule, 'useReducedMotion').mockReturnValue(false);
 
@@ -36,6 +37,14 @@ vi.mock("gsap/Flip", () => ({
 }));
 vi.mock("../../../dashboard/src/v2/hooks/use-project-effective-settings.js", () => ({
     useProjectEffectiveSettings: () => ({ data: { settings: { appearance: { reducedMotion: "NONE" } } } })
+}));
+vi.mock("../../../dashboard/src/lib/api/dashboard-api.js", () => ({
+    cancelSprintRun: vi.fn(() => Promise.resolve()),
+    cancelTaskDispatch: vi.fn(() => Promise.resolve()),
+    orchestrateSprint: vi.fn(() => Promise.resolve()),
+    pauseSprintRun: vi.fn(() => Promise.resolve()),
+    rerunTask: vi.fn(() => Promise.resolve()),
+    resumeSprintRun: vi.fn(() => Promise.resolve()),
 }));
 
 describe("TasksList", () => {
@@ -272,6 +281,29 @@ const baseProps: any = {
 
         liveLink.focus();
         expect(liveLink.className).toMatch(/focus-visible:ring-2/);
+    });
+
+    it("keeps pending active stream actions visible, target-labelled, and inert", async () => {
+        vi.mocked(dashboardApi.cancelTaskDispatch).mockReturnValueOnce(new Promise(() => {}));
+        render(<ProjectDataProvider initialData={null as any}><TasksList pageData={pageData} /></ProjectDataProvider>);
+
+        const stopButton = screen.getByRole("button", { name: /Stop task task-1: Test Task/i });
+        await act(async () => {
+            fireEvent.click(stopButton);
+        });
+
+        const pendingButton = screen.getByRole("button", {
+            name: /Stop task task-1: Test Task. Stop unavailable while task action is pending/i,
+        });
+        expect(pendingButton).toBeDisabled();
+        expect(pendingButton).toHaveAttribute("aria-busy", "true");
+        expect(pendingButton).toBeVisible();
+        expect(screen.getByText("Stop unavailable while task action is pending")).toHaveClass("sr-only");
+
+        await act(async () => {
+            fireEvent.click(pendingButton);
+        });
+        expect(dashboardApi.cancelTaskDispatch).toHaveBeenCalledTimes(1);
     });
 
     it("labels sprint stream status and progress for assistive technology", () => {

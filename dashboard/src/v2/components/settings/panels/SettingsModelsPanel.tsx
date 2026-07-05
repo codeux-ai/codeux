@@ -15,10 +15,12 @@ import type {
 } from "../../../../types.js";
 import {
   getEligibleProviders,
+  getConfiguredProviderModel,
   getProviderInstanceLabel,
   getProviderInstanceModelOptions,
   getProviderModelOptions,
   getProviderTypeLabel,
+  getSystemIntegrationProviders,
   providerSupportsModelSelection,
   providerSupportsThinkingMode,
   resolveRouteDisplayProviderPool,
@@ -174,6 +176,29 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
   const workerModelOptions = workerProviderSettings
     ? getProviderInstanceModelOptions(editableSettings.workers.virtualWorkerProvider, workerProviderSettings, systemSettings)
     : getProviderModelOptions(workerProviderType);
+  const systemIntegrationProviders = getSystemIntegrationProviders(systemSettings);
+  const getEffectiveProviderDisplayModel = (
+    providerConfigId: ProviderConfigId,
+    provider: ProjectSettings["aiProvider"]["providers"][ProviderConfigId],
+    modelOverride?: string | null,
+  ): string => {
+    const fallbackModel = modelOverride?.trim() || provider.model;
+    return getConfiguredProviderModel(provider.provider, systemIntegrationProviders[providerConfigId], fallbackModel)
+      || fallbackModel;
+  };
+  const globalProviderDisplayModel = globalProviderSettings && editableSettings.aiProvider.provider
+    ? getEffectiveProviderDisplayModel(editableSettings.aiProvider.provider, globalProviderSettings)
+    : null;
+  const workerProviderDisplayModel = workerProviderSettings
+    ? getEffectiveProviderDisplayModel(editableSettings.workers.virtualWorkerProvider, workerProviderSettings)
+    : null;
+  const workerDefaultDisplayModel = workerProviderSettings
+    ? getEffectiveProviderDisplayModel(
+      editableSettings.workers.virtualWorkerProvider,
+      workerProviderSettings,
+      editableSettings.workers.model === "default" ? workerProviderSettings.model : editableSettings.workers.model,
+    )
+    : null;
 
   const updateProviderSettings = (
     providerConfigId: ProviderConfigId,
@@ -337,7 +362,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                   <div className="min-w-0">
                     <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Global anchor</div>
                     <div className="mt-1 truncate text-sm font-semibold text-slate-900 dark:text-white">{globalProviderSettings ? getProviderInstanceLabel(globalProviderSettings) : "None"}</div>
-                    <div className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">{globalProviderSettings?.model || "default"}</div>
+                    <div className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">{globalProviderDisplayModel || "default"}</div>
                   </div>
                 </div>
               </div>
@@ -347,7 +372,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                   <div className="min-w-0">
                     <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Worker anchor</div>
                     <div className="mt-1 truncate text-sm font-semibold text-slate-900 dark:text-white">{workerProviderSettings ? getProviderInstanceLabel(workerProviderSettings) : "None"}</div>
-                    <div className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">{editableSettings.workers.model === "default" ? `Default (${workerProviderSettings?.model || "default"})` : editableSettings.workers.model}</div>
+                    <div className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">{editableSettings.workers.model === "default" ? `Default (${workerProviderDisplayModel || "default"})` : workerDefaultDisplayModel || editableSettings.workers.model}</div>
                   </div>
                 </div>
               </div>
@@ -450,7 +475,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
               },
             }))}
             options={[
-              { value: "default", label: `Default (${workerProviderSettings?.model || "default"})` },
+              { value: "default", label: `Default (${workerProviderDisplayModel || "default"})` },
               ...workerModelOptions,
             ]}
           />
@@ -477,6 +502,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
           {providerEntries.map(([providerConfigId, provider]) => {
             const expanded = !!expandedProviderCards[providerConfigId];
             const detailsId = `base-provider-details-${providerConfigId}`;
+            const displayModel = getEffectiveProviderDisplayModel(providerConfigId, provider);
             return (
             <div key={`base-${providerConfigId}`} className={`relative overflow-hidden rounded-[1.35rem] border p-4 shadow-[0_14px_32px_rgba(15,23,42,0.035)] transition-colors dark:shadow-[0_16px_34px_rgba(0,0,0,0.18)] ${
               provider.enabled
@@ -516,8 +542,8 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                     <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-signal-700/70 dark:text-signal-200/80">Model</div>
                     <Cpu className="h-3 w-3 text-signal-600/70 dark:text-signal-300/70" strokeWidth={2.4} />
                   </div>
-                  <div className="mt-1 truncate font-mono text-sm font-bold text-slate-900 dark:text-white" title={providerSupportsModelSelection(provider.provider) ? provider.model : undefined}>
-                    {providerSupportsModelSelection(provider.provider) ? provider.model : "Managed by provider"}
+                  <div className="mt-1 truncate font-mono text-sm font-bold text-slate-900 dark:text-white" title={providerSupportsModelSelection(provider.provider) ? displayModel : undefined}>
+                    {providerSupportsModelSelection(provider.provider) ? displayModel : "Managed by provider"}
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -821,7 +847,8 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                 const cardKey = `${activeRouteDefinition.id}-${providerConfigId}`;
                 const expanded = !!expandedRouteOverrideCards[cardKey];
                 const detailsId = `route-override-details-${cardKey}`;
-                const effectiveModel = override.model || provider.model;
+                const effectiveModel = getEffectiveProviderDisplayModel(providerConfigId, provider, override.model || provider.model);
+                const inheritedModel = getEffectiveProviderDisplayModel(providerConfigId, provider);
                 const effectiveThinking = (override.thinkingMode || provider.thinkingMode) as string;
                 const effectiveWeight = override.weight ?? provider.weight;
                 const supportsModel = providerSupportsModelSelection(provider.provider);
@@ -906,7 +933,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                             <Toggle aria-label={`Enable ${provider.name} for ${activeRouteDefinition.label}`} value={override.enabled ?? provider.enabled} onChange={(value) => updateRouteProviderOverride(activeRouteDefinition.id, providerConfigId, { enabled: value })} />
                         </Row>
                         {supportsModel ? (
-                          <Row label="Model override" description={`Inherited: ${provider.model}`}>
+                          <Row label="Model override" description={`Inherited: ${inheritedModel}`}>
                               <SelectInput
                                 value={override.model || provider.model}
                                 aria-label={`${provider.name} model override for ${activeRouteDefinition.label}`}

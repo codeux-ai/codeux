@@ -88,6 +88,7 @@ describe("Settings Resolution Service", () => {
       const settings = sanitizeProjectSettings({});
       expect(settings.automationLevel).toBe(DEFAULT_DASHBOARD_SETTINGS.automationLevel);
       expect(settings.aiProvider.provider).toBe(DEFAULT_DASHBOARD_SETTINGS.aiProvider.provider);
+      expect(settings.appearance.navigationMode).toBe("SIDEBAR");
       expect(settings.skills.length).toBeGreaterThan(0);
       expect(settings.agents.instructionTemplates).toBeDefined();
     });

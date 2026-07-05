@@ -615,7 +615,7 @@ describe("onboarding appearance step", () => {
         ...DEFAULT_DASHBOARD_SETTINGS,
         appearance: {
           theme: "DARK",
-          navigationMode: "DOCK",
+          navigationMode: "SIDEBAR",
           reducedMotion: "NONE",
           zoomLevel: 1,
           backgroundMode: "ANIMATED",

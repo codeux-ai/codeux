@@ -61,6 +61,7 @@ This project is a Model Context Protocol (MCP) server with an integrated dashboa
 - `src/services/cli-process-runner.ts`
 - `src/services/cli-docker-utils.ts`
 - `src/services/cli-workflow-text-utils.ts`
+- Docker-backed project setup and dashboard chat invocations seed their provider workspace from the effective default branch snapshot. The checkout contract asks `WorkspaceManager` for the configured branch, which prefers `origin/<defaultBranch>` and falls back to the local branch when the remote tracking ref is unavailable; HOST-mode invocations continue to use their existing cwd behavior.
 
 ### 8. Shared logging and correlation
 - `src/shared/logging/logger.ts`

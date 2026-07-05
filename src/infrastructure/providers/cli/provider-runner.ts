@@ -7,6 +7,7 @@ import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.
 import { CliProviderId, enabledCustomServersFor, isOpenCodeNativeSessionId, ProviderCommandSpec, providerSpecs } from "./provider-command-specs.js";
 import { CommandResult, runStreamingCommand } from "../../../services/cli-process-runner.js";
 import type { IDockerRunner } from "./docker-runner.js";
+import type { SnapshotCheckout } from "./workspace-manager.js";
 import { isDockerWorkspaceMountError } from "../../../services/cli-docker-utils.js";
 import { sanitizeInvocationOutputText } from "../../../services/invocation-output-sanitizer.js";
 import * as fs from "fs/promises";
@@ -85,6 +86,7 @@ export interface ProviderRunInput {
   workspaceSessionId?: string;
   workflowSettings: CliWorkflowSettings;
   repoPath: string;
+  snapshotCheckout?: SnapshotCheckout;
   githubToken?: string;
   gitlabToken?: string;
   signal?: AbortSignal;
@@ -141,6 +143,7 @@ export class ProviderRunner implements IProviderRunner {
         cwd: input.cwd,
         repoPath: input.repoPath,
         sessionId: input.workspaceSessionId || input.sessionId,
+        snapshotCheckout: input.snapshotCheckout,
         preserve: preserveSessionWorkspace,
         reuseExisting: preserveSessionWorkspace,
       })

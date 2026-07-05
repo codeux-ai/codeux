@@ -155,6 +155,7 @@ describe("SettingsSprintPanel", () => {
     const qaHeading = screen.getByText("Quality Assurance");
     const guardrailsHeading = screen.getByText("Guardrails");
 
+    expect(screen.queryByText("Jules CI autofix")).toBeNull();
     expect(Boolean(mergeGatesHeading.compareDocumentPosition(qaHeading) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(qaHeading.compareDocumentPosition(guardrailsHeading) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
 

@@ -648,6 +648,8 @@ export class FeaturePrGateService {
         attentionItem = inProgressResult.workerCiFixPayload;
       }
 
+      await this.persistMergedTask(task, context);
+
       events.push({ state: task.status === "BLOCKED" ? "blocked" : "waiting_checks", payload: {
         prNumber: pr.number,
         prUrl: pr.url,

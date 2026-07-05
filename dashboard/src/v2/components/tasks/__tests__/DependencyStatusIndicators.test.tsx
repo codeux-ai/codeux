@@ -19,8 +19,9 @@ describe("DependencyStatusIndicators", () => {
           { recordId: "2", id: "TASK-2", title: "Test task 2", status: "pending" },
           { recordId: "3", id: "TASK-3", title: "Test task 3", status: "QA_REVIEW_FAILED" },
           { recordId: "4", id: "TASK-4", title: "Test task 4", status: "in_progress" },
+          { recordId: "4b", id: "TASK-4B", title: "Test task 4B", status: "coding_completed" },
           { recordId: "5", id: "TASK-5", title: "Unknown Task (missing)", status: "pending" }
-        ]}
+        ] as any}
       />
     );
 
@@ -28,10 +29,10 @@ describe("DependencyStatusIndicators", () => {
     const task1Elements = container.querySelectorAll('span[aria-hidden="true"]');
     expect(Array.from(task1Elements).some(el => el.textContent === "TASK-1")).toBeTruthy();
 
-    expect(getByText("Blocked: 4 dependencies need completion")).toBeTruthy();
+    expect(getByText("Blocked: 5 dependencies need completion")).toBeTruthy();
 
     // Verify explicit accessible text
-    expect(getByText("Depends on task TASK-1, resolved. Status: completed. Title: Test task 1")).toBeTruthy();
+    expect(getByText("Depends on task TASK-1, resolved. Dependency completed. Status: completed. Title: Test task 1")).toBeTruthy();
 
     // Verify sr-only accessible text
     const srText = getByText((content, element) => {
@@ -40,23 +41,28 @@ describe("DependencyStatusIndicators", () => {
     expect(srText).toBeTruthy();
 
     // Check specific styling classes for visual feedback states
-    const completedIndicator = getByTitle(/Depends on Test task 1 \(completed\)/);
+    const completedIndicator = getByTitle(/Depends on Test task 1 \(Resolved; completed\)/);
     expect(completedIndicator.className).toContain("text-status-green");
 
-    const pendingIndicator = getByTitle(/Depends on Test task 2 \(pending\)/);
-    expect(pendingIndicator.className).toContain("text-slate-500");
+    const pendingIndicator = getByTitle(/Depends on Test task 2 \(Blocked; pending\)/);
+    expect(pendingIndicator.className).toContain("text-status-amber");
     expect(pendingIndicator.className).not.toContain("border-dashed");
 
-    const blockedIndicator = getByTitle(/Depends on Test task 3 \(QA REVIEW FAILED\)/i);
-    expect(blockedIndicator.className).toContain("text-red-500");
+    const blockedIndicator = getByTitle(/Depends on Test task 3 \(QA failed; QA REVIEW FAILED\)/i);
+    expect(blockedIndicator.className).toContain("text-status-red");
 
-    const inProgressIndicator = getByTitle(/Depends on Test task 4 \(in progress\)/i);
-    expect(inProgressIndicator.className).toContain("text-signal-500");
+    const inProgressIndicator = getByTitle(/Depends on Test task 4 \(In progress; in progress\)/i);
+    expect(inProgressIndicator.className).toContain("text-signal-600");
     expect(getByText("In progress")).toBeTruthy();
 
-    const unknownIndicator = getByTitle(/Depends on Unknown Task \(missing\) \(pending\)/i);
+    const codingCompleteIndicator = getByTitle(/Depends on Test task 4B \(Ready for QA; coding completed\)/i);
+    expect(codingCompleteIndicator.className).toContain("text-cyan-700");
+    expect(getByText("Ready for QA")).toBeTruthy();
+
+    const unknownIndicator = getByTitle(/Depends on Unknown Task \(missing\) \(Unknown; pending\)/i);
     expect(unknownIndicator.className).toContain("border-dashed");
-    expect(container.querySelector('[role="list"]')).toHaveAccessibleName("Blocked: 4 dependencies need completion. Task dependencies");
+    expect(getByText("Unknown")).toBeTruthy();
+    expect(container.querySelector('[role="list"]')).toHaveAccessibleName("Blocked: 5 dependencies need completion. Task dependencies");
   });
 
   it("summarizes resolved dependencies without implying blockers", () => {

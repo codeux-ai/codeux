@@ -26,9 +26,12 @@ import {
   getSelectedFilteredSprints,
   getLedgerSelectionSummary,
   getLedgerViewStateKey,
+  getSortAriaSort,
+  getSortButtonLabel,
   type BulkLedgerAction,
   nextSort,
   DEFAULT_LEDGER_FILTERS,
+  SPRINT_TABLE_SORT_LABELS,
   type LedgerSort,
   type LedgerFilters,
   type SprintTableSortKey,
@@ -104,6 +107,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
   const [sortAnnouncement, setSortAnnouncement] = useState("Sorted by Created descending.");
   const [filterAnnouncement, setFilterAnnouncement] = useState("");
   const [selectionAnnouncement, setSelectionAnnouncement] = useState("No sprints selected.");
+  const [selectionEventAnnouncement, setSelectionEventAnnouncement] = useState("");
   const [bulkAnnouncement, setBulkAnnouncement] = useState("");
 
   useEffect(() => {
@@ -150,6 +154,10 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
     setSelectedIds((current) => {
       if (current.size === 0) return current;
       const pruned = pruneSelection(current, filteredSprints);
+      const removedCount = current.size - pruned.size;
+      if (removedCount > 0) {
+        setSelectionEventAnnouncement(`${removedCount} selected sprint${removedCount === 1 ? "" : "s"} removed from selection because filters changed. ${pruned.size} selected sprint${pruned.size === 1 ? "" : "s"} remain.`);
+      }
       return pruned.size === current.size ? current : pruned;
     });
   }, [filteredSprints]);
@@ -223,16 +231,6 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
     transitionTimingFunction: interactionTokens.selectionMovement.ease,
   };
 
-  const sortLabels: Record<SprintTableSortKey, string> = {
-    showcasePinned: "Showcase",
-    sprintKey: "Sprint ID",
-    name: "Sprint",
-    status: "Status",
-    tasksCount: "Tasks",
-    completion: "Completion",
-    createdAt: "Created",
-  };
-
   useEffect(() => {
     const hasFilters = Boolean(filters.query.trim()) || filters.qa !== "all" || filters.showcase !== "all" || filters.status !== "all";
     setFilterAnnouncement(hasFilters
@@ -250,7 +248,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
   const handleSort = (key: SprintTableSortKey) => {
     setSort((current) => {
       const next = nextSort(current, key);
-      setSortAnnouncement(`Sorted by ${sortLabels[next.key]} ${next.direction === "asc" ? "ascending" : "descending"}. ${ledgerSprints.length} sprint${ledgerSprints.length === 1 ? " remains" : "s remain"} visible.`);
+      setSortAnnouncement(`Sorted by ${SPRINT_TABLE_SORT_LABELS[next.key]} ${next.direction === "asc" ? "ascending" : "descending"}. ${ledgerSprints.length} sprint${ledgerSprints.length === 1 ? " remains" : "s remain"} visible.`);
       return next;
     });
   };
@@ -258,12 +256,14 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
   const handleToggleSelectAll = () => {
     if (selectionSummary.allSelected) {
       setSelectedIds(new Set());
+      setSelectionEventAnnouncement(`Deselected all ${ledgerSprints.length} filtered sprint${ledgerSprints.length === 1 ? "" : "s"}.`);
     } else {
       const next = new Set(selectedIds);
       for (const sprint of ledgerSprints) {
         next.add(sprint.id);
       }
       setSelectedIds(next);
+      setSelectionEventAnnouncement(`Selected all ${ledgerSprints.length} filtered sprint${ledgerSprints.length === 1 ? "" : "s"}.`);
     }
   };
 
@@ -274,6 +274,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
   const handleClearSelection = useCallback(() => {
     setSelectedIds(deselectAll());
     setLastBulkAction(null);
+    setSelectionEventAnnouncement("Sprint selection cleared.");
   }, []);
 
   const restoreBulkDeleteFocus = useCallback(() => {
@@ -284,11 +285,8 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
         ledgerFocusRef.current?.focus();
       }
     };
-    if (typeof window.requestAnimationFrame === "function") {
-      window.requestAnimationFrame(focusTarget);
-    } else {
-      window.setTimeout(focusTarget, 0);
-    }
+    window.setTimeout(focusTarget, 0);
+    window.setTimeout(focusTarget, 75);
   }, []);
 
   const handleBulkStart = useCallback(() => {
@@ -348,11 +346,60 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
 
   const renderSortIndicator = (key: SprintTableSortKey) => {
     if (sort.key !== key) {
-      return <ArrowUpDown aria-hidden="true" className="h-3 w-3 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 dark:text-slate-600" strokeWidth={2.2} style={{ transitionDuration: typeof sortDuration === 'number' ? `${sortDuration}s` : sortDuration, transitionTimingFunction: sortEase }} />;
+      return (
+        <span className="inline-flex min-w-[2.75rem] items-center justify-end gap-1 text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500" aria-hidden="true">
+          <ArrowUpDown className="h-3 w-3 transition-transform" strokeWidth={2.2} style={{ transitionDuration: typeof sortDuration === 'number' ? `${sortDuration}s` : sortDuration, transitionTimingFunction: sortEase }} />
+          None
+        </span>
+      );
     }
     return sort.direction === "asc"
-      ? <ArrowUp aria-hidden="true" className="h-3 w-3 text-signal-500 opacity-100 transition-transform" strokeWidth={2.2} style={{ transitionDuration: typeof sortDuration === 'number' ? `${sortDuration}s` : sortDuration, transitionTimingFunction: sortEase }} />
-      : <ArrowDown aria-hidden="true" className="h-3 w-3 text-signal-500 opacity-100 transition-transform" strokeWidth={2.2} style={{ transitionDuration: typeof sortDuration === 'number' ? `${sortDuration}s` : sortDuration, transitionTimingFunction: sortEase }} />;
+      ? (
+        <span className="inline-flex min-w-[2.75rem] items-center justify-end gap-1 text-[10px] font-bold uppercase text-signal-600 dark:text-signal-300" aria-hidden="true">
+          <ArrowUp className="h-3 w-3 transition-transform" strokeWidth={2.2} style={{ transitionDuration: typeof sortDuration === 'number' ? `${sortDuration}s` : sortDuration, transitionTimingFunction: sortEase }} />
+          Asc
+        </span>
+      )
+      : (
+        <span className="inline-flex min-w-[2.75rem] items-center justify-end gap-1 text-[10px] font-bold uppercase text-signal-600 dark:text-signal-300" aria-hidden="true">
+          <ArrowDown className="h-3 w-3 transition-transform" strokeWidth={2.2} style={{ transitionDuration: typeof sortDuration === 'number' ? `${sortDuration}s` : sortDuration, transitionTimingFunction: sortEase }} />
+          Desc
+        </span>
+      );
+  };
+
+  const renderSortHeader = (key: SprintTableSortKey, options?: { align?: "left" | "right"; className?: string; isLast?: boolean }) => {
+    const label = SPRINT_TABLE_SORT_LABELS[key];
+    const alignRight = options?.align === "right";
+    return (
+      <TableCell
+        isHeader
+        align={options?.align}
+        isLast={options?.isLast}
+        className={`group ${options?.className ?? ""}`}
+        ariaSort={getSortAriaSort(sort, key)}
+      >
+        <button
+          type="button"
+          onClick={() => handleSort(key)}
+          className={`inline-flex w-full items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200 ${alignRight ? "justify-end" : "justify-start"}`}
+          style={controlFeedbackStyle}
+          aria-label={getSortButtonLabel(sort, key)}
+        >
+          {alignRight ? (
+            <>
+              {renderSortIndicator(key)}
+              <span>{label}</span>
+            </>
+          ) : (
+            <>
+              <span>{label}</span>
+              {renderSortIndicator(key)}
+            </>
+          )}
+        </button>
+      </TableCell>
+    );
   };
 
   return (
@@ -422,90 +469,13 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
                   : <Square className="h-4 w-4" strokeWidth={2.2} />}
               </button>
             </TableCell>
-            <TableCell isHeader className="group w-[80px] min-w-[80px]" ariaSort={sort.key === "showcasePinned" ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
-              <button
-                type="button"
-                onClick={() => handleSort("showcasePinned")}
-                className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
-                style={controlFeedbackStyle}
-                aria-label={`Sort by Showcase, currently ${sort.key === "showcasePinned" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Showcase in ${sort.key === "showcasePinned" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
-              >
-                Showcase
-                {renderSortIndicator("showcasePinned")}
-              </button>
-            </TableCell>
-            <TableCell isHeader className="group w-[120px] min-w-[120px]" ariaSort={sort.key === "sprintKey" ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
-              <button
-                type="button"
-                onClick={() => handleSort("sprintKey")}
-                className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
-                style={controlFeedbackStyle}
-                aria-label={`Sort by Sprint ID, currently ${sort.key === "sprintKey" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Sprint ID in ${sort.key === "sprintKey" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
-              >
-                Sprint ID
-                {renderSortIndicator("sprintKey")}
-              </button>
-            </TableCell>
-            <TableCell isHeader className="group w-[220px] min-w-[220px]" ariaSort={sort.key === "name" ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
-              <button
-                type="button"
-                onClick={() => handleSort("name")}
-                className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
-                style={controlFeedbackStyle}
-                aria-label={`Sort by Sprint, currently ${sort.key === "name" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Sprint in ${sort.key === "name" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
-              >
-                Sprint
-                {renderSortIndicator("name")}
-              </button>
-            </TableCell>
-            <TableCell isHeader className="group w-[120px] min-w-[120px]" ariaSort={sort.key === "status" ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
-              <button
-                type="button"
-                onClick={() => handleSort("status")}
-                className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
-                style={controlFeedbackStyle}
-                aria-label={`Sort by Status, currently ${sort.key === "status" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Status in ${sort.key === "status" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
-              >
-                Status
-                {renderSortIndicator("status")}
-              </button>
-            </TableCell>
-            <TableCell isHeader align="right" className="group w-[100px] min-w-[100px]" ariaSort={sort.key === "tasksCount" ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
-              <button
-                type="button"
-                onClick={() => handleSort("tasksCount")}
-                className="inline-flex w-full items-center justify-end gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
-                style={controlFeedbackStyle}
-                aria-label={`Sort by Tasks, currently ${sort.key === "tasksCount" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Tasks in ${sort.key === "tasksCount" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
-              >
-                {renderSortIndicator("tasksCount")}
-                Tasks
-              </button>
-            </TableCell>
-            <TableCell isHeader align="right" className="group w-[140px] min-w-[140px]" ariaSort={sort.key === "completion" ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
-              <button
-                type="button"
-                onClick={() => handleSort("completion")}
-                className="inline-flex w-full items-center justify-end gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
-                style={controlFeedbackStyle}
-                aria-label={`Sort by Completion, currently ${sort.key === "completion" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Completion in ${sort.key === "completion" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
-              >
-                {renderSortIndicator("completion")}
-                Completion
-              </button>
-            </TableCell>
-            <TableCell isHeader className="group w-[120px] min-w-[120px]" ariaSort={sort.key === "createdAt" ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
-              <button
-                type="button"
-                onClick={() => handleSort("createdAt")}
-                className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
-                style={controlFeedbackStyle}
-                aria-label={`Sort by Created, currently ${sort.key === "createdAt" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Created in ${sort.key === "createdAt" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
-              >
-                Created
-                {renderSortIndicator("createdAt")}
-              </button>
-            </TableCell>
+            {renderSortHeader("showcasePinned", { className: "w-[80px] min-w-[80px]" })}
+            {renderSortHeader("sprintKey", { className: "w-[120px] min-w-[120px]" })}
+            {renderSortHeader("name", { className: "w-[220px] min-w-[220px]" })}
+            {renderSortHeader("status", { className: "w-[120px] min-w-[120px]" })}
+            {renderSortHeader("tasksCount", { align: "right", className: "w-[100px] min-w-[100px]" })}
+            {renderSortHeader("completion", { align: "right", className: "w-[140px] min-w-[140px]" })}
+            {renderSortHeader("createdAt", { className: "w-[120px] min-w-[120px]" })}
             <TableCell isHeader align="right" isLast className="w-[140px] min-w-[140px] pr-6">Controls</TableCell>
           </TableHeader>
           <TableBody>
@@ -572,7 +542,7 @@ const SprintLedgerComponent: FunctionComponent<SprintLedgerProps> = ({
         </div>
       </div>
       <div className="sr-only" aria-live="polite" aria-atomic="true">
-        {[sortAnnouncement, filterAnnouncement, selectionAnnouncement, bulkAnnouncement].filter(Boolean).join(" ")}
+        {[sortAnnouncement, filterAnnouncement, selectionAnnouncement, selectionEventAnnouncement, bulkAnnouncement].filter(Boolean).join(" ")}
       </div>
     </div>
   );

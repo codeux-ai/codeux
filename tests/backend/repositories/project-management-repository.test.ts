@@ -3,7 +3,11 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
-import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
+import {
+  createGeneratedSprintName,
+  isGeneratedSprintName,
+  ProjectManagementRepository,
+} from "../../../src/repositories/project-management-repository.js";
 import { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
 import { SprintMarkdownService } from "../../../src/services/sprint-markdown-service.js";
 
@@ -29,6 +33,44 @@ afterEach(async () => {
 });
 
 describe("ProjectManagementRepository", () => {
+  it("creates untitled sprints with deterministic generated names and slugs", async () => {
+    const { repository } = await createRepository();
+    const project = repository.createProject({
+      name: "Untitled Sprint Project",
+      sourceType: "local",
+      sourceRef: "/workspace/untitled-sprint-project",
+    });
+
+    const sprint1 = repository.createSprint(project.id, {
+      goal: "Plan without a user title",
+    });
+    const sprint2 = repository.createSprint(project.id, {
+      name: "   ",
+      goal: "Plan another untitled sprint",
+    });
+    const custom = repository.createSprint(project.id, {
+      name: "Custom sprint title",
+      goal: "Plan with a user title",
+    });
+    const customPlaceholder = repository.createSprint(project.id, {
+      name: "Untitled sprint 1",
+      goal: "Plan with a user title that resembles a generated placeholder",
+    });
+
+    expect(sprint1.name).toBe(createGeneratedSprintName(1));
+    expect(sprint1.slug).toBe("untitled-sprint-1");
+    expect(sprint1.isGeneratedName).toBe(true);
+    expect(isGeneratedSprintName(sprint1.name)).toBe(true);
+    expect(sprint2.name).toBe(createGeneratedSprintName(2));
+    expect(sprint2.slug).toBe("untitled-sprint-2");
+    expect(sprint2.isGeneratedName).toBe(true);
+    expect(custom.name).toBe("Custom sprint title");
+    expect(custom.slug).toBe("custom-sprint-title");
+    expect(custom.isGeneratedName).toBe(false);
+    expect(customPlaceholder.name).toBe("Untitled sprint 1");
+    expect(customPlaceholder.isGeneratedName).toBe(false);
+    expect(isGeneratedSprintName(customPlaceholder.name)).toBe(true);
+  });
 
   it("updates a project and sprint gracefully with empty or partial inputs", async () => {
     const { repository } = await createRepository();
