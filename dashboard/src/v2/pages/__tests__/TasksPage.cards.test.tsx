@@ -10,6 +10,7 @@ import { useProjectData, ProjectDataContext } from "../../context/project-data.j
 import { useSprints } from "../../../hooks/useSprints.js";
 import { useProjectTasks } from "../../hooks/use-project-tasks.js";
 import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-settings.js";
+import { deleteTask } from "../../lib/project-api.js";
 import { createMockTask } from "../../components/tasks/__tests__/fixtures/tasks.fixture.js";
 
 expect.extend(matchers);
@@ -68,6 +69,11 @@ vi.mock("../../hooks/use-project-tasks.js", () => ({
 }));
 vi.mock("../../hooks/use-project-effective-settings.js", () => ({
   useProjectEffectiveSettings: vi.fn(),
+}));
+vi.mock("../../lib/project-api.js", () => ({
+  createTask: vi.fn(),
+  deleteTask: vi.fn(),
+  updateTask: vi.fn(),
 }));
 
 // Need to mock user interaction resize observers usually present in Kanban rendering
@@ -342,6 +348,85 @@ describe("TasksPage.cards Integration", () => {
     await user.keyboard("{End}{Enter}");
     expect(selectSprint).toHaveBeenCalledWith("sprint_2");
     await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
+  it("keeps task board filters and create/edit/delete interactions wired through the page", async () => {
+    const user = userEvent.setup();
+    const refreshTasks = vi.fn();
+    const refreshSprints = vi.fn();
+    const task = createMockTask({
+      recordId: "task_rec_1",
+      id: "T-100",
+      title: "Foundation Setup",
+      status: "pending",
+      priority: "critical",
+      assignee: "Alice",
+      dependsOnTaskIds: [],
+      executorType: "jules",
+    });
+    const completedTask = createMockTask({
+      recordId: "task_rec_2",
+      id: "T-101",
+      title: "Release Notes",
+      status: "completed",
+      priority: "low",
+      assignee: "Bob",
+      dependsOnTaskIds: [],
+      executorType: "jules",
+    });
+
+    (deleteTask as unknown as any).mockResolvedValue(undefined);
+    (useProjectData as unknown as any).mockReturnValue({
+      projects: [{ id: "proj_1", name: "Project Alpha" }],
+      selectedProject: { id: "proj_1", name: "Project Alpha" },
+    });
+    (useSprints as unknown as any).mockReturnValue({
+      data: [{ id: "sprint_1", number: 1, name: "Sprint One", status: "running", date: "Jan 1", tasksCount: 1, completion: 0, active: true }],
+      loading: false,
+      selectedSprintId: "sprint_1",
+      selectSprint: vi.fn(),
+      refetch: refreshSprints,
+    });
+    (useProjectTasks as any).mockReturnValue({
+      tasks: [task, completedTask],
+      loading: false,
+      error: null,
+      refresh: refreshTasks,
+    });
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "proj_1", name: "Project Alpha" } as any], selectedProject: { id: "proj_1", name: "Project Alpha" } as any } as any}>
+        <TasksPage />
+      </ProjectDataContext.Provider>
+    );
+
+    await user.click(screen.getByRole("tab", { name: "Done" }));
+    await waitFor(() => expect(screen.getByText("Release Notes")).toBeInTheDocument());
+    expect(screen.queryByText("Foundation Setup")).not.toBeInTheDocument();
+    expect(screen.getByText(/Filtered to show completed status and any priority/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "All" }));
+    await waitFor(() => expect(screen.getByText("Foundation Setup")).toBeInTheDocument());
+    await user.click(screen.getByRole("tab", { name: "Critical" }));
+    await waitFor(() => expect(screen.queryByText("Release Notes")).not.toBeInTheDocument());
+    expect(screen.getByText("Foundation Setup")).toBeInTheDocument();
+    expect(screen.getByText(/Filtered to show all status and critical priority/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "New Task" }));
+    expect(screen.getByText("Create A New Task.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close task composer" }));
+
+    await user.click(screen.getByRole("button", { name: /Edit task T-100: Foundation Setup/i }));
+    expect(screen.getByText("Refine The Task.")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Foundation Setup")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close task composer" }));
+
+    await user.click(screen.getByRole("button", { name: /Delete task T-100: Foundation Setup/i }));
+    expect(screen.getByText(/Delete "Foundation Setup"/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Delete Task" }));
+    await waitFor(() => expect(deleteTask).toHaveBeenCalledWith("task_rec_1"));
+    expect(refreshTasks).toHaveBeenCalled();
+    expect(refreshSprints).toHaveBeenCalled();
   });
 
   it("verifies optimistic task rendering and layout stability", () => {

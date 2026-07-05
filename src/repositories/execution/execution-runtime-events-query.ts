@@ -19,6 +19,7 @@ import type { ExecutionRuntimeEventSummaryRow } from "./execution-repository-typ
 const MAX_RUNTIME_EVENTS = 300;
 const EXPANDED_EVENTS_PER_RUN_LIMIT = MAX_RUNTIME_EVENTS;
 const RECENT_PROJECT_EVENTS_LIMIT = 240;
+const SELECTED_SPRINT_EVENTS_LIMIT = 120;
 
 function compareRuntimeEvents(
   left: ExecutionRuntimeEventSummaryRow,
@@ -30,23 +31,41 @@ function compareRuntimeEvents(
 function mergeRuntimeEvents(
   eventGroups: ExecutionRuntimeEventSummaryRow[][],
   limit: number,
+  pinnedEventGroups: ExecutionRuntimeEventSummaryRow[][] = [],
 ): ExecutionRuntimeEventSummaryRow[] {
+  const pinnedEventById = new Map<string, ExecutionRuntimeEventSummaryRow>();
+  for (const group of pinnedEventGroups) {
+    for (const row of group) {
+      pinnedEventById.set(row.id, row);
+    }
+  }
+  const pinnedEvents = [...pinnedEventById.values()]
+    .sort(compareRuntimeEvents)
+    .slice(0, limit);
+
   const eventById = new Map<string, ExecutionRuntimeEventSummaryRow>();
   for (const group of eventGroups) {
     for (const row of group) {
+      if (pinnedEventById.has(row.id)) {
+        continue;
+      }
       eventById.set(row.id, row);
     }
   }
-  return [...eventById.values()]
+  return [
+    ...pinnedEvents,
+    ...[...eventById.values()]
     .sort(compareRuntimeEvents)
-    .slice(0, limit);
+      .slice(0, Math.max(limit - pinnedEvents.length, 0)),
+  ].sort(compareRuntimeEvents);
 }
 
 export function queryExecutionRuntimeEvents(
   db: DatabaseAdapter,
   storage: AppDbStorage,
   projectId: string,
-  expandedSprintRunIds: string[]
+  expandedSprintRunIds: string[],
+  selectedSprintId?: string | null,
 ): ExecutionRuntimeEventSummaryRow[] {
   const uniqueExpandedSprintRunIds = [...new Set(expandedSprintRunIds)];
   const expandedPlaceholders = uniqueExpandedSprintRunIds.map(() => "?").join(", ");
@@ -198,8 +217,110 @@ export function queryExecutionRuntimeEvents(
     })
     : [];
 
+  const selectedTaskEvents = selectedSprintId
+    ? db.prepare(`
+      SELECT
+        tre.id,
+        'task_run' AS scope_type,
+        tre.task_run_id,
+        tr.sprint_run_id,
+        tr.dispatch_id,
+        tre.project_id,
+        tr.sprint_id,
+        s.name AS sprint_name,
+        s.number AS sprint_number,
+        sr.status AS sprint_run_status,
+        tr.task_id,
+        t.task_key,
+        t.title AS task_title,
+        tr.state AS task_run_state,
+        tre.event_type,
+        tre.originator,
+        tre.source_event_key,
+        tr.provider,
+        tr.session_id,
+        tr.session_name,
+        tr.worker_branch,
+        tr.pr_url,
+        tr.connection_id,
+        c.display_name AS connection_display_name,
+        c.role AS connection_role,
+        tre.created_at,
+        tre.payload_json
+      FROM task_run_events tre
+      INNER JOIN task_runs tr ON tr.id = tre.task_run_id
+      INNER JOIN sprints s ON s.id = tr.sprint_id
+      INNER JOIN tasks t ON t.id = tr.task_id
+      LEFT JOIN sprint_runs sr ON sr.id = tr.sprint_run_id
+      LEFT JOIN mcp_connections c ON c.id = tr.connection_id
+      WHERE tre.project_id = ?
+        AND tr.sprint_id = ?
+        AND tre.event_type != 'status_sync'
+        ${expandedExclusion}
+      ORDER BY tre.created_at DESC, tre.id DESC
+      LIMIT ?
+    `).all(
+      projectId,
+      selectedSprintId,
+      ...uniqueExpandedSprintRunIds,
+      SELECTED_SPRINT_EVENTS_LIMIT,
+    ) as unknown as ExecutionRuntimeEventSummaryRow[]
+    : [];
+
+  const selectedSprintRunEvents = selectedSprintId
+    ? db.prepare(`
+      SELECT
+        sre.id,
+        'sprint_run' AS scope_type,
+        NULL AS task_run_id,
+        sre.sprint_run_id,
+        NULL AS dispatch_id,
+        sr.project_id,
+        sr.sprint_id,
+        s.name AS sprint_name,
+        s.number AS sprint_number,
+        sr.status AS sprint_run_status,
+        NULL AS task_id,
+        NULL AS task_key,
+        NULL AS task_title,
+        NULL AS task_run_state,
+        sre.event_type,
+        sre.originator,
+        sre.source_event_key,
+        NULL AS provider,
+        NULL AS session_id,
+        NULL AS session_name,
+        NULL AS worker_branch,
+        NULL AS pr_url,
+        NULL AS connection_id,
+        NULL AS connection_display_name,
+        NULL AS connection_role,
+        sre.created_at,
+        sre.payload_json
+      FROM sprint_run_events sre
+      INNER JOIN sprint_runs sr ON sr.id = sre.sprint_run_id
+      INNER JOIN sprints s ON s.id = sr.sprint_id
+      WHERE sr.project_id = ?
+        AND sr.sprint_id = ?
+        ${uniqueExpandedSprintRunIds.length > 0 ? `AND sr.id NOT IN (${expandedPlaceholders})` : ""}
+      ORDER BY sre.created_at DESC, sre.id DESC
+      LIMIT ?
+    `).all(
+      projectId,
+      selectedSprintId,
+      ...uniqueExpandedSprintRunIds,
+      SELECTED_SPRINT_EVENTS_LIMIT,
+    ) as unknown as ExecutionRuntimeEventSummaryRow[]
+    : [];
+
+  const selectedEvents = mergeRuntimeEvents(
+    [selectedTaskEvents, selectedSprintRunEvents],
+    SELECTED_SPRINT_EVENTS_LIMIT,
+  );
+
   return mergeRuntimeEvents(
     [expandedSprintTaskEvents, recentEvents],
     MAX_RUNTIME_EVENTS,
+    [selectedEvents],
   );
 }

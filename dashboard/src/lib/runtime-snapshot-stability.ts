@@ -1,4 +1,10 @@
-import type { DashboardStatus, ExecutionDashboardSnapshot, Subtask } from "../types.js";
+import { isDeepEqual } from "../v2/lib/resource-equality.js";
+import type {
+  DashboardStatus,
+  ExecutionDashboardSnapshot,
+  ProjectLiveDashboardSnapshot,
+  Subtask,
+} from "../types.js";
 
 const ACTIVE_SPRINT_RUN_STATUSES = new Set([
   "queued",
@@ -159,6 +165,7 @@ const isRecentEventEquivalent = (left: RecentEvent, right: RecentEvent): boolean
   left?.id === right?.id
   && left?.createdAt === right?.createdAt
   && left?.eventType === right?.eventType
+  && isDeepEqual(left?.payload ?? null, right?.payload ?? null)
 );
 
 const isRecentInvocationEquivalent = (left: RecentInvocation, right: RecentInvocation): boolean => (
@@ -221,6 +228,58 @@ export function areExecutionSnapshotsEquivalent(
     && areListsEquivalent(left.recentInvocations ?? [], right.recentInvocations ?? [], isRecentInvocationEquivalent)
     && left.primaryAssignedWorker?.workerEndpointId === right.primaryAssignedWorker?.workerEndpointId
     && left.overflowAssignedWorkers.length === right.overflowAssignedWorkers.length
+  );
+}
+
+const areSubtasksEquivalent = (left: Subtask, right: Subtask): boolean => isDeepEqual(left, right);
+
+export function areStatusSnapshotsEquivalent(
+  left: DashboardStatus,
+  right: DashboardStatus,
+): boolean {
+  return (
+    left.project_id === right.project_id
+    && left.sprint_id === right.sprint_id
+    && left.sprint_number === right.sprint_number
+    && left.source_id === right.source_id
+    && left.repo_path === right.repo_path
+    && left.feature_branch === right.feature_branch
+    && left.reportText === right.reportText
+    && left.statusTable === right.statusTable
+    && left.instructions === right.instructions
+    && areListsEquivalent(left.subtasks, right.subtasks, areSubtasksEquivalent)
+  );
+}
+
+function resolveSnapshotProjectId(snapshot: ProjectLiveDashboardSnapshot): string | null {
+  return (
+    normalizeValue(snapshot.projectId)
+    ?? normalizeValue(snapshot.status.project_id)
+    ?? normalizeValue(snapshot.execution.projectId)
+  );
+}
+
+function hasScopeChanged(
+  previous: ProjectLiveDashboardSnapshot,
+  next: ProjectLiveDashboardSnapshot,
+): boolean {
+  return (
+    resolveSnapshotProjectId(previous) !== resolveSnapshotProjectId(next)
+    || normalizeValue(previous.selectedSprintId) !== normalizeValue(next.selectedSprintId)
+  );
+}
+
+export function areProjectLiveDashboardSnapshotsEquivalent(
+  left: ProjectLiveDashboardSnapshot,
+  right: ProjectLiveDashboardSnapshot,
+): boolean {
+  return (
+    resolveSnapshotProjectId(left) === resolveSnapshotProjectId(right)
+    && normalizeValue(left.selectedSprintId) === normalizeValue(right.selectedSprintId)
+    && areStatusSnapshotsEquivalent(left.status, right.status)
+    && areExecutionSnapshotsEquivalent(left.execution, right.execution)
+    && isDeepEqual(left.gitStatus, right.gitStatus)
+    && left.gitStatusError === right.gitStatusError
   );
 }
 
@@ -301,4 +360,31 @@ export function stabilizeStatusSnapshot(
   }
 
   return mergeMissingTaskRuntimeMetadata(previous, next);
+}
+
+export function stabilizeProjectLiveDashboardSnapshot(
+  previous: ProjectLiveDashboardSnapshot,
+  next: ProjectLiveDashboardSnapshot,
+): ProjectLiveDashboardSnapshot {
+  if (previous === next) {
+    return previous;
+  }
+
+  if (hasScopeChanged(previous, next)) {
+    return next;
+  }
+
+  const execution = stabilizeExecutionSnapshot(previous.execution, next.execution);
+  const status = stabilizeStatusSnapshot(previous.status, next.status, execution);
+  const stableStatus = areStatusSnapshotsEquivalent(previous.status, status) ? previous.status : status;
+  const gitStatus = isDeepEqual(previous.gitStatus, next.gitStatus) ? previous.gitStatus : next.gitStatus;
+
+  const candidate: ProjectLiveDashboardSnapshot = {
+    ...next,
+    status: stableStatus,
+    execution,
+    gitStatus,
+  };
+
+  return areProjectLiveDashboardSnapshotsEquivalent(previous, candidate) ? previous : candidate;
 }

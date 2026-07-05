@@ -18,6 +18,8 @@ If the requested port is busy, startup automatically retries the next port (`+1`
 ## Live Data Contracts
 All live fields rendered in the dashboard originate from the SQLite database, are assembled by the backend, and transported via HTTP/WebSockets. The browser does not reconcile competing states. See the [Live Runtime Contract](../architecture/live-runtime-contract.md) for details on ownership of fields like `projectId`, `status`, and `execution`.
 
+The v2 Live Session route keeps runtime data wiring in `LiveSessionPage.tsx`, pure projection/filter derivation in `dashboard/src/v2/lib/live-session-view-model.ts`, and repeated panel markup under `dashboard/src/v2/components/live-session/`. Keep sprint-scoped arrays such as dispatches, events, invocations, and projected task card items memoized from stabilized runtime snapshots so reconnects, stale banners, filters, and pending runtime actions do not force avoidable recomputation or change accessibility semantics.
+
 ## API Endpoints
 
 Implemented in `src/server/dashboard-server.ts`.
@@ -354,6 +356,7 @@ Legacy runtime:
 - Heavy WebGL-only dashboard surfaces are now lazy-loaded, including the global ocean background and the agent avatar scene, so the initial dashboard route no longer eagerly pulls those renderer modules into the first page chunk
 - Tasks page is project-scoped and uses a three-column board state (`Queued`, `In Progress`, `Completed`), where `coding_completed` acts as active work.
 - Tasks page renders create/edit inline through the new `TaskComposer` replacing the modal flow.
+- Tasks page keeps route-level state, sprint scope routing, optimistic task insertion, and task mutation handlers in `TasksPage.tsx`, while focused task-board components under `dashboard/src/v2/components/tasks/` render the sprint scope selector, filters, and Kanban lanes from the shared task-board view-model/action helpers.
 - Tasks page task-card PR affordances use resolved project settings from `GET /api/projects/:projectId/settings/effective`: `PR pending` metadata and pending PR actions are hidden when effective project git settings disable task PR creation, including `git.autoCreatePr` off or `git.githubMode` set to `LOCAL`, while runtime-enriched PR links remain visible for existing pull requests whenever a URL exists.
 - Legacy create/edit task modals still announce validation through the shared action feedback region, focus and scroll the first invalid required field into view, and expose status, priority, executor, and dependency choices with native radio or checkbox semantics. Dependency filtering reports result-count changes through a polite live region and preserves selected dependencies when the current filter hides them.
 - On a fresh installation, the Tasks page replaces the old generic project/sprint/task database message with a polished task-scope placeholder; the project action opens the shared Add Project dialog and the sprint action routes operators to the Sprints page before the kanban controls appear.

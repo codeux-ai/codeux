@@ -27,6 +27,7 @@ export interface SessionSyncDependencies {
   resolveSessionName: (session: Partial<JulesSession>) => string | undefined;
   extractSessionId: (session: Partial<JulesSession>) => string | undefined;
   fetchRecentActivities: (sessionName: string, pageSize?: number) => Promise<JulesActivity[]>;
+  activityFetchTimeoutMs?: number;
   listAllActivities?: (sessionId: string) => Promise<JulesActivity[]>;
   getSession?: (sessionId: string) => Promise<JulesSession>;
   isActionRequiredState: (state?: string) => boolean;

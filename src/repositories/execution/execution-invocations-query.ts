@@ -179,23 +179,7 @@ export function queryProjectExecutionSnapshotInvocations(
       SELECT${INVOCATION_SELECT}
       FROM execution_invocations${INVOCATION_JOINS}
       WHERE execution_invocations.project_id = ?
-        AND execution_invocations.sprint_id = ?
-      ORDER BY execution_invocations.started_at DESC, execution_invocations.rowid DESC
-      LIMIT ?
-    `).all(
-      params.projectId,
-      params.selectedSprintId,
-      SNAPSHOT_SELECTED_SPRINT_INVOCATION_LIMIT,
-    ) as SnapshotInvocationRow[]
-    : [];
-
-  const selectedSprintProviderFallbackRows = params.selectedSprintId
-    ? db.prepare(`
-      SELECT${INVOCATION_SELECT}
-      FROM execution_invocations${INVOCATION_JOINS}
-      WHERE execution_invocations.project_id = ?
-        AND execution_invocations.sprint_id IS NULL
-        AND provider_invocations.sprint_id = ?
+        AND COALESCE(execution_invocations.sprint_id, provider_invocations.sprint_id) = ?
       ORDER BY execution_invocations.started_at DESC, execution_invocations.rowid DESC
       LIMIT ?
     `).all(
@@ -212,34 +196,12 @@ export function queryProjectExecutionSnapshotInvocations(
       FROM (
         SELECT${INVOCATION_SELECT},
           ROW_NUMBER() OVER (
-            PARTITION BY execution_invocations.sprint_run_id
+            PARTITION BY COALESCE(execution_invocations.sprint_run_id, provider_invocations.sprint_run_id)
             ORDER BY execution_invocations.started_at DESC, execution_invocations.rowid DESC
           ) AS invocation_rank
         FROM execution_invocations${INVOCATION_JOINS}
         WHERE execution_invocations.project_id = ?
-          AND execution_invocations.sprint_run_id IN (${uniqueSprintRunIds.map(() => "?").join(", ")})
-      ) ranked
-      WHERE ranked.invocation_rank <= ?
-    `).all(
-      params.projectId,
-      ...uniqueSprintRunIds,
-      SNAPSHOT_EXPANDED_RUN_INVOCATION_LIMIT,
-    ) as SnapshotInvocationRow[]
-    : [];
-
-  const expandedRunProviderFallbackRows = uniqueSprintRunIds.length > 0
-    ? db.prepare(`
-      SELECT *
-      FROM (
-        SELECT${INVOCATION_SELECT},
-          ROW_NUMBER() OVER (
-            PARTITION BY provider_invocations.sprint_run_id
-            ORDER BY execution_invocations.started_at DESC, execution_invocations.rowid DESC
-          ) AS invocation_rank
-        FROM execution_invocations${INVOCATION_JOINS}
-        WHERE execution_invocations.project_id = ?
-          AND execution_invocations.sprint_run_id IS NULL
-          AND provider_invocations.sprint_run_id IN (${uniqueSprintRunIds.map(() => "?").join(", ")})
+          AND COALESCE(execution_invocations.sprint_run_id, provider_invocations.sprint_run_id) IN (${uniqueSprintRunIds.map(() => "?").join(", ")})
       ) ranked
       WHERE ranked.invocation_rank <= ?
     `).all(
@@ -252,9 +214,7 @@ export function queryProjectExecutionSnapshotInvocations(
   return mergeSnapshotInvocationRows([
     projectRecentRows,
     expandedRunRows,
-    expandedRunProviderFallbackRows,
     selectedSprintRows,
-    selectedSprintProviderFallbackRows,
   ]).map(mapExecutionInvocationRow);
 }
 

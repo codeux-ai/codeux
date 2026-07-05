@@ -578,6 +578,8 @@ describe("runSessionSyncStep", () => {
       durationMs: null,
     });
     const fetchRecentActivities = vi.fn().mockResolvedValue([]);
+    const resolveSessionName = vi.fn((session: { name?: string }) => session.name);
+    const extractSessionId = vi.fn((session: { id?: string }) => session.id);
 
     const result = await runSessionSyncStep(
       subtasks,
@@ -593,8 +595,8 @@ describe("runSessionSyncStep", () => {
             },
           ],
         }),
-        resolveSessionName: (session: { name?: string }) => session.name,
-        extractSessionId: (session: { id?: string }) => session.id,
+        resolveSessionName,
+        extractSessionId,
         fetchRecentActivities,
         isActionRequiredState: vi.fn().mockReturnValue(false),
         executionRepository: {
@@ -609,8 +611,131 @@ describe("runSessionSyncStep", () => {
 
     expect(getLatestTaskRunBySessionId).toHaveBeenCalledTimes(1);
     expect(getLatestTaskRunBySessionId).toHaveBeenCalledWith("shared-session");
+    expect(resolveSessionName).toHaveBeenCalledTimes(1);
+    expect(extractSessionId).toHaveBeenCalledTimes(1);
     expect(fetchRecentActivities).toHaveBeenCalledTimes(1);
     expect(result.subtasks.map((task) => task.session_id)).toEqual(["shared-session", "shared-session"]);
+  });
+
+  it("isolates activity fetch failures so unrelated task sync continues", async () => {
+    const subtasks: Subtask[] = [
+      { id: "task-1", title: "Task One", prompt: "", depends_on: [], is_independent: true, status: "PENDING" },
+      { id: "task-2", title: "Task Two", prompt: "", depends_on: [], is_independent: true, status: "PENDING" },
+    ];
+
+    const logger = { warn: vi.fn() };
+    const healthyActivities = [
+      {
+        id: "activity-healthy",
+        name: "sessions/session-2/activities/activity-healthy",
+        createTime: "2026-03-09T10:00:00.000Z",
+      },
+    ];
+    const fetchRecentActivities = vi.fn().mockImplementation(async (sessionName: string) => {
+      if (sessionName === "sessions/session-1") {
+        throw new Error("activity backend unavailable");
+      }
+      return healthyActivities;
+    });
+
+    const result = await runSessionSyncStep(
+      subtasks,
+      {
+        listSessions: vi.fn().mockResolvedValue({
+          sessions: [
+            {
+              id: "session-1",
+              name: "sessions/session-1",
+              title: "Sprint 2: [run:my-repo/s2/task-1] [task-1] Task One",
+              state: "RUNNING",
+            },
+            {
+              id: "session-2",
+              name: "sessions/session-2",
+              title: "Sprint 2: [run:my-repo/s2/task-2] [task-2] Task Two",
+              state: "RUNNING",
+            },
+          ],
+        }),
+        resolveSessionName: (session: { name?: string }) => session.name,
+        extractSessionId: (session: { id?: string }) => session.id,
+        fetchRecentActivities,
+        isActionRequiredState: vi.fn().mockReturnValue(false),
+        logger,
+      } as any,
+      false,
+      { repoPath: "/tmp/my-repo", sprintNumber: 2 },
+    );
+
+    expect(fetchRecentActivities).toHaveBeenCalledTimes(2);
+    expect(result.subtasks[0]).toMatchObject({
+      session_id: "session-1",
+      status: "RUNNING",
+      activities: [],
+    });
+    expect(result.subtasks[1]).toMatchObject({
+      session_id: "session-2",
+      status: "RUNNING",
+      activities: healthyActivities,
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Could not fetch activities for session",
+      expect.objectContaining({ sessionName: "sessions/session-1" }),
+    );
+  });
+
+  it("times out a slow activity fetch without blocking unrelated task sync", async () => {
+    const subtasks: Subtask[] = [
+      { id: "task-1", title: "Task One", prompt: "", depends_on: [], is_independent: true, status: "PENDING" },
+      { id: "task-2", title: "Task Two", prompt: "", depends_on: [], is_independent: true, status: "PENDING" },
+    ];
+
+    const healthyActivities = [
+      {
+        id: "activity-2",
+        name: "sessions/session-2/activities/activity-2",
+        createTime: "2026-03-09T10:00:00.000Z",
+      },
+    ];
+    const fetchRecentActivities = vi.fn().mockImplementation((sessionName: string) => {
+      if (sessionName === "sessions/session-1") {
+        return new Promise(() => {});
+      }
+      return Promise.resolve(healthyActivities);
+    });
+
+    const result = await runSessionSyncStep(
+      subtasks,
+      {
+        listSessions: vi.fn().mockResolvedValue({
+          sessions: [
+            {
+              id: "session-1",
+              name: "sessions/session-1",
+              title: "Sprint 3: [run:my-repo/s3/task-1] [task-1] Task One",
+              state: "RUNNING",
+            },
+            {
+              id: "session-2",
+              name: "sessions/session-2",
+              title: "Sprint 3: [run:my-repo/s3/task-2] [task-2] Task Two",
+              state: "RUNNING",
+            },
+          ],
+        }),
+        resolveSessionName: (session: { name?: string }) => session.name,
+        extractSessionId: (session: { id?: string }) => session.id,
+        fetchRecentActivities,
+        activityFetchTimeoutMs: 1,
+        isActionRequiredState: vi.fn().mockReturnValue(false),
+        logger: { warn: vi.fn() },
+      } as any,
+      false,
+      { repoPath: "/tmp/my-repo", sprintNumber: 3 },
+    );
+
+    expect(result.subtasks[0]?.activities).toEqual([]);
+    expect(result.subtasks[1]?.activities).toBe(healthyActivities);
   });
 
   it("fetches activities using bounded parallelism for multiple unique sessions", async () => {

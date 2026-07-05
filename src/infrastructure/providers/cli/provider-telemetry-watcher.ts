@@ -45,7 +45,7 @@ export class ProviderTelemetryWatcher {
   private promise: Promise<void> | null = null;
   private tempDbPath: string | null = null;
   private lastTelemetrySourceSignature: string | null = null;
-  private lastPreReadSourceSignature: string | null = null;
+  private lastEmittedPreReadSourceSignature: string | null = null;
   private readFailureCount = 0;
   private lastFailureWarningCount = 0;
   private resolvedNativeSessionId: string | null = null;
@@ -63,7 +63,9 @@ export class ProviderTelemetryWatcher {
       await this.promise.catch(() => undefined);
     }
     if (this.tempDbPath) {
-      await fs.rm(this.tempDbPath, { force: true }).catch(() => undefined);
+      const tempDbPath = this.tempDbPath;
+      this.tempDbPath = null;
+      await fs.rm(tempDbPath, { force: true }).catch(() => undefined);
     }
   }
 
@@ -73,7 +75,7 @@ export class ProviderTelemetryWatcher {
       try {
         const stdout = this.opts.getAccumulatedRawStdout();
         const stderr = this.opts.getAccumulatedStderr();
-        const preReadSourceSignature = await this.buildPreReadSourceSignature({
+        let preReadSourceSignature = await this.buildPreReadSourceSignature({
           resolvedNativeSessionId: this.resolvedNativeSessionId,
           stdout,
           stderr,
@@ -81,7 +83,7 @@ export class ProviderTelemetryWatcher {
         if (
           preReadSourceSignature
           && this.lastTelemetrySourceSignature
-          && preReadSourceSignature === this.lastPreReadSourceSignature
+          && preReadSourceSignature === this.lastEmittedPreReadSourceSignature
         ) {
           await this.wait(1500);
           continue;
@@ -102,8 +104,24 @@ export class ProviderTelemetryWatcher {
         } else if (this.opts.provider === "antigravity") {
           if (!resolvedNativeSessionId && this.opts.antigravityLogPath) {
             resolvedNativeSessionId = await this.opts.parseAntigravityConversationId(this.opts.antigravityLogPath);
+            this.resolvedNativeSessionId = resolvedNativeSessionId;
           }
           if (resolvedNativeSessionId) {
+            const resolvedPreReadSourceSignature = await this.buildPreReadSourceSignature({
+              resolvedNativeSessionId,
+              stdout,
+              stderr,
+            });
+            if (resolvedPreReadSourceSignature) {
+              preReadSourceSignature = resolvedPreReadSourceSignature;
+              if (
+                this.lastTelemetrySourceSignature
+                && resolvedPreReadSourceSignature === this.lastEmittedPreReadSourceSignature
+              ) {
+                await this.wait(1500);
+                continue;
+              }
+            }
             antigravityTranscriptJsonl = await this.opts.readAntigravityTranscript(resolvedNativeSessionId);
             if (!this.tempDbPath) {
               const safeSession = resolvedNativeSessionId.replace(/[^A-Za-z0-9_-]/g, "_");
@@ -124,8 +142,8 @@ export class ProviderTelemetryWatcher {
           antigravityTranscriptJsonl,
         });
         if (sourceSignature === this.lastTelemetrySourceSignature) {
-          this.lastPreReadSourceSignature = preReadSourceSignature;
-          this.readFailureCount = 0;
+          this.lastEmittedPreReadSourceSignature = preReadSourceSignature;
+          this.resetReadFailures();
           await this.wait(1500);
           continue;
         }
@@ -153,8 +171,8 @@ export class ProviderTelemetryWatcher {
           this.opts.onTelemetry(telemetry);
         }
         this.lastTelemetrySourceSignature = sourceSignature;
-        this.lastPreReadSourceSignature = preReadSourceSignature;
-        this.readFailureCount = 0;
+        this.lastEmittedPreReadSourceSignature = preReadSourceSignature;
+        this.resetReadFailures();
       } catch (err) {
         this.recordReadFailure(err);
       }
@@ -296,13 +314,15 @@ export class ProviderTelemetryWatcher {
   }
 
   private shouldLogFailureWarning(): boolean {
-    if (this.readFailureCount < 2) {
-      return false;
-    }
-    if (this.readFailureCount <= 5) {
+    if ([1, 2, 5].includes(this.readFailureCount)) {
       return this.lastFailureWarningCount !== this.readFailureCount;
     }
     return this.readFailureCount % 10 === 0 && this.lastFailureWarningCount !== this.readFailureCount;
+  }
+
+  private resetReadFailures(): void {
+    this.readFailureCount = 0;
+    this.lastFailureWarningCount = 0;
   }
 
   private async wait(ms: number): Promise<void> {

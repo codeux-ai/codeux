@@ -9,6 +9,7 @@ import type {
 import {
   deriveFilteredLiveSessionTasks,
   deriveLiveSessionStats,
+  deriveLiveSessionSnapshotSurface,
   deriveLiveSessionTaskCardItems,
   deriveLiveTransportBannerViewModel,
   deriveProjectedLiveSessionTasks,
@@ -334,6 +335,48 @@ describe("live-session-view-model", () => {
       ariaLive: "polite",
       ariaBusy: false,
       isVisible: true,
+    });
+  });
+
+  it("derives snapshot surface state for reconnecting, recovering, stale, and live runtime panels", () => {
+    expect(deriveLiveSessionSnapshotSurface({
+      transportState: "disconnected",
+      isRecovering: false,
+    })).toMatchObject({
+      kind: "reconnecting",
+      label: "Reconnecting",
+      isBusy: true,
+    });
+
+    expect(deriveLiveSessionSnapshotSurface({
+      transportState: "connected",
+      isRecovering: true,
+      snapshotUpdatedAt: null,
+    })).toMatchObject({
+      kind: "recovering",
+      label: "Awaiting Snapshot",
+      isBusy: true,
+    });
+
+    expect(deriveLiveSessionSnapshotSurface({
+      transportState: "connected",
+      isRecovering: false,
+      snapshotUpdatedAt: "2026-03-27T10:03:00.000Z",
+      transportBannerTitle: "Stale Data",
+    })).toMatchObject({
+      kind: "stale",
+      label: "Stale Snapshot",
+      isBusy: true,
+    });
+
+    expect(deriveLiveSessionSnapshotSurface({
+      transportState: "connected",
+      isRecovering: false,
+      snapshotUpdatedAt: "2026-03-27T10:03:00.000Z",
+    })).toMatchObject({
+      kind: "live",
+      label: "Live",
+      isBusy: false,
     });
   });
 

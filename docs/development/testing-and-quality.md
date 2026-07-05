@@ -23,10 +23,14 @@ pnpm test
 pnpm run test:backend
 ```
 
+Use focused backend tests first when a change is isolated to a repository, service, script, sprint step, or server route. In this repository, appending a test path to `pnpm run test:backend -- <path>` may still run the backend suite because the script already includes `tests/backend`; check the command output before assuming only one file ran.
+
 - Run dashboard tests only
 ```bash
 pnpm run test:dashboard
 ```
+
+Use focused dashboard tests first when changing pure view-model helpers, resource hooks, page state, or components under `dashboard/src/`. Broaden to `pnpm run test:dashboard` for user-facing Live, Tasks, Stats, settings, accessibility, or realtime behavior.
 
 - Run coverage report (verifies 80% global thresholds)
 ```bash
@@ -42,6 +46,8 @@ pnpm run test:backend:coverage
 ```bash
 pnpm run ci
 ```
+
+`pnpm run ci` starts with `pnpm run quality:guardrails`, then runs audit, lint, backend coverage, dashboard tests, and build. Run `pnpm run quality:guardrails` directly after changes that affect shared implementation structure, large modules, duplicate logic, dependency factory wiring, realtime snapshot persistence, optimistic task insertion, or the guardrail script itself. Treat blocking guardrail output as CI-equivalent; advisory oversized-file and broad-`any` reports identify cleanup targets but do not fail the command.
 
 - Run Playwright E2E browser tests
 ```bash
@@ -106,6 +112,14 @@ pnpm run typecheck:dashboard
 3. Add tests for behavioral changes.
 4. Validate both server and dashboard build.
 5. If you change invocation reasoning or transcript persistence, keep `docs/architecture/execution-invocation-tracking.md` and `docs/dashboard/design-system-chat.md` aligned with `provider-conversation-message-mapper.ts`, `ProviderExecutionService`, and `ReasoningWidget`, then re-check the docs index links.
+
+## Change-Specific Validation
+
+- Quality guardrail changes: run `pnpm run quality:guardrails`, the focused guardrail tests under `tests/backend/scripts/quality-guardrails.test.ts`, `pnpm run lint`, and `pnpm run build` if package scripts or shared TypeScript imports changed.
+- Execution snapshot or Live runtime performance changes: run focused backend repository/service tests for the changed query or websocket path, focused dashboard hook/view-model tests for stabilization behavior, `pnpm run quality:guardrails`, `pnpm run lint`, and `pnpm run build`.
+- Backend-only behavior changes: run the narrowest relevant backend tests first, then `pnpm run test:backend`, `pnpm run lint`, and `pnpm run build` when contracts, repositories, scripts, or app startup paths changed.
+- Dashboard-only behavior changes: run the narrowest relevant dashboard tests first, then `pnpm run test:dashboard`, `pnpm run typecheck:dashboard`, and `pnpm run build` for route-level, resource, accessibility, or user-facing changes.
+- Documentation-only changes: run commands requested by the task. When the docs describe scripts, CI, contracts, or generated types, also run `pnpm run lint` so markdown-adjacent package and TypeScript references stay consistent.
 
 ## Cross-Platform Test Expectations
 
