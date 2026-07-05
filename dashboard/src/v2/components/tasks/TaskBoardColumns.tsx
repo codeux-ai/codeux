@@ -68,7 +68,69 @@ function getAgentPresetAvatarConfig(task: Task, agentPresetsMap: Map<string, Age
   return task.agentPresetId ? agentPresetsMap.get(task.agentPresetId)?.avatarConfig : undefined;
 }
 
-export const TaskBoardColumns: FunctionComponent<TaskBoardColumnsProps> = ({
+function areTaskListsEquivalent(previous: Task[], next: Task[]): boolean {
+  return previous.length === next.length && previous.every((task, index) => (
+    task.recordId === next[index].recordId &&
+    task.status === next[index].status
+  ));
+}
+
+function areDropTargetsEqual(
+  previous: TaskBoardDropTargetContext | null,
+  next: TaskBoardDropTargetContext | null,
+): boolean {
+  return previous?.status === next?.status && previous?.index === next?.index;
+}
+
+function areColumnsEquivalent(
+  previous: TaskBoardState["columns"],
+  next: TaskBoardState["columns"],
+  previousViewModels: Map<string, TaskCardViewModel>,
+  nextViewModels: Map<string, TaskCardViewModel>,
+): boolean {
+  if (previous.length !== next.length) {
+    return false;
+  }
+
+  return previous.every((column, columnIndex) => {
+    const nextColumn = next[columnIndex];
+    if (column.status !== nextColumn.status || column.count !== nextColumn.count || column.tasks.length !== nextColumn.tasks.length) {
+      return false;
+    }
+
+    return column.tasks.every((task, taskIndex) => {
+      const nextTask = nextColumn.tasks[taskIndex];
+      return task.recordId === nextTask.recordId &&
+        previousViewModels.get(task.recordId) === nextViewModels.get(nextTask.recordId);
+    });
+  });
+}
+
+function areTaskBoardColumnsPropsEqual(previous: TaskBoardColumnsProps, next: TaskBoardColumnsProps): boolean {
+  return previous.boardRef === next.boardRef &&
+    areColumnsEquivalent(previous.columns, next.columns, previous.taskViewModels, next.taskViewModels) &&
+    areTaskListsEquivalent(previous.allTasks, next.allTasks) &&
+    previous.agentPresetsMap === next.agentPresetsMap &&
+    previous.loading === next.loading &&
+    previous.showSkeletons === next.showSkeletons &&
+    previous.filterTransitionPending === next.filterTransitionPending &&
+    previous.statusFilter === next.statusFilter &&
+    previous.priorityFilter === next.priorityFilter &&
+    previous.taskScopeSprintId === next.taskScopeSprintId &&
+    previous.reducedMotion === next.reducedMotion &&
+    previous.draggedTaskId === next.draggedTaskId &&
+    areDropTargetsEqual(previous.dropTargetContext, next.dropTargetContext) &&
+    previous.listTransitionStyle.transitionDuration === next.listTransitionStyle.transitionDuration &&
+    previous.listTransitionStyle.transitionTimingFunction === next.listTransitionStyle.transitionTimingFunction &&
+    previous.onDragOver === next.onDragOver &&
+    previous.onDrop === next.onDrop &&
+    previous.onDragStart === next.onDragStart &&
+    previous.onDragEnd === next.onDragEnd &&
+    previous.onEditTask === next.onEditTask &&
+    previous.onDeleteTask === next.onDeleteTask;
+}
+
+const TaskBoardColumnsComponent: FunctionComponent<TaskBoardColumnsProps> = ({
   boardRef,
   columns,
   taskViewModels,
@@ -200,3 +262,5 @@ export const TaskBoardColumns: FunctionComponent<TaskBoardColumnsProps> = ({
     ))}
   </div>
 );
+
+export const TaskBoardColumns = memo(TaskBoardColumnsComponent, areTaskBoardColumnsPropsEqual);
