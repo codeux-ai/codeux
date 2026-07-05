@@ -3,6 +3,13 @@ import { AlertTriangle, CheckCircle2, Layers, RefreshCw } from "lucide-preact";
 
 import type { ContainerBuildProgress } from "../../../lib/activity.js";
 
+const BUILDING_KINDS = new Set<ContainerBuildProgress["kind"]>([
+  "cache_miss",
+  "lock_wait",
+  "build_start",
+  "build_step",
+]);
+
 const getStatusCopy = (progress: ContainerBuildProgress): {
   title: string;
   tone: string;
