@@ -51,6 +51,25 @@ describe("Antigravity Log Parser - parseAntigravityTranscript", () => {
     expect(parseAntigravityTranscript("   \n   ")).toEqual([]);
   });
 
+  it("skips malformed JSON lines while preserving valid partial records", () => {
+    const turns = parseAntigravityTranscript([
+      "{\"type\":\"USER_INPUT\",",
+      JSON.stringify({
+        type: "USER_INPUT",
+        content: "<USER_REQUEST>valid prompt</USER_REQUEST>",
+        created_at: "2026-06-01T10:00:00.000Z",
+      }),
+    ].join("\n"));
+
+    expect(turns).toEqual([
+      {
+        kind: "user",
+        text: "valid prompt",
+        timestampMs: Date.parse("2026-06-01T10:00:00.000Z"),
+      },
+    ]);
+  });
+
   it("parses user input and strips USER_REQUEST XML tags", () => {
     const jsonl = [
       JSON.stringify({
@@ -214,27 +233,37 @@ describe("Antigravity Log Parser - parseAntigravityDatabase", () => {
     await fs.rm(path.dirname(tempDbPath), { recursive: true, force: true }).catch(() => {});
   });
 
-  it("returns null for non-existent database file", () => {
+  it("returns null usage fields for non-existent database file", () => {
     const result = parseAntigravityDatabase("/non-existent-path/file.db");
-    expect(result).toBeNull();
+    expect(result).toEqual({ usage: null, rawUsageJson: null, lastIdx: null });
   });
 
-  it("returns null for database missing gen_metadata table", () => {
+  it("returns null usage fields for database missing gen_metadata table", () => {
     const db = new DatabaseSync(tempDbPath);
     db.exec("CREATE TABLE other_table (id INTEGER);");
     db.close();
 
     const result = parseAntigravityDatabase(tempDbPath);
-    expect(result).toBeNull();
+    expect(result).toEqual({ usage: null, rawUsageJson: null, lastIdx: null });
   });
 
-  it("returns null for database with empty gen_metadata table", () => {
+  it("returns null usage fields for database with empty gen_metadata table", () => {
     const db = new DatabaseSync(tempDbPath);
     db.exec("CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB);");
     db.close();
 
     const result = parseAntigravityDatabase(tempDbPath);
-    expect(result).toBeNull();
+    expect(result).toEqual({ usage: null, rawUsageJson: null, lastIdx: null });
+  });
+
+  it("returns null usage and the last idx for malformed gen_metadata rows", () => {
+    const db = new DatabaseSync(tempDbPath);
+    db.exec("CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB);");
+    db.prepare("INSERT INTO gen_metadata (idx, data) VALUES (?, ?)").run(3, Buffer.from([0xff, 0xff]));
+    db.close();
+
+    const result = parseAntigravityDatabase(tempDbPath);
+    expect(result).toEqual({ usage: null, rawUsageJson: null, lastIdx: 3 });
   });
 
   it("sums token totals across every gen_metadata row, not just the latest", () => {
@@ -324,7 +353,7 @@ describe("Antigravity Log Parser - parseAntigravityDatabase", () => {
     expect(result!.lastIdx).toBe(2);
   });
 
-  it("returns null when a follow-up run added no new rows past sinceIdx", () => {
+  it("returns null usage when a follow-up run added no new rows past sinceIdx", () => {
     const db = new DatabaseSync(tempDbPath);
     db.exec("CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB);");
     const insert = db.prepare("INSERT INTO gen_metadata (idx, data) VALUES (?, ?)");
@@ -332,6 +361,6 @@ describe("Antigravity Log Parser - parseAntigravityDatabase", () => {
     db.close();
 
     const result = parseAntigravityDatabase(tempDbPath, 0);
-    expect(result).toBeNull();
+    expect(result).toEqual({ usage: null, rawUsageJson: null, lastIdx: null });
   });
 });
