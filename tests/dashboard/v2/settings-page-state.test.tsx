@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
+import { h } from "preact";
 import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
-import { renderHook, act, waitFor, cleanup } from "@testing-library/preact";
+import { renderHook, act, waitFor, cleanup, render, screen, fireEvent } from "@testing-library/preact";
 import { useSettingsPageState } from "../../../dashboard/src/v2/hooks/use-settings-page-state.js";
-import { CATEGORIES } from "../../../dashboard/src/v2/components/settings/SettingsCategoryRail.js";
+import { SettingsCategoryRail, CATEGORIES } from "../../../dashboard/src/v2/components/settings/SettingsCategoryRail.js";
+import { focusFirstInvalidSettingsControl } from "../../../dashboard/src/v2/SettingsPage.js";
 import { applyEffectiveProjectSettings } from "../../../dashboard/src/v2/lib/settings-view-models.js";
 import * as settingsApi from "../../../dashboard/src/v2/lib/settings-api.js";
 import * as memoryApi from "../../../dashboard/src/v2/lib/memory-api.js";
@@ -12,13 +14,18 @@ import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-d
 
 import * as navigationBlocker from "../../../dashboard/src/v2/router/navigation-blocker.js";
 
-vi.mock("../../../dashboard/src/v2/context/project-data.js", () => ({
-  useProjectData: vi.fn(() => ({
+vi.mock("../../../dashboard/src/v2/context/project-data.js", async () => {
+  const { createContext } = await import("preact");
+  const projectDataValue = {
     deleteProject: vi.fn(() => Promise.resolve()),
     selectedProject: { id: "proj-1", name: "Test Project" },
     selectedProjectId: "proj-1",
-  }))
-}));
+  };
+  return {
+    ProjectDataContext: createContext(projectDataValue),
+    useProjectData: vi.fn(() => projectDataValue),
+  };
+});
 
 vi.mock("../../../dashboard/src/v2/router/navigation-blocker.js", () => ({
   registerNavigationBlocker: vi.fn(() => vi.fn()),
@@ -250,6 +257,56 @@ describe("useSettingsPageState", () => {
       result.current.setSettingsSearch("");
     });
     expect(result.current.filteredCategories.length).toBe(CATEGORIES.length);
+  });
+
+  it("moves category rail focus with arrow keys and commits selection with Enter", () => {
+    const onSwitchCategory = vi.fn();
+    render(
+      <SettingsCategoryRail
+        filteredCategories={CATEGORIES.slice(0, 3)}
+        activeCategory="general"
+        settingsSearch=""
+        settingsSearchMatches={{}}
+        onSwitchCategory={onSwitchCategory}
+      />,
+    );
+
+    const general = screen.getByRole("button", { name: /General/ });
+    const appearance = screen.getByRole("button", { name: /Appearance/ });
+    general.focus();
+
+    fireEvent.keyDown(general, { key: "ArrowDown" });
+    expect(appearance).toBe(document.activeElement);
+    expect(onSwitchCategory).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(appearance, { key: "Enter" });
+    expect(onSwitchCategory).toHaveBeenCalledWith("appearance");
+  });
+
+  it("focuses the first invalid visible settings field before save dispatch", () => {
+    const root = document.createElement("div");
+    const valid = document.createElement("input");
+    valid.type = "number";
+    valid.min = "1";
+    valid.value = "4";
+    const invalid = document.createElement("input");
+    invalid.type = "number";
+    invalid.min = "1";
+    invalid.value = "0";
+    const laterInvalid = document.createElement("input");
+    laterInvalid.setAttribute("aria-invalid", "true");
+    root.append(valid, invalid, laterInvalid);
+    document.body.append(root);
+    const invalidFocus = vi.spyOn(invalid, "focus");
+    const laterFocus = vi.spyOn(laterInvalid, "focus");
+
+    const message = focusFirstInvalidSettingsControl(root);
+
+    expect(message).toBeTruthy();
+    expect(invalid.getAttribute("aria-invalid")).toBe("true");
+    expect(invalidFocus).toHaveBeenCalled();
+    expect(laterFocus).not.toHaveBeenCalled();
+    root.remove();
   });
 
   it("automatically switches active category if current is filtered out", async () => {

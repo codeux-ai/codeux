@@ -47,22 +47,34 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
   const normalizedSearch = settingsSearch.trim().toLowerCase();
   const buttonsRef = useRef<(HTMLButtonElement | null)[]>([]);
   const tokens = useInteractionTokens();
+  const disabledReasonId = "settings-category-rail-disabled-reason";
+  const instructionsId = "settings-category-rail-instructions";
   const selectionTransitionStyle = {
     transitionDuration: tokens.selectionMovement.duration,
     transitionTimingFunction: tokens.selectionMovement.ease,
   };
 
   const handleKeyDown = (e: KeyboardEvent, index: number) => {
-    if (e.key === "ArrowDown") {
+    if (filteredCategories.length === 0) {
+      return;
+    }
+    if (e.key === "ArrowDown" || e.key === "ArrowRight") {
       e.preventDefault();
       const nextIndex = (index + 1) % filteredCategories.length;
       buttonsRef.current[nextIndex]?.focus();
-      onSwitchCategory(filteredCategories[nextIndex].id);
-    } else if (e.key === "ArrowUp") {
+    } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
       e.preventDefault();
       const prevIndex = (index - 1 + filteredCategories.length) % filteredCategories.length;
       buttonsRef.current[prevIndex]?.focus();
-      onSwitchCategory(filteredCategories[prevIndex].id);
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      buttonsRef.current[0]?.focus();
+    } else if (e.key === "End") {
+      e.preventDefault();
+      buttonsRef.current[filteredCategories.length - 1]?.focus();
+    } else if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onSwitchCategory(filteredCategories[index].id);
     }
   };
 
@@ -77,6 +89,7 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
           Categories
         </div>
         <div
+          id={instructionsId}
           role="status"
           aria-live="polite"
           aria-atomic="true"
@@ -88,6 +101,14 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
               : `No categories match "${settingsSearch.trim()}". Clear search or try routing, provider, auth, CI, agent, or memory.`
             : "Jump directly into the area you need without digging through the full settings tree."}
         </div>
+        {disabledCategoryReason ? (
+          <div
+            id={disabledReasonId}
+            className="mt-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.08] px-3 py-2 text-xs font-semibold leading-relaxed text-amber-700 dark:border-amber-300/20 dark:bg-amber-300/[0.08] dark:text-amber-200"
+          >
+            {disabledCategoryReason}
+          </div>
+        ) : null}
       </div>
 
       {filteredCategories.map((category, index) => {
@@ -107,7 +128,9 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
             onClick={() => onSwitchCategory(category.id)}
             onKeyDown={(e) => handleKeyDown(e, index)}
             aria-current={isActive ? "page" : undefined}
+            aria-selected={isActive}
             aria-disabled={disabled}
+            aria-describedby={[instructionsId, disabled && disabledCategoryReason ? disabledReasonId : undefined].filter(Boolean).join(" ") || undefined}
             aria-busy={isPending ? "true" : undefined}
             title={disabled && disabledCategoryReason ? disabledCategoryReason : undefined}
             style={selectionTransitionStyle}
