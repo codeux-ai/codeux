@@ -14,7 +14,7 @@ interface ActionFeedbackRegionProps {
   className?: string;
   autoDismissMs?: number;
   autoDismiss?: boolean;
-  retryAction?: () => void;
+  retryAction?: () => void | Promise<void>;
   retryLabel?: string;
   retryPending?: boolean;
   progress?: number;
@@ -36,6 +36,10 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
   const clearBtnRef = useRef<HTMLButtonElement>(null);
   const retryRef = useRef<HTMLButtonElement>(null);
   const retryPendingRef = useRef(false);
+  const retryStatusIdRef = useRef<string | null>(null);
+  if (retryStatusIdRef.current === null) {
+    retryStatusIdRef.current = `action-feedback-retry-status-${Math.random().toString(36).slice(2)}`;
+  }
   const reducedMotion = useReducedMotion();
   const motionTokens = useGsapInteractionTokens();
   const cssTokens = useInteractionTokens();
@@ -137,23 +141,35 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
     const fallback = document.querySelector<HTMLElement>('[data-feedback-focus-fallback], [data-focus-fallback], [role="main"], main, #root') || document.body;
     if (fallback.tabIndex < 0) fallback.tabIndex = -1;
     fallback.focus();
-    if (document.activeElement instanceof HTMLElement && (document.activeElement === dismissBtnRef.current || document.activeElement === clearBtnRef.current || document.activeElement === retryRef.current)) {
+    if (
+      document.activeElement instanceof HTMLElement &&
+      (document.activeElement === dismissBtnRef.current || document.activeElement === clearBtnRef.current || document.activeElement === retryRef.current)
+    ) {
       document.activeElement.blur();
     }
   };
 
+  const moveFocusToFallbackIfRemoved = (previousActive: Element | null) => {
+    queueMicrotask(() => {
+      const activeElement = document.activeElement;
+      const activeWasRemoved = previousActive instanceof HTMLElement && !previousActive.isConnected;
+      const focusWasLost = activeElement === document.body || activeElement === null;
+      if (activeWasRemoved || focusWasLost) {
+        moveFocusToFallback();
+      }
+    });
+  };
+
   const handleDismiss = () => {
-    if (document.activeElement === dismissBtnRef.current) {
-      moveFocusToFallback();
-    }
+    const previousActive = document.activeElement === dismissBtnRef.current ? document.activeElement : null;
     onDismiss?.();
+    if (previousActive) moveFocusToFallbackIfRemoved(previousActive);
   };
 
   const handleClearError = () => {
-    if (document.activeElement === clearBtnRef.current) {
-      moveFocusToFallback();
-    }
+    const previousActive = document.activeElement === clearBtnRef.current ? document.activeElement : null;
     clearError?.();
+    if (previousActive) moveFocusToFallbackIfRemoved(previousActive);
   };
 
   const handleRetry = async () => {
@@ -207,7 +223,6 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
   const isPending = displayedStatus === "pending";
   const isRetryPending = retryPending || localRetryPending;
   const actionLabel = retryLabel || "Retry";
-  const retryAriaLabel = isRetryPending ? `${actionLabel} in progress` : actionLabel;
   const dismissAriaLabel = "Dismiss";
   const clearErrorAriaLabel = "Clear error";
   const statusLabel = isPending && progress !== undefined
@@ -246,12 +261,21 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
             onClick={() => void handleRetry()}
             disabled={isRetryPending}
             aria-busy={isRetryPending ? "true" : undefined}
-            aria-label={retryAriaLabel}
+            aria-label={actionLabel}
+            aria-describedby={isRetryPending ? retryStatusIdRef.current : undefined}
             style={{ transitionDuration: cssTokens.controlFeedback.duration, transitionTimingFunction: cssTokens.controlFeedback.ease }}
             className="flex min-h-7 items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md bg-white/50 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-black/40 border border-black/5 dark:border-white/5 transition-colors motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-60"
           >
             <RotateCcw className={`w-3.5 h-3.5 ${isRetryPending ? "motion-safe:animate-spin" : ""} motion-reduce:animate-none`} aria-hidden="true" />
-            {actionLabel}
+            <span>{actionLabel}</span>
+            <span
+              id={retryStatusIdRef.current}
+              role="status"
+              aria-live="polite"
+              className="sr-only"
+            >
+              {isRetryPending ? `${actionLabel} in progress.` : ""}
+            </span>
           </button>
         )}
         {displayedStatus === "error" && clearError ? (

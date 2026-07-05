@@ -59,13 +59,16 @@ export const Toast: FunctionComponent<ToastProps> = ({
   const retryButtonRef = useRef<HTMLButtonElement>(null);
   const dismissingRef = useRef(false);
   const retryPendingRef = useRef(false);
+  const retryStatusIdRef = useRef<string | null>(null);
+  if (retryStatusIdRef.current === null) {
+    retryStatusIdRef.current = `toast-retry-status-${Math.random().toString(36).slice(2)}`;
+  }
   const [retryPending, setRetryPending] = useState(false);
   const motionTokens = useGsapInteractionTokens();
   const cssTokens = useInteractionTokens();
   const Icon = icons[type];
   const colorClass = colors[type];
   const retryText = retryLabel || "Retry";
-  const retryAriaLabel = retryPending ? `${retryText} in progress` : retryText;
 
   useLayoutEffect(() => {
     if (!containerRef.current) return;
@@ -100,20 +103,22 @@ export const Toast: FunctionComponent<ToastProps> = ({
   }, [autoDismissMs, type]);
 
   const moveFocusToFallback = () => {
-    if (document.activeElement === dismissButtonRef.current || document.activeElement === actionButtonRef.current || document.activeElement === retryButtonRef.current) {
-      const fallback = document.querySelector<HTMLElement>('[data-feedback-focus-fallback], [data-focus-fallback], [role="main"], main, #root') || document.body;
-      if (fallback.tabIndex < 0) fallback.tabIndex = -1;
-      fallback.focus();
-      if (document.activeElement === dismissButtonRef.current || document.activeElement === actionButtonRef.current || document.activeElement === retryButtonRef.current) {
-          (document.activeElement as HTMLElement).blur();
-      }
+    const fallback = document.querySelector<HTMLElement>('[data-feedback-focus-fallback], [data-focus-fallback], [role="main"], main, #root') || document.body;
+    if (fallback.tabIndex < 0) fallback.tabIndex = -1;
+    fallback.focus();
+    if (
+      document.activeElement === dismissButtonRef.current ||
+      document.activeElement === actionButtonRef.current ||
+      document.activeElement === retryButtonRef.current
+    ) {
+      (document.activeElement as HTMLElement).blur();
     }
   };
 
   const handleDismiss = () => {
     if (dismissingRef.current) return;
     dismissingRef.current = true;
-    moveFocusToFallback();
+    const previousActive = document.activeElement;
     if (!containerRef.current) return;
 
     gsap.to(containerRef.current, {
@@ -121,7 +126,16 @@ export const Toast: FunctionComponent<ToastProps> = ({
       opacity: 0,
       duration: motionTokens.enterExit.duration,
       ease: motionTokens.enterExit.ease,
-      onComplete: () => onDismiss(id),
+      onComplete: () => {
+        onDismiss(id);
+        queueMicrotask(() => {
+          const activeWasRemoved = previousActive instanceof HTMLElement && !previousActive.isConnected;
+          const focusWasLost = document.activeElement === document.body || document.activeElement === null;
+          if (activeWasRemoved || focusWasLost) {
+            moveFocusToFallback();
+          }
+        });
+      },
     });
   };
 
@@ -172,11 +186,20 @@ export const Toast: FunctionComponent<ToastProps> = ({
             }}
             disabled={retryPending}
             aria-busy={retryPending ? "true" : undefined}
-            aria-label={retryAriaLabel}
+            aria-label={retryText}
+            aria-describedby={retryPending ? retryStatusIdRef.current : undefined}
             style={{ transitionDuration: cssTokens.controlFeedback.duration, transitionTimingFunction: cssTokens.controlFeedback.ease }}
             className="mt-2 text-xs font-bold uppercase tracking-wider underline hover:opacity-80 transition-opacity motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current rounded mr-3 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {retryText}
+            <span
+              id={retryStatusIdRef.current}
+              role="status"
+              aria-live="polite"
+              className="sr-only"
+            >
+              {retryPending ? `${retryText} in progress.` : ""}
+            </span>
           </button>
         )}
         {action && (
