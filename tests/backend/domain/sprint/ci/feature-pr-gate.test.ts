@@ -323,6 +323,43 @@ describe("FeaturePrGateService", () => {
     );
   });
 
+  it("emits a stable CI wait event key across repeated retryable observations", async () => {
+    context.ciIntelligence.featurePrAutoMergeMode = "WHEN_GREEN";
+    context.gitStatus.openPullRequests[0].checks = [
+      { name: "build", status: "queued", conclusion: null }
+    ];
+    context.autoMergeFeaturePr = vi.fn();
+    vi.mocked(context.executionRepository!.getLatestTaskRun).mockReturnValue({
+      id: "run-1",
+      state: "COMPLETED",
+    } as any);
+
+    const first = await service.evaluateCiGate(subtasks, context);
+    const second = await service.evaluateCiGate(first.subtasks, context);
+
+    expect(second.subtasks[0]).toMatchObject({
+      status: "RUNNING",
+      merge_indicator: "CI",
+    });
+    expect(second.subtasks[0].is_merged).toBeFalsy();
+    expect(context.autoMergeFeaturePr).not.toHaveBeenCalled();
+    expect(context.sendSessionMessage).not.toHaveBeenCalled();
+
+    const eventCalls = vi.mocked(context.executionRepository!.appendTaskRunEvent).mock.calls;
+    expect(eventCalls).toHaveLength(2);
+    expect(eventCalls[0][3]).toMatchObject({
+      state: "waiting_checks",
+      prNumber: 101,
+      hasPendingChecks: true,
+    });
+    expect(eventCalls[1][3]).toMatchObject({
+      state: "waiting_checks",
+      prNumber: 101,
+      hasPendingChecks: true,
+    });
+    expect(eventCalls[1][4]).toEqual(eventCalls[0][4]);
+  });
+
   it("skips CI waiting when no PR-triggered workflow matches the feature branch", async () => {
     const repoPath = await createTempRepoWithWorkflow(`
 name: CI
