@@ -35,8 +35,10 @@ Stable layouts on narrow widths (especially mobile or multi-panel layouts) must 
 - **Search and Telemetry Layout:** Components should gracefully hide text or collapse altogether (e.g. icon-only triggers) instead of overflowing the flex container.
 
 ### 5. Hover and Active Indicators
-- **Interactions:** Hover backgrounds for triggers follow `hover:bg-black/[0.05] dark:hover:bg-white/[0.05]`. Active routes in the Sidebar use the primary `signal-500` marker tone.
-- **Tooltips:** Minimized primary sidebar navigation items expose semantic `aria-label`s on their links and keep visual tooltips explicitly mapped via `aria-hidden="true"` styled to mimic standard dropdown glass panels (`shadow-2xl rounded-2xl`). Footer actions such as Settings and the sidebar collapse/expand control keep semantic `aria-label`s but do not render custom hover text labels.
+- **Motion Tokens:** Shell navigation must use the interaction contracts in `dashboard/src/v2/lib/motion`. Use `controlFeedback` for hover, focus, icon color, and label feedback; `selectionMovement` for active route backgrounds, vertical markers, and minimized/expanded label reveal; and `enterExit` for mobile drawer and backdrop transitions.
+- **Interactions:** Hover backgrounds for triggers follow `hover:bg-black/[0.05] dark:hover:bg-white/[0.05]`. Active routes in the Sidebar use the primary `signal-500` marker tone and must remain visibly marked by semantic `aria-current="page"`, active label weight/color, and the persistent Signal Jade indicator.
+- **Minimized Tooltips:** Minimized primary sidebar navigation items expose semantic `aria-label`s on their links and keep visual tooltips explicitly mapped via `aria-hidden="true"` styled to mimic standard dropdown glass panels (`shadow-2xl rounded-2xl`). Tooltips must appear on both hover and `focus-visible`, so keyboard users receive the same label confirmation without pointer hover. Footer actions such as Settings and the sidebar collapse/expand control follow the same minimized tooltip pattern.
+- **Unavailable Routes:** Disabled or unavailable shell destinations remain keyboard reachable as disabled link semantics (`role="link"`, `aria-disabled="true"`) and expose a concise visible or screen-reader-accessible explanation through `aria-describedby`. Do not rely on hover-only text for unavailable reasons.
 
 ## Accessibility Contracts
 
@@ -53,4 +55,11 @@ Stable layouts on narrow widths (especially mobile or multi-panel layouts) must 
 
 - Desktop and mobile sidebar landmarks must have distinct accessible names. Mobile sidebars use dialog semantics only while open, with the inner workspace navigation named separately from the outer dialog.
 - Every shell route link keeps a stable accessible name even when rendered icon-only or visually minimized. Active route links use `aria-current="page"`; hidden tooltip labels remain `aria-hidden`.
+- Mobile sidebar drawers close through the backdrop, route selection, and Escape. Closing must restore focus to the opener when it is still connected and usable, otherwise to the route page fallback.
+- Page route containers must provide a named, programmatically focusable fallback target (`data-focus-fallback`, `tabIndex=-1`, and a stable accessible name) so route changes and overlay closes never leave keyboard focus lost.
 - Fixed bottom dock containers must stay inside their own horizontal scroll boundary, account for `env(safe-area-inset-bottom)`, and preserve visible Signal Jade focus rings at the viewport edges.
+
+### Reduced Motion
+
+- Reduced motion removes movement by resolving interaction durations to `0ms`; it must not remove active route indicators, focus rings, tooltip text, unavailable explanations, or page-region focus targets.
+- Active sidebar and dock state must remain understandable without animation. Preserve `aria-current`, active marker color, active label treatment, and visible focus rings even when transforms and animated movement are disabled.
