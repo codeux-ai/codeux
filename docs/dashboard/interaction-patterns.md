@@ -66,6 +66,8 @@ Current refined dashboard surfaces use the interaction contracts as follows:
 ## Cross-Surface Interaction Rules
 
 - Preserve stale data when a surface already has a useful snapshot or list and the new request is a refresh, reconnect, retryable load failure, or transient stale state. Mark the affected region with `aria-busy` when it is actively updating, add polite status copy, and visually dim or badge the stale content without blocking valid actions.
+- Realtime resources must keep websocket snapshots newer than REST refreshes. Direct websocket payloads advance the resource ordering clock before they are batched into the next animation frame, so an older REST response from polling, mount, or reconnect recovery cannot overwrite the newer snapshot when it finishes later.
+- Treat `snapshot_required` as a recovery hint, not a reason to churn the UI. Repeated hints coalesce into one silent REST refresh, while an explicit foreground refresh, externally signaled refresh, or direct websocket payload supersedes the pending silent refresh before it can abort or overwrite newer work.
 - Show an honest empty state when the committed query or filter set has no results. Do not keep stale content for a new committed search that legitimately returns no matches.
 - Disabled or unavailable controls need a durable reason. Use visible helper text, a status badge, `aria-describedby`, or `title`; do not depend on click-time announcements from native disabled controls.
 - Destructive dashboard actions use `useConfirmDialog` and `ConfirmDialog` when confirmation is required. The dialog must name the destructive target, trap focus, support Escape/cancel, expose pending progress when applicable, and restore focus to the initiating control or a safe page fallback.
