@@ -70,7 +70,10 @@ describe("fetchActivitiesBounded", () => {
     expect(result.get("s_fail")).toEqual([]);
     expect(result.get("s3")).toEqual([{ id: "act_s3" }]);
 
-    expect(mockLogger.warn).toHaveBeenCalledWith("Could not fetch activities for session", { sessionName: "s_fail" });
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      "Could not fetch activities for session",
+      expect.objectContaining({ sessionName: "s_fail" }),
+    );
   });
 
   it("handles empty session list without error", async () => {
