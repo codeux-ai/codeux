@@ -254,6 +254,58 @@ describe("DockerRunner", () => {
     expect(argvWrite?.[1]).toContain("'\"'\"'quotes'\"'\"'");
   });
 
+  it("applies configured memory limits to provider Docker runs", async () => {
+    await runner.runProviderInDocker({
+      command: "qwen",
+      args: ["--prompt", "plan"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: "session-1",
+      providerLabel: "qwen-code",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerMemoryLimitMb: 6144,
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity: vi.fn(),
+    });
+
+    const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
+    expect(dockerArgs).toEqual(expect.arrayContaining([
+      "--memory",
+      "6144m",
+      "--memory-swap",
+      "6144m",
+    ]));
+  });
+
+  it("omits Docker memory flags when the configured limit is disabled", async () => {
+    await runner.runProviderInDocker({
+      command: "codex",
+      args: ["exec", "--yolo"],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: "session-1",
+      providerLabel: "codex",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerMemoryLimitMb: 0,
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity: vi.fn(),
+    });
+
+    const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
+    expect(dockerArgs).not.toContain("--memory");
+    expect(dockerArgs).not.toContain("--memory-swap");
+  });
+
   it("passes provider environment through an env-file so API keys do not enter docker argv", async () => {
     await runner.runProviderInDocker({
       command: "gemini",

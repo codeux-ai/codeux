@@ -857,6 +857,8 @@ export interface CliWorkflowSettings {
   executionMode: CliExecutionMode;
   containerImage: string;
   containerSetupScriptPath: string;
+  /** Docker memory limit in MiB for provider CLI containers. 0 disables Docker memory flags. */
+  containerMemoryLimitMb: number;
   containerCacheSetupScriptImage: boolean;
   containerInstallPlaywrightBrowsers: boolean;
   containerMountGitConfig: boolean;

@@ -223,6 +223,11 @@ export class DockerRunner implements IDockerRunner {
         "-e", `CODE_UX_INSTALL_PLAYWRIGHT=${installPlaywrightBrowsers ? "1" : "0"}`,
       );
 
+      const memoryLimitMb = this.resolveContainerMemoryLimitMb(workflowSettings.containerMemoryLimitMb);
+      if (memoryLimitMb > 0) {
+        dockerArgs.push("--memory", `${memoryLimitMb}m`, "--memory-swap", `${memoryLimitMb}m`);
+      }
+
       if (setupScriptPath && resolvedImage.runSetupScriptAtRuntime) {
         const setupScriptSource = this.mapDockerSourcePathForDaemon(setupScriptPath, repoPath, sessionId, "setup script", onActivity);
         dockerArgs.push("--mount", toDockerMountArg({ source: setupScriptSource, destination: CONTAINER_SETUP_SCRIPT, readonly: true }));
@@ -326,6 +331,13 @@ export class DockerRunner implements IDockerRunner {
 
   private shellSingleQuote(value: string): string {
     return `'${value.replaceAll("'", "'\"'\"'")}'`;
+  }
+
+  private resolveContainerMemoryLimitMb(value: unknown): number {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return 0;
+    }
+    return Math.max(0, Math.round(value));
   }
 
   async readWorkspaceFile(cwd: string, targetPath: string): Promise<string | null> {

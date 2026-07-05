@@ -14,6 +14,7 @@ export const DEFAULT_CLI_WORKFLOW_SETTINGS: CliWorkflowSettings = {
   executionMode: "DOCKER",
   containerImage: "node:24-bookworm",
   containerSetupScriptPath: "",
+  containerMemoryLimitMb: 6144,
   containerCacheSetupScriptImage: true,
   containerInstallPlaywrightBrowsers: true,
   containerMountGitConfig: false,
