@@ -27,12 +27,14 @@ The redesigned Stats page uses a stable top-to-bottom shell:
    - Keep only selected project, sprint lens, time window, and active visual mode controls visible in the command band.
    - Time presets are `1h`, `24h`, `7d`, `30d`, `All time`, and `Custom`.
    - Choosing `Custom` opens start and end date fields. The selected range changes only after `Apply` succeeds.
-   - Invalid or incomplete custom ranges keep focusable controls visible, set `aria-invalid`, connect `aria-errormessage`, and announce inline error text.
+   - Invalid or incomplete custom ranges keep focusable controls visible, keep Apply keyboard-reachable, set `aria-invalid` on the first invalid field, connect `aria-errormessage`, move focus to that field on failed apply, and announce inline error text.
+   - Successful preset and custom range changes produce short polite status copy such as `Time window changed to 24h.` or `Custom range applied: 2026-06-26 to 2026-07-03.` without changing the stats API query contract.
 2. Mode navigation
    - The mode rail is a responsive segmented grid with icon-first buttons and stable accessible labels: `Trend`, `Composition`, `Models`, `Providers`, `Ledgers`, and `System`.
    - The visible `Providers` label maps to the internal reliability mode. Keep user-facing copy and tests aligned if this mapping changes.
    - The rail uses `role="group"` and `aria-pressed`; it is not a tablist because mode changes replace the whole analysis workspace.
    - The active mode also has a screen-reader-only polite status so compact controls communicate selected-state changes without changing their pressed-button semantics.
+   - Active mode movement uses `selectionMovement` timing and a visible selected surface. Reduced motion removes movement while preserving the pressed state, active fill, icon, and status copy.
 3. Metric deck
    - The hero remains a command header only: page title, selected project, sprint lens, time-window controls, and mode navigation.
    - Mode-specific top cards are the single primary metric deck for the selected analysis surface. They use `StatsCard` and should put the most actionable metric first for the selected mode.
@@ -63,6 +65,7 @@ Trend is the chart-first workspace for time-series telemetry.
 - Short daily windows show compact bucket labels under the overview strip so the minimap carries its own context without relying only on the main x-axis labels.
 - Series controls sit in a full-width band under the usage graph, grouped into readable categories such as totals, token details, source confidence, providers, models, purposes, and Git. Controls use `role="switch"` and `aria-checked`; at least one series remains enabled.
 - Hover, keyboard focus, minimap selection, drag zoom, and active bucket controls all update the same focused-bucket summary; avoid a second live-values panel that repeats those values. The focused-bucket card fills the height of its chart-side column, caps to the graph height, and scrolls internally when the graph is tall.
+- The focused-bucket tooltip distinguishes idle, focused, and pinned inspection states in visible copy and polite tooltip text. Marker position has a text equivalent such as `Focused bucket marker at 45 percent of the visible chart window` so color and motion are not the only cues.
 - The visible SVG, readable chart summary, and screen-reader-only table must agree on peak tokens, peak active time, average tokens, invocation peak, active series, and zoom range.
 
 ### Composition
@@ -184,6 +187,7 @@ See [Mobile Responsiveness](./mobile-responsiveness.md) for dashboard-wide const
 - Date inputs have visible labels, programmatic labels, validation state, and inline alert text for invalid custom ranges.
 - Invocation tables provide captions, active `aria-sort` only on the sorted column, explicit sort button labels, mobile cell labels, and wrapping-safe cells for long provider, model, error, and transcript text.
 - Shared table primitives may announce result counts through polite status text and mark background refreshes with `aria-busy` without replacing cached rows. Sortable shared headers show a direction glyph and include `sorted ascending`, `sorted descending`, or `not sorted` in the control name.
+- Shared sortable table headers set `aria-sort` consistently, including `none` for sortable inactive columns, and pair the glyph with an accessible sort label. Busy result announcements use concise copy such as `Updating results. 2 records shown.` while cached rows remain visible.
 - System controls are grouped by purpose. Mode controls, time presets, record views, status filters, purpose filters, provider filters, error-category filters, and pagination controls use named groups rather than anonymous button clusters.
 - System record-view buttons use `aria-pressed`, not tab semantics, because they are command-style filters for the records work area. Arrow, Home, and End handling should keep focus inside the group.
 - System invocation tables preserve semantic header relationships: desktop headers use `scope="col"`, sortable headers set `aria-sort` only when active, and body cells reference their headers.
@@ -202,6 +206,7 @@ Motion is for orientation only: shell entrance, mode transitions, card detail re
 - Use `selectionMovement` for mode detail movement, active tab indicators, selected ledger views, metric-card detail refreshes, and small micrograph emphasis.
 - Use `listReveal` for progressive ledger and invocation row entrance.
 - Use `listReorder` when sorting or filtering repositions existing rows.
+- Shared table rows expose `listReorder` as their reorder motion contract. Reduced motion snaps row reveal and reorder changes while leaving row labels, result counts, and sort icons visible.
 - List-window controls use `listReorder` timing for visible-count changes and a static polite range announcement such as `Showing 1 to 20 of 45 tasks`; under reduced motion, the state text remains while transition classes snap.
 - Use `inlineValidation` for custom date range errors.
 - Use `asyncFeedback` for chart refresh overlays and `ActionFeedbackRegion` states in usage graph loading/error/empty surfaces.
