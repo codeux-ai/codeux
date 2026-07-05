@@ -19,14 +19,31 @@ const cloneMemorySettings = (memory: ProjectSettings["memory"]): ProjectSettings
 
 const cloneJiraSettings = (jira: SystemSettings["integrations"]["jira"]): SystemSettings["integrations"]["jira"] => ({ ...jira });
 
+const cloneQualityAssuranceTrigger = (
+  trigger: ProjectSettings["agents"]["qualityAssurance"]["taskCompletion"],
+): ProjectSettings["agents"]["qualityAssurance"]["taskCompletion"] => {
+  const sourceIds = Array.isArray(trigger.agentPresetIds)
+    ? trigger.agentPresetIds
+    : trigger.agentPresetId
+      ? [trigger.agentPresetId]
+      : [];
+  const agentPresetIds = [...new Set(sourceIds.map((id) => id.trim()).filter(Boolean))];
+
+  return {
+    ...trigger,
+    agentPresetIds,
+    agentPresetId: agentPresetIds[0] ?? null,
+  };
+};
+
 const cloneQualityAssuranceSettings = (qa: ProjectSettings["agents"]["qualityAssurance"]): ProjectSettings["agents"]["qualityAssurance"] => ({
   enabled: qa.enabled,
   maxTaskReviewRuns: qa.maxTaskReviewRuns,
   maxSprintReviewRuns: qa.maxSprintReviewRuns,
   exhaustionPolicy: qa.exhaustionPolicy,
-  taskCompletion: { ...qa.taskCompletion },
-  sprintCompletion: { ...qa.sprintCompletion },
-  completedTaskWithoutPr: { ...qa.completedTaskWithoutPr },
+  taskCompletion: cloneQualityAssuranceTrigger(qa.taskCompletion),
+  sprintCompletion: cloneQualityAssuranceTrigger(qa.sprintCompletion),
+  completedTaskWithoutPr: cloneQualityAssuranceTrigger(qa.completedTaskWithoutPr),
 });
 
 const cloneSkills = (skills: SkillToggle[]): SkillToggle[] => skills.map((skill) => ({ ...skill }));

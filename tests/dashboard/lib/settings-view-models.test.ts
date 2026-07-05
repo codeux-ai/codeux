@@ -716,9 +716,9 @@ describe("settings cloning helpers", () => {
     maxTaskReviewRuns: 2,
     maxSprintReviewRuns: 3,
     exhaustionPolicy: "STOP" as const,
-    taskCompletion: { strategy: "ALWAYS" as const },
-    sprintCompletion: { strategy: "ALWAYS" as const },
-    completedTaskWithoutPr: { strategy: "CREATE_PR" as const },
+    taskCompletion: { strategy: "ALWAYS" as const, agentPresetIds: ["qa-task"], agentPresetId: "qa-task" },
+    sprintCompletion: { strategy: "ALWAYS" as const, agentPresetIds: ["qa-sprint", "qa-peer"], agentPresetId: "qa-sprint" },
+    completedTaskWithoutPr: { strategy: "CREATE_PR" as const, agentPresetIds: [], agentPresetId: null },
   });
 
   const createMockProjectSettings = (): ProjectSettings => ({
@@ -777,6 +777,7 @@ describe("settings cloning helpers", () => {
     clone.jira.host = "new-host";
     clone.agents.qualityAssurance.enabled = false;
     clone.agents.qualityAssurance.taskCompletion.strategy = "NEVER";
+    clone.agents.qualityAssurance.sprintCompletion.agentPresetIds.push("qa-extra");
     clone.agents.routing.taskCoding.orchestratorAgentPresetIds.push("c");
     clone.customMcpServers![0].headers!["X-New"] = "123";
     clone.customMcpServers![0].env!["BAZ"] = "qux";
@@ -789,6 +790,7 @@ describe("settings cloning helpers", () => {
     expect(original.jira.host).toBe("h");
     expect(original.agents.qualityAssurance.enabled).toBe(true);
     expect(original.agents.qualityAssurance.taskCompletion.strategy).toBe("ALWAYS");
+    expect(original.agents.qualityAssurance.sprintCompletion.agentPresetIds).toEqual(["qa-sprint", "qa-peer"]);
     expect(original.agents.routing.taskCoding.orchestratorAgentPresetIds).toEqual(["a", "b"]);
     expect(original.customMcpServers![0].headers!["X-New"]).toBeUndefined();
     expect(original.customMcpServers![0].env!["BAZ"]).toBeUndefined();
@@ -806,6 +808,7 @@ describe("settings cloning helpers", () => {
     clone.memory.enabled = false;
     clone.jira.host = "new-host";
     clone.agents.qualityAssurance.enabled = false;
+    clone.agents.qualityAssurance.sprintCompletion.agentPresetIds.push("qa-extra");
     clone.agents.routing.taskCoding.orchestratorAgentPresetIds.push("c");
     clone.customMcpServers![0].headers!["X-New"] = "123";
 
@@ -813,6 +816,7 @@ describe("settings cloning helpers", () => {
     expect(original.memory.enabled).toBe(true);
     expect(original.jira.host).toBe("h");
     expect(original.agents.qualityAssurance.enabled).toBe(true);
+    expect(original.agents.qualityAssurance.sprintCompletion.agentPresetIds).toEqual(["qa-sprint", "qa-peer"]);
     expect(original.agents.routing.taskCoding.orchestratorAgentPresetIds).toEqual(["a", "b"]);
     expect(original.customMcpServers![0].headers!["X-New"]).toBeUndefined();
   });

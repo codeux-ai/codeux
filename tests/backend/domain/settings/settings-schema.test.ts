@@ -223,11 +223,13 @@ describe("validateSettingsPayload", () => {
           taskCompletion: {
             enabled: "bad",
             agentPresetId: 1,
+            agentPresetIds: ["qa", 1],
           },
           sprintCompletion: "bad",
           completedTaskWithoutPr: {
             enabled: "bad",
             agentPresetId: 2,
+            agentPresetIds: "bad",
           },
         },
       },
@@ -272,13 +274,30 @@ describe("validateSettingsPayload", () => {
     expect(paths).toContain("agents.qualityAssurance.maxTaskReviewRuns");
     expect(paths).toContain("agents.qualityAssurance.taskCompletion.enabled");
     expect(paths).toContain("agents.qualityAssurance.taskCompletion.agentPresetId");
+    expect(paths).toContain("agents.qualityAssurance.taskCompletion.agentPresetIds.1");
     expect(paths).toContain("agents.qualityAssurance.sprintCompletion");
     expect(paths).toContain("agents.qualityAssurance.completedTaskWithoutPr.enabled");
     expect(paths).toContain("agents.qualityAssurance.completedTaskWithoutPr.agentPresetId");
+    expect(paths).toContain("agents.qualityAssurance.completedTaskWithoutPr.agentPresetIds");
     expect(paths).toContain("skills[0]");
     expect(paths).toContain("skills[1].isInternal");
     expect(paths).toContain("mcpTools[0]");
     expect(paths).toContain("mcpTools[1].enabled");
+  });
+
+  it("accepts QA trigger agent preset arrays and legacy single preset fields", () => {
+    const payload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    payload.agents.qualityAssurance.taskCompletion.agentPresetId = "qa-legacy";
+    payload.agents.qualityAssurance.taskCompletion.agentPresetIds = ["qa-legacy"];
+    payload.agents.qualityAssurance.sprintCompletion.agentPresetId = "qa-1";
+    payload.agents.qualityAssurance.sprintCompletion.agentPresetIds = ["qa-1", "qa-2"];
+    payload.agents.qualityAssurance.completedTaskWithoutPr.agentPresetId = null;
+    payload.agents.qualityAssurance.completedTaskWithoutPr.agentPresetIds = [];
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(true);
+    expect(result.issues).toEqual([]);
   });
 });
 

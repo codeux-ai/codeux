@@ -308,15 +308,18 @@ Dashboard behavior:
   - `exhaustionPolicy` (default `FINISH_TASK` for new or unset settings)
   - `taskCompletion`
     - `enabled`
+    - `agentPresetIds` (ordered list of review agent preset IDs; empty means the built-in/default QA agent fallback)
     - `agentPresetId`
   - `sprintCompletion`
     - `enabled`
+    - `agentPresetIds` (ordered list of review agent preset IDs; empty means the built-in/default QA agent fallback)
     - `agentPresetId`
   - `completedTaskWithoutPr`
     - `enabled`
+    - `agentPresetIds` (ordered list of review agent preset IDs; empty means the built-in/default QA agent fallback)
     - `agentPresetId`
 
-Quality assurance settings are project-scoped today and are edited from `Settings -> Sprint & Git`, immediately below `Merge Gates & Autofix`. When task-level QA is enabled, successful CLI task runs preserve their worktree long enough for a QA follow-up pass to resume the same session/worktree if fixes are required.
+Quality assurance settings are project-scoped today and are edited from `Settings -> Sprint & Git`, immediately below `Merge Gates & Autofix`. Each QA trigger can persist multiple review agent presets in `agentPresetIds`; Code UX still accepts the legacy single `agentPresetId` field and mirrors it to the first selected ID in sanitized and effective settings for compatibility. When task-level QA is enabled, successful CLI task runs preserve their worktree long enough for a QA follow-up pass to resume the same session/worktree if fixes are required.
 
 QA merge-gate notes:
 - task QA now runs on code-complete tasks before Code UX auto-merges their feature PRs
