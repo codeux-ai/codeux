@@ -137,6 +137,9 @@ export const InteractiveUsageChart: FunctionComponent<{
   const { activeIndex, activeBucket, tooltipLeft, xPositions } = useMemo(() => getTooltipState(
     visibleBuckets, chartData, hoveredIndex, padding, width
   ), [visibleBuckets, chartData, hoveredIndex, padding, width]);
+  const tooltipInspectionState = activeBucket
+    ? zoomRange && zoomRange.start === zoomRange.end ? 'pinned' : 'focused'
+    : 'idle';
 
   const selectionBounds = dragStartIndex !== null && dragCurrentIndex !== null
     ? {
@@ -506,6 +509,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                 label={activeBucket?.label || ""}
                 bucketStart={activeBucket?.bucketStart || ""}
                 bucket={activeBucket}
+                inspectionState={tooltipInspectionState}
                 activeSeries={visibleSeries.map((s) => ({
                   id: s.id,
                   label: s.label,

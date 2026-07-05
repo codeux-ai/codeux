@@ -6,6 +6,7 @@ import { cleanup, render, screen, fireEvent } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { afterEach, expect, describe, it } from "vitest";
 import { TelemetryLedgerTabs } from "../../../dashboard/src/v2/pages/stats/components/TelemetryLedgerTabs.js";
+import { Table, TableBody, TableCell, TableHeader, TableRow } from "../../../dashboard/src/v2/components/ui/Table.js";
 
 expect.extend(matchers);
 
@@ -95,5 +96,32 @@ describe("TelemetryLedgerTabs", () => {
     fireEvent.keyDown(tablist, { key: "Home" });
     expect(taskTab).toHaveFocus();
     expect(taskTab).toHaveAttribute("aria-selected", "true");
+  });
+});
+
+describe("Stats table accessibility", () => {
+  it("labels sortable headers and announces busy result counts", () => {
+    render(
+      <Table ariaLabel="Stats results" resultCount={2} resultLabel="records" busy>
+        <TableHeader>
+          <TableCell isHeader onSort={() => {}} sortLabel="Tokens" ariaSort="descending">Tokens</TableCell>
+          <TableCell isHeader onSort={() => {}} sortLabel="Latest">Latest</TableCell>
+        </TableHeader>
+        <TableBody>
+          <TableRow>
+            <TableCell mobileLabel="Tokens">200</TableCell>
+            <TableCell mobileLabel="Latest">Today</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    );
+
+    expect(screen.getByRole("table", { name: "Stats results" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("status")).toHaveTextContent("Updating results. 2 records shown.");
+    expect(screen.getByRole("columnheader", { name: /Tokens/ })).toHaveAttribute("aria-sort", "descending");
+    expect(screen.getByRole("button", { name: "Tokens, sorted descending" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /Latest/ })).toHaveAttribute("aria-sort", "none");
+    expect(screen.getByRole("button", { name: "Latest, not sorted" })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /200 Today/ })).toHaveAttribute("data-reorder-motion", "listReorder");
   });
 });

@@ -360,19 +360,69 @@ describe("StatsPage Shell", () => {
   });
 
   it("announces invalid custom date ranges and blocks Apply", () => {
+    const applyCustomRange = vi.fn();
     mockStatsPageData({
       activeQuery: { window: "custom", from: "2026-07-03", to: "2026-06-26" },
       customFrom: "2026-07-03",
       customTo: "2026-06-26",
+      applyCustomRange,
     });
 
     render(<StatsPage />);
 
     expect(screen.getByRole("button", { name: "Custom" })).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled();
+    const apply = screen.getByRole("button", { name: "Apply" });
+    expect(apply).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByRole("alert")).toHaveTextContent("End date must be after start date.");
-    expect(screen.getByLabelText("Custom start date")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText("Custom start date")).toHaveAttribute("aria-invalid", "false");
     expect(screen.getByLabelText("Custom end date")).toHaveAttribute("aria-errormessage", "stats-custom-range-error");
+
+    fireEvent.click(apply);
+    expect(screen.getByLabelText("Custom end date")).toHaveFocus();
+    expect(applyCustomRange).not.toHaveBeenCalled();
+  });
+
+  it("focuses the first missing custom date and announces successful range changes", () => {
+    const applyCustomRange = vi.fn();
+    const applyPresetWindow = vi.fn();
+    mockStatsPageData({
+      activeQuery: { window: "7d" },
+      customFrom: "",
+      customTo: "2026-07-03",
+      applyCustomRange,
+      applyPresetWindow,
+    });
+
+    render(<StatsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Custom" }));
+    const apply = screen.getByRole("button", { name: "Apply" });
+    fireEvent.click(apply);
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Choose both dates before applying a custom range.");
+    expect(screen.getByLabelText("Custom start date")).toHaveFocus();
+    expect(applyCustomRange).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "24h" }));
+    expect(applyPresetWindow).toHaveBeenCalledWith("24h");
+    expect(screen.getAllByRole("status").some((status) => status.textContent === "Time window changed to 24h.")).toBe(true);
+  });
+
+  it("announces successful custom range applies without changing query contracts", () => {
+    const applyCustomRange = vi.fn();
+    mockStatsPageData({
+      activeQuery: { window: "custom", from: "2026-06-26", to: "2026-07-03" },
+      customFrom: "2026-06-26",
+      customTo: "2026-07-03",
+      applyCustomRange,
+    });
+
+    render(<StatsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(applyCustomRange).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByRole("status").some((status) => status.textContent === "Custom range applied: 2026-06-26 to 2026-07-03.")).toBe(true);
   });
 
   it("calls visual mode switches from the hero and renders active content for three modes", () => {
@@ -382,6 +432,7 @@ describe("StatsPage Shell", () => {
 
     const modeGroup = screen.getByRole("group", { name: "Analytics modes" });
     expect(within(modeGroup).getByRole("button", { name: "Trend" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(modeGroup).getByRole("button", { name: "Trend" })).toHaveAttribute("data-selection-motion", "selectionMovement");
     expect(within(modeGroup).getByText("Selected analytics mode: Trend.")).toBeInTheDocument();
 
     fireEvent.click(within(modeGroup).getByRole("button", { name: "Composition" }));
