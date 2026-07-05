@@ -309,11 +309,11 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
           setError(null);
         }
       } catch (fetchError: unknown) {
-        if (fetchError instanceof Error && fetchError.name === "AbortError" || abortController.signal.aborted) return;
+        if ((fetchError instanceof Error && fetchError.name === "AbortError") || abortController.signal.aborted) return;
         if (fetchIdRef.current !== currentFetchId) return;
         setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
       } finally {
-        if (!abortController.signal.aborted && fetchIdRef.current === currentFetchId) {
+        if (fetchIdRef.current === currentFetchId) {
           setLoading((prev) => (prev !== false ? false : prev));
           setIsRecovering((prev) => (prev !== false ? false : prev));
           isRecoveringRef.current = false;
