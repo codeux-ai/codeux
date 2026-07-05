@@ -59,6 +59,46 @@ export function parsePreviewSessionIdFromHost(hostHeader: string | undefined): s
   return sessionId || null;
 }
 
+export function parseSelectedPreviewPortFromRequest(
+  urlValue: string | null | undefined,
+  headerValue: string | string[] | undefined,
+): string | null {
+  const url = new URL(urlValue || "/", "http://preview.local");
+  const querySelectedPort = url.searchParams.get("previewPort")
+    ?? url.searchParams.get("containerPort")
+    ?? url.searchParams.get("hostPort");
+  const headerSelectedPort = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+  return querySelectedPort ?? headerSelectedPort ?? null;
+}
+
+export function stripPreviewPortSelectorFromPath(pathValue: string | null | undefined): string {
+  const url = new URL(pathValue || "/", "http://preview.local");
+  url.searchParams.delete("previewPort");
+  url.searchParams.delete("containerPort");
+  url.searchParams.delete("hostPort");
+  const query = url.searchParams.toString();
+  return `${url.pathname}${query ? `?${query}` : ""}`;
+}
+
+export function resolvePreviewHostPort(session: SprintPreviewSession, selectedPort: string | number | null | undefined): number | null {
+  const primary = session.portMappings.find((mapping) => mapping.isPrimary === true) ?? session.portMappings[0];
+  if (selectedPort === undefined || selectedPort === null || selectedPort === "") {
+    return primary?.hostPort ?? session.hostPort;
+  }
+  const normalizedPort = typeof selectedPort === "string" ? selectedPort.trim() : String(selectedPort);
+  const parsedPort = Number.parseInt(normalizedPort, 10);
+  if (!/^\d+$/.test(normalizedPort) || !Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
+    throw new Error("Selected preview port is invalid.");
+  }
+  const mapping = session.portMappings.find((candidate) =>
+    candidate.containerPort === parsedPort || candidate.hostPort === parsedPort
+  );
+  if (!mapping) {
+    throw new Error("Selected preview port is not available for this session.");
+  }
+  return mapping.hostPort;
+}
+
 export function isAllowedPreviewControlOrigin(req: express.Request): boolean {
   const origin = typeof req.headers.origin === "string" ? req.headers.origin.trim() : "";
   if (!origin) {
@@ -702,9 +742,10 @@ export async function pipePreviewUpgradeRequest(args: {
   socket: Duplex;
   head: Buffer;
   upstreamPort: number;
+  targetPath?: string;
 }): Promise<void> {
   const upstreamSocket = net.connect(args.upstreamPort, "127.0.0.1");
-  const requestLines = [`${args.req.method || "GET"} ${args.req.url || "/"} HTTP/${args.req.httpVersion}`];
+  const requestLines = [`${args.req.method || "GET"} ${args.targetPath || args.req.url || "/"} HTTP/${args.req.httpVersion}`];
   for (const [key, value] of Object.entries(args.req.headers)) {
     if (value === undefined) {
       continue;

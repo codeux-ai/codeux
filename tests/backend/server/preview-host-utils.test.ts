@@ -7,7 +7,10 @@ import {
   escapeHtml,
   escapeJsonForScript,
   mergePreviewCorsHeaders,
+  parseSelectedPreviewPortFromRequest,
+  resolvePreviewHostPort,
   rewritePreviewLocationHeader,
+  stripPreviewPortSelectorFromPath,
 } from "../../../src/server/preview-host-utils.js";
 import type { Request } from "express";
 import type { SprintPreviewSession } from "../../../src/contracts/app-types.js";
@@ -68,6 +71,31 @@ describe("preview-host-utils", () => {
       const req = { protocol: "http", headers: { host: "dashboard.local" } } as unknown as Request;
       expect(rewritePreviewLocationHeader("/relative/path", req, 3000)).toBe("/relative/path");
       expect(rewritePreviewLocationHeader("https://external.com/path", req, 3000)).toBe("https://external.com/path");
+    });
+  });
+
+  describe("selected preview ports", () => {
+    const session = {
+      hostPort: 5555,
+      portMappings: [
+        { containerPort: 3000, hostPort: 5555, isPrimary: true },
+        { containerPort: 5173, hostPort: 5556 },
+      ],
+    } as SprintPreviewSession;
+
+    it("defaults host routing to the primary mapping", () => {
+      expect(resolvePreviewHostPort(session, null)).toBe(5555);
+    });
+
+    it("resolves selected host routing only from persisted mappings", () => {
+      expect(resolvePreviewHostPort(session, "5173")).toBe(5556);
+      expect(resolvePreviewHostPort(session, "5556")).toBe(5556);
+      expect(() => resolvePreviewHostPort(session, "9999")).toThrow("not available for this session");
+    });
+
+    it("parses and strips selector parameters without forwarding them upstream", () => {
+      expect(parseSelectedPreviewPortFromRequest("/app?previewPort=5173&keep=1", undefined)).toBe("5173");
+      expect(stripPreviewPortSelectorFromPath("/app?previewPort=5173&keep=1")).toBe("/app?keep=1");
     });
   });
 
