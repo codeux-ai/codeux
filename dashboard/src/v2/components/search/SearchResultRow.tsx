@@ -141,6 +141,12 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
                     e.stopPropagation();
                 }
             }}
+            onPointerDown={(e: PointerEvent) => {
+                if (isDisabled) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            }}
             onKeyDown={(e: KeyboardEvent) => {
                 if (isDisabled && (e.key === "Enter" || e.key === " ")) {
                     e.preventDefault();

@@ -227,9 +227,48 @@ describe("Global Search", () => {
             expect(listbox).toHaveAttribute("aria-describedby", "search-results-refreshing-note");
             expect(listbox).not.toHaveClass("pointer-events-none");
             expect(screen.getAllByRole("status", { hidden: true })).toHaveLength(1);
-            expect(screen.getByRole("status", { hidden: true })).toHaveTextContent("Updating results for 'generic'. 1 current results remain available.");
+            expect(screen.getByRole("status", { hidden: true })).toHaveTextContent("Updating results for 'generic'. 1 current result remains available.");
             expect(screen.getByRole("option", { name: /generic sprint/i, hidden: true })).toBeInTheDocument();
             expect(screen.getByText("Updating visible results")).toBeInTheDocument();
+        });
+
+        it("keeps stale results visible for a new typed query and shows committed-query empties after refresh", () => {
+            const { rerender } = render(
+                <SearchOverlay
+                    isOpen={true}
+                    onClose={vi.fn()}
+                    searchQuery="new query"
+                    committedSearchQuery="old query"
+                    onSearchChange={vi.fn()}
+                    results={{
+                        sprints: [{ id: "sprint-old", title: "Old Query Sprint", displayKey: "SPR-OLD", sprintKey: "SPR-OLD", routeSprintId: "sprint-old", status: "running" }],
+                        tasks: [],
+                        agents: [],
+                        containers: []
+                    }}
+                    isLoading={true}
+                />
+            );
+
+            expect(screen.getByRole("listbox", { hidden: true })).toHaveAttribute("aria-busy", "true");
+            expect(screen.getByRole("status", { hidden: true })).toHaveTextContent("Updating results for 'new query'. 1 current result remains available.");
+            expect(screen.getByRole("option", { name: /old query sprint/i, hidden: true })).toBeInTheDocument();
+
+            rerender(
+                <SearchOverlay
+                    isOpen={true}
+                    onClose={vi.fn()}
+                    searchQuery="new query"
+                    committedSearchQuery="new query"
+                    onSearchChange={vi.fn()}
+                    results={{ sprints: [], tasks: [], agents: [], containers: [] }}
+                    isLoading={false}
+                />
+            );
+
+            expect(screen.queryByRole("listbox", { hidden: true })).toBeNull();
+            expect(screen.getAllByText("No results found for 'new query'").some((el) => !el.closest(".sr-only"))).toBe(true);
+            expect(screen.getAllByRole("status", { hidden: true })[0]).toHaveTextContent("No results found for 'new query'");
         });
 
         it("keeps the active descendant stable while stale results refresh", () => {
@@ -558,6 +597,7 @@ describe("Global Search", () => {
              expect(screen.getByText("This result is unavailable and cannot be opened.")).toBeInTheDocument();
 
              fireEvent.mouseEnter(link);
+             fireEvent.pointerDown(link);
              fireEvent.keyDown(link, { key: "Enter" });
              fireEvent.click(link);
 
