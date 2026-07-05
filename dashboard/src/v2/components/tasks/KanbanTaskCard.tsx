@@ -41,6 +41,7 @@ export const KanbanTaskCard: FunctionComponent<{
   const qaReviewLabel = viewModel.qaReviewLabel ?? (task.latestReview ? `QA ${task.latestReview.status}` : "QA not reviewed");
   const dragStateLabel = viewModel.dragStateLabel ?? "Pointer drag only; keyboard reordering is not supported";
   const cardActions = viewModel.actions ?? [];
+  const hasPullRequestMetadata = viewModel.hasPullRequestMetadata ?? true;
   const dependencySummary = dependencyIndicators.length === 0
     ? "No dependency blockers."
     : `${dependencyIndicators.length} ${dependencyIndicators.length === 1 ? "dependency" : "dependencies"}; ${blockerCount === 0 ? "no blockers" : `${blockerCount} ${blockerCount === 1 ? "blocker" : "blockers"}`}: ${dependencyIndicators.map((dep) => `${dep.id} ${dep.stateLabel ?? dep.status.replace(/_/g, " ")}`).join(", ")}.`;
@@ -52,7 +53,7 @@ export const KanbanTaskCard: FunctionComponent<{
     : sessionState
       ? `Runtime session ${sessionState}.`
       : "Runtime not started.";
-  const prSummary = prUrl ? "Pull request available." : "No pull request available yet.";
+  const prSummary = prUrl ? "Pull request available." : hasPullRequestMetadata ? "No pull request available yet." : "Pull request creation disabled.";
   const isReducedMotion = useReducedMotion();
   const isDragDisabled = isReducedMotion || !!task.isOptimistic;
   const StatusIcon = STATUS_CFG[task.status].icon;
@@ -231,7 +232,7 @@ export const KanbanTaskCard: FunctionComponent<{
               <span>PR ready</span>
             </a>
           )}
-          {!prUrl && (
+          {!prUrl && hasPullRequestMetadata && (
             <span className="flex min-h-7 items-center rounded-full border border-black/[0.06] bg-black/[0.03] px-2 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-500">
               PR pending
             </span>
@@ -373,6 +374,7 @@ export const KanbanTaskCard: FunctionComponent<{
 
   return tasksEqual && depsEqual &&
          prev.viewModel.prUrl === next.viewModel.prUrl &&
+         prev.viewModel.hasPullRequestMetadata === next.viewModel.hasPullRequestMetadata &&
          prev.viewModel.sessionId === next.viewModel.sessionId &&
          prev.viewModel.sessionState === next.viewModel.sessionState &&
          prev.viewModel.liveRunningTime === next.viewModel.liveRunningTime &&

@@ -53,6 +53,27 @@ test("buildTaskBoardViewModel combines optimistic and normal tasks, filters, and
   expect(vm1?.task.id).toBe("t1");
 });
 
+test("buildTaskBoardViewModel passes task PR availability into card view models", () => {
+  const task = createMockTask("t1", { status: "pending" });
+
+  const vm = buildTaskBoardViewModel({
+    tasks: [task],
+    optimisticTasks: [],
+    statusFilter: "all",
+    priorityFilter: "all",
+    listWindow: 50,
+    taskScopeSprintId: null,
+    taskDispatches: [],
+    recentEvents: [],
+    subtasks: [],
+    taskPullRequestsEnabled: false,
+  });
+
+  const taskVm = vm.taskViewModels.get("t1");
+  expect(taskVm?.hasPullRequestMetadata).toBe(false);
+  expect(taskVm?.actions?.some((action) => action.kind === "pull_request")).toBe(false);
+});
+
 test("buildTaskBoardViewModel applies sprint scope correctly", () => {
   const t1 = createMockTask("t1", { sprintId: "sprint-1" });
   const d1: ExecutionTaskDispatchSummary = { id: "d1", sprintId: "sprint-1", executionId: "", taskId: "t1", status: "completed", queuedAt: "", workerBranch: "b" };
