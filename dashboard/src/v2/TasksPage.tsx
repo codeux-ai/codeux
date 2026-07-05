@@ -551,7 +551,7 @@ export const TasksPage: FunctionComponent = () => {
   const sprintKeyPrefix = settings.data?.settings?.git?.sprintKeyPrefix || "SPR";
   const gitSettings = settings.data?.settings?.git;
   const taskPullRequestsEnabled = gitSettings
-    ? gitSettings.githubMode !== "LOCAL" && gitSettings.autoCreatePr !== false
+    ? gitSettings.githubMode !== "LOCAL" && gitSettings.autoCreatePr === true
     : true;
   const [agentPresetsMap, setAgentPresetsMap] = useState<Map<string, AgentPreset>>(new Map());
   useEffect(() => {
