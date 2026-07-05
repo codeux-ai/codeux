@@ -80,6 +80,11 @@ describe("DockerBootstrapBuilder", () => {
 
     expect(script).toContain(`merge_json_file "${CLAUDE_CODE_MCP_CONFIG_MOUNT}" "$HOME/.claude.json"`);
     expect(script).toContain(`merge_json_file "${GEMINI_MCP_SETTINGS_MOUNT}" "$HOME/.gemini/settings.json"`);
+    expect(script).toContain(`remove_json_key "$HOME/.gemini/settings.json" "mcpServers"`);
+    expect(script).toContain(`remove_json_key "$HOME/.claude.json" "mcpServers"`);
+    expect(script).toContain(`remove_json_key "$HOME/.qwen/settings.json" "mcpServers"`);
+    expect(script).toContain(`remove_json_key "$HOME/.gemini/antigravity-cli/mcp_config.json" "mcpServers"`);
+    expect(script).toContain(`remove_codex_mcp_servers "$HOME/.codex/config.toml"`);
     expect(script).toContain(`append_if_missing_literal "${CODEX_MCP_CONFIG_MOUNT}" "$HOME/.codex/config.toml" "[mcp_servers.code-ux]"`);
     expect(script).toContain(`merge_json_file "/opt/provider-config/qwen-settings.json" "$HOME/.qwen/settings.json"`);
     expect(script).toContain("merged.memory={...(destinationJson.memory||{}), ...(sourceJson.memory||{})}");

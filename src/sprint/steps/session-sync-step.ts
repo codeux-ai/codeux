@@ -425,16 +425,18 @@ const recoverMissingRecordedSession = (
 
   const providerInvocation = deps.executionRepository.getLatestProviderInvocationUsageBySession(sessionId, "task_coding");
   if (providerInvocation?.status === "running") {
-    failStaleProviderInvocation(
-      deps.executionRepository,
-      providerInvocation,
-      deps.executionRepository.listExecutionInvocationsByProviderInvocationId(providerInvocation.id),
-      {
-        reconciledAt: now,
-        recoveryReason: "session_sync_missing_recorded_session",
-        systemMessage: message,
-      },
-    );
+    if (providerInvocation.provider === "jules") {
+      failStaleProviderInvocation(
+        deps.executionRepository,
+        providerInvocation,
+        deps.executionRepository.listExecutionInvocationsByProviderInvocationId(providerInvocation.id),
+        {
+          reconciledAt: now,
+          recoveryReason: "session_sync_missing_recorded_session",
+          systemMessage: message,
+        },
+      );
+    }
   }
 
   if (taskRun && taskRun.state !== "COMPLETED" && taskRun.state !== "FAILED") {
@@ -508,7 +510,7 @@ const syncExecutionRunState = async (
       const usage = sessionId
         ? deps.executionRepository.getLatestProviderInvocationUsageBySession(sessionId, "task_coding")
         : null;
-      if (usage) {
+      if (usage && usage.provider === persistedTaskRun.provider) {
         deps.executionRepository.associateProviderInvocationRuntime(usage.id, {
           sprintRunId: deps.sprintRunId,
           dispatchId: taskRun.dispatchId,
@@ -684,7 +686,8 @@ const syncExecutionRunState = async (
         });
       }
 
-      const existingUsage = deps.executionRepository.getLatestProviderInvocationUsageBySession(sessionId || sessionName || taskRun.id, "task_coding");
+      const latestUsage = deps.executionRepository.getLatestProviderInvocationUsageBySession(sessionId || sessionName || taskRun.id, "task_coding");
+      const existingUsage = latestUsage && latestUsage.provider === provider ? latestUsage : null;
 
       if (existingUsage && existingUsage.status !== (nextRunState === "COMPLETED" ? "completed" : "failed")) {
           deps.executionRepository.updateProviderInvocationUsage(existingUsage.id, {

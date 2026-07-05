@@ -433,7 +433,6 @@ export class CodeUxServer {
       logger: this.logger.child({ component: "mcp-request-router", runtimeRole }),
       withCorrelationContext: (request, operation) => this.runWithMcpCorrelationContext(request, operation),
       getMcpApprovalTracker: () => this.mcpApprovalTracker,
-      executionRepository: this.executionRepository,
     });
 
     server.onerror = (error) => {
