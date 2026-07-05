@@ -1,4 +1,9 @@
 import type { APIRequestContext } from '@playwright/test';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+
+const e2eProjectSource = fs.mkdtempSync(path.join(os.tmpdir(), 'codeux-e2e-project-'));
 
 // A freshly-checked-out server (as in CI) starts with the first-run onboarding
 // overlay open, no projects, and no selected project. The overlay is a
@@ -27,9 +32,10 @@ export async function ensureSelectedProject(request: APIRequestContext): Promise
 
   let projectId = body.projects?.[0]?.id;
   if (!projectId) {
-    // The repo checkout itself is a valid local source for an "existing" project.
+    // Use a disposable local source so app-side markdown mirroring or asset
+    // seeding never writes into the repository under test.
     const created = await request.post('/api/projects', {
-      data: { name: 'E2E Test Project', sourceType: 'local', sourceRef: process.cwd() },
+      data: { name: 'E2E Test Project', sourceType: 'local', sourceRef: e2eProjectSource },
     });
     projectId = ((await created.json()) as { id: string }).id;
   }
