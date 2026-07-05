@@ -18,6 +18,7 @@ The dashboard's Live page and runtime components follow a distinct visual system
 ## Data & Performance Constraints
 
 - **Indexed Execution History:** To maintain linear performance in dashboard live runtime metrics over large execution sets, construct and pass down an `IndexedExecutionHistory` instead of repeatedly scanning full arrays with `Array.prototype.filter` ($O(T \times (D + E))$ vs $O(T + D + E)$). When retrieving records from the index, return an empty array if an entry doesn't exist rather than falling back to the unindexed array.
+- **Execution Runtime Aggregation:** `ExecutionRuntimePanel` render-time aggregation belongs in `dashboard/src/v2/lib/live-session/execution-runtime-view-model.ts`. Keep active runs, active dispatches, active connections, pending inbox totals, visible row slices, attention and failure counters, and dispatch-event lookup derivations in that pure helper so the panel renders from a memoized view model instead of recalculating filters per row.
 
 ## Operational State Hierarchy
 

@@ -23,6 +23,7 @@ import {
     type LiveActionLabels,
     type LiveActionState,
 } from "../../lib/live-session-runtime.js";
+import { deriveExecutionRuntimeViewModel } from "../../lib/live-session/execution-runtime-view-model.js";
 
 export const statusTone = (value: string | null): string => {
     if (!value) return "text-slate-400";
@@ -455,35 +456,16 @@ export const ExecutionRuntimePanel: FunctionComponent<{
         }
     }, [open, isReducedMotion, motionTokens.expansionCollapse.duration, motionTokens.expansionCollapse.ease, collapsible]);
 
-    const activeSprintRuns = useMemo(() => (snapshot?.sprintRuns ?? []).filter((run) => run.status === "running" || run.status === "queued"), [snapshot?.sprintRuns, snapshot?.sprintRuns?.length]);
-    const activeDispatches = useMemo(() => (snapshot?.taskDispatches ?? []).filter((dispatch) => (
-        dispatch.status === "queued" || dispatch.status === "claimed" || dispatch.status === "running"
-    )), [snapshot?.taskDispatches, snapshot?.taskDispatches?.length]);
-    const activeConnections = useMemo(() => (snapshot?.connections ?? []).filter((connection) => connection.status !== "offline"), [snapshot?.connections, snapshot?.connections?.length]);
-    const pendingInboxTotal = useMemo(
-        () => (snapshot?.connections ?? []).reduce((sum, connection) => sum + connection.pendingInboxCount, 0),
-        [snapshot?.connections, snapshot?.connections?.length],
+    const runtimeViewModel = useMemo(
+        () => snapshot ? deriveExecutionRuntimeViewModel(snapshot) : null,
+        [
+            snapshot?.sprintRuns,
+            snapshot?.taskDispatches,
+            snapshot?.connections,
+            snapshot?.attentionItems,
+            snapshot?.recentEvents,
+        ],
     );
-
-    const { queuedWorkers, runningWorkers } = useMemo(() => {
-        const workers = activeDispatches.filter((dispatch) => dispatch.executorType === "docker_cli");
-        return {
-            queuedWorkers: workers.filter((dispatch) => dispatch.status === "queued").length,
-            runningWorkers: workers.filter((dispatch) => dispatch.status === "claimed" || dispatch.status === "running").length,
-        };
-    }, [activeDispatches]);
-
-    const visibleSprintRuns = useMemo(() => (snapshot?.sprintRuns ?? []).slice(0, 4), [snapshot?.sprintRuns, snapshot?.sprintRuns?.length]);
-    const visibleTaskDispatches = useMemo(() => (snapshot?.taskDispatches ?? []).slice(0, 8), [snapshot?.taskDispatches, snapshot?.taskDispatches?.length]);
-    const blockedAttentionCount = useMemo(
-        () => (snapshot?.attentionItems ?? []).filter((item) => item.status === "open" || item.status === "claimed").length,
-        [snapshot?.attentionItems, snapshot?.attentionItems?.length],
-    );
-    const failedTaskCount = useMemo(
-        () => (snapshot?.taskDispatches ?? []).filter((dispatch) => dispatch.status === "failed").length,
-        [snapshot?.taskDispatches, snapshot?.taskDispatches?.length],
-    );
-    const runtimeSummary = `${activeSprintRuns.length} active run${activeSprintRuns.length === 1 ? "" : "s"}, ${activeDispatches.length} active dispatch${activeDispatches.length === 1 ? "" : "es"}, ${blockedAttentionCount} attention item${blockedAttentionCount === 1 ? "" : "s"}, ${failedTaskCount} failed dispatch${failedTaskCount === 1 ? "" : "es"}.`;
 
     if (!snapshot) {
         return (
@@ -492,6 +474,21 @@ export const ExecutionRuntimePanel: FunctionComponent<{
             </div>
         );
     }
+
+    const {
+        activeSprintRuns,
+        activeDispatches,
+        activeConnections,
+        pendingInboxTotal,
+        queuedWorkers,
+        runningWorkers,
+        visibleSprintRuns,
+        visibleTaskDispatches,
+        blockedAttentionCount,
+        failedTaskCount,
+        dispatchEventsByDispatchId,
+        runtimeSummary,
+    } = runtimeViewModel!;
 
     return (
         <div role="region" aria-label="Execution runtime" aria-busy={snapshotSurface.isBusy || activeSprintRuns.length > 0 || activeDispatches.length > 0 ? "true" : undefined} className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800">
@@ -727,9 +724,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                             ) : (
                                 <div className="max-h-[50dvh] sm:max-h-80 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar" role="log" aria-live="polite" aria-busy={snapshotSurface.isBusy ? "true" : undefined} aria-label="Task dispatch status rows">
                                     {visibleTaskDispatches.map((dispatch) => {
-                                        const dispatchEvents = snapshot.recentEvents.filter(
-                                            (e) => e.dispatchId === dispatch.id || (e.taskRunId && e.taskRunId === dispatch.taskRunId)
-                                        );
+                                        const dispatchEvents = dispatchEventsByDispatchId.get(dispatch.id) ?? [];
                                         const activeCap = findActiveConcurrencyWait(dispatchEvents, dispatch.status);
                                         const cancelActionState = getPendingActionState(pendingActionIds, `dispatch-cancel:${dispatch.id}`);
                                         const forceCancelActionState = getPendingActionState(pendingActionIds, `dispatch-force-cancel:${dispatch.id}`);
