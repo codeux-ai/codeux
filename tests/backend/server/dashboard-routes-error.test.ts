@@ -1,6 +1,7 @@
 import express, { type Express } from "express";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
+import { HttpRouteError } from "../../../src/server/http-errors.js";
 import { registerConversationRoutes } from "../../../src/server/conversation-routes.js";
 import { registerExecutionControlRoutes } from "../../../src/server/execution-control-routes.js";
 import type { DashboardDependencies } from "../../../src/server/dashboard-server.js";
@@ -11,6 +12,7 @@ import { registerSettingsRoutes } from "../../../src/server/settings-routes.js";
 import { toErrorResponse } from "../../../src/server/route-utils.js";
 import { registerSprintRoutes } from "../../../src/server/sprint-routes.js";
 import { registerTaskRoutes } from "../../../src/server/task-routes.js";
+import { EntityNotFoundError, ValidationError } from "../../../src/repositories/repository-utils.js";
 
 const createApp = (...registrars: Array<(app: Express) => void>): Express => {
   const app = express();
@@ -22,6 +24,112 @@ const createApp = (...registrars: Array<(app: Express) => void>): Express => {
 };
 
 describe("dashboard route handlers", () => {
+  it.each([
+    {
+      label: "ValidationError",
+      route: "/api/status",
+      deps: {
+        getStatus: () => {
+          throw new ValidationError("Invalid status request");
+        },
+      },
+      status: 400,
+      body: { error: "Invalid status request" },
+      expectedNextError: null,
+    },
+    {
+      label: "parser-style Invalid error",
+      route: "/api/projects/project-1/stats?window=custom&from=2024-01-02&to=2024-01-01",
+      deps: {
+        getProjectStatsSnapshot: () => ({ ok: true }),
+      },
+      status: 400,
+      body: { error: "Invalid custom stats window: start must be earlier than or equal to end." },
+      expectedNextError: null,
+    },
+    {
+      label: "parser-style Missing error",
+      route: "/api/status",
+      deps: {
+        getStatus: () => {
+          throw new Error("Missing required test field");
+        },
+      },
+      status: 400,
+      body: { error: "Missing required test field" },
+      expectedNextError: null,
+    },
+    {
+      label: "EntityNotFoundError",
+      route: "/api/status",
+      deps: {
+        getStatus: () => {
+          throw new EntityNotFoundError("Project not found");
+        },
+      },
+      status: 404,
+      body: { error: "Project not found" },
+      expectedNextError: null,
+    },
+    {
+      label: "explicit HttpRouteError",
+      route: "/api/status",
+      deps: {
+        getStatus: () => {
+          throw new HttpRouteError(409, "Route conflict");
+        },
+      },
+      status: 409,
+      body: { error: "Route conflict" },
+      expectedNextError: null,
+    },
+    {
+      label: "unexpected sync error",
+      route: "/api/status",
+      deps: {
+        getStatus: () => {
+          throw new Error("database connection string leaked");
+        },
+      },
+      status: 500,
+      body: { error: "Internal Server Error" },
+      expectedNextError: "database connection string leaked",
+    },
+    {
+      label: "unexpected async error",
+      route: "/api/live",
+      deps: {
+        getLiveSnapshot: async () => {
+          throw new Error("provider token leaked");
+        },
+      },
+      status: 500,
+      body: { error: "Internal Server Error" },
+      expectedNextError: "provider token leaked",
+    },
+  ])("maps $label through dashboard route wrappers", async ({ route, deps, status, body, expectedNextError }) => {
+    const delegatedErrors: unknown[] = [];
+    const app = createApp((router) => registerRuntimeRoutes(router, deps as DashboardDependencies));
+    app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+      delegatedErrors.push(error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "error middleware fallback" });
+      }
+    });
+
+    const response = await request(app).get(route);
+
+    expect(response.status).toBe(status);
+    expect(response.body).toEqual(body);
+    if (expectedNextError) {
+      expect(delegatedErrors).toHaveLength(1);
+      expect(delegatedErrors[0]).toBeInstanceOf(Error);
+      expect((delegatedErrors[0] as Error).message).toBe(expectedNextError);
+    } else {
+      expect(delegatedErrors).toEqual([]);
+    }
+  });
+
   it("covers project route errors, success branches, and 404 handling", async () => {
     const projectDeps = {
       listProjects: () => [{ id: "project-1" }],
