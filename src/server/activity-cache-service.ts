@@ -4,11 +4,31 @@ import type { Logger } from "../shared/logging/logger.js";
 const DEFAULT_LIVE_ACTIVITY_FETCH_TIMEOUT_MS = 30_000;
 
 class ActivityFetchTimeoutError extends Error {
+  readonly timeoutMs: number;
+
   constructor(sessionName: string, timeoutMs: number) {
     super(`Timed out fetching live activities for ${sessionName} after ${timeoutMs}ms`);
     this.name = "ActivityFetchTimeoutError";
+    this.timeoutMs = timeoutMs;
   }
 }
+
+const getFetchFailureMetadata = (
+  sessionName: string,
+  error: unknown,
+  cacheFallbackState: "empty" | "stale",
+  cachedActivityCount: number
+) => {
+  const isTimeout = error instanceof ActivityFetchTimeoutError;
+  return {
+    sessionName,
+    failureCause: isTimeout ? "timeout" : "error",
+    errorName: error instanceof Error ? error.name : typeof error,
+    cacheFallbackState,
+    cachedActivityCount,
+    ...(isTimeout ? { timeoutMs: error.timeoutMs } : {}),
+  };
+};
 
 async function withTimeout<T>(
   promise: Promise<T>,
@@ -153,12 +173,13 @@ export class ActivityCacheService {
               const cached = this.liveActivitiesCache.get(sessionName);
               if (cached && !cached.isNegative) {
                 this.deps.logger?.warn("Could not fetch live activities; returning stale cached activities", {
-                  sessionName,
-                  error,
+                  ...getFetchFailureMetadata(sessionName, error, "stale", cached.data.length),
                 });
                 return { sessionName, activities: cached.data, isNegative: false, failed: true };
               }
-              this.deps.logger?.warn("Could not fetch live activities", { sessionName, error });
+              this.deps.logger?.warn("Could not fetch live activities", {
+                ...getFetchFailureMetadata(sessionName, error, "empty", 0),
+              });
               return { sessionName, activities: [], isNegative: false, failed: true };
             }
           },
