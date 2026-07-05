@@ -4,7 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { Compass, ExternalLink, Loader2, ServerOff, FolderArchive, Play, Square, AlertCircle } from "lucide-preact";
 import { useProjectData } from "../../context/project-data.js";
 import { fetchPreviewSessions } from "../../lib/browser-api.js";
-import { buildPreviewUrl } from "../../lib/preview-origin.js";
+import { buildPreviewUrl, formatPreviewPortMappingsSummary, getPrimaryPreviewPortMapping } from "../../lib/preview-origin.js";
 import type { SprintPreviewSession } from "../../../types.js";
 import { getSafeUrl } from "../../lib/safe-url.js";
 import { buildInteractionTransition } from "../../lib/motion/tokens.js";
@@ -190,13 +190,6 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [closeMenu, isMenuVisible]);
 
-    const formatPort = (session: SprintPreviewSession) => {
-        if (session.containerAppPort && session.hostPort) {
-            return `:${session.containerAppPort} ➔ :${session.hostPort}`;
-        }
-        return session.containerAppPort ? `:${session.containerAppPort} ➔ pending` : "port pending";
-    };
-
     if (!enabled) {
         return null;
     }
@@ -271,8 +264,9 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                         ) : sessions.length > 0 ? (
                             sessions.map((session, index) => {
                                 const sprintName = session.sprintName || "Unknown Sprint";
-                                const canOpen = Boolean(session.hostPort);
-                                const firstEnabledIndex = sessions.findIndex((candidate) => Boolean(candidate.hostPort));
+                                const primaryMapping = getPrimaryPreviewPortMapping(session);
+                                const canOpen = Boolean(primaryMapping?.hostPort);
+                                const firstEnabledIndex = sessions.findIndex((candidate) => Boolean(getPrimaryPreviewPortMapping(candidate)?.hostPort));
                                 const menuItemClassName = `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex flex-col gap-1.5 px-3 py-3 text-left transition-colors group border-b border-black/[0.04] dark:border-white/[0.04] last:border-0 ${
                                     canOpen
                                         ? "hover:bg-black/[0.04] dark:hover:bg-white/[0.04]"
@@ -303,7 +297,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                             {healthLabel[session.healthStatus]}
                                         </span>
                                         <span className="break-words text-[10px] font-mono text-slate-500 dark:text-slate-400">
-                                            {formatPort(session)}
+                                            {formatPreviewPortMappingsSummary(session)}
                                         </span>
                                     </div>
                                     {!canOpen && (
