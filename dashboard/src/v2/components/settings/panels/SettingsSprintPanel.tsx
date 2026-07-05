@@ -11,6 +11,7 @@ import { SprintKeyEditor } from "../SprintKeyEditor.js";
 import { InfoIconPopover } from "../../ui/InfoIconPopover.js";
 import { BranchNameSchemeEditor } from "../BranchNameSchemeEditor.js";
 import { PrTemplateEditorModal } from "../PrTemplateEditorModal.js";
+import { updateGitHubModeForSettings } from "../../../../lib/settings-updaters.js";
 
 const GUARDRAIL_JOB_META: Array<{ key: GuardrailJobType; label: string; description: string }> = [
   { key: "task_coding", label: "Coding attempts", description: "Max times a task is (re)dispatched for coding before it is blocked." },
@@ -119,13 +120,10 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
         <Row label="Git mode" description="Remote enables PR and CI-aware automation. Local keeps orchestration repo-local only." badge={getFieldBadge("git.githubMode")}>
           <PillChoiceGroup
             value={editableSettings.git.githubMode}
-            onChange={(value) => updateEditableSettings((current) => ({
-              ...current,
-              git: {
-                ...current.git,
-                githubMode: value as ProjectSettings["git"]["githubMode"],
-              },
-            }))}
+            onChange={(value) => updateEditableSettings((current) => updateGitHubModeForSettings(
+              current,
+              value as ProjectSettings["git"]["githubMode"],
+            ))}
             options={[
               { value: "REMOTE", label: "Remote", hint: "PRs, CI, and remote branch sync stay enabled." },
               { value: "LOCAL", label: "Local", hint: "Disable remote PR orchestration and stay repo-local." },

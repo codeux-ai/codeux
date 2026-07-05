@@ -20,6 +20,7 @@ import {
 } from "lucide-preact";
 import type { Source, SourceStatus } from "./types.js";
 import { AddProjectModal, type AddProjectModalSubmission, type SourceType as AddProjectModalSourceType } from "./components/ui/AddProjectModal.js";
+import { buildGitHubModeProjectSettingsOverride } from "../lib/settings-updaters.js";
 import { StatusDot } from "./components/ui/StatusDot.js";
 import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
@@ -601,17 +602,19 @@ export const ProjectsPage: FunctionComponent = () => {
 
     const handleAddProject = async (project: AddProjectModalSubmission) => {
         if (project.type === 'new_project') {
+            const isLocalProject = project.initMode === 'new-local';
             const sourceRef = project.initMode === 'new-local'
                 ? (project.path || project.name)
                 : (project.repoSlug || project.name);
 
             await createProject({
                 name: project.name,
-                sourceType: project.initMode === 'new-local' ? 'local' : 'git',
+                sourceType: isLocalProject ? 'local' : 'git',
                 sourceRef,
                 initMode: project.initMode,
                 remoteProvider: project.remoteProvider,
                 isPrivate: project.isPrivate,
+                ...(isLocalProject ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
             });
             return;
         }
@@ -621,6 +624,7 @@ export const ProjectsPage: FunctionComponent = () => {
             sourceType: project.type,
             sourceRef: project.path,
             cloneDir: project.cloneDir,
+            ...(project.type === "local" ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
         });
         if (project.setup?.enabled) {
             launchProjectSetup(createdProject.id, createdProject.name, project.setup.options);
