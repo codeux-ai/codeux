@@ -54,6 +54,12 @@ pnpm run ci
 pnpm exec playwright test
 ```
 
+### E2E Fixture Helpers
+
+Root E2E specs should prepare normal app state through `tests/e2e/helpers/prepare-app.ts` before loading pages that depend on onboarding, project selection, sprints, or tasks. The helper layer uses the dashboard HTTP APIs, not direct database writes or shell commands, and creates per-run local project fixtures under the OS temp directory with names prefixed by the Playwright worker and a timestamp-safe run suffix.
+
+Use `completeOnboarding`, `ensureSelectedProject`, `createDraftSprint`, and `createTaskInSprint` for setup. Use the exported update/delete helpers to mutate or clean sprint/task records during a spec. These helpers intentionally avoid provider credentials, Docker dispatch, project setup automation, and orchestration endpoints so E2E state preparation stays deterministic and local to the web app contract.
+
 GitHub Actions optimization notes:
 - The CI pipeline is split into three parallel, concurrent jobs: `Typecheck & Lint`, `Unit & Integration Tests`, and `Playwright E2E Tests` for maximum speed and fast feedback.
 - Restores and saves Vite, Vitest, and TypeScript compiler increment caches across runs.
