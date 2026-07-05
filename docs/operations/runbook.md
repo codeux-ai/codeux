@@ -68,6 +68,8 @@ Checks:
   - direct attention-item realtime refresh
   - scope-aware websocket replay checks
 - If the live view updates task state but Git/CI panels lag, confirm `/api/git-status` is healthy; that surface is rate-limited to avoid external API spam, so it may trail runtime updates by a couple of seconds under heavy activity.
+- `/api/live-activities` fetches are bounded per provider session with a safe timeout so slow activity reads cannot stall the dashboard request indefinitely. Fetch concurrency remains capped, terminal sessions are skipped, and sessions that genuinely return zero activities are negative-cached briefly to avoid hot polling.
+- If a live activity refresh times out or fails for a session with previously cached activities, Code UX logs a warning and returns the stale activities instead of replacing them with an empty result. Provider errors and timeouts are not treated as empty activity results, so the next refresh can recover as soon as the provider responds again.
 - `/api/system/update-status` reports the running Code UX version plus the latest published npm version. It caches the npm lookup briefly, so repeated dashboard refreshes should not hammer the registry, and the dashboard logs a single startup notice when a newer release is available.
 - The dashboard title bar shows a small "Update available" badge next to the version label whenever `/api/system/update-status` reports a newer published version. If the badge is missing, the check either found no newer release or the lookup failed and was suppressed.
 - If the dashboard still degrades under load, inspect `runtime.debugLogFileLevel`; file logging defaults to `error` and uses async streams, but sustained log volume is still a useful signal that a hot loop is too noisy.
