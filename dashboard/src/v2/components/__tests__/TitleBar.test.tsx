@@ -42,16 +42,19 @@ describe("TitleBar", () => {
       currentVersion: "1.0.0",
       latestVersion: "1.2.0",
       updateAvailable: true,
+      releaseUrl: "https://github.com/codeux-ai/codeux/releases/tag/v1.2.0",
       checkedAt: "2026-07-02T00:00:00.000Z",
     });
 
     render(<TitleBar />);
 
-    await waitFor(() => {
-      expect(screen.getByText("Update available")).toBeInTheDocument();
-    });
+    const updateLink = await screen.findByRole("link", { name: "Open Code UX 1.2.0 release" });
 
-    expect(screen.getByText("Update available")).toHaveAttribute("title", "Latest version: 1.2.0");
+    expect(updateLink).toHaveTextContent("Update available");
+    expect(updateLink).toHaveAttribute("href", "https://github.com/codeux-ai/codeux/releases/tag/v1.2.0");
+    expect(updateLink).toHaveAttribute("target", "_blank");
+    expect(updateLink).toHaveAttribute("rel", "noreferrer");
+    expect(updateLink).toHaveAttribute("title", "Open Code UX 1.2.0 release");
   });
 
   it("renders no badge when the update check fails", async () => {
@@ -64,13 +67,15 @@ describe("TitleBar", () => {
     });
 
     expect(screen.queryByText("Update available")).toBeNull();
+    expect(screen.queryByRole("link", { name: /release/i })).toBeNull();
   });
 
-  it("renders no badge when no update is available", async () => {
+  it("renders no update control when no update is available", async () => {
     fetchUpdateStatusMock.mockResolvedValue({
       currentVersion: "1.0.0",
       latestVersion: "1.0.0",
       updateAvailable: false,
+      releaseUrl: "https://github.com/codeux-ai/codeux/releases/tag/v1.0.0",
       checkedAt: "2026-07-02T00:00:00.000Z",
     });
 
@@ -81,5 +86,26 @@ describe("TitleBar", () => {
     });
 
     expect(screen.queryByText("Update available")).toBeNull();
+    expect(screen.queryByRole("link", { name: /release/i })).toBeNull();
+  });
+
+  it("renders no update control when update status contains an error", async () => {
+    fetchUpdateStatusMock.mockResolvedValue({
+      currentVersion: "1.0.0",
+      latestVersion: "1.2.0",
+      updateAvailable: true,
+      releaseUrl: "https://github.com/codeux-ai/codeux/releases/tag/v1.2.0",
+      checkedAt: "2026-07-02T00:00:00.000Z",
+      error: "registry unavailable",
+    });
+
+    render(<TitleBar />);
+
+    await waitFor(() => {
+      expect(fetchUpdateStatusMock).toHaveBeenCalled();
+    });
+
+    expect(screen.queryByText("Update available")).toBeNull();
+    expect(screen.queryByRole("link", { name: /release/i })).toBeNull();
   });
 });
