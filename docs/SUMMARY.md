@@ -12,6 +12,7 @@
 - [DB-Native Orchestrator Integration](./architecture/db-native-orchestrator-integration.md)
 - [Execution Dashboard Projection](./architecture/execution-dashboard-projection.md)
 - [Execution Invocation Tracking](./architecture/execution-invocation-tracking.md)
+- [Code Quality And Performance Contracts](./architecture/code-quality-performance-contracts.md)
 - [Dashboard Realtime Transport Plan](./architecture/dashboard-realtime-transport-plan.md)
 - [Dashboard Realtime Foundation](./architecture/dashboard-realtime-foundation.md)
 - [Live Runtime Contract](./architecture/live-runtime-contract.md)

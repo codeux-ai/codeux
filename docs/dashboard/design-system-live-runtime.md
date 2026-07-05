@@ -2,6 +2,8 @@
 
 The dashboard's Live page and runtime components follow a distinct visual system optimized for an operational command surface. Under pressure, it is crucial that the interface provides high trust and fast scanability.
 
+Live runtime implementation must also follow the bounded live snapshot, indexed execution history, and pure dashboard view-model contracts in [Code Quality And Performance Contracts](../architecture/code-quality-performance-contracts.md).
+
 ## Core Principles
 
 1. **Calmer Operational Command Surface**: The live runtime avoids excessive visual noise. Surfaces and panels prioritize clear, calm presentation of status and controls without heavy decorative backgrounds.
