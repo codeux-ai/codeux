@@ -30,6 +30,31 @@ Claims store confidence, durability, category, tags, source metadata, and option
 
 The project-scope memory is a compatibility and retrieval layer. The claim row is the source of durable knowledge and provenance.
 
+## Direct MCP Management
+
+Project-manager agents can maintain durable claims through `manage_memory` without waiting for sprint remediation. The canonical MCP action schema is documented in [MCP Tools and Contracts](../mcp/tools-and-contracts.md#manage_memory-claim-actions).
+
+The direct lifecycle is:
+
+1. `create_claim` requires `projectId` and a non-blank `claim`, then creates both the canonical `memory_claims` row and a project-scope mirror memory.
+2. Optional `sourceMemoryId` links source evidence during creation; `supportType`, `weight`, or `evidenceWeight` can refine that relationship.
+3. `update_claim` changes the canonical row and synchronizes mirror memory content, category, and strength.
+4. `add_claim_evidence` links additional project-scoped evidence memory to the claim.
+5. `deprecate_claim` is the destructive lifecycle action. It first returns `approvalRequired: true` and only changes state when the repeated request includes `approval.confirmed: true`.
+
+Example:
+
+```json
+{
+  "action": "add_claim_evidence",
+  "projectId": "project-123",
+  "claimId": "claim-123",
+  "memoryId": "mem-456",
+  "supportType": "supports",
+  "weight": 0.75
+}
+```
+
 ## Claim-First Retrieval
 
 Agents and dashboards can search canonical claims directly through:
