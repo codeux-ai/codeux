@@ -40,6 +40,7 @@ export const KanbanTaskCard: FunctionComponent<{
   const dependencyActionLabel = viewModel.dependencyActionLabel ?? (blockerCount > 0 ? `${blockerCount} dependency ${blockerCount === 1 ? "blocker" : "blockers"}` : "Dependencies clear");
   const qaReviewLabel = viewModel.qaReviewLabel ?? (task.latestReview ? `QA ${task.latestReview.status}` : "QA not reviewed");
   const dragStateLabel = viewModel.dragStateLabel ?? "Pointer drag only; keyboard reordering is not supported";
+  const shouldShowExecutorLabel = viewModel.executorLabel !== "Auto";
   const cardActions = viewModel.actions ?? [];
   const hasPullRequestMetadata = viewModel.hasPullRequestMetadata ?? true;
   const dependencySummary = dependencyIndicators.length === 0
@@ -143,9 +144,11 @@ export const KanbanTaskCard: FunctionComponent<{
       </h4>
 
       <div className="relative z-10 mb-4 flex flex-wrap items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">
-        <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 min-w-0 truncate max-w-full">
-          {viewModel.executorLabel}
-        </span>
+        {shouldShowExecutorLabel && (
+          <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 min-w-0 truncate max-w-full">
+            {viewModel.executorLabel}
+          </span>
+        )}
         {agentPresetName && (
           <span className="inline-flex items-center gap-1 rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 min-w-0 max-w-full">
             <AgentSelectAvatarIcon avatarConfig={agentPresetAvatarConfig} seed={agentPresetName} />
@@ -168,9 +171,6 @@ export const KanbanTaskCard: FunctionComponent<{
             </span>
           </span>
         )}
-        <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1">
-          {isReducedMotion ? "Drag disabled: reduced motion" : task.isOptimistic ? "Drag disabled: saving" : "Pointer drag only"}
-        </span>
         {dependencyIndicators.length > 0 && (
           <span className={`rounded-full border px-2.5 py-1 ${blockerCount > 0 ? "border-status-amber/25 bg-status-amber/[0.08] text-status-amber" : "border-status-green/20 bg-status-green/[0.08] text-status-green"}`}>
             {dependencyActionLabel}
