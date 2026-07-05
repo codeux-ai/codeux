@@ -444,12 +444,12 @@ export const TelemetryLedger: FunctionComponent<{
                     <div className="flex flex-col gap-4">
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
-                          <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-xl border border-[color:var(--stats-card-border)] bg-[color:var(--stats-card-bg)] text-[10px] font-black uppercase leading-none text-[color:var(--stats-value-color)] shadow-sm backdrop-blur-xl">
+                          <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-xl border border-[color:var(--stats-card-border)] bg-[color:var(--stats-card-bg)] text-[10px] font-semibold uppercase leading-none text-[color:var(--stats-value-color)] shadow-sm backdrop-blur-xl">
                             <span className="text-[8px] tracking-[0.12em] text-[color:var(--stats-label-color)]">Rank</span>
                             <span className="mt-0.5 text-xs">{index + 1}</span>
                           </div>
                           <div className="min-w-0">
-                            <div className="break-words text-base font-black tracking-tight text-[color:var(--stats-value-color)] [overflow-wrap:anywhere]">{item.label}</div>
+                            <div className="break-words text-base font-semibold tracking-tight text-[color:var(--stats-value-color)] [overflow-wrap:anywhere]">{item.label}</div>
                             <div className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">
                               {formatTokens(tokenPerCall)}/call · last {formatDateTime(item.lastActivityAt)}
                             </div>

@@ -391,7 +391,7 @@ const ProviderReliabilityCard: FunctionComponent<{
             <Icon className="h-4 w-4" strokeWidth={2.1} aria-hidden="true" />
           </div>
           <div className="min-w-0">
-            <div className="break-words text-base font-black text-[color:var(--stats-value-color)]" title={provider.label}>{provider.label}</div>
+            <div className="break-words text-base font-semibold text-[color:var(--stats-value-color)]" title={provider.label}>{provider.label}</div>
             <div className="mt-1 break-words text-sm text-[color:var(--stats-detail-color)]">{provider.secondaryLabel ?? "No secondary label"}</div>
             <div className="mt-2 flex flex-wrap gap-2">
               <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${SOURCE_TONE_CLASS[row.sourceTone]}`}>
@@ -405,20 +405,20 @@ const ProviderReliabilityCard: FunctionComponent<{
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
-            <span className="text-base font-black normal-case tracking-tight text-[color:var(--stats-value-color)]">
+            <span className="text-base font-semibold normal-case tracking-tight text-[color:var(--stats-value-color)]">
               {provider.usage.totalTokens > 0 ? formatTokens(provider.usage.totalTokens) : "—"}
             </span>
             <span className="text-[color:var(--stats-label-color)]">tokens</span>
           </div>
           <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
-            <span className="text-base font-black normal-case tracking-tight text-[color:var(--stats-value-color)]">
+            <span className="text-base font-semibold normal-case tracking-tight text-[color:var(--stats-value-color)]">
               {provider.usage.invocationCount.toLocaleString()}
             </span>
             <span className="text-[color:var(--stats-label-color)]">calls</span>
           </div>
           <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
             <DollarSign className="h-3.5 w-3.5 text-[color:var(--stats-positive-text)]" strokeWidth={2.2} aria-hidden="true" />
-            <span className="text-base font-black normal-case tracking-tight text-[color:var(--stats-value-color)]">
+            <span className="text-base font-semibold normal-case tracking-tight text-[color:var(--stats-value-color)]">
               {formatPricingValue(hasCost ? provider.usage.totalCostUsd : null)}
             </span>
             <span className="text-[color:var(--stats-label-color)]">cost</span>

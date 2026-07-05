@@ -138,10 +138,10 @@ export const ModelCard: FunctionComponent<{
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className={`inline-flex shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${CHIP_CLASS}`}>
+              <span className={`inline-flex shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${CHIP_CLASS}`}>
                 #{rank}
               </span>
-              <h3 className="min-w-0 max-w-full break-words text-base font-black leading-tight text-[color:var(--stats-value-color)]" title={model.label}>
+              <h3 className="min-w-0 max-w-full break-words text-base font-semibold leading-tight text-[color:var(--stats-value-color)]" title={model.label}>
                 {model.label}
               </h3>
             </div>
@@ -160,14 +160,14 @@ export const ModelCard: FunctionComponent<{
           </div>
           <div className={`inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
             <BarChart3 className="h-3.5 w-3.5 text-[color:var(--stats-signal-text)]" strokeWidth={2.2} />
-            <span className="text-base font-black normal-case text-[color:var(--stats-value-color)]">
+            <span className="text-base font-semibold normal-case text-[color:var(--stats-value-color)]">
               {formatTokens(model.usage.totalTokens)}
             </span>
             <span className="text-[color:var(--stats-label-color)]">tokens</span>
           </div>
           <div className={`inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
             <DollarSign className="h-3.5 w-3.5 text-[color:var(--stats-positive-text)]" strokeWidth={2.2} />
-            <span className="text-base font-black normal-case text-[color:var(--stats-value-color)]">
+            <span className="text-base font-semibold normal-case text-[color:var(--stats-value-color)]">
               {formatPricingValue(hasCost ? model.usage.totalCostUsd : null)}
             </span>
             <span className="text-[color:var(--stats-label-color)]">cost</span>
@@ -371,7 +371,7 @@ export const ModelsStudio: FunctionComponent<{
                 <Activity className="h-3.5 w-3.5 text-[color:var(--stats-signal-text)]" strokeWidth={2.2} />
                 Window Volume
               </div>
-              <div className="mt-4 text-2xl font-semibold text-[color:var(--stats-value-color)]">{formatTokens(totalTokens)}</div>
+              <div className="mt-4 text-xl font-semibold text-[color:var(--stats-value-color)]">{formatTokens(totalTokens)}</div>
               <div className="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--stats-label-color)]">tokens ranked by model volume</div>
               <div className="mt-5 grid grid-cols-2 gap-3">
                 <ModelMetric label="Calls" value={totalCalls.toLocaleString()} detail={totalCalls < LOW_SAMPLE_THRESHOLD ? "sparse sample" : "invocations"} />

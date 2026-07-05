@@ -246,7 +246,7 @@ export function buildModelHighlights(models: ExecutionModelStatsSummary[]): Mode
 }
 
 const MODEL_SEGMENT_PALETTE = [
-  "rgba(0,224,160,0.9)",
+  "rgb(var(--signal-rgb) / 0.9)",
   "rgba(255,184,0,0.88)",
   "rgba(0,170,255,0.9)",
   "rgba(251,113,133,0.88)",

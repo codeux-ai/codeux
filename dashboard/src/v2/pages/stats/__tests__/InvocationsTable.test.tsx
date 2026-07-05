@@ -193,11 +193,11 @@ describe("InvocationsTable", () => {
     // initial window is 20, so we should see 20 instances of gemini-1.5-pro
     expect(queryAllByText("gemini-1.5-pro").length).toBe(20);
 
-    const revealBtn = getByRole("button", { name: "Show more invocations" });
+    const revealBtn = getByRole("button", { name: /^Show more invocations/ });
     fireEvent.click(revealBtn);
 
     expect(queryAllByText("gemini-1.5-pro").length).toBe(40);
-    expect(queryByRole("button", { name: "Show more invocations" })).toBeNull();
+    expect(queryByRole("button", { name: /^Show more invocations/ })).toBeNull();
   });
 
   it("preserves expanded invocation even if outside initial window", () => {
@@ -210,7 +210,7 @@ describe("InvocationsTable", () => {
   });
 
   it("renders loading skeleton", () => {
-    render(<Harness loading={true} />);
+    render(<Harness invocations={[]} loading={true} />);
     expect(screen.getByRole("status", { name: "Loading invocation records" })).toBeTruthy();
     expect(screen.getByText("Refreshing the ledger rows and transcript expansion targets.")).toBeTruthy();
   });

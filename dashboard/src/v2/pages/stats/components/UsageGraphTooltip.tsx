@@ -106,7 +106,7 @@ export const UsageGraphTooltip: FunctionComponent<UsageGraphTooltipProps> = ({
               <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-[var(--stats-card-bg)]" style={{ backgroundColor: series.accentHex }} />
               <span className="min-w-0 break-words font-medium">{series.label}</span>
             </div>
-            <div className="text-right font-black text-[var(--stats-value-color)]">{series.value}</div>
+            <div className="text-right font-semibold text-[var(--stats-value-color)]">{series.value}</div>
           </div>
         )) : (
           <div className="rounded-[0.85rem] border border-dashed border-[var(--stats-card-border)] px-3 py-4 text-sm leading-relaxed text-[var(--stats-detail-color)]">

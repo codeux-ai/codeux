@@ -49,7 +49,7 @@ const SystemMetricCard: FunctionComponent<{
         {label}
       </div>
     </div>
-    <div className={`mt-4 break-words text-xl font-semibold tracking-tight tabular-nums md:text-[1.7rem] ${valueClassName || "text-[color:var(--stats-value-color)]"}`}>
+    <div className={`mt-4 break-words text-xl font-semibold tracking-tight tabular-nums md:text-2xl ${valueClassName || "text-[color:var(--stats-value-color)]"}`}>
       {value}
     </div>
     <div className="mt-1 text-[11px] font-semibold leading-snug text-[color:var(--stats-detail-color)]">
@@ -515,7 +515,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             aria-label={`Available invocation records: ${invocations.length.toLocaleString()}`}
           >
             <span>Available</span>
-            <span className="inline-flex min-w-[3.25rem] justify-end font-black tabular-nums text-[color:var(--stats-value-color)]">
+            <span className="inline-flex min-w-[3.25rem] justify-end font-semibold tabular-nums text-[color:var(--stats-value-color)]">
               {invocations.length.toLocaleString()}
             </span>
           </div>
@@ -550,7 +550,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
                     >
                       <span className="min-w-0 truncate">{tabLabel}</span>
                       <span
-                        className={`inline-flex min-w-[2.5rem] justify-end rounded-full px-2 py-0.5 text-[9px] font-black tabular-nums tracking-[0.08em] ${activeTab === tab ? TAB_COUNT_ACTIVE_CLASS : TAB_COUNT_IDLE_CLASS}`}
+                        className={`inline-flex min-w-[2.5rem] justify-end rounded-full px-2 py-0.5 text-[9px] font-semibold tabular-nums tracking-[0.08em] ${activeTab === tab ? TAB_COUNT_ACTIVE_CLASS : TAB_COUNT_IDLE_CLASS}`}
                         aria-hidden="true"
                       >
                         {tabCount.toLocaleString()}

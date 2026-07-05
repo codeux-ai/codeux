@@ -235,11 +235,11 @@ export const GitTelemetryLedger: FunctionComponent<{
                     <div className="flex flex-col gap-4">
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--stats-card-border)] bg-[color:var(--stats-card-bg)] text-xs font-black text-[color:var(--stats-value-color)] shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--stats-card-border)] bg-[color:var(--stats-card-bg)] text-xs font-semibold text-[color:var(--stats-value-color)] shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl">
                             {index + 1}
                           </div>
                           <div className="min-w-0">
-                            <div className="break-words text-base font-black tracking-tight text-[color:var(--stats-value-color)] [overflow-wrap:anywhere]">{item.label}</div>
+                            <div className="break-words text-base font-semibold tracking-tight text-[color:var(--stats-value-color)] [overflow-wrap:anywhere]">{item.label}</div>
                             <div className="mt-1.5 flex flex-wrap items-center gap-2">
                               {item.secondaryLabel ? (
                                 <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
@@ -598,7 +598,7 @@ export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSum
             >
               <Icon className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden="true" />
               <span className="truncate">{tab.label}</span>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-black tabular-nums ${CHIP_CLASS} ${isActive ? TAB_COUNT_ACTIVE_CLASS : TAB_COUNT_IDLE_CLASS}`}>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums ${CHIP_CLASS} ${isActive ? TAB_COUNT_ACTIVE_CLASS : TAB_COUNT_IDLE_CLASS}`}>
                 {tab.count.toLocaleString()}
               </span>
             </button>
