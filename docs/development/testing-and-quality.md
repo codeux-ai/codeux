@@ -56,6 +56,12 @@ The quality guardrail script also audits `vitest.config.ts` directly. It fails i
 ```bash
 pnpm exec playwright test
 ```
+Build first when running E2E from a clean checkout:
+```bash
+pnpm run build
+pnpm exec playwright test
+```
+The Playwright config starts `node dist/index.js`, waits on the local `/health` liveness probe, and runs against a temporary HOME/USERPROFILE so the suite does not depend on a developer's browser cache, onboarding state, selected project, or real Code UX database. The E2E suite is local-only: tests must navigate through `baseURL` routes or local API probes, not external websites. Failure artifacts are retained under `test-results/`, and the HTML report is written to `playwright-report/`; CI uploads both paths after every run so traces, videos, screenshots, and reports are available when failures occur.
 
 GitHub Actions optimization notes:
 - `CI` runs on pushes to `main` and `dev`, and on pull requests targeting any branch. `Playwright Tests` runs on pushes and pull requests targeting `main` or `dev`, keeping release and publish workflows separate from validation.
@@ -63,11 +69,11 @@ GitHub Actions optimization notes:
 - Every validation job restores dependency cache as a speed hint, then still runs `pnpm install --frozen-lockfile --ignore-scripts` so the lockfile remains the install source of truth.
 - Restores and saves Vite, Vitest, and TypeScript compiler increment caches across runs. Build and Playwright jobs intentionally do not restore `.cache/tsc` because stale `.tsbuildinfo` without matching `dist/` output can make compiled entrypoints appear up-to-date when `dist/` is missing.
 - Caches Playwright browser binaries (`~/.cache/ms-playwright`) to reduce downloads, then always runs `pnpm exec playwright install chromium --with-deps` so browser and OS dependencies are verified even after a cache restore.
-- Uses `fullyParallel` execution in `playwright.config.ts` on CI to harness all available CPU cores.
+- Keeps Playwright browser tests serialized because the suite shares one local `node dist/index.js` server and isolated SQLite home per run.
 - Seamlessly integrates browser-level E2E tests for WebGL visual rendering, failure fallbacks, and mobile/desktop responsive layout breakpoints, removing mock-heavy DOM stubs from Unit tests.
 - Uses the GitHub Actions reporter to publish Playwright test failures inline on pull request checks.
 - Cancels superseded runs for the same branch or PR to conserve resources.
-- Uploads Playwright failure artifacts from `test-results/` and `playwright-report/` as the `playwright-artifacts` workflow artifact for seven days.
+- Uploads `test-results/` and `playwright-report/` as the `playwright-artifacts` workflow artifact for seven days, with empty uploads ignored so successful runs do not fail if no failure artifacts were produced.
 
 - Build backend and dashboard
 ```bash
