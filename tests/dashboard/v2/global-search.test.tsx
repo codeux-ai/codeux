@@ -566,6 +566,11 @@ describe("Global Search", () => {
     });
 
     describe("SearchResultRow Component", () => {
+        const classTokens = (container: HTMLElement): string[] =>
+            Array.from(container.querySelectorAll("[class]")).flatMap((element) =>
+                (element.getAttribute("class") ?? "").split(/\s+/).filter(Boolean)
+            );
+
         it("renders sprint properly and highlights active state", () => {
             const item = { id: "1", title: "Test Sprint", displayKey: "SPR-1", sprintKey: "SPR-1", routeSprintId: "1", status: "active" };
             render(<SearchResultRow item={item} categoryType="sprints" searchQuery="" globalItemIndex={0} isFocused={true} onFocus={vi.fn()} activeItemRef={null} onClick={vi.fn()} />);
@@ -603,6 +608,33 @@ describe("Global Search", () => {
 
              expect(onFocus).not.toHaveBeenCalled();
              expect(onClick).not.toHaveBeenCalled();
+        });
+
+        it("renders running agent status dots without raw pulse or ping animation classes", () => {
+            const item = { id: "agent-1", name: "Runtime Agent", routeAgentId: "agent-1", status: "running" };
+            const { container } = render(
+                <SearchResultRow
+                    item={item}
+                    categoryType="agents"
+                    searchQuery=""
+                    globalItemIndex={0}
+                    isFocused={false}
+                    onFocus={vi.fn()}
+                    activeItemRef={null}
+                    onClick={vi.fn()}
+                />
+            );
+
+            expect(screen.getByRole("option", { name: /runtime agent, running/i })).toBeInTheDocument();
+            expect(screen.getByText("running")).toBeInTheDocument();
+
+            const tokens = classTokens(container);
+            expect(tokens).toContain("bg-status-green");
+            expect(tokens).toContain("motion-safe:animate-ping");
+            expect(tokens).toContain("motion-safe:animate-pulse");
+            expect(tokens).toContain("motion-reduce:animate-none");
+            expect(tokens).not.toContain("animate-ping");
+            expect(tokens).not.toContain("animate-pulse");
         });
     });
 });

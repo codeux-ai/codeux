@@ -63,6 +63,11 @@ describe("SearchOverlay Accessibility", () => {
         cleanup();
     });
 
+    const classTokens = (container: Element): string[] =>
+        Array.from(container.querySelectorAll("[class]")).flatMap((element) =>
+            (element.getAttribute("class") ?? "").split(/\s+/).filter(Boolean)
+        );
+
     it("has accessible search combobox", () => {
         render(
             <SearchOverlay
@@ -223,6 +228,36 @@ describe("SearchOverlay Accessibility", () => {
 
         expect(screen.getAllByRole("status", { hidden: true })[0]).toHaveTextContent("No results found for 'no-match'");
         expect(screen.getAllByText("No results found for 'no-match'").some((el) => !el.closest(".sr-only"))).toBe(true);
+    });
+
+    it("keeps active agent and container indicators static under reduced motion", () => {
+        const { container } = render(
+            <SearchOverlay
+                isOpen={true}
+                onClose={mockOnClose}
+                searchQuery="runtime"
+                onSearchChange={mockOnSearchChange}
+                results={{
+                    sprints: [],
+                    tasks: [],
+                    agents: [{ id: "agent-1", name: "Runtime Agent", routeAgentId: "agent-1", status: "running" }],
+                    containers: [{ id: "container-1", name: "Runtime Preview", routeContainerId: "container-1", status: "running" }],
+                }}
+            />
+        );
+
+        expect(screen.getByRole("option", { name: /runtime agent, running/i, hidden: true })).toBeInTheDocument();
+        expect(screen.getByRole("option", { name: /runtime preview, running/i, hidden: true })).toBeInTheDocument();
+        expect(screen.getByText("running")).toBeInTheDocument();
+        expect(screen.getByText("Running")).toBeInTheDocument();
+
+        const tokens = classTokens(container);
+        expect(tokens).toContain("bg-status-green");
+        expect(tokens).toContain("motion-safe:animate-ping");
+        expect(tokens).toContain("motion-safe:animate-pulse");
+        expect(tokens).toContain("motion-reduce:animate-none");
+        expect(tokens).not.toContain("animate-ping");
+        expect(tokens).not.toContain("animate-pulse");
     });
 
     it("supports Home and End keyboard navigation", async () => {
