@@ -7,7 +7,7 @@ import { useChatPageResources } from "../../../dashboard/src/v2/hooks/use-chat-p
 import { useInvocationPaneData, areInvocationMessagesEqual } from "../../../dashboard/src/v2/hooks/use-invocation-pane-data.js";
 import { renderHook, act, waitFor } from "@testing-library/preact";
 import { cancelThreadTurn } from "../../../dashboard/src/v2/lib/connection-api.js";
-import { fetchInvocationMessages } from "../../../dashboard/src/v2/lib/invocation-api.js";
+import { fetchInvocationMessages, fetchProjectInvocations } from "../../../dashboard/src/v2/lib/invocation-api.js";
 
 // Mock connection-api calls to prevent external requests
 vi.mock("../../../dashboard/src/v2/lib/connection-api.js", () => ({
@@ -276,6 +276,90 @@ describe("useChatPageResources integration", () => {
     });
 
     expect(refreshInvocationMessages).toHaveBeenCalledWith("inv-1", { force: true });
+  });
+
+  it("loads chat invocations in 40-row pages and preserves the server total", async () => {
+    const makeInvocation = (index: number) => ({
+      id: `inv-${index}`,
+      projectId: "proj-1",
+      sprintId: null,
+      taskId: null,
+      sprintRunId: null,
+      dispatchId: null,
+      taskRunId: null,
+      attentionItemId: null,
+      providerInvocationId: null,
+      type: "dashboard_reply",
+      status: "completed",
+      provider: "mock",
+      model: "mock",
+      systemPrompt: null,
+      startedAt: `2026-03-10T12:${String(index).padStart(2, "0")}:00.000Z`,
+      finishedAt: null,
+      errorMessage: null,
+      lastErrorCategory: null,
+      lastErrorMessage: null,
+      lastRetryAfterIso: null,
+      messageCount: 0,
+      lastMessageAt: null,
+      invocationSource: "internal",
+      agentPresetId: null,
+      inputTokens: 0,
+      cachedInputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      createdAt: `2026-03-10T12:${String(index).padStart(2, "0")}:00.000Z`,
+      updatedAt: `2026-03-10T12:${String(index).padStart(2, "0")}:00.000Z`,
+    }) as any;
+    const pageOne = Array.from({ length: 40 }, (_, index) => makeInvocation(index));
+    const pageTwo = Array.from({ length: 3 }, (_, index) => makeInvocation(index + 40));
+
+    vi.mocked(fetchProjectInvocations).mockImplementation(async (_projectId, query?: any) => ({
+      items: query?.offset === 40 ? pageTwo : pageOne,
+      totalCount: 43,
+      summary: {},
+      availablePurposes: [],
+      availableProviders: [],
+    } as any));
+
+    const { result } = renderHook(() => {
+      const cache = useMessageCache();
+      const threadData = useChatThreadData({
+        selectedProject: { id: "proj-1" },
+        cache,
+        execution: null,
+        workerRouting: null,
+      });
+      const invocationData = useInvocationPaneData({
+        selectedProject: { id: "proj-1" },
+        cache,
+      });
+      const resources = useChatPageResources({
+        selectedProject: { id: "proj-1" },
+        cache,
+        chatMode: "invocations",
+        threadData,
+        invocationData,
+      });
+
+      return { invocationData, resources };
+    });
+
+    await waitFor(() => {
+      expect(result.current.invocationData.invocations).toHaveLength(40);
+    });
+    expect(result.current.invocationData.invocationTotalCount).toBe(43);
+    expect(result.current.invocationData.hasMoreInvocations).toBe(true);
+    expect(vi.mocked(fetchProjectInvocations)).toHaveBeenCalledWith("proj-1", expect.objectContaining({ limit: 40, offset: 0 }));
+
+    await act(async () => {
+      await result.current.resources.loadMoreInvocations();
+    });
+
+    expect(result.current.invocationData.invocations).toHaveLength(43);
+    expect(result.current.invocationData.invocationTotalCount).toBe(43);
+    expect(result.current.invocationData.hasMoreInvocations).toBe(false);
+    expect(vi.mocked(fetchProjectInvocations)).toHaveBeenCalledWith("proj-1", expect.objectContaining({ limit: 40, offset: 40 }));
   });
 
   it("refreshes a selected running invocation when its summary changes and keeps new reasoning content visible", async () => {

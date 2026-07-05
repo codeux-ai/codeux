@@ -60,7 +60,15 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
     },
   });
 
-  const { connections, agentPresets, loading, manualRefreshing, refreshThreads } = useChatPageResources({
+  const {
+    connections,
+    agentPresets,
+    loading,
+    manualRefreshing,
+    invocationsLoadingMore,
+    refreshThreads,
+    loadMoreInvocations,
+  } = useChatPageResources({
     selectedProject,
     cache,
     chatMode,
@@ -182,6 +190,8 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
     setChatMode,
     threads: threadData.threads,
     invocations: invocationData.invocations,
+    invocationTotalCount: invocationData.invocationTotalCount,
+    hasMoreInvocations: invocationData.hasMoreInvocations,
     connections,
     selectedThreadId: threadData.selectedThreadId,
     selectedInvocationId: invocationData.selectedInvocationId,
@@ -207,7 +217,9 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
     threadMessagesLoading,
     invocationsLoading,
     invocationMessagesLoading,
+    invocationsLoadingMore,
     refreshThreads,
+    loadMoreInvocations,
     refreshMessages: threadData.refreshMessages,
     refreshInvocationMessages: invocationData.refreshInvocationMessages,
     activateThread: threadData.activateThread,
