@@ -19,27 +19,29 @@ const routes = [
 const routeReadyTimeoutMs = 15_000;
 
 function locatorForRouteReady(page: Page, route: string): Locator {
+  const mainHeading = (name: string): Locator => page.locator('main h1:visible', { hasText: name });
+
   switch (route) {
     case '/':
-      return page.getByRole('heading', { name: 'Overview' });
+      return mainHeading('Overview');
     case '/sprints':
-      return page.getByRole('heading', { name: 'Active Sprints' });
+      return mainHeading('Active Sprints');
     case '/tasks':
-      return page.locator('h1').filter({ hasText: /^Task Board$/ });
+      return mainHeading('Task Board');
     case '/projects':
-      return page.getByRole('heading', { name: 'Manage Projects' });
+      return mainHeading('Manage Projects');
     case '/chat':
-      return page.getByRole('heading', { name: 'Project Conversations' });
+      return mainHeading('Project Conversations');
     case '/agents':
-      return page.getByRole('heading', { name: 'Your Workforce' });
+      return mainHeading('Your Workforce');
     case '/stats':
-      return page.getByRole('heading', { name: 'Stats' });
+      return mainHeading('Stats');
     case '/scheduler':
       return page.getByTestId('scheduler-page-root');
     case '/config':
-      return page.getByRole('heading', { name: 'Settings & Integration' });
+      return mainHeading('Settings & Integration');
     case '/memory':
-      return page.getByRole('heading', { name: 'Memory Map' });
+      return mainHeading('Memory Map');
     case '/browser':
       return page.getByTestId('browser-page-root');
     case '/files':

@@ -20,11 +20,11 @@ test('Dashboard accessibility smoke test', async ({ page }) => {
   await expect(skipLink).toBeFocused();
 
   // 2. Primary Navigation
-  const nav = page.getByRole('navigation', { name: /Dock navigation/i });
+  const nav = page.getByRole('navigation', { name: /Primary navigation/i });
   await expect(nav).toBeVisible({ timeout: 15_000 });
 
   // 3. Global Search
-  const searchTrigger = page.getByRole('button', { name: 'Search' });
+  const searchTrigger = page.getByRole('button', { name: /Search workspace|Open search/i });
   await expect(searchTrigger).toBeVisible({ timeout: 15_000 });
 
   // 4. Notification trigger
@@ -42,7 +42,7 @@ test('Dashboard accessibility smoke test', async ({ page }) => {
   }
 
   // 7. Open Dialog
-  await searchTrigger.click();
+  await searchTrigger.press('Enter');
   const dialog = page.getByRole('dialog', { name: 'Search' });
   await expect(dialog).toBeVisible({ timeout: 15_000 });
   const searchInput = dialog.getByPlaceholder('Find sprints, tasks, agents, previews...');
