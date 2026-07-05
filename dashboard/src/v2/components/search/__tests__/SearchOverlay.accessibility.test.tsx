@@ -204,8 +204,25 @@ describe("SearchOverlay Accessibility", () => {
 
         expect(screen.getByRole("listbox", { hidden: true })).toHaveAttribute("aria-busy", "true");
         expect(screen.getAllByRole("option", { hidden: true })).toHaveLength(2);
-        expect(screen.getByRole("status", { hidden: true })).toHaveTextContent("Updating results for 't'. 2 current results remain available.");
-        expect(screen.getByText("Updating")).toBeInTheDocument();
+        expect(screen.getByRole("status", { hidden: true })).toHaveTextContent("Updating results for 't'. 2 current results remain visible.");
+        expect(screen.getByText("Updating visible results")).toBeInTheDocument();
+    });
+
+    it("uses the committed query for true empty states after refresh completes", () => {
+        render(
+            <SearchOverlay
+                isOpen={true}
+                onClose={mockOnClose}
+                searchQuery="no-match"
+                committedSearchQuery="no-match"
+                onSearchChange={mockOnSearchChange}
+                results={{ sprints: [], tasks: [], agents: [], containers: [] }}
+                isLoading={false}
+            />
+        );
+
+        expect(screen.getAllByRole("status", { hidden: true })[0]).toHaveTextContent("No results found for 'no-match'");
+        expect(screen.getAllByText("No results found for 'no-match'").some((el) => !el.closest(".sr-only"))).toBe(true);
     });
 
     it("supports Home and End keyboard navigation", async () => {
@@ -333,6 +350,7 @@ describe("SearchOverlay Accessibility", () => {
         expect(mockOnClose).toHaveBeenCalledTimes(1);
 
         mockOnClose.mockClear();
+        fireEvent.pointerDown(unavailable);
         fireEvent.click(unavailable);
         fireEvent.click(disabled);
         expect(mockOnClose).not.toHaveBeenCalled();
@@ -385,7 +403,7 @@ describe("SearchOverlay Accessibility", () => {
         combobox.focus();
         await user.keyboard("{End}");
 
-        expect(resultsRegion.scrollTop).toBe(60);
+        expect(resultsRegion.scrollTop).toBe(68);
         expect(window.HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
     });
 
@@ -406,6 +424,7 @@ describe("SearchOverlay Accessibility", () => {
 
         expect(listbox).toHaveStyle({ transitionDuration: "0ms" });
         expect(firstOption).toHaveStyle({ transitionDuration: "0ms" });
+        expect(firstOption).toHaveClass("border-black/[0.06]");
         expect(closeButton).toHaveStyle({ transitionDuration: "0ms" });
         expect(gsapFromTo).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ duration: 0, ease: expect.any(String) }));
     });

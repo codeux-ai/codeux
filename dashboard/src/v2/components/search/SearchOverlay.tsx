@@ -103,6 +103,7 @@ export interface SearchResults {
 
 interface SearchOverlayProps {
     anchorRef?: preact.RefObject<HTMLDivElement | null>;
+    committedSearchQuery?: string;
     isLoading?: boolean;
     isOpen: boolean;
     onClose: () => void;
@@ -112,7 +113,7 @@ interface SearchOverlayProps {
     hasProjectData?: boolean;
 }
 
-export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef, isOpen, onClose, searchQuery, onSearchChange, results, isLoading, hasProjectData = true }) => {
+export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef, committedSearchQuery, isOpen, onClose, searchQuery, onSearchChange, results, isLoading, hasProjectData = true }) => {
     const overlayRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const resultsRegionRef = useRef<HTMLDivElement>(null);
@@ -161,15 +162,17 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
     const activeDescendantId = activeItem ? `search-result-${activeItem.id}` : undefined;
     const hasResults = allItems.length > 0;
     const hasStaleResults = Boolean(isLoading && hasResults);
+    const committedQuery = committedSearchQuery ?? searchQuery;
+    const visibleResultQuery = hasStaleResults && committedQuery.trim().length > 0 ? committedQuery : searchQuery;
     const resultsDescriptionId = hasStaleResults ? "search-results-refreshing-note" : "search-status-message";
     const statusMessage = searchQuery.length === 0
         ? ''
         : isLoading
             ? hasResults
-                ? `Updating results for '${searchQuery}'. ${allItems.length} current results remain available.`
+                ? `Updating results for '${searchQuery}'. ${allItems.length} current ${allItems.length === 1 ? "result remains" : "results remain"} visible.`
                 : 'Searching workspace'
             : allItems.length === 0
-                ? (!hasProjectData ? `Project data unavailable for '${searchQuery}'` : `No results found for '${searchQuery}'`)
+                ? (!hasProjectData ? `Project data unavailable for '${searchQuery}'` : `No results found for '${visibleResultQuery}'`)
                 : `${allItems.length} results available`;
 
     const [modalStyle, setModalStyle] = useState({});
@@ -453,7 +456,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                         ) : (
                             <div className="flex min-h-52 flex-col items-center justify-center rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] px-6 py-12 text-center text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-slate-400" aria-live="polite" role="status">
                                 <Inbox className="mb-4 h-8 w-8 opacity-55" aria-hidden="true" />
-                                <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">No results found for '{searchQuery}'</span>
+                                <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">No results found for '{visibleResultQuery}'</span>
                                 <span className="mt-1 max-w-sm text-xs leading-5 text-slate-500 dark:text-slate-400">Try a sprint key, task ID, provider, agent, or status.</span>
                             </div>
                         )
