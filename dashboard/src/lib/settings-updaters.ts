@@ -100,7 +100,7 @@ export const buildGitHubModeProjectSettingsOverride = (
   return {
     git: {
       githubMode: settings.git.githubMode,
-    },
+    } as ProjectSettingsOverride["git"],
     skills: settings.skills,
   };
 };
