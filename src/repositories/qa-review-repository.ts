@@ -164,7 +164,7 @@ export class QaReviewRepository {
 
   countTaskRuns(taskId: string): number {
     const row = this.db.prepare(`
-      SELECT COUNT(*) AS count
+      SELECT COUNT(DISTINCT run_index) AS count
       FROM qa_review_runs
       WHERE task_id = ?
         AND trigger_type IN ('task_completion', 'completed_task_without_pr')
@@ -202,7 +202,7 @@ export class QaReviewRepository {
    */
   countDecisiveTaskRuns(taskId: string): number {
     const row = this.db.prepare(`
-      SELECT COUNT(*) AS count
+      SELECT COUNT(DISTINCT run_index) AS count
       FROM qa_review_runs
       WHERE task_id = ?
         AND trigger_type IN ('task_completion', 'completed_task_without_pr')
@@ -218,11 +218,37 @@ export class QaReviewRepository {
       FROM qa_review_runs
       WHERE task_id = ?
         AND trigger_type IN ('task_completion', 'completed_task_without_pr')
-      ORDER BY started_at DESC
+      ORDER BY run_index DESC,
+        CASE
+          WHEN status = 'running' THEN 0
+          WHEN outcome = 'changes_requested' THEN 1
+          WHEN status = 'failed' THEN 2
+          WHEN outcome = 'pass' THEN 3
+          ELSE 4
+        END,
+        started_at DESC
       LIMIT 1
     `).get(taskId) as QaReviewRunRow | undefined;
 
     return row ? this.mapRow(row) : null;
+  }
+
+  listLatestTaskCycleRuns(taskId: string): QaReviewRunRecord[] {
+    const rows = this.db.prepare(`
+      SELECT *
+      FROM qa_review_runs
+      WHERE task_id = ?
+        AND trigger_type IN ('task_completion', 'completed_task_without_pr')
+        AND run_index = (
+          SELECT MAX(run_index)
+          FROM qa_review_runs
+          WHERE task_id = ?
+            AND trigger_type IN ('task_completion', 'completed_task_without_pr')
+        )
+      ORDER BY started_at ASC, id ASC
+    `).all(taskId, taskId) as unknown as QaReviewRunRow[];
+
+    return rows.map((row) => this.mapRow(row));
   }
 
   getLatestSprintRun(sprintId: string): QaReviewRunRecord | null {
@@ -231,11 +257,37 @@ export class QaReviewRepository {
       FROM qa_review_runs
       WHERE sprint_id = ?
         AND trigger_type = 'sprint_completion'
-      ORDER BY started_at DESC
+      ORDER BY run_index DESC,
+        CASE
+          WHEN status = 'running' THEN 0
+          WHEN outcome = 'changes_requested' THEN 1
+          WHEN status = 'failed' THEN 2
+          WHEN outcome = 'pass' THEN 3
+          ELSE 4
+        END,
+        started_at DESC
       LIMIT 1
     `).get(sprintId) as QaReviewRunRow | undefined;
 
     return row ? this.mapRow(row) : null;
+  }
+
+  listLatestSprintCycleRuns(sprintId: string): QaReviewRunRecord[] {
+    const rows = this.db.prepare(`
+      SELECT *
+      FROM qa_review_runs
+      WHERE sprint_id = ?
+        AND trigger_type = 'sprint_completion'
+        AND run_index = (
+          SELECT MAX(run_index)
+          FROM qa_review_runs
+          WHERE sprint_id = ?
+            AND trigger_type = 'sprint_completion'
+        )
+      ORDER BY started_at ASC, id ASC
+    `).all(sprintId, sprintId) as unknown as QaReviewRunRow[];
+
+    return rows.map((row) => this.mapRow(row));
   }
 
   hasSprintReviewRun(sprintId: string): boolean {
