@@ -15,7 +15,7 @@ Code UX can run as an installable Electron desktop app while preserving the exis
 
 ## Native Desktop Integration
 
-The Add Project dialog uses a native Electron directory picker when running in the desktop app. Browser-only dashboard sessions keep the existing HTTP directory browser fallback.
+The Add Project dialog uses a native Electron directory picker when running in the desktop app. Browser-only dashboard sessions keep the existing HTTP directory browser fallback. When no current path is typed, the native picker opens at the user's home directory; relative defaults are resolved from the user's home directory before opening the dialog.
 
 The native picker is exposed through the isolated preload bridge:
 
@@ -55,7 +55,7 @@ The release output is written to `release/electron/`.
 
 Electron package builds run `pnpm run electron:prepare-deps` before Electron Builder. That script creates a production-only, hoisted runtime dependency tree in `.cache/electron-runtime/node_modules`, prunes non-runtime package files, generates deterministic PNG/ICO/BMP desktop artwork, and Electron Builder copies it to `resources/node_modules` so ASAR-packaged builds can resolve pnpm transitive dependencies at runtime.
 
-Electron Builder also copies the bundled `.code-ux` runtime defaults to `resources/.code-ux-defaults`. Keep that resource filter aligned with the default asset seeding contract in `src/services/code-ux-default-assets-service.ts`; the packaged app depends on `planning_agent.md`, `project_manager.md`, `quality_assurance_agent.md`, `worker.md`, and `container/setup.sh` being present because it cannot fall back to the workspace `.code-ux` directory after installation.
+Electron Builder also copies the bundled `.code-ux` runtime defaults to `resources/.code-ux-defaults`. Keep that resource filter aligned with the default asset seeding contract in `src/services/code-ux-default-assets-service.ts`; the packaged app depends on `planning_agent.md`, `project_manager.md`, `quality_assurance_agent.md`, `worker.md`, `container/setup.sh`, and `.code-ux/quicksprints/templates/*.md` being present because it cannot fall back to the workspace `.code-ux` directory after installation. Built-in agent preset sync reads those bundled defaults directly, so Project Setup Agent prompts can still use the base agent templates even if a user removes the seeded copies under `~/.code-ux/agents`.
 
 The runtime dependency tree is fingerprinted from production dependencies and the lockfile. If the fingerprint matches a previous run, `electron:prepare-deps` reuses the existing tree instead of deleting and reinstalling it.
 

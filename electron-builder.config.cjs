@@ -73,6 +73,7 @@ module.exports = {
         "agents/quality_assurance_agent.md",
         "agents/worker.md",
         "container/setup.sh",
+        "quicksprints/templates/*.md",
       ],
     },
   ],

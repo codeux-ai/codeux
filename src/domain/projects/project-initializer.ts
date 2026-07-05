@@ -14,6 +14,30 @@ function resolveCloneParentDir(cloneDir?: string): string {
   return path.isAbsolute(trimmed) ? trimmed : path.resolve(os.homedir(), trimmed);
 }
 
+function resolveNewLocalProjectDir(sourceRef: string, cloneDir?: string): { targetDir: string; allowedRoot: string } {
+  const trimmed = sourceRef.trim();
+  if (!trimmed) {
+    throw new Error("Local project directory cannot be empty");
+  }
+  const trimmedCloneDir = cloneDir?.trim();
+  if (trimmedCloneDir) {
+    const allowedRoot = path.isAbsolute(trimmedCloneDir)
+      ? trimmedCloneDir
+      : path.resolve(os.homedir(), trimmedCloneDir);
+    return {
+      targetDir: path.isAbsolute(trimmed) ? trimmed : path.resolve(allowedRoot, trimmed),
+      allowedRoot,
+    };
+  }
+  if (path.isAbsolute(trimmed)) {
+    return { targetDir: trimmed, allowedRoot: trimmed };
+  }
+  return {
+    targetDir: path.resolve(os.homedir(), trimmed),
+    allowedRoot: os.homedir(),
+  };
+}
+
 export async function initializeProject(
   input: CreateProjectInput,
   deps: {
@@ -25,20 +49,18 @@ export async function initializeProject(
   const mode = input.initMode ?? "existing";
 
   if (mode === "new-local") {
-    // In new-local, sourceRef is the full directory path to initialize.
-    // The selected root is determined by the app, we'll enforce it to be within process.cwd()
-    // unless a specific cloneDir is provided (which we will use as the root for safety if needed,
-    // but the prompt says "selected root". Typically process.cwd() is the safe root for standard execution).
-    // Let's pass process.cwd() as the allowed root to prevent traversal outside the workspace,
-    // but the review noted "Rigid Root Assumption" because cloneDir might be outside cwd.
-    // Let's use cloneDir if provided, else cwd.
-    const allowedRoot = input.cloneDir ?? process.cwd();
+    const { targetDir, allowedRoot } = resolveNewLocalProjectDir(input.sourceRef, input.cloneDir);
     // Use the validator's own resolved, root-checked path for every subsequent
     // operation rather than re-deriving it from the raw request input.
-    const safeSourceRef = validateSafeClonePath(input.sourceRef, allowedRoot);
-    validateNonEmptyDir(safeSourceRef);
+    const safeSourceRef = validateSafeClonePath(targetDir, allowedRoot);
+    validateNonEmptyDir(safeSourceRef, allowedRoot);
     await initLocalRepo(safeSourceRef, input.defaultBranch ?? "main", input.name);
-    return deps.createProject({ ...input, sourceType: "local", initMode: undefined });
+    return deps.createProject({
+      ...input,
+      sourceType: "local",
+      sourceRef: safeSourceRef,
+      initMode: undefined,
+    });
   }
 
   if (mode === "new-remote") {
