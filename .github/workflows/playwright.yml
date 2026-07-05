@@ -1,9 +1,14 @@
 name: Playwright Tests
+
 on:
   push:
-    branches: [ dev, main, master ]
+    branches: [main, dev]
   pull_request:
-    branches: [ dev, main, master ]
+    branches: [main, dev]
+
+concurrency:
+  group: playwright-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   test-e2e:
     name: Playwright E2E Tests
@@ -31,10 +36,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: node_modules
-          key: ${{ runner.os }}-nm-${{ hashFiles('pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-node22-pnpm10.33.0-nm-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
 
       - name: Install dependencies
-        if: steps.nm-cache-e2e.outputs.cache-hit != 'true'
         run: pnpm install --frozen-lockfile --ignore-scripts
 
       # Cache only Vite's transform cache — NOT the server tsc incremental
@@ -48,7 +52,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .cache/vite
-          key: ${{ runner.os }}-e2e-cache-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vite.config.ts', 'tsconfig.json') }}
+          key: ${{ runner.os }}-node22-pnpm10.33.0-vite-e2e-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vite.config.ts', 'tsconfig.json', 'dashboard/tsconfig.json') }}
 
       - name: Build server & dashboard
         run: pnpm run build
@@ -58,26 +62,21 @@ jobs:
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-node22-pnpm10.33.0-playwright-${{ hashFiles('package.json', 'pnpm-lock.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-playwright-
+            ${{ runner.os }}-node22-pnpm10.33.0-playwright-
 
-      - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
+      - name: Install Playwright browsers and OS dependencies
         run: pnpm exec playwright install chromium --with-deps
-
-      - name: Install Playwright OS dependencies (if cached)
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
 
       - name: Run Playwright E2E Tests
         run: pnpm exec playwright test
 
-      - name: Upload Playwright test results
+      - name: Upload Playwright artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-results
+          name: playwright-artifacts
           path: |
             test-results/
             playwright-report/

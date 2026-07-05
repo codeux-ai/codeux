@@ -24,7 +24,6 @@ export const fetchExecutionSnapshot = async (): Promise<ExecutionDashboardSnapsh
 const MAX_CACHE_SIZE = 5;
 const livePayloadCache = new Map<string, RuntimeDashboardPayload>();
 const livePayloadInflight = new Map<string, Promise<RuntimeDashboardPayload>>();
-const livePayloadInvalidationGeneration = new Map<string, number>();
 const livePayloadProjectIndex = new Map<string, string>();
 
 export interface LivePayloadCacheOptions {
@@ -120,7 +119,6 @@ const updateLruCache = (key: string, resolved: RuntimeDashboardPayload, requestP
 export const clearLivePayloadCacheForTests = (): void => {
   livePayloadCache.clear();
   livePayloadInflight.clear();
-  livePayloadInvalidationGeneration.clear();
   livePayloadProjectIndex.clear();
   overviewTelemetryInflight = null;
   onboardingReadinessInflight = null;
@@ -138,7 +136,6 @@ export const invalidateLivePayloadCache = (projectId?: string | null): void => {
   for (const key of Array.from(livePayloadInflight.keys())) {
     if (key === projectKey || key === indexedKey || key.startsWith(`${projectKey}::`)) {
       livePayloadInflight.delete(key);
-      livePayloadInvalidationGeneration.set(key, (livePayloadInvalidationGeneration.get(key) ?? 0) + 1);
     }
   }
   livePayloadProjectIndex.delete(projectKey);
@@ -179,23 +176,17 @@ export const fetchLivePayload = async (
 ): Promise<RuntimeDashboardPayload> => {
   const requestKey = getLivePayloadCacheKey(projectId, options);
   let request = livePayloadInflight.get(requestKey);
-  const requestGeneration = livePayloadInvalidationGeneration.get(requestKey) ?? 0;
   if (!request) {
     const query = typeof projectId === "string" && projectId.trim().length > 0
       ? `?projectId=${encodeURIComponent(projectId.trim())}`
       : "";
-    const nextRequest = fetchJson<RuntimeDashboardPayload>(`/api/live${query}`);
-    request = nextRequest.finally(() => {
-      if (livePayloadInflight.get(requestKey) === request) {
-        livePayloadInflight.delete(requestKey);
-      }
+    request = fetchJson<RuntimeDashboardPayload>(`/api/live${query}`).finally(() => {
+      livePayloadInflight.delete(requestKey);
     });
     livePayloadInflight.set(requestKey, request);
   }
   const resolved = await request;
-  if ((livePayloadInvalidationGeneration.get(requestKey) ?? 0) === requestGeneration) {
-    updateLruCache(getLivePayloadCacheKey(projectId, options, resolved), resolved, projectId);
-  }
+  updateLruCache(getLivePayloadCacheKey(projectId, options, resolved), resolved, projectId);
   return resolved;
 };
 

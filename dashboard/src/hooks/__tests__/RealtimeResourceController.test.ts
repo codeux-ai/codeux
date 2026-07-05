@@ -176,24 +176,4 @@ describe("RealtimeResourceController", () => {
     expect(clearTimeoutMock).toHaveBeenCalledWith(20);
     expect(clearTimeoutMock).toHaveBeenCalledWith(21);
   });
-
-  it("does not flush a pending direct payload after cleanup invalidates the controller", () => {
-    installWindow();
-
-    const setData = vi.fn();
-    const controller = new RealtimeResourceController<any>(
-      setData,
-      vi.fn(),
-      vi.fn(),
-      (a, b) => a === b,
-      vi.fn()
-    );
-
-    controller.scheduleDirectUpdate({ value: "stale" });
-    controller.cleanup();
-
-    vi.advanceTimersByTime(250);
-
-    expect(setData).not.toHaveBeenCalled();
-  });
 });

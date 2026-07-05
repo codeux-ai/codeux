@@ -299,6 +299,31 @@ curl http://localhost:4444/api/status
 curl http://localhost:4444/api/git-status
 ```
 
+## CI And E2E Operations
+
+GitHub validation is split by signal:
+- `CI` runs `Typecheck & Lint`, `Backend Tests & Coverage`, `Dashboard Tests`, `Build`, and `Security Audit` on Node 22 with pnpm 10.33.0. It runs on pushes to `main` and `dev`, and on pull requests targeting any branch.
+- `Playwright Tests` runs browser E2E validation on pushes and pull requests targeting `main` or `dev`. Release and publish workflows remain separate from CI/E2E validation.
+- Superseded runs for the same branch or pull request are cancelled by workflow concurrency groups.
+
+Local equivalents:
+- `pnpm run lint` mirrors the TypeScript validation portion of `Typecheck & Lint`.
+- `pnpm run test:backend:coverage` mirrors the backend coverage job.
+- `pnpm run test:dashboard` mirrors the dashboard Vitest job.
+- `pnpm run audit` mirrors the independent security audit job.
+- `pnpm run build` validates the compiled server and dashboard bundle.
+- `pnpm exec playwright test` runs the browser E2E suite locally after dependencies and Playwright browsers are installed.
+
+Dependency and cache behavior:
+- CI restores `node_modules` only as a speed hint and still runs `pnpm install --frozen-lockfile --ignore-scripts` in every job.
+- Vitest, Vite, TypeScript, and Playwright browser caches are keyed to the Linux runner, Node 22, pnpm 10.33.0, and dependency/config files that affect the cached output.
+- Playwright always runs `pnpm exec playwright install chromium --with-deps` after restoring the browser cache so cached browser binaries cannot hide missing OS dependencies.
+- The Build and Playwright jobs do not cache `.cache/tsc`; those jobs must emit a fresh `dist/` tree for package output and the E2E web server.
+
+Artifacts:
+- On Playwright failure, download the `playwright-artifacts` artifact from the workflow run. It contains `test-results/` traces/screenshots/videos when produced and `playwright-report/` for the HTML report.
+- The artifact retention window is seven days. If no files were produced, artifact upload is allowed to continue without masking the original test failure.
+
 ## Escalation Notes
 
 When reporting issues include:

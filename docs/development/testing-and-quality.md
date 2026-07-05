@@ -49,6 +49,7 @@ pnpm run ci
 
 `pnpm run ci` starts with `pnpm run quality:guardrails`, then runs audit, lint, backend coverage, dashboard tests, and build. Run `pnpm run quality:guardrails` directly after changes that affect shared implementation structure, large modules, duplicate logic, dependency factory wiring, realtime snapshot persistence, optimistic task insertion, or the guardrail script itself. Treat blocking guardrail output as CI-equivalent; advisory oversized-file and broad-`any` reports identify cleanup targets but do not fail the command.
 
+GitHub Actions runs the same signals as separate jobs so a vulnerability finding does not obscure compile, test, or build failures. The `Security Audit` job runs `pnpm run audit` independently, while `Typecheck & Lint`, `Backend Tests & Coverage`, `Dashboard Tests`, and `Build` run the repository quality, TypeScript, Vitest, and bundle checks on Node 22 with pnpm 10.33.0.
 The quality guardrail script also audits `vitest.config.ts` directly. It fails if any global coverage threshold drops below the locked floors (`lines: 77.4`, `functions: 71.5`, `branches: 66.1`, `statements: 76.0`) or if the `src/server/activity-cache-service.ts` line threshold is missing or below 80%. This check is file-based and deterministic; it does not run Vitest coverage.
 
 - Run Playwright E2E browser tests
@@ -63,13 +64,16 @@ pnpm exec playwright test
 The Playwright config starts `node dist/index.js`, waits on the local `/health` liveness probe, and runs against a temporary HOME/USERPROFILE so the suite does not depend on a developer's browser cache, onboarding state, selected project, or real Code UX database. The E2E suite is local-only: tests must navigate through `baseURL` routes or local API probes, not external websites. Failure artifacts are retained under `test-results/`, and the HTML report is written to `playwright-report/`; CI uploads both paths after every run so traces, videos, screenshots, and reports are available when failures occur.
 
 GitHub Actions optimization notes:
-- The CI pipeline is split into three parallel, concurrent jobs: `Typecheck & Lint`, `Unit & Integration Tests`, and `Playwright E2E Tests` for maximum speed and fast feedback.
-- Restores and saves Vite, Vitest, and TypeScript compiler increment caches across runs.
-- Caches Playwright browser binaries (`~/.cache/ms-playwright`) to avoid downloading browsers on every run, dramatically reducing E2E setup time.
-- Serializes Playwright browser tests because the suite shares one local `node dist/index.js` server and isolated SQLite home per run.
+- `CI` runs on pushes to `main` and `dev`, and on pull requests targeting any branch. `Playwright Tests` runs on pushes and pull requests targeting `main` or `dev`, keeping release and publish workflows separate from validation.
+- The CI pipeline is split into parallel jobs: `Typecheck & Lint`, `Backend Tests & Coverage`, `Dashboard Tests`, `Build`, and `Security Audit`. Playwright E2E runs in its own workflow so browser setup and artifacts stay isolated.
+- Every validation job restores dependency cache as a speed hint, then still runs `pnpm install --frozen-lockfile --ignore-scripts` so the lockfile remains the install source of truth.
+- Restores and saves Vite, Vitest, and TypeScript compiler increment caches across runs. Build and Playwright jobs intentionally do not restore `.cache/tsc` because stale `.tsbuildinfo` without matching `dist/` output can make compiled entrypoints appear up-to-date when `dist/` is missing.
+- Caches Playwright browser binaries (`~/.cache/ms-playwright`) to reduce downloads, then always runs `pnpm exec playwright install chromium --with-deps` so browser and OS dependencies are verified even after a cache restore.
+- Keeps Playwright browser tests serialized because the suite shares one local `node dist/index.js` server and isolated SQLite home per run.
 - Seamlessly integrates browser-level E2E tests for WebGL visual rendering, failure fallbacks, and mobile/desktop responsive layout breakpoints, removing mock-heavy DOM stubs from Unit tests.
 - Uses the GitHub Actions reporter to publish Playwright test failures inline on pull request checks.
 - Cancels superseded runs for the same branch or PR to conserve resources.
+- Uploads `test-results/` and `playwright-report/` as the `playwright-artifacts` workflow artifact for seven days, with empty uploads ignored so successful runs do not fail if no failure artifacts were produced.
 
 - Build backend and dashboard
 ```bash
