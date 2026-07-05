@@ -8,6 +8,11 @@ import { AppDbStorage, resolveAppDbPath } from "../../../src/repositories/app-db
 
 const tempDirs: string[] = [];
 
+function getIndexColumns(db: ReturnType<AppDbStorage["getDatabase"]>, indexName: string): string[] {
+  return (db.prepare(`PRAGMA index_info('${indexName}')`).all() as Array<{ name: string }>)
+    .map((row) => row.name);
+}
+
 async function createTempDbPath(): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-app-db-"));
   tempDirs.push(dir);
@@ -62,6 +67,24 @@ describe("AppDbStorage", () => {
     const attentionItemsIndexes = db.prepare("PRAGMA index_list('project_attention_items')").all() as Array<{ name: string }>;
     expect(attentionItemsIndexes.some((idx) => idx.name === "idx_project_attention_items_project_status_updated")).toBe(true);
     expect(attentionItemsIndexes.some((idx) => idx.name === "idx_project_attention_items_sprint_run_status_updated")).toBe(true);
+    expect(attentionItemsIndexes.some((idx) => idx.name === "idx_project_attention_items_project_status_updated_opened")).toBe(true);
+    expect(attentionItemsIndexes.some((idx) => idx.name === "idx_project_attention_items_sprint_run_status_updated_opened")).toBe(true);
+    expect(getIndexColumns(db, "idx_project_attention_items_project_status_updated_opened")).toEqual(["project_id", "status", "updated_at", "opened_at", "id"]);
+    expect(getIndexColumns(db, "idx_project_attention_items_sprint_run_status_updated_opened")).toEqual(["sprint_run_id", "status", "updated_at", "opened_at", "id"]);
+
+    const executionInvocationIndexes = db.prepare("PRAGMA index_list('execution_invocations')").all() as Array<{ name: string }>;
+    expect(executionInvocationIndexes.some((idx) => idx.name === "idx_execution_invocations_status_started")).toBe(true);
+    expect(getIndexColumns(db, "idx_execution_invocations_status_started")).toEqual(["status", "started_at"]);
+
+    const providerInvocationIndexes = db.prepare("PRAGMA index_list('provider_invocations')").all() as Array<{ name: string }>;
+    expect(providerInvocationIndexes.some((idx) => idx.name === "idx_provider_invocations_sprint_started")).toBe(true);
+    expect(providerInvocationIndexes.some((idx) => idx.name === "idx_provider_invocations_sprint_run_started")).toBe(true);
+    expect(getIndexColumns(db, "idx_provider_invocations_sprint_started")).toEqual(["sprint_id", "started_at"]);
+    expect(getIndexColumns(db, "idx_provider_invocations_sprint_run_started")).toEqual(["sprint_run_id", "started_at"]);
+
+    const taskRunEventIndexes = db.prepare("PRAGMA index_list('task_run_events')").all() as Array<{ name: string }>;
+    expect(taskRunEventIndexes.some((idx) => idx.name === "idx_task_run_events_project_created")).toBe(true);
+    expect(getIndexColumns(db, "idx_task_run_events_project_created")).toEqual(["project_id", "created_at", "id"]);
   });
 
   it("uses the explicit dbPath when provided", async () => {
