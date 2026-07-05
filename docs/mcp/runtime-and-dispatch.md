@@ -72,6 +72,21 @@ This allows all log lines emitted during a tool call to share a single `correlat
 
 This split keeps tool contracts stable while allowing orchestration internals to evolve independently.
 
+## Custom MCP Defaults
+
+Dashboard settings include custom MCP servers that local CLI providers may receive at execution time.
+
+Code UX seeds Playwright MCP as a default custom MCP server:
+
+- stable id and name: `playwright`
+- transport: stdio
+- command: `npx`
+- args: `@playwright/mcp@latest`
+
+The built-in `code_ux` MCP tool surface is controlled separately from custom MCP servers. Agent presets store MCP access in `mcp_access_json`: `codeUxEnabled` controls the built-in Code UX tools, while `linkedServerIds` selects custom MCP servers such as `playwright`.
+
+By default, the built-in `Worker` and `Project manager` agents link the `playwright` server and keep `code_ux` enabled. Generated task-coding roster agents created by Project Setup use the same default link when they are first created. Existing agents keep user-edited MCP access selections, so setup and sync do not overwrite custom server choices after creation.
+
 ## Transport Model
 
 Code UX now uses two MCP transport classes:
