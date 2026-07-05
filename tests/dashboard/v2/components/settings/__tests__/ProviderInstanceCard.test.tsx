@@ -176,6 +176,62 @@ describe("ProviderInstanceCard", () => {
     expect(screen.getByRole("status").textContent).toContain("Codex Draft display name changed locally");
   });
 
+  it("reports enable and disable update errors through an alert region", () => {
+    const provider: SystemProviderConfig = {
+      provider: "codex",
+      name: "Codex Toggle",
+      apiKey: "",
+      mountAuth: false,
+      authPath: "",
+      authType: "apiKey",
+    };
+
+    render(
+      <ProviderInstanceCard
+        providerConfigId="codex-toggle"
+        provider={provider}
+        providerModel="gpt-5.5"
+        dockerExecutionEnabled={false}
+        onUpdate={vi.fn()}
+        enabled
+        onToggleEnabled={() => {
+          throw new Error("Unable to update provider routing state.");
+        }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("switch", { name: "Enable Codex Toggle" }));
+
+    expect(screen.getByRole("alert").textContent).toContain("Unable to update provider routing state.");
+  });
+
+  it("announces API key edits as local draft feedback", () => {
+    const provider: SystemProviderConfig = {
+      provider: "codex",
+      name: "Codex Key Draft",
+      apiKey: "",
+      mountAuth: false,
+      authPath: "",
+      authType: "apiKey",
+    };
+    const onUpdate = vi.fn();
+
+    render(
+      <ProviderInstanceCard
+        providerConfigId="codex-key-draft"
+        provider={provider}
+        providerModel="gpt-5.5"
+        dockerExecutionEnabled={false}
+        onUpdate={onUpdate}
+      />
+    );
+
+    fireEvent.input(screen.getByLabelText("Codex Key Draft API key"), { target: { value: "sk-local" } });
+
+    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ apiKey: "sk-local" }));
+    expect(screen.getByRole("status").textContent).toContain("Codex Key Draft API key changed locally");
+  });
+
   it("uses the secret field label in the reveal toggle accessible name", () => {
     const provider: SystemProviderConfig = {
       provider: "codex",

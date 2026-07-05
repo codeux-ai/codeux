@@ -15,6 +15,51 @@ import { PageHeader } from "./components/layout/PageHeader.js";
 import { UnsavedChangesModal } from "./components/ui/UnsavedChangesModal.js";
 import { getSettingsSearchMatchPreview } from "./lib/settings-search-index.js";
 
+export function focusFirstInvalidSettingsControl(root: ParentNode): string | null {
+  const controls = Array.from(root.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
+    "input:not(:disabled), select:not(:disabled), textarea:not(:disabled)",
+  ) ?? []);
+  const hasInvalidNativeValue = (control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement): boolean => {
+    if (control.tagName === "INPUT" && (control as HTMLInputElement).type === "number") {
+      const numericValue = Number(control.value);
+      const minValue = (control as HTMLInputElement).min;
+      const maxValue = (control as HTMLInputElement).max;
+      const min = minValue === "" ? null : Number(minValue);
+      const max = maxValue === "" ? null : Number(maxValue);
+      if (!Number.isFinite(numericValue)) {
+        return true;
+      }
+      if (min !== null && numericValue < min) {
+        return true;
+      }
+      if (max !== null && numericValue > max) {
+        return true;
+      }
+    }
+    return typeof control.checkValidity === "function" && !control.checkValidity();
+  };
+  const invalidControl = controls.find((control) => (
+    control.getAttribute("aria-invalid") === "true"
+    || hasInvalidNativeValue(control)
+  ));
+  if (!invalidControl) {
+    return null;
+  }
+
+  const message = "validationMessage" in invalidControl && invalidControl.validationMessage
+    ? invalidControl.validationMessage
+    : "Fix the highlighted setting before saving changes.";
+  invalidControl.setAttribute("aria-invalid", "true");
+  if ("reportValidity" in invalidControl && typeof invalidControl.reportValidity === "function") {
+    invalidControl.reportValidity();
+  }
+  invalidControl.focus();
+  window.setTimeout(() => {
+    invalidControl.focus();
+  }, 0);
+  return message;
+}
+
 export const SettingsPage: FunctionComponent = () => {
   const headerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -24,6 +69,7 @@ export const SettingsPage: FunctionComponent = () => {
   const gsapTokens = useGsapInteractionTokens();
   const interactionTokens = useInteractionTokens();
   const [pendingCategory, setPendingCategory] = useState<typeof CATEGORIES[number]["id"] | null>(null);
+  const [validationMessage, setValidationMessage] = useState<string | null>(null);
 
   const state = useSettingsPageState(CATEGORIES);
   const {
@@ -153,6 +199,23 @@ export const SettingsPage: FunctionComponent = () => {
       });
     }
   }, [activeCategory, state, prefersReducedMotion, gsapTokens.selectionMovement.duration, gsapTokens.selectionMovement.ease, gsapTokens.enterExit.duration, gsapTokens.enterExit.ease]);
+
+  const focusFirstInvalidSetting = useCallback((): boolean => {
+    const message = focusFirstInvalidSettingsControl(contentRef.current ?? document);
+    if (!message) {
+      setValidationMessage(null);
+      return false;
+    }
+    setValidationMessage(message);
+    return true;
+  }, []);
+
+  const handleSaveRequest = useCallback(async (): Promise<void> => {
+    if (focusFirstInvalidSetting()) {
+      return;
+    }
+    await handleSave();
+  }, [focusFirstInvalidSetting, handleSave]);
 
   return (
     <PageContainer aria-label="Settings" padding="settings" className="gap-10">
@@ -324,7 +387,7 @@ export const SettingsPage: FunctionComponent = () => {
             ) : null}
             <button
               type="button"
-              onClick={() => void handleSave()}
+              onClick={() => void handleSaveRequest()}
               disabled={!activeDirty || activeSaving || loading || (activeScope === "project" && !selectedProject)}
               aria-busy={activeSaving ? "true" : undefined}
               aria-disabled={!activeDirty || activeSaving || loading || (activeScope === "project" && !selectedProject)}
@@ -385,9 +448,12 @@ export const SettingsPage: FunctionComponent = () => {
 
           <div className="flex flex-col gap-3">
             <ActionFeedbackRegion
-              status={error ? "error" : activeSaving || resettingProject ? "pending" : saveMessage ? "success" : activeDirty ? "warning" : "idle"}
-              message={error || (resettingProject ? "Resetting project overrides..." : activeSaving ? "Saving changes..." : saveMessage ? "Changes saved." : activeDirty ? "You have unsaved changes." : null)}
-              onDismiss={clearFeedback}
+              status={error ? "error" : validationMessage ? "warning" : activeSaving || resettingProject ? "pending" : saveMessage ? "success" : activeDirty ? "warning" : "idle"}
+              message={error || validationMessage || (resettingProject ? "Resetting project overrides..." : activeSaving ? "Saving changes..." : saveMessage ? "Changes saved." : activeDirty ? "You have unsaved changes." : null)}
+              onDismiss={() => {
+                setValidationMessage(null);
+                clearFeedback();
+              }}
             />
           </div>
 
