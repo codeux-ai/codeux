@@ -9,7 +9,7 @@ import type { McpConnectionRecord } from "../../contracts/connection-chat-types.
 import type { ProjectWorkerAssignmentRepository } from "../../repositories/project-worker-assignment-repository.js";
 import type { ProjectAttentionRepository } from "../../repositories/project-attention-repository.js";
 import type { ProjectExecutionSnapshotOptions } from "../../repositories/execution/project-execution-snapshot-query.js";
-import { DashboardSnapshotCachePolicy } from "./dashboard-snapshot-cache-policy.js";
+import { DashboardSnapshotCachePolicy, type ProjectExecutionSnapshotCacheKey } from "./dashboard-snapshot-cache-policy.js";
 
 export function mapExecutionConnections(connections: McpConnectionRecord[]): ExecutionConnectionSummary[] {
   return connections.map((connection) => ({
@@ -103,22 +103,21 @@ export type DashboardSnapshotCacheDeps = Pick<BootDashboardDeps,
 export class DashboardSnapshotCache {
   private deps: DashboardSnapshotCacheDeps;
 
-  private projectExecutionSnapshotCache = new Map<string, { snapshot: ExecutionDashboardSnapshot; expiresAt: number }>();
-  // Memoizes the feed-less view of each cached execution snapshot, keyed by the
-  // snapshot instance so it is invalidated automatically when the snapshot is
-  // rebuilt. Lets the high-frequency `project.execution.updated` channel and the
-  // `/execution` endpoint ship a lean payload while the Live page keeps the feed.
-  private leanExecutionBySnapshot = new WeakMap<ExecutionDashboardSnapshot, ExecutionDashboardSnapshot>();
+  private projectExecutionSnapshotCache = new Map<ProjectExecutionSnapshotCacheKey, { snapshot: ExecutionDashboardSnapshot; expiresAt: number }>();
+  // Memoizes the feed-less view with the same explicit project/sprint scope as
+  // the full snapshot cache. The source snapshot guard prevents stale lean views
+  // from surviving a full snapshot rebuild after TTL expiry.
+  private leanExecutionSnapshotCache = new Map<ProjectExecutionSnapshotCacheKey, {
+    sourceSnapshot: ExecutionDashboardSnapshot;
+    snapshot: ExecutionDashboardSnapshot;
+    expiresAt: number;
+  }>();
   private projectStatsSnapshotCache = new Map<string, { snapshot: ReturnType<DashboardSnapshotCacheDeps["executionRepository"]["getProjectStatsSnapshot"]>; expiresAt: number }>();
   private overviewTelemetryCache: { snapshot: ReturnType<DashboardSnapshotCacheDeps["executionRepository"]["getOverviewTelemetrySnapshot"]>; expiresAt: number } | null = null;
   private projectsSnapshotCache: { snapshot: ReturnType<DashboardSnapshotCacheDeps["projectManagementRepository"]["listProjects"]>; expiresAt: number } | null = null;
 
   constructor(deps: DashboardSnapshotCacheDeps) {
     this.deps = deps;
-  }
-
-  private getProjectExecutionCacheKey(projectId: string, options: ProjectExecutionSnapshotOptions = {}): string {
-    return `${projectId}:${options.selectedSprintId || ""}`;
   }
 
   getProjectsSnapshot = () => {
@@ -149,7 +148,7 @@ export class DashboardSnapshotCache {
 
   getProjectExecutionSnapshot = (projectId: string, options: ProjectExecutionSnapshotOptions = {}) => {
     const now = Date.now();
-    const cacheKey = this.getProjectExecutionCacheKey(projectId, options);
+    const cacheKey = DashboardSnapshotCachePolicy.getProjectExecutionSnapshotCacheKey(projectId, options);
     const cached = this.projectExecutionSnapshotCache.get(cacheKey);
     if (cached && cached.expiresAt > now) {
       return cached.snapshot;
@@ -178,6 +177,7 @@ export class DashboardSnapshotCache {
       snapshot,
       expiresAt: now + DashboardSnapshotCachePolicy.PROJECT_EXECUTION_CACHE_TTL_MS,
     });
+    this.leanExecutionSnapshotCache.delete(cacheKey);
     return snapshot;
   };
 
@@ -190,17 +190,26 @@ export class DashboardSnapshotCache {
    * keeps the execution channel lean and, because the feed is what churns most,
    * lets the realtime publisher de-duplicate the vast majority of pushes.
    */
-  getProjectExecutionSnapshotLean = (projectId: string): ExecutionDashboardSnapshot => {
-    const full = this.getProjectExecutionSnapshot(projectId);
+  getProjectExecutionSnapshotLean = (
+    projectId: string,
+    options: ProjectExecutionSnapshotOptions = {},
+  ): ExecutionDashboardSnapshot => {
+    const now = Date.now();
+    const cacheKey = DashboardSnapshotCachePolicy.getProjectExecutionSnapshotCacheKey(projectId, options);
+    const full = this.getProjectExecutionSnapshot(projectId, options);
     if (full.recentEvents.length === 0 && (full.recentInvocations?.length ?? 0) === 0) {
       return full;
     }
-    const cached = this.leanExecutionBySnapshot.get(full);
-    if (cached) {
-      return cached;
+    const cached = this.leanExecutionSnapshotCache.get(cacheKey);
+    if (cached && cached.sourceSnapshot === full && cached.expiresAt > now) {
+      return cached.snapshot;
     }
     const lean: ExecutionDashboardSnapshot = { ...full, recentEvents: [], recentInvocations: [] };
-    this.leanExecutionBySnapshot.set(full, lean);
+    this.leanExecutionSnapshotCache.set(cacheKey, {
+      sourceSnapshot: full,
+      snapshot: lean,
+      expiresAt: now + DashboardSnapshotCachePolicy.PROJECT_EXECUTION_CACHE_TTL_MS,
+    });
     return lean;
   };
 
@@ -221,8 +230,13 @@ export class DashboardSnapshotCache {
 
   invalidateProjectExecution(projectId: string): void {
     for (const key of Array.from(this.projectExecutionSnapshotCache.keys())) {
-      if (key === projectId || key.startsWith(`${projectId}:`)) {
+      if (DashboardSnapshotCachePolicy.isProjectExecutionSnapshotCacheKeyMatch(key, projectId)) {
         this.projectExecutionSnapshotCache.delete(key);
+      }
+    }
+    for (const key of Array.from(this.leanExecutionSnapshotCache.keys())) {
+      if (DashboardSnapshotCachePolicy.isProjectExecutionSnapshotCacheKeyMatch(key, projectId)) {
+        this.leanExecutionSnapshotCache.delete(key);
       }
     }
   }
@@ -244,6 +258,7 @@ export class DashboardSnapshotCache {
 
   invalidateAll(): void {
     this.projectExecutionSnapshotCache.clear();
+    this.leanExecutionSnapshotCache.clear();
     this.projectStatsSnapshotCache.clear();
     this.overviewTelemetryCache = null;
     this.projectsSnapshotCache = null;
