@@ -10,6 +10,8 @@ import { getCurrentMcpAgentId } from "./mcp-agent-context.js";
 import type { Logger } from "../shared/logging/logger.js";
 import type { McpRuntimeRole } from "../contracts/mcp-tool-definitions.js";
 import { getCorrelationId } from "../shared/logging/correlation-id.js";
+import type { ManagementErrorKind } from "../mcp/management/payload-parsers.js";
+import { sanitizeManagementErrorMessage } from "../mcp/management/payload-parsers.js";
 
 export interface McpRequestRouterArgs {
   server: Server;
@@ -23,6 +25,85 @@ export interface McpRequestRouterArgs {
   withCorrelationContext?: <T>(request: unknown, operation: () => Promise<T>) => Promise<T>;
   getMcpApprovalTracker?: () => import("../services/mcp-approval-tracker.js").McpApprovalTracker;
 }
+
+const TOOL_ERROR_CONTEXT: Record<string, { domain: string; defaultAction: string }> = {
+  manage_code_ux: { domain: "system", defaultAction: "unknown" },
+  manage_projects: { domain: "projects", defaultAction: "unknown" },
+  manage_sprints: { domain: "sprints", defaultAction: "unknown" },
+  manage_tasks: { domain: "tasks", defaultAction: "unknown" },
+  manage_quicksprints: { domain: "quicksprints", defaultAction: "unknown" },
+  manage_scheduler: { domain: "scheduler", defaultAction: "unknown" },
+  manage_agents: { domain: "agents", defaultAction: "unknown" },
+  manage_memory: { domain: "memory", defaultAction: "unknown" },
+  manage_settings: { domain: "settings", defaultAction: "unknown" },
+  manage_preview: { domain: "preview", defaultAction: "unknown" },
+  manage_telemetry: { domain: "telemetry", defaultAction: "unknown" },
+  search_knowledge: { domain: "knowledge", defaultAction: "search" },
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const readActionForEnvelope = (
+  toolName: string,
+  toolArgs: unknown,
+  defaultAction: string,
+): string => {
+  if (toolName === "manage_code_ux" && isRecord(toolArgs)) {
+    const domain = typeof toolArgs.domain === "string" && toolArgs.domain.trim() ? toolArgs.domain.trim() : null;
+    if (domain) {
+      return typeof toolArgs.action === "string" && toolArgs.action.trim() ? toolArgs.action.trim() : defaultAction;
+    }
+  }
+  if (isRecord(toolArgs) && typeof toolArgs.action === "string" && toolArgs.action.trim()) {
+    return toolArgs.action.trim();
+  }
+  return defaultAction;
+};
+
+const readDomainForEnvelope = (toolName: string, toolArgs: unknown, defaultDomain: string): string => {
+  if (toolName === "manage_code_ux" && isRecord(toolArgs) && typeof toolArgs.domain === "string" && toolArgs.domain.trim()) {
+    return toolArgs.domain.trim();
+  }
+  return defaultDomain;
+};
+
+const readErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+};
+
+const isInvalidParamsError = (error: unknown): boolean =>
+  error instanceof McpError && error.code === ErrorCode.InvalidParams;
+
+const formatToolErrorEnvelope = (
+  toolName: string,
+  toolArgs: unknown,
+  error: unknown,
+): { content: Array<{ type: string; text: string }>; isError: true } | null => {
+  const context = TOOL_ERROR_CONTEXT[toolName];
+  if (!context) {
+    return null;
+  }
+
+  const errorType: ManagementErrorKind = isInvalidParamsError(error) ? "validation" : "runtime";
+  const envelope = {
+    result: {
+      status: "error",
+      domain: readDomainForEnvelope(toolName, toolArgs, context.domain),
+      action: readActionForEnvelope(toolName, toolArgs, context.defaultAction),
+      message: sanitizeManagementErrorMessage(readErrorMessage(error)),
+      errorType,
+    },
+  };
+
+  return {
+    content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }],
+    isError: true,
+  };
+};
 
 export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => {
   const logger = args.logger;
@@ -106,7 +187,7 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
         if (error instanceof Error && error.message.startsWith("Tool not found:")) {
           throw new McpError(ErrorCode.MethodNotFound, error.message);
         }
-        return args.formatError(error);
+        return formatToolErrorEnvelope(name, toolArgs, error) ?? args.formatError(error);
       }
     };
 

@@ -118,6 +118,8 @@ The parsed management envelope has:
 - `result.errorType: "validation"` for payload parser failures and `"runtime"` for dependency or execution failures.
 - `result.field` when a validation helper can identify the invalid field.
 
+Schema-level MCP argument failures use the same envelope before a tool handler is dispatched. Missing `action`, malformed argument bodies, and unknown action enum values return `errorType: "validation"` with the failed tool's management domain. Runtime exceptions that escape a handler return `errorType: "runtime"`. Error text is sanitized before it is sent to MCP clients: stack trace lines and secret-like fields such as tokens, API keys, passwords, authorization headers, and credentials are omitted or redacted.
+
 Approval responses are not errors. Calls that need human confirmation still return `approvalRequired: true` and do not set `isError`.
 
 ### Destructive Action Approvals
@@ -190,6 +192,14 @@ For payload normalization in management tools, Code UX centralizes parsing behav
 
 
 The dedicated management tools (`manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_settings`) and the legacy `manage_code_ux` dispatcher share the same action handlers.
+
+Focused validation commands:
+
+```bash
+pnpm run test:backend -- tests/backend/mcp/tool-validators.test.ts tests/backend/mcp/mcp-management.test.ts tests/backend/mcp/management-payload-parsers.test.ts
+pnpm run test:backend
+pnpm run lint
+```
 
 For sprint create/update calls:
 - `name` is the canonical repository field.

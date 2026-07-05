@@ -19,12 +19,27 @@ export function managementValidationError(message: string, field?: string): Mana
   return new ManagementValidationError(message, field);
 }
 
+export function sanitizeManagementErrorMessage(message: string): string {
+  const withoutStack = message
+    .split(/\r?\n/)
+    .filter((line) => !/^\s*at\s+/.test(line))
+    .join("\n")
+    .trim();
+  const sanitized = (withoutStack || "An unknown error occurred").replace(
+    /\b(api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|password|authorization|credential)\b(\s*[:=]\s*)(["']?)[^,\n}]+(["']?)/gi,
+    (_match, key: string, separator: string, openingQuote: string, closingQuote: string) =>
+      `${key}${separator}${openingQuote}[redacted]${closingQuote && openingQuote ? closingQuote : ""}`,
+  );
+
+  return sanitized;
+}
+
 export function formatManagementErrorEnvelope(
   domain: string,
   action: string,
   error: unknown,
 ): ManagementResponseEnvelope {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = sanitizeManagementErrorMessage(error instanceof Error ? error.message : String(error));
   const kind: ManagementErrorKind = isManagementValidationError(error) ? "validation" : "runtime";
   const result: Record<string, unknown> = {
     status: "error",
