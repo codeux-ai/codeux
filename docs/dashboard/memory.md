@@ -74,6 +74,10 @@ Sprint-scoped memories are treated as observations. Durable project knowledge is
 
 Active claims use a normalized fingerprint. If a later sprint produces the same durable claim, remediation links the new sprint memories as evidence on the existing claim instead of creating another long-term memory copy.
 
+Internal MCP can also create and maintain durable claims directly through `manage_memory` without requiring a sprint ID. The `create_claim` action writes the canonical claim row and a project-scoped mirror memory tagged with `source.originType = "memory_claim"` and `source.originId = <claimId>`, which lets `MemoryService.searchClaims` hydrate active claims from normal project memory search results. `update_claim` keeps those mirror memories aligned with the current claim text, category, confidence, and durability.
+
+Project managers can use `list_claims`, `get_claim`, `update_claim`, and `add_claim_evidence` without approval. Destructive claim lifecycle actions use explicit approval: `deprecate_claim` returns `approvalRequired: true` until the caller repeats the same request with `approval.confirmed: true`, and it only reports success when the repository changes the claim status.
+
 Claims can be audited through read-only endpoints:
 
 ```http
