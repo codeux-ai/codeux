@@ -14,12 +14,12 @@ import type { ExecutionRuntimeEventSummaryRow } from "./execution-repository-typ
 // activity (full history is available on demand elsewhere), so each active run contributes at most
 // `EXPANDED_EVENTS_PER_RUN_LIMIT` recent events (applied PER run via a window function so a chatty
 // run can never evict a quieter parallel run's events) and the merged feed is capped at
-// `MAX_RUNTIME_EVENTS`. The per-run cap matches the final cap so a single active run keeps its full
-// recent history up to the payload bound rather than losing its oldest events.
+// `MAX_RUNTIME_EVENTS`. Selected-sprint events are read through a separate pinned slice so an older
+// selected sprint remains visible even when expanded runs and project-recent events are noisy.
 const MAX_RUNTIME_EVENTS = 300;
-const EXPANDED_EVENTS_PER_RUN_LIMIT = MAX_RUNTIME_EVENTS;
 const RECENT_PROJECT_EVENTS_LIMIT = 240;
 const SELECTED_SPRINT_EVENTS_LIMIT = 120;
+const EXPANDED_EVENTS_PER_RUN_LIMIT = SELECTED_SPRINT_EVENTS_LIMIT;
 
 function compareRuntimeEvents(
   left: ExecutionRuntimeEventSummaryRow,
@@ -55,7 +55,7 @@ function mergeRuntimeEvents(
   return [
     ...pinnedEvents,
     ...[...eventById.values()]
-    .sort(compareRuntimeEvents)
+      .sort(compareRuntimeEvents)
       .slice(0, Math.max(limit - pinnedEvents.length, 0)),
   ].sort(compareRuntimeEvents);
 }
