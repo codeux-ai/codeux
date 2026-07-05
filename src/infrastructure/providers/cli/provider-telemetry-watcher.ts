@@ -36,8 +36,95 @@ export interface TelemetryWatcherOptions {
   getAntigravityLogMetadata?: (logPath: string) => Promise<string | null>;
   parseAntigravityConversationId: (logPath: string) => Promise<string | null>;
   getAntigravityTranscriptMetadata?: (resolvedSessionId: string) => Promise<string | null>;
+  getAntigravityDatabaseMetadata?: (resolvedSessionId: string) => Promise<string | null>;
   readAntigravityTranscript: (resolvedSessionId: string) => Promise<string | null>;
   resolveAntigravityDatabase: (resolvedSessionId: string, destPath: string) => Promise<boolean | string | null>;
+}
+
+type ProviderMetadataSignature = { available: true; signature: string } | { available: false };
+
+function buildMetadataSourceSignature(args: {
+  provider: CliProviderId;
+  model: string;
+  resolvedNativeSessionId: string | null;
+  stdout: string;
+  stderr: string;
+  providerMetadata: string | null;
+}): string {
+  return [
+    args.provider,
+    args.model,
+    args.resolvedNativeSessionId || "",
+    signatureForString(args.stdout),
+    signatureForString(args.stderr),
+    args.providerMetadata || "",
+  ].join("|");
+}
+
+async function buildTelemetrySourceSignature(args: {
+  provider: CliProviderId;
+  model: string;
+  resolvedNativeSessionId: string | null;
+  stdout: string;
+  stderr: string;
+  claudeSessionJsonl: string | null;
+  codexSessionJson: string | null;
+  qwenLog: { usage: QwenUsageTotals | null; conversation: ParsedConversationTurn[] } | null;
+  antigravityTranscriptJsonl: string | null;
+  antigravityTempDbPath: string | null;
+}): Promise<string> {
+  const parts = [
+    args.provider,
+    args.model,
+    args.resolvedNativeSessionId || "",
+    signatureForString(args.stdout),
+    signatureForString(args.stderr),
+    signatureForString(args.claudeSessionJsonl || ""),
+    signatureForString(args.codexSessionJson || ""),
+    signatureForString(args.antigravityTranscriptJsonl || ""),
+  ];
+
+  if (args.qwenLog) {
+    parts.push(signatureForString(JSON.stringify(args.qwenLog)));
+  }
+
+  if (args.antigravityTempDbPath) {
+    parts.push(`antigravity-temp-db:${await readFileMetadataSignature(args.antigravityTempDbPath)}`);
+  }
+
+  return parts.join("|");
+}
+
+async function readFileMetadataSignature(filePath: string): Promise<string> {
+  const stat = await fs.stat(filePath).catch(() => null);
+  if (!stat) {
+    return "missing";
+  }
+  return `${stat.size}:${Math.floor(stat.mtimeMs)}`;
+}
+
+function signatureForString(value: string): string {
+  if (!value) {
+    return "0:";
+  }
+  if (value.length > 32768) {
+    return [
+      value.length,
+      hashString(value.slice(0, 4096)),
+      hashString(value.slice(Math.floor(value.length / 2), Math.floor(value.length / 2) + 4096)),
+      hashString(value.slice(-16384)),
+    ].join(":");
+  }
+  return `${value.length}:${hashString(value)}`;
+}
+
+function hashString(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
 }
 
 export class ProviderTelemetryWatcher {
@@ -132,14 +219,17 @@ export class ProviderTelemetryWatcher {
         }
         this.resolvedNativeSessionId = resolvedNativeSessionId;
 
-        const sourceSignature = await this.buildTelemetrySourceSignature({
-          resolvedNativeSessionId,
+        const sourceSignature = await buildTelemetrySourceSignature({
+          provider: this.opts.provider,
+          model: this.opts.model,
+          resolvedNativeSessionId: resolvedNativeSessionId || this.opts.nativeSessionId,
           stdout,
           stderr,
           claudeSessionJsonl,
           codexSessionJson,
           qwenLog,
           antigravityTranscriptJsonl,
+          antigravityTempDbPath: this.tempDbPath,
         });
         if (sourceSignature === this.lastTelemetrySourceSignature) {
           this.lastEmittedPreReadSourceSignature = preReadSourceSignature;
@@ -186,116 +276,57 @@ export class ProviderTelemetryWatcher {
     stderr: string;
   }): Promise<string | null> {
     const resolvedNativeSessionId = args.resolvedNativeSessionId || this.opts.nativeSessionId;
-    const parts = [
-      this.opts.provider,
-      this.opts.model,
-      resolvedNativeSessionId || "",
-      this.signatureForString(args.stdout),
-      this.signatureForString(args.stderr),
-    ];
-
     const providerMetadata = await this.readProviderMetadata(resolvedNativeSessionId);
-    if (providerMetadata === undefined) {
+    if (!providerMetadata.available) {
       return null;
     }
-    parts.push(providerMetadata || "");
-    return parts.join("|");
+    return buildMetadataSourceSignature({
+      provider: this.opts.provider,
+      model: this.opts.model,
+      resolvedNativeSessionId,
+      stdout: args.stdout,
+      stderr: args.stderr,
+      providerMetadata: providerMetadata.signature,
+    });
   }
 
-  private async readProviderMetadata(resolvedNativeSessionId: string | null): Promise<string | null | undefined> {
+  private async readProviderMetadata(resolvedNativeSessionId: string | null): Promise<ProviderMetadataSignature> {
     if (this.opts.provider === "claude-code" && this.opts.nativeSessionId) {
       if (!this.opts.getClaudeSessionJsonlMetadata) {
-        return undefined;
+        return { available: false };
       }
-      return await this.opts.getClaudeSessionJsonlMetadata(this.opts.nativeSessionId);
+      return { available: true, signature: await this.opts.getClaudeSessionJsonlMetadata(this.opts.nativeSessionId) || "" };
     }
     if (this.opts.provider === "codex") {
       if (!this.opts.getCodexLatestSessionJsonMetadata) {
-        return undefined;
+        return { available: false };
       }
-      return await this.opts.getCodexLatestSessionJsonMetadata();
+      return { available: true, signature: await this.opts.getCodexLatestSessionJsonMetadata() || "" };
     }
     if (this.opts.provider === "qwen-code") {
       if (!this.opts.getQwenLogDataMetadata) {
-        return undefined;
+        return { available: false };
       }
-      return await this.opts.getQwenLogDataMetadata();
+      return { available: true, signature: await this.opts.getQwenLogDataMetadata() || "" };
     }
     if (this.opts.provider === "antigravity") {
       const parts: string[] = [];
       if (this.opts.antigravityLogPath) {
         if (!this.opts.getAntigravityLogMetadata) {
-          return undefined;
+          return { available: false };
         }
         parts.push(`log:${await this.opts.getAntigravityLogMetadata(this.opts.antigravityLogPath)}`);
       }
       if (resolvedNativeSessionId) {
-        if (!this.opts.getAntigravityTranscriptMetadata) {
-          return undefined;
+        if (!this.opts.getAntigravityTranscriptMetadata || !this.opts.getAntigravityDatabaseMetadata) {
+          return { available: false };
         }
         parts.push(`transcript:${await this.opts.getAntigravityTranscriptMetadata(resolvedNativeSessionId)}`);
+        parts.push(`database:${await this.opts.getAntigravityDatabaseMetadata(resolvedNativeSessionId)}`);
       }
-      return parts.join("|");
+      return { available: true, signature: parts.join("|") };
     }
-    return null;
-  }
-
-  private async buildTelemetrySourceSignature(args: {
-    resolvedNativeSessionId: string | null;
-    stdout: string;
-    stderr: string;
-    claudeSessionJsonl: string | null;
-    codexSessionJson: string | null;
-    qwenLog: { usage: QwenUsageTotals | null; conversation: ParsedConversationTurn[] } | null;
-    antigravityTranscriptJsonl: string | null;
-  }): Promise<string> {
-    const parts = [
-      this.opts.provider,
-      this.opts.model,
-      args.resolvedNativeSessionId || this.opts.nativeSessionId || "",
-      this.signatureForString(args.stdout),
-      this.signatureForString(args.stderr),
-      this.signatureForString(args.claudeSessionJsonl || ""),
-      this.signatureForString(args.codexSessionJson || ""),
-      this.signatureForString(args.antigravityTranscriptJsonl || ""),
-    ];
-
-    if (args.qwenLog) {
-      parts.push(this.signatureForString(JSON.stringify(args.qwenLog)));
-    }
-
-    if (this.tempDbPath) {
-      const stat = await fs.stat(this.tempDbPath).catch(() => null);
-      if (stat) {
-        parts.push(`${stat.size}:${Math.floor(stat.mtimeMs)}`);
-      }
-    }
-
-    return parts.join("|");
-  }
-
-  private signatureForString(value: string): string {
-    if (!value) {
-      return "0:";
-    }
-    if (value.length > 32768) {
-      return [
-        value.length,
-        this.hashString(value.slice(0, 4096)),
-        this.hashString(value.slice(Math.floor(value.length / 2), Math.floor(value.length / 2) + 4096)),
-        this.hashString(value.slice(-16384)),
-      ].join(":");
-    }
-    return `${value.length}:${this.hashString(value)}`;
-  }
-
-  private hashString(value: string): string {
-    let hash = 2166136261;
-    for (let index = 0; index < value.length; index += 1) {
-      hash ^= value.charCodeAt(index);
-      hash = Math.imul(hash, 16777619);
-    }
-    return (hash >>> 0).toString(36);
+    return { available: true, signature: "" };
   }
 
   private recordReadFailure(err: unknown): void {

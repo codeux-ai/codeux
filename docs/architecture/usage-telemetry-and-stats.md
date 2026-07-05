@@ -128,7 +128,21 @@ Code UX parses session data from two sources:
 
 For Docker-backed Antigravity runs, the SQLite database is encoded to Base64 within the container first, and then decoded to a temporary file on the host before parsing to bypass Docker named volume permission issues.
 
-The live provider telemetry watcher avoids re-reading full provider transcripts when cheap source fingerprints prove nothing changed since the last successful telemetry emission. The fingerprint includes stdout, stderr, provider/model identity, available provider metadata, and the resolved native session id; Antigravity rebuilds that fingerprint immediately after its conversation id is discovered from the log so the next poll can skip transcript and temporary database work unless the log, transcript metadata, stream output, or resolved id changes. Repeated watcher read failures are logged at bounded checkpoints with provider/session context, and watcher shutdown clears active polling before removing any temporary Antigravity database copy once.
+## Live Watcher Polling
+
+The live provider telemetry watcher polls once after startup and then at a 1.5 second cadence while the provider command is active. Each poll builds a cheap metadata signature first. That signature includes:
+
+- provider and model
+- resolved native session id when one is known
+- stdout and stderr stream signatures
+- provider-specific metadata for transcript/log sources
+- Antigravity database metadata when the source conversation database can be statted before copying it
+
+When the metadata signature matches the last successful telemetry emission, the watcher skips full transcript/log reads and skips Antigravity temporary database refreshes. This is the primary fast path for Claude Code JSONL, Codex rollout JSONL, Qwen Code OpenAI logs, and Antigravity log/transcript/database sources. When metadata helpers are unavailable, such as Docker reads or older tests/callers, the watcher falls back to the full read path so telemetry emissions are not dropped.
+
+Provider metadata helpers must return a stable string that changes when the underlying source changes. Current helpers use file name, size, and integer mtime for single files or sorted directory entries. Missing-but-valid sources should return a sentinel such as `missing` or `none`; an unavailable helper is represented by omitting the helper entirely, which deliberately disables the metadata fast path for that provider. Antigravity performs one additional signature pass after the conversation id is parsed from the log so the resolved id, transcript metadata, and database metadata all participate before deciding whether to read the transcript or refresh the temporary database copy.
+
+Repeated watcher read failures are logged at bounded checkpoints with provider/session context, and watcher shutdown clears active polling before removing any temporary Antigravity database copy once.
 
 Each `gen_metadata` row is **one model call**, not a running session total — confirmed empirically against live conversation databases, where a single conversation can carry anywhere from a handful to several hundred rows and consecutive rows' input-token fields fluctuate rather than grow monotonically. The original implementation read only the *latest* row, which under-reported total usage by roughly the number of generations in the run (verified against real data: a 203-generation conversation showed 1,268 input tokens under the old logic vs. 2,372,421 actually used). `parseAntigravityDatabase` now sums every row instead.
 
