@@ -119,6 +119,15 @@ export const SettingsPage: FunctionComponent = () => {
     transitionDuration: interactionTokens.controlFeedback.duration,
     transitionTimingFunction: interactionTokens.controlFeedback.ease,
   };
+  const saveDisabledReason = activeSaving
+    ? "Settings are saving."
+    : loading
+      ? "Settings are still loading."
+      : activeScope === "project" && !selectedProject
+        ? "Select a project before saving project settings."
+        : !activeDirty
+          ? "No settings changes to save."
+          : undefined;
 
   useEffect(() => () => {
     mountedRef.current = false;
@@ -391,6 +400,9 @@ export const SettingsPage: FunctionComponent = () => {
               disabled={!activeDirty || activeSaving || loading || (activeScope === "project" && !selectedProject)}
               aria-busy={activeSaving ? "true" : undefined}
               aria-disabled={!activeDirty || activeSaving || loading || (activeScope === "project" && !selectedProject)}
+              aria-description={saveDisabledReason}
+              title={saveDisabledReason}
+              data-motion-contract="controlFeedback"
               className={`group inline-flex items-center gap-2.5 rounded-2xl px-5 py-3 text-sm font-bold transition-[background-color,box-shadow,transform] duration-300 hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 ${
                 saveMessage && !error
                   ? "bg-status-green text-white shadow-[var(--elevation-raised)]"
@@ -414,6 +426,11 @@ export const SettingsPage: FunctionComponent = () => {
                 </>
               )}
             </button>
+            {saveDisabledReason ? (
+              <div className="w-full text-xs font-semibold leading-relaxed text-slate-500 dark:text-slate-400">
+                {saveDisabledReason}
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -428,7 +445,7 @@ export const SettingsPage: FunctionComponent = () => {
           pendingCategory={pendingCategory}
         />
 
-        <div id="settings-active-category-panel" ref={contentRef} aria-busy={activeSaving || loading || resettingProject ? "true" : undefined} className="flex min-w-0 flex-col gap-5">
+        <div id="settings-active-category-panel" ref={contentRef} aria-busy={activeSaving || loading || resettingProject ? "true" : undefined} data-motion-contract="enterExit" className="flex min-w-0 flex-col gap-5">
           <div className="mb-1 flex flex-wrap items-center gap-3">
             <activeCategoryConfig.icon
               className={`h-4 w-4 ${activeCategoryConfig.danger ? "text-status-red" : "text-signal-500"}`}
