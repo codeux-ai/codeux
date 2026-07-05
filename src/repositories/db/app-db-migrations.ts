@@ -283,6 +283,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_execution_invocations_project_sprint_started", "execution_invocations", "project_id, sprint_id, started_at DESC");
   ensureIndex(db, "idx_execution_invocations_project_sprint_run_started", "execution_invocations", "project_id, sprint_run_id, started_at DESC");
   ensureIndex(db, "idx_execution_invocations_task_run_started", "execution_invocations", "task_run_id, started_at DESC");
+  ensureIndex(db, "idx_execution_invocations_status_started", "execution_invocations", "status, started_at DESC");
   ensureIndex(db, "idx_execution_invocation_messages_invocation_created", "execution_invocation_messages", "invocation_id, created_at ASC");
   ensureIndex(db, "idx_dashboard_realtime_events_scope_sequence", "dashboard_realtime_events", "scope_type, scope_id, is_replayable, sequence DESC");
   // Non-replayable snapshot events are no longer persisted (their watermark is tracked in
@@ -345,8 +346,10 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_project_worker_assignments_worker_status", "project_worker_assignments", "worker_endpoint_id, status, last_affinity_at DESC");
   ensureIndex(db, "idx_project_attention_items_project_status", "project_attention_items", "project_id, status, opened_at DESC");
   ensureIndex(db, "idx_project_attention_items_project_status_updated", "project_attention_items", "project_id, status, updated_at DESC");
+  ensureIndex(db, "idx_project_attention_items_project_status_updated_opened", "project_attention_items", "project_id, status, updated_at DESC, opened_at DESC, id DESC");
   ensureIndex(db, "idx_project_attention_items_sprint_run_status", "project_attention_items", "sprint_run_id, status, opened_at DESC");
   ensureIndex(db, "idx_project_attention_items_sprint_run_status_updated", "project_attention_items", "sprint_run_id, status, updated_at DESC");
+  ensureIndex(db, "idx_project_attention_items_sprint_run_status_updated_opened", "project_attention_items", "sprint_run_id, status, updated_at DESC, opened_at DESC, id DESC");
   ensureIndex(db, "idx_project_attention_items_dispatch_status", "project_attention_items", "dispatch_id, status, opened_at DESC");
   ensureIndex(db, "idx_sprint_preview_sessions_project_updated", "sprint_preview_sessions", "project_id, updated_at DESC");
   ensureIndex(db, "idx_sprint_preview_sessions_sprint", "sprint_preview_sessions", "sprint_id, updated_at DESC");
