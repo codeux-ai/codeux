@@ -423,8 +423,9 @@ describe("SprintComposer", () => {
       expect(queryByText("Planning in motion")).not.toBeInTheDocument();
     });
     expect(queryByRole("button", { name: "Minimize" })).not.toBeInTheDocument();
-    expect(queryByRole("button", { name: "New Sprint" })).not.toBeInTheDocument();
-    expect(queryAllByText("Cancel Active Request")).toHaveLength(1);
+    expect(queryByRole("button", { name: "New Sprint" })).toBeInTheDocument();
+    expect(queryByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(queryAllByText("Cancel Active Request")).toHaveLength(0);
 
     // We didn't cancel, so we can now resolve the submit to finish
     resolveSubmit!(undefined);

@@ -397,16 +397,26 @@ export const QuicksprintExecutionView: FunctionComponent<{
                       </span>
                     </div>
                     <p className="mt-2">
-                      {feedback?.text || "Planning is in progress."} Conflicting controls are paused until this request finishes or is cancelled.
+                      {feedback?.text || "Planning is in progress."} You can start another quicksprint while this request continues in the background.
                     </p>
-                    <button
-                      type="button"
-                      onClick={announceCancel}
-                      className="mt-3 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full border border-status-red/20 bg-status-red/[0.06] px-4 py-2 text-xs font-semibold text-status-red transition-colors duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] hover:bg-status-red/[0.12] motion-reduce:transition-none"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                      Cancel Request
-                    </button>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={announceNewQuicksprint}
+                        className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full border border-slate-900 bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition-colors duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] hover:bg-slate-800 motion-reduce:transition-none dark:border-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                      >
+                        <Zap className="h-3.5 w-3.5" />
+                        New Quicksprint
+                      </button>
+                      <button
+                        type="button"
+                        onClick={announceCancel}
+                        className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full border border-status-red/20 bg-status-red/[0.06] px-4 py-2 text-xs font-semibold text-status-red transition-colors duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] hover:bg-status-red/[0.12] motion-reduce:transition-none"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        Cancel Request
+                      </button>
+                    </div>
                   </div>
                 )}
                 {isSubmitBlocked && (

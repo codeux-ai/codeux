@@ -375,7 +375,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     }
   };
 
-  const handleStartNewSprint = (): void => {
+  const detachActiveRequest = (): void => {
     if (activeRequestRef.current) {
       activeRequestRef.current.detached = true;
       ignoredRequestIdsRef.current.add(activeRequestRef.current.id);
@@ -386,6 +386,15 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     setIsSubmitting(false);
     setIsOverlayDismissed(true);
     clearFeedback();
+  };
+
+  const handleDetachAndClose = (): void => {
+    detachActiveRequest();
+    onClose();
+  };
+
+  const handleStartNewSprint = (): void => {
+    detachActiveRequest();
     resetForNewSprint();
     onStartNewSprint?.();
   };
@@ -643,9 +652,8 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
 
             <button
               type="button"
-              onClick={onClose}
-              disabled={isBusy}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/78 text-slate-400 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:hover:text-white"
+              onClick={isBusy ? handleDetachAndClose : onClose}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/78 text-slate-400 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:hover:text-white"
               aria-label="Close sprint composer"
             >
               <X className="h-4 w-4" />
@@ -1068,18 +1076,34 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                   </div>
                 </div>
               </button>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleStartNewSprint}
+                  className="inline-flex min-h-[38px] items-center justify-center rounded-full border border-slate-900 bg-slate-900 px-3 py-1.5 text-[11px] font-bold text-white transition-colors hover:bg-slate-800 dark:border-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                >
+                  New Sprint
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  className="inline-flex min-h-[38px] items-center justify-center rounded-full border border-status-red/20 bg-status-red/[0.06] px-3 py-1.5 text-[11px] font-bold text-status-red transition-colors hover:bg-status-red/[0.12]"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           )}
           <button
             type="button"
-            onClick={isBusy ? handleCancel : onClose}
+            onClick={isBusy ? handleDetachAndClose : onClose}
             className={`rounded-[1.2rem] border px-5 py-3 text-sm font-semibold transition-colors w-full sm:w-auto ${
               isBusy
-                ? "border-status-red/30 bg-status-red/[0.06] text-status-red hover:bg-status-red/[0.12]"
+                ? "border-black/[0.06] bg-white/66 text-slate-500 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-300 dark:hover:text-white"
                 : "border-black/[0.06] bg-white/66 text-slate-500 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-300 dark:hover:text-white"
             }`}
           >
-            {isBusy ? "Cancel Active Request" : "Cancel"}
+            {isBusy ? "Close Composer" : "Cancel"}
           </button>
           <button
             type="submit"

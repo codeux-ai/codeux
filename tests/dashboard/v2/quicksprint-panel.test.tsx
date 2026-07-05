@@ -51,6 +51,16 @@ describe("QuicksprintPanel", () => {
         dispatchEvent: vi.fn(),
       })),
     });
+    Object.defineProperty(window, "requestAnimationFrame", {
+      configurable: true,
+      writable: true,
+      value: (callback: FrameRequestCallback) => window.setTimeout(() => callback(Date.now()), 0),
+    });
+    Object.defineProperty(window, "cancelAnimationFrame", {
+      configurable: true,
+      writable: true,
+      value: (id: number) => window.clearTimeout(id),
+    });
   });
 
   const fullstackPurpose = {
@@ -498,7 +508,8 @@ describe("QuicksprintPanel", () => {
       expect(queryByText("Quicksprint in motion")).not.toBeInTheDocument();
     });
     expect(queryByRole("button", { name: "Minimize" })).not.toBeInTheDocument();
-    expect(queryByRole("button", { name: "New Quicksprint" })).not.toBeInTheDocument();
+    expect(queryByRole("button", { name: "New Quicksprint" })).toBeInTheDocument();
+    expect(queryByRole("button", { name: "Cancel Request" })).toBeInTheDocument();
     expect(queryAllByText("Cancel Active Request")).toHaveLength(0);
 
     // We didn't cancel, so we can now resolve the execution
@@ -650,7 +661,9 @@ describe("QuicksprintPanel", () => {
     const firstSignal = mockOnExecute.mock.calls[0]?.[6] as AbortSignal;
     expect(firstSignal).toBeInstanceOf(AbortSignal);
 
-    fireEvent.click(getByText("New Quicksprint"));
+    const planningDialog = getByText("Quicksprint in motion").closest("[role='dialog']");
+    expect(planningDialog).toBeInTheDocument();
+    fireEvent.click(within(planningDialog as HTMLElement).getByText("New Quicksprint"));
 
     expect(firstSignal.aborted).toBe(false);
     expect(getByText("Opened a new quicksprint while the previous plan and start request continues in the background.", { selector: "p" })).toBeInTheDocument();
