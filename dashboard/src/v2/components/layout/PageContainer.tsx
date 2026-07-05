@@ -47,6 +47,7 @@ export const PageContainer: FunctionComponent<PageContainerProps> = ({
   padding = "standard",
   as = "div",
   "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledBy,
   "data-focus-fallback": dataFocusFallback,
   role,
   tabIndex,
@@ -54,6 +55,9 @@ export const PageContainer: FunctionComponent<PageContainerProps> = ({
   ...props
 }) => {
   const interactionTokens = useInteractionTokens();
+  const hasAriaLabel = typeof ariaLabel === "string" && ariaLabel.trim().length > 0;
+  const hasAriaLabelledBy = typeof ariaLabelledBy === "string" && ariaLabelledBy.trim().length > 0;
+  const hasAccessibleName = hasAriaLabel || hasAriaLabelledBy;
   const classes = [
     "relative z-10 mx-auto flex w-full flex-col animate-in fade-in motion-reduce:animate-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50",
     PAGE_CONTAINER_WIDTH,
@@ -72,11 +76,12 @@ export const PageContainer: FunctionComponent<PageContainerProps> = ({
   return (
     <Component
       {...props}
-      aria-label={ariaLabel ?? "Page content"}
-      data-focus-fallback={dataFocusFallback ?? ""}
+      aria-label={hasAriaLabel ? ariaLabel : undefined}
+      aria-labelledby={hasAriaLabelledBy ? ariaLabelledBy : undefined}
+      data-focus-fallback={hasAccessibleName ? (dataFocusFallback ?? "") : undefined}
       ref={containerRef as any}
-      role={role ?? (as === "div" ? "region" : undefined)}
-      tabIndex={tabIndex ?? -1}
+      role={role ?? (as === "div" && hasAccessibleName ? "region" : undefined)}
+      tabIndex={tabIndex ?? (hasAccessibleName ? -1 : undefined)}
       className={classes}
       style={transitionStyle}
     >

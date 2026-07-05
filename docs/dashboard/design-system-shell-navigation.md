@@ -56,7 +56,7 @@ Stable layouts on narrow widths (especially mobile or multi-panel layouts) must 
 - Desktop and mobile sidebar landmarks must have distinct accessible names. Mobile sidebars use dialog semantics only while open, with the inner workspace navigation named separately from the outer dialog.
 - Every shell route link keeps a stable accessible name even when rendered icon-only or visually minimized. Active route links use `aria-current="page"`; hidden tooltip labels remain `aria-hidden`.
 - Mobile sidebar drawers close through the backdrop, route selection, and Escape. Closing must restore focus to the opener when it is still connected and usable, otherwise to the route page fallback.
-- Page route containers must provide a named, programmatically focusable fallback target (`data-focus-fallback`, `tabIndex=-1`, and a stable accessible name) so route changes and overlay closes never leave keyboard focus lost.
+- Page route containers that need route-change or overlay-close focus recovery must provide a specific accessible name through `aria-label` or `aria-labelledby`. `PageContainer` only applies the named `region`, `data-focus-fallback`, and fallback `tabIndex=-1` when that name is present; unlabeled layout wrappers must stay out of the landmark list instead of exposing a generic "Page content" region.
 - Fixed bottom dock containers must stay inside their own horizontal scroll boundary, account for `env(safe-area-inset-bottom)`, and preserve visible Signal Jade focus rings at the viewport edges.
 
 ### Reduced Motion
