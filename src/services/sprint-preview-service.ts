@@ -430,7 +430,7 @@ export class SprintPreviewService {
         status: "stopped",
         hostPort: session.hostPort,
         containerAppPort: session.containerAppPort,
-        portMappings: session.portMappings,
+        portMappings: this.getEffectivePortMappings(session),
         containerId: null,
         containerName: null,
         healthStatus: "unknown",
@@ -462,7 +462,7 @@ export class SprintPreviewService {
         status: "stopped",
         hostPort: session.hostPort,
         containerAppPort: session.containerAppPort,
-        portMappings: session.portMappings,
+        portMappings: this.getEffectivePortMappings(session),
         containerId: null,
         containerName: null,
         healthStatus: "unknown",
@@ -788,7 +788,7 @@ export class SprintPreviewService {
       });
     }
 
-    const portMappings = this.mergeContainerHostPort(session.portMappings, container.hostPort || null);
+    const portMappings = this.mergeContainerHostPort(this.getEffectivePortMappings(session), container.hostPort || null);
     const primaryMapping = this.getPrimaryPortMapping(portMappings);
     const hostPort = primaryMapping.hostPort;
 
@@ -1352,7 +1352,7 @@ export class SprintPreviewService {
     const containerPorts = this.getOrderedContainerPorts(settings);
     const usedHostPorts = new Set<number>();
     const existingByContainerPort = new Map(
-      (existing?.portMappings ?? [])
+      this.getEffectivePortMappings(existing)
         .filter((mapping) => mapping.hostPort !== null)
         .map((mapping) => [mapping.containerPort, mapping.hostPort as number]),
     );
@@ -1412,11 +1412,26 @@ export class SprintPreviewService {
     };
   }
 
+  private getEffectivePortMappings(session: Pick<SprintPreviewSession, "containerAppPort" | "hostPort" | "portMappings"> | null | undefined): SprintPreviewPortMapping[] {
+    if (session && Array.isArray(session.portMappings) && session.portMappings.length > 0) {
+      return session.portMappings;
+    }
+    if (!session) {
+      return [];
+    }
+    return [{
+      containerPort: session.containerAppPort,
+      hostPort: session.hostPort,
+      isPrimary: true,
+    }];
+  }
+
   private resolveSelectedPortMapping(
     session: SprintPreviewSession,
     selectedPort?: string | number | null,
   ): SprintPreviewPortMapping {
-    const primary = this.getPrimaryPortMapping(session.portMappings);
+    const portMappings = this.getEffectivePortMappings(session);
+    const primary = this.getPrimaryPortMapping(portMappings);
     if (selectedPort === undefined || selectedPort === null || selectedPort === "") {
       return primary;
     }
@@ -1427,7 +1442,7 @@ export class SprintPreviewService {
     if (!/^\d+$/.test(normalizedPort) || !Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
       throw new Error("Selected preview port is invalid.");
     }
-    const mapping = session.portMappings.find((candidate) =>
+    const mapping = portMappings.find((candidate) =>
       candidate.containerPort === parsedPort || candidate.hostPort === parsedPort
     );
     if (!mapping) {

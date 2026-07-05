@@ -5,7 +5,7 @@ import net from "net";
 import type { Duplex } from "stream";
 import path from "path";
 import escapeHtmlLib from "escape-html";
-import type { SprintPreviewSession } from "../contracts/app-types.js";
+import type { SprintPreviewPortMapping, SprintPreviewSession } from "../contracts/app-types.js";
 
 export const PREVIEW_BRIDGE_PATH = "/_code_ux/preview-bridge.js";
 export const PREVIEW_STATUS_PATH = "/_code_ux/preview-status";
@@ -81,7 +81,8 @@ export function stripPreviewPortSelectorFromPath(pathValue: string | null | unde
 }
 
 export function resolvePreviewHostPort(session: SprintPreviewSession, selectedPort: string | number | null | undefined): number | null {
-  const primary = session.portMappings.find((mapping) => mapping.isPrimary === true) ?? session.portMappings[0];
+  const portMappings = getEffectivePreviewPortMappings(session);
+  const primary = portMappings.find((mapping) => mapping.isPrimary === true) ?? portMappings[0];
   if (selectedPort === undefined || selectedPort === null || selectedPort === "") {
     return primary?.hostPort ?? session.hostPort;
   }
@@ -90,13 +91,24 @@ export function resolvePreviewHostPort(session: SprintPreviewSession, selectedPo
   if (!/^\d+$/.test(normalizedPort) || !Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
     throw new Error("Selected preview port is invalid.");
   }
-  const mapping = session.portMappings.find((candidate) =>
+  const mapping = portMappings.find((candidate) =>
     candidate.containerPort === parsedPort || candidate.hostPort === parsedPort
   );
   if (!mapping) {
     throw new Error("Selected preview port is not available for this session.");
   }
   return mapping.hostPort;
+}
+
+function getEffectivePreviewPortMappings(session: Pick<SprintPreviewSession, "containerAppPort" | "hostPort" | "portMappings">): SprintPreviewPortMapping[] {
+  if (Array.isArray(session.portMappings) && session.portMappings.length > 0) {
+    return session.portMappings;
+  }
+  return [{
+    containerPort: session.containerAppPort,
+    hostPort: session.hostPort,
+    isPrimary: true,
+  }];
 }
 
 export function isAllowedPreviewControlOrigin(req: express.Request): boolean {

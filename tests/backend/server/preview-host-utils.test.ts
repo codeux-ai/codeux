@@ -93,6 +93,17 @@ describe("preview-host-utils", () => {
       expect(() => resolvePreviewHostPort(session, "9999")).toThrow("not available for this session");
     });
 
+    it("falls back to the legacy single-port session shape when port mappings are absent", () => {
+      const legacySession = {
+        hostPort: 5555,
+        containerAppPort: 3000,
+        portMappings: [],
+      } as SprintPreviewSession;
+
+      expect(resolvePreviewHostPort(legacySession, null)).toBe(5555);
+      expect(resolvePreviewHostPort(legacySession, "3000")).toBe(5555);
+    });
+
     it("parses and strips selector parameters without forwarding them upstream", () => {
       expect(parseSelectedPreviewPortFromRequest("/app?previewPort=5173&keep=1", undefined)).toBe("5173");
       expect(stripPreviewPortSelectorFromPath("/app?previewPort=5173&keep=1")).toBe("/app?keep=1");
