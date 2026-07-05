@@ -72,9 +72,18 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
       maxTaskReviewRuns: DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.maxTaskReviewRuns,
       maxSprintReviewRuns: DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.maxSprintReviewRuns,
       exhaustionPolicy: DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.exhaustionPolicy,
-      taskCompletion: { ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.taskCompletion },
-      sprintCompletion: { ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.sprintCompletion },
-      completedTaskWithoutPr: { ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.completedTaskWithoutPr },
+      taskCompletion: {
+        ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.taskCompletion,
+        agentPresetIds: [...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.taskCompletion.agentPresetIds],
+      },
+      sprintCompletion: {
+        ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.sprintCompletion,
+        agentPresetIds: [...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.sprintCompletion.agentPresetIds],
+      },
+      completedTaskWithoutPr: {
+        ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.completedTaskWithoutPr,
+        agentPresetIds: [...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.completedTaskWithoutPr.agentPresetIds],
+      },
     },
   },
   skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),

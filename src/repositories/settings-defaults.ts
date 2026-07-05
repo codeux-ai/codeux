@@ -608,14 +608,17 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
       exhaustionPolicy: "FINISH_TASK",
       taskCompletion: {
         enabled: true,
+        agentPresetIds: [],
         agentPresetId: null,
       },
       sprintCompletion: {
         enabled: true,
+        agentPresetIds: [],
         agentPresetId: null,
       },
       completedTaskWithoutPr: {
         enabled: true,
+        agentPresetIds: [],
         agentPresetId: null,
       },
     },

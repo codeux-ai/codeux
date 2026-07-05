@@ -46,8 +46,11 @@ describe("SettingsRepository", () => {
     expect(system.defaults.agents.qualityAssurance.maxSprintReviewRuns).toBe(3);
     expect(system.defaults.agents.qualityAssurance.exhaustionPolicy).toBe("FINISH_TASK");
     expect(system.defaults.agents.qualityAssurance.taskCompletion.enabled).toBe(true);
+    expect(system.defaults.agents.qualityAssurance.taskCompletion.agentPresetIds).toEqual([]);
     expect(system.defaults.agents.qualityAssurance.sprintCompletion.enabled).toBe(true);
+    expect(system.defaults.agents.qualityAssurance.sprintCompletion.agentPresetIds).toEqual([]);
     expect(system.defaults.agents.qualityAssurance.completedTaskWithoutPr.enabled).toBe(true);
+    expect(system.defaults.agents.qualityAssurance.completedTaskWithoutPr.agentPresetIds).toEqual([]);
     expect(system.defaults.agents.instructionTemplates.planningMissing).toContain("Sprint Planning Missing");
     expect(system.mcpTools.length).toBeGreaterThan(0);
 
@@ -164,10 +167,12 @@ describe("SettingsRepository", () => {
             },
             sprintCompletion: {
               enabled: true,
-              agentPresetId: "qa-sprint",
+              agentPresetIds: [" qa-sprint ", "qa-peer", "qa-sprint", ""],
+              agentPresetId: "qa-sprint-legacy-ignored",
             },
             completedTaskWithoutPr: {
               enabled: false,
+              agentPresetIds: [],
               agentPresetId: null,
             },
           },
@@ -216,9 +221,13 @@ describe("SettingsRepository", () => {
     expect(effectiveProject.settings.git.defaultBranch).toBe("develop");
     expect(effectiveProject.settings.agents.qualityAssurance.enabled).toBe(true);
     expect(effectiveProject.settings.agents.qualityAssurance.maxTaskReviewRuns).toBe(3);
+    expect(effectiveProject.settings.agents.qualityAssurance.taskCompletion.agentPresetIds).toEqual(["qa-task"]);
     expect(effectiveProject.settings.agents.qualityAssurance.taskCompletion.agentPresetId).toBe("qa-task");
+    expect(effectiveProject.settings.agents.qualityAssurance.sprintCompletion.agentPresetIds).toEqual(["qa-sprint", "qa-peer"]);
     expect(effectiveProject.settings.agents.qualityAssurance.sprintCompletion.agentPresetId).toBe("qa-sprint");
     expect(effectiveProject.settings.agents.qualityAssurance.completedTaskWithoutPr.enabled).toBe(false);
+    expect(effectiveProject.settings.agents.qualityAssurance.completedTaskWithoutPr.agentPresetIds).toEqual([]);
+    expect(effectiveProject.settings.agents.qualityAssurance.completedTaskWithoutPr.agentPresetId).toBe(null);
     expect(effectiveProject.sources["automationLevel"]).toBe("project");
     expect(effectiveProject.sources["git.defaultBranch"]).toBe("project");
 

@@ -138,15 +138,40 @@ const sanitizeBackgroundPattern = (value: unknown): BackgroundPattern => {
     : "NONE";
 };
 
+const sanitizeAgentPresetIds = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (typeof entry !== "string") {
+      continue;
+    }
+    const id = entry.trim();
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      ids.push(id);
+    }
+  }
+  return ids;
+};
+
 const sanitizeQualityAssuranceTrigger = (
   value: unknown,
   defaults: DashboardSettings["agents"]["qualityAssurance"]["taskCompletion"],
 ): DashboardSettings["agents"]["qualityAssurance"]["taskCompletion"] => {
   const input = value && typeof value === "object" ? value as Partial<DashboardSettings["agents"]["qualityAssurance"]["taskCompletion"]> : {};
+  const legacyAgentPresetId = readString(input.agentPresetId, "").trim();
+  const agentPresetIds = Array.isArray(input.agentPresetIds)
+    ? sanitizeAgentPresetIds(input.agentPresetIds)
+    : sanitizeAgentPresetIds(legacyAgentPresetId ? [legacyAgentPresetId] : defaults.agentPresetIds);
 
   return {
     enabled: readBoolean(input.enabled, defaults.enabled),
-    agentPresetId: readString(input.agentPresetId, "").trim() || null,
+    agentPresetIds,
+    agentPresetId: agentPresetIds[0] ?? null,
   };
 };
 
@@ -284,9 +309,18 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
       maxTaskReviewRuns: DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.maxTaskReviewRuns,
       maxSprintReviewRuns: DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.maxSprintReviewRuns,
       exhaustionPolicy: DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.exhaustionPolicy,
-      taskCompletion: { ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.taskCompletion },
-      sprintCompletion: { ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.sprintCompletion },
-      completedTaskWithoutPr: { ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.completedTaskWithoutPr },
+      taskCompletion: {
+        ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.taskCompletion,
+        agentPresetIds: [...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.taskCompletion.agentPresetIds],
+      },
+      sprintCompletion: {
+        ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.sprintCompletion,
+        agentPresetIds: [...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.sprintCompletion.agentPresetIds],
+      },
+      completedTaskWithoutPr: {
+        ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.completedTaskWithoutPr,
+        agentPresetIds: [...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.completedTaskWithoutPr.agentPresetIds],
+      },
     },
   },
   skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),
