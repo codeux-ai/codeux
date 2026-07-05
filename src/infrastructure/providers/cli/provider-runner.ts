@@ -92,6 +92,9 @@ export interface ProviderRunInput {
   signal?: AbortSignal;
   onActivity: (desc: string, originator?: string) => void;
   onTelemetry?: (telemetry: ProviderUsageTelemetry) => void;
+  invocationId?: string | null;
+  providerInvocationId?: string | null;
+  purpose?: string | null;
   /** Pass a previous nativeSessionId to continue an existing CLI session.
    *  Claude Code: uses --resume. Gemini: adds --resume. Codex: uses exec resume --last.
    *  Qwen Code uses project-scoped --continue because Code UX logical ids are not Qwen saved-session ids. */
@@ -217,6 +220,9 @@ export class ProviderRunner implements IProviderRunner {
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
     onTelemetry?: (telemetry: ProviderUsageTelemetry) => void;
+    invocationId?: string | null;
+    providerInvocationId?: string | null;
+    purpose?: string | null;
     codexOutputPath?: string | null;
     continueSessionId?: string | null;
     openCodeBaselineUsage?: Record<string, unknown> | null;
@@ -369,6 +375,9 @@ export class ProviderRunner implements IProviderRunner {
         workflowSettings,
         signal,
         onTelemetry: input.onTelemetry,
+        invocationId: input.invocationId,
+        providerInvocationId: input.providerInvocationId,
+        purpose: input.purpose,
         getAccumulatedRawStdout: () => accumulatedRawStdout,
         getAccumulatedStderr: () => accumulatedStderr,
         nativeSessionId,

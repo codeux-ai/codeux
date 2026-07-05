@@ -36,6 +36,7 @@ The contracts below are implemented across `dashboard/src/v2/components/ui/*`, `
 ## Async States
 
 - First-load and blocking loading states use `role="status"`, `aria-live="polite"`, and `aria-busy` on the affected region or initiating control.
+- Primary operational pages must keep async-state semantics stable enough for regression tests: Live Session first-load telemetry, task stream skeletons, Settings category loading/save/error states, Stats shell loading/error/no-project panels, and Browser preview refresh/empty/unavailable states should expose named regions or named status/alert nodes rather than relying on visual skeletons alone.
 - Empty, low-data, stale-data, success, pending, and background-refresh states stay polite. They should preserve existing content where possible instead of replacing the whole workbench during refresh.
 - Errors that block the current task, failed saves, disconnected/reconnecting runtime transport, and unavailable browser containers use `role="alert"` or assertive live behavior. Avoid assertive announcements for routine polling, count changes, or non-blocking success messages.
 - Live runtime feeds, overview telemetry, Git/CI panels, invocation feeds, attention queues, and Stats refresh states should announce status changes without replaying the entire page. Use `aria-atomic="true"` only when the whole message is needed for context.

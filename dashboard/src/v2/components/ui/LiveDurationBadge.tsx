@@ -36,9 +36,10 @@ export const LiveDurationBadge: FunctionComponent<LiveDurationBadgeProps> = ({ d
     return (
         <span
             ref={ref}
-            className="inline-block min-w-0 max-w-full truncate break-words rounded px-0.5 -ml-0.5 font-mono tabular-nums"
+            aria-label={`Live duration: ${durationText || "not available"}`}
+            className="live-duration-badge inline-block min-w-0 max-w-full truncate break-words rounded px-0.5 -ml-0.5 font-mono tabular-nums motion-reduce:bg-signal-500/10 motion-reduce:ring-1 motion-reduce:ring-[color:var(--status-static-running-ring)]"
         >
-            <span className="sr-only">Live duration: </span>
+            <span className="sr-only" aria-hidden="true">Live duration: </span>
             {durationText}
         </span>
     );

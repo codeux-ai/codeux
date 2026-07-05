@@ -206,4 +206,58 @@ describe("parseCodexExecStdout", () => {
     expect(result.rawUsageJson).toEqual({ input_tokens: 25, output_tokens: 9 });
     expect(result.conversation).toEqual([]);
   });
+
+  it("skips partial JSON and unknown events while preserving recoverable stream metadata", () => {
+    const stdout = [
+      "{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":99,\"api_key\":\"sk-test-secret\"",
+      JSON.stringify({ type: "thread.started", thread_id: "thread-safe-id" }),
+      JSON.stringify({ type: "provider.debug", message: "ignored event" }),
+      JSON.stringify({
+        type: "item.started",
+        timestamp: "2026-06-01T10:00:00.000Z",
+        item: { id: "cmd_1", type: "command_execution", command: "pnpm test", status: "running" },
+      }),
+      JSON.stringify({
+        type: "turn.completed",
+        usage: { input_tokens: 12, total_tokens: 20 },
+      }),
+    ].join("\n");
+
+    const result = parseCodexExecStdout(stdout);
+
+    expect(result.nativeSessionId).toBe("thread-safe-id");
+    expect(result.usage).toMatchObject({ inputTokens: 12, outputTokens: 8 });
+    expect(result.rawUsageJson).toEqual({ input_tokens: 12, total_tokens: 20 });
+    expect(result.conversation).toHaveLength(1);
+    expect(result.conversation[0]).toMatchObject({
+      kind: "tool_call",
+      toolName: "shell",
+      toolCallId: "cmd_1",
+      toolArguments: "pnpm test",
+      toolStatus: "running",
+    });
+    expect(JSON.stringify(result)).not.toContain("sk-test-secret");
+  });
+
+  it("normalizes missing and negative token fields in rollout usage records", () => {
+    const jsonl = [
+      sessionMeta("sess-missing-fields"),
+      tokenCount("2026-06-01T10:00:05.000Z", {
+        input_tokens: "30",
+        output_tokens: -10,
+        total_tokens: 45,
+        input_token_details: { cached_tokens: -3 },
+      }),
+    ].join("\n");
+
+    const result = parseCodexRolloutJsonl(jsonl);
+
+    expect(result.usage).toEqual({
+      inputTokens: 30,
+      cachedInputTokens: 0,
+      outputTokens: 15,
+      reasoningOutputTokens: 0,
+    });
+    expect(result.nativeSessionId).toBe("sess-missing-fields");
+  });
 });

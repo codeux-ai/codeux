@@ -1,6 +1,9 @@
 import { defineConfig } from "vitest/config";
 
 process.env.VITEST_IN_MEMORY_DB = "true";
+process.env.TZ = "UTC";
+process.env.LANG = "C.UTF-8";
+process.env.LC_ALL = "C.UTF-8";
 
 export default defineConfig({
   cacheDir: ".cache/vitest",

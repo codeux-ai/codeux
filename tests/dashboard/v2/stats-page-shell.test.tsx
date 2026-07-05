@@ -319,6 +319,7 @@ describe("StatsPage Shell", () => {
     expect(screen.getByRole("heading", { name: "Stats" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Stats workspace context")).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("No project selected");
+    expect(screen.getByRole("status", { name: "No project selected" })).toHaveTextContent("Stats panel idle");
     expect(screen.getByText("Project · No project selected")).toBeInTheDocument();
     expect(screen.queryByText("No snapshot yet")).not.toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Time window presets" })).toBeInTheDocument();
@@ -331,9 +332,8 @@ describe("StatsPage Shell", () => {
     render(<StatsPage />);
 
     expect(screen.getByRole("region", { name: "Statistics" })).toHaveAttribute("aria-busy", "true");
-    expect(screen.getByRole("status")).toHaveTextContent("Stats panel refreshing");
-    expect(screen.getByRole("status")).toHaveTextContent("Loading telemetry field");
-    expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByRole("status", { name: "Loading telemetry field" })).toHaveTextContent("Stats panel refreshing");
+    expect(screen.getByRole("status", { name: "Loading telemetry field" })).toHaveAttribute("aria-live", "polite");
   });
 
   it("keeps previous stats visible while a refresh is loading", () => {
@@ -342,6 +342,7 @@ describe("StatsPage Shell", () => {
     render(<StatsPage />);
 
     expect(screen.queryByText(/Loading telemetry field/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Statistics" })).not.toHaveAttribute("aria-busy");
     expect(screen.getByRole("region", { name: "Providers metrics" })).toBeInTheDocument();
     expect(screen.getByLabelText("Mock analysis studio")).toHaveTextContent("Reliability analysis");
     expect(screen.getAllByRole("status").some((status) => status.textContent === "Refreshing")).toBe(true);
@@ -353,8 +354,7 @@ describe("StatsPage Shell", () => {
 
     render(<StatsPage />);
 
-    expect(screen.getByRole("alert")).toHaveTextContent("Stats panel unavailable");
-    expect(screen.getByRole("alert")).toHaveTextContent("Stats fetch failed.");
+    expect(screen.getByRole("alert", { name: "Stats fetch failed." })).toHaveTextContent("Stats panel unavailable");
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(refresh).toHaveBeenCalledTimes(1);
   });

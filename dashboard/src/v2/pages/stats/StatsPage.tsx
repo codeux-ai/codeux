@@ -119,6 +119,7 @@ export const StatsPage: FunctionComponent = () => {
       className={`${PANEL_CLASS} ${styles.statePanel} !p-5 md:!p-6`}
       data-stats-shell-animate
       role={options.role}
+      aria-label={options.title}
       aria-live={options.role === "status" ? "polite" : undefined}
     >
       <div className={styles.statePanelInner}>

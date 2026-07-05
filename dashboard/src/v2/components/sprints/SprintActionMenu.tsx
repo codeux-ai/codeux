@@ -14,7 +14,9 @@ import {
   Square,
   XCircle,
 } from "lucide-preact";
+import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import type { Sprint } from "../../types.js";
+import { ConfirmDialog } from "../ui/ConfirmDialog.js";
 
 export interface SprintActionMenuProps {
   sprint: Sprint;
@@ -72,6 +74,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
   role,
   buttonClassName = "flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-medium leading-snug text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 [&>span]:min-w-0 [&>span]:break-words",
 }) => {
+  const actionConfirm = useConfirmDialog();
   const handleDeleteClassName = buttonClassName.replace(
     /text-slate-600 transition-colors hover:bg-black\/\[0\.04\] hover:text-slate-900/,
     "text-status-red hover:bg-status-red/10"
@@ -87,8 +90,35 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
   const canPauseResume = Boolean(onPauseResume) && (isRunning || isPaused);
   const hasRunControls = Boolean(onPrimaryAction) || canPauseResume || Boolean(viewTasksHref) || Boolean(onAddTasks);
 
+  const confirmMenuAction = async (
+    options: {
+      title: string;
+      body: string;
+      confirmLabel: string;
+      destructive?: boolean;
+      tone?: "default" | "success" | "warning" | "danger" | "neutral";
+    },
+    action?: () => void,
+  ): Promise<void> => {
+    if (!action) {
+      onClose?.();
+      return;
+    }
+    const confirmed = await actionConfirm.requestConfirm(options);
+    onClose?.();
+    if (confirmed) {
+      action();
+    }
+  };
+
   return (
     <>
+      <ConfirmDialog
+        isOpen={actionConfirm.isOpen}
+        options={actionConfirm.options}
+        onConfirm={actionConfirm.handleConfirm}
+        onCancel={actionConfirm.handleCancel}
+      />
       {hasRunControls && (
         <>
           {onPrimaryAction && (
@@ -96,6 +126,15 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
               type="button"
               role={role}
               onClick={() => {
+                if (isRunning) {
+                  void confirmMenuAction({
+                    title: "Stop Sprint",
+                    body: `Stop sprint "${sprint.name}"? Active task dispatches may be interrupted.`,
+                    confirmLabel: "Stop Sprint",
+                    destructive: true,
+                  }, onPrimaryAction);
+                  return;
+                }
                 onClose?.();
                 onPrimaryAction();
               }}
@@ -119,8 +158,17 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
               type="button"
               role={role}
               onClick={() => {
-                onClose?.();
-                onPauseResume?.();
+                if (isPaused) {
+                  onClose?.();
+                  onPauseResume?.();
+                  return;
+                }
+                void confirmMenuAction({
+                  title: "Pause Sprint",
+                  body: `Pause sprint "${sprint.name}"? Running work will stop accepting new sprint actions until it is resumed.`,
+                  confirmLabel: "Pause",
+                  tone: "warning",
+                }, onPauseResume);
               }}
               disabled={pauseResumeBusy}
               title={pauseResumeBusy ? "Sprint pause or resume action in progress" : undefined}
@@ -253,8 +301,12 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
         type="button"
         role={role}
         onClick={() => {
-          onClose?.();
-          onDelete?.();
+          void confirmMenuAction({
+            title: "Delete Sprint",
+            body: `Delete sprint "${sprint.name}" and its tasks? This action cannot be undone.`,
+            confirmLabel: "Delete",
+            destructive: true,
+          }, onDelete);
         }}
         disabled={deleteBusy}
         aria-busy={deleteBusy}

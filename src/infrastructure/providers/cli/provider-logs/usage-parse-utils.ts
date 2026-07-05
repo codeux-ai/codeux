@@ -6,11 +6,11 @@
 
 export function toNumber(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
+    return Math.max(0, value);
   }
   if (typeof value === "string" && value.trim().length > 0) {
     const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
+    return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
   }
   return 0;
 }
@@ -98,7 +98,7 @@ function findFirstBalancedJsonContainer(text: string, kind: JsonContainerKind): 
     }
   }
 
-  return { ok: false, error: "malformed", jsonText: text.slice(start), startIndex: start, endIndex: text.length };
+  return { ok: false, error: "malformed", startIndex: start, endIndex: text.length };
 }
 
 export function extractJsonContainer<T = unknown>(
@@ -113,7 +113,7 @@ export function extractJsonContainer<T = unknown>(
   try {
     const value = JSON.parse(extracted.jsonText) as unknown;
     if (!isExpectedJsonKind(value, kind)) {
-      return { ok: false, error: "unexpected_type", ...extracted };
+      return { ok: false, error: "unexpected_type", startIndex: extracted.startIndex, endIndex: extracted.endIndex };
     }
     return { ok: true, value: value as T, ...extracted };
   } catch {
@@ -128,11 +128,11 @@ export function parseJsonContainer<T = unknown>(
   try {
     const parsed = JSON.parse(value) as unknown;
     if (!isExpectedJsonKind(parsed, kind)) {
-      return { ok: false, error: "unexpected_type", jsonText: value, startIndex: 0, endIndex: value.length };
+      return { ok: false, error: "unexpected_type", startIndex: 0, endIndex: value.length };
     }
     return { ok: true, value: parsed as T, jsonText: value, startIndex: 0, endIndex: value.length };
   } catch {
-    return { ok: false, error: "malformed", jsonText: value, startIndex: 0, endIndex: value.length };
+    return { ok: false, error: "malformed", startIndex: 0, endIndex: value.length };
   }
 }
 
