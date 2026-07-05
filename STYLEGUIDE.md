@@ -236,30 +236,27 @@ The Sparkline SVG sits `absolute bottom-0 left-0 w-full h-20` and uses smooth cu
 
 ### Organic Cells (SourcesGrid / SprintsPage)
 
-The liquid blob pattern uses two elements:
+The liquid blob pattern uses a shape-following shadow shell and a clipped body:
 
 ```tsx
-{/* 1. Shadow underlay — rendered OUTSIDE the mask, unclipped */}
-<div className="absolute inset-0 shadow-[...] animate-organic pointer-events-none" />
-
-{/* 2. Clipped liquid body — WebkitMask clips content to the organic shape */}
-<div
-    className="absolute inset-0 bg-white/55 dark:bg-void-800/65 backdrop-blur-3xl
-               border border-white/70 dark:border-white/[0.06]
-               overflow-hidden animate-organic transform-gpu"
-    style={{ WebkitMaskImage: '-webkit-radial-gradient(white, black)', backfaceVisibility: 'hidden' }}
->
-    {/* Inner inset highlight */}
-    <div className="absolute inset-0 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.5)]
-                    dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] animate-organic" />
-    {/* Status ring — only for non-idle states */}
-    {state.ring && (
-        <div className={`absolute inset-0 border-2 animate-[spin_5s_linear_infinite]
-                         scale-105 mix-blend-screen ${state.ring}`}
-             style={{ borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%', clipPath: 'inset(-10px)' }} />
-    )}
+{/* 1. Animated shell — owns the organic radius and shape-following shadow */}
+<div className="absolute inset-0 drop-shadow-[...] animate-organic">
+    {/* 2. Clipped liquid body — inherits the shell radius */}
+    <div
+        className="absolute inset-0 bg-white/55 dark:bg-void-800/65 backdrop-blur-3xl
+                   border border-white/70 dark:border-white/[0.06]
+                   overflow-hidden rounded-[inherit] transform-gpu"
+        style={{ WebkitMaskImage: '-webkit-radial-gradient(white, black)', backfaceVisibility: 'hidden' }}
+    >
+        {/* Inner inset highlight */}
+        <div className="absolute inset-0 rounded-[inherit]
+                        shadow-[inset_0_0_0_1px_rgba(255,255,255,0.5)]
+                        dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]" />
+    </div>
 </div>
 ```
+
+Use `drop-shadow` for the ambient sprint/source cell shadow. A separate `box-shadow` underlay draws around the rectangular bounds and will not match the animated organic corners.
 
 The `WebkitMaskImage: '-webkit-radial-gradient(white, black)'` is what makes `overflow-hidden` respect the organic `border-radius` shape. Without it, the content clips to a rectangle.
 

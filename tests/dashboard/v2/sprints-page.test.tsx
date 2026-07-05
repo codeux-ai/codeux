@@ -677,6 +677,8 @@ describe("SprintsPage", () => {
 
     const hideGalleryButton = screen.getByRole("button", { name: /hide gallery/i });
     expect(hideGalleryButton).toBeInTheDocument();
+    expect(hideGalleryButton.parentElement?.className).toContain("grid-cols-[minmax(5.5rem,0.85fr)_repeat(3,minmax(0,1fr))]");
+    expect(hideGalleryButton.parentElement?.firstElementChild).toBe(hideGalleryButton);
 
     fireEvent.click(hideGalleryButton);
 

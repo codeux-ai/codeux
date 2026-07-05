@@ -186,12 +186,13 @@ describe("ProjectsPage", () => {
     expect(screen.getByTestId("add-project-modal")).toBeInTheDocument();
   });
 
-  it("renders responsive layout classes for the page header", () => {
+  it("keeps page header actions stacked until large viewports", () => {
     const { container } = render(<ProjectsPage />);
     const headerContainer = container.querySelector("header");
     expect(headerContainer).toBeInTheDocument();
     expect(headerContainer?.className).toContain("flex-col");
-    expect(headerContainer?.className).toContain("sm:flex-row");
+    expect(headerContainer?.className).toContain("lg:flex-row");
+    expect(headerContainer?.className).not.toContain("sm:flex-row");
   });
 
   it("wraps filter controls and card actions on narrow screens", () => {

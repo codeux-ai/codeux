@@ -195,24 +195,22 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
       ref={bubbleRef}
       onMouseEnter={handleHoverEnter}
       onMouseLeave={handleHoverLeave}
-      className={`group relative flex h-72 w-72 shrink-0 cursor-pointer items-center justify-center perspective-1000 lg:h-80 lg:w-80 transition-[box-shadow,transform] duration-150 [@media(hover:hover)]:hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)] [@media(hover:hover)]:hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:transform-none`}
+      className="group relative flex h-72 w-72 shrink-0 cursor-pointer items-center justify-center perspective-1000 transition-transform duration-150 [@media(hover:hover)]:hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:transform-none lg:h-80 lg:w-80"
     >
       <div
-        className={`pointer-events-none absolute inset-0 rounded-[1.75rem] shadow-[0_24px_48px_rgba(0,0,0,0.07)] transition-all duration-700 dark:shadow-[0_24px_48px_rgba(0,0,0,0.5)] ${animationClass} ${isCompleted ? "opacity-80" : ""}`}
-
-      />
-
-      <div
-        className={`absolute inset-0 rounded-[1.75rem] overflow-hidden border border-white/70 backdrop-blur-md transition-all duration-700 transform-gpu dark:border-white/[0.06] ${animationClass} ${isCompleted ? "opacity-80" : ""} ${isRunning ? "bg-white/72 dark:bg-void-800/82" : "bg-white/55 dark:bg-void-800/65"}`}
-        style={{
-
-          WebkitMaskImage: "-webkit-radial-gradient(white, black)",
-          backfaceVisibility: "hidden",
-        }}
+        className={`absolute inset-0 rounded-[1.75rem] drop-shadow-[0_24px_48px_rgba(0,0,0,0.07)] transition-[filter,opacity] duration-700 transform-gpu dark:drop-shadow-[0_24px_48px_rgba(0,0,0,0.5)] group-hover:drop-shadow-[0_30px_58px_rgba(0,0,0,0.12)] dark:group-hover:drop-shadow-[0_30px_58px_rgba(0,0,0,0.55)] ${animationClass} ${isCompleted ? "opacity-80" : ""}`}
       >
-        <div className={`absolute inset-0 pointer-events-none shadow-[inset_0_0_0_1px_rgba(255,255,255,0.5)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] ${animationClass}`} />
-        <WaveFluid accentHex={state.accentHex} />
-        <BorderTrace accentHex={state.accentHex} />
+        <div
+          className={`absolute inset-0 overflow-hidden rounded-[inherit] border border-white/70 backdrop-blur-md transition-colors duration-700 dark:border-white/[0.06] ${isRunning ? "bg-white/72 dark:bg-void-800/82" : "bg-white/55 dark:bg-void-800/65"}`}
+          style={{
+            WebkitMaskImage: "-webkit-radial-gradient(white, black)",
+            backfaceVisibility: "hidden",
+          }}
+        >
+          <div className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.5)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]" />
+          <WaveFluid accentHex={state.accentHex} />
+          <BorderTrace accentHex={state.accentHex} />
+        </div>
       </div>
 
       {state.ring && !isCompleted && (
