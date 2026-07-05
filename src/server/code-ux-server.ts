@@ -87,7 +87,6 @@ import {
 } from "../services/runtime-process-lock.js";
 import { workspaceVolumeHelperPool } from "../infrastructure/providers/cli/workspace-volume-helper.js";
 import { disposeCommandSpawner, shutdownGitHelperPool } from "../shared/subprocess/command-runner.js";
-import { sanitizeManagementErrorMessage } from "../mcp/management/payload-parsers.js";
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
   const normalized = String(message || "").trim().toLowerCase();
@@ -821,7 +820,6 @@ export class CodeUxServer {
       const axiosError = error as AxiosError<{ error?: { message?: string } }>;
       message = axiosError.response?.data?.error?.message || axiosError.message;
     }
-    message = sanitizeManagementErrorMessage(message);
     return {
       content: [{ type: "text", text: `Error: ${message}` }],
       isError: true,

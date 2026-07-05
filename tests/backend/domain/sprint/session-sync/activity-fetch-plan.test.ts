@@ -1,4 +1,4 @@
-import { beforeEach, describe, it, expect, vi } from "vitest";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { planSessionActivityFetches } from "../../../../../src/domain/sprint/session-sync/activity-fetch-plan.js";
 import { Subtask, JulesSession } from "../../../../../src/contracts/app-types.js";
 import { buildTaskRunKey } from "../../../../../src/services/task-run-key.js";
@@ -25,6 +25,10 @@ describe("planSessionActivityFetches", () => {
   beforeEach(() => {
     mockDeps.logger.warn.mockClear();
     isForeignSessionMatch = vi.fn().mockReturnValue(false);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("should return empty array if no subtasks", () => {
@@ -114,7 +118,9 @@ describe("planSessionActivityFetches", () => {
     );
   });
 
-  it("should include remotely terminal session if not fully synced locally", () => {
+  it("should include recovered terminal session if it is not fully synced locally under fake timers", () => {
+    vi.useFakeTimers();
+
     const subtasks: Subtask[] = [{ id: "task1", record_id: "rec1" } as Subtask];
     const sessionMap = new Map<string, JulesSession>();
 
@@ -126,9 +132,12 @@ describe("planSessionActivityFetches", () => {
     const result = planSessionActivityFetches(subtasks, sessionMap, mockContext, mockSessionMetadataLookup, mockDeps.logger, isForeignSessionMatch, isLocallyTerminal);
 
     expect(result).toEqual(["session1"]);
+    expect(mockDeps.logger.warn).not.toHaveBeenCalled();
   });
 
-  it("should include locally terminal session if not remotely terminal", () => {
+  it("should include stale running session if local state was terminal under fake timers", () => {
+    vi.useFakeTimers();
+
     const subtasks: Subtask[] = [{ id: "task1", record_id: "rec1" } as Subtask];
     const sessionMap = new Map<string, JulesSession>();
 
@@ -140,6 +149,7 @@ describe("planSessionActivityFetches", () => {
     const result = planSessionActivityFetches(subtasks, sessionMap, mockContext, mockSessionMetadataLookup, mockDeps.logger, isForeignSessionMatch, isLocallyTerminal);
 
     expect(result).toEqual(["session1"]);
+    expect(mockDeps.logger.warn).not.toHaveBeenCalled();
   });
 
   it("should treat cancelled remote sessions as terminal through the state mapper", () => {

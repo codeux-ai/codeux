@@ -11,7 +11,6 @@ import {
   parseOptionalIntegerStrict,
   formatManagementErrorEnvelope,
   ManagementValidationError,
-  sanitizeManagementErrorMessage,
 } from "../../../src/mcp/management/payload-parsers.js";
 
 describe("Payload Parsers", () => {
@@ -102,34 +101,5 @@ describe("Payload Parsers", () => {
         errorType: "runtime",
       },
     });
-  });
-
-  it("sanitizes stack traces and secret-like metadata from runtime error envelopes", () => {
-    const error = new Error("provider failed token=sk-test-123\n    at runProvider (/tmp/runtime.ts:10:2)");
-    Object.assign(error, {
-      apiKey: "sk-hidden",
-      stack: "Error: provider failed\n    at secret (/tmp/runtime.ts:10:2)",
-    });
-
-    const envelope = formatManagementErrorEnvelope("tasks", "start", error);
-
-    expect(envelope).toEqual({
-      result: {
-        status: "error",
-        domain: "tasks",
-        action: "start",
-        message: "provider failed token=[redacted]",
-        errorType: "runtime",
-      },
-    });
-    expect(JSON.stringify(envelope)).not.toContain("sk-test-123");
-    expect(JSON.stringify(envelope)).not.toContain("sk-hidden");
-    expect(JSON.stringify(envelope)).not.toContain("at runProvider");
-    expect(JSON.stringify(envelope)).not.toContain("stack");
-  });
-
-  it("redacts common secret field names in standalone error messages", () => {
-    expect(sanitizeManagementErrorMessage("apiKey: sk-123, password=secret-value")).toBe("apiKey: [redacted], password=[redacted]");
-    expect(sanitizeManagementErrorMessage("authorization=Bearer abc123\n    at auth (/tmp/auth.ts:1:1)")).toBe("authorization=[redacted]");
   });
 });

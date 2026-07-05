@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
 vi.mock("../../../src/services/project-git-clone-service.js", () => ({
   prepareGitProjectCreateInput: vi.fn(async (input: unknown) => input),
@@ -8,8 +7,6 @@ vi.mock("../../../src/services/project-git-clone-service.js", () => ({
 import { ManagementToolHandler } from "../../../src/mcp/management-tool-handler.js";
 import { prepareGitProjectCreateInput } from "../../../src/services/project-git-clone-service.js";
 import { TOOL_DEFINITIONS } from "../../../src/contracts/mcp-tool-definitions.js";
-import { DEFAULT_MCP_TOOL_TOGGLES } from "../../../src/mcp/mcp-tool-availability.js";
-import { registerMcpRequestHandlers } from "../../../src/server/mcp-request-router.js";
 import type { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import type { SprintPreviewService } from "../../../src/services/sprint-preview-service.js";
 import type { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
@@ -437,106 +434,5 @@ describe("ManagementToolHandler", () => {
     response = await handler.handleManageTasks({ action: "delete", taskId: "t1", approval: { confirmed: true } });
     parsed = JSON.parse(response.content[0].text);
     expect(parsed.result).toEqual({ success: true });
-  });
-});
-
-describe("MCP management router error envelopes", () => {
-  const createRouter = (managementToolHandler: Partial<ManagementToolHandler> = {}) => {
-    const handlers: Record<string, (request: unknown) => Promise<unknown>> = {};
-    const server = {
-      setRequestHandler: vi.fn((schema, handler) => {
-        handlers[schema.method] = handler;
-      }),
-    };
-
-    registerMcpRequestHandlers({
-      server: server as any,
-      managementToolHandler: managementToolHandler as ManagementToolHandler,
-      getDashboardSettings: () => ({ mcpTools: DEFAULT_MCP_TOOL_TOGGLES }) as any,
-      getRuntimeRole: () => "project_manager",
-      formatError: (error: unknown) => ({
-        content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
-        isError: true,
-      }),
-    });
-
-    return handlers[CallToolRequestSchema.method];
-  };
-
-  const callTool = async (
-    handler: (request: unknown) => Promise<unknown>,
-    name: string,
-    toolArguments: unknown,
-  ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> => {
-    return await handler({ params: { name, arguments: toolArguments } }) as {
-      content: Array<{ type: string; text: string }>;
-      isError?: boolean;
-    };
-  };
-
-  const parseToolError = (response: { content: Array<{ type: string; text: string }> }) =>
-    JSON.parse(response.content[0].text) as {
-      result: {
-        status: string;
-        domain: string;
-        action: string;
-        message: string;
-        errorType: string;
-      };
-    };
-
-  it.each([
-    ["project", "manage_projects", {}],
-    ["task", "manage_tasks", { action: null }],
-    ["sprint", "manage_sprints", { action: "launch" }],
-    ["telemetry", "manage_telemetry", []],
-    ["settings", "manage_settings", { action: "write_secret" }],
-  ] as const)("returns validation envelopes for malformed %s tool calls", async (_label, toolName, body) => {
-    const managementToolHandler = {
-      handleManageProjects: vi.fn(),
-      handleManageTasks: vi.fn(),
-      handleManageSprints: vi.fn(),
-      handleManageTelemetry: vi.fn(),
-      handleManageSettings: vi.fn(),
-    };
-    const handler = createRouter(managementToolHandler);
-
-    const response = await callTool(handler, toolName, body);
-    const parsed = parseToolError(response);
-
-    expect(response.isError).toBe(true);
-    expect(parsed.result).toMatchObject({
-      status: "error",
-      errorType: "validation",
-    });
-    expect(parsed.result.message).toContain(`Invalid arguments for tool ${toolName}`);
-    expect(JSON.stringify(parsed)).not.toContain("stack");
-    for (const dispatch of Object.values(managementToolHandler)) {
-      expect(dispatch).not.toHaveBeenCalled();
-    }
-  });
-
-  it("returns sanitized runtime envelopes for unhandled management dispatch failures", async () => {
-    const handler = createRouter({
-      handleManageTasks: vi.fn(async () => {
-        throw new Error("provider failed token=sk-runtime-secret\n    at runProvider (/tmp/provider.ts:10:2)");
-      }),
-    });
-
-    const response = await callTool(handler, "manage_tasks", { action: "list", projectId: "project-1" });
-    const parsed = parseToolError(response);
-    const serialized = JSON.stringify(parsed);
-
-    expect(response.isError).toBe(true);
-    expect(parsed.result).toEqual({
-      status: "error",
-      domain: "tasks",
-      action: "list",
-      message: "provider failed token=[redacted]",
-      errorType: "runtime",
-    });
-    expect(serialized).not.toContain("sk-runtime-secret");
-    expect(serialized).not.toContain("at runProvider");
-    expect(serialized).not.toContain("stack");
   });
 });

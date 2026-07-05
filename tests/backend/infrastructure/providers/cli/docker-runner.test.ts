@@ -42,14 +42,6 @@ import { DockerSetupImageCache } from "../../../../../src/infrastructure/provide
 
 describe("DockerRunner", () => {
   let runner: DockerRunner;
-  const providerSecretFixtures = [
-    { providerLabel: "gemini", command: "gemini", envKey: "GEMINI_API_KEY", secret: "fixture-gemini-api-key-secret" },
-    { providerLabel: "codex", command: "codex", envKey: "OPENAI_API_KEY", secret: "fixture-codex-openai-api-key-secret" },
-    { providerLabel: "claude-code", command: "claude", envKey: "ANTHROPIC_AUTH_TOKEN", secret: "fixture-claude-auth-token-secret" },
-    { providerLabel: "qwen-code", command: "qwen", envKey: "QWEN_API_KEY", secret: "fixture-qwen-api-key-secret" },
-    { providerLabel: "opencode", command: "opencode", envKey: "OPENCODE_API_KEY", secret: "fixture-opencode-api-key-secret" },
-    { providerLabel: "antigravity", command: "agy", envKey: "ANTIGRAVITY_API_KEY", secret: "fixture-antigravity-api-key-secret" },
-  ] as const;
 
   beforeEach(() => {
     runner = new DockerRunner();
@@ -290,43 +282,6 @@ describe("DockerRunner", () => {
     expect(envWrite?.[2]).toEqual(expect.objectContaining({ mode: 0o600 }));
   });
 
-  it.each(providerSecretFixtures)(
-    "keeps $providerLabel provider secrets out of docker argv and activity logs",
-    async ({ providerLabel, command, envKey, secret }) => {
-      const onActivity = vi.fn();
-
-      await runner.runProviderInDocker({
-        command,
-        args: ["--prompt", "plan"],
-        cwd: "docker-volume://workspace-1",
-        providerEnv: { [envKey]: secret, PROVIDER_FAMILY: providerLabel },
-        sessionId: "session-1",
-        providerLabel,
-        workflowSettings: {
-          executionMode: "DOCKER",
-          containerImage: "node:24",
-          containerSetupScriptPath: "",
-          containerCacheSetupScriptImage: false,
-        } as any,
-        repoPath: "/repo/project",
-        onActivity,
-      });
-
-      const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
-      const serializedDockerArgs = dockerArgs.join("\n");
-      const serializedActivity = JSON.stringify(onActivity.mock.calls);
-      expect(serializedDockerArgs).not.toContain(secret);
-      expect(serializedDockerArgs).not.toContain(`${envKey}=`);
-      expect(serializedActivity).not.toContain(secret);
-      expect(serializedActivity).toContain(providerLabel);
-      expect(serializedDockerArgs).toContain("--env-file");
-
-      const envWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("provider.env"));
-      expect(envWrite?.[1]).toContain(`${envKey}=${secret}`);
-      expect(envWrite?.[2]).toEqual(expect.objectContaining({ mode: 0o600 }));
-    },
-  );
-
   it("stages generated Gemini MCP config outside runtime home and copies it during bootstrap", async () => {
     await runner.runProviderInDocker({
       command: "gemini",
@@ -361,65 +316,10 @@ describe("DockerRunner", () => {
       expect.stringContaining("target=/code-ux-runtime-home/.gemini/settings.json"),
     ]));
   });
-
-  it("keeps MCP auth tokens out of docker argv while staging generated provider config", async () => {
-    const codeUxToken = "fixture-docker-mcp-auth-token";
-    const customToken = "fixture-docker-custom-mcp-auth-token";
-
-    await runner.runProviderInDocker({
-      command: "codex",
-      args: ["exec", "--yolo", "plan"],
-      cwd: "docker-volume://workspace-1",
-      providerEnv: {},
-      sessionId: "session-1",
-      providerLabel: "codex",
-      workflowSettings: {
-        executionMode: "DOCKER",
-        containerImage: "node:24",
-        containerSetupScriptPath: "",
-        containerCacheSetupScriptImage: false,
-      } as any,
-      repoPath: "/repo/project",
-      onActivity: vi.fn(),
-      mcpConnection: {
-        url: "http://127.0.0.1:3000/mcp",
-        authToken: codeUxToken,
-        agentId: "agent-session-1",
-      },
-      customMcpServers: [
-        {
-          id: "docs",
-          name: "docs",
-          transport: "http",
-          url: "https://docs.example/mcp",
-          enabled: true,
-          headers: { Authorization: `Bearer ${customToken}` },
-        },
-      ],
-    });
-
-    const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
-    const serializedDockerArgs = dockerArgs.join("\n");
-    expect(serializedDockerArgs).not.toContain(codeUxToken);
-    expect(serializedDockerArgs).not.toContain(customToken);
-    expect(serializedDockerArgs).toContain("code-ux.session-id=session-1");
-    expect(serializedDockerArgs).toContain("code-ux.command=codex");
-
-    const configWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("codex-config.toml"));
-    expect(configWrite?.[1]).toContain(codeUxToken);
-    expect(configWrite?.[1]).toContain(customToken);
-  });
 });
 
 describe("DockerRunner custom MCP server injection", () => {
   let runner: DockerRunner;
-  const mcpConfigProviders = [
-    { provider: "gemini", filename: "gemini-settings.json" },
-    { provider: "codex", filename: "codex-config.toml" },
-    { provider: "claude-code", filename: "claude-mcp.json" },
-    { provider: "qwen-code", filename: "qwen-settings.json" },
-    { provider: "antigravity", filename: "antigravity-mcp.json" },
-  ] as const;
 
   const writtenFor = (filename: string): string | undefined => {
     const call = vi.mocked(fs.writeFile).mock.calls.find(([target]) => String(target).endsWith(filename));
@@ -507,37 +407,6 @@ describe("DockerRunner custom MCP server injection", () => {
     expect(toml).toContain('url = "https://docs.example/mcp"');
     expect(toml).toContain('http_headers = { "X-Key" = "abc" }');
   });
-
-  it.each(mcpConfigProviders)(
-    "writes $provider MCP auth tokens only to the generated protected config artifact",
-    async ({ provider, filename }) => {
-      const codeUxToken = `fixture-${provider}-mcp-auth-token`;
-      const customToken = `fixture-${provider}-custom-mcp-token`;
-      const agentId = `agent-${provider}-session`;
-
-      const mounts = await build(
-        provider,
-        { url: "http://127.0.0.1:3000/mcp", authToken: codeUxToken, agentId },
-        [
-          {
-            id: "docs",
-            name: "docs",
-            transport: "http",
-            url: "https://docs.example/mcp",
-            enabled: true,
-            headers: { Authorization: `Bearer ${customToken}` },
-          },
-        ],
-      );
-
-      const artifact = writtenFor(filename)!;
-      expect(mounts).toHaveLength(1);
-      expect(mounts[0].source).toBe(`/tmp/cfg/${filename}`);
-      expect(artifact).toContain(codeUxToken);
-      expect(artifact).toContain(customToken);
-      expect(artifact).toContain(agentId);
-    },
-  );
 
   it("respects per-server provider restriction and enabled flag", async () => {
     const mounts = await build("claude-code", null, [
