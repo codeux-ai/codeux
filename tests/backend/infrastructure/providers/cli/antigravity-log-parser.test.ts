@@ -45,6 +45,25 @@ function buildTestProto(input: number, output: number, reasoning: number, candid
   return encodeLengthDelimited(1, f17Buffer);
 }
 
+function buildPartialUsageProto(fields: {
+  input?: number;
+  output?: number;
+  reasoning?: number;
+  candidates?: number;
+  cached?: number;
+}): Buffer {
+  const tokenFields: Buffer[] = [];
+  if (fields.input !== undefined) tokenFields.push(encodeVarintField(2, fields.input));
+  if (fields.output !== undefined) tokenFields.push(encodeVarintField(3, fields.output));
+  if (fields.cached !== undefined) tokenFields.push(encodeVarintField(5, fields.cached));
+  if (fields.reasoning !== undefined) tokenFields.push(encodeVarintField(9, fields.reasoning));
+  if (fields.candidates !== undefined) tokenFields.push(encodeVarintField(10, fields.candidates));
+
+  const f2Message = encodeLengthDelimited(2, Buffer.concat(tokenFields));
+  const f17Buffer = encodeLengthDelimited(17, f2Message);
+  return encodeLengthDelimited(1, f17Buffer);
+}
+
 describe("Antigravity Log Parser - parseAntigravityTranscript", () => {
   it("handles empty or whitespace-only input", () => {
     expect(parseAntigravityTranscript("")).toEqual([]);
@@ -219,6 +238,40 @@ describe("Antigravity Log Parser - parseAntigravityTranscript", () => {
     expect(turns[0].text).toBe("Grace window message");
     expect(turns[1].text).toBe("New message");
   });
+
+  it("skips partial JSON and unknown transcript events while preserving recoverable terminal output", () => {
+    const turns = parseAntigravityTranscript([
+      "{\"type\":\"TOOL_RESPONSE\",\"content\":\"secret output\",\"api_key\":\"sk-test-secret\"",
+      JSON.stringify({ type: "UNKNOWN_EVENT", content: "ignored", created_at: "2026-06-01T10:00:00.000Z" }),
+      JSON.stringify({
+        type: "PLANNER_RESPONSE",
+        content: { text: "Recovered response" },
+        tool_calls: [
+          { tool_call_id: "call-safe", tool_name: "edit", args: undefined },
+        ],
+        created_at: "2026-06-01T10:00:01.000Z",
+      }),
+      JSON.stringify({
+        type: "TOOL_RESPONSE",
+        content: "partial terminal output",
+        toolCallID: "call-safe",
+        toolName: "edit",
+        created_at: "2026-06-01T10:00:02.000Z",
+      }),
+    ].join("\n"));
+
+    expect(turns.map((turn) => turn.kind)).toEqual(["assistant", "tool_call", "tool_result"]);
+    expect(turns[1]).toMatchObject({
+      toolName: "edit",
+      toolCallId: "call-safe",
+    });
+    expect(turns[2]).toMatchObject({
+      toolName: "edit",
+      toolCallId: "call-safe",
+      text: "partial terminal output",
+    });
+    expect(JSON.stringify(turns)).not.toContain("sk-test-secret");
+  });
 });
 
 describe("Antigravity Log Parser - parseAntigravityDatabase", () => {
@@ -362,5 +415,32 @@ describe("Antigravity Log Parser - parseAntigravityDatabase", () => {
 
     const result = parseAntigravityDatabase(tempDbPath, 0);
     expect(result).toEqual({ usage: null, rawUsageJson: null, lastIdx: null });
+  });
+
+  it("defaults missing token protobuf fields to zero while preserving recoverable usage", () => {
+    const db = new DatabaseSync(tempDbPath);
+    db.exec("CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB);");
+    db.prepare("INSERT INTO gen_metadata (idx, data) VALUES (?, ?)").run(1, buildPartialUsageProto({
+      input: 123,
+      cached: 12,
+    }));
+    db.close();
+
+    const result = parseAntigravityDatabase(tempDbPath);
+
+    expect(result.usage).toEqual({
+      inputTokens: 123,
+      outputTokens: 0,
+      reasoningTokens: 0,
+      cachedInputTokens: 12,
+    });
+    expect(result.rawUsageJson).toEqual({
+      inputTokens: 123,
+      outputTokens: 0,
+      reasoningTokens: 0,
+      cachedInputTokens: 12,
+      generationCount: 1,
+    });
+    expect(result.lastIdx).toBe(1);
   });
 });
