@@ -68,6 +68,12 @@ const normalizeAgentName = (value: string): string => (
   value.trim().replace(/[_-]+/g, " ").replace(/\s+/g, " ").toLowerCase()
 );
 
+type QaRouteTriggerSettings = {
+  enabled?: boolean;
+  agentPresetIds?: unknown;
+  agentPresetId?: string | null;
+};
+
 type PushAgentMode = "commit_only" | "commit_and_push" | "pull_request";
 
 type PushAgentResult = {
@@ -403,6 +409,30 @@ export const AgentsPage: FunctionComponent = () => {
         addBuiltIn(label, builtInName);
       }
     };
+    const collectQaAgentPresetIds = (trigger: QaRouteTriggerSettings): string[] => {
+      if (Array.isArray(trigger.agentPresetIds)) {
+        return trigger.agentPresetIds
+          .filter((agentPresetId): agentPresetId is string => typeof agentPresetId === "string")
+          .map((agentPresetId) => agentPresetId.trim())
+          .filter(Boolean);
+      }
+      const legacyAgentPresetId = trigger.agentPresetId?.trim();
+      return legacyAgentPresetId ? [legacyAgentPresetId] : [];
+    };
+    const addQaRoute = (
+      trigger: QaRouteTriggerSettings | null | undefined,
+      label: string,
+    ) => {
+      if (!trigger?.enabled) return;
+      const agentPresetIds = collectQaAgentPresetIds(trigger);
+      if (agentPresetIds.length > 0) {
+        for (const agentPresetId of agentPresetIds) {
+          add(agentPresetId, label);
+        }
+      } else {
+        addBuiltIn(label, "Quality assurance agent");
+      }
+    };
 
     const routing = effectiveSettings?.settings.agents.routing;
     const qa = effectiveSettings?.settings.agents.qualityAssurance;
@@ -423,15 +453,9 @@ export const AgentsPage: FunctionComponent = () => {
     addManualRoute(routing?.clarificationReply.agentPresetId, "Clarification Reply", "Project manager");
 
     if (qa?.enabled) {
-      if (qa.taskCompletion.enabled) {
-        addManualRoute(qa.taskCompletion.agentPresetId, "QA Task", "Quality assurance agent");
-      }
-      if (qa.sprintCompletion.enabled) {
-        addManualRoute(qa.sprintCompletion.agentPresetId, "QA Sprint", "Quality assurance agent");
-      }
-      if (qa.completedTaskWithoutPr.enabled) {
-        addManualRoute(qa.completedTaskWithoutPr.agentPresetId, "QA No PR", "Quality assurance agent");
-      }
+      addQaRoute(qa.taskCompletion, "QA Task");
+      addQaRoute(qa.sprintCompletion, "QA Sprint");
+      addQaRoute(qa.completedTaskWithoutPr, "QA No PR");
     }
 
     return tags;

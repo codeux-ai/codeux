@@ -361,6 +361,42 @@ describe("AgentsPage", () => {
     expect(screen.getAllByText("QA Task").length).toBeGreaterThan(0);
   });
 
+  it("shows the same QA route badge for every agent in a QA reviewer roster", async () => {
+    const effective = createEffectiveSettings();
+    effective.settings.agents.qualityAssurance.enabled = true;
+    effective.settings.agents.qualityAssurance.taskCompletion = {
+      enabled: true,
+      agentPresetIds: ["agent-1", "agent-2"],
+      agentPresetId: "agent-1",
+    };
+    effective.settings.agents.qualityAssurance.sprintCompletion.enabled = false;
+    effective.settings.agents.qualityAssurance.completedTaskWithoutPr.enabled = false;
+    vi.mocked(settingsApi.fetchProjectEffectiveSettings).mockResolvedValue(effective as any);
+
+    await renderPage();
+
+    const cards = await screen.findAllByTestId("showcase-card");
+    expect(cards[0].textContent).toContain("QA Task");
+    expect(cards[1].textContent).toContain("QA Task");
+  });
+
+  it("keeps rendering QA route badges for legacy single-agent QA settings", async () => {
+    const effective = createEffectiveSettings();
+    effective.settings.agents.qualityAssurance.enabled = true;
+    effective.settings.agents.qualityAssurance.taskCompletion = {
+      enabled: true,
+      agentPresetId: "agent-2",
+    } as any;
+    effective.settings.agents.qualityAssurance.sprintCompletion.enabled = false;
+    effective.settings.agents.qualityAssurance.completedTaskWithoutPr.enabled = false;
+    vi.mocked(settingsApi.fetchProjectEffectiveSettings).mockResolvedValue(effective as any);
+
+    await renderPage();
+
+    const cards = await screen.findAllByTestId("showcase-card");
+    expect(cards[1].textContent).toContain("QA Task");
+  });
+
   it("tags built-in fallback agents when route settings use built-in selections", async () => {
     mockPresets = [
       {
