@@ -1,6 +1,6 @@
 import { runCompletionStep } from "../../../sprint/steps/completion-step.js";
 import type { SprintAgentArgs } from "../../../sprint/sprint-types.js";
-import { deleteBranchLocally, getCheckedOutRef, mergeBranchLocally, restoreCheckedOutRef } from "../../../infrastructure/git/local-merge.js";
+import { deleteBranchLocally, getCheckedOutRef, mergeBranchLocally, restoreCheckedOutRef, type LocalMergeResult } from "../../../infrastructure/git/local-merge.js";
 import { determineNextState, WatchLoopState } from "./watch-loop-state-machine.js";
 import type { Subtask,
   AutomationInterventionsSettings,
@@ -720,13 +720,36 @@ export class WatchLoopRunner {
           // working directory, so finalizing the sprint must not silently park it on the
           // default branch.
           const originalRef = await getCheckedOutRef(repoPath);
-          const mainMerge = await mergeBranchLocally({
-            repoPath,
-            targetBranch: defaultBranch,
-            sourceBranch: defaultFeatureBranch,
-            commitMessage: `Merge branch '${defaultFeatureBranch}' into ${defaultBranch}`,
-          });
-          await restoreCheckedOutRef(repoPath, originalRef);
+          let restoreSucceeded = true;
+          let mainMerge: LocalMergeResult = {
+            ok: false,
+            conflict: false,
+            error: "Local merge did not run.",
+          };
+          try {
+            mainMerge = await mergeBranchLocally({
+              repoPath,
+              targetBranch: defaultBranch,
+              sourceBranch: defaultFeatureBranch,
+              commitMessage: `Merge branch '${defaultFeatureBranch}' into ${defaultBranch}`,
+            });
+          } catch (err) {
+            mainMerge = {
+              ok: false,
+              conflict: false,
+              error: err instanceof Error ? err.message : String(err),
+            };
+          } finally {
+            restoreSucceeded = await restoreCheckedOutRef(repoPath, originalRef);
+            if (!restoreSucceeded) {
+              this.deps.logger.warn("LOCAL Mode: Failed to restore original checked-out ref after final merge attempt", {
+                repoPath,
+                originalRef: originalRef?.ref ?? null,
+                detached: originalRef?.detached ?? false,
+                sprintRunId,
+              });
+            }
+          }
 
           if (mainMerge.ok) {
             report += `- ✅ **Merged locally:** Sprint feature branch \`${defaultFeatureBranch}\` merged into default branch \`${defaultBranch}\`.\n`;
@@ -737,11 +760,17 @@ export class WatchLoopRunner {
               projectId: scopedExecutionContext.project.id,
               sprintId: scopedExecutionContext.sprint.id,
             }).git.deleteMergedBranches;
-            if (deleteMergedBranches) {
+            if (deleteMergedBranches && restoreSucceeded) {
               const deleted = await deleteBranchLocally({ repoPath, branch: defaultFeatureBranch });
               if (deleted) {
                 this.deps.logger.info(`LOCAL Mode: Deleted merged feature branch ${defaultFeatureBranch}`);
               }
+            } else if (deleteMergedBranches && !restoreSucceeded) {
+              this.deps.logger.warn("LOCAL Mode: Skipped deleting merged feature branch because the original checkout could not be restored", {
+                repoPath,
+                branch: defaultFeatureBranch,
+                sprintRunId,
+              });
             }
             resolveMainMergeAttentionItems(
               this.deps.projectAttentionService,
