@@ -989,7 +989,7 @@ export const MemoryPage: FunctionComponent = () => {
                     <AlertTriangle className="w-4 h-4 shrink-0" strokeWidth={2.5} />
                     <p className="text-xs font-bold">
                         <span className="uppercase tracking-[0.14em]">Warning — Lobotomize mode active.</span>
-                        {" "}Single-click a graph node to delete it immediately. Inspector and sidebar delete buttons also skip confirmation.
+                        {" "}Single-click a graph node to delete it immediately. Inspector deletion is immediate; sidebar cards must be armed before deleting.
                     </p>
                 </div>
             )}
