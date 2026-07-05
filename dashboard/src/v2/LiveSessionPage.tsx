@@ -277,6 +277,15 @@ export const LiveSessionPage: FunctionComponent = () => {
         if (forceCompletePendingIds.has(taskRuntimeId)) {
             return;
         }
+        const confirmed = await requestConfirm({
+            title: "Force Complete Task",
+            body: `Mark task "${task.title || task.id}" as completed? This bypasses the normal runtime completion path.`,
+            confirmLabel: "Force Complete",
+            destructive: true,
+        });
+        if (!confirmed) {
+            return;
+        }
         setForceCompletePendingIds((prev) => new Set(prev).add(taskRuntimeId));
         setForceCompleteErrorByTaskId((prev) => {
             const next = new Map(prev);

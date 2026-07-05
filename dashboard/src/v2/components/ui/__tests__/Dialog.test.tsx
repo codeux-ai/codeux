@@ -3,7 +3,9 @@ import { h } from "preact";
 import { useState } from "preact/hooks";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";
 import { Dialog } from "../Dialog.js";
+import { ConfirmDialog } from "../ConfirmDialog.js";
 import { DropdownMenu, DropdownMenuItem } from "../DropdownMenu.js";
+import { useConfirmDialog } from "../../../hooks/use-confirm-dialog.js";
 import { expect, test, describe, afterEach, vi } from "vitest";
 
 vi.mock("gsap", () => {
@@ -48,6 +50,34 @@ function DialogHarness({ unmountTrigger = false }: { unmountTrigger?: boolean })
           Close dialog
         </button>
       </Dialog>
+    </main>
+  );
+}
+
+function ConfirmHarness({ onDecision }: { onDecision: (confirmed: boolean) => void }) {
+  const confirm = useConfirmDialog();
+  const openConfirm = async (): Promise<void> => {
+    const confirmed = await confirm.requestConfirm({
+      title: "Reset runtime state",
+      body: "Reset the runtime state for this task?",
+      confirmLabel: "Reset",
+      cancelLabel: "Keep",
+      tone: "warning",
+    });
+    onDecision(confirmed);
+  };
+
+  return (
+    <main data-testid="confirm-fallback">
+      <button type="button" onClick={() => void openConfirm()}>
+        Open confirm
+      </button>
+      <ConfirmDialog
+        isOpen={confirm.isOpen}
+        options={confirm.options}
+        onConfirm={confirm.handleConfirm}
+        onCancel={confirm.handleCancel}
+      />
     </main>
   );
 }
@@ -195,5 +225,51 @@ describe("Dialog and Modal", () => {
     await waitFor(() => {
       expect(document.activeElement).toBe(trigger);
     });
+  });
+
+  test("confirm dialog exposes a stable name, focuses cancel first, and resolves true only from the confirm button", async () => {
+    const onDecision = vi.fn();
+    render(<ConfirmHarness onDecision={onDecision} />);
+
+    const trigger = screen.getByRole("button", { name: "Open confirm" });
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    const dialog = await screen.findByRole("dialog", { name: "Reset runtime state" });
+    expect(dialog).toHaveAttribute("aria-describedby", "confirm-dialog-body");
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Keep" }));
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+
+    await waitFor(() => {
+      expect(onDecision).toHaveBeenCalledWith(true);
+      expect(document.activeElement).toBe(trigger);
+    });
+  });
+
+  test("confirm dialog resolves false on cancel, Escape, and backdrop dismissal without confirming", async () => {
+    const onDecision = vi.fn();
+    render(<ConfirmHarness onDecision={onDecision} />);
+
+    const trigger = screen.getByRole("button", { name: "Open confirm" });
+    fireEvent.click(trigger);
+    fireEvent.click(await screen.findByRole("button", { name: "Keep" }));
+    await waitFor(() => expect(onDecision).toHaveBeenLastCalledWith(false));
+
+    fireEvent.click(trigger);
+    await screen.findByRole("dialog", { name: "Reset runtime state" });
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(onDecision).toHaveBeenCalledTimes(2));
+    expect(onDecision).toHaveBeenLastCalledWith(false);
+
+    fireEvent.click(trigger);
+    const dialog = await screen.findByRole("dialog", { name: "Reset runtime state" });
+    const backdrop = dialog.parentElement?.firstElementChild as HTMLElement | undefined;
+    expect(backdrop).toBeTruthy();
+    fireEvent.click(backdrop!);
+    await waitFor(() => expect(onDecision).toHaveBeenCalledTimes(3));
+    expect(onDecision).toHaveBeenLastCalledWith(false);
   });
 });
