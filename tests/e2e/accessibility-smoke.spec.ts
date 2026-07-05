@@ -20,7 +20,7 @@ test('Dashboard accessibility smoke test', async ({ page }) => {
   await expect(skipLink).toBeFocused();
 
   // 2. Primary Navigation
-  const nav = page.getByRole('navigation', { name: /Dock navigation/i });
+  const nav = page.getByRole('navigation', { name: /Primary navigation/i });
   await expect(nav).toBeVisible();
 
   // 3. Global Search
@@ -53,12 +53,6 @@ test('Dashboard accessibility smoke test', async ({ page }) => {
   // 8. Sprint Ledger
   await page.goto('/sprints');
   await page.waitForURL('**/sprints');
-
-  // Wait for loading indicator to be hidden if it exists
-  const loadingElement = page.getByText(/loading/i).first();
-  if (await loadingElement.isVisible()) {
-    await expect(loadingElement).toBeHidden();
-  }
 
   const sprintLedger = page.getByRole('region', { name: 'Sprint Ledger' });
   await expect(sprintLedger).toBeVisible();

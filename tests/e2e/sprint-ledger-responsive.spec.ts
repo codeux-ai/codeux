@@ -58,9 +58,9 @@ test.describe('Sprint Ledger Responsive Layout E2E Tests', () => {
     await page.waitForTimeout(500); // Allow layout transition
 
     // On mobile, the field labels (e.g. "Sprint ID", "Completion", "Controls") should be visible
-    const mobileIdLabels = page.locator('span:has-text("Sprint ID")');
-    const mobileCompletionLabels = page.locator('span:has-text("Completion")');
-    const mobileControlsLabels = page.locator('span:has-text("Controls")');
+    const mobileIdLabels = page.locator('td span.lg\\:hidden', { hasText: 'Sprint ID' });
+    const mobileCompletionLabels = page.locator('td span.lg\\:hidden', { hasText: 'Completion' });
+    const mobileControlsLabels = page.locator('td span.lg\\:hidden', { hasText: 'Controls' });
 
     // Assert that at least one of each mobile label is visible in the list
     await expect(mobileIdLabels.first()).toBeVisible();
@@ -75,5 +75,11 @@ test.describe('Sprint Ledger Responsive Layout E2E Tests', () => {
     await expect(mobileIdLabels.first()).not.toBeVisible();
     await expect(mobileCompletionLabels.first()).not.toBeVisible();
     await expect(mobileControlsLabels.first()).not.toBeVisible();
+
+    // Desktop headers remain visible, so this test distinguishes them from the
+    // responsive row labels above instead of matching by text alone.
+    await expect(page.getByRole('columnheader', { name: /Sprint ID/i })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: /Completion/i })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: /Controls/i })).toBeVisible();
   });
 });
