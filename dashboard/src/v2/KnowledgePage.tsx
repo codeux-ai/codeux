@@ -176,7 +176,7 @@ export const KnowledgePage: FunctionComponent = () => {
   const readyCount = documents.filter((d) => d.status === "ready").length;
 
   return (
-    <PageContainer padding="section" className="gap-8">
+    <PageContainer aria-label="Knowledge" padding="section" className="gap-8">
       {/* Header */}
       <PageHeader
         icon={Library}
