@@ -428,7 +428,14 @@ export const SettingsPage: FunctionComponent = () => {
           pendingCategory={pendingCategory}
         />
 
-        <div id="settings-active-category-panel" ref={contentRef} aria-busy={activeSaving || loading || resettingProject ? "true" : undefined} className="flex min-w-0 flex-col gap-5">
+        <div
+          id="settings-active-category-panel"
+          ref={contentRef}
+          role="region"
+          aria-label="Settings category panel"
+          aria-busy={activeSaving || loading || resettingProject ? "true" : undefined}
+          className="flex min-w-0 flex-col gap-5"
+        >
           <div className="mb-1 flex flex-wrap items-center gap-3">
             <activeCategoryConfig.icon
               className={`h-4 w-4 ${activeCategoryConfig.danger ? "text-status-red" : "text-signal-500"}`}
@@ -447,6 +454,11 @@ export const SettingsPage: FunctionComponent = () => {
           </div>
 
           <div className="flex flex-col gap-3">
+            {loading ? (
+              <div role="status" aria-label="Loading settings" aria-live="polite" aria-busy="true" className="sr-only">
+                Loading settings.
+              </div>
+            ) : null}
             <ActionFeedbackRegion
               status={error ? "error" : validationMessage ? "warning" : activeSaving || resettingProject ? "pending" : saveMessage ? "success" : activeDirty ? "warning" : "idle"}
               message={error || validationMessage || (resettingProject ? "Resetting project overrides..." : activeSaving ? "Saving changes..." : saveMessage ? "Changes saved." : activeDirty ? "You have unsaved changes." : null)}

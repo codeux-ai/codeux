@@ -313,7 +313,7 @@ export const LiveSessionPage: FunctionComponent = () => {
 
 
     return (
-        <PageContainer aria-label="Live Session" className="gap-16">
+        <PageContainer aria-label="Live Session" className="gap-16" aria-busy={!initialLoadComplete ? "true" : undefined}>
             <h1 className="sr-only">Live Session</h1>
             <ConfirmDialog isOpen={isConfirmOpen} options={confirmOptions} onConfirm={handleConfirm} onCancel={handleCancel} />
             <LiveTransportBanner
@@ -390,8 +390,9 @@ export const LiveSessionPage: FunctionComponent = () => {
                 {/* Task cards */}
                 <div className="xl:col-span-8 flex flex-col gap-5 min-w-0" style={listReorderStyle}>
                     {!hasSprintContext && !initialLoadComplete ? (
-                        /* Initial load in progress — render nothing to avoid flashing idle placeholder */
-                        null
+                        <div role="status" aria-label="Loading live session telemetry" aria-live="polite" aria-busy="true" className="sr-only">
+                            Loading live session telemetry.
+                        </div>
                     ) : !hasSprintContext ? (
                         <IdleRuntimeState
                             title={showStatusPanel ? sprintStatusPresentation.title : "Waiting for Sprint Start"}
