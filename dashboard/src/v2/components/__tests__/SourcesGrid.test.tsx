@@ -104,4 +104,16 @@ describe("SourcesGrid", () => {
     expect(planSourcesGridLayout(1, 8)).toEqual({ visibleCount: 4, columns: 2 });
     expect(planSourcesGridLayout(2, 3)).toEqual({ visibleCount: 2, columns: 2 });
   });
+
+  it("spreads multi-card rows from the left edge to the right edge", () => {
+    renderSourcesGrid([
+      createSource(1, "2026-01-01T00:00:00.000Z"),
+      createSource(2, "2026-01-02T00:00:00.000Z"),
+      createSource(3, "2026-01-03T00:00:00.000Z"),
+    ]);
+
+    const grid = document.querySelector("[data-source-columns]") as HTMLElement;
+    expect(grid.style.justifyContent).toBe("space-between");
+    expect(grid.style.gridTemplateColumns).toContain("calc((100% - 48px) / 3)");
+  });
 });

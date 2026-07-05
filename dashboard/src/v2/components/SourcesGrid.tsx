@@ -44,6 +44,11 @@ const getAvailableColumns = (width: number): number => {
     return Math.max(1, Math.floor((width + SOURCE_CELL_GAP_PX) / (SOURCE_CELL_SIZE_PX + SOURCE_CELL_GAP_PX)));
 };
 
+const getGridTemplateColumns = (columns: number): string => {
+    const totalGap = Math.max(0, columns - 1) * SOURCE_CELL_GAP_PX;
+    return `repeat(${columns}, minmax(0, min(14rem, calc((100% - ${totalGap}px) / ${columns}))))`;
+};
+
 export const SourcesGrid: FunctionComponent = () => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [availableColumns, setAvailableColumns] = useState(DEFAULT_VISIBLE_SOURCE_CELLS);
@@ -109,8 +114,11 @@ export const SourcesGrid: FunctionComponent = () => {
 
             <div
                 ref={containerRef}
-                className="grid w-full justify-center gap-6 overflow-visible"
-                style={projectsLoading ? undefined : { gridTemplateColumns: `repeat(${layoutPlan.columns}, minmax(0, 14rem))` }}
+                className="grid w-full gap-6 overflow-visible"
+                style={projectsLoading ? undefined : {
+                    gridTemplateColumns: getGridTemplateColumns(layoutPlan.columns),
+                    justifyContent: layoutPlan.columns === 1 ? "center" : "space-between",
+                }}
                 data-source-count={projectsLoading ? undefined : recentSources.length}
                 data-source-columns={projectsLoading ? undefined : layoutPlan.columns}
             >
