@@ -1,4 +1,6 @@
+import { useMemo } from "preact/hooks";
 import type { ComponentChildren, FunctionComponent, JSX, Ref } from "preact";
+import { useInteractionTokens } from "../../lib/motion/index.js";
 
 // Fullscreen: containers span the full available width with no fixed cap.
 const PAGE_CONTAINER_WIDTH = "max-w-none";
@@ -31,7 +33,12 @@ type PageContainerProps = Omit<JSX.HTMLAttributes<HTMLElement>, "ref"> & {
   padding?: PageContainerPadding;
   as?: "div" | "main";
   id?: string;
+  "data-focus-fallback"?: string;
 };
+
+function isCssProperties(style: JSX.HTMLAttributes<HTMLElement>["style"]): style is JSX.CSSProperties {
+  return typeof style === "object" && style !== null && !("peek" in style) && !("subscribe" in style);
+}
 
 export const PageContainer: FunctionComponent<PageContainerProps> = ({
   children,
@@ -39,21 +46,41 @@ export const PageContainer: FunctionComponent<PageContainerProps> = ({
   containerRef,
   padding = "standard",
   as = "div",
+  "aria-label": ariaLabel,
+  "data-focus-fallback": dataFocusFallback,
+  role,
+  tabIndex,
+  style,
   ...props
 }) => {
+  const interactionTokens = useInteractionTokens();
   const classes = [
-    "relative z-10 mx-auto flex w-full flex-col animate-in fade-in duration-200 motion-reduce:animate-none",
+    "relative z-10 mx-auto flex w-full flex-col animate-in fade-in motion-reduce:animate-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50",
     PAGE_CONTAINER_WIDTH,
     pageContainerPadding[padding],
     className,
   ].filter(Boolean).join(" ");
+  const transitionStyle = useMemo<JSX.CSSProperties>(() => ({
+    ...(isCssProperties(style) ? style : {}),
+    animationDuration: interactionTokens.enterExit.duration,
+    transitionDuration: interactionTokens.controlFeedback.duration,
+    transitionTimingFunction: interactionTokens.controlFeedback.ease,
+  }), [interactionTokens.controlFeedback.duration, interactionTokens.controlFeedback.ease, interactionTokens.enterExit.duration, style]);
 
   const Component = as;
 
   return (
-    <Component {...props} ref={containerRef as any} className={classes}>
+    <Component
+      {...props}
+      aria-label={ariaLabel ?? "Page content"}
+      data-focus-fallback={dataFocusFallback ?? ""}
+      ref={containerRef as any}
+      role={role ?? (as === "div" ? "region" : undefined)}
+      tabIndex={tabIndex ?? -1}
+      className={classes}
+      style={transitionStyle}
+    >
       {children}
     </Component>
   );
 };
-
