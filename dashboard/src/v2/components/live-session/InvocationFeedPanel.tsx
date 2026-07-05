@@ -9,7 +9,7 @@ import { formatTime } from "../../../lib/time.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
 import type { ExecutionInvocationRecord } from "../../../types.js";
 import { formatInvocationDuration, formatInvocationPurpose, InvocationContextChips } from "../chat/invocation-display.js";
-import { statusRailTone, statusTone, shortenRuntimeId } from "./ExecutionRuntimePanel.js";
+import { RuntimeSnapshotSurfaceBadge, statusRailTone, statusTone, shortenRuntimeId } from "./ExecutionRuntimePanel.js";
 
 const INVOCATION_STATUS_DOT: Record<string, string> = {
   running: "bg-signal-500 shadow-[0_0_8px_rgba(0,224,160,0.35)] motion-reduce:ring-2 motion-reduce:ring-signal-500/30 motion-reduce:shadow-none",
@@ -35,6 +35,8 @@ const InvocationFeedRow: FunctionComponent<{
   const isReducedMotion = useReducedMotion();
   const motionTokens = useGsapInteractionTokens();
   const prevStatusRef = useRef(invocation.status);
+  const prevStatus = prevStatusRef.current;
+  const statusChanged = prevStatus !== invocation.status;
 
   useLayoutEffect(() => {
     if (!rowRef.current) return;
@@ -72,6 +74,11 @@ const InvocationFeedRow: FunctionComponent<{
           <div className="flex min-w-0 items-center gap-2">
             <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${dotClass} ${invocation.status === "running" ? "motion-safe:animate-pulse" : ""}`} aria-hidden="true" />
             <span className="sr-only">Invocation status: {invocation.status}.</span>
+            {statusChanged && (
+              <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+                Invocation status changed from {prevStatus} to {invocation.status}.
+              </span>
+            )}
             <span className="min-w-0 break-words text-xs font-semibold text-slate-700 dark:text-slate-300">
               {purposeLabel}
             </span>
@@ -141,7 +148,7 @@ export const InvocationFeedPanel: FunctionComponent<{
   invocations: scopedInvocations,
   sprintKeyPrefix = "SPR",
 }) => {
-  const { execution: snapshot } = useExecutionTimeline();
+  const { execution: snapshot, snapshotSurface } = useExecutionTimeline();
   const [open, setOpen] = useState(defaultOpen);
   const contentId = useId();
   const contentRef = useRef<HTMLDivElement>(null);
@@ -213,6 +220,7 @@ export const InvocationFeedPanel: FunctionComponent<{
       <span className="rounded-md bg-status-red/10 px-2 py-0.5 text-[9px] font-mono font-bold text-status-red">
         {failedCount} failed
       </span>
+      <RuntimeSnapshotSurfaceBadge surface={snapshotSurface} />
       <span className="sr-only">{invocationSummary}</span>
     </div>
   );
@@ -280,7 +288,7 @@ export const InvocationFeedPanel: FunctionComponent<{
                   role="log"
                   aria-label="Live invocation feed"
                   aria-live="polite"
-                  aria-busy={runningCount > 0 ? "true" : undefined}
+                  aria-busy={snapshotSurface?.isBusy || runningCount > 0 ? "true" : undefined}
                   aria-relevant="additions text"
                   className="max-h-[50dvh] sm:max-h-96 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar"
                 >

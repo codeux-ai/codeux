@@ -32,6 +32,7 @@ import {
 } from "./lib/live-session-view-model.js";
 import { CollapsiblePanel } from "./components/ui/CollapsiblePanel.js";
 import { ExecutionTimelineProvider } from "../hooks/ExecutionTimelineContext.js";
+import type { ExecutionSnapshotSurfaceState } from "../hooks/ExecutionTimelineContext.js";
 import { ExecutionTimeline } from "./components/ExecutionTimeline.js";
 import { AttentionLedger } from "./components/AttentionLedger.js";
 import { ExecutionRuntimePanel } from "./components/live-session/ExecutionRuntimePanel.js";
@@ -264,6 +265,40 @@ export const LiveSessionPage: FunctionComponent = () => {
         () => deriveLiveTransportBannerViewModel({ transportState, isRecovering, error, snapshotUpdatedAt }),
         [error, isRecovering, snapshotUpdatedAt, transportState],
     );
+    const snapshotSurface = useMemo<ExecutionSnapshotSurfaceState>(() => {
+        if (transportState === "reconnecting" || transportState === "disconnected") {
+            return {
+                kind: "reconnecting",
+                label: "Reconnecting",
+                description: "Cached runtime snapshot remains visible while the live stream reconnects.",
+                isBusy: true,
+            };
+        }
+        if (isRecovering) {
+            return {
+                kind: "recovering",
+                label: snapshotUpdatedAt ? "Recovering" : "Awaiting Snapshot",
+                description: snapshotUpdatedAt
+                    ? "Cached runtime snapshot remains visible while fresh live data is loading."
+                    : "Waiting for the first runtime snapshot after transport recovery.",
+                isBusy: true,
+            };
+        }
+        if (transportBannerViewModel?.title === "Stale Data") {
+            return {
+                kind: "stale",
+                label: "Stale Snapshot",
+                description: "Cached runtime snapshot remains visible, but it is more than a minute old.",
+                isBusy: true,
+            };
+        }
+        return {
+            kind: "live",
+            label: "Live",
+            description: "Runtime data is current.",
+            isBusy: false,
+        };
+    }, [isRecovering, snapshotUpdatedAt, transportBannerViewModel?.title, transportState]);
 
     const handleEditTask = (task: Subtask): void => {
         const search = new URLSearchParams();
@@ -482,6 +517,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                 <div className="xl:col-span-4 flex flex-col gap-5 min-w-0">
                     <ExecutionTimelineProvider
                         execution={execution}
+                        snapshotSurface={snapshotSurface}
                         onOrchestrateSprint={handleOrchestrateSprint}
                         onPauseSprintRun={handlePauseSprintRun}
                         onCancelSprintRun={handleCancelSprintRun}

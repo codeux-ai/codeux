@@ -22,9 +22,10 @@ export const MemorySearch: FunctionComponent = () => {
             return;
         }
 
+        const trimmedInput = inputValue.trim();
         const timeoutId = window.setTimeout(() => {
             searchQuerySignal.value = inputValue;
-            setAnnouncement(inputValue.trim() ? `Search applied for ${inputValue.trim()}` : "Search cleared");
+            setAnnouncement(trimmedInput ? `Search applied for ${trimmedInput}` : "Search cleared");
         }, SEARCH_DEBOUNCE_MS);
 
         return () => {
@@ -86,10 +87,14 @@ export const MemorySearch: FunctionComponent = () => {
                 Type to filter memories. Search is applied after a short pause. Press Escape to clear the search.
             </p>
             <div id="memory-search-status" className="mt-1 min-h-4 text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                {searchPending ? "Applying search..." : committedQuery.trim() ? `Search active: ${committedQuery.trim()}` : "Search is clear"}
+                {searchPending
+                    ? "Typing. Search applies after a short pause."
+                    : committedQuery.trim()
+                        ? `Search active: ${committedQuery.trim()}`
+                        : "Search is clear"}
             </div>
             <div className="sr-only" aria-live="polite" aria-atomic="true">
-                {searchPending ? "Applying search" : announcement}
+                {announcement}
             </div>
             {searchPending && (
                 <div className="absolute right-10 top-1/2 hidden -translate-y-1/2 rounded-md border border-signal-500/20 bg-signal-500/[0.08] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-600 dark:text-signal-400 sm:block">

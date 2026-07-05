@@ -225,7 +225,7 @@ describe("TasksPage.cards Integration", () => {
 
     expect(screen.getByText("Foundation Setup")).toBeInTheDocument();
     expect(screen.queryByText("PR pending")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Pull request pending for task T-100: Foundation Setup/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Open pull request for task T-100: Foundation Setup/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Task sprint scope: CUX-1: Sprint One/i })).toBeInTheDocument();
   });
 
@@ -294,7 +294,7 @@ describe("TasksPage.cards Integration", () => {
     expect(selectSprint).toHaveBeenCalledWith("sprint_2");
     expect(screen.getByText("Sprint Scoped Task")).toBeInTheDocument();
     expect(screen.queryByText("PR pending")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Pull request pending for task T-200: Sprint Scoped Task/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Open pull request for task T-200: Sprint Scoped Task/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Task sprint scope: CUX-2: Sprint Two/i })).toBeInTheDocument();
   });
 

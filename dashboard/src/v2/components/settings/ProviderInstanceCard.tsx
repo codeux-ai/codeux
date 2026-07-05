@@ -163,12 +163,19 @@ export const ProviderInstanceCard: FunctionComponent<{
                 aria-pressed={enabledValue}
                 value={enabledValue}
                 onChange={(value) => {
-                  onToggleEnabled(value);
-                  setRemoveArmed(false);
-                  setFeedback({
-                    tone: "warning",
-                    message: `${providerInstanceLabel} ${value ? "enabled" : "disabled"} locally. Save changes to persist it.`,
-                  });
+                  try {
+                    onToggleEnabled(value);
+                    setRemoveArmed(false);
+                    setFeedback({
+                      tone: "warning",
+                      message: `${providerInstanceLabel} ${value ? "enabled" : "disabled"} locally. Save changes to persist it.`,
+                    });
+                  } catch (toggleError) {
+                    setFeedback({
+                      tone: "error",
+                      message: toggleError instanceof Error ? toggleError.message : "Provider enabled state could not be updated.",
+                    });
+                  }
                 }}
               />
             </label>
@@ -265,7 +272,7 @@ export const ProviderInstanceCard: FunctionComponent<{
       {/* API Key Panel */}
       {currentAuthType === "apiKey" && (
         <Row label="API key" description="Stored for this named provider instance.">
-          <SecretInput value={provider.apiKey} onChange={(value) => onUpdate(sanitizeSystemProviderConfig({ ...provider, apiKey: value }))} aria-label={`${providerInstanceLabel} API key`} mono />
+          <SecretInput value={provider.apiKey} onChange={(value) => applySanitizedUpdate({ apiKey: value }, `${providerInstanceLabel} API key changed locally. Save changes to persist it.`)} aria-label={`${providerInstanceLabel} API key`} aria-describedby={feedback ? feedbackId : undefined} mono />
         </Row>
       )}
 

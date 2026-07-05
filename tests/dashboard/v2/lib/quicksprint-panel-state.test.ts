@@ -152,6 +152,18 @@ describe("Quicksprint Panel State", () => {
       expect(result).toContain("Produce exactly 3 subtasks.");
     });
 
+    it("trims run-specific prompt text before the preview exposes it", () => {
+      const template = createTemplate({
+        agentInstructionMarkdown: "Template instructions.",
+      });
+
+      const result = getCombinedPrompt(template, [], "  Keep the preview readable.  ", 2);
+
+      expect(result).toContain("## Additional Instructions\n\nKeep the preview readable.");
+      expect(result).not.toContain("  Keep the preview readable.");
+      expect(result).toContain("Produce exactly 2 subtasks.");
+    });
+
     it("uses an unlimited-task instruction when noTaskLimit is enabled", () => {
       const template = createTemplate({
         agentInstructionMarkdown: "Template instructions.",

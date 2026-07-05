@@ -38,6 +38,10 @@
   border-color: rgba(0, 224, 160, 0.55);
 }
 
+.kanban-card[data-drag-disabled="true"] {
+  cursor: default;
+}
+
 .kanban-card--dragging {
   opacity: 0.64;
   filter: saturate(0.85);
@@ -63,6 +67,35 @@
 }
 .kanban-card[data-optimistic="true"] {
   box-shadow: 0 0 0 1px rgba(0, 224, 160, 0.18), 0 2px 20px rgba(0,0,0,0.04);
+}
+
+.kanban-card__meta-slots {
+  contain: layout;
+}
+
+.kanban-card__meta-slot {
+  flex: 0 1 auto;
+  white-space: nowrap;
+}
+
+.kanban-card__meta-slot--duration {
+  min-width: 8.75rem;
+}
+
+.kanban-card__meta-slot--pr {
+  min-width: 5.75rem;
+  justify-content: center;
+}
+
+.kanban-card__meta-slot--timestamp {
+  display: inline-flex;
+  min-width: 4.75rem;
+  justify-content: flex-end;
+}
+
+.kanban-card__meta-state {
+  display: inline-block;
+  min-width: 2rem;
 }
 
 .kanban-card__actions {

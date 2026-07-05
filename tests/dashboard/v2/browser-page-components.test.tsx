@@ -316,6 +316,8 @@ describe("PreviewWindowChrome", () => {
     const childWrapper = screen.getByTestId("test-child-minimize").parentElement!.parentElement!;
     expect(childWrapper.classList.contains("hidden")).toBe(true);
     expect(screen.getByText("Restore")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Preview window is minimized. Use Restore to reopen it." })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Restore preview window" })).toHaveFocus();
 
     await act(async () => {
       fireEvent.click(screen.getByText("Restore"));
@@ -342,6 +344,8 @@ describe("PreviewWindowChrome", () => {
     const childWrapper = screen.getByTestId("test-child-close").parentElement!.parentElement!;
     expect(childWrapper.classList.contains("hidden")).toBe(true);
     expect(screen.getByText("Window Closed")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Preview window is closed. The preview session can keep running in the background." })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reopen preview window" })).toHaveFocus();
 
     await act(async () => {
       fireEvent.click(screen.getByText("Reopen Window"));
@@ -352,15 +356,19 @@ describe("PreviewWindowChrome", () => {
 
   it("describes disabled and pending navigation controls", () => {
     render(
-      <PreviewWindowChrome {...defaultProps} navigationEnabled={false}>
+      <PreviewWindowChrome
+        {...defaultProps}
+        navigationEnabled={false}
+        navigationDisabledReason="Preview navigation is disabled until the running container receives a routed host port."
+      >
         <div data-testid="test-child-disabled" />
       </PreviewWindowChrome>
     );
 
     const address = screen.getByLabelText("Preview address for Chrome Sprint");
     expect(address).toBeDisabled();
-    expect(address).toHaveAccessibleDescription("Preview navigation controls are disabled until the selected container is running and has a routed host port.");
-    expect(screen.getAllByText("Preview navigation controls are disabled until the selected container is running and has a routed host port.").length).toBeGreaterThan(0);
+    expect(address).toHaveAccessibleDescription("Preview navigation is disabled until the running container receives a routed host port.");
+    expect(screen.getAllByText("Preview navigation is disabled until the running container receives a routed host port.").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Go back in preview session Chrome Sprint" })).toBeDisabled();
   });
 

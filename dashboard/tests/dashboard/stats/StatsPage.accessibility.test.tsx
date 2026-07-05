@@ -347,7 +347,7 @@ describe("StatsPage accessibility", () => {
     expect(screen.getByRole("group", { name: "Time window presets" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Custom" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("alert")).toHaveTextContent("End date must be after start date.");
-    expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Apply" })).toHaveAttribute("aria-disabled", "true");
 
     expect(isValidCustomRange("2026-06-30", "2026-07-01")).toBe(true);
     expect(isValidCustomRange("2026-07-01", "2026-06-30")).toBe(false);
@@ -398,7 +398,7 @@ describe("StatsPage accessibility", () => {
     expect(tokenSwitch!).toHaveAttribute("aria-checked", "true");
     expect(activeSwitch!).toHaveAttribute("aria-checked", "true");
     expect(invocationSwitch!).toHaveAttribute("aria-checked", "true");
-    expect(screen.getByRole("tooltip")).toHaveTextContent("Bucket values");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Focused bucket");
     expect(screen.getByLabelText(/Jun 30 bucket: Tokens/i)).toBeInTheDocument();
 
     const srTable = document.querySelector("table.sr-only");

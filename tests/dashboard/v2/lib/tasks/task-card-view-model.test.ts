@@ -196,7 +196,7 @@ describe("task-card-view-model", () => {
       expect(vm.prUrl).toBeUndefined();
       expect(vm.actions?.find((action) => action.kind === "pull_request")).toMatchObject({
         label: "PR pending",
-        disabledReason: "No PR yet",
+        disabledReason: "No pull request is available for task T-1 yet.",
       });
     });
 
@@ -265,7 +265,7 @@ describe("task-card-view-model", () => {
 
       expect(vm.dependencyActionLabel).toBe("2 dependency blockers");
       expect(vm.dependencyIndicators.map((dep) => dep.stateLabel)).toEqual(["QA failed", "Ready for QA"]);
-      expect(vm.qaReviewLabel).toBe("QA completed, fail");
+      expect(vm.qaReviewLabel).toBe("QA failed, fail");
       expect(vm.optimisticSavingLabel).toBe("Saving task changes");
       expect(vm.dragStateLabel).toBe("Pointer drag disabled while task changes are saving; keyboard reordering is not supported");
       expect(vm.actions?.find((action) => action.kind === "preview")).toMatchObject({
@@ -274,7 +274,69 @@ describe("task-card-view-model", () => {
       });
       expect(vm.actions?.find((action) => action.kind === "rerun")).toMatchObject({
         ariaLabel: "Rerun task T-1: Task 1",
-        disabledReason: "Open Live to rerun",
+        disabledReason: "Open Live to rerun task T-1.",
+      });
+      expect(vm.actions?.find((action) => action.kind === "pull_request")).toMatchObject({
+        ariaLabel: "Open pull request for task T-1: Task 1",
+        disabledReason: "No pull request is available for task T-1 yet.",
+      });
+      expect(vm.actions?.find((action) => action.kind === "live_runtime")).toMatchObject({
+        ariaLabel: "Open live runtime for task T-1: Task 1",
+        disabledReason: "Live runtime has not started for task T-1.",
+      });
+    });
+
+    it("labels no-review, in-progress review, failed review, preview, PR, and live runtime states", () => {
+      const taskWithoutSprint = createMockTask({
+        sprintId: "",
+        latestReview: undefined,
+      });
+      const noReviewVm = buildTaskCardViewModel(taskWithoutSprint, new Map());
+
+      expect(noReviewVm.qaReviewLabel).toBe("QA no review");
+      expect(noReviewVm.actions?.find((action) => action.kind === "preview")).toMatchObject({
+        ariaLabel: "Open sprint preview for task T-1: Task 1",
+        disabledReason: "Task T-1 has no sprint preview.",
+      });
+
+      const runningReviewVm = buildTaskCardViewModel(createMockTask({
+        latestReview: {
+          status: "running",
+          outcome: null,
+          summary: null,
+          findings: [],
+          reviewer: "QA Bot",
+          finishedAt: null,
+        },
+      }), new Map());
+      expect(runningReviewVm.qaReviewLabel).toBe("QA in progress");
+
+      const failedReviewVm = buildTaskCardViewModel(createMockTask({
+        latestReview: {
+          status: "failed",
+          outcome: "rejected",
+          summary: "Needs work.",
+          findings: [],
+          reviewer: "QA Bot",
+          finishedAt: "2023-10-01T11:30:00Z",
+        },
+      }), new Map());
+      expect(failedReviewVm.qaReviewLabel).toBe("QA failed, rejected");
+
+      const liveVm = buildTaskCardViewModel(createMockTask(), new Map(), {
+        sessionId: "session-123",
+        sessionState: "running",
+        prUrl: "https://example.test/pull/1",
+        liveStartedAt: "2023-10-01T11:58:00Z",
+        liveTotalSeconds: 125,
+      });
+      expect(liveVm.actions?.find((action) => action.kind === "pull_request")).toMatchObject({
+        ariaLabel: "Open pull request for task T-1: Task 1",
+        href: "https://example.test/pull/1",
+      });
+      expect(liveVm.actions?.find((action) => action.kind === "live_runtime")).toMatchObject({
+        ariaLabel: "Open live runtime for task T-1: Task 1",
+        href: "/live",
       });
     });
   });

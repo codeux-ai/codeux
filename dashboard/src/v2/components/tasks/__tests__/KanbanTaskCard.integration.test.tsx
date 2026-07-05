@@ -82,7 +82,7 @@ describe("KanbanTaskCard Integration", () => {
       { recordId: "rec_3", id: "TASK-125", title: "Database schema", status: "pending" }
     ],
     dependencyActionLabel: "1 dependency blocker",
-    qaReviewLabel: "QA not reviewed",
+    qaReviewLabel: "QA no review",
     optimisticSavingLabel: null,
     dragStateLabel: "Pointer drag only; keyboard reordering is not supported",
     actions: [
@@ -91,7 +91,7 @@ describe("KanbanTaskCard Integration", () => {
         label: "Rerun",
         ariaLabel: "Rerun task TASK-123: Implement new feature",
         title: "Rerun is available from the Live task detail workflow.",
-        disabledReason: "Open Live to rerun",
+        disabledReason: "Open Live to rerun task TASK-123.",
       },
       {
         kind: "preview",
@@ -103,16 +103,16 @@ describe("KanbanTaskCard Integration", () => {
       {
         kind: "pull_request",
         label: "PR pending",
-        ariaLabel: "Pull request pending for task TASK-123: Implement new feature",
+        ariaLabel: "Open pull request for task TASK-123: Implement new feature",
         title: "No pull request is available yet.",
-        disabledReason: "No PR yet",
+        disabledReason: "No pull request is available for task TASK-123 yet.",
       },
       {
         kind: "live_runtime",
         label: "Live idle",
-        ariaLabel: "Live runtime not started for task TASK-123: Implement new feature",
+        ariaLabel: "Open live runtime for task TASK-123: Implement new feature",
         title: "Runtime has not started for this task.",
-        disabledReason: "Runtime idle",
+        disabledReason: "Live runtime has not started for task TASK-123.",
       },
     ],
   };
@@ -160,7 +160,7 @@ describe("KanbanTaskCard Integration", () => {
     executorLabel: "CLI",
     dependencyIndicators: [],
     dependencyActionLabel: "Dependencies clear",
-    qaReviewLabel: "QA not reviewed",
+    qaReviewLabel: "QA no review",
     optimisticSavingLabel: null,
     dragStateLabel: "Pointer drag only; keyboard reordering is not supported",
     actions: [],
@@ -196,7 +196,7 @@ describe("KanbanTaskCard Integration", () => {
     executorLabel: "Auto",
     dependencyIndicators: [],
     dependencyActionLabel: "Dependencies clear",
-    qaReviewLabel: "QA not reviewed",
+    qaReviewLabel: "QA no review",
     optimisticSavingLabel: null,
     dragStateLabel: "Pointer drag only; keyboard reordering is not supported",
     actions: [],
@@ -299,8 +299,8 @@ describe("KanbanTaskCard Integration", () => {
     expect(actionsContainer).toHaveAttribute("aria-label", "Actions for task TASK-123");
     expect(getByText("Rerun")).toBeInTheDocument();
     expect(getByText("Preview")).toBeInTheDocument();
-    expect(getByRole("button", { name: /Pull request pending for task TASK-123: Implement new feature/i })).toHaveTextContent("PR pending");
-    expect(getByRole("button", { name: /Live runtime not started for task TASK-123: Implement new feature/i })).toHaveTextContent("Live idle");
+    expect(getByRole("button", { name: /Open pull request for task TASK-123: Implement new feature/i })).toHaveTextContent("PR pending");
+    expect(getByRole("button", { name: /Open live runtime for task TASK-123: Implement new feature/i })).toHaveTextContent("Live idle");
 
     // Simulate delete click to ensure confirm dialog is requested
     await user.click(deleteBtn);
@@ -408,7 +408,7 @@ describe("KanbanTaskCard Integration", () => {
     );
 
     // Check that descriptive 'Dependency' text is in the document (from the new sr-only span)
-    const srText = getByText(/Depends on task TASK-124, resolved. Dependency completed. Status: completed. Title: Backend API/i);
+    const srText = getByText(/Depends on task TASK-124, resolved. Resolved dependency. Dependency completed. Status: completed. Title: Backend API/i);
     expect(srText).toBeInTheDocument();
     expect(srText).toHaveClass("sr-only");
 
@@ -475,11 +475,11 @@ describe("KanbanTaskCard Integration", () => {
   it("keeps unavailable task actions keyboard reachable with explanatory labels", () => {
     const { getByRole, getByText } = render(<KanbanTaskCard viewModel={mockViewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
 
-    expect(getByRole("button", { name: /Rerun task TASK-123: Implement new feature. Open Live to rerun/i })).toHaveAttribute("aria-disabled", "true");
-    expect(getByRole("button", { name: /Pull request pending for task TASK-123: Implement new feature. No PR yet/i })).toHaveAttribute("aria-disabled", "true");
-    expect(getByRole("button", { name: /Live runtime not started for task TASK-123: Implement new feature. Runtime idle/i })).toHaveAttribute("aria-disabled", "true");
+    expect(getByRole("button", { name: /Rerun task TASK-123: Implement new feature/i })).toHaveAccessibleDescription("Open Live to rerun task TASK-123.");
+    expect(getByRole("button", { name: /Open pull request for task TASK-123: Implement new feature/i })).toHaveAccessibleDescription("No pull request is available for task TASK-123 yet.");
+    expect(getByRole("button", { name: /Open live runtime for task TASK-123: Implement new feature/i })).toHaveAccessibleDescription("Live runtime has not started for task TASK-123.");
     expect(getByText("1 dependency blocker")).toBeInTheDocument();
-    expect(getByText("QA not reviewed")).toBeInTheDocument();
+    expect(getByText("QA no review")).toBeInTheDocument();
   });
 
   it("prevents long metadata strings from overflowing the card horizontally", () => {

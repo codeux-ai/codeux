@@ -23,9 +23,22 @@ import { LiveSessionPage } from "../../../dashboard/src/v2/LiveSessionPage.js";
 import { useDashboardRuntimeData } from "../../../dashboard/src/hooks/use-dashboard-runtime-data.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
 import { useProjectGitStatus } from "../../../dashboard/src/v2/hooks/use-project-git-status.js";
-
-
-
+import { useLiveSessionActions } from "../../../dashboard/src/v2/hooks/use-live-session-actions.js";
+const liveSessionActionMocks = vi.hoisted(() => ({
+  rerunningIds: new Set<string>(),
+  pendingActionIds: new Set<string>(),
+  handleRerun: vi.fn(),
+  handleOrchestrateSprint: vi.fn(),
+  handlePauseSprintRun: vi.fn(),
+  handleCancelSprintRun: vi.fn(),
+  handleForceCancelSprintRun: vi.fn(),
+  handleCancelTaskDispatch: vi.fn(),
+  handleForceCancelTaskDispatch: vi.fn(),
+  handleRetryTaskDispatch: vi.fn(),
+  handleClaimAttentionItem: vi.fn(),
+  handleResolveAttentionItem: vi.fn(),
+  handleDismissAttentionItem: vi.fn(),
+}));
 
 
 vi.mock("gsap", () => ({
@@ -56,21 +69,7 @@ vi.mock("../../../dashboard/src/v2/hooks/use-preview-sessions.js", () => ({
   usePreviewSessions: () => ({ selectedSession: null }),
 }));
 vi.mock("../../../dashboard/src/v2/hooks/use-live-session-actions.js", () => ({
-  useLiveSessionActions: () => ({
-    rerunningIds: new Set(),
-    pendingActionIds: new Set(),
-    handleRerun: vi.fn(),
-    handleOrchestrateSprint: vi.fn(),
-    handlePauseSprintRun: vi.fn(),
-    handleCancelSprintRun: vi.fn(),
-    handleForceCancelSprintRun: vi.fn(),
-    handleCancelTaskDispatch: vi.fn(),
-    handleForceCancelTaskDispatch: vi.fn(),
-    handleRetryTaskDispatch: vi.fn(),
-    handleClaimAttentionItem: vi.fn(),
-    handleResolveAttentionItem: vi.fn(),
-    handleDismissAttentionItem: vi.fn(),
-  }),
+  useLiveSessionActions: vi.fn(() => liveSessionActionMocks),
 }));
 
 const mockExecution = {
@@ -90,7 +89,10 @@ describe("LiveSessionPage Runtime Status", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    liveSessionActionMocks.rerunningIds = new Set();
+    liveSessionActionMocks.pendingActionIds = new Set();
     vi.mocked(useProjectData).mockReturnValue({ selectedProjectId: "p1" } as any);
+    vi.mocked(useLiveSessionActions).mockReturnValue(liveSessionActionMocks);
   });
 
   it("renders the LiveTransportBanner in a disconnected state", () => {
@@ -142,6 +144,53 @@ describe("LiveSessionPage Runtime Status", () => {
     expect(banner).toHaveAttribute("aria-live", "polite");
     expect(banner).toHaveAttribute("aria-busy", "true");
     expect(screen.getByRole("region", { name: "Execution runtime" })).toBeInTheDocument();
+  });
+
+  it("preserves cached runtime rows and marks affected panels busy when the live snapshot is stale", () => {
+    vi.mocked(useDashboardRuntimeData).mockReturnValue({
+      error: null,
+      gitStatus: null,
+      gitStatusError: null,
+      initialLoadComplete: true,
+      transportState: "connected",
+      isRecovering: false,
+      snapshotUpdatedAt: "2024-01-01T00:00:00Z",
+      refreshGitStatus: vi.fn(),
+      refreshRuntimeStatus: vi.fn(),
+      selectedSprintId: "s1",
+      status: { subtasks: [], timestamp: "2024-01-01T00:00:00Z", project_id: "p1", sprint_id: "s1" },
+      execution: {
+        ...mockExecution,
+        sprintRuns: [{
+          id: "run-stale",
+          projectId: "p1",
+          sprintId: "s1",
+          sprintName: "Cached Sprint",
+          sprintNumber: 1,
+          status: "running",
+          triggerType: "manual",
+          triggeredBy: null,
+          executorMode: "mixed",
+          startedAt: "2024-01-01T10:00:00Z",
+          finishedAt: null,
+          lastHeartbeatAt: "2024-01-01T10:05:00Z",
+          createdAt: "2024-01-01T10:00:00Z",
+          activeLeaseOwnerKey: null,
+          activeLeaseExpiresAt: null,
+          humanIntervention: null,
+        }],
+      },
+      stats: { total: 0 } as any,
+      tasksWithLiveActivities: [],
+    });
+
+    render(<LiveSessionPage />);
+
+    expect(screen.getByText("Stale Data")).toBeInTheDocument();
+    expect(screen.getAllByText("Stale Snapshot").length).toBeGreaterThan(0);
+    expect(screen.getByText("Cached Sprint · Sprint 1")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Execution runtime" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("log", { name: "Sprint run status rows" })).toHaveAttribute("aria-busy", "true");
   });
 
   it("renders the LiveTransportBanner with an error message", () => {
@@ -277,6 +326,58 @@ describe("LiveSessionPage Runtime Status", () => {
     expect(screen.queryByText("Needs you")).not.toBeInTheDocument();
   });
 
+  it("keeps pending runtime actions inert with target-specific accessible names", () => {
+    liveSessionActionMocks.pendingActionIds = new Set(["sprint-pause:run-pending"]);
+    vi.mocked(useLiveSessionActions).mockReturnValue(liveSessionActionMocks);
+    vi.mocked(useDashboardRuntimeData).mockReturnValue({
+      error: null,
+      gitStatus: null,
+      gitStatusError: null,
+      initialLoadComplete: true,
+      transportState: "connected",
+      isRecovering: false,
+      snapshotUpdatedAt: new Date().toISOString(),
+      refreshGitStatus: vi.fn(),
+      refreshRuntimeStatus: vi.fn(),
+      selectedSprintId: "s1",
+      status: { subtasks: [], timestamp: "2024-01-01T00:00:00Z", project_id: "p1", sprint_id: "s1" },
+      execution: {
+        ...mockExecution,
+        sprintRuns: [{
+          id: "run-pending",
+          projectId: "p1",
+          sprintId: "s1",
+          sprintName: "Pending Sprint",
+          sprintNumber: 1,
+          status: "running",
+          triggerType: "manual",
+          triggeredBy: null,
+          executorMode: "mixed",
+          startedAt: "2024-01-01T10:00:00Z",
+          finishedAt: null,
+          lastHeartbeatAt: "2024-01-01T10:05:00Z",
+          createdAt: "2024-01-01T10:00:00Z",
+          activeLeaseOwnerKey: null,
+          activeLeaseExpiresAt: null,
+          humanIntervention: null,
+        }],
+      },
+      stats: { total: 0 } as any,
+      tasksWithLiveActivities: [],
+    });
+
+    render(<LiveSessionPage />);
+
+    const pendingPause = screen.getByRole("button", { name: /Pause sprint run Pending Sprint\. Pausing is already in progress\./i });
+    fireEvent.click(pendingPause);
+
+    expect(pendingPause).toHaveAttribute("aria-disabled", "true");
+    expect(pendingPause).toHaveAttribute("aria-busy", "true");
+    expect(pendingPause).toHaveTextContent("Pausing");
+    expect(pendingPause).toHaveTextContent("Pausing in progress.");
+    expect(liveSessionActionMocks.handlePauseSprintRun).not.toHaveBeenCalled();
+  });
+
   it("renders Waiting for slot (2/2) for a queued dispatch with concurrency wait event", () => {
     const task = {
       record_id: "task-rec-cap",
@@ -393,7 +494,10 @@ describe("LiveSessionPage Integration Isolation", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    liveSessionActionMocks.rerunningIds = new Set();
+    liveSessionActionMocks.pendingActionIds = new Set();
     vi.mocked(useProjectData).mockReturnValue({ selectedProjectId: "p1" } as any);
+    vi.mocked(useLiveSessionActions).mockReturnValue(liveSessionActionMocks);
   });
 
   it("isolates task state rigidly to the explicitly selected sprint despite concurrent newer execution metadata", () => {

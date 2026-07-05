@@ -19,11 +19,14 @@ interface TableProps {
 
 export function Table({ children, className = "", caption, ariaLabel, ariaLabelledBy, resultCount, resultLabel = "rows", busy }: TableProps) {
   const hasResultCount = typeof resultCount === "number";
+  const resultCountCopy = hasResultCount
+    ? `${busy ? "Updating results. " : ""}${resultCount.toLocaleString()} ${resultLabel} shown.`
+    : "";
   return (
     <div className={`overflow-x-hidden lg:overflow-visible ${className}`}>
       {hasResultCount && (
         <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-          {busy ? "Updating " : ""}{resultCount.toLocaleString()} {resultLabel} shown.
+          {resultCountCopy}
         </div>
       )}
       <table
@@ -53,11 +56,15 @@ export function TableHeader({ children }: { children: ComponentChildren }) {
 export function TableBody({ children }: { children: ComponentChildren }) {
   const tbodyRef = useRef<HTMLTableSectionElement>(null);
   const hasMounted = useRef(false);
+  const previousChildren = useRef<ComponentChildren | null>(null);
   const isReducedMotion = useReducedMotion();
   const gsapTokens = useGsapInteractionTokens();
 
   useEffect(() => {
-    if (isReducedMotion || !tbodyRef.current || hasMounted.current) return;
+    if (isReducedMotion || !tbodyRef.current) {
+      previousChildren.current = children;
+      return;
+    }
 
     // Animate the rows in exactly once, when they first appear. We mark
     // `hasMounted` synchronously here (not in gsap's onComplete): under a live
@@ -65,10 +72,30 @@ export function TableBody({ children }: { children: ComponentChildren }) {
     // deferred flag would let every re-render restart the tween — resetting all
     // rows to opacity 0 and making the table appear to perpetually reload.
     const rows = tbodyRef.current.querySelectorAll(':scope > [data-table-row]');
-    if (rows.length === 0) return;
+    if (rows.length === 0) {
+      previousChildren.current = children;
+      return;
+    }
+
+    if (hasMounted.current) {
+      if (previousChildren.current !== children) {
+        gsap.fromTo(
+          rows,
+          { y: 3 },
+          {
+            y: 0,
+            stagger: Math.min(0.015, 0.12 / rows.length),
+            duration: gsapTokens.listReorder.duration,
+            ease: gsapTokens.listReorder.ease
+          }
+        );
+      }
+      previousChildren.current = children;
+      return;
+    }
 
     hasMounted.current = true;
-
+    previousChildren.current = children;
     // Animate only the vertical offset — never opacity. gsap writes its tweened
     // value to the element's inline style, and if the parent re-renders fast
     // enough to interrupt the tween (live data streams do), an opacity tween can
@@ -100,8 +127,9 @@ export function TableRow({ children, className = "", selected, onClick, style, "
       aria-selected={selected}
       aria-busy={ariaBusy || undefined}
       role="row"
-      className={`group mb-3 block overflow-hidden rounded-[1.5rem] border shadow-[var(--elevation-base)] backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:shadow-[var(--elevation-raised)] focus-within:ring-2 focus-within:ring-signal-500/20 lg:table-row lg:overflow-visible lg:rounded-none lg:border-0 lg:shadow-none lg:hover:bg-[var(--fill-muted-hover)] lg:transition-colors ${cursorClass} ${selectedClass} ${className}`}
-      style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease, ...(typeof style === "object" ? style : {}) }}
+      data-reorder-motion="listReorder"
+      className={`group mb-3 block overflow-hidden rounded-[1.5rem] border shadow-[var(--elevation-base)] backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:shadow-[var(--elevation-raised)] focus-within:ring-2 focus-within:ring-signal-500/20 motion-reduce:transition-none motion-reduce:hover:translate-y-0 lg:table-row lg:overflow-visible lg:rounded-none lg:border-0 lg:shadow-none lg:hover:bg-[var(--fill-muted-hover)] lg:transition-colors ${cursorClass} ${selectedClass} ${className}`}
+      style={{ transitionDuration: tokens.listReorder.duration, transitionTimingFunction: tokens.listReorder.ease, ...(typeof style === "object" ? style : {}) }}
     >
       {children}
     </tr>
@@ -145,8 +173,9 @@ export function TableCell({ children, className = "", isFirst, isLast, isHeader,
     const roundedClass = isFirst ? "rounded-l-2xl border-l" : isLast ? "rounded-r-2xl border-r pr-6" : "";
     const plClass = isFirst ? "pl-6" : "";
     const sortCopy = getSortCopy(ariaSort);
+    const resolvedAriaSort = onSort ? (ariaSort ?? "none") : ariaSort;
     return (
-      <th scope="col" aria-sort={ariaSort}
+      <th scope="col" aria-sort={resolvedAriaSort}
         className={`border-y border-[color:var(--border-hairline)] bg-[var(--surface-glass)] px-4 py-2 ${alignClass} ${roundedClass} ${plClass} ${className}`}
       >
         {onSort ? (
