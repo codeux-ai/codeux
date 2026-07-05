@@ -29,7 +29,7 @@ export const CanvasBackground: FunctionComponent = () => {
     return (
         <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
             {/* Warm ambient gradients replacing the cold indigo splash */}
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_-10%_-10%,_rgba(0,224,160,0.04)_0%,_transparent_60%)] dark:bg-[radial-gradient(ellipse_80%_50%_at_-10%_-10%,_rgba(0,224,160,0.06)_0%,_transparent_60%)] transition-colors duration-1000" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_-10%_-10%,_rgba(0,224,160,0.04)_0%,_transparent_60%)] transition-colors duration-[var(--motion-slow)] motion-reduce:transition-none dark:bg-[radial-gradient(ellipse_80%_50%_at_-10%_-10%,_rgba(0,224,160,0.06)_0%,_transparent_60%)]" />
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_50%_40%_at_110%_110%,_rgba(255,184,0,0.03)_0%,_transparent_60%)] dark:bg-[radial-gradient(ellipse_50%_40%_at_110%_110%,_rgba(255,184,0,0.04)_0%,_transparent_60%)]" />
 
             {/* Signal → Ember flowing SVG line */}
