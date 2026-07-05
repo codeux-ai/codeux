@@ -7,8 +7,19 @@ import {
 } from "../../../dashboard/src/lib/api/dashboard-api.js";
 import * as fetchJsonModule from "../../../dashboard/src/lib/api/fetch-json.js";
 
+const createDeferred = <T>() => {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+};
+
 describe("Dashboard API Cache", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     clearLivePayloadCacheForTests();
     vi.spyOn(fetchJsonModule, "fetchJson").mockImplementation(async (url) => {
       const projectId = url.includes("projectId=p") ? url.split("projectId=")[1] : "default";
@@ -76,6 +87,59 @@ describe("Dashboard API Cache", () => {
     invalidateLivePayloadCache("p1");
     expect(getCachedLivePayload("p1")).toBeNull();
     expect(getCachedLivePayload("p2")).not.toBeNull();
+  });
+
+  it("should ignore an invalidated in-flight payload and start a fresh request", async () => {
+    const staleRequest = createDeferred<any>();
+    const freshRequest = createDeferred<any>();
+    vi.mocked(fetchJsonModule.fetchJson)
+      .mockReturnValueOnce(staleRequest.promise)
+      .mockReturnValueOnce(freshRequest.promise);
+
+    const stalePromise = fetchLivePayload("p1");
+    expect(fetchJsonModule.fetchJson).toHaveBeenCalledTimes(1);
+
+    invalidateLivePayloadCache("p1");
+
+    const freshPromise = fetchLivePayload("p1");
+    expect(fetchJsonModule.fetchJson).toHaveBeenCalledTimes(2);
+
+    staleRequest.resolve({
+      projectId: "p1",
+      selectedSprintId: "stale",
+      status: { project_id: "p1", subtasks: [], timestamp: null },
+      execution: { projectId: "p1" },
+    });
+    await expect(stalePromise).resolves.toMatchObject({ selectedSprintId: "stale" });
+    expect(getCachedLivePayload("p1")).toBeNull();
+
+    freshRequest.resolve({
+      projectId: "p1",
+      selectedSprintId: "fresh",
+      status: { project_id: "p1", subtasks: [], timestamp: null },
+      execution: { projectId: "p1" },
+    });
+    await expect(freshPromise).resolves.toMatchObject({ selectedSprintId: "fresh" });
+    expect(getCachedLivePayload("p1")?.selectedSprintId).toBe("fresh");
+  });
+
+  it("should keep same-sprint live payload caches scoped by project", async () => {
+    vi.mocked(fetchJsonModule.fetchJson).mockImplementation(async (url) => {
+      const projectId = url.includes("projectId=p1") ? "p1" : "p2";
+      return {
+        projectId,
+        selectedSprintId: "shared-sprint",
+        status: { project_id: projectId, subtasks: [], timestamp: null },
+        execution: { projectId },
+      } as any;
+    });
+
+    await fetchLivePayload("p1", { selectedSprintId: "shared-sprint" });
+    await fetchLivePayload("p2", { selectedSprintId: "shared-sprint" });
+
+    expect(getCachedLivePayload("p1", { selectedSprintId: "shared-sprint" })?.projectId).toBe("p1");
+    expect(getCachedLivePayload("p2", { selectedSprintId: "shared-sprint" })?.projectId).toBe("p2");
+    expect(getCachedLivePayload("p1", { selectedSprintId: "missing" })).toBeNull();
   });
 
   it("should support clearLivePayloadCacheForTests", async () => {

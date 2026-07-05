@@ -32,6 +32,20 @@ const mockPayload = {
   updatedAt: "2024-01-01T00:00:00Z",
 };
 
+const makePayload = (projectId: string, selectedSprintId = "s1", updatedAt = "2024-01-01T00:00:00Z") => ({
+  ...mockPayload,
+  projectId,
+  selectedSprintId,
+  status: { ...mockPayload.status, project_id: projectId, timestamp: updatedAt },
+  execution: {
+    ...mockPayload.execution,
+    projectId,
+    projectName: `Project ${projectId}`,
+    updatedAt,
+  },
+  updatedAt,
+});
+
 describe("useDashboardRuntimeData", () => {
   beforeEach(() => {
     cleanup();
@@ -142,5 +156,41 @@ describe("useDashboardRuntimeData", () => {
 
     expect(result.current.snapshotUpdatedAt).toBeNull();
     expect(result.current.status.timestamp).toBeNull();
+  });
+
+  it("hydrates project-scoped cached live data without leaking between projects", () => {
+    vi.mocked(api.fetchLivePayload).mockImplementation(() => new Promise(() => {}) as any);
+    const cachedP1 = makePayload("p1", "shared-sprint", "2024-02-01T00:00:00Z") as any;
+    const cachedP2 = makePayload("p2", "shared-sprint", "2024-03-01T00:00:00Z") as any;
+    vi.mocked(api.getCachedLivePayload).mockImplementation((projectId, options) => {
+      if (options?.selectedSprintId !== "shared-sprint") {
+        return null;
+      }
+      if (projectId === "p1") {
+        return cachedP1;
+      }
+      if (projectId === "p2") {
+        return cachedP2;
+      }
+      return null;
+    });
+
+    const { result, rerender } = renderHook(
+      ({ projectId }) => useDashboardRuntimeData(projectId, true, { selectedSprintId: "shared-sprint" }),
+      { initialProps: { projectId: "p1" } },
+    );
+
+    expect(result.current.execution.projectId).toBe("p1");
+    expect(result.current.selectedSprintId).toBe("shared-sprint");
+    expect(result.current.snapshotUpdatedAt).toBe("2024-02-01T00:00:00Z");
+    expect(result.current.initialLoadComplete).toBe(true);
+
+    rerender({ projectId: "p2" });
+
+    expect(result.current.execution.projectId).toBe("p2");
+    expect(result.current.selectedSprintId).toBe("shared-sprint");
+    expect(result.current.snapshotUpdatedAt).toBe("2024-03-01T00:00:00Z");
+    expect(api.getCachedLivePayload).toHaveBeenCalledWith("p1", { selectedSprintId: "shared-sprint" });
+    expect(api.getCachedLivePayload).toHaveBeenCalledWith("p2", { selectedSprintId: "shared-sprint" });
   });
 });

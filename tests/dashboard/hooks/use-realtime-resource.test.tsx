@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { h } from "preact";
-import { render, cleanup, waitFor } from "@testing-library/preact";
+import { render, cleanup, waitFor, renderHook, act } from "@testing-library/preact";
 import { useRealtimeResource } from "../../../dashboard/src/hooks/use-realtime-resource.js";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
@@ -11,13 +11,16 @@ vi.mock("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js", () =
 }));
 
 function TestComponent({ initialData, fetchResource }: any) {
-  const { data, loading, refetch } = useRealtimeResource({
+  const { data, loading, error, initialLoadComplete, isRecovering, refetch } = useRealtimeResource({
     initialData,
     fetchResource,
     isEqual: (a, b) => a.id === b.id,
   });
   return h("div", null,
     h("div", { "data-testid": "loading" }, loading ? "true" : "false"),
+    h("div", { "data-testid": "recovering" }, isRecovering ? "true" : "false"),
+    h("div", { "data-testid": "initial-load-complete" }, initialLoadComplete ? "true" : "false"),
+    h("div", { "data-testid": "error" }, error ?? ""),
     h("div", { "data-testid": "data-id" }, data.id),
     h("button", { "data-testid": "refetch", onClick: () => refetch() }, "Refetch"),
     h("button", { "data-testid": "refetch-silent", onClick: () => refetch({ silent: true }) }, "Refetch Silent"),
@@ -28,6 +31,16 @@ function TestComponent({ initialData, fetchResource }: any) {
     } }, "Refetch Abort")
   );
 }
+
+const createDeferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+};
 
 describe("useRealtimeResource", () => {
   beforeEach(() => {
@@ -266,5 +279,97 @@ describe("useRealtimeResource", () => {
 
     getByTestId("refetch-silent").click();
     expect(fetchResource).toHaveBeenCalledTimes(3);
+  });
+
+  it("transitions loading, error, and recovering flags across load, refresh, abort, and retry", async () => {
+    const initialRequest = createDeferred<{ id: string }>();
+    const silentFailure = createDeferred<{ id: string }>();
+    const abortRequest = createDeferred<{ id: string }>();
+    const retryRequest = createDeferred<{ id: string }>();
+
+    const fetchResource = vi.fn()
+      .mockReturnValueOnce(initialRequest.promise)
+      .mockReturnValueOnce(silentFailure.promise)
+      .mockImplementationOnce((signal?: AbortSignal) => {
+        signal?.addEventListener("abort", () => {
+          const error = new Error("aborted");
+          error.name = "AbortError";
+          abortRequest.reject(error);
+        });
+        return abortRequest.promise;
+      })
+      .mockReturnValueOnce(retryRequest.promise);
+
+    const initialData = { id: "empty" };
+    const { result, unmount } = renderHook(() => useRealtimeResource({
+      initialData,
+      fetchResource,
+    }));
+
+    expect(result.current.loading).toBe(true);
+    expect(result.current.isRecovering).toBe(true);
+    expect(result.current.initialLoadComplete).toBe(false);
+    expect(result.current.error).toBeNull();
+
+    act(() => {
+      initialRequest.resolve({ id: "loaded" });
+    });
+
+    await waitFor(() => expect(result.current.data.id).toBe("loaded"));
+    expect(result.current.loading).toBe(false);
+    expect(result.current.isRecovering).toBe(false);
+    expect(result.current.initialLoadComplete).toBe(true);
+
+    act(() => {
+      void result.current.refetch({ silent: true });
+    });
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.isRecovering).toBe(false);
+
+    act(() => {
+      silentFailure.reject(new Error("network down"));
+    });
+
+    await waitFor(() => expect(result.current.error).toBe("network down"));
+    expect(result.current.loading).toBe(false);
+    expect(result.current.isRecovering).toBe(false);
+    expect(result.current.data.id).toBe("loaded");
+
+    const abortController = new AbortController();
+    act(() => {
+      void (result.current.refetch as (options: { signal: AbortSignal }) => Promise<void>)({
+        signal: abortController.signal,
+      });
+    });
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.isRecovering).toBe(true);
+
+    act(() => {
+      abortController.abort();
+    });
+
+    await waitFor(() => expect(result.current.isRecovering).toBe(false));
+    expect(result.current.error).toBe("network down");
+    expect(result.current.loading).toBe(false);
+
+    act(() => {
+      void result.current.refetch();
+    });
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.isRecovering).toBe(true);
+
+    act(() => {
+      retryRequest.resolve({ id: "recovered" });
+    });
+
+    await waitFor(() => expect(result.current.data.id).toBe("recovered"));
+    expect(result.current.error).toBeNull();
+    expect(result.current.loading).toBe(false);
+    expect(result.current.isRecovering).toBe(false);
+
+    unmount();
   });
 });
