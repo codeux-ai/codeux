@@ -77,6 +77,9 @@ export const BrowserPage: FunctionComponent = () => {
 
   const browserFeedback = useActionFeedback();
   const navigationPendingTimerRef = useRef<number | null>(null);
+  const navigationActionSuccessTimerRef = useRef<number | null>(null);
+  const addressNavigationSuccessTimerRef = useRef<number | null>(null);
+  const mountedRef = useRef(true);
   const navigationPendingRef = useRef(false);
   const launchingRef = useRef(false);
   const pendingSessionActionRef = useRef<"rebuild" | "stop" | null>(null);
@@ -383,10 +386,21 @@ export const BrowserPage: FunctionComponent = () => {
     return () => window.clearInterval(timer);
   }, [visibleSelectedSession?.id]);
 
+  const clearNavigationTimer = (timerRef: { current: number | null }) => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
   useEffect(() => () => {
+    mountedRef.current = false;
     if (navigationPendingTimerRef.current !== null) {
       window.clearTimeout(navigationPendingTimerRef.current);
+      navigationPendingTimerRef.current = null;
     }
+    clearNavigationTimer(navigationActionSuccessTimerRef);
+    clearNavigationTimer(addressNavigationSuccessTimerRef);
     navigationPendingRef.current = false;
   }, []);
 
@@ -467,7 +481,12 @@ export const BrowserPage: FunctionComponent = () => {
     browserFeedback.setPending(pendingMessage);
     markNavigationPending();
     action();
-    window.setTimeout(() => {
+    clearNavigationTimer(navigationActionSuccessTimerRef);
+    navigationActionSuccessTimerRef.current = window.setTimeout(() => {
+      navigationActionSuccessTimerRef.current = null;
+      if (!mountedRef.current) {
+        return;
+      }
       browserFeedback.setSuccess(successMessage);
     }, 360);
   };
@@ -600,7 +619,12 @@ export const BrowserPage: FunctionComponent = () => {
     setCurrentPath(nextPath);
     setAddressValue(nextPath);
     postNavigationCommand("push", nextPath);
-    window.setTimeout(() => {
+    clearNavigationTimer(addressNavigationSuccessTimerRef);
+    addressNavigationSuccessTimerRef.current = window.setTimeout(() => {
+      addressNavigationSuccessTimerRef.current = null;
+      if (!mountedRef.current) {
+        return;
+      }
       browserFeedback.setSuccess(`Navigation sent for ${nextPath}`);
     }, 360);
   };

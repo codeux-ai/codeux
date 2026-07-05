@@ -469,6 +469,47 @@ describe("BrowserPage", () => {
     }
   });
 
+  it("clears delayed navigation success timers on unmount", () => {
+    vi.useFakeTimers();
+    const setTimeoutSpy = vi.spyOn(window, "setTimeout");
+    const clearTimeoutSpy = vi.spyOn(window, "clearTimeout");
+    const getLastNavigationSuccessTimerId = () => {
+      const timerIndex = setTimeoutSpy.mock.calls.reduce(
+        (lastMatch, call, index) => (call[1] === 360 ? index : lastMatch),
+        -1
+      );
+      return timerIndex >= 0 ? setTimeoutSpy.mock.results[timerIndex]?.value : undefined;
+    };
+
+    try {
+      const reloadRender = render(<BrowserPage />);
+      fireEvent.click(screen.getByRole("button", { name: "Reload preview" }));
+      const reloadSuccessTimerId = getLastNavigationSuccessTimerId();
+
+      reloadRender.unmount();
+
+      expect(reloadSuccessTimerId).toBeDefined();
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(reloadSuccessTimerId);
+
+      setTimeoutSpy.mockClear();
+      clearTimeoutSpy.mockClear();
+
+      const navigateRender = render(<BrowserPage />);
+      fireEvent.input(screen.getByLabelText("Preview address"), { target: { value: "/docs" } });
+      fireEvent.click(screen.getByRole("button", { name: "Navigate preview" }));
+      const addressSuccessTimerId = getLastNavigationSuccessTimerId();
+
+      navigateRender.unmount();
+
+      expect(addressSuccessTimerId).toBeDefined();
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(addressSuccessTimerId);
+    } finally {
+      setTimeoutSpy.mockRestore();
+      clearTimeoutSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("shows script save success feedback and prevents duplicate save submissions", async () => {
     const user = userEvent.setup();
     let resolveSave: ((value: { content: string; mode: "script"; path: string }) => void) | null = null;

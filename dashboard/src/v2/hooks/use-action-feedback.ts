@@ -22,7 +22,7 @@ export function useActionFeedback(autoDismissMs: number = 5000) {
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
-      window.clearTimeout(timerRef.current);
+      globalThis.clearTimeout(timerRef.current);
       timerRef.current = null;
     }
   }, []);
@@ -77,7 +77,7 @@ export function useActionFeedback(autoDismissMs: number = 5000) {
     setFeedback({ status, message, ...wrapOptions(options) });
 
     if (options?.autoDismiss !== false) {
-      timerRef.current = window.setTimeout(() => {
+      timerRef.current = globalThis.setTimeout(() => {
         retryPendingRef.current = false;
         setFeedback({ status: "idle", message: null });
       }, autoDismissMs);
