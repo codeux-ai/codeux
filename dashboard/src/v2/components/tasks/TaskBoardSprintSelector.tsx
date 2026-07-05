@@ -294,14 +294,18 @@ export const TaskBoardSprintSelector: FunctionComponent<TaskBoardSprintSelectorP
                     isActive ? "bg-ember-500/[0.06] dark:bg-ember-500/[0.08]" : "hover:bg-black/[0.03] dark:hover:bg-white/[0.03]"
                   }`}
                 >
-                  <div className={`w-2 h-2 rounded-full shrink-0 ${
-                    sprint.status === "running" ? "bg-status-green shadow-[0_0_8px_rgba(0,171,132,0.6)] animate-pulse" :
+                  <div
+                    aria-hidden="true"
+                    data-sprint-status-dot={sprint.status}
+                    className={`w-2 h-2 rounded-full shrink-0 ${
+                    sprint.status === "running" ? "bg-status-green shadow-[0_0_8px_rgba(0,171,132,0.6)] motion-safe:animate-pulse motion-reduce:animate-none motion-reduce:ring-2 motion-reduce:ring-status-green/25" :
                     sprint.status === "paused" ? "bg-status-amber shadow-[0_0_8px_rgba(245,158,11,0.45)]" :
                     sprint.status === "completed" ? "bg-signal-500" :
                     sprint.status === "failed" ? "bg-status-red" :
                     sprint.status === "cancelled" ? "bg-slate-400 dark:bg-slate-500" :
                     "bg-slate-400 dark:bg-slate-600"
-                  }`} />
+                  }`}
+                  />
                   <div className="flex-1 min-w-0 flex flex-col">
                     <span className={`text-sm font-bold tracking-tight truncate min-w-0 ${isActive ? "text-ember-600 dark:text-ember-400" : "text-slate-800 dark:text-white"}`}>
                       {formatSprintDisplay(sprint, sprintKeyPrefix)}
