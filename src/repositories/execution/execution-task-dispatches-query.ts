@@ -74,6 +74,8 @@ export function queryExecutionTaskDispatches(
   projectId: string,
   expandedSprintRunIds: string[]
 ): ExecutionTaskDispatchSummaryRow[] {
+  const uniqueExpandedSprintRunIds = [...new Set(expandedSprintRunIds)];
+
   // Collapse to the single most-recent dispatch per task before applying the
   // status-rank ordering and cap. A task only ever has one *current* dispatch;
   // keeping older ones lets a stale terminal dispatch (e.g. a FAILED attempt that
@@ -132,7 +134,7 @@ export function queryExecutionTaskDispatches(
     LIMIT 24
   `).all(projectId) as unknown as ExecutionTaskDispatchSummaryRow[];
 
-  const expandedSprintTaskDispatches = expandedSprintRunIds.length > 0
+  const expandedSprintTaskDispatches = uniqueExpandedSprintRunIds.length > 0
     ? storage.executeChunkedInQuery<ExecutionTaskDispatchSummaryRow>({
       sqlPrefix: `
       SELECT
@@ -172,7 +174,7 @@ export function queryExecutionTaskDispatches(
       WHERE td.project_id = ?
         AND td.sprint_run_id`,
       sqlSuffix: "",
-      items: expandedSprintRunIds,
+      items: uniqueExpandedSprintRunIds,
       bindParamsBefore: [projectId],
     })
     : [];
