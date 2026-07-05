@@ -197,6 +197,7 @@ export function useTaskBoardController(): TaskBoardController {
     sprints,
     taskScopeSprintId,
   );
+  const previousTaskViewModelsRef = useRef<TaskBoardViewModel["taskViewModels"] | undefined>(undefined);
 
   useEffect(() => {
     if (loading || tasks.length === 0) {
@@ -239,6 +240,7 @@ export function useTaskBoardController(): TaskBoardController {
       recentEvents,
       subtasks,
       taskPullRequestsEnabled,
+      previousTaskViewModels: previousTaskViewModelsRef.current,
     });
   }, [
     tasks,
@@ -252,6 +254,10 @@ export function useTaskBoardController(): TaskBoardController {
     subtasks,
     taskPullRequestsEnabled,
   ]);
+
+  useEffect(() => {
+    previousTaskViewModelsRef.current = currentBoardViewModel.taskViewModels;
+  }, [currentBoardViewModel.taskViewModels]);
   const [displayBoardViewModel, setDisplayBoardViewModel] = useState<TaskBoardViewModel>(currentBoardViewModel);
   const [filterTransitionPending, setFilterTransitionPending] = useState(false);
   const previousFilterKeyRef = useRef(`${statusFilter}|${priorityFilter}`);

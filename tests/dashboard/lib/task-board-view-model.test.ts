@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { buildTaskBoardSprintScopeState, buildTaskBoardViewModel } from "../../../dashboard/src/v2/lib/tasks/task-board-view-model.js";
 import type { Sprint, Task } from "../../../dashboard/src/v2/types.js";
-import type { ExecutionTaskDispatchSummary, Subtask } from "../../../dashboard/src/types.js";
+import type { ExecutionRuntimeEventSummary, ExecutionTaskDispatchSummary, Subtask } from "../../../dashboard/src/types.js";
 
 function createMockTask(id: string, overrides: Partial<Task> = {}): Task {
   return {
@@ -23,6 +23,39 @@ function createMockTask(id: string, overrides: Partial<Task> = {}): Task {
     isIndependent: true,
     isMerged: false,
     mergeIndicator: null,
+    ...overrides,
+  };
+}
+
+function createRuntimeEvent(overrides: Partial<ExecutionRuntimeEventSummary> = {}): ExecutionRuntimeEventSummary {
+  return {
+    id: "event-1",
+    scopeType: "task_run",
+    taskRunId: "task-run-unrelated",
+    sprintRunId: "run-unrelated",
+    dispatchId: "dispatch-unrelated",
+    projectId: "project-1",
+    sprintId: "sprint-unrelated",
+    sprintName: "Sprint unrelated",
+    sprintNumber: 99,
+    sprintRunStatus: "running",
+    taskId: "task-unrelated",
+    taskKey: "TASK-UNRELATED",
+    taskTitle: "Unrelated task",
+    taskRunState: "running",
+    eventType: "heartbeat",
+    originator: "worker",
+    sourceEventKey: null,
+    provider: null,
+    sessionId: null,
+    sessionName: null,
+    workerBranch: null,
+    prUrl: null,
+    connectionId: null,
+    connectionDisplayName: null,
+    connectionRole: null,
+    createdAt: "2026-07-03T10:05:00.000Z",
+    payload: null,
     ...overrides,
   };
 }
@@ -156,6 +189,80 @@ test("buildTaskBoardViewModel gives optimistic task precedence", () => {
   const taskVm = vm.taskViewModels.get("t1");
   expect(taskVm?.task.title).toBe("New Title");
   expect(taskVm?.task.status).toBe("in_progress");
+});
+
+test("buildTaskBoardViewModel keeps optimistic tasks ahead of cached base task view models", () => {
+  const normalTask = createMockTask("t1", { title: "Persisted Title", status: "pending" });
+  const initial = buildTaskBoardViewModel({
+    tasks: [normalTask],
+    optimisticTasks: [],
+    statusFilter: "all",
+    priorityFilter: "all",
+    listWindow: 50,
+    taskScopeSprintId: null,
+    taskDispatches: [],
+    recentEvents: [],
+    subtasks: [],
+  });
+  const previousTaskVm = initial.taskViewModels.get("t1");
+  const optimisticTask = createMockTask("t1", {
+    title: "Optimistic Title",
+    status: "in_progress",
+    isOptimistic: true,
+  });
+
+  const next = buildTaskBoardViewModel({
+    tasks: [normalTask],
+    optimisticTasks: [optimisticTask],
+    statusFilter: "all",
+    priorityFilter: "all",
+    listWindow: 50,
+    taskScopeSprintId: null,
+    taskDispatches: [],
+    recentEvents: [],
+    subtasks: [],
+    previousTaskViewModels: initial.taskViewModels,
+  });
+
+  expect(next.boardState.filteredTasks).toHaveLength(1);
+  expect(next.boardState.filteredTasks[0]).toBe(optimisticTask);
+  expect(next.taskViewModels.get("t1")).not.toBe(previousTaskVm);
+  expect(next.taskViewModels.get("t1")?.task).toBe(optimisticTask);
+});
+
+test("buildTaskBoardViewModel reuses unchanged card view models across unrelated live events", () => {
+  const dependency = createMockTask("dep-1", { status: "completed", title: "Prepare API" });
+  const task = createMockTask("task-1", {
+    status: "in_progress",
+    dependsOnTaskIds: ["dep-1"],
+  });
+  const initial = buildTaskBoardViewModel({
+    tasks: [dependency, task],
+    optimisticTasks: [],
+    statusFilter: "all",
+    priorityFilter: "all",
+    listWindow: 50,
+    taskScopeSprintId: "sprint-1",
+    taskDispatches: [],
+    recentEvents: [],
+    subtasks: [],
+  });
+
+  const next = buildTaskBoardViewModel({
+    tasks: [dependency, task],
+    optimisticTasks: [],
+    statusFilter: "all",
+    priorityFilter: "all",
+    listWindow: 50,
+    taskScopeSprintId: "sprint-1",
+    taskDispatches: [],
+    recentEvents: [createRuntimeEvent()],
+    subtasks: [],
+    previousTaskViewModels: initial.taskViewModels,
+  });
+
+  expect(next.taskViewModels.get("task-1")).toBe(initial.taskViewModels.get("task-1"));
+  expect(next.taskViewModels.get("dep-1")).toBe(initial.taskViewModels.get("dep-1"));
 });
 
 test("buildTaskBoardViewModel handles empty states", () => {
