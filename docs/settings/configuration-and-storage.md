@@ -473,7 +473,7 @@ Repository demo script:
   - workspace and runtime volumes are created with deterministic Code UX names and labels; fresh provider containers should not create anonymous Docker volumes
   - write-back happens via Git patch artifacts applied on the host, not direct file sync from the container
   - patch export preserves raw `git diff --binary` output byte-for-byte so whitespace-only EOF hunks and `\ No newline at end of file` markers still apply cleanly on the host branch
-  - patch export still excludes legacy `/workspace/.code-ux-home` paths as a defense-in-depth guard for older preserved volumes, but fresh Docker workspaces should not contain provider home/cache state
+  - patch export still excludes legacy `/workspace/.code-ux-home` paths and root `/workspace/.pnpm-store` package-cache paths as a defense-in-depth guard for older preserved volumes, and untracked export staging asks Git to discover paths internally so large file sets do not exceed Docker command-line limits; fresh Docker workspaces should not contain provider home/cache state
   - the remaining persistent Docker-side cache is the optional setup-image cache, not per-session provider home directories under `~/.code-ux/runtime/docker`
 - If setup script is missing or does not provide the requested provider CLI, the runner attempts a provider-specific fallback install (`gemini`, `codex`, or `claude`) before failing.
   - CLI model settings continue to flow into Docker-backed providers:

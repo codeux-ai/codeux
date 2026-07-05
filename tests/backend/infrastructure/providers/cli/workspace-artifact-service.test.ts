@@ -72,7 +72,7 @@ describe("WorkspaceArtifactService", () => {
     const service = new WorkspaceArtifactService(workspaceManager);
     const patchText = await service.exportBinaryPatch("workspace", baseRef);
 
-    expect(seenOptions).toEqual([{ trimOutput: false }, { trimOutput: false }]);
+    expect(seenOptions.some((options) => options.trimOutput === false && options.env?.GIT_INDEX_FILE)).toBe(true);
     expect(patchText).toContain("+   \n");
 
     const result = await service.applyPatchToBranch({
@@ -269,6 +269,12 @@ describe("WorkspaceArtifactService", () => {
     );
     await fs.writeFile(path.join(workspaceRepoPath, "new-component.tsx"), "export const value = 1;\n", "utf8");
     await fs.writeFile(path.join(workspaceRepoPath, ".task-learnings.md"), "## Category: learning\n- Do not commit this file.\n", "utf8");
+    await fs.mkdir(path.join(workspaceRepoPath, ".pnpm-store", "v10", "files", "00"), { recursive: true });
+    await fs.writeFile(
+      path.join(workspaceRepoPath, ".pnpm-store", "v10", "files", "00", "cache-object"),
+      "cached dependency artifact\n",
+      "utf8",
+    );
     await fs.mkdir(path.join(workspaceRepoPath, "logs", "openai"), { recursive: true });
     await fs.writeFile(path.join(workspaceRepoPath, "logs", "openai", "openai-123.json"), "{}", "utf8");
     await fs.writeFile(path.join(workspaceRepoPath, "logs", "openai", "request.log"), "log", "utf8");
@@ -291,6 +297,7 @@ describe("WorkspaceArtifactService", () => {
     expect(patchText).toContain("diff --git a/new-component.tsx b/new-component.tsx");
     expect(patchText).not.toContain(".task-learnings.md");
     expect(patchText).not.toContain(".code-ux-home");
+    expect(patchText).not.toContain(".pnpm-store");
     expect(patchText).not.toContain("logs/openai");
 
     const result = await service.applyPatchToBranch({
@@ -310,10 +317,54 @@ describe("WorkspaceArtifactService", () => {
       .rejects.toThrow();
     await expect(runGit(hostRepoPath, ["show", "refs/heads/worker/test:.code-ux-home/.cache/node-gyp/header.h"]))
       .rejects.toThrow();
+    await expect(runGit(hostRepoPath, ["show", "refs/heads/worker/test:.pnpm-store/v10/files/00/cache-object"]))
+      .rejects.toThrow();
     await expect(runGit(hostRepoPath, ["show", "refs/heads/worker/test:logs/openai/openai-123.json"]))
       .rejects.toThrow();
     await expect(runGit(hostRepoPath, ["show", "refs/heads/worker/test:logs/openai/request.log"]))
       .rejects.toThrow();
+  });
+
+  it("lets git discover untracked export paths instead of passing them through argv", async () => {
+    const untrackedPaths = Array.from({ length: 1_201 }, (_, index) => `src/generated/file-${index}.ts`);
+    const gitCalls: string[][] = [];
+
+    const workspaceManager = {
+      runWorkspaceCommand: async (
+        _worktreePath: string,
+        command: string,
+        args: string[],
+      ) => {
+        if (command === "git") {
+          gitCalls.push(args);
+        }
+        if (command === "git" && args[0] === "diff") {
+          return {
+            ok: true,
+            code: 0,
+            stdout: "diff --git a/src/generated/file-0.ts b/src/generated/file-0.ts\n",
+            stderr: "",
+          };
+        }
+        return {
+          ok: true,
+          code: 0,
+          stdout: "",
+          stderr: "",
+        };
+      },
+    } as IWorkspaceManager;
+
+    const service = new WorkspaceArtifactService(workspaceManager);
+    const patchText = await service.exportBinaryPatch("workspace", "HEAD");
+
+    expect(patchText).toContain("diff --git");
+    expect(gitCalls.some((args) => args[0] === "ls-files")).toBe(false);
+    const addCall = gitCalls.find((args) => args[0] === "add");
+    expect(addCall).toEqual(expect.arrayContaining(["add", "--intent-to-add", "--", "."]));
+    for (const untrackedPath of untrackedPaths) {
+      expect(addCall).not.toContain(untrackedPath);
+    }
   });
 
   it("excludes stale Code UX export index files from preserved workspaces", async () => {
@@ -391,8 +442,8 @@ describe("WorkspaceArtifactService", () => {
 
     // Simulate opencode's snapshot store: a bare git repo (HEAD/objects/refs laid
     // out directly, no nested `.git`) full of loose objects living under the
-    // provider sprint HOME. Without scoping the scan, `git ls-files --others`
-    // walks every one of these and the volume of output corrupts the export.
+    // provider sprint HOME. Without shared excludes, Git would mark every one of
+    // these objects as intent-to-add and they would enter the exported patch.
     const snapshotRepo = path.join(
       workspaceRepoPath,
       ".code-ux-home", ".local", "share", "opencode", "snapshot", "a".repeat(40), "b".repeat(40),
@@ -409,7 +460,7 @@ describe("WorkspaceArtifactService", () => {
 
     await fs.writeFile(path.join(workspaceRepoPath, "new-component.tsx"), "export const value = 1;\n", "utf8");
 
-    const lsFilesArgs: string[][] = [];
+    const addArgs: string[][] = [];
     const workspaceManager = {
       runWorkspaceCommand: async (
         _worktreePath: string,
@@ -417,8 +468,8 @@ describe("WorkspaceArtifactService", () => {
         args: string[],
         options: WorkspaceCommandOptions = {},
       ) => {
-        if (command === "git" && args[0] === "ls-files") {
-          lsFilesArgs.push(args);
+        if (command === "git" && args[0] === "add") {
+          addArgs.push(args);
         }
         return await runCommandStrict(command, args, workspaceRepoPath, options.env ?? process.env, {
           trimOutput: options.trimOutput,
@@ -430,11 +481,9 @@ describe("WorkspaceArtifactService", () => {
     const service = new WorkspaceArtifactService(workspaceManager);
     const patchText = await service.exportBinaryPatch("workspace", baseRef);
 
-    // The scan must constrain itself with the same excludes the diff uses, so the
-    // snapshot store is never enumerated in the first place.
-    expect(lsFilesArgs).toHaveLength(1);
-    expect(lsFilesArgs[0]).toContain(":(exclude).code-ux-home");
-    expect(lsFilesArgs[0]).toContain(":(exclude).code-ux-home/**");
+    expect(addArgs).toHaveLength(1);
+    expect(addArgs[0]).toContain(":(exclude).code-ux-home");
+    expect(addArgs[0]).toContain(":(exclude).code-ux-home/**");
 
     expect(patchText).toContain("diff --git a/new-component.tsx b/new-component.tsx");
     expect(patchText).not.toContain(".code-ux-home");

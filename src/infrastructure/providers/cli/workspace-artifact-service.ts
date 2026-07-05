@@ -9,26 +9,7 @@ import {
 } from "../../../services/git-http-auth.js";
 import type { IWorkspaceManager } from "./workspace-manager.js";
 
-const PROTECTED_EXPORT_PATH_PREFIXES = [
-  ".code-ux-home",
-];
-
-const TEMP_EXPORT_INDEX_PATH_RE = /^\.code-ux-export-[^/]+\.index$/;
-
-function isProtectedExportPath(candidate: string): boolean {
-  return TEMP_EXPORT_INDEX_PATH_RE.test(candidate) || PROTECTED_EXPORT_PATH_PREFIXES.some((protectedPath) => (
-    candidate === protectedPath || candidate.startsWith(`${protectedPath}/`)
-  ));
-}
-
-// Safety net: qwen-code's OpenAI logger writes `logs/openai/openai-<ts>-<id>.json`
-// files. We redirect them out of the worktree via settings, but guard against
-// qwen versions that ignore that setting so the logs are never committed.
-const QWEN_OPENAI_LOG_PATH_RE = /(^|\/)logs\/openai\//;
-
-function isQwenOpenAiLogPath(candidate: string): boolean {
-  return QWEN_OPENAI_LOG_PATH_RE.test(candidate);
-}
+const TEMP_EXPORT_PATHSPEC = ":(exclude).code-ux-export-*";
 
 export interface AppliedWorkspacePatchResult {
   hasChanges: boolean;
@@ -71,49 +52,21 @@ export class WorkspaceArtifactService {
   constructor(private readonly workspaceManager: IWorkspaceManager) {}
 
   async exportBinaryPatch(workspaceRef: string, baseRef: string): Promise<string> {
-    // Pathspecs shared by the diff and the untracked-file scan. Keeping them in
-    // sync matters. Current Docker runs keep provider HOME in a sibling runtime
-    // volume, but older preserved workspaces may still contain `.code-ux-home`
-    // with churning provider state. Excluding it at the source keeps legacy
-    // listings small and prevents runtime cache/state from entering patches.
+    // Pathspecs shared by intent-to-add staging and the final diff. Keeping them
+    // in sync matters: the temporary index asks Git to discover untracked files
+    // internally, so Code UX never has to pass a large untracked path list
+    // through Docker argv.
     const excludePathspecs = [
       `:(exclude)${LEARNINGS_FILENAME}`,
+      TEMP_EXPORT_PATHSPEC,
       ":(exclude).code-ux-home",
       ":(exclude).code-ux-home/**",
+      ":(exclude).pnpm-store",
+      ":(exclude).pnpm-store/**",
       ":(exclude,glob)**/logs/openai/**",
       ":(exclude,glob)logs/openai/**",
     ];
     const diffArgs = ["diff", "--binary", baseRef, "--", ".", ...excludePathspecs];
-    const untrackedResult = await this.workspaceManager.runWorkspaceCommand(
-      workspaceRef,
-      "git",
-      ["ls-files", "--others", "--exclude-standard", "-z", "--", ".", ...excludePathspecs],
-      { trimOutput: false },
-    );
-    const untrackedPaths = untrackedResult.stdout
-      .split("\0")
-      .filter((candidate) => (
-        candidate.length > 0
-        // Defense in depth: a clipped stdout stream is prefixed with "..." and
-        // begins mid-path. Such a fragment is never a real ls-files entry, so
-        // drop it rather than feed a bogus pathspec to `git add`.
-        && !candidate.startsWith("...")
-        && candidate !== LEARNINGS_FILENAME
-        && !isProtectedExportPath(candidate)
-        && !isQwenOpenAiLogPath(candidate)
-      ));
-
-    // Git patch payloads are whitespace-sensitive. Preserve raw command output so
-    // EOF-only whitespace lines and no-newline markers survive host-side apply.
-    if (untrackedPaths.length === 0) {
-      const result = await this.workspaceManager.runWorkspaceCommand(
-        workspaceRef,
-        "git",
-        diffArgs,
-        { trimOutput: false },
-      );
-      return result.stdout;
-    }
 
     const tempIndexPath = `.code-ux-export-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.index`;
     const tempIndexEnv = {
@@ -131,7 +84,7 @@ export class WorkspaceArtifactService {
       await this.workspaceManager.runWorkspaceCommand(
         workspaceRef,
         "git",
-        ["add", "--intent-to-add", "--", ...untrackedPaths],
+        ["add", "--intent-to-add", "--", ".", ...excludePathspecs],
         { env: tempIndexEnv },
       );
       const result = await this.workspaceManager.runWorkspaceCommand(
