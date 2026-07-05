@@ -831,15 +831,15 @@ export class WorkspaceManager implements IWorkspaceManager {
   ): Promise<void> {
     const seedRefs = await this.resolveExistingSeedRefs(repoPath, branches, refLookup);
     if (seedRefs.length === 0) {
-      await this.seedWorkspaceFromBundle(repoPath, worktreePath);
+      await this.seedWorkspaceFromBundle(repoPath, worktreePath, undefined, branches);
       await checkout();
       return;
     }
-    await this.seedWorkspaceFromBundle(repoPath, worktreePath, seedRefs);
+    await this.seedWorkspaceFromBundle(repoPath, worktreePath, seedRefs, branches);
     try {
       await checkout();
     } catch {
-      await this.seedWorkspaceFromBundle(repoPath, worktreePath);
+      await this.seedWorkspaceFromBundle(repoPath, worktreePath, undefined, branches);
       await checkout();
     }
   }
@@ -852,7 +852,12 @@ export class WorkspaceManager implements IWorkspaceManager {
    * `+refs/*:refs/*` fetch preserves the full ref path, so both `refs/heads/x` and
    * `refs/remotes/origin/x` resolve afterwards exactly as with the full seed.
    */
-  private async seedWorkspaceFromBundle(repoPath: string, worktreePath: string, seedRefs?: string[]): Promise<void> {
+  private async seedWorkspaceFromBundle(
+    repoPath: string,
+    worktreePath: string,
+    seedRefs?: string[],
+    localBranchAliases?: Array<string | null | undefined>,
+  ): Promise<void> {
     const { volumeName } = parseWorkspaceHandle(worktreePath);
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-bundle-"));
     const bundlePath = path.join(tempDir, "repo.bundle");
@@ -876,6 +881,7 @@ export class WorkspaceManager implements IWorkspaceManager {
         originUrl
           ? `git -C /workspace remote set-url origin ${shellQuote(originUrl)}`
           : "git -C /workspace remote remove origin >/dev/null 2>&1 || true",
+        ...this.buildLocalBranchAliasCommands(localBranchAliases),
         "git -C /workspace config user.name \"${CODE_UX_GIT_USER_NAME:-Code UX}\"",
         "git -C /workspace config user.email \"${CODE_UX_GIT_USER_EMAIL:-agents@codeux.ai}\"",
         ownerSpec ? `chown -R ${shellQuote(ownerSpec)} /workspace` : null,
@@ -902,6 +908,22 @@ export class WorkspaceManager implements IWorkspaceManager {
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
     }
+  }
+
+  private buildLocalBranchAliasCommands(branches?: Array<string | null | undefined>): string[] {
+    if (!branches || branches.length === 0) {
+      return [];
+    }
+    const uniqueBranches = Array.from(new Set(branches.map((branch) => branch?.trim()).filter(Boolean) as string[]));
+    return uniqueBranches.map((branch) => {
+      const localRef = `refs/heads/${branch}`;
+      const remoteRef = `refs/remotes/origin/${branch}`;
+      return [
+        `if ! git -C /workspace show-ref --verify --quiet ${shellQuote(localRef)}`,
+        `&& git -C /workspace show-ref --verify --quiet ${shellQuote(remoteRef)}`,
+        `; then git -C /workspace update-ref ${shellQuote(localRef)} ${shellQuote(remoteRef)}; fi`,
+      ].join(" ");
+    });
   }
 
   private async ensurePublicHelperImage(image: string, cwd: string, env: NodeJS.ProcessEnv): Promise<void> {
