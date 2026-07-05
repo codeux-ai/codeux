@@ -891,6 +891,7 @@ export interface SprintPreviewSettings {
   hostPortRangeStart: number;
   hostPortRangeEnd: number;
   containerAppPort: number;
+  containerAppPorts: number[];
   startupScriptPath: string;
 }
 
@@ -1258,6 +1259,13 @@ export type SprintPreviewSessionStatus = "stopped" | "starting" | "running" | "e
 export type SprintPreviewHealthStatus = "unknown" | "healthy" | "unreachable";
 export type SprintPreviewStartupMode = "auto" | "script";
 
+export interface SprintPreviewPortMapping {
+  containerPort: number;
+  hostPort: number | null;
+  label?: string;
+  isPrimary?: boolean;
+}
+
 export interface SprintPreviewSession {
   id: string;
   projectId: string;
@@ -1268,6 +1276,7 @@ export interface SprintPreviewSession {
   status: SprintPreviewSessionStatus;
   hostPort: number | null;
   containerAppPort: number;
+  portMappings: SprintPreviewPortMapping[];
   containerId: string | null;
   containerName: string | null;
   worktreePath: string | null;

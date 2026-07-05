@@ -562,6 +562,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     hostPortRangeStart: 5555,
     hostPortRangeEnd: 6666,
     containerAppPort: 3000,
+    containerAppPorts: [3000],
     startupScriptPath: ".code-ux/browser/start-preview.sh",
   },
   workers: {

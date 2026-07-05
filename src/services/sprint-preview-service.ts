@@ -146,12 +146,19 @@ export class SprintPreviewService {
       await this.enforceMaxConcurrentContainers(projectId, settings.maxConcurrentContainers, existing?.id || null);
 
       const hostPort = existing?.hostPort || await this.findFreePort(settings);
+      const portMappings = [{
+        containerPort: settings.containerAppPort,
+        hostPort,
+        isPrimary: true,
+      }];
 
       const session = existing || this.deps.sprintPreviewRepository.createSession({
         projectId,
         sprintId,
         status: "starting",
         containerAppPort: settings.containerAppPort,
+        hostPort,
+        portMappings,
         startupScriptPath: preparedScript.scriptPath,
         startupMode: preparedScript.mode,
         installCommand: effectiveInstallCommand,
@@ -166,6 +173,7 @@ export class SprintPreviewService {
         status: "starting" as const,
         hostPort,
         containerAppPort: settings.containerAppPort,
+        portMappings,
         startupScriptPath: preparedScript.scriptPath,
         startupMode: preparedScript.mode,
         installCommand: effectiveInstallCommand,
@@ -325,6 +333,11 @@ export class SprintPreviewService {
           ...sessionBasePatch,
           status: "error",
           hostPort: null,
+          portMappings: [{
+            containerPort: settings.containerAppPort,
+            hostPort: null,
+            isPrimary: true,
+          }],
           containerId: null,
           containerName: null,
           healthStatus: "unreachable",

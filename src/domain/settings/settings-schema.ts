@@ -62,6 +62,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 };
 
+const isValidPort = (value: unknown): value is number => (
+  typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 65535
+);
+
 const validateProviderSettings = (
   value: unknown,
   path: string,
@@ -479,7 +483,16 @@ const validateSprintPreview = (
   if (typeof value.maxConcurrentContainers !== "number") issues.push({ path: `${path}.maxConcurrentContainers`, message: "Expected a number" });
   if (typeof value.hostPortRangeStart !== "number") issues.push({ path: `${path}.hostPortRangeStart`, message: "Expected a number" });
   if (typeof value.hostPortRangeEnd !== "number") issues.push({ path: `${path}.hostPortRangeEnd`, message: "Expected a number" });
-  if (typeof value.containerAppPort !== "number") issues.push({ path: `${path}.containerAppPort`, message: "Expected a number" });
+  if (!isValidPort(value.containerAppPort)) issues.push({ path: `${path}.containerAppPort`, message: "Expected a port number between 1 and 65535" });
+  if (!Array.isArray(value.containerAppPorts)) {
+    issues.push({ path: `${path}.containerAppPorts`, message: "Expected an array" });
+  } else {
+    value.containerAppPorts.forEach((port, index) => {
+      if (!isValidPort(port)) {
+        issues.push({ path: `${path}.containerAppPorts.${index}`, message: "Expected a port number between 1 and 65535" });
+      }
+    });
+  }
   if (typeof value.startupScriptPath !== "string") {
     issues.push({ path: `${path}.startupScriptPath`, message: "Expected a string" });
   } else {
