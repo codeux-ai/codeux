@@ -420,6 +420,7 @@ Legacy runtime:
 - The Stats page uses the same project realtime invalidation channels as the rest of the v2 dashboard, then falls back to polling so usage graphs and tables stay current during active sprint execution
 - Overview widgets and headline stat cards now read project/task data from the same project-management API surface, and task streams are filtered to the currently selected active sprint only (a frontend-only view change with no API contract change)
 - Agents page features an immersive, showcase-first layout that defaults to presenting the selected agent's 3D animated avatar, details, and route-assignment tags, rather than a raw edit form.
+- Agents page route-assignment tags include every configured QA reviewer in each trigger roster: task completion reviewers show `QA Task`, sprint completion reviewers show `QA Sprint`, and completed-task-without-PR reviewers show `QA No PR`; legacy single-agent QA settings still render the same badges.
 - Agents are generated with a random persisted avatar on creation and can be fully customized in the dedicated edit mode. Server-side sync also resolves missing avatar metadata for base roles and Project Setup Agent generated specialists, then persists the result into sqlite and mirrored markdown.
 - Agent detail cards show selected-agent usage totals from execution invocations, including total cost, tokens, run count, and completion rate alongside provider/model, MCP, and instruction metadata.
 - Edit mode exposes a new toggleable Memory Template Override control, allowing operators to explicitly provide custom memory injection instructions on a per-agent basis.
@@ -431,7 +432,7 @@ Legacy runtime:
 - Project-local markdown mirroring is enabled by default through project settings, so dashboard edits create/update `.code-ux/agents/*.md` in the selected repo without touching shipped defaults
 - Markdown-backed agents now show sync state and support both manual single-agent re-import and bulk `Sync All`
 - The first built-in role is `Planning agent`, which is editable under Agents like any other DB-backed agent
-- `Settings > Sprint & Git` now includes the QA controls immediately below `Merge Gates & Autofix`, with per-trigger agent selection across all project agents, QA-labeled presets floated to the top, the same project-scope behavior preserved for local QA edits, and the persisted settings path still anchored at `agents.qualityAssurance`
+- `Settings > Sprint & Git` now includes the QA controls immediately below `Merge Gates & Autofix`, with per-trigger multi-select agent assignment across all project agents, QA-labeled presets floated to the top, the same project-scope behavior preserved for local QA edits, and the persisted settings path still anchored at `agents.qualityAssurance`. Leaving a trigger with no custom agents selected clearly uses the built-in QA fallback without saving placeholder preset ids.
 - Chat page is DB-backed and stores project conversation threads/messages in sqlite
 - Chat page now provides a `Threads / Invocations` toggle to switch between human conversation threads and read-only execution invocations.
 - Chat page UI is redesigned with animated identities, structured widgets for rich messages, and automatic worker pickup derived from active project routing.

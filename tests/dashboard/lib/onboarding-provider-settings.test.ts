@@ -73,7 +73,15 @@ describe("onboarding-provider-settings", () => {
             clarificationReply: { strategy: "DEFAULT" },
           },
           instructionTemplates: {},
-          qualityAssurance: { enabled: false, maxTaskReviewRuns: 2, maxSprintReviewRuns: 3, exhaustionPolicy: "STOP", taskCompletion: { strategy: "ALWAYS" }, sprintCompletion: { strategy: "ALWAYS" }, completedTaskWithoutPr: { strategy: "CREATE_PR" } }
+          qualityAssurance: {
+            enabled: false,
+            maxTaskReviewRuns: 2,
+            maxSprintReviewRuns: 3,
+            exhaustionPolicy: "STOP",
+            taskCompletion: { strategy: "ALWAYS", agentPresetIds: [], agentPresetId: null },
+            sprintCompletion: { strategy: "ALWAYS", agentPresetIds: [], agentPresetId: null },
+            completedTaskWithoutPr: { strategy: "CREATE_PR", agentPresetIds: [], agentPresetId: null },
+          }
         },
         guardrails: { onLimitAction: "WARN", defaultLimitOverrides: [], limitOverrides: [], jobConfigOverrides: [], jobs: { task_coding: {}, ci_fix: {}, merge_conflict: {}, clarification_reply: {}, planning: {}, remediation: {} } },
         skills: [],

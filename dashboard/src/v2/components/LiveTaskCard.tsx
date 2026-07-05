@@ -3,8 +3,8 @@ import { memo, createPortal } from "preact/compat";
 import { useEffect, useLayoutEffect, useRef, useState, useMemo, useCallback } from "preact/hooks";
 import gsap from "gsap";
 import {
-    Clock, ChevronDown, ChevronRight, Eye, EyeOff,
-    FileText, RotateCcw, GitPullRequest, ExternalLink, Timer, CheckCheck, PencilLine, Cpu, MessageSquareText,
+    ChevronRight, Eye, EyeOff,
+    FileText, RotateCcw, GitPullRequest, ExternalLink, CheckCheck, PencilLine, Cpu,
 } from "lucide-preact";
 
 
@@ -12,7 +12,6 @@ import { MARKDOWN_PROSE_CLASS } from "./ui/MarkdownEditorField.js";
 import { TaskStagePills } from "./SprintStatsDeck.js";
 import { RuntimeEventFeed } from "./RuntimeEventFeed.js";
 import { renderMarkdown } from "../../lib/markdown.js";
-import { formatTime } from "../../lib/time.js";
 import type { Subtask, ExecutionRuntimeEventSummary, ExecutionInvocationRecord } from "../../types.js";
 import {
     MERGE_INDICATOR_CFG,
@@ -20,99 +19,14 @@ import {
 } from "../lib/live-session-config.js";
 import { getTaskProgressPhase, type TaskProgressPhase } from "../../lib/task-progress.js";
 import type { LiveTaskTimingSummary } from "../lib/live-stats.js";
-import {
-    deriveLiveDurationDisplay,
-    type LiveDurationDispatchTiming,
-} from "../lib/live-duration-display.js";
 import { RerunTaskModal } from "./ui/RerunTaskModal.js";
 import { Button } from "./ui/Button.js";
 import { useReducedMotion } from "../hooks/use-reduced-motion.js";
 import { AgentSelectAvatarIcon } from "./agents/AgentSelectAvatarIcon.js";
 import { SprintReviewBadge } from "./sprints/SprintReviewBadge.js";
 import { getSafeUrl } from "../lib/safe-url.js";
-import { formatInvocationDuration, formatInvocationPurpose } from "./chat/invocation-display.js";
-import { formatDuration } from "../lib/format-duration.js";
-
-/* ─── Helpers ────────────────────────────────────────────────────────────── */
-
-function extractRetryAfterIso(errorMessage: string): string | null {
-    const match = errorMessage.match(/\[RETRY_AFTER:(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\]/);
-    return match?.[1] ?? null;
-}
-
-export const QuotaCountdown: FunctionComponent<{ errorMessage: string }> = memo(({ errorMessage }) => {
-    const retryIso = extractRetryAfterIso(errorMessage);
-    const [remaining, setRemaining] = useState(() =>
-        retryIso ? Math.max(0, Math.floor((new Date(retryIso).getTime() - Date.now()) / 1000)) : null
-    );
-
-    useEffect(() => {
-        if (!retryIso) { setRemaining(null); return; }
-        const update = () => Math.max(0, Math.floor((new Date(retryIso).getTime() - Date.now()) / 1000));
-        setRemaining(update());
-        const timer = window.setInterval(() => {
-            const left = update();
-            setRemaining(left);
-            if (left <= 0) window.clearInterval(timer);
-        }, 1000);
-        return () => window.clearInterval(timer);
-    }, [retryIso]);
-
-    if (remaining == null) {
-        return <div className="text-status-red">{errorMessage}</div>;
-    }
-
-    return (
-        <div className="flex items-center gap-2 text-status-amber" role="status" aria-live="polite">
-            <Clock className="w-3 h-3 flex-shrink-0" strokeWidth={2} />
-            <span>
-                {remaining <= 0
-                    ? "Quota should be available now — retry the task."
-                    : `Quota exhausted — resets in ${formatDuration(remaining)}`}
-            </span>
-        </div>
-    );
-});
-
-export const TaskDuration: FunctionComponent<{
-    taskTiming?: LiveTaskTimingSummary | null;
-    dispatchTiming?: LiveDurationDispatchTiming | null;
-}> = memo(({ taskTiming, dispatchTiming }) => {
-    const [now, setNow] = useState(() => Date.now());
-    const display = useMemo(() => deriveLiveDurationDisplay({
-        taskTiming,
-        dispatchTiming,
-        now,
-    }), [taskTiming, dispatchTiming, now]);
-
-    useEffect(() => {
-        setNow(Date.now());
-    }, [
-        dispatchTiming?.finishedAt,
-        dispatchTiming?.startedAt,
-        dispatchTiming?.status,
-        taskTiming?.activeStage,
-        taskTiming?.startedAt,
-        taskTiming?.totalSeconds,
-    ]);
-
-    useEffect(() => {
-        if (display.mode !== "live") {
-            return;
-        }
-        const timer = window.setInterval(() => setNow(Date.now()), 1000);
-        return () => window.clearInterval(timer);
-    }, [display.mode]);
-
-    if (!display.visible) return null;
-
-    return (
-        <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-400">
-            <Timer className="w-3 h-3" strokeWidth={2} />
-            <span>{formatDuration(display.elapsedSeconds)}</span>
-        </div>
-    );
-});
+import { LiveTaskInvocationRow } from "./live-session/LiveTaskInvocationRow.js";
+import { QuotaCountdown, TaskDuration } from "./live-session/LiveTaskTiming.js";
 
 /* ─── LiveTaskCard ───────────────────────────────────────────────────────── */
 
@@ -148,99 +62,6 @@ export interface LiveTaskCardProps {
     } | null;
     agentPreset?: { name: string; avatarConfig?: import("../types.js").AgentAvatarConfig } | null;
 }
-
-const INVOCATION_STATUS_DOT: Record<string, string> = {
-    running: "bg-signal-500 shadow-[0_0_8px_rgba(0,224,160,0.55)]",
-    completed: "bg-status-green",
-    failed: "bg-status-red shadow-[0_0_8px_rgba(227,0,15,0.35)]",
-    cancelled: "bg-slate-400",
-    paused: "bg-status-amber shadow-[0_0_8px_rgba(245,158,11,0.35)]",
-};
-
-const INVOCATION_STATUS_TEXT: Record<string, string> = {
-    running: "text-signal-500",
-    completed: "text-status-green",
-    failed: "text-status-red",
-    cancelled: "text-slate-400",
-    paused: "text-status-amber",
-};
-
-const buildInvocationHref = (invocationId: string): string => (
-    `/chat?mode=invocations&invocation=${encodeURIComponent(invocationId)}`
-);
-
-const shortenInvocationId = (value: string): string => value.slice(0, 8);
-
-const TaskInvocationRow: FunctionComponent<{ invocation: ExecutionInvocationRecord }> = memo(({ invocation }) => {
-    const purposeLabel = formatInvocationPurpose(invocation.type);
-    const activityAt = invocation.lastMessageAt || invocation.updatedAt || invocation.startedAt || invocation.createdAt;
-    const duration = formatInvocationDuration(invocation.startedAt || invocation.createdAt, invocation.finishedAt);
-    const tokenTotal = invocation.totalTokens ?? ((invocation.inputTokens ?? 0) + (invocation.outputTokens ?? 0));
-    const statusDot = INVOCATION_STATUS_DOT[invocation.status] || "bg-slate-400";
-    const statusText = INVOCATION_STATUS_TEXT[invocation.status] || "text-slate-500";
-
-    return (
-        <div className="rounded-xl border border-black/[0.04] bg-white/60 p-3 dark:border-white/[0.05] dark:bg-void-900/25">
-            <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                    <div className="flex min-w-0 items-center gap-2">
-                        <span className={`h-2 w-2 shrink-0 rounded-full ${statusDot} ${invocation.status === "running" ? "motion-safe:animate-pulse motion-reduce:ring-2 motion-reduce:ring-signal-500/25" : ""}`} />
-                        <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
-                            {purposeLabel}
-                        </span>
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
-                        <span>{invocation.provider || "provider pending"}</span>
-                        <span>·</span>
-                        <span>{invocation.model || "model pending"}</span>
-                        <span>·</span>
-                        <span>{shortenInvocationId(invocation.id)}</span>
-                    </div>
-                </div>
-                <div className="shrink-0 text-right">
-                    <div className={`text-[10px] font-bold uppercase tracking-[0.14em] ${statusText}`}>
-                        {invocation.status}
-                    </div>
-                    <div className="mt-1 text-[10px] font-mono text-slate-400">
-                        {formatTime(activityAt)}
-                    </div>
-                </div>
-            </div>
-
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1 rounded-md border border-black/[0.05] px-2 py-0.5 text-[10px] font-mono text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
-                    <MessageSquareText className="h-3 w-3" strokeWidth={2} />
-                    {invocation.messageCount}
-                </span>
-                {duration && (
-                    <span className="inline-flex items-center gap-1 rounded-md border border-black/[0.05] px-2 py-0.5 text-[10px] font-mono text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
-                        <Timer className="h-3 w-3" strokeWidth={2} />
-                        {duration}
-                    </span>
-                )}
-                {tokenTotal > 0 && (
-                    <span className="rounded-md border border-black/[0.05] px-2 py-0.5 text-[10px] font-mono text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
-                        {tokenTotal.toLocaleString()} tok
-                    </span>
-                )}
-                <a
-                    href={buildInvocationHref(invocation.id)}
-                    aria-label={`Open transcript for ${purposeLabel}`}
-                    className="inline-flex items-center gap-1 rounded-md border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:text-signal-400 dark:focus-visible:ring-offset-void-800"
-                >
-                    <ExternalLink className="h-3 w-3" strokeWidth={2} />
-                    Transcript
-                </a>
-            </div>
-
-            {invocation.lastErrorMessage && (
-                <p className="mt-2 line-clamp-2 text-[11px] leading-relaxed text-status-red">
-                    {invocation.lastErrorMessage}
-                </p>
-            )}
-        </div>
-    );
-});
 
 const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     task,
@@ -559,7 +380,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                             className="max-h-80 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar"
                         >
                             {invocations.map((invocation) => (
-                                <TaskInvocationRow key={invocation.id} invocation={invocation} />
+                                <LiveTaskInvocationRow key={invocation.id} invocation={invocation} />
                             ))}
                         </div>
                     </div>
@@ -715,4 +536,4 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     );
 });
 
-export { LiveTaskCard };
+export { LiveTaskCard, QuotaCountdown, TaskDuration };

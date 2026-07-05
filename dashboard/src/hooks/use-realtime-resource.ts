@@ -15,12 +15,22 @@ export class RealtimeResourceController<T> {
     private readonly isDeepEqual: (a: T, b: T) => boolean,
     refreshInternal: (opts?: { silent?: boolean }) => Promise<void>,
     stabilizeNext?: ((prev: T, next: T) => T) | undefined,
-    isEqual?: ((a: T, b: T) => boolean) | undefined
+    isEqual?: ((a: T, b: T) => boolean) | undefined,
+    private readonly markDirectUpdate?: () => void,
+    private readonly abortInFlight?: () => void
   ) {
     this.refreshInternal = refreshInternal;
     this.stabilizeNext = stabilizeNext;
     this.isEqual = isEqual;
   }
+
+  cancelSilentRefresh = () => {
+    if (typeof window === "undefined") return;
+    if (this.refreshTimeout !== null) {
+      window.clearTimeout(this.refreshTimeout);
+      this.refreshTimeout = null;
+    }
+  };
 
   flushDirectUpdate = () => {
     if (typeof window !== "undefined") {
@@ -51,6 +61,8 @@ export class RealtimeResourceController<T> {
   };
 
   scheduleDirectUpdate = (payload: T) => {
+    this.cancelSilentRefresh();
+    this.markDirectUpdate?.();
     this.pendingDirectPayload = { value: payload };
     if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
       this.flushDirectUpdate();
@@ -75,6 +87,7 @@ export class RealtimeResourceController<T> {
   };
 
   cleanup = () => {
+    this.abortInFlight?.();
     if (typeof window === "undefined") return;
     if (this.refreshTimeout !== null) {
       window.clearTimeout(this.refreshTimeout);
@@ -217,6 +230,7 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
   const abortControllerRef = useRef<AbortController | null>(null);
   const fetchIdRef = useRef<number>(0);
   const activeSilentFetchPromiseRef = useRef<Promise<void> | null>(null);
+  const controllerRef = useRef<RealtimeResourceController<T> | null>(null);
 
   const refreshInternal = useCallback((refreshOptions?: { silent?: boolean; signal?: AbortSignal }): Promise<void> => {
     // Determine if we show a foreground loading spinner.
@@ -233,6 +247,7 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
     }
     if (!shouldDedupeSilentFetch) {
       activeSilentFetchPromiseRef.current = null;
+      controllerRef.current?.cancelSilentRefresh();
     }
 
     if (abortControllerRef.current) {
@@ -268,7 +283,15 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
       isRecoveringRef.current = true;
     }
 
-    const fetchPromise = (async () => {
+    let fetchPromise: Promise<void> | null = null;
+    const onAbort = () => {
+      if (activeSilentFetchPromiseRef.current === fetchPromise) {
+        activeSilentFetchPromiseRef.current = null;
+      }
+    };
+    abortController.signal.addEventListener("abort", onAbort, { once: true });
+
+    fetchPromise = (async () => {
       try {
         // If the caller provided a signal, respect its abort state alongside our internal one
         // Since fetchResource takes only one signal, we'll pass our internal one,
@@ -301,17 +324,9 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
         if (abortListener && refreshOptions?.signal) {
           refreshOptions.signal.removeEventListener("abort", abortListener);
         }
+        abortController.signal.removeEventListener("abort", onAbort);
       }
     })();
-
-    // Ensure we do not cache a promise that gets aborted, preventing subsequent
-    // silent refresh deduplications from getting an already-aborted promise.
-    const onAbort = () => {
-      if (activeSilentFetchPromiseRef.current === fetchPromise) {
-        activeSilentFetchPromiseRef.current = null;
-      }
-    };
-    abortController.signal.addEventListener("abort", onAbort, { once: true });
 
     if (shouldDedupeSilentFetch) {
       activeSilentFetchPromiseRef.current = fetchPromise;
@@ -344,7 +359,6 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
     };
   }, [options.fetchResource, options.isAlreadyLoaded, options.refreshOnMount, refreshInternal]);
 
-  const controllerRef = useRef<RealtimeResourceController<T> | null>(null);
   if (!controllerRef.current) {
     controllerRef.current = new RealtimeResourceController<T>(
       setData,
@@ -353,7 +367,13 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
       isDeepEqual,
       refreshInternal,
       optionsRef.current.stabilizeNext,
-      optionsRef.current.isEqual
+      optionsRef.current.isEqual,
+      () => {
+        fetchIdRef.current += 1;
+      },
+      () => {
+        abortControllerRef.current?.abort();
+      }
     );
   } else {
     // Update captured closures so callbacks aren't stale

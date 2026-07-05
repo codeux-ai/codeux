@@ -7,7 +7,7 @@ import { parseAgentMarkdown, formatAgentMarkdown } from "./agent-preset-markdown
 import type { SettingsRepository } from "../repositories/settings-repository.js";
 import { getHomeCodeUxPath, getRepoCodeUxPath } from "../shared/config/code-ux-paths.js";
 import type { Logger } from "../shared/logging/logger.js";
-import { ensureDefaultCodeUxAssetsInstalled } from "./code-ux-default-assets-service.js";
+import { ensureDefaultCodeUxAssetsInstalled, resolveBundledCodeUxDir } from "./code-ux-default-assets-service.js";
 import { CODE_UX_INTERNAL_DOCS_SOURCE_REF, type KnowledgeService } from "./knowledge-service.js";
 import { runCommandStrict } from "./cli-process-runner.js";
 import { readLocalGitOriginUrl } from "../infrastructure/git/local-git-origin.js";
@@ -238,9 +238,7 @@ export class AgentPresetSyncService {
     const existingPresets = this.deps.agentPresetRepository.listAgentPresets(projectId);
     const presetsById = new Map(existingPresets.map((preset) => [preset.id, preset]));
     const presetsByName = new Map(existingPresets.map((preset) => [this.normalizeName(preset.name), preset]));
-    const defaultAgentPresetsCopied = this.deps.agentPresetRepository.hasCopiedDefaultAgentPresets(projectId);
-    const sourceFiles = await this.readAgentSources(project.baseDir, { defaultAgentPresetsCopied });
-    let copiedDefaultAgentPresetThisSync = false;
+    const sourceFiles = await this.readAgentSources(project.baseDir);
 
     for (const source of sourceFiles) {
       const existing = existingPresets.find((preset) => preset.sourcePath === source.sourcePath)
@@ -278,9 +276,6 @@ export class AgentPresetSyncService {
         });
         presetsById.set(created.id, created);
         presetsByName.set(source.normalizedName, created);
-        if (this.isDefaultBaseAgentSource(source)) {
-          copiedDefaultAgentPresetThisSync = true;
-        }
         continue;
       }
 
@@ -342,10 +337,6 @@ export class AgentPresetSyncService {
           presetsByName.set(source.normalizedName, updated);
         }
       }
-    }
-
-    if (!defaultAgentPresetsCopied && copiedDefaultAgentPresetThisSync) {
-      this.deps.agentPresetRepository.markDefaultAgentPresetsCopied(projectId);
     }
 
     await this.seedProjectManagerInternalDocs(projectId);
@@ -655,17 +646,22 @@ export class AgentPresetSyncService {
     }
   }
 
-  private async readAgentSources(repoPath: string, options: { defaultAgentPresetsCopied: boolean }): Promise<AgentSourceFile[]> {
+  private async readAgentSources(repoPath: string): Promise<AgentSourceFile[]> {
     await ensureDefaultCodeUxAssetsInstalled({
       projectRoot: this.deps.projectRoot,
       logger: this.deps.logger,
-      skipDefaultAgentFiles: options.defaultAgentPresetsCopied,
     });
 
     const collected = new Map<string, AgentSourceFile>();
+    const bundledCodeUxDir = process.env.NODE_ENV === "test" && process.env.CODE_UX_ENABLE_DEFAULT_ASSET_INSTALL_IN_TESTS !== "1"
+      ? null
+      : await resolveBundledCodeUxDir({
+        projectRoot: this.deps.projectRoot,
+        requireQuicksprintTemplates: false,
+      });
     const roots: Array<{ directory: string; scope: AgentSourceScope }> = [
       { directory: getRepoCodeUxPath(repoPath, "agents"), scope: "project" },
-      { directory: getRepoCodeUxPath(this.deps.projectRoot, "agents"), scope: "default" },
+      ...(bundledCodeUxDir ? [{ directory: path.join(bundledCodeUxDir, "agents"), scope: "default" as const }] : []),
       { directory: getHomeCodeUxPath("agents"), scope: "home" },
     ];
 
@@ -677,9 +673,6 @@ export class AgentPresetSyncService {
         }
         const sourcePath = path.join(root.directory, entry.name);
         const source = await this.readAgentSourceFile(sourcePath, root.scope);
-        if (options.defaultAgentPresetsCopied && this.isDefaultBaseAgentSource(source)) {
-          continue;
-        }
         if (!collected.has(source.normalizedName)) {
           collected.set(source.normalizedName, source);
         }
@@ -687,11 +680,6 @@ export class AgentPresetSyncService {
     }
 
     return Array.from(collected.values());
-  }
-
-  private isDefaultBaseAgentSource(source: AgentSourceFile): boolean {
-    return (source.sourceScope === "default" || source.sourceScope === "home")
-      && Object.prototype.hasOwnProperty.call(BASE_AGENT_IDS, source.normalizedName);
   }
 
   private async readAgentSourceFile(sourcePath: string, sourceScope: AgentSourceScope): Promise<AgentSourceFile> {

@@ -15,6 +15,13 @@ type GuardrailModule = {
     sources: Array<{ path: string; text: string }>,
     options: { minimumLines: number; minimumTokens: number },
   ) => DuplicateBlock[];
+  findRealtimePayloadFingerprintViolations: (
+    sources: Array<{ path: string; text: string }>,
+  ) => Array<{ path: string; line: number; pattern: string; match: string; remediation: string }>;
+  findRealtimeSnapshotPersistenceViolations: (
+    repositorySource: { path: string; text: string },
+    serviceSource: { path: string; text: string },
+  ) => Array<{ path: string; line: number; pattern: string; match: string; remediation: string }>;
 };
 
 const guardrails = await import("../../../scripts/check-quality-guardrails.mjs") as GuardrailModule;
@@ -107,5 +114,98 @@ export function Second() {
     );
 
     expect(duplicates).toEqual([]);
+  });
+});
+
+describe("quality guardrail realtime snapshot scanners", () => {
+  it("reports direct full-payload JSON fingerprinting in realtime hot-path files", () => {
+    const violations = guardrails.findRealtimePayloadFingerprintViolations([
+      {
+        path: "src/services/dashboard-realtime-service.ts",
+        text: `
+async function publish(payload: unknown) {
+  const fingerprint = JSON.stringify(payload);
+  return Buffer.byteLength(fingerprint, "utf8");
+}
+`,
+      },
+    ]);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      path: "src/services/dashboard-realtime-service.ts",
+      line: 3,
+      pattern: "direct realtime payload JSON.stringify",
+      match: "JSON.stringify(payload)",
+    });
+    expect(violations[0].remediation).toContain("getDashboardRealtimePayloadFingerprint");
+  });
+
+  it("allows the shared realtime fingerprint helper in snapshot hot paths", () => {
+    const violations = guardrails.findRealtimePayloadFingerprintViolations([
+      {
+        path: "src/services/dashboard-realtime-service.ts",
+        text: `
+async function publish(eventType: string, payload: unknown) {
+  const fingerprint = getDashboardRealtimePayloadFingerprint(eventType, payload);
+  return Buffer.byteLength(fingerprint, "utf8");
+}
+`,
+      },
+    ]);
+
+    expect(violations).toEqual([]);
+  });
+
+  it("keeps replayable domain events allowed while blocking replayable heavy snapshots", () => {
+    const repositorySource = {
+      path: "src/repositories/dashboard-realtime-event-repository.ts",
+      text: `
+export function appendEvent(input) {
+  if (replayable) {
+    INSERT INTO dashboard_realtime_events
+  }
+}
+`,
+    };
+    const serviceSource = {
+      path: "src/services/dashboard-realtime-service.ts",
+      text: `
+class DashboardRealtimeService {
+  private buildPublishTask() {
+    return this.publishRawEvent({
+      eventType: options.eventType,
+      payload,
+      replayable: false,
+    });
+  }
+
+  publishMessage(payload: unknown) {
+    return this.publishRawEvent({
+      eventType: "conversation.message.created",
+      payload,
+      replayable: true,
+    });
+  }
+
+  publishSnapshot(payload: unknown) {
+    return this.publishRawEvent({
+      eventType: "project.execution.updated",
+      payload,
+      replayable: true,
+    });
+  }
+}
+`,
+    };
+
+    const violations = guardrails.findRealtimeSnapshotPersistenceViolations(repositorySource, serviceSource);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      path: "src/services/dashboard-realtime-service.ts",
+      pattern: "project.execution.updated direct publishRawEvent replayability",
+    });
+    expect(violations[0].match).not.toContain("conversation.message.created");
   });
 });

@@ -308,15 +308,18 @@ Dashboard behavior:
   - `exhaustionPolicy` (default `FINISH_TASK` for new or unset settings)
   - `taskCompletion`
     - `enabled`
+    - `agentPresetIds` (ordered list of review agent preset IDs; empty means the built-in/default QA agent fallback)
     - `agentPresetId`
   - `sprintCompletion`
     - `enabled`
+    - `agentPresetIds` (ordered list of review agent preset IDs; empty means the built-in/default QA agent fallback)
     - `agentPresetId`
   - `completedTaskWithoutPr`
     - `enabled`
+    - `agentPresetIds` (ordered list of review agent preset IDs; empty means the built-in/default QA agent fallback)
     - `agentPresetId`
 
-Quality assurance settings are project-scoped today and are edited from `Settings -> Sprint & Git`, immediately below `Merge Gates & Autofix`. When task-level QA is enabled, successful CLI task runs preserve their worktree long enough for a QA follow-up pass to resume the same session/worktree if fixes are required.
+Quality assurance settings are project-scoped today and are edited from `Settings -> Sprint & Git`, immediately below `Merge Gates & Autofix`. Each QA trigger can persist multiple review agent presets in `agentPresetIds`; Code UX still accepts the legacy single `agentPresetId` field and mirrors it to the first selected ID in sanitized and effective settings for compatibility. When task-level QA is enabled, successful CLI task runs preserve their worktree long enough for a QA follow-up pass to resume the same session/worktree if fixes are required.
 
 QA merge-gate notes:
 - task QA now runs on code-complete tasks before Code UX auto-merges their feature PRs
@@ -454,7 +457,7 @@ Container execution notes:
   - `"CREATE_PR"`: open or reuse the feature PR, then stop before auto-merge and mark the task settled with `PR_ONLY`
   - `"WHEN_GREEN"`: auto-merge when merge gates are clear, including green or confidently-not-applicable CI
   - `"ALWAYS"`: attempt auto-merge without waiting for CI, while still respecting merge conflicts and configured review-comment blockers
-- `mainBranchAutoMergeMode` (default `"CREATE_PR"`):
+- `mainBranchAutoMergeMode` (default `"ALWAYS"`):
   - `"OFF"`: Code UX does not automatically open or merge the final `feature -> default` PR
   - `"CREATE_PR"`: when sprint work is complete, Code UX opens or resolves the main PR but does not auto-merge it; the sprint run pauses until a human merges the PR and resumes the sprint
   - `"WHEN_GREEN"`: when sprint work is complete, Code UX opens or resolves the main PR if needed, auto-merges after the main merge gate is green, and keeps the sprint active until GitHub reports the PR as merged

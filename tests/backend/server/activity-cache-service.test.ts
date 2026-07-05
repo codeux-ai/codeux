@@ -189,6 +189,26 @@ describe('ActivityCacheService', () => {
       expect(result).toEqual({});
     });
 
+    it('should filter terminal sessions while fetching active non-terminal sessions', async () => {
+      const mockTask2 = { ...mockTask, id: 'task-2' };
+      mockDeps.getSubtasks.mockReturnValue([mockTask, mockTask2]);
+      mockDeps.resolveSessionNameFromTask.mockImplementation((task) => {
+        return task.id === 'task-1' ? 'session-terminal' : 'session-active';
+      });
+      (mockDeps.isSessionTerminal as any).mockImplementation((sessionName: string) => {
+        return sessionName === 'session-terminal';
+      });
+      mockDeps.fetchRecentActivities.mockResolvedValue([mockActivity]);
+
+      const result = await service.getLiveActivitiesForActiveTasks();
+
+      expect(mockDeps.isSessionTerminal).toHaveBeenCalledWith('session-terminal');
+      expect(mockDeps.isSessionTerminal).toHaveBeenCalledWith('session-active');
+      expect(mockDeps.fetchRecentActivities).toHaveBeenCalledTimes(1);
+      expect(mockDeps.fetchRecentActivities).toHaveBeenCalledWith('session-active', PAGE_SIZE);
+      expect(result).toEqual({ 'session-active': [mockActivity] });
+    });
+
     it('should handle fetch failures gracefully', async () => {
       mockDeps.getSubtasks.mockReturnValue([mockTask]);
       mockDeps.resolveSessionNameFromTask.mockReturnValue('session-1');
@@ -199,7 +219,50 @@ describe('ActivityCacheService', () => {
       expect(result).toEqual({ 'session-1': [] });
       expect(mockDeps.logger?.warn).toHaveBeenCalledWith(
         'Could not fetch live activities',
-        { sessionName: 'session-1' }
+        expect.objectContaining({ sessionName: 'session-1' })
+      );
+    });
+
+    it('should return stale cached activities when a refresh times out', async () => {
+      service = new ActivityCacheService(mockDeps, LIVE_CACHE_MS, GIT_CACHE_MS, PAGE_SIZE, 3, 2000, 25);
+      mockDeps.getSubtasks.mockReturnValue([mockTask]);
+      mockDeps.resolveSessionNameFromTask.mockReturnValue('session-1');
+      mockDeps.fetchRecentActivities.mockResolvedValue([mockActivity]);
+
+      await service.getLiveActivitiesForActiveTasks();
+
+      vi.advanceTimersByTime(LIVE_CACHE_MS + 100);
+      mockDeps.fetchRecentActivities.mockClear();
+      mockDeps.fetchRecentActivities.mockReturnValue(new Promise<JulesActivity[]>(() => {}));
+
+      const resultPromise = service.getLiveActivitiesForActiveTasks();
+      await vi.advanceTimersByTimeAsync(25);
+      const result = await resultPromise;
+
+      expect(mockDeps.fetchRecentActivities).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({ 'session-1': [mockActivity] });
+      expect(mockDeps.logger?.warn).toHaveBeenCalledWith(
+        'Could not fetch live activities; returning stale cached activities',
+        expect.objectContaining({ sessionName: 'session-1' })
+      );
+    });
+
+    it('should return stale cached activities when a refresh fails', async () => {
+      mockDeps.getSubtasks.mockReturnValue([mockTask]);
+      mockDeps.resolveSessionNameFromTask.mockReturnValue('session-1');
+      mockDeps.fetchRecentActivities.mockResolvedValue([mockActivity]);
+
+      await service.getLiveActivitiesForActiveTasks();
+
+      vi.advanceTimersByTime(LIVE_CACHE_MS + 100);
+      mockDeps.fetchRecentActivities.mockRejectedValue(new Error('Fetch failed'));
+
+      const result = await service.getLiveActivitiesForActiveTasks();
+
+      expect(result).toEqual({ 'session-1': [mockActivity] });
+      expect(mockDeps.logger?.warn).toHaveBeenCalledWith(
+        'Could not fetch live activities; returning stale cached activities',
+        expect.objectContaining({ sessionName: 'session-1' })
       );
     });
 
@@ -226,12 +289,40 @@ describe('ActivityCacheService', () => {
       expect(res1).toBe(res2); // Should be the exact same object reference
     });
 
-    it('should cache fetch failures temporarily with negative TTL', async () => {
+    it('should reuse one deduped fetch for concurrent callers', async () => {
+      const mockTask2 = { ...mockTask, id: 'task-2' };
+      mockDeps.getSubtasks.mockReturnValue([mockTask, mockTask2]);
+      mockDeps.resolveSessionNameFromTask.mockImplementation((task) => {
+        return task.id === 'task-1' ? 'session-1' : 'session-2';
+      });
+
+      let resolveFetch: ((activities: JulesActivity[]) => void) | undefined;
+      const fetchPromise = new Promise<JulesActivity[]>((resolve) => {
+        resolveFetch = resolve;
+      });
+      mockDeps.fetchRecentActivities.mockReturnValue(fetchPromise);
+
+      const promise1 = service.getLiveActivitiesForActiveTasks();
+      const promise2 = service.getLiveActivitiesForActiveTasks();
+
+      resolveFetch?.([mockActivity]);
+      const [res1, res2] = await Promise.all([promise1, promise2]);
+
+      expect(mockDeps.fetchRecentActivities).toHaveBeenCalledTimes(2);
+      expect(mockDeps.getSubtasks).toHaveBeenCalledTimes(1);
+      expect(res1).toBe(res2);
+      expect(res1).toEqual({
+        'session-1': [mockActivity],
+        'session-2': [mockActivity],
+      });
+    });
+
+    it('should cache genuinely empty activity results temporarily with negative TTL', async () => {
       mockDeps.getSubtasks.mockReturnValue([mockTask]);
       mockDeps.resolveSessionNameFromTask.mockReturnValue('session-1');
-      mockDeps.fetchRecentActivities.mockRejectedValue(new Error('Fetch failed'));
+      mockDeps.fetchRecentActivities.mockResolvedValue([]);
 
-      // First call fails, should cache as negative
+      // First call returns no activities, should cache as negative
       await service.getLiveActivitiesForActiveTasks();
       expect(mockDeps.fetchRecentActivities).toHaveBeenCalledTimes(1);
 
@@ -250,6 +341,17 @@ describe('ActivityCacheService', () => {
       const result3 = await service.getLiveActivitiesForActiveTasks();
       expect(mockDeps.fetchRecentActivities).toHaveBeenCalledTimes(1);
       expect(result3).toEqual({ 'session-1': [mockActivity] });
+    });
+
+    it('should not negative-cache provider failures', async () => {
+      mockDeps.getSubtasks.mockReturnValue([mockTask]);
+      mockDeps.resolveSessionNameFromTask.mockReturnValue('session-1');
+      mockDeps.fetchRecentActivities.mockRejectedValue(new Error('Fetch failed'));
+
+      await service.getLiveActivitiesForActiveTasks();
+      await service.getLiveActivitiesForActiveTasks();
+
+      expect(mockDeps.fetchRecentActivities).toHaveBeenCalledTimes(2);
     });
   });
 

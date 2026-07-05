@@ -29,6 +29,34 @@ describe("initializeProject validation", () => {
     ).resolves.toBeTruthy();
   });
 
+  it("resolves relative new local repo paths from the home directory", async () => {
+    const createProject = vi.fn().mockResolvedValue({});
+    await initializeProject(
+      { initMode: "new-local", sourceRef: "valid-local-repo", name: "valid", sourceType: "local" },
+      { createProject, getGithubToken: vi.fn() }
+    );
+
+    expect(createProject).toHaveBeenCalledWith(expect.objectContaining({
+      sourceType: "local",
+      sourceRef: path.join(os.homedir(), "valid-local-repo"),
+      initMode: undefined,
+    }));
+  });
+
+  it("allows absolute new local repo paths selected outside the Code UX working directory", async () => {
+    const createProject = vi.fn().mockResolvedValue({});
+    const selectedPath = path.join(os.tmpdir(), "code-ux-selected-local-repo");
+
+    await initializeProject(
+      { initMode: "new-local", sourceRef: selectedPath, name: "valid", sourceType: "local" },
+      { createProject, getGithubToken: vi.fn() }
+    );
+
+    expect(createProject).toHaveBeenCalledWith(expect.objectContaining({
+      sourceRef: path.resolve(selectedPath),
+    }));
+  });
+
   it("rejects local repo outside allowed root", async () => {
     const allowedRoot = process.cwd();
     const evilPath = path.resolve(allowedRoot, "..", "evil-repo");
@@ -36,6 +64,15 @@ describe("initializeProject validation", () => {
       initializeProject(
         { initMode: "new-local", sourceRef: evilPath, cloneDir: allowedRoot, name: "evil", sourceType: "local" },
         { createProject: vi.fn().mockResolvedValue({}), getGithubToken: vi.fn() }
+      )
+    ).rejects.toThrow();
+  });
+
+  it("rejects relative new local paths that escape the home directory", async () => {
+    await expect(
+      initializeProject(
+        { initMode: "new-local", sourceRef: "../evil-repo", name: "evil", sourceType: "local" },
+        { createProject: vi.fn(), getGithubToken: vi.fn() }
       )
     ).rejects.toThrow();
   });

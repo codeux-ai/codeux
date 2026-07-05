@@ -1,8 +1,8 @@
 /**
- * Shared conversation model produced by the per-provider log parsers
- * (codex / qwen-code / opencode). Each provider writes its own JSON log
- * format; the parsers normalise those into an ordered list of turns so the
- * dashboard can render the full agent session with rich, per-type UI.
+ * Shared conversation model produced by the per-provider log parsers.
+ * Each provider writes its own JSON log format; the parsers normalise those
+ * into an ordered list of turns so the dashboard can render the full agent
+ * session with rich, per-type UI.
  */
 
 export type ParsedTurnKind = "user" | "assistant" | "reasoning" | "tool_call" | "tool_result" | "injected_context";
@@ -36,4 +36,14 @@ export interface ParsedConversationTurn {
   /** Event timestamp in ms; used to isolate the current run's turns from a
    *  resumed session's accumulated history. */
   timestampMs?: number | null;
+}
+
+export interface ParsedProviderLogResult<TUsage> {
+  /** Provider usage counts when the log exposes them; null when unavailable. */
+  usage: TUsage | null;
+  /** Provider-native usage payload for raw telemetry storage; null when unavailable. */
+  rawUsageJson: Record<string, unknown> | null;
+  /** Ordered provider conversation turns; empty when no turns are available. */
+  conversation: ParsedConversationTurn[];
+  nativeSessionId: string | null;
 }

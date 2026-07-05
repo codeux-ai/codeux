@@ -72,7 +72,7 @@ describe("Settings Resolution Service", () => {
     it("uses the updated CI, memory, and QA defaults", () => {
       const settings = buildDefaultProjectSettings();
       expect(settings.ciIntelligence.featurePrAutoMergeMode).toBe("ALWAYS");
-      expect(settings.ciIntelligence.mainBranchAutoMergeMode).toBe("CREATE_PR");
+      expect(settings.ciIntelligence.mainBranchAutoMergeMode).toBe("ALWAYS");
       expect(settings.ciIntelligence.resolveMergeConflicts).toBe(true);
       expect(settings.ciIntelligence.resolveMainMergeConflicts).toBe(true);
       expect(settings.memory.enabled).toBe(true);

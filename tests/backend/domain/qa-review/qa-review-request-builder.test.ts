@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { buildQaReviewRequest, resolveTaskTriggerType } from "../../../../src/domain/qa-review/qa-review-request-builder.js";
+import { buildQaReviewRequest, buildQaReviewRequests, resolveTaskTriggerType } from "../../../../src/domain/qa-review/qa-review-request-builder.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../src/repositories/settings-defaults.js";
 import type { DashboardSettings, Subtask } from "../../../../src/contracts/app-types.js";
 
@@ -85,6 +85,7 @@ describe("qa-review-request-builder", () => {
 
     it("builds a QA review request for a completed task without PR", async () => {
       mockSettings.agents.qualityAssurance.completedTaskWithoutPr.agentPresetId = "no-pr-agent";
+      mockSettings.agents.qualityAssurance.completedTaskWithoutPr.agentPresetIds = ["no-pr-agent"];
       const result = await buildQaReviewRequest({
         task: defaultTask, taskRun: null, project: defaultProject, sprint: defaultSprint, sprintRunId: null, settings: mockSettings, budgetArgs: defaultBudgetArgs, resolveAgent
       });
@@ -99,6 +100,7 @@ describe("qa-review-request-builder", () => {
 
     it("builds a QA review request for a task completion with memory instructions", async () => {
       mockSettings.agents.qualityAssurance.taskCompletion.agentPresetId = "pr-agent";
+      mockSettings.agents.qualityAssurance.taskCompletion.agentPresetIds = ["pr-agent"];
       mockSettings.memory = { enabled: true, workerLearningsInstruction: "Capture learnings.", autoCaptureSprint: true, syncToQwen: false };
 
       const taskWithPr = { ...defaultTask, pr_url: "http://github.com/pr/1" };
@@ -133,10 +135,34 @@ describe("qa-review-request-builder", () => {
       expect(result?.agentPresetId).toBe("agent-1"); // resolved default agent id
     });
 
+    it("builds one task QA request per configured reviewer", async () => {
+      const perAgentResolve = vi.fn()
+        .mockResolvedValueOnce({ id: "agent-a", name: "QA A", instructionMarkdown: "A instructions." })
+        .mockResolvedValueOnce({ id: "agent-b", name: "QA B", instructionMarkdown: "B instructions." });
+      mockSettings.agents.qualityAssurance.taskCompletion.agentPresetIds = ["agent-a", "agent-b"];
+      mockSettings.agents.qualityAssurance.taskCompletion.agentPresetId = "agent-a";
+      const taskWithPr = { ...defaultTask, pr_url: "http://github.com/pr/1" };
+
+      const results = await buildQaReviewRequests({
+        task: taskWithPr, taskRun: { id: "run-1", taskId: "task-1", workerBranch: "b" }, project: defaultProject, sprint: defaultSprint, sprintRunId: "sprint-run-1", settings: mockSettings, budgetArgs: defaultBudgetArgs, resolveAgent: perAgentResolve
+      });
+
+      expect(results).toHaveLength(2);
+      expect(perAgentResolve).toHaveBeenNthCalledWith(1, "proj-1", "agent-a");
+      expect(perAgentResolve).toHaveBeenNthCalledWith(2, "proj-1", "agent-b");
+      expect(results.map((request) => request.runPayload.runIndex)).toEqual([1, 1]);
+      expect(results.map((request) => request.runPayload.agentPresetId)).toEqual(["agent-a", "agent-b"]);
+      expect(results.map((request) => request.runPayload.payload)).toEqual([
+        expect.objectContaining({ agentPresetId: "agent-a", agentName: "QA A" }),
+        expect.objectContaining({ agentPresetId: "agent-b", agentName: "QA B" }),
+      ]);
+    });
+
     it("computes default feature branch if sprint featureBranch is missing", async () => {
       const sprintWithoutBranch = { ...defaultSprint, featureBranch: "" };
       mockSettings.git.featureBranchPrefix = "my-feat/";
       mockSettings.agents.qualityAssurance.taskCompletion.agentPresetId = "pr-agent";
+      mockSettings.agents.qualityAssurance.taskCompletion.agentPresetIds = ["pr-agent"];
       const taskWithPr = { ...defaultTask, pr_url: "http://github.com/pr/1" };
 
       const result = await buildQaReviewRequest({

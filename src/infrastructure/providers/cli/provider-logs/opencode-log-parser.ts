@@ -1,7 +1,15 @@
-import type { ParsedConversationTurn } from "./provider-conversation-types.js";
+import type { ParsedConversationTurn, ParsedProviderLogResult } from "./provider-conversation-types.js";
 import { extractJsonContainer, parseJsonObject, toNumber } from "./usage-parse-utils.js";
 
-export interface OpenCodeLogResult {
+export interface OpenCodeUsageTotals {
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+  cost: number;
+}
+
+export interface OpenCodeLogResult extends ParsedProviderLogResult<OpenCodeUsageTotals> {
   transcriptText: string;
   inputTokens: number;
   cachedInputTokens: number;
@@ -12,7 +20,6 @@ export interface OpenCodeLogResult {
   nativeSessionId: string | null;
   /** Aggregated usage object stored for raw telemetry. */
   rawUsageJson: Record<string, unknown> | null;
-  conversation: ParsedConversationTurn[];
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -181,7 +188,22 @@ export function subtractOpenCodeBaseline(
  * `assistant`) also carry a cumulative `tokens`/`cost`, used as a fallback when
  * no `step-finish` parts are present.
  */
-export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult | null {
+function emptyOpenCodeLogResult(): OpenCodeLogResult {
+  return {
+    usage: null,
+    transcriptText: "",
+    inputTokens: 0,
+    cachedInputTokens: 0,
+    outputTokens: 0,
+    reasoningOutputTokens: 0,
+    cost: 0,
+    nativeSessionId: null,
+    rawUsageJson: null,
+    conversation: [],
+  };
+}
+
+export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult {
   const textParts: string[] = [];
   const conversation: ParsedConversationTurn[] = [];
   let nativeSessionId: string | null = null;
@@ -309,7 +331,7 @@ export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult | null
   }
 
   if (!foundEvent) {
-    return null;
+    return emptyOpenCodeLogResult();
   }
 
   // Prefer per-step usage; fall back to the sum of final per-message usage.
@@ -341,8 +363,18 @@ export function parseOpenCodeJsonLines(stdout: string): OpenCodeLogResult | null
       cost,
     }
     : null;
+  const parsedUsage: OpenCodeUsageTotals | null = hasUsage
+    ? {
+      inputTokens: usage.input,
+      cachedInputTokens: usage.cacheRead,
+      outputTokens: usage.output,
+      reasoningOutputTokens: usage.reasoning,
+      cost,
+    }
+    : null;
 
   return {
+    usage: parsedUsage,
     transcriptText: textParts.join("\n\n").trim(),
     inputTokens: usage.input,
     cachedInputTokens: usage.cacheRead,

@@ -113,6 +113,109 @@ describe("ProviderTelemetryWatcher", () => {
     await watcher.stop();
   });
 
+  it.each([
+    {
+      provider: "claude-code" as const,
+      metadataKey: "getClaudeSessionJsonlMetadata",
+      readKey: "readClaudeSessionJsonl",
+      metadata: "claude.jsonl:12:100",
+      readResult: "claude transcript",
+    },
+    {
+      provider: "qwen-code" as const,
+      metadataKey: "getQwenLogDataMetadata",
+      readKey: "readQwenLogData",
+      metadata: "qwen-log:12:100",
+      readResult: { usage: null, conversation: [] },
+    },
+  ])("skips expensive $provider reads when metadata is unchanged", async ({ provider, metadataKey, readKey, metadata, readResult }) => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const opts = {
+      provider,
+      model: "test-model",
+      prompt: "test",
+      cwd: "/cwd",
+      startedMs: 123,
+      workflowSettings: { executionMode: "HOST" as const },
+      signal: controller.signal,
+      getAccumulatedRawStdout: () => "",
+      getAccumulatedStderr: () => "",
+      nativeSessionId: "native-1",
+      sessionId: "sess-1",
+      antigravityLogPath: null,
+      getClaudeSessionJsonlMetadata: vi.fn().mockResolvedValue(metadata),
+      readClaudeSessionJsonl: vi.fn().mockResolvedValue(readResult),
+      getCodexLatestSessionJsonMetadata: vi.fn(),
+      readCodexLatestSessionJson: vi.fn(),
+      getQwenLogDataMetadata: vi.fn().mockResolvedValue(metadata),
+      readQwenLogData: vi.fn().mockResolvedValue(readResult),
+      parseAntigravityConversationId: vi.fn(),
+      readAntigravityTranscript: vi.fn(),
+      resolveAntigravityDatabase: vi.fn(),
+      onTelemetry: vi.fn(),
+    };
+
+    const watcher = new ProviderTelemetryWatcher(opts as any);
+    watcher.start();
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(1500);
+
+    expect(opts[metadataKey]).toHaveBeenCalledTimes(2);
+    expect(opts[readKey]).toHaveBeenCalledTimes(1);
+    expect(collectProviderUsageTelemetry).toHaveBeenCalledTimes(1);
+    expect(opts.onTelemetry).toHaveBeenCalledTimes(1);
+
+    controller.abort();
+    await watcher.stop();
+  });
+
+  it("runs expensive reads when provider metadata changes", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const opts = {
+      provider: "codex" as const,
+      model: "test-model",
+      prompt: "test",
+      cwd: "/cwd",
+      startedMs: 123,
+      workflowSettings: { executionMode: "HOST" as const },
+      signal: controller.signal,
+      getAccumulatedRawStdout: () => "",
+      getAccumulatedStderr: () => "",
+      nativeSessionId: "native-1",
+      sessionId: "sess-1",
+      antigravityLogPath: null,
+      readClaudeSessionJsonl: vi.fn(),
+      getCodexLatestSessionJsonMetadata: vi.fn()
+        .mockResolvedValueOnce("rollout.jsonl:12:100")
+        .mockResolvedValueOnce("rollout.jsonl:24:200"),
+      readCodexLatestSessionJson: vi.fn()
+        .mockResolvedValueOnce("codex transcript")
+        .mockResolvedValueOnce("codex transcript updated"),
+      readQwenLogData: vi.fn(),
+      parseAntigravityConversationId: vi.fn(),
+      readAntigravityTranscript: vi.fn(),
+      resolveAntigravityDatabase: vi.fn(),
+      onTelemetry: vi.fn(),
+    };
+
+    const watcher = new ProviderTelemetryWatcher(opts as any);
+    watcher.start();
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(1500);
+
+    expect(opts.getCodexLatestSessionJsonMetadata).toHaveBeenCalledTimes(2);
+    expect(opts.readCodexLatestSessionJson).toHaveBeenCalledTimes(2);
+    expect(collectProviderUsageTelemetry).toHaveBeenCalledTimes(2);
+    expect(opts.onTelemetry).toHaveBeenCalledTimes(2);
+
+    controller.abort();
+    await watcher.stop();
+  });
+
   it("keeps skipping expensive Antigravity reads after resolving the native session id later", async () => {
     vi.useFakeTimers();
     const controller = new AbortController();
@@ -131,6 +234,7 @@ describe("ProviderTelemetryWatcher", () => {
       antigravityLogPath: "/log",
       getAntigravityLogMetadata: vi.fn().mockResolvedValue("log:12:100"),
       getAntigravityTranscriptMetadata: vi.fn().mockResolvedValue("transcript:20:101"),
+      getAntigravityDatabaseMetadata: vi.fn().mockResolvedValue("database:30:102"),
       readClaudeSessionJsonl: vi.fn(),
       readCodexLatestSessionJson: vi.fn(),
       readQwenLogData: vi.fn(),
@@ -149,6 +253,7 @@ describe("ProviderTelemetryWatcher", () => {
     expect(opts.parseAntigravityConversationId).toHaveBeenCalledTimes(1);
     expect(opts.getAntigravityLogMetadata).toHaveBeenCalledTimes(3);
     expect(opts.getAntigravityTranscriptMetadata).toHaveBeenCalledTimes(2);
+    expect(opts.getAntigravityDatabaseMetadata).toHaveBeenCalledTimes(2);
     expect(opts.readAntigravityTranscript).toHaveBeenCalledTimes(1);
     expect(opts.resolveAntigravityDatabase).toHaveBeenCalledTimes(1);
     expect(collectProviderUsageTelemetry).toHaveBeenCalledTimes(1);
@@ -261,6 +366,7 @@ describe("ProviderTelemetryWatcher", () => {
       antigravityLogPath: "/log",
       getAntigravityLogMetadata: vi.fn().mockResolvedValue("log:12:100"),
       getAntigravityTranscriptMetadata: vi.fn().mockResolvedValue("transcript:20:101"),
+      getAntigravityDatabaseMetadata: vi.fn().mockResolvedValue("database:30:102"),
       readClaudeSessionJsonl: vi.fn(),
       readCodexLatestSessionJson: vi.fn(),
       readQwenLogData: vi.fn(),

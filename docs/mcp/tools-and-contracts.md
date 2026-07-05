@@ -174,7 +174,7 @@ Dashboard calls can add `background: true` to the HTTP setup request. In that mo
 
 ### Project Creation Paths
 
-`manage_projects` and `manage_code_ux` project creation use the same initialization path as the dashboard. Git URL projects are cloned into the selected `cloneDir`, or `~/.code-ux/projects/<repo-name>` when `cloneDir` is omitted. `new-remote` project creation treats `cloneDir` as the clone parent directory and stores the project base directory as the single repository checkout root.
+`manage_projects` and `manage_code_ux` project creation use the same initialization path as the dashboard. Git URL projects are cloned into the selected `cloneDir`, or `~/.code-ux/projects/<repo-name>` when `cloneDir` is omitted. `new-remote` project creation treats `cloneDir` as the clone parent directory and stores the project base directory as the single repository checkout root. `new-local` project creation resolves relative `sourceRef` values from the user's home directory and accepts absolute paths selected by the desktop picker without constraining them to the Code UX process working directory.
 
 ### Sprint, Task, and Settings Payload Normalization
 
@@ -190,6 +190,59 @@ For payload normalization in management tools, Code UX centralizes parsing behav
 
 
 The dedicated management tools (`manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_settings`) and the legacy `manage_code_ux` dispatcher share the same action handlers.
+
+### `manage_memory` claim actions
+
+`manage_memory` supports durable long-term memory claim management in addition to raw memory actions. These actions are available to `project_manager` runtime roles and let project managers create canonical project claims directly without a sprint ID:
+
+```json
+{
+  "action": "create_claim",
+  "projectId": "project-123",
+  "claim": "Use dependency factory composition for service wiring.",
+  "category": "patterns",
+  "confidence": 0.9,
+  "durability": 0.85,
+  "tags": ["architecture"],
+  "appliesToPaths": ["src/services"],
+  "sourceMemoryId": "mem-123"
+}
+```
+
+`create_claim` writes the canonical `memory_claims` row and a project-scoped mirror memory whose source metadata uses `originType: "memory_claim"` and `originId` equal to the claim ID. The mirror memory content is the claim text, its category matches the claim category, and its strength is the larger of `confidence` and `durability`. This preserves compatibility with semantic claim search, which retrieves project memories first and hydrates active claims from that source metadata. When `sourceMemoryId` is provided, the action also links it as supporting evidence unless a more specific `supportType` and `weight` or `evidenceWeight` are supplied.
+
+`update_claim` keeps the mirror memories aligned by updating their content, category, and strength after the canonical row changes. Claim search hydrates only active claims from mirror memories, so deprecated claims stop appearing in claim search without deleting their evidence history.
+
+Available claim actions:
+- `create_claim`: requires `projectId` and non-blank `claim`; accepts `category`, `confidence`, `durability`, `tags`, `appliesToPaths`, `sourceMemoryId`, `supersedesClaimId`, `supportType`, `weight`, and `evidenceWeight`. `category` defaults to `context`; `confidence` and `durability` default to `0.8`; direct claims use manual source metadata.
+- `list_claims`: requires `projectId`; accepts `status`, `category`, and `limit`.
+- `get_claim`: requires `projectId` and `claimId`.
+- `update_claim`: requires `projectId` and `claimId`; accepts updated `claim`, `category`, `confidence`, `durability`, `status`, `tags`, `appliesToPaths`, and nullable `supersedesClaimId`; keeps project mirror memories in sync.
+- `add_claim_evidence`: requires `projectId`, `claimId`, and `memoryId`; accepts `supportType` (`supports`, `contradicts`, or `supersedes`) and `weight`.
+- `deprecate_claim`: requires `projectId`, `claimId`, and explicit `approval.confirmed: true`. The first unconfirmed call returns the standard `approvalRequired` envelope and does not mutate state.
+
+Claim reads and writes remain project-scoped. A claim ID or evidence memory outside the provided project is rejected instead of being linked across project boundaries.
+
+Destructive claim lifecycle example:
+
+```json
+{
+  "action": "deprecate_claim",
+  "projectId": "project-123",
+  "claimId": "claim-123"
+}
+```
+
+The first call returns `approvalRequired: true`. To execute the deprecation after explicit human approval, repeat the same request with:
+
+```json
+{
+  "action": "deprecate_claim",
+  "projectId": "project-123",
+  "claimId": "claim-123",
+  "approval": { "confirmed": true }
+}
+```
 
 For sprint create/update calls:
 - `name` is the canonical repository field.

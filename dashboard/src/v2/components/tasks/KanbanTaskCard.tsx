@@ -417,36 +417,14 @@ export const KanbanTaskCard: FunctionComponent<{
       />
     </div>
   );
-}, (prev, next) => {
-  const prevTask = prev.viewModel.task;
-  const nextTask = next.viewModel.task;
-
-  const tasksEqual = prevTask.recordId === nextTask.recordId &&
-         prevTask.status === nextTask.status &&
-         prevTask.priority === nextTask.priority &&
-         prevTask.title === nextTask.title &&
-         prevTask.isOptimistic === nextTask.isOptimistic &&
-         prevTask.latestReview?.status === nextTask.latestReview?.status &&
-         prevTask.latestReview?.outcome === nextTask.latestReview?.outcome &&
-         prevTask.latestReview?.summary === nextTask.latestReview?.summary;
-
-  const depsEqual = prev.viewModel.dependencyIndicators.length === next.viewModel.dependencyIndicators.length &&
-         prev.viewModel.dependencyIndicators.every((dep, i) =>
-           dep.status === next.viewModel.dependencyIndicators[i].status &&
-           dep.recordId === next.viewModel.dependencyIndicators[i].recordId
-         );
-
-  return tasksEqual && depsEqual &&
-         prev.viewModel.prUrl === next.viewModel.prUrl &&
-         prev.viewModel.hasPullRequestMetadata === next.viewModel.hasPullRequestMetadata &&
-         prev.viewModel.sessionId === next.viewModel.sessionId &&
-         prev.viewModel.sessionState === next.viewModel.sessionState &&
-         prev.viewModel.liveRunningTime === next.viewModel.liveRunningTime &&
-         prev.viewModel.liveStartedAt === next.viewModel.liveStartedAt &&
-         prev.viewModel.executorLabel === next.viewModel.executorLabel &&
-         prev.agentPresetName === next.agentPresetName &&
-         prev.agentPresetAvatarConfig === next.agentPresetAvatarConfig &&
-         prev.onEdit === next.onEdit &&
-         prev.onDelete === next.onDelete &&
-         prev.isDragging === next.isDragging;
-});
+}, (prev, next) => (
+  prev.viewModel === next.viewModel &&
+  prev.index === next.index &&
+  prev.agentPresetName === next.agentPresetName &&
+  prev.agentPresetAvatarConfig === next.agentPresetAvatarConfig &&
+  prev.onEdit === next.onEdit &&
+  prev.onDelete === next.onDelete &&
+  prev.isDragging === next.isDragging &&
+  prev.onDragStart === next.onDragStart &&
+  prev.onDragEnd === next.onDragEnd
+));

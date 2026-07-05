@@ -78,7 +78,7 @@ Production refinement shipped on March 15, 2026:
 - project execution snapshots are now throttled per project instead of being rebuilt on every task-run event burst
 - runtime-status, structure, projects, and overview snapshots each have their own cadence limits
 - project execution refresh no longer implies a `projects.updated` snapshot by default, which removes a major source of redundant dashboard work during active sprints
-- snapshot-based events (`project.live.updated`, `project.execution.updated`, and `overview.telemetry.updated`) are now fingerprinted; publications and sequence increments are skipped if the semantic payload (ignoring timestamps like `updatedAt`) is unchanged
+- snapshot-based events (`project.live.updated`, `project.execution.updated`, `project.runtime_status.updated`, `project.git.updated`, `projects.updated`, and `overview.telemetry.updated`) are fingerprinted through the shared payload helper; publications and sequence increments are skipped if the semantic payload (ignoring fetch timestamps like `updatedAt` and `timestamp`) is unchanged
 
 July 4, 2026 refinement:
 
@@ -87,6 +87,11 @@ July 4, 2026 refinement:
 - The execution snapshot signature includes project id/name, collection lengths, sprint run ids/statuses/heartbeat/lease/finish/intervention markers, dispatch ids/statuses/task run/provider/session/branch/PR/heartbeat/lease/error markers, connection ids/statuses/heartbeat/counts, assigned worker ids/statuses, attention item ids/types/severity/owner/status/claim/resolve markers, runtime event tail identities, and recent invocation tail identities.
 - The optimized path still ignores volatile `updatedAt` and status `timestamp` churn, so timestamp-only reassembly does not broadcast or append a non-replayable marker. Meaningful sprint run, dispatch, attention, runtime event, or invocation changes still publish.
 - Unknown payload shapes, and known event types whose snapshot shape is incomplete, still fall back to the existing normalized full-payload fingerprint. Replayable raw events published through `publishRawEvent` are unchanged and are not deduplicated by snapshot signatures.
+
+July 5, 2026 helper contract:
+
+- Dashboard realtime payload fingerprinting is available as a standalone backend helper in `src/services/dashboard-realtime-payload-fingerprint.ts`. The helper has no Express, WebSocket, repository, or persistence dependency, so realtime publishing code can consume it without coupling deduplication logic to transport concerns.
+- The helper covers the common snapshot events (`project.live.updated`, `project.execution.updated`, `project.runtime_status.updated`, `projects.updated`, `project.git.updated`, and `overview.telemetry.updated`) using stable high-signal fields. Unknown payloads use deterministic key-sorted fallback serialization that omits fetch timestamps and bounds depth, array length, object keys, and string length so unusually large feeds cannot dominate the realtime flush cycle.
 
 ### Dashboard websocket endpoint
 

@@ -1,9 +1,9 @@
 
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "preact/hooks";
+import { useLayoutEffect, useMemo, useRef } from "preact/hooks";
 import gsap from "gsap";
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import {
   ListChecks,
   FolderGit2,
@@ -16,34 +16,14 @@ import {
 } from "lucide-preact";
 import { TaskComposer } from "./components/ui/TaskComposer.js";
 import { AddProjectModal } from "./components/ui/AddProjectModal.js";
-import type { AddProjectModalSubmission } from "./components/ui/AddProjectModal.js";
-import type { Sprint, Task, TaskPriority, TaskStatus } from "./types.js";
-import { useProjectData } from "./context/project-data.js";
-import { useSprints } from "../hooks/useSprints.js";
-import { useProjectTasks } from "./hooks/use-project-tasks.js";
-import { createTask, deleteTask, updateTask } from "./lib/project-api.js";
-import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "./lib/list-window.js";
+import type { Task } from "./types.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
 import { PageHeader } from "./components/layout/PageHeader.js";
-import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
 import { Button } from "./components/ui/Button.js";
-import { fetchAgentPresets } from "./lib/agent-preset-api.js";
-import type { AgentPreset } from "./types.js";
-import { STATUS_CFG } from "./lib/tasks-constants.js";
-import {
-  buildTaskBoardViewModel,
-  type TaskBoardViewModel,
-} from "./lib/tasks/task-board-view-model.js";
-import { resolveTaskDropStatus } from "./lib/tasks/task-board-actions.js";
-import {
-  TaskBoardFilters,
-  type TaskBoardPriorityFilter,
-  type TaskBoardStatusFilter,
-} from "./components/tasks/TaskBoardFilters.js";
-import { TaskBoardColumns, type TaskBoardDropTargetContext } from "./components/tasks/TaskBoardColumns.js";
-import { useDashboardRuntimeData } from "../hooks/use-dashboard-runtime-data.js";
-import { useReducedMotion } from "./hooks/use-reduced-motion.js";
+import { TaskBoardFilters } from "./components/tasks/TaskBoardFilters.js";
+import { TaskBoardColumns } from "./components/tasks/TaskBoardColumns.js";
 import { useInteractionTokens } from "./lib/motion/tokens.js";
+import { useTaskBoardController } from "./hooks/use-task-board-controller.js";
 
 type TaskScopePlaceholderMode = "project" | "sprint";
 
@@ -210,108 +190,60 @@ const SprintProgressCard: FunctionComponent<{
 export const TasksPage: FunctionComponent = () => {
   const headerRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
-  const { projects, selectedProject, createProject } = useProjectData();
-  const projectId = selectedProject?.id || null;
-  const {
-    data: sprints,
-    loading: sprintsLoading,
-    selectedSprintId,
-    selectSprint,
-    refetch: refreshSprints,
-  } = useSprints(selectedProject?.id || null);
-  const { execution, status } = useDashboardRuntimeData(
-    projectId,
-    !!selectedProject,
-    { selectedSprintId },
-  );
-  const settings = useProjectEffectiveSettings(projectId);
-  const sprintKeyPrefix = settings.data?.settings?.git?.sprintKeyPrefix || "SPR";
-  const gitSettings = settings.data?.settings?.git;
-  const taskPullRequestsEnabled = gitSettings
-    ? gitSettings.githubMode !== "LOCAL" && gitSettings.autoCreatePr === true
-    : true;
-  const [agentPresetsMap, setAgentPresetsMap] = useState<Map<string, AgentPreset>>(new Map());
-  useEffect(() => {
-    if (!projectId) return;
-    let cancelled = false;
-    fetchAgentPresets(projectId).then(presets => {
-      if (!cancelled) setAgentPresetsMap(new Map(presets.map(p => [p.id, p])));
-    }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [projectId]);
-  const locationSearch = useRouterState({ select: (state) => state.location.searchStr });
-  const initialSprint = useMemo(() => {
-    const params = new URLSearchParams(locationSearch);
-    // Support both "sprint" and "sprintId"
-    return params.get("sprintId") || params.get("sprint");
-  }, [locationSearch]);
-  const routeSprintId = useMemo(() => {
-    if (!initialSprint) {
-      return null;
-    }
-    return sprints.some((sprint: Sprint) => sprint.id === initialSprint) ? initialSprint : null;
-  }, [initialSprint, sprints]);
-  const taskScopeSprintId = routeSprintId ?? selectedSprintId;
-
-  useEffect(() => {
-    if (!routeSprintId || routeSprintId === selectedSprintId) {
-      return;
-    }
-    void selectSprint(routeSprintId);
-  }, [routeSprintId, selectedSprintId, selectSprint]);
-
-  const [statusFilter, setStatusFilter] = useState<TaskBoardStatusFilter>("all");
-  const [priorityFilter, setPriorityFilter] = useState<TaskBoardPriorityFilter>("all");
-  const [listWindow, setListWindow] = useState<ListWindowOption>(DEFAULT_LIST_WINDOW);
-  const [showComposer, setShowComposer] = useState(false);
-  const [showAddProjectModal, setShowAddProjectModal] = useState(false);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
-  const [dropTargetContext, setDropTargetContext] = useState<TaskBoardDropTargetContext | null>(null);
-  const [optimisticTasks, setOptimisticTasks] = useState<Task[]>([]);
-  const [resolvedTaskId, setResolvedTaskId] = useState<string | null>(null);
-  const composerRef = useRef<HTMLDivElement>(null);
   const interactionTokens = useInteractionTokens();
-
-  const { tasks, loading, error, refresh: refreshTasks } = useProjectTasks(
-    selectedProject?.id || null,
+  const controller = useTaskBoardController();
+  const {
     projects,
+    selectedProject,
     sprints,
-    taskScopeSprintId
-  );
-
-  // Handle route taskId resolution for scroll-to-focus
-  useEffect(() => {
-    if (!loading && tasks.length > 0) {
-      const params = new URLSearchParams(locationSearch);
-      const taskId = params.get("taskId");
-      if (taskId && tasks.some(t => t.id === taskId || t.recordId === taskId)) {
-        // Find the actual recordId (in case the route passed the short ID)
-        const targetTask = tasks.find(t => t.id === taskId || t.recordId === taskId);
-        if (targetTask) {
-          setResolvedTaskId(targetTask.recordId);
-          // Clean up URL so it doesn't keep refocusing on subsequent renders
-          params.delete("taskId");
-          const nextSearch = params.toString();
-          const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
-          window.history.replaceState(window.history.state, "", nextUrl);
-        }
-      }
-    }
-  }, [locationSearch, loading, tasks]);
-
-  const reducedMotion = useReducedMotion();
-  const [showSkeletons, setShowSkeletons] = useState(false);
-
-  useEffect(() => {
-    let timeoutId: number;
-    if (loading) {
-      timeoutId = window.setTimeout(() => setShowSkeletons(true), 200);
-    } else {
-      setShowSkeletons(false);
-    }
-    return () => window.clearTimeout(timeoutId);
-  }, [loading]);
+    sprintsLoading,
+    selectedSprintId,
+    taskScopeSprintId,
+    selectedSprintModel,
+    sprintKeyPrefix,
+    isTaskScopeReady,
+    tasks,
+    loading,
+    error,
+    statusFilter,
+    setStatusFilter,
+    priorityFilter,
+    setPriorityFilter,
+    listWindow,
+    setListWindow,
+    showComposer,
+    editingTask,
+    composerRef,
+    showAddProjectModal,
+    setShowAddProjectModal,
+    reducedMotion,
+    showSkeletons,
+    filterTransitionPending,
+    boardCountAnnouncement,
+    boardViewModel,
+    draggedTaskId,
+    dropTargetContext,
+    agentPresetsMap,
+    resolvedTaskId,
+    clearResolvedTaskId,
+    handleSprintScopeSelect,
+    handleComposerToggle,
+    handleComposerClose,
+    handleTaskSubmit,
+    handleDragStart,
+    handleDragEnd,
+    handleDragOver,
+    handleDrop,
+    handleDeleteTask,
+    handleEditClick,
+    handleAddProject,
+  } = controller;
+  const { boardState, taskViewModels } = boardViewModel;
+  const { filteredTasks, stats, columns } = boardState;
+  const listTransitionStyle = useMemo(() => ({
+    transitionDuration: interactionTokens.listReorder.duration,
+    transitionTimingFunction: interactionTokens.listReorder.ease,
+  }), [interactionTokens.listReorder.duration, interactionTokens.listReorder.ease]);
 
   useLayoutEffect(() => {
     if (!headerRef.current) return;
@@ -377,7 +309,7 @@ export const TasksPage: FunctionComponent = () => {
         {
           opacity: 1,
           borderWidth: "1px",
-          borderColor: "rgba(0,0,0,0.06)", // Fallback, clearProps will remove it
+          borderColor: "rgba(0,0,0,0.06)",
           borderStyle: "solid",
           duration: 0.4,
           ease: "power2.out",
@@ -386,238 +318,9 @@ export const TasksPage: FunctionComponent = () => {
       );
     });
 
-    setResolvedTaskId(null);
+    clearResolvedTaskId();
     return () => ctx.revert();
-  }, [resolvedTaskId, tasks]);
-
-  const currentBoardViewModel = useMemo(() => {
-    return buildTaskBoardViewModel({
-      tasks,
-      optimisticTasks,
-      statusFilter,
-      priorityFilter,
-      listWindow,
-      taskScopeSprintId,
-      taskDispatches: execution.taskDispatches,
-      recentEvents: execution.recentEvents,
-      subtasks: status.subtasks ?? [],
-      taskPullRequestsEnabled,
-    });
-  }, [
-    tasks,
-    optimisticTasks,
-    statusFilter,
-    priorityFilter,
-    listWindow,
-    taskScopeSprintId,
-    execution.taskDispatches,
-    execution.recentEvents,
-    status.subtasks,
-    taskPullRequestsEnabled,
-  ]);
-  const [displayBoardViewModel, setDisplayBoardViewModel] = useState<TaskBoardViewModel>(currentBoardViewModel);
-  const [filterTransitionPending, setFilterTransitionPending] = useState(false);
-  const previousFilterKeyRef = useRef(`${statusFilter}|${priorityFilter}`);
-
-  useEffect(() => {
-    const nextFilterKey = `${statusFilter}|${priorityFilter}`;
-    if (previousFilterKeyRef.current !== nextFilterKey) {
-      previousFilterKeyRef.current = nextFilterKey;
-      setFilterTransitionPending(true);
-      const timeoutId = window.setTimeout(() => {
-        setDisplayBoardViewModel(currentBoardViewModel);
-        setFilterTransitionPending(false);
-      }, reducedMotion ? 0 : 160);
-      return () => window.clearTimeout(timeoutId);
-    }
-
-    setDisplayBoardViewModel(currentBoardViewModel);
-    setFilterTransitionPending(false);
-    return undefined;
-  }, [currentBoardViewModel, priorityFilter, reducedMotion, statusFilter]);
-
-  const { boardState, taskViewModels } = displayBoardViewModel;
-  const { filteredTasks, stats, columns } = boardState;
-  const boardCountSummary = useMemo(() => (
-    columns.map(({ status, count }) => `${STATUS_CFG[status].label}: ${count}`).join(", ")
-  ), [columns]);
-  const [boardCountAnnouncement, setBoardCountAnnouncement] = useState("");
-  const previousBoardCountSummaryRef = useRef("");
-
-  useEffect(() => {
-    if (loading || showSkeletons || filterTransitionPending || previousBoardCountSummaryRef.current === boardCountSummary) {
-      return;
-    }
-    previousBoardCountSummaryRef.current = boardCountSummary;
-    const timeoutId = window.setTimeout(() => {
-      setBoardCountAnnouncement(`${displayBoardViewModel.filterAnnouncement} ${boardCountSummary}.`);
-    }, 350);
-    return () => window.clearTimeout(timeoutId);
-  }, [boardCountSummary, displayBoardViewModel.filterAnnouncement, filterTransitionPending, loading, showSkeletons]);
-
-  const selectedSprintModel = taskScopeSprintId ? sprints.find((sprint: Sprint) => sprint.id === taskScopeSprintId) || null : null;
-  const isTaskScopeReady = !!selectedProject && sprints.length > 0;
-
-  const handleSprintScopeSelect = useCallback((sprintId: string | null) => {
-    const params = new URLSearchParams(locationSearch);
-    if (sprintId) {
-      params.set("sprintId", sprintId);
-    } else {
-      params.delete("sprintId");
-    }
-    params.delete("sprint");
-    const nextSearch = params.toString();
-    const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
-    window.history.replaceState(window.history.state, "", nextUrl);
-    void selectSprint(sprintId);
-  }, [locationSearch, selectSprint]);
-
-  const handleTaskSubmit = useCallback(async (draft: {
-    sprintId: string;
-    title: string;
-    description: string;
-    promptMarkdown: string;
-    status: TaskStatus;
-    priority: TaskPriority;
-    executorType: Task["executorType"];
-    dependsOnTaskIds: string[];
-  }) => {
-    if (!selectedProject) return;
-
-    const isEditing = !!editingTask;
-    const optId = `opt-${Date.now()}`;
-
-    if (!isEditing) {
-      const optimisticTask: Task = {
-        recordId: optId,
-        id: "OPT-...",
-        source: "dash",
-        sprint: sprints.find((s: Sprint) => s.id === draft.sprintId)?.name || "...",
-        sprintId: draft.sprintId,
-        title: draft.title,
-        status: draft.status,
-        priority: draft.priority,
-        executorType: draft.executorType,
-        assignee: "Pending",
-        time: "...",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        promptMarkdown: draft.promptMarkdown,
-        description: draft.description,
-        dependsOnTaskIds: draft.dependsOnTaskIds,
-        isIndependent: false,
-        isMerged: false,
-        mergeIndicator: null,
-        isOptimistic: true,
-      };
-      setOptimisticTasks((prev) => [optimisticTask, ...prev]);
-    }
-
-    try {
-      let createdTaskId: string | null = null;
-      if (isEditing) {
-        await updateTask(editingTask.recordId, draft);
-      } else {
-        const createdTask = await createTask(selectedProject.id, draft);
-        createdTaskId = createdTask.id;
-      }
-      await Promise.all([refreshTasks(), refreshSprints()]);
-      setEditingTask(null);
-      setShowComposer(false);
-
-      if (createdTaskId) {
-        setResolvedTaskId(createdTaskId);
-      }
-    } finally {
-      if (!isEditing) {
-        setOptimisticTasks((prev) => prev.filter((t) => t.recordId !== optId));
-      }
-    }
-  }, [selectedProject, editingTask, refreshTasks, refreshSprints, sprints]);
-
-
-  const handleDragStart = useCallback((taskId: string, e: DragEvent) => {
-    if (reducedMotion) return;
-    setDraggedTaskId(taskId);
-    if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
-    // e.dataTransfer.setDragImage(new Image(), 0, 0); // optional: hide default ghost
-  }, [reducedMotion]);
-
-  const handleDragEnd = useCallback(() => {
-    setDraggedTaskId(null);
-    setDropTargetContext(null);
-  }, []);
-
-  const handleDragOver = useCallback((status: TaskStatus, index: number, e: DragEvent) => {
-    if (reducedMotion) return;
-    e.preventDefault();
-    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-    setDropTargetContext({ status, index });
-  }, [reducedMotion]);
-
-  const handleDrop = useCallback(async (status: TaskStatus, e: DragEvent) => {
-    e.preventDefault();
-    if (reducedMotion) return;
-    if (!draggedTaskId) return;
-
-    const draggedTask = tasks.find(t => t.recordId === draggedTaskId);
-    if (!draggedTask) return;
-
-    const targetStatus = resolveTaskDropStatus(draggedTask.status, status);
-    if (targetStatus) {
-      const updatedTask = { ...draggedTask, status: targetStatus };
-      setOptimisticTasks(prev => {
-        const filtered = prev.filter(t => t.recordId !== updatedTask.recordId);
-        return [updatedTask, ...filtered];
-      });
-
-      try {
-        await updateTask(draggedTask.recordId, { status: targetStatus });
-        await refreshTasks();
-      } finally {
-        setOptimisticTasks(prev => prev.filter(t => t.recordId !== updatedTask.recordId));
-      }
-    }
-    setDraggedTaskId(null);
-    setDropTargetContext(null);
-  }, [draggedTaskId, reducedMotion, tasks, refreshTasks]);
-
-  const handleDeleteTask = useCallback(async (task: Task) => {
-    await deleteTask(task.recordId);
-    await Promise.all([refreshTasks(), refreshSprints()]);
-    setEditingTask((prev) => prev?.recordId === task.recordId ? null : prev);
-  }, [refreshTasks, refreshSprints]);
-
-  const handleEditClick = useCallback((nextTask: Task) => {
-    setEditingTask(nextTask);
-    setShowComposer(true);
-    setTimeout(() => composerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-  }, []);
-
-  const handleAddProject = useCallback(async (project: AddProjectModalSubmission) => {
-    if (project.type === 'new_project') {
-      const sourceRef = project.initMode === 'new-local'
-        ? (project.path || project.name)
-        : (project.repoSlug || project.name);
-
-      await createProject({
-        name: project.name,
-        sourceType: project.initMode === 'new-local' ? 'local' : 'git',
-        sourceRef,
-        initMode: project.initMode,
-        remoteProvider: project.remoteProvider,
-        isPrivate: project.isPrivate,
-      });
-      return;
-    }
-
-    await createProject({
-      name: project.name,
-      sourceType: project.type,
-      sourceRef: project.path,
-      cloneDir: project.cloneDir,
-    });
-  }, [createProject]);
+  }, [clearResolvedTaskId, resolvedTaskId, tasks]);
 
   return (
     <PageContainer
@@ -633,7 +336,7 @@ export const TasksPage: FunctionComponent = () => {
           <>
             {selectedProject
               ? taskScopeSprintId
-                ? `Task execution for ${selectedProject.name}, scoped to Sprint ${sprints.find((s: Sprint) => s.id === taskScopeSprintId)?.number ?? "..."}.`
+                ? `Task execution for ${selectedProject.name}, scoped to Sprint ${sprints.find((sprint) => sprint.id === taskScopeSprintId)?.number ?? "..."}.`
                 : `Task execution for ${selectedProject.name}. Showing all tasks across the project.`
               : "Select a project to manage sprint tasks."}
             {selectedProject && (statusFilter !== "all" || priorityFilter !== "all") && (
@@ -667,15 +370,7 @@ export const TasksPage: FunctionComponent = () => {
           </div>
 
           <Button
-            onClick={() => {
-              if (showComposer || editingTask) {
-                setShowComposer(false);
-                setEditingTask(null);
-              } else {
-                setShowComposer(true);
-                setTimeout(() => composerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-              }
-            }}
+            onClick={handleComposerToggle}
             variant="signal"
             icon={(showComposer || editingTask) ? X : Plus}
             disabled={!selectedProject || sprints.length === 0}
@@ -739,10 +434,7 @@ export const TasksPage: FunctionComponent = () => {
             availableTasks={tasks}
             initialTask={editingTask}
             initialSprintId={selectedSprintId}
-            onClose={() => {
-              setShowComposer(false);
-              setEditingTask(null);
-            }}
+            onClose={handleComposerClose}
             onSubmit={handleTaskSubmit}
           />
         </div>
@@ -774,10 +466,7 @@ export const TasksPage: FunctionComponent = () => {
           reducedMotion={reducedMotion}
           draggedTaskId={draggedTaskId}
           dropTargetContext={dropTargetContext}
-          listTransitionStyle={{
-            transitionDuration: interactionTokens.listReorder.duration,
-            transitionTimingFunction: interactionTokens.listReorder.ease,
-          }}
+          listTransitionStyle={listTransitionStyle}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
           onDragStart={handleDragStart}

@@ -264,6 +264,7 @@ describe("Memory Capture Integration", () => {
         countTaskRuns: vi.fn().mockReturnValue(0),
         getLatestSprintRun: vi.fn().mockReturnValue(null),
         countSprintRuns: vi.fn().mockReturnValue(0),
+        listLatestSprintCycleRuns: vi.fn().mockReturnValue([]),
       } as any,
       agentPresetSyncService: {
         resolveTargetedQualityAssuranceAgent: vi.fn().mockResolvedValue({

@@ -224,12 +224,16 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_task_runs_task_session_name", "task_runs", "task_id, session_name");
   ensureIndex(db, "idx_task_runs_task_finished", "task_runs", "task_id, finished_at");
   ensureIndex(db, "idx_task_runs_sprint_run_started", "task_runs", "sprint_run_id, started_at DESC");
+  ensureIndex(db, "idx_task_runs_project_sprint_lookup", "task_runs", "project_id, sprint_id, sprint_run_id, id");
+  ensureIndex(db, "idx_task_runs_project_sprint_run_lookup", "task_runs", "project_id, sprint_run_id, id");
   ensureColumn(db, "provider_invocations", "execution_mode", "TEXT");
   ensureColumn(db, "provider_invocations", "jules_tokens", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "provider_invocations", "invocation_source", "TEXT NOT NULL DEFAULT 'internal'");
   ensureColumn(db, "provider_invocations", "token_accounting_version", "INTEGER NOT NULL DEFAULT 1");
   backfillTokenAccountingV2(db);
   ensureIndex(db, "idx_provider_invocations_project_started", "provider_invocations", "project_id, started_at DESC");
+  ensureIndex(db, "idx_provider_invocations_project_sprint_started", "provider_invocations", "project_id, sprint_id, started_at DESC");
+  ensureIndex(db, "idx_provider_invocations_project_sprint_run_started", "provider_invocations", "project_id, sprint_run_id, started_at DESC");
   ensureIndex(db, "idx_provider_invocations_sprint_started", "provider_invocations", "sprint_id, started_at DESC");
   ensureIndex(db, "idx_provider_invocations_task_started", "provider_invocations", "task_id, started_at DESC");
   ensureIndex(db, "idx_provider_invocations_task_run", "provider_invocations", "task_run_id, started_at DESC");
@@ -245,6 +249,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_task_dispatches_project_sprint_run_recency", "task_dispatches", "project_id, sprint_run_id, last_heartbeat_at DESC, started_at DESC, claimed_at DESC, queued_at DESC");
   ensureIndex(db, "idx_execution_leases_scope", "execution_leases", "scope_type, scope_id");
   ensureIndex(db, "idx_task_run_events_task_run_created", "task_run_events", "task_run_id, created_at DESC");
+  ensureIndex(db, "idx_task_run_events_task_run_created_id", "task_run_events", "task_run_id, created_at DESC, id DESC");
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_task_run_events_provider_activity_run_created
     ON task_run_events (task_run_id, created_at DESC, id DESC)
@@ -276,6 +281,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_sprint_run_events_sprint_run_created", "sprint_run_events", "sprint_run_id, created_at DESC");
   ensureIndex(db, "idx_sprint_run_events_sprint_run_created_id", "sprint_run_events", "sprint_run_id, created_at DESC, id DESC");
   ensureUniqueIndex(db, "idx_sprint_run_events_source_event", "sprint_run_events", "sprint_run_id, source_event_key");
+  ensureIndex(db, "idx_sprint_runs_project_lookup", "sprint_runs", "project_id, id, sprint_id, status");
   ensureIndex(db, "idx_execution_invocations_project_started", "execution_invocations", "project_id, started_at DESC");
   ensureIndex(db, "idx_execution_invocations_sprint_started", "execution_invocations", "sprint_id, started_at DESC");
   ensureIndex(db, "idx_execution_invocations_task_started", "execution_invocations", "task_id, started_at DESC");
@@ -284,6 +290,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_execution_invocations_project_sprint_run_started", "execution_invocations", "project_id, sprint_run_id, started_at DESC");
   ensureIndex(db, "idx_execution_invocations_task_run_started", "execution_invocations", "task_run_id, started_at DESC");
   ensureIndex(db, "idx_execution_invocations_status_started", "execution_invocations", "status, started_at DESC");
+  ensureIndex(db, "idx_execution_invocations_provider_invocation", "execution_invocations", "provider_invocation_id");
   ensureIndex(db, "idx_execution_invocation_messages_invocation_created", "execution_invocation_messages", "invocation_id, created_at ASC");
   ensureIndex(db, "idx_dashboard_realtime_events_scope_sequence", "dashboard_realtime_events", "scope_type, scope_id, is_replayable, sequence DESC");
   // Non-replayable snapshot events are no longer persisted (their watermark is tracked in

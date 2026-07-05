@@ -2,6 +2,8 @@
 
 The Live snapshot (`ProjectLiveDashboardSnapshot`) serves as the authoritative boundary contract for the Live dashboard page and websocket realtime stream.
 
+For the bounded snapshot, cache, realtime delivery, and dashboard view-model guardrails that apply when changing this contract, see [Code Quality And Performance Contracts](./code-quality-performance-contracts.md).
+
 ## Core Boundary Contract
 
 1. **SQLite is the Absolute Source of Truth:**
@@ -9,6 +11,7 @@ The Live snapshot (`ProjectLiveDashboardSnapshot`) serves as the authoritative b
 
 2. **The Server Assembles the Snapshot:**
    The `getProjectLiveSnapshot` module (`src/app/live/project-live-snapshot.ts`) is the unified assembly path. It reads data across repositories to compute a complete projection for a project in a specific moment.
+   Snapshot assembly first resolves and validates the project identity plus selected sprint scope through `ProjectManagementRepository`. After that scope is fixed, the project runtime status read, execution snapshot read, and optional git/CI/PR status read are independent and run concurrently. This keeps the boundary deterministic while preventing slow external git tracking or heavy execution queries from serializing unrelated repository work. Each section still reports its own elapsed duration in the `project_live_snapshot_assembled` log event; the total build time reflects the overlapped wall-clock path.
 
 3. **Websockets Transport Committed Changes:**
    The realtime service (`DashboardRealtimeService`) strictly listens for database commits (e.g., SQLite `UPDATE`, `INSERT`) and triggers the snapshot assembly path. It publishes the newly assembled `ProjectLiveDashboardSnapshot` over the websocket. The websocket transport itself is stateless and relies completely on the backend snapshot assembly.
@@ -25,6 +28,8 @@ The Live snapshot (`ProjectLiveDashboardSnapshot`) serves as the authoritative b
 
 7. **Browser Stabilization:**
    `useDashboardRuntimeData` applies `stabilizeProjectLiveDashboardSnapshot` before equality checks. Project or selected-sprint changes bypass stabilization, while unchanged status, execution, git, and nested execution lists keep their previous references. Active execution snapshots are not replaced by stale empty snapshots during recovery, and missing task runtime metadata can be carried forward only inside the same project and sprint scope.
+   Status task stabilization is semantic rather than payload-deep: equality covers the task identity, rendered title/prompt/dependency/status fields, provider/session metadata, worker branch, PR URL, merge indicators, intervention hints, and QA/review summaries used by Live task cards and task board surfaces. Assembly timestamps, large activity payload churn, and unknown non-rendered task fields must not invalidate the status snapshot or unrelated execution list references. Any field visible in `LiveTaskCard`, `ExecutionRuntimePanel`, or `TasksPage` must be added to this explicit comparison before the UI depends on it.
+   Execution list stabilization is also per-surface semantic. Unchanged `sprintRuns`, `taskDispatches`, `connections`, `attentionItems`, `recentEvents`, and `recentInvocations` reuse the previous list reference even when sibling feeds update, while rendered runtime changes such as statuses, heartbeat/finish markers, error messages, session/provider/branch/PR metadata, counters, and displayed review/intervention text replace the affected list.
 
 ## Field Ownership & Mutation Triggers
 
@@ -74,7 +79,7 @@ The top-level fields within `ProjectLiveDashboardSnapshot` are explicitly owned 
    When orchestration automatically approves a plan, answers a clarification, or resumes a paused task, the execution tables are updated immediately to clear the prior blocked/error dispatch state for that task run. This prevents stale "action required" warnings from surviving on Live task cards after automation has already taken ownership of the handoff.
 
 8. **Cache TTLs and Invalidation Policies:**
-    To guarantee real-time latency budgets, portions of the snapshot are aggressively cached by the `DashboardSnapshotCache`. Cache policies (TTLs and invalidation keys) are explicitly defined in `src/app/lifecycle/dashboard-snapshot-cache-policy.ts`. Current baseline TTLs are 500ms for global telemetry and 2s for project-level stats and execution snapshots. Cached snapshots are immutable to ensure safe concurrent reads without deep cloning. Additionally, live activity streams utilize a short negative cache TTL (e.g., 2s) to briefly suppress repeated failing or empty fetches for running sessions, preserving fast refresh for active sessions while protecting downstream dependencies from noisy retries.
+    To guarantee real-time latency budgets, portions of the snapshot are aggressively cached by the `DashboardSnapshotCache`. Cache policies (TTLs and invalidation keys) are explicitly defined in `src/app/lifecycle/dashboard-snapshot-cache-policy.ts`. Current baseline TTLs are 500ms for global telemetry and 2s for project-level stats and execution snapshots. Cached snapshots are immutable to ensure safe concurrent reads without deep cloning. Execution snapshot caches are scoped by a typed project execution key containing the project id and explicit selected-sprint state: either `selected` with the sprint id or `none` when no sprint is selected. Full snapshots and feed-less lean snapshots use the same scope, so `/api/live` selected-sprint payloads and `project.execution.updated` lean payloads cannot reuse a project-only entry for a different selected sprint. `invalidateProjectExecution(projectId)` clears every full and lean execution entry for that project across all selected-sprint scopes. Additionally, live activity streams utilize a short negative cache TTL (e.g., 2s) to briefly suppress repeated failing or empty fetches for running sessions, preserving fast refresh for active sessions while protecting downstream dependencies from noisy retries.
 
 ## 11. Optimistic UI and Accessibility Guidelines
 When the UI initiates an action (such as pausing a sprint, claiming an attention item, or rerunning a task), the client should rely on optimistic state markers to provide immediate feedback without waiting for the next snapshot. During these pending states, and for dynamic real-time areas:

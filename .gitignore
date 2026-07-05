@@ -36,6 +36,13 @@ logs/openai/
 /test-*
 /tmp*
 
+# Product video captures and renders may contain private local project names.
+/public/product-video/captures/*.png
+/public/product-video/captures/*.json
+/public/product-video/clips/*.webm
+/public/product-video/clips/*.json
+/product-video/out/
+
 # This is a pnpm-only project — never commit an npm lockfile (ungoverned by pnpm overrides)
 package-lock.json
 **/package-lock.json

@@ -905,6 +905,7 @@ export interface WorkerSettings {
 
 export interface QualityAssuranceTriggerSettings {
   enabled: boolean;
+  agentPresetIds: string[];
   agentPresetId: string | null;
 }
 
