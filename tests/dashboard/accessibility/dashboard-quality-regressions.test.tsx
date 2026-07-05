@@ -633,9 +633,11 @@ describe("dashboard accessibility quality regressions", () => {
     expect(actionFeedback).toMatch(/aria-busy=\{isPending \? "true" : undefined\}/);
 
     const quicksprint = readSource("dashboard/src/v2/components/quicksprint/QuicksprintExecutionView.tsx");
-    expect(quicksprint).toMatch(/aria-busy=\{isBusy \? "true" : "false"\}/);
-    expect(quicksprint).toMatch(/role="status"/);
+    expect(quicksprint).toMatch(/aria-busy=\{isBusy \|\| pendingExecuteMode !== null \|\| isCancelPending \? "true" : "false"\}/);
     expect(quicksprint).toMatch(/aria-describedby=\{isSubmitBlocked \? duplicateSubmitDescriptionId : undefined\}/);
+
+    const quicksprintPanel = readSource("dashboard/src/v2/components/quicksprint/QuicksprintPanel.tsx");
+    expect(quicksprintPanel).toMatch(/role="status"/);
 
     const settings = readSource("dashboard/src/v2/components/settings/SettingsContentPanels.tsx");
     expect(settings).toMatch(/aria-busy=\{activeSaving \|\| loading \? "true" : undefined\}/);
