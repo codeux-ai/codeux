@@ -39,6 +39,7 @@ import {
   hasActiveCiFixAttentionAttempt,
   shouldEscalateFeatureMergeConflict,
   collectActiveHumanMergeConflictEscalationTaskIds,
+  collectActiveWorkerCiFixTaskIds,
   collectActiveWorkerMergeConflictTaskIds,
   snapshotTaskState,
   resolveCiStatusCacheTtlMs,
@@ -323,6 +324,7 @@ export class CycleRunner {
     }
 
     const activeWorkerMergeConflictTaskIds = collectActiveWorkerMergeConflictTaskIds(activeProjectAttentionItems);
+    const activeWorkerCiFixTaskIds = collectActiveWorkerCiFixTaskIds(activeProjectAttentionItems);
     const activeHumanMergeConflictEscalationTaskIds = collectActiveHumanMergeConflictEscalationTaskIds(activeProjectAttentionItems);
     const activeMergeConflictTaskIds = new Set([
       ...activeWorkerMergeConflictTaskIds,
@@ -356,6 +358,7 @@ export class CycleRunner {
       activeMergeConflictTaskIds,
       activeHumanMergeConflictEscalationTaskIds,
       this.mergeConflictDebouncer,
+      activeWorkerCiFixTaskIds,
     );
     const transitionState = evaluateSprintTransitionState({
       subtasks,
