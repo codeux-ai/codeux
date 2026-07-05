@@ -1,4 +1,4 @@
-import type { ParsedConversationTurn } from "./provider-conversation-types.js";
+import type { ParsedConversationTurn, ParsedProviderLogResult } from "./provider-conversation-types.js";
 import {
   parseJsonObject,
   parseTimestampMs,
@@ -7,12 +7,9 @@ import {
   type ParsedUsageCounts,
 } from "./usage-parse-utils.js";
 
-export interface CodexLogResult {
-  usage: ParsedUsageCounts | null;
+export interface CodexLogResult extends ParsedProviderLogResult<ParsedUsageCounts> {
   /** The usage object the counts were read from, for raw telemetry storage. */
   rawUsageJson: Record<string, unknown> | null;
-  conversation: ParsedConversationTurn[];
-  nativeSessionId: string | null;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -324,12 +321,7 @@ function streamItemToTurns(item: Record<string, unknown>, timestampMs: number | 
  * invocation (unlike the rollout file, which accumulates across resumes), so no
  * time-window isolation is applied.
  */
-export function parseCodexExecStdout(stdout: string): {
-  usage: ParsedUsageCounts | null;
-  rawUsageJson: Record<string, unknown> | null;
-  nativeSessionId: string | null;
-  conversation: ParsedConversationTurn[];
-} {
+export function parseCodexExecStdout(stdout: string): CodexLogResult {
   let latestUsage: Record<string, unknown> | null = null;
   let nativeSessionId: string | null = null;
   const conversation: ParsedConversationTurn[] = [];

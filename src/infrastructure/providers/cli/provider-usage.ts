@@ -672,57 +672,39 @@ export async function collectProviderUsageTelemetry(args: {
     const exportUsage = rawExportUsage
       ? subtractOpenCodeBaseline(rawExportUsage, args.opencodeBaselineUsage)
       : null;
-    if (parsed) {
-      const transcriptText = parsed.transcriptText || fallbackOutput;
-      const conversation = withLeadingUserTurn(parsed.conversation, args.prompt);
-      // Prefer exported session usage, then any usage the stream happened to
-      // carry (older opencode builds), then estimation.
-      const reported = exportUsage
-        ?? ((parsed.inputTokens > 0 || parsed.outputTokens > 0)
-          ? {
-            inputTokens: parsed.inputTokens,
-            cachedInputTokens: parsed.cachedInputTokens,
-            outputTokens: parsed.outputTokens,
-            reasoningOutputTokens: parsed.reasoningOutputTokens,
-            rawUsageJson: parsed.rawUsageJson,
-          }
-          : null);
-      if (reported) {
-        return {
-          ...emptyTelemetry(),
-          inputTokens: reported.inputTokens,
-          cachedInputTokens: reported.cachedInputTokens,
-          outputTokens: reported.outputTokens,
-          reasoningOutputTokens: reported.reasoningOutputTokens,
-          totalTokens: totalTrackedTokens(reported.inputTokens, reported.cachedInputTokens, reported.outputTokens),
-          usageSource: "reported",
-          rawUsageJson: reported.rawUsageJson,
-          transcriptText,
-          nativeSessionId: parsed.nativeSessionId,
-          conversation,
-        };
-      }
-      const estimated = estimateTelemetry("opencode", args.model, args.prompt, transcriptText);
-      estimated.nativeSessionId = parsed.nativeSessionId;
-      estimated.conversation = conversation;
-      return estimated;
-    }
-    if (exportUsage) {
+    const transcriptText = parsed.transcriptText || fallbackOutput;
+    const conversation = withLeadingUserTurn(parsed.conversation, args.prompt);
+    // Prefer exported session usage, then any usage the stream happened to
+    // carry (older opencode builds), then estimation.
+    const reported = exportUsage
+      ?? (parsed.usage
+        ? {
+          inputTokens: parsed.usage.inputTokens,
+          cachedInputTokens: parsed.usage.cachedInputTokens,
+          outputTokens: parsed.usage.outputTokens,
+          reasoningOutputTokens: parsed.usage.reasoningOutputTokens,
+          rawUsageJson: parsed.rawUsageJson,
+        }
+        : null);
+    if (reported) {
       return {
         ...emptyTelemetry(),
-        inputTokens: exportUsage.inputTokens,
-        cachedInputTokens: exportUsage.cachedInputTokens,
-        outputTokens: exportUsage.outputTokens,
-        reasoningOutputTokens: exportUsage.reasoningOutputTokens,
-        totalTokens: totalTrackedTokens(exportUsage.inputTokens, exportUsage.cachedInputTokens, exportUsage.outputTokens),
+        inputTokens: reported.inputTokens,
+        cachedInputTokens: reported.cachedInputTokens,
+        outputTokens: reported.outputTokens,
+        reasoningOutputTokens: reported.reasoningOutputTokens,
+        totalTokens: totalTrackedTokens(reported.inputTokens, reported.cachedInputTokens, reported.outputTokens),
         usageSource: "reported",
-        rawUsageJson: exportUsage.rawUsageJson,
-        transcriptText: fallbackOutput,
-        nativeSessionId: args.nativeSessionId || null,
-        conversation: [],
+        rawUsageJson: reported.rawUsageJson,
+        transcriptText,
+        nativeSessionId: parsed.nativeSessionId ?? args.nativeSessionId ?? null,
+        conversation,
       };
     }
-    return estimateTelemetry("opencode", args.model, args.prompt, fallbackOutput);
+    const estimated = estimateTelemetry("opencode", args.model, args.prompt, transcriptText);
+    estimated.nativeSessionId = parsed.nativeSessionId ?? args.nativeSessionId ?? null;
+    estimated.conversation = conversation;
+    return estimated;
   }
 
   if (args.provider === "antigravity") {
@@ -736,10 +718,8 @@ export async function collectProviderUsageTelemetry(args: {
 
     if (args.antigravitySessionDbPath) {
       const dbResult = parseAntigravityDatabase(args.antigravitySessionDbPath, args.antigravitySinceIdx ?? undefined);
-      if (dbResult) {
-        usage = dbResult.usage;
-        rawUsageJson = dbResult.rawUsageJson;
-      }
+      usage = dbResult.usage;
+      rawUsageJson = dbResult.rawUsageJson;
     }
 
     const transcriptText = conversation

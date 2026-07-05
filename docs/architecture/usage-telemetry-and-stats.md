@@ -61,6 +61,21 @@ Rollups are exposed in:
 
 ## Provider Collection Rules
 
+### CLI Log Parser Contract
+
+Provider log parsers normalize missing data before `provider-usage.ts` consumes
+it. A parser that can read a log source but finds no conversation turns returns
+`conversation: []`; it does not omit the field or return `undefined`. Usage
+that is absent, malformed, or otherwise unavailable is represented as
+`usage: null` and `rawUsageJson: null`. Downstream telemetry code decides
+whether that becomes `estimated` or `unavailable` usage, preserving the
+persisted provider invocation schema and dashboard API shape.
+
+Provider-specific usage inference remains intentionally narrow. Codex and Qwen
+share the OpenAI-style usage adapter, OpenCode keeps its raw cumulative export
+snapshot for resumed-session baselines, and Antigravity continues to document
+its internal protobuf mapping as inferred rather than official.
+
 ### Gemini
 
 Gemini CLI runs with structured JSON output enabled.
@@ -149,6 +164,8 @@ Each `gen_metadata` row is **one model call**, not a running session total — c
 There is no official schema for this internal protobuf, so the field mapping is inferred rather than documented: input/output/reasoning/candidates are the same fields the original implementation used, and a new field (proto field 5) is treated as **cached/reused-context tokens** — it's present only on some rows (consistent with proto3 omitting zero-valued fields, i.e. "no cache hit this turn"), and where present its value closely tracks the *previous* row's input tokens (that turn's context, now served from cache on the next one).
 
 Because `agy --conversation=<id>` resumes the same conversation db across follow-up/retry invocations — accumulating `gen_metadata` rows across separate CLI runs just like Codex's rollout file or OpenCode's session store — a resumed run must not re-sum generations an earlier invocation already reported. There's no timestamp column to window by, so instead `ProviderRunner` peeks the db's current highest `idx` *before* a resumed run starts (a lightweight read-only query, self-contained to `provider-runner.ts`/`antigravity-log-parser.ts` — no cross-invocation baseline needs to be persisted or threaded through callers, unlike the OpenCode fix) and only sums rows past that cutoff afterward.
+
+If the Antigravity database is missing, malformed, missing `gen_metadata`, or has no rows after the resume cutoff, `parseAntigravityDatabase` returns a structured result with `usage: null`, `rawUsageJson: null`, and `lastIdx: null` unless malformed rows were seen, in which case `lastIdx` records the highest inspected row. Transcript parsing separately returns `[]` for empty or malformed-only transcript files.
 
 ### OpenCode
 

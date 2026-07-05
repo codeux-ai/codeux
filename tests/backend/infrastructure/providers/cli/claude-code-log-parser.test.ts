@@ -53,14 +53,32 @@ describe("parseClaudeCodeSessionJsonl", () => {
   it("returns empty result for empty input", () => {
     const result = parseClaudeCodeSessionJsonl("");
     expect(result.usage).toBeNull();
-    expect(result.conversation).toHaveLength(0);
+    expect(result.rawUsageJson).toBeNull();
+    expect(result.conversation).toEqual([]);
     expect(result.nativeSessionId).toBeNull();
   });
 
   it("returns empty result for whitespace-only input", () => {
     const result = parseClaudeCodeSessionJsonl("   \n  \n  ");
     expect(result.usage).toBeNull();
-    expect(result.conversation).toHaveLength(0);
+    expect(result.rawUsageJson).toBeNull();
+    expect(result.conversation).toEqual([]);
+  });
+
+  it("keeps partial user-only records as conversation turns with null usage", () => {
+    const result = parseClaudeCodeSessionJsonl(makeUserEntry({
+      content: [{ type: "text", text: "Only the prompt was logged." }],
+    }));
+
+    expect(result.usage).toBeNull();
+    expect(result.rawUsageJson).toBeNull();
+    expect(result.conversation).toEqual([
+      {
+        kind: "user",
+        text: "Only the prompt was logged.",
+        timestampMs: Date.parse("2026-06-01T10:00:00.000Z"),
+      },
+    ]);
   });
 
   it("parses nativeSessionId from any entry", () => {
@@ -420,5 +438,38 @@ describe("parseClaudeCodeSessionJsonl", () => {
 
     expect(result.usage!.inputTokens).toBe(10);
     expect(result.conversation).toHaveLength(1);
+  });
+
+  it("parses usage-only assistant records without synthesizing text turns", () => {
+    const result = parseClaudeCodeSessionJsonl(JSON.stringify({
+      type: "assistant",
+      sessionId: "usage-only",
+      timestamp: "2026-06-01T10:00:00.000Z",
+      message: {
+        id: "msg_usage_only",
+        role: "assistant",
+        content: [],
+        usage: {
+          input_tokens: 31,
+          output_tokens: 11,
+          cache_creation_input_tokens: 7,
+          cache_read_input_tokens: 5,
+        },
+      },
+    }));
+
+    expect(result.usage).toEqual({
+      inputTokens: 31,
+      outputTokens: 11,
+      cacheCreationTokens: 7,
+      cacheReadTokens: 5,
+    });
+    expect(result.rawUsageJson).toEqual({
+      input_tokens: 31,
+      output_tokens: 11,
+      cache_creation_input_tokens: 7,
+      cache_read_input_tokens: 5,
+    });
+    expect(result.conversation).toEqual([]);
   });
 });
