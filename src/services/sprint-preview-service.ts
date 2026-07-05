@@ -19,7 +19,7 @@ import type { SettingsRepository } from "../repositories/settings-repository.js"
 import { SprintPreviewRepository } from "../repositories/sprint-preview-repository.js";
 import { DockerBootstrapBuilder } from "../infrastructure/providers/cli/docker-bootstrap-builder.js";
 import { DockerCredentialMountBuilder } from "../infrastructure/providers/cli/docker-credential-mount-builder.js";
-import { DockerSetupImageCache } from "../infrastructure/providers/cli/docker-setup-image-cache.js";
+import { DockerSetupImageCache, type DockerSetupImageCacheProgress } from "../infrastructure/providers/cli/docker-setup-image-cache.js";
 import { resolveDockerRuntimeRoot } from "../infrastructure/providers/cli/docker-runtime-paths.js";
 import { formatSprintBranch } from "../domain/sprint/branch-name-generator.js";
 import { runCommandStrict } from "./cli-process-runner.js";
@@ -241,6 +241,16 @@ export class SprintPreviewService {
               projectId,
               sprintId,
               message,
+            });
+          },
+          onProgress: (progress: DockerSetupImageCacheProgress) => {
+            this.deps.logger?.info("Sprint preview setup image progress", {
+              projectId,
+              sprintId,
+              kind: progress.kind,
+              progressPercent: progress.progressPercent,
+              stepText: progress.stepText,
+              imageTag: progress.imageTag,
             });
           },
           mapSourcePathForDaemon: (sourcePath) => this.mapDockerSourcePathForDaemon(sourcePath, project.baseDir),

@@ -131,6 +131,7 @@ describe("DockerRunner", () => {
   });
 
   it("runs providers inside isolated Docker volumes", async () => {
+    const onSetupImageProgress = vi.fn();
     await runner.runProviderInDocker({
       command: "gemini",
       args: ["--yolo", "--p", "hello"],
@@ -146,6 +147,7 @@ describe("DockerRunner", () => {
       } as any,
       repoPath: "/repo/project",
       onActivity: vi.fn(),
+      onSetupImageProgress,
     });
 
     expect(runStreamingCommand).toHaveBeenCalledWith(
@@ -176,6 +178,7 @@ describe("DockerRunner", () => {
     expect(cacheInstance.resolveImage).toHaveBeenCalledWith(expect.objectContaining({
       installPlaywrightBrowsers: true,
       runtimeRoot: "/runtime-root",
+      onProgress: onSetupImageProgress,
     }));
   });
 

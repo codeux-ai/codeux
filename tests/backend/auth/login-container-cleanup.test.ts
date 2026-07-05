@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import request from "supertest";
 import express from "express";
 import { EventEmitter } from "events";
-import { registerTerminalRoutes, bootDashboardTerminalWebSocketServer } from "../../../src/server/terminal-routes.js";
+import { registerTerminalRoutes, bootDashboardTerminalWebSocketServer, resetLoginBaseImageStateForTests } from "../../../src/server/terminal-routes.js";
 import type { DashboardDependencies } from "../../../src/server/dashboard-server.js";
 
 const mockSpawnEvents = new EventEmitter();
@@ -45,6 +45,7 @@ describe("Login container cleanup", () => {
   let app: express.Express;
 
   beforeEach(() => {
+    resetLoginBaseImageStateForTests();
     app = express();
     app.use(express.json());
 
