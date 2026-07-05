@@ -45,8 +45,12 @@ backup files appear there.
   - `dashboard-server.ts`
   - Express routes for dashboard APIs and static assets.
 - `repositories/`
+  - `db/app-db-schema.ts`, `db/app-db-migrations.ts`
+  - SQLite schema bootstrap plus idempotent additive migrations for `~/.code-ux/app.db`. Backend repository tests now reopen a fresh temp database and run migrations repeatedly to verify execution invocations, provider invocations, task/sprint runtime events, snapshot projection tables, required indexes, and fresh-schema defaults remain queryable without manual setup.
   - `execution-repository.ts`
-  - Delegates snapshot projection to `execution/project-execution-snapshot-query.ts` while keeping validation boundary. The snapshot query owns shared sprint-run/task ID deduplication before invoking bounded slice queries and usage/wall-time enrichment.
+  - Delegates snapshot projection to `execution/project-execution-snapshot-query.ts` while keeping validation boundary. The snapshot query owns shared sprint-run/task ID deduplication before invoking bounded slice queries and usage/wall-time enrichment. Repository coverage exercises provider usage lookups, grouped usage, runtime events, execution invocation joins, and project execution snapshots against the migrated schema.
+  - `project-runtime-repository.ts`
+  - Runtime status sync and projection over project/sprint/task rows plus `task_runs`, `task_run_events`, and persisted runtime context in app settings. Migration coverage verifies a repeatedly migrated fresh database can persist a runtime sync and project it back through the selected-project runtime view.
   - `execution/execution-invocations-query.ts`
   - Focused query module separating invocation and message lists from write concerns. Its live snapshot slice merges bounded project-recent, selected-sprint, and expanded-run rows by invocation ID while preserving recency order.
   - `execution/execution-runtime-events-query.ts`
