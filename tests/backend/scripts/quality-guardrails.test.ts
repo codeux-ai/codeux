@@ -22,6 +22,15 @@ type GuardrailModule = {
     repositorySource: { path: string; text: string },
     serviceSource: { path: string; text: string },
   ) => Array<{ path: string; line: number; pattern: string; match: string; remediation: string }>;
+  findCoverageThresholdViolations: (
+    source: string,
+    options?: {
+      path?: string;
+      minimumGlobalThresholds?: Record<string, number>;
+      filePath?: string;
+      minimumFileLineThreshold?: number;
+    },
+  ) => Array<{ path: string; line: number; pattern: string; match: string; remediation: string }>;
 };
 
 const guardrails = await import("../../../scripts/check-quality-guardrails.mjs") as GuardrailModule;
@@ -207,5 +216,83 @@ class DashboardRealtimeService {
       pattern: "project.execution.updated direct publishRawEvent replayability",
     });
     expect(violations[0].match).not.toContain("conversation.message.created");
+  });
+});
+
+describe("quality guardrail coverage threshold scanner", () => {
+  const passingConfig = `
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  test: {
+    coverage: {
+      provider: "v8",
+      thresholds: {
+        // Never lower these thresholds.
+        lines: 77.4,
+        functions: 71.5,
+        branches: 66.1,
+        statements: 76.0,
+        "src/server/activity-cache-service.ts": {
+          lines: 80,
+        },
+      },
+    },
+  },
+});
+`;
+
+  it("accepts the current global and activity-cache-service coverage thresholds", () => {
+    expect(guardrails.findCoverageThresholdViolations(passingConfig)).toEqual([]);
+  });
+
+  it("reports lowered global coverage thresholds", () => {
+    const violations = guardrails.findCoverageThresholdViolations(
+      passingConfig
+        .replace("lines: 77.4", "lines: 77.3")
+        .replace("functions: 71.5", "functions: 71.4")
+        .replace("branches: 66.1", "branches: 66")
+        .replace("statements: 76.0", "statements: 75.9"),
+    );
+
+    expect(violations.map((violation) => violation.pattern)).toEqual([
+      "coverage threshold lines",
+      "coverage threshold functions",
+      "coverage threshold branches",
+      "coverage threshold statements",
+    ]);
+    expect(violations.map((violation) => violation.match)).toEqual([
+      "lines: 77.3",
+      "functions: 71.4",
+      "branches: 66",
+      "statements: 75.9",
+    ]);
+  });
+
+  it("reports a missing activity-cache-service file threshold", () => {
+    const violations = guardrails.findCoverageThresholdViolations(
+      passingConfig.replace(`
+        "src/server/activity-cache-service.ts": {
+          lines: 80,
+        },`, ""),
+    );
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      pattern: "activity-cache-service coverage threshold",
+      match: "src/server/activity-cache-service.ts: missing",
+    });
+  });
+
+  it("reports a lowered activity-cache-service line threshold", () => {
+    const violations = guardrails.findCoverageThresholdViolations(
+      passingConfig.replace("lines: 80", "lines: 79"),
+    );
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      pattern: "activity-cache-service coverage threshold",
+      match: "src/server/activity-cache-service.ts.lines: 79",
+    });
   });
 });
