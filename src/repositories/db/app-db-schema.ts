@@ -693,7 +693,10 @@ CREATE INDEX IF NOT EXISTS idx_sprint_runs_project_status_recency ON sprint_runs
 CREATE INDEX IF NOT EXISTS idx_task_dispatches_project_task_recency ON task_dispatches (project_id, task_id, last_heartbeat_at DESC, started_at DESC, claimed_at DESC, queued_at DESC);
 CREATE INDEX IF NOT EXISTS idx_task_dispatches_project_sprint_run_recency ON task_dispatches (project_id, sprint_run_id, last_heartbeat_at DESC, started_at DESC, claimed_at DESC, queued_at DESC);
 CREATE INDEX IF NOT EXISTS idx_task_runs_task_sprint_session ON task_runs (task_id, sprint_run_id, session_id);
+CREATE INDEX IF NOT EXISTS idx_task_runs_project_sprint_lookup ON task_runs (project_id, sprint_id, sprint_run_id, id);
+CREATE INDEX IF NOT EXISTS idx_task_runs_project_sprint_run_lookup ON task_runs (project_id, sprint_run_id, id);
 CREATE INDEX IF NOT EXISTS idx_task_run_events_project_created ON task_run_events (project_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_task_run_events_task_run_created_id ON task_run_events (task_run_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_task_run_events_provider_activity_run_created ON task_run_events (task_run_id, created_at DESC, id DESC) WHERE event_type = 'provider_activity';
 CREATE INDEX IF NOT EXISTS idx_task_run_events_provider_activity_project_created ON task_run_events (project_id, created_at DESC, id DESC) WHERE event_type = 'provider_activity';
 CREATE INDEX IF NOT EXISTS idx_project_attention_items_project_owner_status ON project_attention_items (project_id, owner_type, status);
@@ -701,6 +704,7 @@ CREATE INDEX IF NOT EXISTS idx_project_attention_items_project_status_updated ON
 CREATE INDEX IF NOT EXISTS idx_project_attention_items_project_status_updated_opened ON project_attention_items (project_id, status, updated_at DESC, opened_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_project_attention_items_sprint_run_status_updated_opened ON project_attention_items (sprint_run_id, status, updated_at DESC, opened_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_sprint_run_events_sprint_run_created_id ON sprint_run_events (sprint_run_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_sprint_runs_project_lookup ON sprint_runs (project_id, id, sprint_id, status);
 CREATE INDEX IF NOT EXISTS idx_execution_invocations_project_started ON execution_invocations (project_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_execution_invocations_project_sprint_started ON execution_invocations (project_id, sprint_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_execution_invocations_project_sprint_run_started ON execution_invocations (project_id, sprint_run_id, started_at DESC);

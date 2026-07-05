@@ -378,8 +378,88 @@ describe("execution snapshot runtime event slices", () => {
       "run-quiet",
     ]);
 
-    expect(events).toHaveLength(300);
+    expect(events).toHaveLength(121);
+    expect(events.filter((event) => event.id.startsWith("event-chatty-"))).toHaveLength(120);
     expect(events.map((event) => event.id)).toContain("event-quiet");
     expect(events.map((event) => event.id)).not.toContain("event-status-sync");
+  });
+
+  it("bounds chatty expanded runs while retaining quieter selected-sprint events", async () => {
+    const storage = await createStorage();
+    seedProject(storage);
+    const db = storage.getDatabase();
+
+    db.prepare(`
+      INSERT INTO sprint_runs (id, project_id, sprint_id, status, trigger_type, executor_mode, created_at, updated_at)
+      VALUES
+        ('run-selected-quiet', 'project-1', 'sprint-inactive', 'completed', 'dashboard', 'mixed', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'),
+        ('run-background', 'project-1', 'sprint-other', 'completed', 'dashboard', 'mixed', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')
+    `).run();
+    seedRuntimeTask(storage, {
+      sprintId: "sprint-active",
+      taskId: "task-chatty-retention",
+      taskRunId: "task-run-chatty-retention",
+      sprintRunId: "run-active",
+    });
+    seedRuntimeTask(storage, {
+      sprintId: "sprint-other",
+      taskId: "task-expanded-quiet-retention",
+      taskRunId: "task-run-expanded-quiet-retention",
+      sprintRunId: "run-quiet",
+    });
+    seedRuntimeTask(storage, {
+      sprintId: "sprint-other",
+      taskId: "task-background-retention",
+      taskRunId: "task-run-background-retention",
+      sprintRunId: "run-background",
+    });
+    seedRuntimeTask(storage, {
+      sprintId: "sprint-inactive",
+      taskId: "task-selected-quiet-retention",
+      taskRunId: "task-run-selected-quiet-retention",
+      sprintRunId: "run-selected-quiet",
+    });
+
+    for (let i = 0; i < 400; i += 1) {
+      db.prepare(`
+        INSERT INTO task_run_events (id, task_run_id, project_id, event_type, originator, created_at)
+        VALUES (?, 'task-run-chatty-retention', 'project-1', 'provider_activity', 'system', ?)
+      `).run(
+        `event-chatty-retention-${String(i).padStart(3, "0")}`,
+        `2026-01-01T12:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}.000Z`,
+      );
+    }
+    db.prepare(`
+      INSERT INTO task_run_events (id, task_run_id, project_id, event_type, originator, created_at)
+      VALUES ('event-expanded-quiet-retention', 'task-run-expanded-quiet-retention', 'project-1', 'provider_activity', 'system', '2026-01-01T12:07:00.000Z')
+    `).run();
+    for (let i = 0; i < 240; i += 1) {
+      db.prepare(`
+        INSERT INTO task_run_events (id, task_run_id, project_id, event_type, originator, created_at)
+        VALUES (?, 'task-run-background-retention', 'project-1', 'provider_activity', 'system', ?)
+      `).run(
+        `event-background-retention-${String(i).padStart(3, "0")}`,
+        `2026-01-01T11:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}.000Z`,
+      );
+    }
+    db.prepare(`
+      INSERT INTO task_run_events (id, task_run_id, project_id, event_type, originator, created_at)
+      VALUES ('event-selected-quiet-retention', 'task-run-selected-quiet-retention', 'project-1', 'provider_activity', 'system', '2026-01-01T09:00:00.000Z')
+    `).run();
+
+    const events = queryExecutionRuntimeEvents(
+      storage.getDatabase(),
+      storage,
+      "project-1",
+      ["run-active", "run-quiet"],
+      "sprint-inactive",
+    );
+
+    const eventIds = events.map((event) => event.id);
+    expect(events).toHaveLength(300);
+    expect(eventIds).toContain("event-selected-quiet-retention");
+    expect(eventIds).toContain("event-expanded-quiet-retention");
+    expect(events.filter((event) => event.id.startsWith("event-chatty-retention-"))).toHaveLength(120);
+    expect(events.filter((event) => event.id.startsWith("event-background-retention-"))).toHaveLength(178);
   });
 });

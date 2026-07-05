@@ -110,6 +110,7 @@ describe('queryProjectExecutionSnapshot', () => {
 
   it('merges selected sprint and expanded run invocations into the live feed', async () => {
     const { queryExecutionSprintRuns } = await import('../../../../src/repositories/execution/execution-sprint-runs-query.js');
+    const { queryExecutionRuntimeEvents } = await import('../../../../src/repositories/execution/execution-runtime-events-query.js');
     const { queryProjectExecutionSnapshotInvocations } = await import('../../../../src/repositories/execution/execution-invocations-query.js');
     const sprintRuns = [{ id: 'run-active' }, { id: 'run-paused' }];
 
@@ -148,6 +149,13 @@ describe('queryProjectExecutionSnapshot', () => {
       sprintRunIds: ['run-active', 'run-paused'],
       selectedSprintId: 'sprint-paused',
     });
+    expect(queryExecutionRuntimeEvents).toHaveBeenCalledWith(
+      mockDb,
+      mockStorage,
+      'proj-1',
+      ['run-active', 'run-paused'],
+      'sprint-paused',
+    );
     expect(snapshot.recentInvocations.map((invocation: any) => invocation.id)).toEqual([
       'xi-active-run',
       'xi-project-recent',
