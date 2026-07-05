@@ -85,4 +85,59 @@ describe("qwen-code OpenAI log parser", () => {
     expect(await readQwenOpenAiLogRecords(dir, now - 1000)).toEqual([]);
     expect(await parseQwenOpenAiLogs(dir, now - 1000)).toBeNull();
   });
+
+  it("skips partial log files and aggregates recoverable records with missing token fields", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "qwen-log-parser-partial-"));
+    tempDirs.push(dir);
+    const now = Date.now();
+
+    await fs.writeFile(path.join(dir, "partial.json"), "{\"api_key\":\"sk-test-secret\",\"response\":{\"usage\":{\"prompt_tokens\":999");
+    await fs.writeFile(path.join(dir, "unknown-event.json"), JSON.stringify({
+      timestamp: "2026-07-03T00:00:01.000Z",
+      event: "provider.debug",
+      response: {
+        usage: {
+          prompt_tokens: "40",
+          total_tokens: 55,
+          completion_tokens: -2,
+        },
+      },
+    }));
+    await fs.writeFile(path.join(dir, "conversation.json"), JSON.stringify({
+      timestamp: "2026-07-03T00:00:02.000Z",
+      request: {
+        messages: [
+          { role: "system", content: "internal setup" },
+          { role: "user", content: "Please continue" },
+          { role: "assistant", content: "", tool_calls: [{ id: "call_1", function: { name: "shell", arguments: "{\"cmd\":\"test\"}" } }] },
+          { role: "tool", tool_call_id: "call_1", content: "partial output" },
+        ],
+      },
+      response: {
+        usage: { prompt_tokens: 10, completion_tokens: 3 },
+        choices: [{ message: { role: "assistant", content: "Done" } }],
+      },
+    }));
+    await Promise.all(["partial.json", "unknown-event.json", "conversation.json"].map((file) => (
+      fs.utimes(path.join(dir, file), now / 1000, now / 1000)
+    )));
+
+    const records = await readQwenOpenAiLogRecords(dir, now - 1000);
+    const usage = sumQwenOpenAiUsage(records);
+    const conversation = buildQwenConversation(records);
+
+    expect(records).toHaveLength(2);
+    expect(usage).toEqual({
+      inputTokens: 50,
+      cachedInputTokens: 0,
+      outputTokens: 18,
+      reasoningOutputTokens: 0,
+    });
+    expect(conversation.map((turn) => turn.kind)).toEqual(["user", "tool_call", "tool_result", "assistant"]);
+    expect(conversation.find((turn) => turn.kind === "tool_result")).toMatchObject({
+      toolCallId: "call_1",
+      toolOutput: "partial output",
+    });
+    expect(JSON.stringify(records)).not.toContain("sk-test-secret");
+  });
 });
