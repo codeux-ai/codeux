@@ -9,6 +9,7 @@ The Live snapshot (`ProjectLiveDashboardSnapshot`) serves as the authoritative b
 
 2. **The Server Assembles the Snapshot:**
    The `getProjectLiveSnapshot` module (`src/app/live/project-live-snapshot.ts`) is the unified assembly path. It reads data across repositories to compute a complete projection for a project in a specific moment.
+   Snapshot assembly first resolves and validates the project identity plus selected sprint scope through `ProjectManagementRepository`. After that scope is fixed, the project runtime status read, execution snapshot read, and optional git/CI/PR status read are independent and run concurrently. This keeps the boundary deterministic while preventing slow external git tracking or heavy execution queries from serializing unrelated repository work. Each section still reports its own elapsed duration in the `project_live_snapshot_assembled` log event; the total build time reflects the overlapped wall-clock path.
 
 3. **Websockets Transport Committed Changes:**
    The realtime service (`DashboardRealtimeService`) strictly listens for database commits (e.g., SQLite `UPDATE`, `INSERT`) and triggers the snapshot assembly path. It publishes the newly assembled `ProjectLiveDashboardSnapshot` over the websocket. The websocket transport itself is stateless and relies completely on the backend snapshot assembly.
