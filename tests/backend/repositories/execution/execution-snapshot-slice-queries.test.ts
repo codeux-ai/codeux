@@ -125,7 +125,7 @@ describe("execution snapshot invocation slices", () => {
     });
   });
 
-  it("keeps a selected inactive sprint invocation outside the project-recent slice", async () => {
+  it("keeps a selected inactive sprint invocation outside the project-recent and active expanded-run slices", async () => {
     const storage = await createStorage();
     seedProject(storage);
 
@@ -146,7 +146,7 @@ describe("execution snapshot invocation slices", () => {
 
     const invocations = queryProjectExecutionSnapshotInvocations(storage.getDatabase(), {
       projectId: "project-1",
-      sprintRunIds: [],
+      sprintRunIds: ["run-active"],
       selectedSprintId: "sprint-inactive",
     });
 
@@ -176,6 +176,98 @@ function seedRuntimeTask(
 }
 
 describe("execution snapshot runtime event slices", () => {
+  it("deduplicates overlapping recent and selected-sprint events by recency", async () => {
+    const storage = await createStorage();
+    seedProject(storage);
+    const db = storage.getDatabase();
+
+    db.prepare(`
+      INSERT INTO sprint_runs (id, project_id, sprint_id, status, trigger_type, executor_mode, created_at, updated_at)
+      VALUES ('run-inactive', 'project-1', 'sprint-inactive', 'completed', 'dashboard', 'mixed', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')
+    `).run();
+    db.prepare(`
+      INSERT INTO sprint_run_events (id, sprint_run_id, event_type, originator, created_at)
+      VALUES
+        ('event-selected-overlap', 'run-inactive', 'sprint_completed', 'system', '2026-01-01T10:05:00.000Z'),
+        ('event-recent-newer', 'run-quiet', 'sprint_started', 'system', '2026-01-01T10:06:00.000Z'),
+        ('event-recent-older', 'run-active', 'sprint_started', 'system', '2026-01-01T10:04:00.000Z')
+    `).run();
+
+    const events = queryExecutionRuntimeEvents(
+      storage.getDatabase(),
+      storage,
+      "project-1",
+      [],
+      "sprint-inactive",
+    );
+
+    expect(events.map((event) => event.id)).toEqual([
+      "event-recent-newer",
+      "event-selected-overlap",
+      "event-recent-older",
+    ]);
+    expect(events.filter((event) => event.id === "event-selected-overlap")).toHaveLength(1);
+  });
+
+  it("keeps a selected inactive sprint event outside the project-recent and active expanded-run slices", async () => {
+    const storage = await createStorage();
+    seedProject(storage);
+    seedRuntimeTask(storage, {
+      sprintId: "sprint-active",
+      taskId: "task-active-selected-guard",
+      taskRunId: "task-run-active-selected-guard",
+      sprintRunId: "run-active",
+    });
+    seedRuntimeTask(storage, {
+      sprintId: "sprint-other",
+      taskId: "task-recent-selected-guard",
+      taskRunId: "task-run-recent-selected-guard",
+      sprintRunId: "run-quiet",
+    });
+
+    const db = storage.getDatabase();
+    db.prepare(`
+      INSERT INTO sprint_runs (id, project_id, sprint_id, status, trigger_type, executor_mode, created_at, updated_at)
+      VALUES ('run-inactive-selected-events', 'project-1', 'sprint-inactive', 'completed', 'dashboard', 'mixed', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')
+    `).run();
+    seedRuntimeTask(storage, {
+      sprintId: "sprint-inactive",
+      taskId: "task-selected-inactive",
+      taskRunId: "task-run-selected-inactive",
+      sprintRunId: "run-inactive-selected-events",
+    });
+
+    for (let i = 0; i < 245; i += 1) {
+      db.prepare(`
+        INSERT INTO task_run_events (id, task_run_id, project_id, event_type, originator, created_at)
+        VALUES (?, 'task-run-recent-selected-guard', 'project-1', 'provider_activity', 'system', ?)
+      `).run(
+        `event-recent-selected-guard-${String(i).padStart(3, "0")}`,
+        `2026-01-01T11:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}.000Z`,
+      );
+    }
+    db.prepare(`
+      INSERT INTO task_run_events (id, task_run_id, project_id, event_type, originator, created_at)
+      VALUES ('event-active-selected-guard', 'task-run-active-selected-guard', 'project-1', 'provider_activity', 'system', '2026-01-01T12:00:00.000Z')
+    `).run();
+    db.prepare(`
+      INSERT INTO task_run_events (id, task_run_id, project_id, event_type, originator, created_at)
+      VALUES ('event-selected-inactive', 'task-run-selected-inactive', 'project-1', 'provider_activity', 'system', '2026-01-01T09:00:00.000Z')
+    `).run();
+
+    const events = queryExecutionRuntimeEvents(
+      storage.getDatabase(),
+      storage,
+      "project-1",
+      ["run-active", "run-active"],
+      "sprint-inactive",
+    );
+
+    expect(events.map((event) => event.id)).toContain("event-active-selected-guard");
+    expect(events.map((event) => event.id)).toContain("event-selected-inactive");
+    expect(events.filter((event) => event.id === "event-selected-inactive")).toHaveLength(1);
+  });
+
   it("keeps another expanded run's event when one active run is chatty", async () => {
     const storage = await createStorage();
     seedProject(storage);
