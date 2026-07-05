@@ -25,6 +25,8 @@ The Live snapshot (`ProjectLiveDashboardSnapshot`) serves as the authoritative b
 
 7. **Browser Stabilization:**
    `useDashboardRuntimeData` applies `stabilizeProjectLiveDashboardSnapshot` before equality checks. Project or selected-sprint changes bypass stabilization, while unchanged status, execution, git, and nested execution lists keep their previous references. Active execution snapshots are not replaced by stale empty snapshots during recovery, and missing task runtime metadata can be carried forward only inside the same project and sprint scope.
+   Status task stabilization is semantic rather than payload-deep: equality covers the task identity, rendered title/prompt/dependency/status fields, provider/session metadata, worker branch, PR URL, merge indicators, intervention hints, and QA/review summaries used by Live task cards and task board surfaces. Assembly timestamps, large activity payload churn, and unknown non-rendered task fields must not invalidate the status snapshot or unrelated execution list references. Any field visible in `LiveTaskCard`, `ExecutionRuntimePanel`, or `TasksPage` must be added to this explicit comparison before the UI depends on it.
+   Execution list stabilization is also per-surface semantic. Unchanged `sprintRuns`, `taskDispatches`, `connections`, `attentionItems`, `recentEvents`, and `recentInvocations` reuse the previous list reference even when sibling feeds update, while rendered runtime changes such as statuses, heartbeat/finish markers, error messages, session/provider/branch/PR metadata, counters, and displayed review/intervention text replace the affected list.
 
 ## Field Ownership & Mutation Triggers
 
