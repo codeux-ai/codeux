@@ -790,7 +790,7 @@ To prevent credential and runtime config conflicts, provider configurations enfo
 - Backend read-model optimizations efficiently project data to support the resource layer while leaving API routes and backend contracts entirely unchanged.
 - Extensionless dashboard routes like `/sprints` are served by the SPA app shell on direct load or refresh. This routing behavior remains consistent even when Code UX itself is running inside a preview container.
 
-- A "Live Preview" CTA link now appears in the Live view header when the relevant sprint has an active (`running`) preview session with a resolved `hostPort`. The link securely routes directly to the iframe preview origin (`buildPreviewUrl`) at the `lastKnownPath`.
+- A "Live Preview" CTA link appears in the Live view header when the relevant sprint has an active (`running`) preview session with a resolved primary `hostPort`. The main action opens the primary preview origin at the `lastKnownPath`; sessions with multiple configured port mappings add a compact adjacent port picker whose routed options open the selected `previewPort` URL and whose pending mappings remain visibly disabled with their routing reason.
 
 
 ## Interaction Patterns
