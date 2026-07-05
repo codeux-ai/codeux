@@ -4,6 +4,7 @@ export interface UpdateStatus {
   currentVersion: string;
   latestVersion: string | null;
   updateAvailable: boolean;
+  releaseUrl: string;
   checkedAt: string;
   error?: string;
 }
@@ -11,6 +12,7 @@ export interface UpdateStatus {
 const DEFAULT_CACHE_TTL_MS = 30 * 60 * 1000;
 const DEFAULT_FETCH_TIMEOUT_MS = 2500;
 const UPDATE_REGISTRY_URL = "https://registry.npmjs.org/@codeuxai/codeux/latest";
+const CODE_UX_RELEASES_URL = "https://github.com/codeux-ai/codeux/releases";
 
 function parseVersionSegment(segment: string): number {
   const value = Number.parseInt(segment, 10);
@@ -38,6 +40,13 @@ function compareDottedVersions(leftVersion: string, rightVersion: string): numbe
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function buildReleaseUrl(version: string | null): string {
+  if (!version) {
+    return CODE_UX_RELEASES_URL;
+  }
+  return `${CODE_UX_RELEASES_URL}/tag/v${encodeURIComponent(version)}`;
 }
 
 export class UpdateCheckerService {
@@ -89,6 +98,7 @@ export class UpdateCheckerService {
         currentVersion: CODE_UX_VERSION,
         latestVersion: normalizedLatestVersion,
         updateAvailable: compareDottedVersions(normalizedLatestVersion, CODE_UX_VERSION) > 0,
+        releaseUrl: buildReleaseUrl(normalizedLatestVersion),
         checkedAt,
       };
 
@@ -100,6 +110,7 @@ export class UpdateCheckerService {
         currentVersion: CODE_UX_VERSION,
         latestVersion: null,
         updateAvailable: false,
+        releaseUrl: buildReleaseUrl(null),
         checkedAt,
         error: controller.signal.aborted
           ? `Update check timed out after ${this.fetchTimeoutMs}ms.`

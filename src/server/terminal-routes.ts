@@ -441,12 +441,43 @@ async function ensureLoginBaseImage(logger?: Logger): Promise<string> {
   }
 }
 
+export function prewarmLoginBaseImage(logger?: Logger): void {
+  logger?.info("Prewarming Code UX login base image in the background.");
+  void ensureLoginBaseImage(logger).then((image) => {
+    if (image === LOGIN_BASE_IMAGE) {
+      logger?.warn("Login base image prewarm fell back to the raw base image. Provider login can still retry image preparation on demand.");
+      return;
+    }
+    logger?.info("Login base image prewarm completed.", { image });
+  }).catch((error: unknown) => {
+    logger?.warn("Login base image prewarm failed. Provider login will retry image preparation on demand.", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
+}
+
+export function resetLoginBaseImageStateForTests(): void {
+  cachedLoginImageTag = null;
+  pendingLoginImageBuild = null;
+}
+
 async function buildLoginBaseImage(imageTag: string, dockerfile: string, logger?: Logger): Promise<string> {
   logger?.info(`Building login base image ${imageTag} from ${LOGIN_BASE_IMAGE}...`);
   const built = await new Promise<boolean>((resolve) => {
     const proc = spawn("docker", ["build", "-t", imageTag, "-"], { stdio: ["pipe", "pipe", "pipe"] });
     let stderr = "";
+    const logChunk = (chunk: Buffer): void => {
+      const text = chunk.toString("utf8");
+      for (const line of text.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (trimmed) {
+          logger?.info("Login base image build progress", { image: imageTag, line: trimmed });
+        }
+      }
+    };
+    proc.stdout?.on("data", logChunk);
     proc.stderr?.on("data", (chunk) => { stderr += String(chunk); });
+    proc.stderr?.on("data", logChunk);
     proc.on("error", () => resolve(false));
     proc.on("close", (code) => {
       if (code !== 0) {

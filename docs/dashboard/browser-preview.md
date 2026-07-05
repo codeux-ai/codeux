@@ -2,6 +2,12 @@
 
 The browser preview provides an integrated environment for interacting with running sprint containers directly from the dashboard.
 
+## Defaults
+
+- Fresh system and project settings enable the preview runtime and show the in-app browser workspace by default.
+- Existing persisted system, project, or sprint overrides remain authoritative. Sanitization only fills missing preview fields from the current defaults, so an explicit disabled preview stays disabled.
+- `autoStartOnRunningSprint` remains false by default. Operators still choose whether sprint runs should launch preview containers automatically; the default only makes preview controls and the embedded browser available.
+
 ## Interaction Contracts
 
 - Preview refresh, launch, rebuild, stop, remove, navigation, and startup-script save operations use visible async feedback plus local status text. Page-level operation results use `ActionFeedbackRegion` where available; control-specific progress stays beside the control that is pending.

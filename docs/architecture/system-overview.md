@@ -39,6 +39,7 @@ This project is a Model Context Protocol (MCP) server with an integrated dashboa
 - `src/domain/sprint/orchestrator/*`
 - `src/domain/sprint/ci/*`
 - Atomic step modules in `src/sprint/steps/*`
+- Git-mode behavior is split at the final merge gate. REMOTE mode waits for the hosted completion PR to be observed as merged before marking a run complete. LOCAL mode performs the final `feature -> default` merge in the host repository, restores the user's prior checkout afterward, and keeps the run active or paused with merge attention when the local merge fails.
 
 ### 4. Instruction template system
 - `src/instructions/instruction-template-service.ts`

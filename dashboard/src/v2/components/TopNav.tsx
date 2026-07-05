@@ -10,6 +10,7 @@ import { GlobalSearch } from "./top-nav/GlobalSearch.js";
 import { TelemetryStats } from "./top-nav/TelemetryStats.js";
 
 import { AddProjectModal, type AddProjectModalSubmission } from "./ui/AddProjectModal.js";
+import { buildGitHubModeProjectSettingsOverride } from "../../lib/settings-updaters.js";
 import { useProjectData } from "../context/project-data.js";
 import { useSprints } from "../../hooks/useSprints.js";
 import { formatSprintDisplay } from "../lib/format-sprint.js";
@@ -325,17 +326,19 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
     const handleCreateProject = async (project: AddProjectModalSubmission) => {
         if (project.type === 'new_project') {
+            const isLocalProject = project.initMode === 'new-local';
             const sourceRef = project.initMode === 'new-local'
                 ? (project.path || project.name)
                 : (project.repoSlug || project.name);
 
             await createProject({
                 name: project.name,
-                sourceType: project.initMode === 'new-local' ? 'local' : 'git',
+                sourceType: isLocalProject ? 'local' : 'git',
                 sourceRef,
                 initMode: project.initMode,
                 remoteProvider: project.remoteProvider,
                 isPrivate: project.isPrivate,
+                ...(isLocalProject ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
             });
             return;
         }
@@ -345,6 +348,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
             sourceType: project.type,
             sourceRef: project.path,
             cloneDir: project.cloneDir,
+            ...(project.type === "local" ? { settingsOverrides: buildGitHubModeProjectSettingsOverride("LOCAL") } : {}),
         });
     };
 
