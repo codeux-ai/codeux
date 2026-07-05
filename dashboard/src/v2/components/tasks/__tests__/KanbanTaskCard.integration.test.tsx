@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 /// <reference types="@testing-library/jest-dom" />
+import { readFileSync } from "node:fs";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, cleanup } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
@@ -11,6 +12,7 @@ import type { TaskCardViewModel } from "../../../lib/tasks/task-card-view-model.
 expect.extend(matchers);
 
 const mockRequestConfirm = vi.fn().mockResolvedValue(true);
+const taskCardCss = readFileSync("dashboard/src/v2/components/tasks/kanban-task-card.css", "utf8");
 
 vi.mock("../../../hooks/use-confirm-dialog.js", () => ({
   useConfirmDialog: () => ({
@@ -201,7 +203,7 @@ describe("KanbanTaskCard Integration", () => {
   };
 
   it("renders correctly with missing telemetry data", () => {
-    const { getByText } = render(
+    const { getByText, queryByText } = render(
       <KanbanTaskCard
         viewModel={mockMissingDataViewModel}
         onEdit={onEdit}
@@ -210,7 +212,7 @@ describe("KanbanTaskCard Integration", () => {
     );
     expect(getByText("Task Missing Data")).toBeInTheDocument();
     expect(getByText("--")).toBeInTheDocument();
-    expect(getByText("Auto")).toBeInTheDocument();
+    expect(queryByText("Auto")).not.toBeInTheDocument();
   });
 
   const mockLiveViewModel: TaskCardViewModel = {
@@ -275,8 +277,6 @@ describe("KanbanTaskCard Integration", () => {
     const deleteBtn = getByTitle(/Delete task/i);
     expect(editBtn).toBeInTheDocument();
     expect(deleteBtn).toBeInTheDocument();
-    expect(editBtn).toBeVisible();
-    expect(deleteBtn).toBeVisible();
     expect(editBtn).toHaveAccessibleName("Edit task TASK-123: Implement new feature");
     expect(deleteBtn).toHaveAccessibleName("Delete task TASK-123: Implement new feature");
 
@@ -297,8 +297,8 @@ describe("KanbanTaskCard Integration", () => {
     const actionsContainer = editBtn.parentElement;
     expect(actionsContainer).toHaveClass("kanban-card__actions");
     expect(actionsContainer).toHaveAttribute("aria-label", "Actions for task TASK-123");
-    expect(getByText("Rerun")).toBeVisible();
-    expect(getByText("Preview")).toBeVisible();
+    expect(getByText("Rerun")).toBeInTheDocument();
+    expect(getByText("Preview")).toBeInTheDocument();
     expect(getByRole("button", { name: /Pull request pending for task TASK-123: Implement new feature/i })).toHaveTextContent("PR pending");
     expect(getByRole("button", { name: /Live runtime not started for task TASK-123: Implement new feature/i })).toHaveTextContent("Live idle");
 
@@ -308,6 +308,29 @@ describe("KanbanTaskCard Integration", () => {
       destructive: true,
       body: expect.stringContaining("cannot be undone"),
     }));
+  });
+
+  it("hides quick actions by default on pointer-fine hover devices and reveals them on hover or focus", () => {
+    const { container, getByRole } = render(
+      <KanbanTaskCard
+        viewModel={mockViewModel}
+        onEdit={onEdit}
+        onDelete={onDelete}
+      />
+    );
+
+    const card = container.querySelector(".kanban-card");
+    const actionsContainer = container.querySelector(".kanban-card__actions");
+    expect(card).toHaveAttribute("tabIndex", "0");
+    expect(actionsContainer).toHaveClass("kanban-card__actions");
+    expect(actionsContainer).toHaveAttribute("aria-label", "Actions for task TASK-123");
+    expect(getByRole("button", { name: /Edit task TASK-123: Implement new feature/i })).toBeInTheDocument();
+    expect(getByRole("button", { name: /Delete task TASK-123: Implement new feature/i })).toBeInTheDocument();
+
+    expect(taskCardCss).toContain("@media (any-pointer: fine) and (hover: hover)");
+    expect(taskCardCss).toMatch(/\.kanban-card__actions\s*\{[\s\S]*opacity:\s*1;[\s\S]*pointer-events:\s*auto;[\s\S]*transform:\s*translateY\(0\);/);
+    expect(taskCardCss).toMatch(/@media \(any-pointer: fine\) and \(hover: hover\)\s*\{[\s\S]*\.kanban-card__actions\s*\{[\s\S]*opacity:\s*0;[\s\S]*pointer-events:\s*none;[\s\S]*transform:\s*translateY\(-0\.25rem\);/);
+    expect(taskCardCss).toMatch(/\.kanban-card:hover \.kanban-card__actions,[\s\S]*\.kanban-card:focus \.kanban-card__actions,[\s\S]*\.kanban-card:focus-visible \.kanban-card__actions,[\s\S]*\.kanban-card:focus-within \.kanban-card__actions\s*\{[\s\S]*opacity:\s*1;[\s\S]*pointer-events:\s*auto;/);
   });
 
   it("renders status transition clearly when a task status updates", async () => {
@@ -346,7 +369,7 @@ describe("KanbanTaskCard Integration", () => {
     vi.mocked(useReducedMotion).mockReturnValue(true);
 
     const onDragStart = vi.fn();
-    const { container, getByText } = render(
+    const { container, getByText, queryByText } = render(
       <KanbanTaskCard
         viewModel={mockViewModel}
         onEdit={onEdit}
@@ -370,8 +393,9 @@ describe("KanbanTaskCard Integration", () => {
     // Verify screen-reader text is updated
     const srText = getByText("Draggable reordering is disabled in reduced motion mode.");
     expect(srText).toBeInTheDocument();
-    expect(getByText("Drag disabled: reduced motion")).toBeInTheDocument();
-    expect(card).toHaveTextContent("Drag disabled: reduced motion");
+    expect(srText).toHaveClass("sr-only");
+    expect(queryByText("Drag disabled: reduced motion")).not.toBeInTheDocument();
+    expect(card).not.toHaveTextContent("Drag disabled: reduced motion");
   });
 
   it("ensures dependency indicators have clear screen-reader support", () => {
@@ -425,10 +449,11 @@ describe("KanbanTaskCard Integration", () => {
   it("provides accurate drag-and-drop screen-reader guidance", async () => {
     const { useReducedMotion } = await import("../../../hooks/use-reduced-motion.js");
     vi.mocked(useReducedMotion).mockReturnValue(false);
-    const { getByText } = render(<KanbanTaskCard viewModel={mockViewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    const { queryByText } = render(<KanbanTaskCard viewModel={mockViewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
     const kbdGuidance = document.getElementById(`task-card-kbd-${mockViewModel.task.recordId}`);
     expect(kbdGuidance).toBeInTheDocument();
     expect(kbdGuidance).toHaveTextContent(/Draggable task. Drag and drop is pointer-only. Keyboard reordering is not supported/i);
+    expect(queryByText("Pointer drag only")).not.toBeInTheDocument();
   });
 
   it("does not trap Enter or Space on the pointer-only draggable card", async () => {
