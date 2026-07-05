@@ -81,6 +81,7 @@ export function useQuicksprintExecutionState({
   const handleExecute = useCallback(
     async (mode: "plan_only" | "plan_and_start") => {
       if (!selectedTemplate) return;
+      if (executingMode || activeRequestRef.current) return;
 
       const reqId = ++requestCounterRef.current;
       activeRequestRef.current = { id: reqId, detached: false, cancelled: false };
@@ -135,7 +136,7 @@ export function useQuicksprintExecutionState({
         }
       }
     },
-    [onExecute, selectedTemplate, taskCount, noTaskLimit, additionalPrompt, routeOverride, modelOverride, onClose],
+    [onExecute, selectedTemplate, executingMode, taskCount, noTaskLimit, additionalPrompt, routeOverride, modelOverride, onClose],
   );
 
   const handleNewQuicksprint = useCallback(() => {

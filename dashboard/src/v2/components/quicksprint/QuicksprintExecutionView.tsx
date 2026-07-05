@@ -64,10 +64,13 @@ export const QuicksprintExecutionView: FunctionComponent<{
 }) => {
   const isBusy = executingMode !== null;
   const [statusMessage, setStatusMessage] = useState("");
+  const [pendingExecuteMode, setPendingExecuteMode] = useState<"plan_only" | "plan_and_start" | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const pendingExecuteClickRef = useRef(false);
   const promptRegionId = selectedTemplateId ? `quicksprint-combined-prompt-${selectedTemplateId}` : "quicksprint-combined-prompt";
   const busyDescriptionId = selectedTemplateId ? `quicksprint-busy-status-${selectedTemplateId}` : "quicksprint-busy-status";
+  const duplicateSubmitDescriptionId = selectedTemplateId ? `quicksprint-submit-blocked-${selectedTemplateId}` : "quicksprint-submit-blocked";
+  const routeStatusId = selectedTemplateId ? `quicksprint-route-status-${selectedTemplateId}` : "quicksprint-route-status";
   const interactionTokens = useInteractionTokens();
   const feedback = useMemo(
     () => isBusy ? getPlanningFeedback(executingMode === "plan_and_start" ? "plan_and_start" : "plan_only", elapsedMs) : null,
@@ -81,6 +84,21 @@ export const QuicksprintExecutionView: FunctionComponent<{
   const defaultModelLabel = routeOverride?.effectiveModel
     ? `Default (${routeOverride.effectiveModel})`
     : defaultModelOptionLabel;
+  const isSubmitBlocked = isBusy || pendingExecuteMode !== null;
+  const submitBlockedReason = isBusy
+    ? "A quicksprint planning request is already running. Cancel it or wait for it to finish before submitting again."
+    : pendingExecuteMode
+      ? "Planning is starting. Duplicate submissions are blocked until the request state is ready."
+      : "";
+
+  const publishStatus = (message: string) => {
+    setStatusMessage(message);
+    announcePhaseStatus?.(message);
+  };
+
+  const focusConfigureHeading = () => {
+    headingRef.current?.focus({ preventScroll: true });
+  };
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -90,14 +108,21 @@ export const QuicksprintExecutionView: FunctionComponent<{
   }, [selectedTemplateId]);
 
   useEffect(() => {
+    if (!selectedTemplate || isBusy || statusMessage) {
+      return;
+    }
+    setStatusMessage(`${selectedTemplate.name} selected. Configure the quicksprint before planning.`);
+  }, [isBusy, selectedTemplateId, selectedTemplate, statusMessage]);
+
+  useEffect(() => {
     if (!executingMode || !selectedTemplate) {
       pendingExecuteClickRef.current = false;
+      setPendingExecuteMode(null);
       return;
     }
     const actionLabel = executingMode === "plan_and_start" ? "Plan and start" : "Plan only";
     const message = `${actionLabel} request started for ${selectedTemplate.name}.`;
-    setStatusMessage(message);
-    announcePhaseStatus?.(message);
+    publishStatus(message);
   }, [announcePhaseStatus, executingMode, selectedTemplate]);
 
   const renderProviderIcon = (providerId: ProviderId) => (
@@ -116,24 +141,30 @@ export const QuicksprintExecutionView: FunctionComponent<{
   const TemplateIcon = IconMap[selectedTemplate.icon] || Zap;
   const tagColor = selectedTemplate.categoryColor || "slate";
   const handlePlanningExecute = (mode: "plan_only" | "plan_and_start") => {
-    if (isBusy || pendingExecuteClickRef.current) {
+    if (isBusy || pendingExecuteClickRef.current || pendingExecuteMode) {
+      publishStatus(submitBlockedReason || "Planning is already in progress. Duplicate submission blocked.");
       return;
     }
     pendingExecuteClickRef.current = true;
+    setPendingExecuteMode(mode);
+    publishStatus(`${mode === "plan_and_start" ? "Plan and start" : "Plan only"} request queued for ${selectedTemplate.name}.`);
     handleExecute(mode);
   };
   const announceCancel = () => {
     const message = `Cancelled ${executingMode === "plan_and_start" ? "plan and start" : "plan only"} request for ${selectedTemplate.name}.`;
     handleCancelExecute();
-    setStatusMessage(message);
-    announcePhaseStatus?.(message);
+    pendingExecuteClickRef.current = false;
+    setPendingExecuteMode(null);
+    publishStatus(message);
+    focusConfigureHeading();
   };
   const announceNewQuicksprint = () => {
     handleNewQuicksprint();
     setPhase("browse");
     const message = `Opened a new quicksprint while the previous ${executingMode === "plan_and_start" ? "plan and start" : "plan only"} request continues in the background.`;
-    setStatusMessage(message);
-    announcePhaseStatus?.(message);
+    pendingExecuteClickRef.current = false;
+    setPendingExecuteMode(null);
+    publishStatus(message);
   };
 
   return (
@@ -147,7 +178,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   type="button"
                   onClick={onBackToBrowse}
                   disabled={isBusy}
-                  aria-describedby={isBusy ? busyDescriptionId : undefined}
+                  aria-describedby={isSubmitBlocked ? duplicateSubmitDescriptionId : undefined}
                   className="inline-flex min-h-[44px] min-w-[44px] h-8 w-8 items-center justify-center rounded-full border border-black/[0.06] text-slate-400 transition-colors duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transition-none dark:border-white/[0.06] dark:hover:text-white"
                   aria-label="Back to quicksprint templates"
                 >
@@ -183,7 +214,9 @@ export const QuicksprintExecutionView: FunctionComponent<{
                       onChange={(id) => {
                         const opt = routeOptions.find((o) => o.id === id);
                         setRouteOverride(opt || null);
+                        publishStatus(`Planning route changed to ${opt?.label || defaultRouteOptionLabel}.`);
                       }}
+                      aria-describedby={isSubmitBlocked ? duplicateSubmitDescriptionId : routeStatusId}
                       options={[
                         {
                           value: "",
@@ -207,10 +240,10 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   </div>
                 </div>
 
-                <div className={`rounded-[1.4rem] border p-4 transition-[background-color,border-color,opacity] duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] motion-reduce:transition-none ${
+                <div className={`rounded-[1.4rem] border p-4 transition-[background-color,border-color,opacity,transform] duration-[var(--interaction-list-reveal-duration)] ease-[var(--interaction-list-reveal-ease)] motion-reduce:transition-none ${
                   showModelOverride
-                    ? "border-signal-500/20 bg-signal-500/[0.04] dark:bg-signal-500/[0.08]"
-                    : "border-black/[0.06] bg-black/[0.025] opacity-40 dark:border-white/[0.06] dark:bg-white/[0.03]"
+                    ? "translate-y-0 border-signal-500/20 bg-signal-500/[0.04] opacity-100 dark:bg-signal-500/[0.08]"
+                    : "translate-y-0 border-black/[0.06] bg-black/[0.025] opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03]"
                 }`}>
                   <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Model Override</div>
                   <div className="mt-2">
@@ -218,7 +251,12 @@ export const QuicksprintExecutionView: FunctionComponent<{
                       variant="compact"
                       disabled={!showModelOverride || isBusy}
                       value={modelOverride || ""}
-                      onChange={(val) => setModelOverride(val || null)}
+                      onChange={(val) => {
+                        const opt = modelOptions.find((option) => option.value === val);
+                        setModelOverride(val || null);
+                        publishStatus(`Model override changed to ${opt?.label || defaultModelLabel}.`);
+                      }}
+                      aria-describedby={isSubmitBlocked ? duplicateSubmitDescriptionId : routeStatusId}
                       options={[
                         {
                           value: "",
@@ -246,8 +284,12 @@ export const QuicksprintExecutionView: FunctionComponent<{
                 <label className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Additional Instructions (optional)</label>
                 <textarea
                   value={additionalPrompt}
-                  onInput={(e) => setAdditionalPrompt((e.target as HTMLTextAreaElement).value)}
+                  onInput={(e) => {
+                    setAdditionalPrompt((e.target as HTMLTextAreaElement).value);
+                    publishStatus("Additional instructions updated for this quicksprint.");
+                  }}
                   disabled={isBusy}
+                  aria-describedby={isSubmitBlocked ? duplicateSubmitDescriptionId : undefined}
                   placeholder="Add extra context or requirements for this specific run — e.g. 'Focus only on the auth module' or 'Include migration scripts'..."
                   rows={4}
                   className="w-full rounded-[1.7rem] border border-black/[0.06] bg-black/[0.025] p-5 text-sm leading-relaxed text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:border-ember-500/40 focus:shadow-[0_0_0_1px_rgba(255,107,0,0.16),0_0_30px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:placeholder:text-slate-600 resize-y"
@@ -257,7 +299,11 @@ export const QuicksprintExecutionView: FunctionComponent<{
               {/* Prompt preview */}
               <div data-qs-stagger className="mt-6">
                 <button
-                  onClick={() => setShowPrompt(!showPrompt)}
+                  onClick={() => {
+                    const nextShowPrompt = !showPrompt;
+                    setShowPrompt(nextShowPrompt);
+                    publishStatus(nextShowPrompt ? "Combined prompt preview expanded." : "Combined prompt preview collapsed.");
+                  }}
                   aria-expanded={showPrompt}
                   aria-controls={promptRegionId}
                   className={`inline-flex min-h-[44px] min-w-[44px] items-center gap-2 rounded-full border px-3 transition-[background-color,border-color,color,box-shadow] duration-[var(--interaction-control-feedback-duration)] ease-[var(--interaction-control-feedback-ease)] text-[10px] font-bold uppercase tracking-[0.14em] motion-reduce:transition-none ${
@@ -274,6 +320,7 @@ export const QuicksprintExecutionView: FunctionComponent<{
                   id={promptRegionId}
                   role="region"
                   aria-label="Combined quicksprint prompt"
+                  data-motion-contract="expansionCollapse"
                   className={`overflow-hidden transition-[max-height,opacity,margin-top] duration-[var(--interaction-expansion-collapse-duration)] ease-[var(--interaction-expansion-collapse-ease)] motion-reduce:transition-none ${
                     showPrompt ? "mt-4 max-h-[600px] opacity-100" : "max-h-0 opacity-0"
                   }`}
@@ -307,13 +354,24 @@ export const QuicksprintExecutionView: FunctionComponent<{
                     type="checkbox"
                     checked={noTaskLimit}
                     disabled={isBusy}
-                    onChange={(e) => setNoTaskLimit((e.target as HTMLInputElement).checked)}
+                    onChange={(e) => {
+                      const checked = (e.target as HTMLInputElement).checked;
+                      setNoTaskLimit(checked);
+                      publishStatus(checked ? "Subtask limit removed for this quicksprint." : `Subtask count set to ${taskCount}.`);
+                    }}
                     className="h-4 w-4 rounded border-black/20 text-ember-600 focus:ring-ember-500/30"
                   />
                   No limit
                 </label>
                 <div className="mt-5">
-                  <SubtaskSlider value={taskCount} onChange={setTaskCount} disabled={noTaskLimit || isBusy} />
+                  <SubtaskSlider
+                    value={taskCount}
+                    onChange={(value) => {
+                      setTaskCount(value);
+                      publishStatus(`Subtask count set to ${value}.`);
+                    }}
+                    disabled={noTaskLimit || isBusy}
+                  />
                 </div>
               </div>
 
@@ -351,30 +409,42 @@ export const QuicksprintExecutionView: FunctionComponent<{
                     </button>
                   </div>
                 )}
-                {statusMessage && !isBusy && (
-                  <div className="rounded-[1.1rem] border border-black/[0.06] bg-black/[0.025] px-4 py-3 text-xs font-semibold text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400" role="status" aria-live="polite">
-                    {statusMessage}
-                  </div>
+                {isSubmitBlocked && (
+                  <p
+                    id={duplicateSubmitDescriptionId}
+                    className="text-xs leading-relaxed text-slate-500 dark:text-slate-400"
+                  >
+                    {submitBlockedReason}
+                  </p>
                 )}
+                <p
+                  id={routeStatusId}
+                  className="rounded-[1.1rem] border border-black/[0.06] bg-black/[0.025] px-4 py-3 text-xs font-semibold leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400"
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  {statusMessage || `Ready to plan ${selectedTemplate.name}.`}
+                </p>
                 <button
                   onClick={() => handlePlanningExecute("plan_and_start")}
-                  disabled={isBusy}
-                  aria-busy={executingMode === "plan_and_start" ? "true" : "false"}
-                  aria-describedby={isBusy ? busyDescriptionId : undefined}
+                  disabled={isSubmitBlocked}
+                  aria-busy={executingMode === "plan_and_start" || pendingExecuteMode === "plan_and_start" ? "true" : "false"}
+                  aria-describedby={isSubmitBlocked ? duplicateSubmitDescriptionId : undefined}
                   className="flex min-h-[44px] w-full items-center justify-center gap-2.5 rounded-[1.35rem] bg-ember-600 px-5 py-3.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white shadow-[0_0_20px_rgba(255,107,0,0.25)] transition-all hover:bg-ember-500 hover:shadow-[0_0_28px_rgba(255,107,0,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Rocket className={`h-4 w-4 ${executingMode === "plan_and_start" ? "motion-safe:animate-pulse" : ""}`} />
-                  {executingMode === "plan_and_start" ? "Planning & Starting" : "Plan & Start"}
+                  {executingMode === "plan_and_start" || pendingExecuteMode === "plan_and_start" ? "Planning & Starting" : "Plan & Start"}
                 </button>
                 <button
                   onClick={() => handlePlanningExecute("plan_only")}
-                  disabled={isBusy}
-                  aria-busy={executingMode === "plan_only" ? "true" : "false"}
-                  aria-describedby={isBusy ? busyDescriptionId : undefined}
+                  disabled={isSubmitBlocked}
+                  aria-busy={executingMode === "plan_only" || pendingExecuteMode === "plan_only" ? "true" : "false"}
+                  aria-describedby={isSubmitBlocked ? duplicateSubmitDescriptionId : undefined}
                   className="flex min-h-[44px] w-full items-center justify-center gap-2.5 rounded-[1.35rem] border border-black/[0.08] bg-white/66 px-5 py-3.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-black/[0.04] disabled:opacity-50 disabled:cursor-not-allowed dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06]"
                 >
                   <ClipboardList className={`h-4 w-4 ${executingMode === "plan_only" ? "motion-safe:animate-pulse" : ""}`} />
-                  {executingMode === "plan_only" ? "Planning Only" : "Plan Only"}
+                  {executingMode === "plan_only" || pendingExecuteMode === "plan_only" ? "Planning Only" : "Plan Only"}
                 </button>
               </div>
             </div>
