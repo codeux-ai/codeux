@@ -24,7 +24,7 @@ vi.mock("../../../../dashboard/src/v2/lib/monaco-setup.js", () => ({
 
 // Mock react-arborist since JSDOM might lack full ResizeObserver/DOM support for it
 vi.mock("react-arborist", () => ({
-  Tree: ({ data, selection, onSelect, searchMatch, children, searchTerm }: any) => {
+  Tree: ({ data, selection, onSelect, searchMatch, children, searchTerm, loadingPath }: any) => {
     // Just render rows as a flat list for testing tree row component logic
     return (
       <div data-testid="mock-tree">
@@ -38,7 +38,7 @@ vi.mock("react-arborist", () => ({
           };
           const style = {};
           const dragHandle = vi.fn();
-          const tree = { props: { searchTerm } };
+          const tree = { props: { searchTerm, loadingPath } };
           return <div key={nodeData.id}>{children({ node, style, dragHandle, tree })}</div>;
         })}
       </div>
@@ -94,6 +94,19 @@ describe("File Browser Components", () => {
       expect(row).toHaveAttribute("role", "treeitem");
       expect(row).toHaveAttribute("aria-selected", "true");
     });
+
+    it("marks the selected file row busy while file contents load", () => {
+      const nodes = [
+        { id: "1", type: "file", name: "test-file.ts", path: "/test-file.ts" }
+      ];
+
+      render(<FileTree nodes={nodes as any} selectedPath="/test-file.ts" onSelectFile={vi.fn()} loadingPath="/test-file.ts" />);
+
+      const row = screen.getByRole("treeitem", { name: /File \/test-file\.ts, loading contents/i });
+      expect(row).toHaveAttribute("aria-busy", "true");
+      expect(row).toHaveAccessibleDescription("Loading");
+      expect(screen.getByText("Loading")).toBeInTheDocument();
+    });
   });
 
   describe("ChangesList", () => {
@@ -121,6 +134,19 @@ describe("File Browser Components", () => {
       fireEvent.click(button!);
       expect(onSelect).toHaveBeenCalledWith("/changed.ts");
     });
+
+    it("marks the selected changed file busy while its diff loads", () => {
+      const files = [
+        { path: "/changed.ts", status: "modified", additions: 5, deletions: 2 }
+      ];
+
+      render(<ChangesList files={files as any} selectedPath="/changed.ts" onSelect={vi.fn()} loadingPath="/changed.ts" />);
+
+      const option = screen.getByRole("option", { name: /Modified file \/changed\.ts, 5 additions, 2 deletions, loading diff/i });
+      expect(option).toHaveAttribute("aria-busy", "true");
+      expect(option).toHaveAccessibleDescription("Loading");
+      expect(screen.getByText("Loading")).toBeInTheDocument();
+    });
   });
 
   describe("FileViewer", () => {
@@ -142,12 +168,35 @@ describe("File Browser Components", () => {
       expect(screen.getByRole("status")).toBeInTheDocument();
       expect(screen.getByText("Binary file detected")).toBeInTheDocument();
     });
+
+    it("keeps cached file content visible with stale refresh copy", () => {
+      render(<FileViewer file={{ binary: false, path: "/app.ts", content: "cached file", language: "typescript" } as any} loading={true} error={null} isDark={false} />);
+      expect(screen.getByRole("region", { name: "File contents for /app.ts" })).toHaveAttribute("aria-busy", "true");
+      expect(screen.getByText("Refreshing file. Showing cached contents.")).toBeInTheDocument();
+      expect(screen.getByTestId("monaco-editor")).toBeInTheDocument();
+    });
   });
 
   describe("DiffViewer", () => {
     it("renders empty state when diff is null", () => {
       render(<DiffViewer diff={null} loading={false} error={null} isDark={false} sideBySide={false} />);
       expect(screen.getByText("No change selected")).toBeInTheDocument();
+    });
+
+    it("keeps cached diff visible with stale refresh copy", () => {
+      render(
+        <DiffViewer
+          diff={{ path: "/app.ts", original: "old", modified: "new", binary: false, language: "typescript" } as any}
+          loading={true}
+          error={null}
+          isDark={false}
+          sideBySide={false}
+        />
+      );
+
+      expect(screen.getByRole("region", { name: "Diff for /app.ts" })).toHaveAttribute("aria-busy", "true");
+      expect(screen.getByText("Refreshing diff. Showing cached comparison.")).toBeInTheDocument();
+      expect(screen.getByTestId("monaco-diff-editor")).toBeInTheDocument();
     });
   });
 });

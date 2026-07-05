@@ -230,6 +230,36 @@ describe("PreviewSessionSlider", () => {
     expect(unavailableLink).toHaveAccessibleDescription("Preview link unavailable until the container finishes starting and receives a routed host port.");
     expect(screen.getByText("Preview link unavailable until the container finishes starting and receives a routed host port.")).toBeInTheDocument();
   });
+
+  it("disables stopped routed preview links with a persistent recovery reason", () => {
+    render(
+      <PreviewSessionSlider
+        sessions={[
+          {
+            id: "slider-sess-stopped",
+            projectId: "p1",
+            sprintId: "s1",
+            sprintName: "Stopped Sprint",
+            status: "stopped",
+            healthStatus: "unknown",
+            hostPort: 8088,
+            createdAt: "",
+            updatedAt: ""
+          } as any,
+        ]}
+        selectedSessionId="slider-sess-stopped"
+        onSelectSession={vi.fn()}
+        onRemoveSession={vi.fn()}
+      />
+    );
+
+    const unavailableLink = screen.getByText("Link Unavailable").closest("a");
+    expect(unavailableLink).toBeInTheDocument();
+    expect(unavailableLink).not.toHaveAttribute("href");
+    expect(unavailableLink).toHaveAttribute("aria-disabled", "true");
+    expect(unavailableLink).toHaveAccessibleDescription("Preview link unavailable because the selected container is stopped. Rebuild or launch the container to open it.");
+    expect(screen.getByText("Preview link unavailable because the selected container is stopped. Rebuild or launch the container to open it.")).toBeInTheDocument();
+  });
 });
 
 describe("PreviewWindowChrome", () => {
