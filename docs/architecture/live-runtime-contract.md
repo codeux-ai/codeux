@@ -20,6 +20,12 @@ The Live snapshot (`ProjectLiveDashboardSnapshot`) serves as the authoritative b
 5. **Dashboard View-Model Boundary:**
    Live Session render-time projections live in pure dashboard helpers under `dashboard/src/v2/lib/`, with `live-session-view-model.ts` owning deterministic sprint-scoped runtime collections, projected task display state, task filter counts, task-card invocation feeds, duration ticker eligibility, and transport banner state. `LiveSessionPage` memoizes calls into these helpers and keeps hooks, local optimistic action state, and JSX composition in the component. This keeps large task lists from rebuilding indexes ad hoc during render and makes missing snapshots, stale transport states, and invocation selection testable without mounting the full page.
 
+6. **Semantic Snapshot Equality:**
+   Top-level snapshot timestamps are assembly metadata. The realtime service deduplicates `project.live.updated` and `project.execution.updated` using semantic signatures for project/sprint scope, status fields, execution slices, git status, and relevant runtime counters instead of raw `updatedAt` or `timestamp` churn. Unknown payload shapes still fall back to full-payload fingerprinting with `updatedAt` and `timestamp` ignored.
+
+7. **Browser Stabilization:**
+   `useDashboardRuntimeData` applies `stabilizeProjectLiveDashboardSnapshot` before equality checks. Project or selected-sprint changes bypass stabilization, while unchanged status, execution, git, and nested execution lists keep their previous references. Active execution snapshots are not replaced by stale empty snapshots during recovery, and missing task runtime metadata can be carried forward only inside the same project and sprint scope.
+
 ## Field Ownership & Mutation Triggers
 
 The top-level fields within `ProjectLiveDashboardSnapshot` are explicitly owned and mapped back to strict backend origins:
@@ -46,22 +52,28 @@ The top-level fields within `ProjectLiveDashboardSnapshot` are explicitly owned 
 
 ## Observability, Recovery, and Degraded Modes
 
-5. **Guardrails Against Split Authority:**
+1. **Guardrails Against Split Authority:**
    Because the server is the single assembly authority, local browser state must never drift. If the browser receives a gap in the sequence stream (e.g., from network instability), it triggers a `snapshot_required` fallback and immediately drops any partial websocket patches until a full REST `/api/live` payload is loaded, enforcing that there is no split-brain runtime state.
 
-6. **Degraded-Mode UX:**
+2. **Degraded-Mode UX:**
    The `DashboardRealtimeClient` drives deterministic degraded UI modes. If the WebSocket disconnects, the transport transitions through `connecting`, `connected`, `reconnecting`, and `disconnected` states. The UI reflects these states natively without mutating the source-of-truth live snapshots, ensuring the user knows the data is stale rather than attempting to guess the current system state.
 
-7. **Diagnostics and Metrics:**
+3. **Diagnostics and Metrics:**
    For observability, the assembly path is benchmarked (e.g., `scripts/measure-live-snapshot.ts`) to track latency and payload size. These metrics guarantee that as the `ProjectLiveDashboardSnapshot` grows, the backend can continually assemble and deliver it within real-time latency budgets. To further ensure predictable latency, the snapshot projection explicitly avoids issuing empty usage and wall-time rollup queries for idle projects, preventing database query bloat during repeated live refresh cycles.
 
-8. **Reconnect and Restart Recovery Rules:**
+4. **Reconnect and Restart Recovery Rules:**
    When a client reconnects, it receives only replayable events for its subscribed scopes. If a client misses a non-replayable snapshot, the transport natively handles gap detection by forcing a complete snapshot reload rather than replaying outdated or heavy payloads from the SQLite event log.
 
-9. **Automation Handoff Consistency:**
+5. **WebSocket Delivery Boundaries:**
+    Live dashboard snapshots are delivered on the dedicated `project:<projectId>:live` scope as non-replayable `project.live.updated` events. Plain `project:<projectId>` subscribers do not receive the heavy Live payload. The websocket server asks the realtime service for scope interest, skips serialization entirely when no client is subscribed to an event scope, encodes one frame per event, and reuses that buffer for all matching subscribers. Per-subscriber backpressure checks can disconnect slow clients without changing the payload delivered to healthy tabs.
+
+6. **Client Delivery Behavior:**
+    The browser still loads the first snapshot through REST and then applies matching websocket payloads directly. Direct payloads are coalesced to one render per animation frame, with a timeout fallback, so bursts of large snapshots do not saturate the main thread. `snapshot_required` messages always trigger a silent REST refresh, and the client suppresses repeated `snapshot_required` notifications for a short cooldown while continuing to process normal event and subscription messages.
+
+7. **Automation Handoff Consistency:**
    When orchestration automatically approves a plan, answers a clarification, or resumes a paused task, the execution tables are updated immediately to clear the prior blocked/error dispatch state for that task run. This prevents stale "action required" warnings from surviving on Live task cards after automation has already taken ownership of the handoff.
 
-10. **Cache TTLs and Invalidation Policies:**
+8. **Cache TTLs and Invalidation Policies:**
     To guarantee real-time latency budgets, portions of the snapshot are aggressively cached by the `DashboardSnapshotCache`. Cache policies (TTLs and invalidation keys) are explicitly defined in `src/app/lifecycle/dashboard-snapshot-cache-policy.ts`. Current baseline TTLs are 500ms for global telemetry and 2s for project-level stats and execution snapshots. Cached snapshots are immutable to ensure safe concurrent reads without deep cloning. Additionally, live activity streams utilize a short negative cache TTL (e.g., 2s) to briefly suppress repeated failing or empty fetches for running sessions, preserving fast refresh for active sessions while protecting downstream dependencies from noisy retries.
 
 ## 11. Optimistic UI and Accessibility Guidelines

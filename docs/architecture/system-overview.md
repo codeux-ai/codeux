@@ -113,6 +113,7 @@ Priority order:
 - Branch preflight can block plan/orchestrate until local and remote sprint branch exist.
 - Planning preflight can block status/orchestrate until subtask files exist.
 - CI Intelligence settings add protocol-level merge guidance for comments/check gates.
+- `pnpm run ci` starts with the local quality guardrail script, which blocks stale artifacts, unsafe dependency placeholders, realtime snapshot persistence regressions, duplicate optimistic task insertion, and substantial duplicate implementation blocks before broader validation runs.
 
 ## Extensibility Model
 
