@@ -159,7 +159,7 @@ test.describe('sprint and task lifecycle', () => {
     await expect(composer).toBeVisible();
     await composer.getByPlaceholder('Runtime hardening').fill(sprintName);
     await composer.getByPlaceholder('Describe the outcome, affected systems, and what done looks like when this sprint lands.').fill(sprintGoal);
-    await activateButtonWithKeyboard(page, composer.getByRole('button', { name: /Save Draft/ }).first());
+    await composer.getByRole('button', { name: /^Save Draft\b/ }).first().click();
     await activateButtonWithKeyboard(page, composer.getByRole('button', { name: 'Save Draft', exact: true }));
 
     const createdSprint = await getSprintByName(page, project.id, sprintName);
@@ -173,16 +173,16 @@ test.describe('sprint and task lifecycle', () => {
     await page.getByRole('button', { name: `Edit sprint ${sprintName}` }).click();
     await expect(composer).toBeVisible();
     await composer.getByPlaceholder('Runtime hardening').fill(editedSprintName);
-    await activateButtonWithKeyboard(page, composer.getByRole('button', { name: /Save Changes/ }).first());
+    await composer.getByRole('button', { name: /^Save Changes\b/ }).first().click();
     await activateButtonWithKeyboard(page, composer.getByRole('button', { name: 'Save Changes', exact: true }));
 
     await expect.poll(async () => {
       const { sprints } = await fetchSprintsViaApi(request, project.id);
       return sprints.find((sprint) => sprint.id === createdSprint.id)?.name;
     }).toBe(editedSprintName);
+    await page.getByPlaceholder('Search sprints…').fill(editedSprintName);
     await expect(page.getByText(editedSprintName).first()).toBeVisible();
 
-    await page.getByPlaceholder('Search sprints…').fill(editedSprintName);
     await page.getByRole('button', { name: `Open actions menu for sprint ${editedSprintName}` }).last().click();
     await page.getByRole('button', { name: `Delete sprint ${editedSprintName}` }).click();
     const dialog = page.getByRole('dialog', { name: 'Delete Sprint?' });
