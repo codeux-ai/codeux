@@ -418,7 +418,7 @@ export const SettingsPage: FunctionComponent = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[240px_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
         <SettingsCategoryRail
           activeCategory={activeCategory}
           filteredCategories={filteredCategories}
