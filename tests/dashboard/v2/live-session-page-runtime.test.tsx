@@ -215,6 +215,8 @@ describe("LiveSessionPage Runtime Status", () => {
     expect(screen.getByText("Connection Error")).toBeInTheDocument();
     expect(screen.getByText("Some network failure")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("Connection Error");
+    expect(screen.getAllByText("Retrying Load").length).toBeGreaterThan(0);
+    expect(screen.getByRole("region", { name: "Execution runtime" })).toHaveAttribute("aria-busy", "true");
   });
 
   it("renders manual pause messaging and shows intervention label only once", () => {

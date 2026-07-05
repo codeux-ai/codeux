@@ -129,6 +129,35 @@ export const RuntimeSnapshotSurfaceBadge: FunctionComponent<{
     );
 };
 
+export const RuntimeSnapshotSurfaceNotice: FunctionComponent<{
+    surface?: ExecutionSnapshotSurfaceState;
+    panelLabel: string;
+}> = ({ surface = DEFAULT_RUNTIME_SNAPSHOT_SURFACE, panelLabel }) => {
+    if (surface.kind === "live") {
+        return null;
+    }
+
+    const toneClass = surface.kind === "stale"
+        ? "border-status-amber/20 bg-status-amber/[0.055] text-status-amber"
+        : "border-signal-500/20 bg-signal-500/[0.055] text-signal-700 dark:text-signal-300";
+    const message = surface.kind === "stale"
+        ? `${panelLabel} is showing the last cached runtime snapshot while fresh data is unavailable.`
+        : `${panelLabel} is refreshing and keeping the last cached runtime snapshot visible.`;
+
+    return (
+        <p
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            className={`rounded-r-xl rounded-l-sm border border-l-2 px-3 py-2 text-[10px] font-mono leading-relaxed ${toneClass}`}
+        >
+            <span className="font-bold uppercase tracking-[0.14em]">{surface.label}</span>
+            <span className="mx-1" aria-hidden="true">/</span>
+            {message}
+        </p>
+    );
+};
+
 const RuntimeActionButton: FunctionComponent<{
     actionState: LiveActionState;
     labels: LiveActionLabels;
@@ -289,7 +318,8 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                 aria-hidden={collapsible && !open ? "true" : undefined}
             >
                 <div ref={contentRef} className={collapsible ? "collapsible-content overflow-hidden" : ""}>
-                    <div className={`relative z-10 ${collapsible ? "px-5 pb-5 pt-0" : "px-5 pb-5 pt-0"}`}>
+                    <div className={`relative z-10 flex flex-col gap-3 ${collapsible ? "px-5 pb-5 pt-0" : "px-5 pb-5 pt-0"}`}>
+                        <RuntimeSnapshotSurfaceNotice surface={snapshotSurface} panelLabel="Live connections" />
                         {snapshot.connections.length === 0 ? (
                             <p role="status" aria-live="polite" className="text-[11px] font-mono text-slate-400 dark:text-slate-600">
                                 No listeners or workers are connected to the selected project yet.
@@ -545,6 +575,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
             >
                 <div ref={contentRef} className={collapsible ? "collapsible-content overflow-hidden" : ""}>
                     <div className={`relative z-10 space-y-5 ${collapsible ? "px-5 pb-5 pt-0" : "px-5 pb-5 pt-0"}`}>
+                        <RuntimeSnapshotSurfaceNotice surface={snapshotSurface} panelLabel="Execution runtime" />
                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                             {[
                                 { label: "Active Runs", value: activeSprintRuns.length, accent: "text-signal-500" },

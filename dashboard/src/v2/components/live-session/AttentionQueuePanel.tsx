@@ -7,7 +7,7 @@ import { AttentionLedger } from "../AttentionLedger.js";
 import { AlertTriangle, CheckCircle2, ChevronDown } from "lucide-preact";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
-import { RuntimeSnapshotSurfaceBadge } from "./ExecutionRuntimePanel.js";
+import { RuntimeSnapshotSurfaceBadge, RuntimeSnapshotSurfaceNotice } from "./ExecutionRuntimePanel.js";
 
 export const AttentionQueuePanel: FunctionComponent<{
     collapsible?: boolean;
@@ -140,6 +140,7 @@ export const AttentionQueuePanel: FunctionComponent<{
             >
                 <div ref={contentRef} className={collapsible ? "collapsible-content overflow-hidden" : ""}>
                     <div className="relative z-10 flex flex-col gap-3 px-5 pb-5 pt-0">
+                        <RuntimeSnapshotSurfaceNotice surface={snapshotSurface} panelLabel="Attention queue" />
                         {content}
                     </div>
                 </div>
