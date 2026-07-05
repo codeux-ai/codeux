@@ -222,9 +222,10 @@ export class AgentPresetRepository {
         memory_template_override_enabled,
         memory_template_markdown,
         memory_config_json,
+        mcp_access_json,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       projectId,
@@ -242,6 +243,7 @@ export class AgentPresetRepository {
       input.memoryTemplateOverrideEnabled ? 1 : 0,
       input.memoryTemplateMarkdown || null,
       input.memoryConfig ? JSON.stringify(input.memoryConfig) : null,
+      this.serializeMcpAccess(input.mcpAccess),
       now,
       now,
     );

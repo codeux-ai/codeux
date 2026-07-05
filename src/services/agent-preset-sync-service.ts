@@ -13,6 +13,7 @@ import { runCommandStrict } from "./cli-process-runner.js";
 import { readLocalGitOriginUrl } from "../infrastructure/git/local-git-origin.js";
 import { PrService } from "../infrastructure/providers/cli/pr-service.js";
 import { hasAgentAvatarConfig, resolveAgentAvatarConfig } from "../contracts/agent-avatar-style.js";
+import { defaultCodingAgentMcpAccess } from "./agent-mcp-access.js";
 
 interface AgentPresetSyncServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
@@ -87,6 +88,7 @@ export class AgentPresetSyncService {
     memoryTemplateOverrideEnabled?: boolean;
     memoryTemplateMarkdown?: string;
     memoryConfig?: AgentMemoryConfig;
+    mcpAccess?: AgentMcpAccessConfig;
   }): Promise<AgentPresetRecord> {
     const nextName = input.name.trim();
     this.assertAgentNameAvailable(projectId, nextName);
@@ -129,6 +131,7 @@ export class AgentPresetSyncService {
         memoryTemplateOverrideEnabled: source.memoryTemplateOverrideEnabled,
         memoryTemplateMarkdown: source.memoryTemplateMarkdown,
         memoryConfig: source.memoryConfig,
+        mcpAccess: input.mcpAccess,
       });
       return await this.decorateAgentPreset(created);
     }
@@ -271,6 +274,7 @@ export class AgentPresetSyncService {
           memoryTemplateOverrideEnabled: source.memoryTemplateOverrideEnabled,
           memoryTemplateMarkdown: source.memoryTemplateMarkdown,
           memoryConfig: source.memoryConfig,
+          mcpAccess: this.defaultMcpAccessForSource(source.normalizedName),
         });
         presetsById.set(created.id, created);
         presetsByName.set(source.normalizedName, created);
@@ -328,6 +332,15 @@ export class AgentPresetSyncService {
         });
         presetsById.set(imported.id, imported);
         presetsByName.set(source.normalizedName, imported);
+      }
+
+      if (!existing.mcpAccess) {
+        const defaultMcpAccess = this.defaultMcpAccessForSource(source.normalizedName);
+        if (defaultMcpAccess) {
+          const updated = this.deps.agentPresetRepository.updateAgentPreset(existing.id, { mcpAccess: defaultMcpAccess });
+          presetsById.set(updated.id, updated);
+          presetsByName.set(source.normalizedName, updated);
+        }
       }
     }
 
@@ -748,6 +761,13 @@ export class AgentPresetSyncService {
       return ["manager", "chat"];
     }
     return [];
+  }
+
+  private defaultMcpAccessForSource(normalizedName: string): AgentMcpAccessConfig | undefined {
+    if (normalizedName === "worker" || normalizedName === "project manager" || normalizedName === "iris") {
+      return defaultCodingAgentMcpAccess();
+    }
+    return undefined;
   }
 
   private async getRequiredAgent(projectId: string, name: string, suggestedFileName: string): Promise<AgentPresetRecord> {

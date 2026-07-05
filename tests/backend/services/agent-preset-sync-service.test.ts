@@ -12,6 +12,7 @@ import { runCommandStrict } from "../../../src/services/cli-process-runner.js";
 import { KnowledgeIngestionService } from "../../../src/services/knowledge-ingestion-service.js";
 import { KnowledgeService } from "../../../src/services/knowledge-service.js";
 import { PrService } from "../../../src/infrastructure/providers/cli/pr-service.js";
+import { DEFAULT_PLAYWRIGHT_MCP_SERVER_ID } from "../../../src/repositories/settings-defaults.js";
 
 const tempDirs: string[] = [];
 const appStorages: AppDbStorage[] = [];
@@ -266,6 +267,10 @@ describe("AgentPresetSyncService", () => {
       "Quality assurance agent",
       "Worker",
     ]);
+    expect(initial.find((preset) => preset.name === "Worker")?.mcpAccess?.linkedServerIds).toEqual([DEFAULT_PLAYWRIGHT_MCP_SERVER_ID]);
+    expect(initial.find((preset) => preset.name === "Project manager")?.mcpAccess?.linkedServerIds).toEqual([DEFAULT_PLAYWRIGHT_MCP_SERVER_ID]);
+    expect(initial.find((preset) => preset.name === "Planning agent")?.mcpAccess).toBeUndefined();
+    expect(initial.find((preset) => preset.name === "Quality assurance agent")?.mcpAccess).toBeUndefined();
     expect(agentPresetRepository.hasCopiedDefaultAgentPresets(project.id)).toBe(true);
 
     const worker = initial.find((preset) => preset.name === "Worker");
@@ -316,6 +321,7 @@ describe("AgentPresetSyncService", () => {
     const resolved = await syncService.getProjectManagerAgent(project.id);
     expect(resolved.name).toBe("Project manager");
     expect(resolved.instructionMarkdown).toContain("Answer Jules clarification requests.");
+    expect(resolved.mcpAccess?.linkedServerIds).toEqual([DEFAULT_PLAYWRIGHT_MCP_SERVER_ID]);
   });
 
   it("seeds Code UX internal docs as a default Project manager knowledge subscription once", async () => {

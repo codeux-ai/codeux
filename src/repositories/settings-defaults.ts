@@ -91,6 +91,20 @@ export const DEFAULT_PROVIDER_CONFIG_IDS: Record<ProviderId, ProviderConfigId> =
   opencode: "opencode",
   antigravity: "antigravity",
 };
+
+export const DEFAULT_PLAYWRIGHT_MCP_SERVER_ID = "playwright";
+
+export const DEFAULT_PLAYWRIGHT_MCP_SERVER = {
+  id: DEFAULT_PLAYWRIGHT_MCP_SERVER_ID,
+  name: "playwright",
+  label: "Playwright",
+  description: "Browser automation MCP server for coding agents.",
+  enabled: true,
+  transport: "stdio",
+  command: "npx",
+  args: ["@playwright/mcp@latest"],
+  providers: ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"],
+} satisfies DashboardSettings["customMcpServers"][number];
 export const DEFAULT_PROVIDER_CONFIG_NAMES: Record<ProviderId, string> = {
   jules: "Jules Primary",
   gemini: "Gemini Primary",
@@ -608,7 +622,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   },
   skills: DEFAULT_SKILLS,
   mcpTools: DEFAULT_MCP_TOOL_TOGGLES.map((tool) => ({ ...tool })),
-  customMcpServers: [],
+  customMcpServers: [{ ...DEFAULT_PLAYWRIGHT_MCP_SERVER, args: [...DEFAULT_PLAYWRIGHT_MCP_SERVER.args], providers: [...DEFAULT_PLAYWRIGHT_MCP_SERVER.providers] }],
   memory: {
     enabled: true,
     embeddingProvider: "in_app",

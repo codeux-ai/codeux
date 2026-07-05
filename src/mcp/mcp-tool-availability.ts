@@ -114,6 +114,32 @@ export const sanitizeCustomMcpServers = (value: unknown): CustomMcpServer[] => {
   return Array.from(byId.values());
 };
 
+export const sanitizeCustomMcpServersWithDefaults = (
+  value: unknown,
+  defaults: readonly CustomMcpServer[],
+): CustomMcpServer[] => {
+  const sanitizedDefaults = sanitizeCustomMcpServers(defaults);
+  const sanitizedInput = sanitizeCustomMcpServers(value);
+  if (sanitizedInput.length === 0) {
+    return sanitizedDefaults.map((server) => ({ ...server }));
+  }
+
+  const byId = new Map<string, CustomMcpServer>();
+  for (const server of sanitizedDefaults) {
+    byId.set(server.id, server);
+  }
+
+  for (const server of sanitizedInput) {
+    const defaultWithSameName = sanitizedDefaults.find((candidate) => candidate.name === server.name);
+    if (defaultWithSameName && defaultWithSameName.id !== server.id) {
+      byId.delete(defaultWithSameName.id);
+    }
+    byId.set(server.id, server);
+  }
+
+  return Array.from(byId.values());
+};
+
 export const DEFAULT_MCP_TOOL_TOGGLES: McpToolToggle[] = TOOL_DEFINITIONS.map((tool) => ({
   name: tool.name,
   enabled: true,
