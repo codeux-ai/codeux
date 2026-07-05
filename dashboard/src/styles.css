@@ -608,6 +608,27 @@ html.is-electron.is-fullscreen .app-shell {
     display: none;  /* Safari and Chrome */
   }
 
+  @keyframes settings-rail-scroll-indicator {
+    0%, 100% {
+      opacity: 0.72;
+      transform: translateY(-2px);
+    }
+    50% {
+      opacity: 1;
+      transform: translateY(4px);
+    }
+  }
+
+  .settings-rail-scroll-indicator {
+    animation: settings-rail-scroll-indicator 1.55s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .settings-rail-scroll-indicator {
+      animation: none;
+    }
+  }
+
   /* ── Chat Avatar & Widget Animations ───────────────────────────────────────────── */
 
   /* Jules animated J */

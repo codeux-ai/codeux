@@ -3,7 +3,7 @@
  */
 import { h } from "preact";
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, waitFor } from "@testing-library/preact";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";
 import "@testing-library/jest-dom/vitest";
 import { BranchNameSchemeEditor } from "../BranchNameSchemeEditor";
 import { SprintKeyEditor } from "../SprintKeyEditor";
@@ -18,6 +18,14 @@ import type { SettingsSearchMatches } from "../../../lib/settings-search-index";
 import userEvent from "@testing-library/user-event";
 import { SettingsContentPanels } from "../SettingsContentPanels";
 import { UnsavedChangesModal } from "../../ui/UnsavedChangesModal";
+
+const defaultInnerHeight = window.innerHeight;
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  Object.defineProperty(window, "innerHeight", { configurable: true, value: defaultInnerHeight });
+  cleanup();
+});
 
 vi.mock("../panels/SettingsGeneralPanel", () => ({
   SettingsGeneralPanel: () => <div>General panel values stay mounted</div>,
@@ -38,6 +46,99 @@ vi.mock("../panels/SettingsGeneralPanel", () => ({
     );
     const btn = screen.getByRole("button", { name: /General/ });
     expect(btn).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("navigation", { name: "Settings categories" })).toHaveClass(
+      "lg:max-h-[var(--settings-category-rail-available-height)]",
+      "lg:overflow-y-auto",
+      "scrollbar-hide",
+    );
+    expect(screen.queryByText("Categories")).not.toBeInTheDocument();
+    expect(screen.queryByText("Jump directly into the area you need without digging through the full settings tree.")).not.toBeInTheDocument();
+  });
+
+  it("SettingsCategoryRail subtracts the measured page-top margin from its desktop height", async () => {
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 900 });
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      callback(0);
+      return 1;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 240,
+      top: 240,
+      right: 240,
+      bottom: 640,
+      left: 0,
+      width: 240,
+      height: 400,
+      toJSON: () => ({}),
+    });
+    const mockCategories = [
+      { id: "general" as const, num: "01", label: "General", icon: SlidersHorizontal, description: "Test" }
+    ];
+
+    render(
+      <SettingsCategoryRail
+        filteredCategories={mockCategories}
+        activeCategory="general"
+        settingsSearch=""
+        settingsSearchMatches={{}}
+        onSwitchCategory={() => {}}
+      />
+    );
+
+    const rail = screen.getByRole("navigation", { name: "Settings categories" });
+    await waitFor(() => {
+      expect(rail).toHaveStyle("--settings-category-rail-available-height: 644px");
+    });
+    expect(rail).not.toHaveClass("lg:h-[calc(100dvh-5rem)]");
+  });
+
+  it("SettingsCategoryRail shows a hidden-scrollbar scroll hint only while more categories are below", async () => {
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 900 });
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      callback(0);
+      return 1;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 240,
+      top: 240,
+      right: 280,
+      bottom: 640,
+      left: 0,
+      width: 280,
+      height: 400,
+      toJSON: () => ({}),
+    });
+    vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(900);
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(320);
+    const scrollTopSpy = vi.spyOn(HTMLElement.prototype, "scrollTop", "get").mockReturnValue(0);
+    const mockCategories = [
+      { id: "general" as const, num: "01", label: "General", icon: SlidersHorizontal, description: "Test" }
+    ];
+
+    render(
+      <SettingsCategoryRail
+        filteredCategories={mockCategories}
+        activeCategory="general"
+        settingsSearch=""
+        settingsSearchMatches={{}}
+        onSwitchCategory={() => {}}
+      />
+    );
+
+    const rail = screen.getByRole("navigation", { name: "Settings categories" });
+    expect(await screen.findByTestId("settings-category-scroll-hint")).toHaveClass("-bottom-4", "-mb-4", "pb-4");
+    expect(rail).toHaveClass("scrollbar-hide");
+
+    scrollTopSpy.mockReturnValue(580);
+    fireEvent.scroll(rail);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("settings-category-scroll-hint")).not.toBeInTheDocument();
+    });
   });
 
   it("SettingsCategoryRail explains provider search matches", () => {
@@ -63,7 +164,7 @@ vi.mock("../panels/SettingsGeneralPanel", () => ({
       />
     );
 
-    expect(screen.getByText("Showing 1 categories for \"claude\".")).toBeInTheDocument();
+    expect(screen.getByText(/Showing 1 categories for "claude"\./)).toBeInTheDocument();
     expect(screen.getByText("Claude Code")).toBeInTheDocument();
   });
 
@@ -82,7 +183,7 @@ vi.mock("../panels/SettingsGeneralPanel", () => ({
     expect(screen.getByText(/Keep the search field focused/)).toBeInTheDocument();
   });
 
-  it("SettingsCategoryRail exposes pending and disabled category states with visible labels", () => {
+  it("SettingsCategoryRail exposes pending and disabled category states without selected or pending badges", () => {
     cleanup();
     const mockCategories = [
       { id: "general" as const, num: "01", label: "General", icon: SlidersHorizontal, description: "Test" }
@@ -102,10 +203,11 @@ vi.mock("../panels/SettingsGeneralPanel", () => ({
 
     const btn = screen.getByRole("button", { name: /General/ });
     expect(btn).toHaveAttribute("aria-current", "page");
+    expect(btn).toHaveAttribute("aria-selected", "true");
     expect(btn).toHaveAttribute("aria-busy", "true");
     expect(btn).toBeDisabled();
-    expect(screen.getByText("Selected")).toBeInTheDocument();
-    expect(screen.getByText("Pending")).toBeInTheDocument();
+    expect(screen.queryByText("Selected")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pending")).not.toBeInTheDocument();
     expect(screen.getByText("Disabled")).toBeInTheDocument();
   });
 
@@ -169,10 +271,6 @@ vi.mock("../panels/SettingsGeneralPanel", () => ({
 
 
 describe("SettingsControls Accessibility", () => {
-  afterEach(() => {
-    cleanup();
-  });
-
   it("BranchNameSchemeEditor passes aria-label and aria-description", () => {
     render(
       <BranchNameSchemeEditor
@@ -226,9 +324,9 @@ describe("SettingsControls Accessibility", () => {
     expect(input).toHaveAttribute("type", "password");
     expect(input).toHaveAttribute("aria-description", "Secret token");
 
-    await user.click(screen.getByRole("button", { name: "Show secret" }));
+    await user.click(screen.getByRole("button", { name: "Show API key" }));
     expect(input).toHaveAttribute("type", "text");
-    expect(screen.getByRole("button", { name: "Hide secret" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Hide API key" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("NumberInput passes aria-label and aria-description", () => {
@@ -419,7 +517,7 @@ describe("SettingsControls Accessibility", () => {
         } as any}
       />
     );
-    await waitFor(() => expect(screen.getByText("Settings saved.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText("Settings saved.").length).toBeGreaterThan(0));
     expect(screen.getByText("General panel values stay mounted")).toBeInTheDocument();
   });
 
