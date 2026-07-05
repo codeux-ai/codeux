@@ -256,8 +256,9 @@ export const LiveSessionPage: FunctionComponent = () => {
             isRecovering,
             snapshotUpdatedAt,
             transportBannerTitle: transportBannerViewModel?.title ?? null,
+            error,
         }),
-        [isRecovering, snapshotUpdatedAt, transportBannerViewModel?.title, transportState],
+        [error, isRecovering, snapshotUpdatedAt, transportBannerViewModel?.title, transportState],
     );
 
     const handleEditTask = (task: Subtask): void => {
