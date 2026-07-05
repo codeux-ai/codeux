@@ -213,6 +213,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             <SelectInput
               value={localGitModeDisabled ? "OFF" : settings.ciIntelligence.featurePrAutoMergeMode}
               disabled={localGitModeDisabled}
+              disabledReason={localGitModeDisabled ? localGitModeReason : undefined}
               aria-label="Feature PR auto-merge"
               aria-describedby={localGitModeDisabled ? localGitModeReasonId : undefined}
               onChange={(value) => update({
@@ -233,6 +234,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             <SelectInput
               value={localGitModeDisabled ? "OFF" : settings.ciIntelligence.mainBranchAutoMergeMode}
               disabled={localGitModeDisabled}
+              disabledReason={localGitModeDisabled ? localGitModeReason : undefined}
               aria-label="Main branch auto-merge"
               aria-describedby={localGitModeDisabled ? localGitModeReasonId : undefined}
               onChange={(value) => update({
