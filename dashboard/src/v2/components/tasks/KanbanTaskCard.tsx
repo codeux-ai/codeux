@@ -97,6 +97,18 @@ export const KanbanTaskCard: FunctionComponent<{
   const isDragDisabled = isReducedMotion || !!task.isOptimistic;
   const effectiveIsDragging = isDragging && !isDragDisabled;
   const savingDescriptionId = task.isOptimistic ? `task-card-saving-${task.recordId}` : undefined;
+  const cardStateAnnouncement = [
+    `Task ${task.id} status is now ${statusLabel}.`,
+    dependencyIndicators.length > 0
+      ? blockerCount === 0
+        ? `Dependency blockers resolved for task ${task.id}.`
+        : `${dependencyActionLabel} for task ${task.id}.`
+      : `No dependency blockers for task ${task.id}.`,
+    qaReviewBadge.ariaLabel,
+    prSummary,
+    runtimeSummary,
+    task.isOptimistic ? `Saving task ${task.id}; actions that would change this task are temporarily unavailable.` : null,
+  ].filter(Boolean).join(" ");
   const StatusIcon = STATUS_CFG[task.status].icon;
   const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel, triggerRef } = useConfirmDialog();
   const actionIconByKind: Record<TaskCardActionDescriptor["kind"], typeof RotateCcw> = {
@@ -142,11 +154,17 @@ export const KanbanTaskCard: FunctionComponent<{
         willChange: "transform",
         "--kanban-card-control-duration": interactionTokens.controlFeedback.duration,
         "--kanban-card-control-ease": interactionTokens.controlFeedback.ease,
+        "--kanban-card-list-reveal-duration": interactionTokens.listReveal.duration,
+        "--kanban-card-list-reveal-ease": interactionTokens.listReveal.ease,
         "--kanban-card-list-duration": interactionTokens.listReorder.duration,
         "--kanban-card-list-ease": interactionTokens.listReorder.ease,
         "--kanban-card-selection-duration": interactionTokens.selectionMovement.duration,
         "--kanban-card-selection-ease": interactionTokens.selectionMovement.ease,
       }}
+      data-motion-control="controlFeedback"
+      data-motion-selection="selectionMovement"
+      data-motion-list-reveal="listReveal"
+      data-motion-list-reorder="listReorder"
     >
       <span id={`task-card-kbd-${task.recordId}`} className="sr-only">
         {isReducedMotion
@@ -160,6 +178,9 @@ export const KanbanTaskCard: FunctionComponent<{
           Saving task {task.id}; edit, delete, and drag actions are temporarily unavailable.
         </span>
       )}
+      <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {cardStateAnnouncement}
+      </span>
       <div className="absolute inset-0 pointer-events-none transition-colors duration-[var(--kanban-card-control-duration)] ease-[var(--kanban-card-control-ease)] group-hover:bg-signal-500/[0.02] dark:group-hover:bg-signal-500/[0.02]" />
       <WaveFluid accentHex={STATUS_CFG[task.status].hex} />
       <BorderTrace accentHex={STATUS_CFG[task.status].hex} />
@@ -251,7 +272,7 @@ export const KanbanTaskCard: FunctionComponent<{
       <DependencyStatusIndicators indicators={dependencyIndicators} />
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mt-3 pt-3 border-t border-black/[0.04] dark:border-white/[0.04] relative z-10">
-        <div className="kanban-card__meta-slots flex min-w-0 flex-wrap items-center gap-2" aria-busy={task.isOptimistic ? "true" : "false"}>
+        <div className="kanban-card__meta-slots flex min-w-0 flex-wrap items-center gap-2" aria-busy={task.isOptimistic ? "true" : "false"} aria-live="polite" aria-atomic="false">
           <div
             className="kanban-card__meta-slot kanban-card__meta-slot--duration flex min-h-7 min-w-0 items-center gap-1.5 rounded-full border border-black/[0.06] bg-black/[0.03] px-2 text-[10px] text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-500"
             aria-label={liveRunningTime ? `Live runtime: ${liveRunningTime}` : `Duration: ${task.time ?? "Not started"}`}
@@ -298,16 +319,19 @@ export const KanbanTaskCard: FunctionComponent<{
         </span>
       </div>
 
-      <div className="kanban-card__actions absolute top-3 right-3 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center justify-end gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] z-20" aria-label={`Actions for task ${task.id}`}>
+      <div className="kanban-card__actions absolute top-3 right-3 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center justify-end gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] z-20" aria-label={`Actions for task ${task.id}`} data-motion-contract="controlFeedback">
         {cardActions.map((action) => {
           const ActionIcon = actionIconByKind[action.kind];
-          const actionClassName = `inline-flex min-h-8 items-center gap-1.5 rounded-full px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] transition-colors active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 ${
-            action.disabledReason
+          const disabledReason = task.isOptimistic
+            ? `Saving task ${task.id}; ${action.label} is temporarily unavailable.`
+            : action.disabledReason;
+          const actionClassName = `kanban-card__action inline-flex min-h-8 items-center gap-1.5 rounded-full px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] transition-colors active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 ${
+            disabledReason
               ? "text-slate-400 dark:text-slate-500 cursor-not-allowed"
               : "text-slate-500 hover:text-signal-600 dark:text-slate-400 dark:hover:text-signal-400"
           }`;
 
-          if (action.href && !action.disabledReason) {
+          if (action.href && !disabledReason) {
             return (
               <a
                 key={action.kind}
@@ -319,8 +343,8 @@ export const KanbanTaskCard: FunctionComponent<{
                 aria-label={action.ariaLabel}
                 onClick={(event) => event.stopPropagation()}
               >
-                <ActionIcon className="w-3 h-3" aria-hidden="true" />
-                <span>{action.label}</span>
+                <span className="kanban-card__action-icon"><ActionIcon className="w-3 h-3" aria-hidden="true" /></span>
+                <span className="kanban-card__action-label">{action.label}</span>
               </a>
             );
           }
@@ -332,20 +356,21 @@ export const KanbanTaskCard: FunctionComponent<{
               <button
                 type="button"
                 aria-disabled="true"
+                aria-busy={task.isOptimistic ? "true" : undefined}
                 aria-describedby={reasonId}
                 className={actionClassName}
-                title={`${action.title} ${action.disabledReason ?? ""}`.trim()}
+                title={`${action.title} ${disabledReason ?? ""}`.trim()}
                 aria-label={action.ariaLabel}
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
                 }}
               >
-                <ActionIcon className="w-3 h-3" aria-hidden="true" />
-                <span>{action.label}</span>
+                <span className="kanban-card__action-icon"><ActionIcon className="w-3 h-3" aria-hidden="true" /></span>
+                <span className="kanban-card__action-label">{action.label}</span>
               </button>
               <span id={reasonId} className="sr-only">
-                {action.disabledReason ?? "Unavailable"}
+                {disabledReason ?? "Unavailable"}
               </span>
             </Fragment>
           );
@@ -355,7 +380,7 @@ export const KanbanTaskCard: FunctionComponent<{
           aria-disabled={task.isOptimistic ? "true" : undefined}
           aria-busy={task.isOptimistic ? "true" : undefined}
           aria-describedby={task.isOptimistic ? `task-card-edit-reason-${task.recordId}` : undefined}
-          className="inline-flex min-h-8 items-center gap-1.5 rounded-full px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors active:scale-95 hover:text-signal-600 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:text-slate-400 dark:hover:text-signal-400"
+          className="kanban-card__action inline-flex min-h-8 items-center gap-1.5 rounded-full px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors active:scale-95 hover:text-signal-600 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:text-slate-400 dark:hover:text-signal-400"
           title={task.isOptimistic ? `Edit unavailable while task ${task.id} is saving` : `Edit task ${task.id}`} aria-label={`Edit task ${task.id}: ${task.title}`}
           onClick={(event) => {
             event.stopPropagation();
@@ -364,8 +389,8 @@ export const KanbanTaskCard: FunctionComponent<{
             }
           }}
         >
-          <Settings className="w-3 h-3" aria-hidden="true" />
-          <span>Edit</span>
+          <span className="kanban-card__action-icon"><Settings className="w-3 h-3" aria-hidden="true" /></span>
+          <span className="kanban-card__action-label">Edit</span>
         </button>
         {task.isOptimistic && (
           <span id={`task-card-edit-reason-${task.recordId}`} className="sr-only">
@@ -378,7 +403,7 @@ export const KanbanTaskCard: FunctionComponent<{
           aria-disabled={task.isOptimistic ? "true" : undefined}
           aria-busy={task.isOptimistic ? "true" : undefined}
           aria-describedby={task.isOptimistic ? `task-card-delete-reason-${task.recordId}` : undefined}
-          className="inline-flex min-h-8 items-center gap-1.5 rounded-full px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors active:scale-95 hover:text-status-red disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red/30 dark:text-slate-400"
+          className="kanban-card__action inline-flex min-h-8 items-center gap-1.5 rounded-full px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors active:scale-95 hover:text-status-red disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red/30 dark:text-slate-400"
           title={task.isOptimistic ? `Delete unavailable while task ${task.id} is saving` : `Delete task ${task.id}`} aria-label={`Delete task ${task.id}: ${task.title}`}
           onClick={async (e) => {
             e.stopPropagation();
@@ -399,8 +424,8 @@ export const KanbanTaskCard: FunctionComponent<{
             }
           }}
         >
-          <Trash2 className="w-3 h-3" aria-hidden="true" />
-          <span>Delete</span>
+          <span className="kanban-card__action-icon"><Trash2 className="w-3 h-3" aria-hidden="true" /></span>
+          <span className="kanban-card__action-label">Delete</span>
         </button>
         {task.isOptimistic && (
           <span id={`task-card-delete-reason-${task.recordId}`} className="sr-only">
