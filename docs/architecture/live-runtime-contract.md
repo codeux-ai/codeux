@@ -2,6 +2,8 @@
 
 The Live snapshot (`ProjectLiveDashboardSnapshot`) serves as the authoritative boundary contract for the Live dashboard page and websocket realtime stream.
 
+For the bounded snapshot, cache, realtime delivery, and dashboard view-model guardrails that apply when changing this contract, see [Code Quality And Performance Contracts](./code-quality-performance-contracts.md).
+
 ## Core Boundary Contract
 
 1. **SQLite is the Absolute Source of Truth:**

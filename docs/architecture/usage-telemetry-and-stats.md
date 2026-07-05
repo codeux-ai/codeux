@@ -2,6 +2,8 @@
 
 This page describes the provider-usage telemetry model that powers token and time statistics across tasks, sprints, and projects.
 
+For the metadata-first provider telemetry and bounded stats/projection invariants that should guide implementation changes, see [Code Quality And Performance Contracts](./code-quality-performance-contracts.md).
+
 ## Purpose
 
 Code UX now tracks CLI-provider execution usage in a DB-native form so the dashboard can answer:

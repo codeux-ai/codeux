@@ -124,6 +124,8 @@ It joins:
 
 This keeps the dashboard read path aligned with the same DB-native runtime records the orchestrator and workers update.
 
+For the repository-wide quality and performance invariants that protect this read path, including scoped execution caches and indexed projection slices, see [Code Quality And Performance Contracts](./code-quality-performance-contracts.md).
+
 ## Current UI Usage
 
 The v2 live page now renders an execution runtime panel showing:

@@ -1,5 +1,7 @@
 # Tasks Page Design System
 
+Task board implementation must also follow the pure dashboard view-model and rendering performance contracts in [Code Quality And Performance Contracts](../architecture/code-quality-performance-contracts.md).
+
 ## Core Aesthetic: Refined Production Board
 
 The Tasks page and Kanban board should feel like a 'Refined Production Board'. It prioritizes clear state scannability, exact layout, and reduced visual noise.
