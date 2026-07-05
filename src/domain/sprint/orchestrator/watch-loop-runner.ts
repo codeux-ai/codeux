@@ -660,7 +660,11 @@ export class WatchLoopRunner {
               featureBranchTaskContexts: selectMergedTaskContexts(subtasks, { limit: 8 }),
             },
           })]);
-        } else if (ciIntelligence.resolveMainMergeFailedChecks && !mergeFeedback.hasFailedChecks) {
+        } else if (
+          ciIntelligence.resolveMainMergeFailedChecks
+          && !mergeFeedback.hasFailedChecks
+          && mergeFeedback.state !== "pending_checks"
+        ) {
           resolveMainMergeAttentionItems(
             this.deps.projectAttentionService,
             scopedExecutionContext.project.id,

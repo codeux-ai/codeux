@@ -124,6 +124,7 @@ export class CycleStateCoordinator {
     activeMergeConflictTaskIds: Set<string>,
     activeHumanMergeConflictEscalationTaskIds: Set<string>,
     mergeConflictDebouncer?: MergeConflictDebouncer,
+    activeWorkerCiFixTaskIds: Set<string> = new Set(),
   ): void {
     const projectId = args.executionContext.project.id;
     const sprintId = args.executionContext.sprint.id;
@@ -297,7 +298,7 @@ export class CycleStateCoordinator {
           },
         });
       }
-      if (!ciFixTaskIds.has(taskId)) {
+      if (!ciFixTaskIds.has(taskId) && !activeWorkerCiFixTaskIds.has(taskId)) {
         itemsToResolve.push({
           filter: {
             projectId,
@@ -363,6 +364,19 @@ export function collectActiveWorkerMergeConflictTaskIds(subtasks: Array<{
   return new Set(
     subtasks
       .filter((item) => item.attentionType === "merge_conflict" && item.ownerType === "worker")
+      .map((item) => item.taskId?.trim())
+      .filter((taskId): taskId is string => Boolean(taskId)),
+  );
+}
+
+export function collectActiveWorkerCiFixTaskIds(subtasks: Array<{
+  taskId: string | null;
+  attentionType: string;
+  ownerType: string;
+}>): Set<string> {
+  return new Set(
+    subtasks
+      .filter((item) => item.attentionType === "ci_fix_required" && item.ownerType === "worker")
       .map((item) => item.taskId?.trim())
       .filter((taskId): taskId is string => Boolean(taskId)),
   );
