@@ -54,13 +54,25 @@ Current refined dashboard surfaces use the interaction contracts as follows:
 | Surface | Motion contracts | State communication |
 | --- | --- | --- |
 | Shared primitives (`Button`, `Select`, `DropdownMenu`, `ConfirmDialog`, `ActionFeedbackRegion`) | `controlFeedback`, `enterExit`, `expansionCollapse`, `inlineValidation`, `asyncFeedback` | Native `disabled` where possible; normalized `aria-disabled`; fixed feedback icon slots; `aria-busy` on pending controls or regions; status/alert live regions for async results. |
-| Quicksprint panel | `enterExit`, `listReveal`, `selectionMovement`, `expansionCollapse`, `controlFeedback` | Phase changes announce through a polite status region, configure headings receive focus with `preventScroll`, busy planning disables conflicting controls, and cancel/status copy remains visible under reduced motion. |
-| Sprint ledger | `controlFeedback`, `selectionMovement`, `listReorder`, `expansionCollapse` | Sort/filter/selection/bulk states announce politely; selected and pending rows retain static badges; bulk delete uses `ConfirmDialog`; focus returns to the delete trigger or the ledger fallback. |
-| Task cards and active streams | `controlFeedback`, `listReorder` | Status, blockers, QA review, PR/live metadata, edit/delete actions, and drag limitations are visible without hover-only disclosure; reduced motion disables pointer drag and exposes static drag-disabled copy. |
-| Settings workspace | `controlFeedback`, `selectionMovement`, `enterExit`, `inlineValidation`, `asyncFeedback` | Category changes expose selected/pending/disabled labels, settings saves use active-panel `aria-busy` plus `ActionFeedbackRegion`, and fields preserve current values during loading or saving. |
-| Browser, file, and diff workbench | `controlFeedback`, `enterExit`, `asyncFeedback` | Loading, empty, unavailable, and error states use status or alert regions; address/session controls stay keyboard reachable and keep disabled styling tied to a visible structural control. |
-| Live runtime | `controlFeedback`, `enterExit`, `expansionCollapse`, `selectionMovement`, `listReveal`, `listReorder`, `asyncFeedback` | Stale/recovering/refreshing states keep cached runtime data visible with polite live regions; disconnected transport and blocking errors are assertive; pending runtime actions keep focus stable. |
-| Global search | `enterExit`, `listReveal`, `controlFeedback`, `selectionMovement` | The input remains the combobox focus owner with `aria-activedescendant`; stale results remain available with `aria-busy`; unavailable rows expose a visible disabled reason and suppress activation; active rows are scrolled within the result container only. |
+| Quicksprint panel | `enterExit`, `listReveal`, `selectionMovement`, `expansionCollapse`, `controlFeedback`, `asyncFeedback` | Browse, edit, and configure phases announce through a shared polite status region; picker controls expose expanded/selected state; planning suppresses duplicate requests; destructive template removal uses confirmation; cancel/status copy remains visible under reduced motion. |
+| Sprint ledger | `controlFeedback`, `selectionMovement`, `listReorder`, `expansionCollapse`, `asyncFeedback` | Sort, filter, selection, and bulk-action changes are composed into one polite live-region message; selected and pending rows retain static badges; bulk delete uses `ConfirmDialog`; focus returns to the delete trigger or a ledger fallback after dialog teardown. |
+| Live runtime | `controlFeedback`, `enterExit`, `expansionCollapse`, `selectionMovement`, `listReveal`, `listReorder`, `asyncFeedback` | Reconnect, stale, refreshing, and recovering states keep the last runtime snapshot visible with polite live regions; disconnected transport and blocking errors are assertive; pending runtime actions remain focus-stable with `aria-disabled` plus activation suppression. |
+| Browser preview, file, and diff workbench | `controlFeedback`, `enterExit`, `selectionMovement`, `listReveal`, `listReorder`, `asyncFeedback` | Preview launch/rebuild/stop/navigation/script/log operations expose visible async status; unavailable links remain keyboard reachable as disabled link controls with persistent reasons; stale iframe/log content remains mounted during refresh when useful content exists. |
+| Settings workspace | `controlFeedback`, `selectionMovement`, `enterExit`, `inlineValidation`, `asyncFeedback` | Scope/category changes expose selected, pending, inherited, overridden, and disabled-reason text; saves use active-panel `aria-busy` plus `ActionFeedbackRegion`; provider removals use inline confirmation with cancel and focus restoration; fields preserve current draft values while loading or saving. |
+| Global search | `enterExit`, `listReveal`, `controlFeedback`, `selectionMovement` | The input remains the combobox focus owner with `aria-activedescendant`; stale results remain available with `aria-busy`; unavailable rows expose a visible disabled reason and suppress pointer and keyboard activation; active rows are scrolled within the result container only. |
+| Memory workspace | `controlFeedback`, `selectionMovement`, `listReveal`, `listReorder`, `expansionCollapse`, `inlineValidation`, `asyncFeedback` | Search/filter/selection changes announce counts and selected state; background refresh or failed refresh keeps the last useful list visible; batch delete uses confirmation, optimistic feedback, retry, and focus restoration; reduced motion keeps badges, rings, and live-region copy for selected graph/list state. |
+| Task cards and active streams | `controlFeedback`, `selectionMovement`, `listReorder`, `asyncFeedback` | Status, dependency blockers, QA review, PR/live metadata, edit/delete actions, pending dispatch, and drag limitations are visible without hover-only disclosure; repeated controls include task-specific names and expose pending suppression with `aria-busy`, disabled state, and reason text. |
+
+## Cross-Surface Interaction Rules
+
+- Preserve stale data when a surface already has a useful snapshot or list and the new request is a refresh, reconnect, retryable load failure, or transient stale state. Mark the affected region with `aria-busy` when it is actively updating, add polite status copy, and visually dim or badge the stale content without blocking valid actions.
+- Show an honest empty state when the committed query or filter set has no results. Do not keep stale content for a new committed search that legitimately returns no matches.
+- Disabled or unavailable controls need a durable reason. Use visible helper text, a status badge, `aria-describedby`, or `title`; do not depend on click-time announcements from native disabled controls.
+- Destructive dashboard actions use `useConfirmDialog` and `ConfirmDialog` when confirmation is required. The dialog must name the destructive target, trap focus, support Escape/cancel, expose pending progress when applicable, and restore focus to the initiating control or a safe page fallback.
+- Focus restoration applies to overlays, menus, destructive confirmations, async feedback controls that remove themselves, and route-changing controls. If the original trigger has disappeared or become unusable, move focus to a named route region, ledger/list fallback, `[data-focus-fallback]`, `[role="main"]`, or `body`.
+- Reduced motion is not reduced information. When token durations resolve to `0` or `"0ms"`, keep static state cues such as borders, rings, badges, count chips, progress text, `aria-busy`, disabled-reason copy, and live-region messages.
+- Data interactions should announce the result of the operator action, not every visual frame. Sort changes, committed filters, selection counts, bulk-operation starts/completions, active search result changes, memory list changes, and runtime invocation-count summaries should use concise polite live-region text. Blocking errors and disconnected live transport remain assertive.
+- Repeated async controls must include target-specific accessible names, suppress duplicate activation while pending, and keep stable icon/text slots so labels and hit targets do not jump when spinners or result icons appear.
 
 ## Accessibility & Async Feedback
 
@@ -69,8 +81,8 @@ When announcing asynchronous feedback (e.g., via Toasts, ActionFeedbackRegion, o
 - Visual movement (like a toast sliding in) must not interfere with the user's focus or block standard keyboard interaction.
 - Use polite announcements for loading, empty, success, pending, background refresh, reconnect attempts that do not block the current view, and stale-data notices. Use assertive announcements only for blocking errors, failed saves, unavailable preview containers, disconnected live transport, and destructive confirmations that require immediate operator attention.
 - `aria-busy` belongs on the control or region affected by async work. Keep stale content visible during background refresh whenever the source area already owns cached data, such as Stats, Tasks, Sprints, Overview telemetry, and Live runtime panels.
-- `ActionFeedbackRegion` announces pending states politely, exposes pending progress with `aria-busy`, announces blocking errors assertively, and leaves success states with `aria-live="off"` after the pending announcement. Error feedback persists until dismissed or cleared; do not auto-dismiss a blocking error.
-- Toasts use `asyncFeedback` for entrance, `enterExit` for dismissal, and `listReorder` when the non-error stack compacts. Non-error toast overflow may dismiss older items, but error toasts remain in the dedicated error stack until the user or caller removes them.
+- `ActionFeedbackRegion` announces pending states politely, exposes pending progress with `aria-busy`, announces blocking errors assertively, and leaves success states with `aria-live="off"` after the pending announcement. Error feedback persists until dismissed or cleared; do not auto-dismiss a blocking error. Retry, dismiss, and clear-error controls keep stable slots, target-specific labels, focus fallback, and duplicate retry suppression while a retry is pending.
+- Toasts use `asyncFeedback` for entrance, `enterExit` for dismissal, and `listReorder` when the non-error stack compacts. Non-error toast overflow may dismiss older items, but error toasts remain in the dedicated error stack until the user or caller removes them. Retry actions remain visible, suppress duplicate activation while pending, and do not dismiss a blocking error toast by themselves.
 - Cancellation that the operator requested, such as sprint planning cancellation, is warning feedback rather than error feedback. Keep it visible until the operator dismisses it or starts another action.
 - Stale-data and background-refresh states must preserve the last useful content when cached data exists. Use a polite status message, `aria-busy` on the updating region when applicable, and visible copy such as "Refreshing", "Updating", or "Stale Data" rather than replacing the surface with a spinner-only state.
 - Pending actions must suppress duplicate activation and expose the blocked reason through visible status text, `title`, or `aria-describedby`. Do not rely on click-time announcements from disabled controls.
@@ -109,7 +121,7 @@ All standard overlays (Dialog, DropdownMenu, Popover, Tooltip, ConfirmDialog) ad
 5. **Focus Trapping:** Active focus traps must gracefully handle empty containers or containers with dynamically hidden content. If no valid focusable descendants exist, the container itself receives focus. Traps must filter out hidden, disabled, inert, or `aria-hidden="true"` elements when calculating focus boundaries.
 6. **Scroll Management:** When native `element.scrollIntoView()` triggers unwanted whole-page layout shifts or window bouncing in nested `overflow-y-auto` panels, replace it by calculating bounding client rects (`element.getBoundingClientRect()`) against the container and adjusting `container.scrollTop` manually.
 
-Global search follows the same overlay rules. Its open/close GSAP timeline uses `enterExit`, `listReveal`, and `controlFeedback` interaction tokens; the result list keeps stale matches visible during background refresh with `aria-busy`, a polite live status, and visual dimming. Arrow-key navigation updates the combobox `aria-activedescendant` only when an activatable option exists, skips unavailable rows, and keeps the active row visible by adjusting the overlay result scroller, not the page scroll position. Disabled or unavailable rows stay visible with a persistent reason badge, `aria-disabled`, and activation suppression for pointer and keyboard selection.
+Global search follows the same overlay rules. Its open/close GSAP timeline uses `enterExit`, `listReveal`, and `controlFeedback` interaction tokens; the result list keeps stale matches visible during background refresh with `aria-busy`, a polite live status, and visual dimming. Arrow-key navigation updates the combobox `aria-activedescendant`, skips unavailable rows when an activatable option exists, and keeps the active row visible by adjusting the overlay result scroller, not the page scroll position. If every result is disabled or unavailable, navigation keeps a deterministic inactive row referenced so the combobox never points at `-1`, while Enter remains non-activating. Disabled or unavailable rows stay visible with a persistent reason badge, `aria-disabled`, and activation suppression for pointer and keyboard selection.
 
 ## Menu & Popover Keyboard Expectations
 DropdownMenus and Popovers are expected to be fully keyboard accessible:
@@ -129,3 +141,23 @@ DropdownMenus and Popovers are expected to be fully keyboard accessible:
 - Kanban task cards keep Edit/Delete actions persistently reachable with fixed hit targets. Dependency chips distinguish blocked, resolved, in-progress, QA-failed, and unknown dependencies inline; task cards also expose PR pending/ready, live runtime, QA review, optimistic saving, focus, pressed, dragging, and reduced-motion states through static text, borders, badges, and accessible labels.
 
 See the [Dashboard Accessibility Quality Audit](./accessibility-quality-audit.md) for verification expectations.
+
+## Verification Guidance
+
+For documentation-only changes to dashboard interaction guidance, run the dashboard typecheck and verify entrypoint links and anchors:
+
+```bash
+pnpm run typecheck:dashboard
+rg "Interaction Patterns|Shared Primitive Design System|Dashboard Interaction Contracts" docs/index.md docs/SUMMARY.md
+rg "stale data|disabled|ConfirmDialog|reduced motion|aria-busy|asyncFeedback" docs/dashboard/interaction-patterns.md docs/dashboard/design-system-shared-primitives.md docs/dashboard/dashboard-guide.md
+```
+
+For dashboard UI changes, run focused component tests for the touched surface first, then the repository dashboard suite and dashboard typecheck:
+
+```bash
+pnpm exec vitest run <focused dashboard test files>
+pnpm run test:dashboard
+pnpm run typecheck:dashboard
+```
+
+Run `pnpm run build` when changes touch shared contracts, routing, CSS token boundaries, imports, or production bundling behavior. Do not record a check as passed unless it was run for the current change.

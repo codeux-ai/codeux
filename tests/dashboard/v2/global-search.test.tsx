@@ -230,6 +230,14 @@ describe("Global Search", () => {
             expect(visibleText("No results found for 'test'")).toBeInTheDocument();
         });
 
+        it("explains when project data is unavailable for a search", () => {
+            render(<SearchOverlay isOpen={true} onClose={vi.fn()} searchQuery="agent" onSearchChange={vi.fn()} results={{sprints:[], tasks:[], agents:[], containers:[]}} isLoading={false} hasProjectData={false} />);
+
+            expect(screen.getByText("Project data unavailable")).toBeInTheDocument();
+            expect(screen.getByText("Unable to load project search results.")).toBeInTheDocument();
+            expect(screen.getAllByRole("status", { hidden: true })[0]).toHaveTextContent("Project data unavailable for 'agent'");
+        });
+
         it("does not move active descendant for empty result sets", () => {
             render(<SearchOverlay isOpen={true} onClose={vi.fn()} searchQuery="missing" onSearchChange={vi.fn()} results={{sprints:[], tasks:[], agents:[], containers:[]}} isLoading={false} />);
 
@@ -239,6 +247,80 @@ describe("Global Search", () => {
             fireEvent.keyDown(window, { key: "Home" });
 
             expect(combobox).not.toHaveAttribute("aria-activedescendant");
+        });
+
+        it("skips inactive results during keyboard navigation and selection", () => {
+            const onClose = vi.fn();
+            render(
+                <SearchOverlay
+                    isOpen={true}
+                    onClose={onClose}
+                    searchQuery="generic"
+                    onSearchChange={vi.fn()}
+                    results={{
+                        sprints: [
+                            { id: "sprint-disabled", title: "Generic Disabled Sprint", displayKey: "SPR-0", sprintKey: "SPR-0", routeSprintId: "sprint-disabled", status: "unavailable" },
+                            { id: "sprint-enabled", title: "Generic Enabled Sprint", displayKey: "SPR-1", sprintKey: "SPR-1", routeSprintId: "sprint-enabled", status: "running" }
+                        ],
+                        tasks: [],
+                        agents: [],
+                        containers: []
+                    }}
+                    isLoading={false}
+                />
+            );
+
+            const combobox = screen.getByRole("combobox", { hidden: true });
+            fireEvent.keyDown(window, { key: "ArrowDown" });
+
+            expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-sprint-enabled");
+            expect(screen.getByRole("option", { name: /generic disabled sprint/i, hidden: true })).toHaveAttribute("aria-disabled", "true");
+            expect(screen.getByText("This result is unavailable and cannot be opened.")).toBeInTheDocument();
+
+            fireEvent.keyDown(window, { key: "Enter" });
+            expect(mockNavigate).toHaveBeenCalledWith({ to: "/sprints", search: { sprintId: "sprint-enabled", sprintKey: "SPR-1" } });
+            expect(onClose).toHaveBeenCalled();
+        });
+
+        it("keeps a stable active descendant when every result is inactive without navigating on Enter", () => {
+            const onClose = vi.fn();
+            render(
+                <SearchOverlay
+                    isOpen={true}
+                    onClose={onClose}
+                    searchQuery="offline"
+                    onSearchChange={vi.fn()}
+                    results={{
+                        sprints: [
+                            { id: "sprint-disabled", title: "Offline Sprint", displayKey: "SPR-0", sprintKey: "SPR-0", routeSprintId: "sprint-disabled", status: "unavailable" }
+                        ],
+                        tasks: [
+                            { id: "task-disabled", title: "Disabled Task", routeTaskId: "task-disabled", routeSprintId: "sprint-disabled", status: "disabled" }
+                        ],
+                        agents: [],
+                        containers: []
+                    }}
+                    isLoading={false}
+                />
+            );
+
+            const combobox = screen.getByRole("combobox", { hidden: true });
+
+            fireEvent.keyDown(window, { key: "Home" });
+            expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-sprint-disabled");
+
+            fireEvent.keyDown(window, { key: "End" });
+            expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-sprint-disabled");
+
+            fireEvent.keyDown(window, { key: "ArrowDown" });
+            expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-sprint-disabled");
+
+            fireEvent.keyDown(window, { key: "ArrowUp" });
+            expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-sprint-disabled");
+
+            fireEvent.keyDown(window, { key: "Enter" });
+            expect(mockNavigate).not.toHaveBeenCalled();
+            expect(onClose).not.toHaveBeenCalled();
         });
 
         it("updates active descendant and keeps focused results within the result scroller", async () => {
@@ -296,6 +378,24 @@ describe("Global Search", () => {
             fireEvent.keyDown(window, { key: "Escape" });
 
             expect(onClose).toHaveBeenCalled();
+        });
+
+        it("restores focus to the invoking global search control after Escape", async () => {
+            render(<GlobalSearch projectId="p1" selectedProject={{ id: "p1", name: "Project 1" } as any} sprints={[]} />);
+
+            const trigger = screen.getByRole("button", { name: "Search workspace" });
+            trigger.focus();
+            fireEvent.click(trigger);
+
+            await waitFor(() => {
+                expect(screen.getByRole("combobox", { hidden: true })).toHaveFocus();
+            });
+
+            fireEvent.keyDown(document, { key: "Escape" });
+
+            await waitFor(() => {
+                expect(document.activeElement).toBe(trigger);
+            });
         });
 
         it("navigates sprint selections with explicit sprint id and custom key", () => {
@@ -360,10 +460,21 @@ describe("Global Search", () => {
 
         it("disables row when item status is unavailable", () => {
              const item = { id: "tsk12345", title: "Implement feature X", status: "unavailable", sprintId: "1", routeTaskId: "tsk12345", routeSprintId: "1" };
-             render(<SearchResultRow item={item} categoryType="tasks" searchQuery="feature" globalItemIndex={0} isFocused={false} onFocus={vi.fn()} activeItemRef={null} onClick={vi.fn()} />);
+             const onClick = vi.fn();
+             const onFocus = vi.fn();
+             render(<SearchResultRow item={item} categoryType="tasks" searchQuery="feature" globalItemIndex={0} isFocused={false} onFocus={onFocus} activeItemRef={null} onClick={onClick} />);
 
              const link = screen.getByRole("option");
              expect(link).toHaveAttribute("aria-disabled", "true");
+             expect(link).toHaveAttribute("aria-describedby", "search-result-tsk12345-disabled-reason");
+             expect(screen.getByText("This result is unavailable and cannot be opened.")).toBeInTheDocument();
+
+             fireEvent.mouseEnter(link);
+             fireEvent.keyDown(link, { key: "Enter" });
+             fireEvent.click(link);
+
+             expect(onFocus).not.toHaveBeenCalled();
+             expect(onClick).not.toHaveBeenCalled();
         });
     });
 });

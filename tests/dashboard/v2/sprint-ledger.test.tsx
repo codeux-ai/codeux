@@ -181,16 +181,16 @@ describe("SprintLedger Component", () => {
     // Click first row's checkbox
     fireEvent.click(checkboxes[0]); // This checks "Beta API" due to initial descending sort (date)
     await waitFor(() => {
-      expect(screen.getAllByText("Start", { selector: 'button' }).length).toBeGreaterThan(0);
+      expect(screen.getByRole("button", { name: /Start \d+ selected sprints/ })).toBeInTheDocument();
     });
 
     // Perform bulk start
-    const bulkStartBtn = screen.getAllByText("Start", { selector: 'button' })[0];
+    const bulkStartBtn = screen.getByRole("button", { name: /Start \d+ selected sprints/ });
     fireEvent.click(bulkStartBtn);
     expect(defaultProps.onBulkStart).toHaveBeenCalledWith(["sprint-2"]); // Beta API id
 
     // Perform bulk delete
-    const bulkDeleteBtn = screen.getAllByText("Delete")[0];
+    const bulkDeleteBtn = screen.getByRole("button", { name: "Delete 1 selected sprints. Permanent action." });
     fireEvent.click(bulkDeleteBtn);
     
     // Wait for Confirm Dialog and perform destructive hold
@@ -218,7 +218,7 @@ describe("SprintLedger Component", () => {
     // That means the Clear button is gone already. Let's select it again to test clear:
     fireEvent.click(checkboxes[1]);
     await waitFor(() => {
-      expect(screen.getAllByText("Start", { selector: 'button' }).length).toBeGreaterThan(0);
+      expect(screen.getByRole("button", { name: /Start \d+ selected sprints/ })).toBeInTheDocument();
     });
     const clearBtn = screen.getAllByText("Clear")[0];
     fireEvent.click(clearBtn);
@@ -241,16 +241,16 @@ describe("SprintLedger Component", () => {
     const { unmount } = render(<SprintLedger {...defaultProps} />);
     await waitFor(() => expect(screen.getByText("Alpha Design")).toBeInTheDocument());
     fireEvent.click(screen.getAllByRole("button", { name: /Select sprint/i })[0]);
-    await waitFor(() => expect(screen.getAllByText("Start", { selector: 'button' }).length).toBeGreaterThan(0));
-    const startBtn = screen.getByRole("button", { name: "Start 1 selected sprints" });
+    await waitFor(() => expect(screen.getByRole("button", { name: /Start \d+ selected sprints/ })).toBeInTheDocument());
+    const startBtn = screen.getByRole("button", { name: /Start \d+ selected sprints/ });
     expect(startBtn.getAttribute("title")).toBeNull();
     unmount();
     const pendingBulkActionIds = new Set(["sprint-start:sprint-2"]);
     render(<SprintLedger {...defaultProps} pendingActionIds={pendingBulkActionIds} />);
     await waitFor(() => expect(screen.getByText("Beta API")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: /Select sprint Beta API/i }));
-    await waitFor(() => expect(screen.getAllByText("Starting...", { selector: 'button' }).length).toBeGreaterThan(0));
-    const pendingStartBtn = screen.getByRole("button", { name: "Starting 1 selected sprints" });
+    await waitFor(() => expect(screen.getByRole("button", { name: /Starting \d+ selected sprints/ })).toBeInTheDocument());
+    const pendingStartBtn = screen.getByRole("button", { name: /Starting \d+ selected sprints/ });
     expect(pendingStartBtn.getAttribute("title")).toBe("Bulk controls apply to 1 selected sprint.");
     expect(pendingStartBtn).toBeDisabled();
   });
@@ -258,12 +258,12 @@ describe("SprintLedger Component", () => {
   it("updates sort indicator state through aria-sort", () => {
     render(<SprintLedger {...defaultProps} />);
 
-    const sprintHeader = screen.getByRole("button", { name: /Sort by Sprint,/i });
+    const sprintHeader = screen.getByRole("button", { name: "Sort by Sprint" });
     const sprintColumn = sprintHeader.closest("th");
-    const createdHeader = screen.getByRole("button", { name: /Sort by Created,/i }).closest("th");
+    const createdHeader = screen.getByRole("button", { name: "Sort by Created" }).closest("th");
 
     expect(createdHeader).toHaveAttribute("aria-sort", "descending");
-    expect(sprintColumn).not.toHaveAttribute("aria-sort");
+    expect(sprintColumn).toHaveAttribute("aria-sort", "none");
     fireEvent.click(sprintHeader);
 
     expect(sprintColumn).toHaveAttribute("aria-sort", "ascending");

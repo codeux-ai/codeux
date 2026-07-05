@@ -228,6 +228,10 @@ test("buildTaskBoardViewModel carries dependency blockers and live duration into
       id: "dep-1",
       title: "Prepare contract",
       status: "pending",
+      isKnown: true,
+      stateLabel: "Blocked",
+      stateDescription: "Dependency is waiting to start",
+      isBlocking: true,
     },
   ]);
   expect(taskVm?.liveRunningTime).toBe("2m 5s");

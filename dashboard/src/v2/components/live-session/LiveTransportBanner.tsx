@@ -75,7 +75,7 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
   const icon = bannerState?.icon === "error"
     ? <Zap className="w-5 h-5 shrink-0" aria-hidden="true" />
     : bannerState?.icon === "reconnecting"
-      ? <RefreshCcw className="w-5 h-5 shrink-0 motion-safe:animate-spin" aria-hidden="true" />
+      ? <RefreshCcw className="w-5 h-5 shrink-0 motion-safe:animate-spin motion-reduce:rounded-full motion-reduce:ring-2 motion-reduce:ring-current/25" aria-hidden="true" />
       : <WifiOff className="w-5 h-5 shrink-0" aria-hidden="true" />;
 
   return (

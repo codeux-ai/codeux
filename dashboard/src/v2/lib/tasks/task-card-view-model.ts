@@ -7,6 +7,10 @@ export interface DependencyIndicator {
   id: string;
   title: string;
   status: TaskStatus;
+  isKnown?: boolean;
+  stateLabel?: string;
+  stateDescription?: string;
+  isBlocking?: boolean;
 }
 
 export interface TaskCardViewModel {
@@ -62,12 +66,56 @@ export function getExecutorLabel(executorType: TaskExecutorType): string {
   return EXECUTOR_LABEL[executorType] || "Unknown";
 }
 
+export function getDependencyPresentation(status: TaskStatus, isKnown = true): Pick<DependencyIndicator, "stateLabel" | "stateDescription" | "isBlocking"> {
+  if (!isKnown) {
+    return {
+      stateLabel: "Unknown",
+      stateDescription: "Dependency record is missing",
+      isBlocking: true,
+    };
+  }
+
+  switch (status) {
+    case "completed":
+      return {
+        stateLabel: "Resolved",
+        stateDescription: "Dependency completed",
+        isBlocking: false,
+      };
+    case "coding_completed":
+      return {
+        stateLabel: "Ready for QA",
+        stateDescription: "Dependency coding is complete and awaiting QA",
+        isBlocking: true,
+      };
+    case "in_progress":
+      return {
+        stateLabel: "In progress",
+        stateDescription: "Dependency is currently running",
+        isBlocking: true,
+      };
+    case "QA_REVIEW_FAILED":
+      return {
+        stateLabel: "QA failed",
+        stateDescription: "Dependency failed QA review",
+        isBlocking: true,
+      };
+    case "pending":
+    default:
+      return {
+        stateLabel: "Blocked",
+        stateDescription: "Dependency is waiting to start",
+        isBlocking: true,
+      };
+  }
+}
+
 function buildDependencyActionLabel(indicators: DependencyIndicator[]): string {
   if (indicators.length === 0) {
     return "Dependencies clear";
   }
 
-  const blockerCount = indicators.filter((dep) => dep.status !== "completed").length;
+  const blockerCount = indicators.filter((dep) => dep.isBlocking).length;
   if (blockerCount === 0) {
     return `${indicators.length} dependencies clear`;
   }
@@ -85,18 +133,19 @@ function buildQaReviewLabel(task: Task): string {
 }
 
 function buildTaskCardActions(task: Task, prUrl?: string, hasLiveRuntime = false): TaskCardActionDescriptor[] {
+  const target = `task ${task.id}: ${task.title}`;
   return [
     {
       kind: "rerun",
       label: "Rerun",
-      ariaLabel: `Rerun task ${task.id}: ${task.title}`,
+      ariaLabel: `Rerun ${target}`,
       title: "Rerun is available from the Live task detail workflow.",
       disabledReason: "Open Live to rerun",
     },
     {
       kind: "preview",
       label: "Preview",
-      ariaLabel: `Open sprint preview for task ${task.id}: ${task.title}`,
+      ariaLabel: `Open sprint preview for ${target}`,
       title: task.sprintId ? "Open the sprint preview workspace." : "Select a sprint before opening preview.",
       href: task.sprintId ? `/browser?sprintId=${encodeURIComponent(task.sprintId)}` : undefined,
       disabledReason: task.sprintId ? undefined : "No sprint preview",
@@ -104,7 +153,7 @@ function buildTaskCardActions(task: Task, prUrl?: string, hasLiveRuntime = false
     {
       kind: "pull_request",
       label: prUrl ? "PR" : "PR pending",
-      ariaLabel: prUrl ? `Open pull request for task ${task.id}: ${task.title}` : `Pull request pending for task ${task.id}: ${task.title}`,
+      ariaLabel: prUrl ? `Open pull request for ${target}` : `Pull request pending for ${target}`,
       title: prUrl ? "Open pull request in a new tab." : "No pull request is available yet.",
       href: prUrl,
       external: true,
@@ -113,7 +162,7 @@ function buildTaskCardActions(task: Task, prUrl?: string, hasLiveRuntime = false
     {
       kind: "live_runtime",
       label: hasLiveRuntime ? "Live" : "Live idle",
-      ariaLabel: hasLiveRuntime ? `Open live runtime for task ${task.id}: ${task.title}` : `Live runtime not started for task ${task.id}: ${task.title}`,
+      ariaLabel: hasLiveRuntime ? `Open live runtime for ${target}` : `Live runtime not started for ${target}`,
       title: hasLiveRuntime ? "Open the live runtime page." : "Runtime has not started for this task.",
       href: hasLiveRuntime ? "/live" : undefined,
       disabledReason: hasLiveRuntime ? undefined : "Runtime idle",
@@ -129,18 +178,24 @@ export function buildTaskCardViewModel(
   const dependencyIndicators: DependencyIndicator[] = (task.dependsOnTaskIds || []).map(depId => {
     const depTask = taskLookup.get(depId);
     if (!depTask) {
+      const presentation = getDependencyPresentation("pending", false);
       return {
         recordId: depId,
         id: depId,
         title: `Unknown Task (${depId})`,
         status: "pending", // default fallback
+        isKnown: false,
+        ...presentation,
       };
     }
+    const presentation = getDependencyPresentation(depTask.status);
     return {
       recordId: depTask.recordId,
       id: depTask.id,
       title: depTask.title,
       status: depTask.status,
+      isKnown: true,
+      ...presentation,
     };
   });
   const liveRunningTime = liveEnrichment?.liveTotalSeconds && liveEnrichment.liveTotalSeconds > 0
@@ -157,7 +212,9 @@ export function buildTaskCardViewModel(
     dependencyActionLabel: buildDependencyActionLabel(dependencyIndicators),
     qaReviewLabel: buildQaReviewLabel(task),
     optimisticSavingLabel: task.isOptimistic ? "Saving task changes" : null,
-    dragStateLabel: "Pointer drag only; keyboard reordering is not supported",
+    dragStateLabel: task.isOptimistic
+      ? "Pointer drag disabled while task changes are saving; keyboard reordering is not supported"
+      : "Pointer drag only; keyboard reordering is not supported",
     actions: buildTaskCardActions(task, prUrl, hasLiveRuntime),
     sessionId: liveEnrichment?.sessionId,
     sessionState: liveEnrichment?.sessionState,

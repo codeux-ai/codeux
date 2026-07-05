@@ -4,6 +4,7 @@ import { FolderGit2, CheckCircle2, Circle, PlayCircle, Clock, Play, Square, Sett
 import type { Task } from "../../types.js";
 import type { TaskStreamState } from "../../hooks/use-overview-stream-actions.js";
 import { SprintReviewBadge } from "../sprints/SprintReviewBadge.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 interface TaskRowProps {
     task: Task;
@@ -14,9 +15,22 @@ interface TaskRowProps {
 export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onPlayStop }) => {
     const isRunning = state?.isRunning ?? task.status === "in_progress";
     const busy = state?.busy ?? false;
+    const interactionTokens = useInteractionTokens();
+    const playStopLabel = isRunning ? "Stop" : "Rerun";
+    const disabledReason = busy
+        ? `${playStopLabel} unavailable while task action is pending`
+        : !onPlayStop
+            ? `${playStopLabel} unavailable for this task`
+            : null;
     return (
     <div
         className="group relative flex items-center justify-between py-5 border-b border-black/[0.06] dark:border-white/[0.06] last:border-0 focus-within:ring-2 focus-within:ring-signal-500/30 focus-within:ring-offset-2 focus-within:z-10 focus-within:rounded-xl"
+        style={{
+            "--task-row-control-duration": interactionTokens.controlFeedback.duration,
+            "--task-row-control-ease": interactionTokens.controlFeedback.ease,
+            "--task-row-selection-duration": interactionTokens.selectionMovement.duration,
+            "--task-row-selection-ease": interactionTokens.selectionMovement.ease,
+        }}
     >
         {/* Hover backdrop */}
         <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-signal-500/0 via-signal-500/[0.03] to-signal-500/0 dark:via-signal-500/[0.05] opacity-0 group-hover:opacity-100 transition-opacity duration-400 -z-10 rounded-xl" />
@@ -75,28 +89,33 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
             </div>
 
             {/* Time / Actions */}
-            <div className="flex md:col-span-2 items-center justify-end h-full relative overflow-hidden w-full md:w-auto mt-2 md:mt-0">
-                <div className="flex items-center gap-2 md:absolute md:right-0 transition-all duration-300 md:opacity-100 md:group-hover:opacity-0 md:group-hover:translate-x-3">
+            <div className="flex md:col-span-2 items-center justify-start md:justify-end h-full relative w-full md:w-auto mt-2 md:mt-0">
+                <div className="flex min-h-9 items-center gap-2 rounded-full border border-black/[0.05] bg-black/[0.02] px-2 dark:border-white/[0.06] dark:bg-white/[0.03]">
                     <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" strokeWidth={2} aria-hidden="true" />
                     <span className="sr-only">Duration: </span>
                     <span className="text-xs font-mono text-slate-500 dark:text-slate-400">{task.time}</span>
                 </div>
 
                 {/* Quick actions */}
-                <div className="flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-xl rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] md:absolute md:right-0 opacity-100 md:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-[opacity,transform] duration-200 origin-right motion-safe:scale-95 motion-safe:group-hover:scale-100 motion-safe:group-focus-within:scale-100">
+                <div className="ml-2 flex min-h-9 items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-xl rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] transition-[box-shadow,transform] duration-[var(--task-row-control-duration)] ease-[var(--task-row-control-ease)] origin-right motion-safe:group-hover:scale-[1.01] motion-safe:group-focus-within:scale-[1.01]">
                     <button
                         type="button"
                         className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-full transition-colors active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
-                        title={isRunning ? "Stop task" : "Rerun task"}
-                        aria-label={`${isRunning ? "Stop" : "Rerun"} task ${task.id}: ${task.title}`}
+                        title={disabledReason ?? `${playStopLabel} task ${task.id}`}
+                        aria-label={disabledReason ? `${playStopLabel} task ${task.id}: ${task.title}. ${disabledReason}` : `${playStopLabel} task ${task.id}: ${task.title}`}
                         aria-busy={busy}
+                        aria-describedby={disabledReason ? `task-row-action-reason-${task.recordId}` : undefined}
                         disabled={busy || !onPlayStop}
                         onClick={(event) => {
                             event.stopPropagation();
+                            if (busy || !onPlayStop) {
+                                return;
+                            }
                             onPlayStop?.();
                         }}
                     >
                         {busy ? <><Loader2 aria-hidden="true" className="w-3.5 h-3.5 animate-spin" /><span className="sr-only">Loading</span></> : isRunning ? <Square className="w-3.5 h-3.5" fill="currentColor" /> : <Play className="w-3.5 h-3.5" fill="currentColor" />}
+                        {disabledReason && <span id={`task-row-action-reason-${task.recordId}`} className="sr-only">{disabledReason}</span>}
                     </button>
                     <a
                         href={`/tasks?sprintId=${encodeURIComponent(task.sprintId)}`}

@@ -23,6 +23,13 @@ function getDisabledReason(item: SearchItem): string | undefined {
     return item.status === "disabled" ? "Disabled" : "Unavailable";
 }
 
+function getDisabledExplanation(item: SearchItem): string | undefined {
+    if (!item.status || !disabledStatuses.has(item.status)) return undefined;
+    return item.status === "disabled"
+        ? "This result is disabled and cannot be opened."
+        : "This result is unavailable and cannot be opened.";
+}
+
 export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
     item,
     categoryType,
@@ -38,6 +45,7 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
     const transitionTimingFunction = interactionTokens.selectionMovement.ease;
     const avatarConfig = "avatarConfig" in item ? item.avatarConfig : null;
     const disabledReason = getDisabledReason(item);
+    const disabledExplanation = getDisabledExplanation(item);
     const isDisabled = Boolean(disabledReason);
     const disabledDescriptionId = isDisabled ? `search-result-${item.id}-disabled-reason` : undefined;
     let Icon = Target;
@@ -127,6 +135,18 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
         <Link
             to={targetTo as any}
             search={targetSearch as any}
+            onMouseDown={(e: MouseEvent) => {
+                if (isDisabled) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            }}
+            onKeyDown={(e: KeyboardEvent) => {
+                if (isDisabled && (e.key === "Enter" || e.key === " ")) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            }}
             onClick={(e: MouseEvent) => {
                 if (isDisabled) {
                     e.preventDefault();
@@ -146,6 +166,7 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
             aria-disabled={isDisabled ? 'true' : undefined}
             aria-describedby={disabledDescriptionId}
             aria-label={`${categoryType} result: ${itemId} ${title}${badgeText ? `, ${badgeText}` : ''}${disabledReason ? `, ${disabledReason}` : ''}`}
+            title={disabledExplanation}
             role="option"
             aria-selected={isFocused && !isDisabled}
             style={{ transitionDuration, transitionTimingFunction }}
@@ -196,11 +217,21 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
                     </div>
 
                     <div className="flex min-w-0 items-start justify-between gap-3">
-                        <span className={`min-w-0 flex-1 break-words text-sm font-semibold leading-5 transition-colors [overflow-wrap:anywhere] ${
-                            isDisabled ? 'text-slate-500 dark:text-slate-500' : isFocused ? 'text-signal-700 dark:text-signal-400' : 'text-slate-800 group-hover:text-slate-950 dark:text-slate-200 dark:group-hover:text-white'
-                        }`} style={{ transitionDuration, transitionTimingFunction }}>
-                            {renderTitle()}
-                        </span>
+                        <div className="min-w-0 flex-1">
+                            <span className={`block min-w-0 break-words text-sm font-semibold leading-5 transition-colors [overflow-wrap:anywhere] ${
+                                isDisabled ? 'text-slate-500 dark:text-slate-500' : isFocused ? 'text-signal-700 dark:text-signal-400' : 'text-slate-800 group-hover:text-slate-950 dark:text-slate-200 dark:group-hover:text-white'
+                            }`} style={{ transitionDuration, transitionTimingFunction }}>
+                                {renderTitle()}
+                            </span>
+                            {disabledExplanation && (
+                                <span
+                                    id={disabledDescriptionId}
+                                    className="mt-1 block text-xs font-medium leading-5 text-slate-500 dark:text-slate-400"
+                                >
+                                    {disabledExplanation}
+                                </span>
+                            )}
+                        </div>
 
                         <div className="flex shrink-0 items-center gap-2 pt-0.5">
                             {showDot && (
@@ -220,10 +251,7 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
                                 </span>
                             )}
                             {disabledReason && (
-                                <span
-                                    id={disabledDescriptionId}
-                                    className="inline-flex shrink-0 items-center gap-1 rounded-full border border-status-red/20 bg-status-red/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-status-red"
-                                >
+                                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-status-red/20 bg-status-red/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-status-red">
                                     <Ban className="h-3 w-3" aria-hidden="true" />
                                     {disabledReason}
                                 </span>
