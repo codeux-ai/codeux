@@ -25,7 +25,7 @@ function locatorForRouteReady(page: Page, route: string): Locator {
     case '/':
       return mainHeading('Overview');
     case '/sprints':
-      return mainHeading('Active Sprints');
+      return page.getByRole('region', { name: 'Sprint Ledger' });
     case '/tasks':
       return mainHeading('Task Board');
     case '/projects':

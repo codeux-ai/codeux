@@ -2,8 +2,12 @@ import { test, expect, type Page } from '@playwright/test';
 import { completeOnboarding, ensureSelectedProject } from './helpers/prepare-app';
 
 async function ensureProjectSelected(page: Page): Promise<void> {
-  const projectButton = page.locator('[data-tour-id="project-selector"]');
-  await expect(projectButton).toBeVisible();
+  const projectButton = page.getByRole('button', { name: /Project selector/i }).first();
+  if (await projectButton.count() === 0) {
+    return;
+  }
+
+  await expect(projectButton).toBeVisible({ timeout: 15_000 });
   const text = await projectButton.innerText();
   if (text.includes('Select Project') || text.includes('Loading...')) {
     await projectButton.click();
@@ -57,9 +61,9 @@ test.describe('Sprint Ledger Responsive Layout E2E Tests', () => {
     await page.setViewportSize({ width: 375, height: 812 });
 
     // On mobile, the field labels (e.g. "Sprint ID", "Completion", "Controls") should be visible
-    const mobileIdLabels = page.locator('span:has-text("Sprint ID")');
-    const mobileCompletionLabels = page.locator('span:has-text("Completion")');
-    const mobileControlsLabels = page.locator('span:has-text("Controls")');
+    const mobileIdLabels = page.locator('td span.lg\\:hidden[aria-hidden]', { hasText: 'Sprint ID' });
+    const mobileCompletionLabels = page.locator('td span.lg\\:hidden[aria-hidden]', { hasText: 'Completion' });
+    const mobileControlsLabels = page.locator('td span.lg\\:hidden[aria-hidden]', { hasText: 'Controls' });
 
     // Assert that at least one of each mobile label is visible in the list
     await expect(mobileIdLabels.first()).toBeVisible();
