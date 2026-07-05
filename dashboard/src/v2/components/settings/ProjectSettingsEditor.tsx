@@ -195,7 +195,6 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
           ["resolveMainMergeFailedChecks", "Fix main merge CI failures", "Dispatch the virtual worker to fix failing CI on the main-branch merge gate before escalating to a human."],
           ["resolveAllCommentsBeforeFeatureMerge", "Resolve comments before feature merge", "Require review comment resolution before feature branch merge."],
           ["resolveMergeConflicts", "Resolve feature merge conflicts", "Escalate feature-branch merge conflicts to the virtual worker with branch and prompt context."],
-          ["waitForJulesCiAutofix", "Wait for Jules autofix", "Allow Jules to attempt CI autofix before escalating."],
         ].map(([field, label, description]) => (
           <Row key={field} label={label} description={description} badge={getBadge(`ciIntelligence.${field}`)}>
             <Toggle aria-label={label} aria-description={localGitModeDisabled ? localGitModeReason : description} aria-describedby={localGitModeDisabled ? localGitModeReasonId : undefined} value={localGitModeDisabled ? false : (settings.ciIntelligence[field as keyof ProjectSettings["ciIntelligence"]] as boolean)}
@@ -210,23 +209,6 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
           </Row>
         ))}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-          <Row label="Autofix max retries" description="Maximum retries before CI autofix escalates to supervision." badge={getBadge("ciIntelligence.julesCiAutofixMaxRetries")}>
-            <NumberInput
-              value={settings.ciIntelligence.julesCiAutofixMaxRetries}
-              min={0}
-              max={20}
-              disabled={localGitModeDisabled}
-              helperText={localGitModeDisabled ? localGitModeReason : "Use 0 to escalate immediately, or up to 20 autofix attempts."}
-              aria-label="Autofix max retries"
-              aria-describedby={localGitModeDisabled ? localGitModeReasonId : undefined}
-              onChange={(value) => update({
-                ciIntelligence: {
-                  ...settings.ciIntelligence,
-                  julesCiAutofixMaxRetries: value,
-                },
-              })}
-            />
-          </Row>
           <Row label="Feature PR auto-merge" description="Policy for leaving feature work at PR creation or merging after checks and comments are satisfied." badge={getBadge("ciIntelligence.featurePrAutoMergeMode")}>
             <SelectInput
               value={localGitModeDisabled ? "OFF" : settings.ciIntelligence.featurePrAutoMergeMode}

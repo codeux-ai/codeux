@@ -166,50 +166,6 @@ const AutomationCard: FunctionComponent<{
         }))}
       />
     </Row>
-    <Row label="Auto-answer clarifications" description="Answer routine clarification requests automatically when the configured template is sufficient." badge={getFieldBadge("automationInterventions.autoAnswerClarification")}>
-      <Toggle aria-label="Toggle setting"         value={settings.automationInterventions.autoAnswerClarification}
-        onChange={() => update((current) => ({
-          ...current,
-          automationInterventions: {
-            ...current.automationInterventions,
-            autoAnswerClarification: !current.automationInterventions.autoAnswerClarification,
-          },
-        }))}
-      />
-    </Row>
-    {settings.automationInterventions.autoAnswerClarification && (
-      <Row label="Clarification answer mode" description="Choose whether to use a static template or let a worker generate a contextual answer." badge={getFieldBadge("automationInterventions.autoAnswerClarificationMode")}>
-        <PillChoiceGroup
-          value={settings.automationInterventions.autoAnswerClarificationMode}
-          onChange={(value) => update((current) => ({
-            ...current,
-            automationInterventions: {
-              ...current.automationInterventions,
-              autoAnswerClarificationMode: value as ProjectSettings["automationInterventions"]["autoAnswerClarificationMode"],
-            },
-          }))}
-          options={[
-            { value: "TEMPLATE", label: "Template", hint: "Fast static reply." },
-            { value: "WORKER", label: "Worker", hint: "Contextual provider-generated reply." },
-          ]}
-        />
-      </Row>
-    )}
-    {(!settings.automationInterventions.autoAnswerClarification || settings.automationInterventions.autoAnswerClarificationMode === "TEMPLATE") && (
-      <Row label="Clarification answer template" description="Template used when project automation answers a clarification request." badge={getFieldBadge("automationInterventions.clarificationAnswerTemplate")}>
-        <TextInput
-          value={settings.automationInterventions.clarificationAnswerTemplate}
-          onChange={(value) => update((current) => ({
-            ...current,
-            automationInterventions: {
-              ...current.automationInterventions,
-              clarificationAnswerTemplate: value,
-            },
-          }))}
-          placeholder="Respond with the usual clarification template..."
-        />
-      </Row>
-    )}
     <Row label="Auto-resume paused runs" description="Resume a project automatically when a transient pause clears." badge={getFieldBadge("automationInterventions.autoResumePaused")} last>
       <Toggle aria-label="Toggle setting"         value={settings.automationInterventions.autoResumePaused}
         onChange={() => update((current) => ({

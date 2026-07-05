@@ -275,7 +275,7 @@ Dashboard behavior:
 
 `automationInterventions` contains:
 - `autoApprovePlan` (default `true`): auto-approve `AWAITING_PLAN_APPROVAL` sessions in `SEMI_AUTO`
-- `autoAnswerClarification` (default `false`): auto-answer `AWAITING_USER_FEEDBACK` sessions in `SEMI_AUTO`
+- `autoAnswerClarification` (default `false`): auto-answer Jules `AWAITING_USER_FEEDBACK` sessions in `SEMI_AUTO`; dashboard controls live under Settings -> Integrations -> Jules because this path sends replies back to the Jules session.
 - `autoResumePaused` (default `false`): auto-send resume nudge for `PAUSED` sessions in `SEMI_AUTO`
 - `clarificationAnswerTemplate`: default response body used for clarification auto-replies
 - `clarificationCooldownSeconds` (default `300`): retained as the unresolved-clarification escalation window, while clarification dedupe keys off the latest clarification content and Jules activity identity. Once Code UX starts answering a specific clarification request, repeated cycles skip starting or sending another answer for the same question until Jules emits a different clarification prompt or a new non-user activity. If a user reply exists after the latest Jules request, cooldown escalation is suppressed so the task stays agent-owned while Jules processes the response.
@@ -446,8 +446,8 @@ Container execution notes:
 - when `featurePrAutoMergeMode = "WHEN_GREEN"` but a matched feature PR has no checks, Code UX inspects local `.github/workflows/*.yml` files and skips CI waiting only when it can confidently determine that no `pull_request` or `pull_request_target` workflow applies to that PR base branch.
 - feature PR review blocking treats `CHANGES_REQUESTED` as authoritative and no longer blocks solely because GitHub reports incidental PR comments while `reviewDecision` is empty. This avoids Jules bot introduction comments holding otherwise merge-ready task PRs.
 - remote GitHub polling keeps recorded task PR URLs in scope for merged-PR filtering and asks GraphQL for the maximum merged-PR page size, so older merged task PRs can still settle their tasks instead of falling back to an endless merge-required state.
-- `waitForJulesCiAutofix` (default `false`): when enabled with `featurePrAutoMergeMode = "WHEN_GREEN"`, completed tasks stay in work status while feature PR checks are pending/failed so Jules can apply CI autofix before merge.
-- `julesCiAutofixMaxRetries` (default `3`, clamped to `0..20`): max Jules CI autofix notify attempts before escalation to intervention (`FULL -> AGENT`, `SEMI_AUTO/ALWAYS_ASK -> HUMAN`) with explicit task IDs, PR links, and failed check names.
+- `waitForJulesCiAutofix` (default `false`): shown under Settings -> Integrations -> Jules. When enabled with `featurePrAutoMergeMode = "WHEN_GREEN"`, failed feature-PR checks on Jules-managed tasks are first sent back to the existing Jules session with CI context. When disabled, Code UX skips that Jules-specific notification path and dispatches a worker-owned `ci_fix_required` item instead. Pending/failed CI still keeps the task in work status until checks clear or guardrails escalate.
+- `julesCiAutofixMaxRetries` (default `3`, clamped to `0..20`): shown under Settings -> Integrations -> Jules. Max CI autofix attempts before escalation to intervention (`FULL -> AGENT`, `SEMI_AUTO/ALWAYS_ASK -> HUMAN`) with explicit task IDs, PR links, and failed check names. The retry cap applies to the CI-fix guardrail whether the attempt is a Jules session notification or a worker repair.
 - `featurePrAutoMergeMode` (default `"ALWAYS"`):
   - `"OFF"`: no feature PR auto-merge
   - `"CREATE_PR"`: open or reuse the feature PR, then stop before auto-merge and mark the task settled with `PR_ONLY`
