@@ -184,6 +184,54 @@ describe("task-card-view-model", () => {
       expect(vm.liveRunningTime).toBe("2m 5s");
     });
 
+    it("keeps PR pending action and metadata when task pull requests are enabled without a PR URL", () => {
+      const task = createMockTask();
+      const lookup = new Map<string, Task>();
+
+      const vm = buildTaskCardViewModel(task, lookup, undefined, {
+        taskPullRequestsEnabled: true,
+      });
+
+      expect(vm.hasPullRequestMetadata).toBe(true);
+      expect(vm.prUrl).toBeUndefined();
+      expect(vm.actions?.find((action) => action.kind === "pull_request")).toMatchObject({
+        label: "PR pending",
+        disabledReason: "No PR yet",
+      });
+    });
+
+    it("omits PR pending action and metadata when task pull requests are disabled without a PR URL", () => {
+      const task = createMockTask();
+      const lookup = new Map<string, Task>();
+
+      const vm = buildTaskCardViewModel(task, lookup, undefined, {
+        taskPullRequestsEnabled: false,
+      });
+
+      expect(vm.hasPullRequestMetadata).toBe(false);
+      expect(vm.prUrl).toBeUndefined();
+      expect(vm.actions?.some((action) => action.kind === "pull_request")).toBe(false);
+    });
+
+    it("keeps historical PR action and link when task pull requests are disabled with a PR URL", () => {
+      const task = createMockTask();
+      const lookup = new Map<string, Task>();
+
+      const vm = buildTaskCardViewModel(task, lookup, {
+        prUrl: "https://example.test/pull/42",
+      }, {
+        taskPullRequestsEnabled: false,
+      });
+
+      expect(vm.hasPullRequestMetadata).toBe(true);
+      expect(vm.prUrl).toBe("https://example.test/pull/42");
+      expect(vm.actions?.find((action) => action.kind === "pull_request")).toMatchObject({
+        label: "PR",
+        href: "https://example.test/pull/42",
+        disabledReason: undefined,
+      });
+    });
+
     it("builds accessible labels for dependency, QA, drag, optimistic, and action states", () => {
       const qaFailed = createMockTask({
         recordId: "rec-qa",

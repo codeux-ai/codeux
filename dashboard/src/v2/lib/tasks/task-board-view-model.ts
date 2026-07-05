@@ -17,6 +17,7 @@ export interface TaskBoardViewModelOptions {
   taskDispatches: ExecutionTaskDispatchSummary[];
   recentEvents: ExecutionRuntimeEventSummary[];
   subtasks: Subtask[];
+  taskPullRequestsEnabled?: boolean;
 }
 
 export interface TaskBoardViewModel {
@@ -111,6 +112,7 @@ export function buildTaskBoardViewModel(options: TaskBoardViewModelOptions): Tas
     taskDispatches,
     recentEvents,
     subtasks,
+    taskPullRequestsEnabled = true,
   } = options;
 
   const optimisticRecordIds = new Set(optimisticTasks.map((task) => task.recordId));
@@ -139,7 +141,9 @@ export function buildTaskBoardViewModel(options: TaskBoardViewModelOptions): Tas
   for (const task of allTasks) {
     taskViewModels.set(
       task.recordId,
-      buildTaskCardViewModel(task, taskLookup, liveEnrichmentMap.get(task.recordId))
+      buildTaskCardViewModel(task, taskLookup, liveEnrichmentMap.get(task.recordId), {
+        taskPullRequestsEnabled,
+      })
     );
   }
 
