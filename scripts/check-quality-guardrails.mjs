@@ -67,10 +67,16 @@ const realtimeFiles = [
   "src/repositories/dashboard-realtime-event-repository.ts",
   "src/services/dashboard-realtime-service.ts",
 ];
+const realtimeFingerprintHotPathFiles = [
+  "src/services/dashboard-realtime-service.ts",
+  "src/services/dashboard-realtime-payload-fingerprint.ts",
+];
 const optimisticInsertionFiles = [
   "dashboard/src/v2/TasksPage.tsx",
   "dashboard/src/v2/lib/tasks/task-board-actions.ts",
 ];
+const directRealtimePayloadStringifyPattern =
+  /JSON\.stringify\s*\(\s*(?:payload|snapshot|event\.payload|options\.payload)\s*(?:[,)]|\s*\))/g;
 
 function readPositiveInt(name, fallback) {
   const raw = process.env[name];
@@ -541,19 +547,16 @@ async function inspectDependencyFactoryFile(filePath) {
   return violations;
 }
 
-async function inspectRealtimeSnapshotPersistence() {
+export function findRealtimeSnapshotPersistenceViolations(repositorySource, serviceSource) {
   const violations = [];
-  const [repositoryRelativePath, serviceRelativePath] = realtimeFiles;
-  const repositoryPath = path.join(root, repositoryRelativePath);
-  const servicePath = path.join(root, serviceRelativePath);
-  const [repositoryText, serviceText] = await Promise.all([
-    readFile(repositoryPath, "utf8"),
-    readFile(servicePath, "utf8"),
-  ]);
+  const repositoryPath = repositorySource.path;
+  const servicePath = serviceSource.path;
+  const repositoryText = repositorySource.text;
+  const serviceText = serviceSource.text;
 
   if (!/if\s*\(\s*replayable\s*\)\s*\{[\s\S]{0,2000}INSERT\s+INTO\s+dashboard_realtime_events/.test(repositoryText)) {
     violations.push({
-      path: toRelative(repositoryPath),
+      path: repositoryPath,
       line: lineNumberAt(repositoryText, repositoryText.indexOf("INSERT INTO dashboard_realtime_events")),
       pattern: "replayable-gated dashboard_realtime_events INSERT",
       match: "INSERT INTO dashboard_realtime_events",
@@ -572,7 +575,7 @@ async function inspectRealtimeSnapshotPersistence() {
 
   if (!/\breplayable:\s*false\b/.test(buildPublishTaskPublishBlock)) {
     violations.push({
-      path: toRelative(servicePath),
+      path: servicePath,
       line: lineNumberAt(serviceText, buildPublishTaskPublishIndex >= 0 ? buildPublishTaskPublishIndex : buildPublishTaskIndex),
       pattern: "buildPublishTask replayable: false",
       match: compactMatch(buildPublishTaskPublishBlock || "this.publishRawEvent({ ... })"),
@@ -590,7 +593,7 @@ async function inspectRealtimeSnapshotPersistence() {
     if (/\bpayload\b/.test(block) && !/\breplayable:\s*false\b/.test(block)) {
       const eventType = heavySnapshotEventTypes.find((candidate) => block.includes(`"${candidate}"`)) ?? "heavy snapshot";
       violations.push({
-        path: toRelative(servicePath),
+        path: servicePath,
         line: lineNumberAt(serviceText, match.index ?? 0),
         pattern: `${eventType} direct publishRawEvent replayability`,
         match: compactMatch(block),
@@ -601,6 +604,61 @@ async function inspectRealtimeSnapshotPersistence() {
   }
 
   return violations;
+}
+
+async function inspectRealtimeSnapshotPersistence() {
+  const [repositoryRelativePath, serviceRelativePath] = realtimeFiles;
+  const repositoryPath = path.join(root, repositoryRelativePath);
+  const servicePath = path.join(root, serviceRelativePath);
+  const [repositoryText, serviceText] = await Promise.all([
+    readFile(repositoryPath, "utf8"),
+    readFile(servicePath, "utf8"),
+  ]);
+
+  return findRealtimeSnapshotPersistenceViolations(
+    { path: repositoryRelativePath, text: repositoryText },
+    { path: serviceRelativePath, text: serviceText },
+  );
+}
+
+export function findRealtimePayloadFingerprintViolations(sources) {
+  const violations = [];
+
+  for (const source of sources) {
+    directRealtimePayloadStringifyPattern.lastIndex = 0;
+    for (const match of source.text.matchAll(directRealtimePayloadStringifyPattern)) {
+      violations.push({
+        path: source.path,
+        line: lineNumberAt(source.text, match.index ?? 0),
+        pattern: "direct realtime payload JSON.stringify",
+        match: compactMatch(match[0]),
+        remediation:
+          "Use getDashboardRealtimePayloadFingerprint(eventType, payload) for realtime snapshot fingerprints and size estimates; do not serialize the full payload in this hot path.",
+      });
+    }
+  }
+
+  return violations;
+}
+
+async function inspectRealtimePayloadFingerprinting() {
+  const sources = [];
+
+  for (const relativePath of realtimeFingerprintHotPathFiles) {
+    const filePath = path.join(root, relativePath);
+    let text;
+    try {
+      text = await readFile(filePath, "utf8");
+    } catch (error) {
+      if (error && error.code === "ENOENT") {
+        continue;
+      }
+      throw error;
+    }
+    sources.push({ path: relativePath, text });
+  }
+
+  return findRealtimePayloadFingerprintViolations(sources);
 }
 
 async function inspectDuplicateOptimisticInsertions() {
@@ -674,12 +732,14 @@ async function main() {
     reports,
     dependencyFactoryViolationsNested,
     realtimeSnapshotViolations,
+    realtimePayloadFingerprintViolations,
     optimisticInsertionViolations,
     duplicateImplementationViolations,
   ] = await Promise.all([
     Promise.all(productionFiles.map(inspectSourceFile)),
     Promise.all(dependencyFactoryFiles.map(inspectDependencyFactoryFile)),
     inspectRealtimeSnapshotPersistence(),
+    inspectRealtimePayloadFingerprinting(),
     inspectDuplicateOptimisticInsertions(),
     inspectDuplicateImplementationBlocks(productionFiles),
   ]);
@@ -687,6 +747,7 @@ async function main() {
   const blockingViolations = [
     ...dependencyFactoryViolations,
     ...realtimeSnapshotViolations,
+    ...realtimePayloadFingerprintViolations,
     ...optimisticInsertionViolations,
     ...duplicateImplementationViolations,
   ];
