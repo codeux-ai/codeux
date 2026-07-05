@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { h } from "preact";
-import { render, cleanup } from "@testing-library/preact";
+import { useState } from "preact/hooks";
+import { render, cleanup, fireEvent, waitFor } from "@testing-library/preact";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import '@testing-library/jest-dom/vitest';
 import { ActionFeedbackRegion } from "../../../../dashboard/src/v2/components/ui/ActionFeedbackRegion.js";
@@ -100,5 +101,57 @@ describe("ActionFeedbackRegion", () => {
     const retryButton = getByRole("button", { name: "Retry" });
     retryButton.click();
     expect(retryAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps retry visible and name-stable while retry is pending", async () => {
+    let resolveRetry = () => {};
+    const retryAction = vi.fn(() => new Promise<void>((resolve) => {
+      resolveRetry = resolve;
+    }));
+
+    const { getByRole } = render(
+      <ActionFeedbackRegion status="error" message="Error" retryAction={retryAction} />
+    );
+
+    const retryButton = getByRole("button", { name: "Retry" });
+    fireEvent.click(retryButton);
+    fireEvent.click(retryButton);
+
+    expect(retryAction).toHaveBeenCalledTimes(1);
+    expect(retryButton).toBeDisabled();
+    expect(retryButton).toHaveAttribute("aria-busy", "true");
+    expect(retryButton).toHaveAccessibleName("Retry");
+    expect(retryButton).toHaveAccessibleDescription("Retry in progress.");
+
+    resolveRetry();
+    await waitFor(() => expect(retryButton).not.toBeDisabled());
+    expect(retryButton).toHaveAccessibleName("Retry");
+  });
+
+  it("moves focus to the existing fallback after dismissing a focused feedback control", async () => {
+    const FeedbackHarness = () => {
+      const [visible, setVisible] = useState(true);
+      return (
+        <main data-feedback-focus-fallback tabIndex={-1}>
+          {visible && (
+            <ActionFeedbackRegion
+              status="error"
+              message="Save failed"
+              clearError={() => setVisible(false)}
+            />
+          )}
+        </main>
+      );
+    };
+
+    const { getByRole } = render(<FeedbackHarness />);
+    const fallback = getByRole("main");
+    const clearButton = getByRole("button", { name: "Clear error" });
+
+    clearButton.focus();
+    expect(document.activeElement).toBe(clearButton);
+
+    fireEvent.click(clearButton);
+    await waitFor(() => expect(document.activeElement).toBe(fallback));
   });
 });
