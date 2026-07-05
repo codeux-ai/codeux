@@ -11,8 +11,8 @@ Database maintenance runs automatically during normal startup. Operators can exp
 - Startup logs will show a structured result detailing counts of pruned elements, failed vacuums, and WAL checkpoint failures (`checkpointFailures`). WAL checkpoint failures are non-fatal, busy checkpoints are safe to retry later.
 
 1. Confirm API key source is available (recommended, but startup is allowed without key).
-2. Start server (`npm run dev` or `npm start`).
-   - `npm run dev` runs the TypeScript entrypoint through Node's `ts-node` ESM register hook.
+2. Start server (`pnpm run dev` or `pnpm start`).
+   - `pnpm run dev` runs the TypeScript entrypoint through the repository dev script.
    - Code UX writes a project-manager PID lock under the home `.code-ux/runtime/` directory. If another recorded Code UX runtime process is still alive, startup fails fast instead of launching a second scheduler against the same Docker/runtime state. Set `CODE_UX_ALLOW_MULTIPLE_RUNTIMES=1` only for targeted diagnostics.
 3. Open dashboard and verify settings.
 4. Confirm `/api/status` and `/api/git-status` are responding.
