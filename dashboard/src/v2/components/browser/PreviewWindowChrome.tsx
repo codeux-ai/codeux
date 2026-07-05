@@ -1,5 +1,5 @@
 import type { ComponentChildren, FunctionComponent } from "preact";
-import { useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import {
   ChevronLeft,
   ChevronRight,
@@ -27,6 +27,7 @@ interface PreviewWindowChromeProps {
   onAddressChange: (value: string) => void;
   navigationEnabled?: boolean;
   navigationBusy?: boolean;
+  navigationDisabledReason?: string;
   children: ComponentChildren;
 }
 
@@ -59,10 +60,16 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
   onAddressChange,
   navigationEnabled = true,
   navigationBusy = false,
+  navigationDisabledReason,
   children,
 }) => {
   const [windowState, setWindowState] = useState<WindowState>("normal");
   const [navigationAnnouncement, setNavigationAnnouncement] = useState("");
+  const restoreButtonRef = useRef<HTMLButtonElement>(null);
+  const reopenButtonRef = useRef<HTMLButtonElement>(null);
+  const isFullscreen = windowState === "fullscreen";
+  const isMinimized = windowState === "minimized";
+  const isClosed = windowState === "closed";
 
   const containerDescriptionId = "preview-address-disabled-description";
   const navigationPendingDescriptionId = "preview-navigation-pending-description";
@@ -80,11 +87,20 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
         : "Preview window is closed. The preview session can keep running in the background.";
   const navigationDescription = navigationBusy
     ? "Preview navigation is sending the previous command. Wait for the control to become available before submitting another navigation command."
-    : "Preview navigation controls are disabled until the selected container is running and has a routed host port.";
+    : navigationDisabledReason || "Preview navigation controls are disabled until the selected container is running and has a routed host port.";
 
   const announceNavigation = (message: string) => {
     setNavigationAnnouncement(message);
   };
+
+  useEffect(() => {
+    if (isMinimized && !isClosed) {
+      restoreButtonRef.current?.focus({ preventScroll: true });
+    }
+    if (isClosed) {
+      reopenButtonRef.current?.focus({ preventScroll: true });
+    }
+  }, [isClosed, isMinimized]);
 
   if (!session) {
     return (
@@ -101,10 +117,6 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
       </div>
     );
   }
-
-  const isFullscreen = windowState === "fullscreen";
-  const isMinimized = windowState === "minimized";
-  const isClosed = windowState === "closed";
 
   return (
     <div className={isFullscreen ? "fixed inset-0 z-50 flex flex-col bg-white dark:bg-[#04070b]" : ""}>
@@ -126,6 +138,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             </div>
           </div>
           <button
+            ref={restoreButtonRef}
             type="button"
             onClick={() => setWindowState("normal")}
             aria-label="Restore preview window"
@@ -150,6 +163,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
               The preview window is closed but the session is still running in the background. Stop the session to end the container, or reopen the window.
             </p>
             <button
+              ref={reopenButtonRef}
               type="button"
               aria-label="Reopen preview window"
               onClick={() => setWindowState("normal")}

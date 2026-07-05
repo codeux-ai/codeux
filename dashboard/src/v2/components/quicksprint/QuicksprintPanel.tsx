@@ -271,6 +271,8 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     "--interaction-expansion-collapse-ease": interactionTokens.expansionCollapse.ease,
     "--interaction-selection-movement-duration": interactionTokens.selectionMovement.duration,
     "--interaction-selection-movement-ease": interactionTokens.selectionMovement.ease,
+    "--interaction-list-reveal-duration": interactionTokens.listReveal.duration,
+    "--interaction-list-reveal-ease": interactionTokens.listReveal.ease,
   } as JSX.CSSProperties;
 
   /* ── Render ─────────────────────────────────────────────────── */
@@ -292,6 +294,8 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
             builtinPurposeOptions={builtinPurposeOptions}
             selectedBuiltinPurpose={selectedBuiltinPurpose}
             setSelectedBuiltinPurpose={setSelectedBuiltinPurpose}
+            announcePhaseStatus={setPhaseStatus}
+            phaseStatus={phaseStatus}
             handleSelectTemplate={handleSelectTemplate}
             openEditor={wrappedOpenEditor}
             handleDeleteTemplate={onDeleteTemplate ? (template) => { void handleDeleteTemplate(template); } : undefined}

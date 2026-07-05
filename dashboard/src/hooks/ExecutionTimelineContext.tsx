@@ -5,6 +5,7 @@ import type { ExecutionDashboardSnapshot } from "../types.js";
 
 interface ExecutionTimelineContextValue {
   execution: ExecutionDashboardSnapshot | null;
+  snapshotSurface?: ExecutionSnapshotSurfaceState;
   onOrchestrateSprint: (projectId: string, sprintId: string) => void;
   onPauseSprintRun: (sprintRunId: string) => void;
   onCancelSprintRun: (sprintRunId: string) => void;
@@ -18,10 +19,27 @@ interface ExecutionTimelineContextValue {
   pendingActionIds: Set<string>;
 }
 
+export type ExecutionSnapshotSurfaceKind = "live" | "reconnecting" | "recovering" | "stale";
+
+export interface ExecutionSnapshotSurfaceState {
+  kind: ExecutionSnapshotSurfaceKind;
+  label: string;
+  description: string;
+  isBusy: boolean;
+}
+
+export const LIVE_EXECUTION_SNAPSHOT_SURFACE: ExecutionSnapshotSurfaceState = {
+  kind: "live",
+  label: "Live",
+  description: "Runtime data is current.",
+  isBusy: false,
+};
+
 const ExecutionTimelineContext = createContext<ExecutionTimelineContextValue | undefined>(undefined);
 
 export const ExecutionTimelineProvider: FunctionComponent<{
   execution: ExecutionDashboardSnapshot | null;
+  snapshotSurface?: ExecutionSnapshotSurfaceState;
   onOrchestrateSprint?: (projectId: string, sprintId: string) => void;
   onPauseSprintRun?: (sprintRunId: string) => void;
   onCancelSprintRun?: (sprintRunId: string) => void;
@@ -36,6 +54,7 @@ export const ExecutionTimelineProvider: FunctionComponent<{
   children: ComponentChildren;
 }> = ({
   execution,
+  snapshotSurface = LIVE_EXECUTION_SNAPSHOT_SURFACE,
   onOrchestrateSprint = () => {},
   onPauseSprintRun = () => {},
   onCancelSprintRun = () => {},
@@ -52,6 +71,7 @@ export const ExecutionTimelineProvider: FunctionComponent<{
   return (
     <ExecutionTimelineContext.Provider value={{
       execution,
+      snapshotSurface,
       onOrchestrateSprint,
       onPauseSprintRun,
       onCancelSprintRun,

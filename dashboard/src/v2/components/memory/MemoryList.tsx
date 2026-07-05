@@ -1,5 +1,5 @@
 import { FunctionComponent } from "preact";
-import { useState, useEffect, useLayoutEffect, useRef } from "preact/hooks";
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from "preact/hooks";
 import { ActionFeedbackRegion } from "../ui/ActionFeedbackRegion.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
 import { Loader2, Plus, RefreshCw, SearchX } from "lucide-preact";
@@ -22,8 +22,9 @@ export const MemoryList: FunctionComponent<{
     onRetry?: () => void;
     onAddMemory?: () => void;
 }> = ({ nodes, onSelectNode, refreshing = false, loadError = null, onRetry, onAddMemory }) => {
-    const filteredNodes = useComputed(() => {
-        const query = searchQuerySignal.value;
+    const committedQuery = searchQuerySignal.value;
+    const filteredNodes = useMemo(() => {
+        const query = committedQuery;
         if (!query.trim()) {
             return nodes.map((node, index) => ({ node, index })).filter(({ node }) => node.alive);
         }
@@ -38,30 +39,42 @@ export const MemoryList: FunctionComponent<{
 
                 return node.content.toLowerCase().includes(lower) || node.category.toLowerCase().includes(lower);
             });
-    });
+    }, [committedQuery, nodes]);
 
     const reducedMotion = useReducedMotion();
     const gsapTokens = useGsapInteractionTokens();
     const interactionTokens = useInteractionTokens();
     const listRef = useRef<HTMLDivElement>(null);
     const selectAllRef = useRef<HTMLButtonElement>(null);
-    const lastUsefulNodes = useRef(filteredNodes.value);
-    const [renderedNodes, setRenderedNodes] = useState(filteredNodes.value);
+    const lastUsefulNodes = useRef(filteredNodes);
+    const lastUsefulQuery = useRef(searchQuerySignal.value.trim());
+    const [renderedNodes, setRenderedNodes] = useState(filteredNodes);
     const prevRenderedIds = useRef<Set<string>>(new Set());
     const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
 
     useEffect(() => {
-        if (filteredNodes.value.length > 0) {
-            lastUsefulNodes.current = filteredNodes.value;
+        if (filteredNodes.length > 0) {
+            lastUsefulNodes.current = filteredNodes;
+            lastUsefulQuery.current = searchQuerySignal.value.trim();
         }
-    }, [filteredNodes.value]);
+    }, [filteredNodes]);
 
     useEffect(() => {
-        const nextNodes = (refreshing || loadError) && filteredNodes.value.length === 0 && lastUsefulNodes.current.length > 0
+        const currentQuery = searchQuerySignal.value.trim();
+        const canShowLastUseful = (refreshing || loadError)
+            && filteredNodes.length === 0
+            && lastUsefulNodes.current.length > 0
+            && lastUsefulQuery.current === currentQuery;
+        const nextNodes = canShowLastUseful
             ? lastUsefulNodes.current
-            : filteredNodes.value;
+            : filteredNodes;
 
         if (reducedMotion) {
+            setRenderedNodes(nextNodes);
+            return;
+        }
+
+        if (nextNodes.length === 0 && filteredNodes.length === 0 && searchQuerySignal.value.trim()) {
             setRenderedNodes(nextNodes);
             return;
         }
@@ -89,10 +102,15 @@ export const MemoryList: FunctionComponent<{
             }
         }
         setRenderedNodes(nextNodes);
-    }, [filteredNodes.value, refreshing, loadError, reducedMotion, renderedNodes, gsapTokens.expansionCollapse.duration, gsapTokens.expansionCollapse.ease]);
+    }, [filteredNodes, refreshing, loadError, reducedMotion, renderedNodes, gsapTokens.expansionCollapse.duration, gsapTokens.expansionCollapse.ease]);
 
     useEffect(() => {
-        const visibleIds = new Set(filteredNodes.value.map(({ node }) => node.id));
+        const currentQuery = searchQuerySignal.value.trim();
+        const visibleIds = new Set(
+            (refreshing || loadError) && filteredNodes.length === 0 && lastUsefulQuery.current === currentQuery
+                ? lastUsefulNodes.current.map(({ node }) => node.id)
+                : filteredNodes.map(({ node }) => node.id)
+        );
         const selectedIds = selectedMemoryIdsSignal.value;
         if (selectedIds.length === 0) {
             return;
@@ -102,7 +120,7 @@ export const MemoryList: FunctionComponent<{
         if (nextSelectedIds.length !== selectedIds.length) {
             selectedMemoryIdsSignal.value = nextSelectedIds;
         }
-    }, [filteredNodes.value]);
+    }, [filteredNodes, refreshing, loadError]);
 
     useLayoutEffect(() => {
         if (!listRef.current) return;
@@ -143,19 +161,28 @@ export const MemoryList: FunctionComponent<{
     }, [renderedNodes, reducedMotion, gsapTokens.listReveal.duration, gsapTokens.listReveal.ease]);
 
     const resultCount = renderedNodes.length;
-    const totalAliveCount = nodes.filter((node) => node.alive).length;
-    const visibleIds = filteredNodes.value.map(({ node }) => node.id);
     const selectedIds = selectedMemoryIdsSignal.value;
     const selectedCount = selectedIds.length;
-    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
     const activeTier = useComputed(() => activeTierSignal.value);
     const mutationFeedback = memoryMutationsSignal.value.feedback;
     const isDeleting = mutationFeedback?.status === "pending" && Boolean(mutationFeedback.message?.toLowerCase().includes("deleting"));
     const countLabel = `${resultCount} ${resultCount === 1 ? "memory" : "memories"} shown`;
-    const isShowingStaleResults = (refreshing || Boolean(loadError)) && filteredNodes.value.length === 0 && renderedNodes.length > 0;
+    const isShowingStaleResults = (refreshing || Boolean(loadError))
+        && filteredNodes.length === 0
+        && renderedNodes.length > 0
+        && lastUsefulQuery.current === searchQuerySignal.value.trim();
     const query = searchQuerySignal.value.trim();
+    const totalAliveCount = Math.max(
+        nodes.filter((node) => node.alive).length,
+        isShowingStaleResults ? renderedNodes.length : 0,
+    );
+    const visibleIds = (isShowingStaleResults ? renderedNodes : filteredNodes).map(({ node }) => node.id);
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+    const staleStatusText = loadError
+        ? `Could not refresh memories. Showing the last useful result list. ${loadError}`
+        : "Refreshing memories. Keeping the last useful result list visible.";
     const selectionLabel = selectedCount > 0
-        ? `${selectedCount} ${selectedCount === 1 ? "memory" : "memories"} selected`
+        ? `${selectedCount} ${selectedCount === 1 ? "memory" : "memories"} selected from ${visibleIds.length} visible ${visibleIds.length === 1 ? "memory" : "memories"}`
         : "No memories selected";
 
     const handleVisibleSelect = () => {
@@ -195,6 +222,7 @@ export const MemoryList: FunctionComponent<{
                 className="flex min-h-0 min-w-0 flex-col items-center justify-center p-8 text-center text-slate-400"
                 role="listbox"
                 aria-label="Memory List"
+                aria-busy={refreshing || isDeleting}
             >
                 <div className="sr-only" aria-live={loadError ? "assertive" : "polite"} aria-atomic="true">
                     <span>{message}</span>
@@ -261,6 +289,7 @@ export const MemoryList: FunctionComponent<{
             role="listbox"
             aria-label="Memory List"
             aria-describedby="memory-list-status memory-list-selection-status"
+            aria-busy={refreshing || isDeleting}
         >
             <div id="memory-list-status" className="sr-only" aria-live="polite" aria-atomic="true">
                 {countLabel}
@@ -276,6 +305,7 @@ export const MemoryList: FunctionComponent<{
                     <span className="truncate">
                         Showing {resultCount} of {totalAliveCount} memories
                         {searchQuerySignal.value.trim() ? ` for "${searchQuerySignal.value.trim()}"` : ""}
+                        {isShowingStaleResults ? " (last useful list)" : ""}
                     </span>
                 </div>
                 {(refreshing || loadError || isShowingStaleResults) && (
@@ -290,9 +320,7 @@ export const MemoryList: FunctionComponent<{
                     >
                         <RefreshCw size={13} className={refreshing && !loadError ? "mt-0.5 shrink-0 motion-safe:animate-spin" : "mt-0.5 shrink-0"} aria-hidden="true" />
                         <span className="min-w-0 break-words">
-                            {loadError
-                                ? `Could not refresh memories. Showing the last useful result list. ${loadError}`
-                                : "Refreshing memories. Keeping the last useful result list visible."}
+                            {staleStatusText}
                         </span>
                         {loadError && onRetry && (
                             <button
@@ -314,11 +342,15 @@ export const MemoryList: FunctionComponent<{
                         title={allVisibleSelected ? "All currently visible memories are already selected." : undefined}
                         className="rounded-lg border border-black/[0.06] bg-black/[0.04] px-2.5 py-1 text-[11px] font-semibold text-slate-500 transition-colors duration-150 hover:bg-black/[0.08] hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white"
                     >
-                        {allVisibleSelected ? "All visible selected" : "Select all visible"}
+                        {allVisibleSelected ? `All ${visibleIds.length} visible selected` : `Select all ${visibleIds.length} visible`}
                     </button>
                     {selectedCount > 0 && (
-                        <div className="inline-flex max-w-full items-center gap-2 rounded-lg border border-signal-500/20 bg-signal-500/[0.08] px-2.5 py-1 text-xs font-semibold text-signal-500">
-                            <span>{selectedCount} selected</span>
+                        <div className={`inline-flex max-w-full items-center gap-2 rounded-lg border px-2.5 py-1 text-xs font-semibold ${
+                            isDeleting
+                                ? "border-status-red/20 bg-status-red/[0.08] text-status-red"
+                                : "border-signal-500/20 bg-signal-500/[0.08] text-signal-500"
+                        }`}>
+                            <span>{selectedCount} selected from {visibleIds.length} visible</span>
                             <button
                                 type="button"
                                 onClick={clearSelectedMemoryIds}
@@ -335,7 +367,7 @@ export const MemoryList: FunctionComponent<{
                                 className="inline-flex items-center gap-1.5 rounded-md bg-status-red px-2 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-status-red/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-70 dark:focus-visible:ring-offset-void-900"
                             >
                                 {isDeleting && <Loader2 size={12} className="motion-safe:animate-spin" aria-hidden="true" />}
-                                {isDeleting ? "Deleting..." : selectedCount > 1 ? `Delete ${selectedCount} selected` : "Delete selected"}
+                                {isDeleting ? `Deleting ${selectedCount}...` : selectedCount > 1 ? `Delete ${selectedCount} selected` : "Delete selected"}
                             </button>
                         </div>
                     )}

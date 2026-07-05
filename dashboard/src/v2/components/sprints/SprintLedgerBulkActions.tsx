@@ -4,7 +4,7 @@ import { useEffect, useRef } from "preact/hooks";
 import { Heart, Loader2, Play, Trash2, X } from "lucide-preact";
 import gsap from "gsap";
 import { useGsapDurations, useGsapInteractionTokens } from "../../lib/motion/constants.js";
-import { getBulkActionMessage, type BulkLedgerAction } from "../../lib/sprint-ledger-state.js";
+import { getBulkActionMessage, getBulkPendingReason, type BulkLedgerAction } from "../../lib/sprint-ledger-state.js";
 
 export interface SprintLedgerBulkActionsProps {
   selectedCount: number;
@@ -44,11 +44,16 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
   const { expansionCollapse } = useGsapInteractionTokens();
 
   const durations = useGsapDurations();
-  const feedbackMessage = getBulkActionMessage(currentAction, selectedCount, Boolean(isAnyPending));
-  const disabledTitle = isAnyPending ? feedbackMessage : undefined;
+  const effectivePendingAction: BulkLedgerAction = currentAction
+    ?? (isStartPending ? "start" : isDeletePending ? "delete" : isPinPending ? "pin" : null);
+  const feedbackMessage = getBulkActionMessage(effectivePendingAction ?? currentAction, selectedCount, Boolean(isAnyPending));
+  const pendingReason = getBulkPendingReason(effectivePendingAction, selectedCount);
+  const disabledTitle = isAnyPending ? pendingReason : undefined;
   const isBulkPinning = isPinPending && currentAction !== "unpin";
   const isBulkUnpinning = isPinPending && currentAction === "unpin";
   const feedbackId = "sprint-ledger-bulk-action-feedback";
+  const pendingReasonId = "sprint-ledger-bulk-action-pending-reason";
+  const disabledDescription = isAnyPending ? `${feedbackId} ${pendingReasonId}` : undefined;
 
   useEffect(() => {
     const el = containerRef.current;
@@ -103,6 +108,11 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
             <div id={feedbackId} className="text-xs text-slate-500 dark:text-slate-400">
               {feedbackMessage}
             </div>
+            {isAnyPending ? (
+              <div id={pendingReasonId} className="mt-1 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                {pendingReason}
+              </div>
+            ) : null}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -112,7 +122,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
             title={disabledTitle}
             aria-disabled={isAnyPending}
             aria-busy={isBulkPinning ? "true" : undefined}
-            aria-describedby={isAnyPending ? feedbackId : undefined}
+            aria-describedby={disabledDescription}
             onClick={onBulkShowcaseEnable}
             disabled={isAnyPending}
             className="inline-flex min-h-9 min-w-0 flex-1 flex-wrap items-center justify-center gap-1.5 rounded-xl border border-black/[0.06] bg-white/80 px-3 py-1.5 text-xs font-bold leading-tight text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
@@ -129,7 +139,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
             title={disabledTitle}
             aria-disabled={isAnyPending}
             aria-busy={isBulkUnpinning ? "true" : undefined}
-            aria-describedby={isAnyPending ? feedbackId : undefined}
+            aria-describedby={disabledDescription}
             onClick={onBulkShowcaseDisable}
             disabled={isAnyPending}
             className="inline-flex min-h-9 min-w-0 flex-1 flex-wrap items-center justify-center gap-1.5 rounded-xl border border-black/[0.06] bg-white/80 px-3 py-1.5 text-xs font-bold leading-tight text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
@@ -146,7 +156,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
             title={disabledTitle}
             aria-disabled={isAnyPending}
             aria-busy={isStartPending ? "true" : undefined}
-            aria-describedby={isAnyPending ? feedbackId : undefined}
+            aria-describedby={disabledDescription}
             onClick={onBulkStart}
             disabled={isAnyPending}
             className="inline-flex min-h-9 min-w-0 flex-1 flex-wrap items-center justify-center gap-1.5 rounded-xl border border-signal-500/25 bg-signal-500/10 px-3 py-1.5 text-xs font-bold leading-tight text-signal-700 transition-colors hover:bg-signal-500/20 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-signal-300 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
@@ -164,7 +174,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
             title={disabledTitle}
             aria-disabled={isAnyPending}
             aria-busy={isDeletePending ? "true" : undefined}
-            aria-describedby={isAnyPending ? feedbackId : undefined}
+            aria-describedby={disabledDescription}
             onClick={onBulkDelete}
             disabled={isAnyPending}
             className="inline-flex min-h-9 min-w-0 flex-1 flex-wrap items-center justify-center gap-1.5 rounded-xl border border-status-red/20 bg-status-red/10 px-3 py-1.5 text-xs font-bold leading-tight text-status-red transition-colors hover:bg-status-red/20 focus-visible:ring-2 focus-visible:ring-status-red/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
@@ -180,7 +190,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
             aria-label="Clear sprint selection"
             title={disabledTitle}
             aria-disabled={isAnyPending}
-            aria-describedby={isAnyPending ? feedbackId : undefined}
+            aria-describedby={disabledDescription}
             onClick={onClearSelection}
             disabled={isAnyPending}
             className="inline-flex min-h-9 min-w-0 flex-1 flex-wrap items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold leading-tight text-slate-500 transition-colors hover:bg-black/[0.04] hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-slate-400 dark:hover:bg-white/[0.05] dark:hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"

@@ -138,7 +138,7 @@ describe("MemoryList", () => {
             />
         );
 
-        const selectAll = getByRole("button", { name: "Select all visible" });
+        const selectAll = getByRole("button", { name: "Select all 1 visible" });
         expect(selectAll).toBeInTheDocument();
 
         selectAll.click();
@@ -157,12 +157,12 @@ describe("MemoryList", () => {
             />
         );
 
-        fireEvent.click(getByRole("button", { name: "Select all visible" }));
+        fireEvent.click(getByRole("button", { name: "Select all 2 visible" }));
 
         await waitFor(() => {
-            expect(getByText("2 memories selected")).toHaveClass("sr-only");
+            expect(getByText("2 memories selected from 2 visible memories")).toHaveClass("sr-only");
         });
-        expect(getByText("2 selected")).toBeInTheDocument();
+        expect(getByText("2 selected from 2 visible")).toBeInTheDocument();
         expect(getByRole("button", { name: "Delete 2 selected" })).toBeInTheDocument();
     });
 
@@ -216,7 +216,31 @@ describe("MemoryList", () => {
 
         expect(getByText("Alpha project memory")).toBeInTheDocument();
         expect(getByText("Refreshing memories. Keeping the last useful result list visible.")).toBeInTheDocument();
+        expect(getByText("Showing 1 of 1 memories (last useful list)")).toBeInTheDocument();
         expect(queryByText("No memories exist")).toBeNull();
+    });
+
+    test("does not show stale memories for a new committed search with no matches", () => {
+        const { getByText, queryByText, rerender } = render(
+            <MemoryList
+                nodes={[buildNode({ id: "memory-1", content: "Alpha project memory" })]}
+                onSelectNode={vi.fn()}
+            />
+        );
+
+        expect(getByText("Alpha project memory")).toBeInTheDocument();
+
+        searchQuerySignal.value = "missing";
+        rerender(
+            <MemoryList
+                nodes={[buildNode({ id: "memory-1", content: "Alpha project memory" })]}
+                onSelectNode={vi.fn()}
+                refreshing={true}
+            />
+        );
+
+        expect(queryByText("Alpha project memory")).toBeNull();
+        expect(getByText("No memories match your search or filters", { selector: "p" })).toBeInTheDocument();
     });
 
     test("shows recovery copy and retry action when refresh fails", () => {

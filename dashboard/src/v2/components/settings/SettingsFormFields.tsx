@@ -19,9 +19,10 @@ export const SelectInput: FunctionComponent<{
   disabled?: boolean;
   "aria-label"?: string;
   "aria-labelledby"?: string;
-}> = ({ value, onChange, options, disabled, "aria-label": ariaLabel, "aria-labelledby": ariaLabelledby }) => (
+  "aria-describedby"?: string;
+}> = ({ value, onChange, options, disabled, "aria-label": ariaLabel, "aria-labelledby": ariaLabelledby, "aria-describedby": ariaDescribedby }) => (
   <div className="min-w-0 w-full sm:min-w-[220px]">
-    <AvantgardeSelect value={value} onChange={onChange} options={options} disabled={disabled} aria-label={ariaLabel} aria-labelledby={ariaLabelledby} />
+    <AvantgardeSelect value={value} onChange={onChange} options={options} disabled={disabled} aria-label={ariaLabel} aria-labelledby={ariaLabelledby} aria-describedby={ariaDescribedby} />
   </div>
 );
 
@@ -310,9 +311,16 @@ export const NumberInput: FunctionComponent<{
   "aria-describedby"?: string;
 }> = ({ value, onChange, min, max, step = 1, disabled, invalid, valid, helperText, errorText, forceValidation, "aria-label": ariaLabel, "aria-description": ariaDescription, "aria-describedby": ariaDescribedby }) => {
   const generatedId = useId();
-  const showError = Boolean(errorText && (invalid || forceValidation));
+  const [touched, setTouched] = useState(false);
+  const derivedErrorText = Number.isFinite(value) && min !== undefined && value < min
+    ? `Use a value of at least ${min}.`
+    : Number.isFinite(value) && max !== undefined && value > max
+      ? `Use a value no greater than ${max}.`
+      : undefined;
+  const resolvedErrorText = errorText || derivedErrorText;
+  const showError = Boolean(resolvedErrorText && (invalid || forceValidation || (derivedErrorText && touched)));
   const helperId = helperText ? `${generatedId}-helper` : undefined;
-  const errorId = errorText ? `${generatedId}-error` : undefined;
+  const errorId = resolvedErrorText ? `${generatedId}-error` : undefined;
   const validId = valid && !showError ? `${generatedId}-valid` : undefined;
   const describedBy = [showError ? errorId : helperId, validId, ariaDescribedby].filter(Boolean).join(" ") || undefined;
 
@@ -331,11 +339,16 @@ export const NumberInput: FunctionComponent<{
         aria-label={ariaLabel}
         aria-description={ariaDescription}
         data-valid={valid && !showError ? "true" : undefined}
-        onInput={(event) => onChange(Number((event.currentTarget as HTMLInputElement).value))}
+        onBlur={() => setTouched(true)}
+        onFocusOut={() => setTouched(true)}
+        onInput={(event) => {
+          setTouched(true);
+          onChange(Number((event.currentTarget as HTMLInputElement).value));
+        }}
         className="w-32 max-w-full rounded-[1rem] border border-[var(--border-hairline)] hover:border-[var(--border-hairline)] bg-[var(--fill-muted)] px-3.5 py-2.5 text-sm font-mono text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:border-signal-500/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-[var(--fill-muted)] dark:text-slate-200 aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.14)] data-[valid=true]:border-signal-500/50 data-[valid=true]:bg-signal-500/[0.02] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.15)] dark:data-[valid=true]:bg-signal-500/[0.04] "
       />
       {showError ? (
-        <span id={errorId} className="text-xs font-medium text-status-red" role="alert">{errorText}</span>
+        <span id={errorId} className="text-xs font-medium text-status-red" role="alert">{resolvedErrorText}</span>
       ) : helperText ? (
         <span id={helperId} className="text-xs font-medium text-slate-500 dark:text-slate-400">{helperText}</span>
       ) : null}

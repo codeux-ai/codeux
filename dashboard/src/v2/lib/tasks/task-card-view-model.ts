@@ -125,11 +125,20 @@ function buildDependencyActionLabel(indicators: DependencyIndicator[]): string {
 
 function buildQaReviewLabel(task: Task): string {
   if (!task.latestReview) {
-    return "QA not reviewed";
+    return "QA no review";
   }
 
-  const outcome = task.latestReview.outcome ? `, ${task.latestReview.outcome}` : "";
-  return `QA ${task.latestReview.status}${outcome}`;
+  const status = task.latestReview.status.toLowerCase();
+  const outcome = task.latestReview.outcome?.toLowerCase() ?? "";
+  if (status === "running" || status === "in_progress") {
+    return "QA in progress";
+  }
+  if (status === "failed" || outcome === "fail" || outcome === "failed" || outcome === "rejected") {
+    return task.latestReview.outcome ? `QA failed, ${task.latestReview.outcome}` : "QA failed";
+  }
+
+  const outcomeLabel = task.latestReview.outcome ? `, ${task.latestReview.outcome}` : "";
+  return `QA ${task.latestReview.status}${outcomeLabel}`;
 }
 
 function buildTaskCardActions(task: Task, prUrl?: string, hasLiveRuntime = false): TaskCardActionDescriptor[] {
@@ -140,7 +149,7 @@ function buildTaskCardActions(task: Task, prUrl?: string, hasLiveRuntime = false
       label: "Rerun",
       ariaLabel: `Rerun ${target}`,
       title: "Rerun is available from the Live task detail workflow.",
-      disabledReason: "Open Live to rerun",
+      disabledReason: `Open Live to rerun task ${task.id}.`,
     },
     {
       kind: "preview",
@@ -148,24 +157,24 @@ function buildTaskCardActions(task: Task, prUrl?: string, hasLiveRuntime = false
       ariaLabel: `Open sprint preview for ${target}`,
       title: task.sprintId ? "Open the sprint preview workspace." : "Select a sprint before opening preview.",
       href: task.sprintId ? `/browser?sprintId=${encodeURIComponent(task.sprintId)}` : undefined,
-      disabledReason: task.sprintId ? undefined : "No sprint preview",
+      disabledReason: task.sprintId ? undefined : `Task ${task.id} has no sprint preview.`,
     },
     {
       kind: "pull_request",
       label: prUrl ? "PR" : "PR pending",
-      ariaLabel: prUrl ? `Open pull request for ${target}` : `Pull request pending for ${target}`,
+      ariaLabel: `Open pull request for ${target}`,
       title: prUrl ? "Open pull request in a new tab." : "No pull request is available yet.",
       href: prUrl,
       external: true,
-      disabledReason: prUrl ? undefined : "No PR yet",
+      disabledReason: prUrl ? undefined : `No pull request is available for task ${task.id} yet.`,
     },
     {
       kind: "live_runtime",
       label: hasLiveRuntime ? "Live" : "Live idle",
-      ariaLabel: hasLiveRuntime ? `Open live runtime for ${target}` : `Live runtime not started for ${target}`,
+      ariaLabel: `Open live runtime for ${target}`,
       title: hasLiveRuntime ? "Open the live runtime page." : "Runtime has not started for this task.",
       href: hasLiveRuntime ? "/live" : undefined,
-      disabledReason: hasLiveRuntime ? undefined : "Runtime idle",
+      disabledReason: hasLiveRuntime ? undefined : `Live runtime has not started for task ${task.id}.`,
     },
   ];
 }

@@ -127,7 +127,77 @@ describe("TaskRow QA review indicator", () => {
     render(<KanbanTaskCard viewModel={viewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
 
     expect(screen.getByText("Blocked: 1 dependency needs completion")).toBeVisible();
+    expect(screen.getByText("1 dependency blocker")).toBeVisible();
     expect(screen.getByText("Drag disabled: reduced motion")).toBeVisible();
     expect(screen.getByLabelText(/^Task T1: Reviewed task/i)).toHaveAttribute("draggable", "false");
+  });
+
+  it("keeps task-card action names target-specific and exposes disabled reasons separately", () => {
+    const task = makeTask();
+    const viewModel: TaskCardViewModel = {
+      task,
+      humanizedCreatedAt: "1h ago",
+      executorLabel: "CLI",
+      dependencyIndicators: [],
+      qaReviewLabel: "QA no review",
+      actions: [
+        {
+          kind: "rerun",
+          label: "Rerun",
+          ariaLabel: "Rerun task T1: Reviewed task",
+          title: "Rerun is available from the Live task detail workflow.",
+          disabledReason: "Open Live to rerun task T1.",
+        },
+        {
+          kind: "preview",
+          label: "Preview",
+          ariaLabel: "Open sprint preview for task T1: Reviewed task",
+          title: "Open the sprint preview workspace.",
+          href: "/browser?sprintId=sprint-1",
+        },
+        {
+          kind: "pull_request",
+          label: "PR pending",
+          ariaLabel: "Open pull request for task T1: Reviewed task",
+          title: "No pull request is available yet.",
+          disabledReason: "No pull request is available for task T1 yet.",
+        },
+        {
+          kind: "live_runtime",
+          label: "Live idle",
+          ariaLabel: "Open live runtime for task T1: Reviewed task",
+          title: "Runtime has not started for this task.",
+          disabledReason: "Live runtime has not started for task T1.",
+        },
+      ],
+    };
+
+    render(<KanbanTaskCard viewModel={viewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
+
+    expect(screen.getByRole("button", { name: "Rerun task T1: Reviewed task" })).toHaveAccessibleDescription("Open Live to rerun task T1.");
+    expect(screen.getByRole("link", { name: "Open sprint preview for task T1: Reviewed task" })).toHaveAttribute("href", "/browser?sprintId=sprint-1");
+    expect(screen.getByRole("button", { name: "Open pull request for task T1: Reviewed task" })).toHaveAccessibleDescription("No pull request is available for task T1 yet.");
+    expect(screen.getByRole("button", { name: "Open live runtime for task T1: Reviewed task" })).toHaveAccessibleDescription("Live runtime has not started for task T1.");
+  });
+
+  it("exposes optimistic saving state and disabled edit/delete reasons without changing action names", () => {
+    const task = makeTask();
+    const viewModel: TaskCardViewModel = {
+      task: { ...task, isOptimistic: true },
+      humanizedCreatedAt: "1h ago",
+      executorLabel: "CLI",
+      dependencyIndicators: [],
+      optimisticSavingLabel: "Saving task changes",
+      dragStateLabel: "Pointer drag disabled while task changes are saving; keyboard reordering is not supported",
+    };
+
+    render(<KanbanTaskCard viewModel={viewModel} onEdit={vi.fn()} onDelete={vi.fn()} />);
+
+    const card = screen.getByLabelText(/^Task T1: Reviewed task/i);
+    expect(card).toHaveAttribute("aria-busy", "true");
+    expect(card).toHaveAttribute("draggable", "false");
+    expect(screen.getByText("Saving task changes")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Edit task T1: Reviewed task" })).toHaveAccessibleDescription("Saving task T1; edit is temporarily unavailable.");
+    expect(screen.getByRole("button", { name: "Delete task T1: Reviewed task" })).toHaveAccessibleDescription("Saving task T1; delete is temporarily unavailable.");
   });
 });

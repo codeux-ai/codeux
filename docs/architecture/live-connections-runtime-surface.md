@@ -69,6 +69,12 @@ The v2 live experience supports a sidebar-ready live-connections card that share
 
 The execution runtime card no longer embeds live connections, attention items, or the runtime timeline. Attention and runtime timeline remain dedicated sidebar cards, while the connection card stays available as a reusable component for connection-focused surfaces. This keeps the runtime panel focused on sprint runs and dispatches.
 
+Runtime panels preserve the last useful execution snapshot while the live transport reconnects, recovers, or reports stale data. The transport banner announces blocking errors assertively and reconnecting/recovery states politely; the affected runtime, invocation, connection, and attention regions stay mounted with visible `Reconnecting`, `Recovering`, or `Stale Snapshot` badges and `aria-busy` instead of replacing cached rows with spinner-only placeholders.
+
+Collapsible live panels use native button headers with stable `aria-expanded` and `aria-controls` wiring. Their expansion and collapse motion is driven by the shared `expansionCollapse` interaction token, while reduced-motion users still receive static status copy and badge/ring affordances.
+
+Runtime action buttons suppress duplicate activation while an action is pending. Pending and disabled controls keep their target-specific accessible names, expose `aria-disabled`/`aria-busy`, and describe why the action cannot be activated again.
+
 It shows:
 
 - active vs offline connection state

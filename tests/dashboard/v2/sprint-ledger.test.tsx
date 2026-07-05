@@ -195,10 +195,10 @@ describe("SprintLedger Component", () => {
     
     // Wait for Confirm Dialog and perform destructive hold
     await waitFor(() => {
-      expect(screen.getByText("Delete Sprints?")).toBeInTheDocument();
+      expect(screen.getByText("Delete 1 Selected Sprint?")).toBeInTheDocument();
     });
     
-    const confirmBtn = screen.getByRole("button", { name: /Hold to Delete Sprints|Delete Sprints/ });
+    const confirmBtn = screen.getByRole("button", { name: /Hold to Delete 1 Sprint|Delete 1 Sprint/ });
     
     // Simulate hold-to-confirm
     vi.useFakeTimers();
@@ -251,7 +251,8 @@ describe("SprintLedger Component", () => {
     fireEvent.click(screen.getByRole("button", { name: /Select sprint Beta API/i }));
     await waitFor(() => expect(screen.getByRole("button", { name: /Starting \d+ selected sprints/ })).toBeInTheDocument());
     const pendingStartBtn = screen.getByRole("button", { name: /Starting \d+ selected sprints/ });
-    expect(pendingStartBtn.getAttribute("title")).toBe("Bulk controls apply to 1 selected sprint.");
+    expect(pendingStartBtn.getAttribute("title")).toBe("Bulk controls are disabled while starting 1 selected sprint.");
+    expect(pendingStartBtn).toHaveAccessibleDescription(/Starting 1 selected sprint\. Bulk controls are disabled while starting 1 selected sprint\./);
     expect(pendingStartBtn).toBeDisabled();
   });
 
@@ -267,10 +268,10 @@ describe("SprintLedger Component", () => {
     fireEvent.click(sprintHeader);
 
     expect(sprintColumn).toHaveAttribute("aria-sort", "ascending");
-    expect(screen.getByText(/Sorted by Sprint ascending\. 2 sprints remain visible\./i)).toBeInTheDocument();
+    expect(screen.getByText(/Sorted by Sprint ascending\. 2 sprints visible\. No sprints selected\./i)).toBeInTheDocument();
     fireEvent.click(sprintHeader);
     expect(sprintColumn).toHaveAttribute("aria-sort", "descending");
-    expect(screen.getByText(/Sorted by Sprint descending\. 2 sprints remain visible\./i)).toBeInTheDocument();
+    expect(screen.getByText(/Sorted by Sprint descending\. 2 sprints visible\. No sprints selected\./i)).toBeInTheDocument();
   });
 
   it("locks rows properly when specific pending actions occur", async () => {
@@ -435,7 +436,7 @@ describe("SprintLedger Component", () => {
       expect(screen.queryByText("1 of 2 selected")).not.toBeInTheDocument();
     });
     expect(screen.getByRole("row", { name: /Alpha Design/i })).toHaveAttribute("aria-selected", "false");
-    expect(screen.getByText(/Filter results updated: showing 1 of 2 sprints\./i)).toBeInTheDocument();
+    expect(screen.getByText(/Filters updated\. Showing 1 of 2 sprints\. No sprints selected\. 1 hidden selection removed\./i)).toBeInTheDocument();
     expect(screen.getAllByText(/No sprints selected\./i).length).toBeGreaterThan(0);
   });
 

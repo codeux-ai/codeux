@@ -27,6 +27,25 @@ function getDependencyStatusCopy(dep: DependencyIndicator): string {
   }
 }
 
+function getDependencyState(dep: DependencyIndicator): "unknown" | "resolved" | "qa_failed" | "in_progress" | "blocked" {
+  if (dep.isKnown === false || dep.title.startsWith("Unknown Task")) {
+    return "unknown";
+  }
+
+  switch (dep.status) {
+    case "completed":
+      return "resolved";
+    case "QA_REVIEW_FAILED":
+      return "qa_failed";
+    case "in_progress":
+      return "in_progress";
+    case "coding_completed":
+    case "pending":
+    default:
+      return "blocked";
+  }
+}
+
 function isDependencyBlocking(dep: DependencyIndicator): boolean {
   return dep.isBlocking ?? dep.status !== "completed";
 }
@@ -82,6 +101,8 @@ export const DependencyStatusIndicators: FunctionComponent<{
       {indicators.map((dep) => {
         const statusText = dep.status.replace(/_/g, ' ');
         const statusCopy = getDependencyStatusCopy(dep);
+        const dependencyState = getDependencyState(dep);
+        const blockingCopy = isDependencyBlocking(dep) ? "Blocking dependency" : "Resolved dependency";
         const stateDescription = dep.stateDescription ?? getDependencyPresentation(dep.status, dep.isKnown !== false && !dep.title.startsWith("Unknown Task")).stateDescription;
         const containerClass = getDependencyToneClass(dep);
 
@@ -90,10 +111,11 @@ export const DependencyStatusIndicators: FunctionComponent<{
             key={dep.recordId}
             role="listitem"
             className={`flex min-h-7 max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] ${containerClass}`}
+            data-dependency-state={dependencyState}
             title={`Depends on ${dep.title} (${statusCopy}; ${statusText})`}
-            aria-label={`Depends on task ${dep.id}, ${statusCopy.toLowerCase()}. ${stateDescription}. Status: ${statusText}. Title: ${dep.title}`}
+            aria-label={`Depends on task ${dep.id}, ${statusCopy.toLowerCase()}. ${blockingCopy}. ${stateDescription}. Status: ${statusText}. Title: ${dep.title}`}
           >
-            <span className="sr-only">Depends on task {dep.id}, {statusCopy.toLowerCase()}. {stateDescription}. Status: {statusText}. Title: {dep.title}</span>
+            <span className="sr-only">Depends on task {dep.id}, {statusCopy.toLowerCase()}. {blockingCopy}. {stateDescription}. Status: {statusText}. Title: {dep.title}</span>
             <ArrowRight className="w-2.5 h-2.5" strokeWidth={2.5} aria-hidden="true" />
             <span aria-hidden="true" className="shrink-0">{dep.id}</span>
             <span aria-hidden="true" className="rounded-full bg-current/10 px-1.5 py-0.5 text-[8px] opacity-90">{statusCopy}</span>

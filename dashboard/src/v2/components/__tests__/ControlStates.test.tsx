@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vitest";
-import { cleanup, fireEvent, render } from "@testing-library/preact";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
 import { useState } from "preact/hooks";
 import { Button } from "../ui/Button.js";
 import { IconButton } from "../IconButton.js";
@@ -48,6 +48,25 @@ test('Button sets aria-busy true while loading', () => {
     expect(container.querySelector('button')).toHaveAttribute('aria-busy', 'true');
 });
 
+test('Button suppresses same-tick duplicate activation while async work is pending', async () => {
+    let resolveAction = () => {};
+    const buttonClick = vi.fn(() => new Promise<void>((resolve) => {
+        resolveAction = resolve;
+    }));
+
+    const { getByRole } = render(<Button onClick={buttonClick}>Save</Button>);
+    const button = getByRole('button', { name: 'Save' });
+
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    expect(buttonClick).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(button).toHaveAttribute('aria-busy', 'true'));
+
+    resolveAction();
+    await waitFor(() => expect(button).not.toHaveAttribute('aria-busy', 'true'));
+});
+
 test('buttons suppress clicks while aria-disabled or pending', () => {
     const buttonClick = vi.fn();
     const iconClick = vi.fn();
@@ -78,7 +97,7 @@ test('native disabled controls suppress activation and preserve disabled descrip
     const { getByRole } = render(
         <div>
             <p id="disabled-reason">Available after setup completes.</p>
-            <Button disabled aria-describedby="disabled-reason" title="Available after setup completes" onClick={buttonClick}>Start</Button>
+            <Button disabled disabledReason="Available after setup completes." onClick={buttonClick}>Start</Button>
             <Select aria-disabled="true" helperText="Available after setup completes." onChange={selectChange}>
                 <option>One</option>
                 <option>Two</option>
@@ -90,8 +109,9 @@ test('native disabled controls suppress activation and preserve disabled descrip
     fireEvent.click(button);
     expect(buttonClick).not.toHaveBeenCalled();
     expect(button).toHaveAttribute('disabled');
-    expect(button).toHaveAttribute('aria-describedby', 'disabled-reason');
-    expect(button).toHaveAttribute('title', 'Available after setup completes');
+    expect(button).toHaveAttribute('aria-describedby', expect.stringMatching(/^button-disabled-reason-/));
+    expect(button).toHaveAttribute('title', 'Available after setup completes.');
+    expect(button).toHaveAccessibleDescription('Available after setup completes.');
 
     const select = getByRole('combobox');
     fireEvent.change(select, { target: { value: 'Two' } });

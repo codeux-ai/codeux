@@ -124,7 +124,7 @@ describe("Memory batch delete", () => {
             />
         );
 
-        fireEvent.click(getByRole("button", { name: "Select all visible" }));
+        fireEvent.click(getByRole("button", { name: "Select all 2 visible" }));
         expect(selectedMemoryIdsSignal.value).toEqual(["memory-1", "memory-2"]);
 
         fireEvent.click(getByRole("button", { name: "Delete 2 selected" }));
@@ -157,7 +157,7 @@ describe("Memory batch delete", () => {
         );
 
         expect(screen.getByRole("status")).toHaveTextContent("Deleting 2 memories...");
-        expect(screen.getByRole("button", { name: "Deleting..." })).toBeDisabled();
+        expect(screen.getByRole("button", { name: "Deleting 2..." })).toBeDisabled();
     });
 
     test("surfaces retry action when batch delete mutation fails", async () => {

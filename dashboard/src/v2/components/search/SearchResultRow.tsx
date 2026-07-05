@@ -168,11 +168,13 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
             aria-label={`${categoryType} result: ${itemId} ${title}${badgeText ? `, ${badgeText}` : ''}${disabledReason ? `, ${disabledReason}` : ''}`}
             title={disabledExplanation}
             role="option"
-            aria-selected={isFocused && !isDisabled}
+            aria-selected={isFocused}
             style={{ transitionDuration, transitionTimingFunction }}
             className={`group relative flex w-full min-w-0 items-stretch overflow-hidden text-left rounded-[1.25rem] border px-3.5 py-3 transition-[background-color,border-color,box-shadow,color,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800 sm:px-4 ${
                 isDisabled
-                    ? 'border-black/[0.06] bg-black/[0.025] text-slate-500 shadow-none dark:border-white/[0.06] dark:bg-white/[0.025] dark:text-slate-500'
+                    ? isFocused
+                        ? 'border-status-red/35 bg-status-red/[0.055] text-slate-600 shadow-[0_10px_26px_rgba(227,0,15,0.08),inset_0_0_0_1px_rgba(227,0,15,0.08)] dark:bg-status-red/[0.08] dark:text-slate-400'
+                        : 'border-black/[0.06] bg-black/[0.025] text-slate-500 shadow-none dark:border-white/[0.06] dark:bg-white/[0.025] dark:text-slate-500'
                     : isFocused
                     ? 'translate-y-[-1px] border-signal-500/55 bg-signal-500/[0.09] shadow-[0_12px_32px_rgba(0,224,160,0.13),inset_0_0_0_1px_rgba(0,224,160,0.14)] backdrop-blur-2xl motion-reduce:translate-y-0 dark:bg-signal-500/[0.11]'
                     : 'border-black/[0.06] bg-white/58 backdrop-blur-xl hover:border-black/[0.1] hover:bg-white/86 dark:border-white/[0.06] dark:bg-white/[0.035] dark:hover:border-white/[0.11] dark:hover:bg-white/[0.06]'
@@ -180,22 +182,22 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
         >
             <span
                 aria-hidden="true"
-                className={`pointer-events-none absolute inset-y-3 left-2 w-1 rounded-full bg-signal-500 transition-opacity ${
-                    isFocused && !isDisabled ? 'opacity-100' : 'opacity-0 group-focus-visible:opacity-80'
+                className={`pointer-events-none absolute inset-y-3 left-2 w-1 rounded-full transition-[background-color,opacity] ${
+                    isFocused && isDisabled ? 'bg-status-red opacity-100' : isFocused ? 'bg-signal-500 opacity-100' : 'bg-signal-500 opacity-0 group-focus-visible:opacity-80'
                 }`}
                 style={{ transitionDuration, transitionTimingFunction }}
             />
             <span
                 aria-hidden="true"
-                className={`pointer-events-none absolute inset-0 bg-signal-500/[0.045] transition-opacity ${
-                    isFocused && !isDisabled ? 'opacity-100' : 'opacity-0'
+                className={`pointer-events-none absolute inset-0 transition-opacity ${
+                    isFocused && isDisabled ? 'bg-status-red/[0.04] opacity-100' : isFocused ? 'bg-signal-500/[0.045] opacity-100' : 'bg-signal-500/[0.045] opacity-0'
                 }`}
                 style={{ transitionDuration, transitionTimingFunction }}
             />
 
             <div className="relative z-10 flex w-full min-w-0 items-start gap-3">
                 <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-colors ${
-                    isDisabled ? 'border-black/[0.05] bg-black/[0.035] text-slate-400 dark:border-white/[0.05] dark:bg-white/[0.035] dark:text-slate-500' : isFocused ? 'border-signal-500/25 bg-signal-500/12 text-signal-500' : 'border-black/[0.05] bg-black/[0.04] text-slate-500 group-hover:text-slate-700 dark:border-white/[0.06] dark:bg-white/[0.05] dark:text-slate-400 dark:group-hover:text-slate-200'
+                    isDisabled ? isFocused ? 'border-status-red/25 bg-status-red/10 text-status-red' : 'border-black/[0.05] bg-black/[0.035] text-slate-400 dark:border-white/[0.05] dark:bg-white/[0.035] dark:text-slate-500' : isFocused ? 'border-signal-500/25 bg-signal-500/12 text-signal-500' : 'border-black/[0.05] bg-black/[0.04] text-slate-500 group-hover:text-slate-700 dark:border-white/[0.06] dark:bg-white/[0.05] dark:text-slate-400 dark:group-hover:text-slate-200'
                 }`} style={{ transitionDuration, transitionTimingFunction }}>
                     {avatarConfig ? (
                         <div className="flex h-5 w-5 shrink-0 items-center justify-center">

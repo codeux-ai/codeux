@@ -162,7 +162,7 @@ describe("Table component", () => {
     );
 
     expect(screen.getByRole("table", { name: "Busy Table" })).toHaveAttribute("aria-busy", "true");
-    expect(screen.getByRole("status")).toHaveTextContent("Updating 3 results shown.");
+    expect(screen.getByRole("status")).toHaveTextContent("Updating results. 3 results shown.");
   });
 
   it("handles long continuous strings without breaking mobile layout", () => {

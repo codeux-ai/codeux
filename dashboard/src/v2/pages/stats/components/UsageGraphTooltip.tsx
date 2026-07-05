@@ -2,12 +2,15 @@ import type { FunctionComponent } from 'preact';
 import type { ExecutionUsageBucketSummary } from '../../../types.js';
 import { formatCost, formatStatsDuration, formatTokens } from '../stats-utils.js';
 
+export type UsageGraphInspectionState = 'idle' | 'focused' | 'pinned';
+
 interface UsageGraphTooltipProps {
   visible: boolean;
   left: number;
   label: string;
   bucketStart: string;
   bucket?: ExecutionUsageBucketSummary | null;
+  inspectionState?: UsageGraphInspectionState;
   activeSeries: Array<{
     id: string;
     label: string;
@@ -22,8 +25,10 @@ export const UsageGraphTooltip: FunctionComponent<UsageGraphTooltipProps> = ({
   label,
   bucketStart,
   bucket,
+  inspectionState,
   activeSeries,
 }) => {
+  const state = inspectionState ?? (visible ? 'focused' : 'idle');
   const date = new Date(bucketStart);
   let formattedDate = bucketStart;
   if (!Number.isNaN(date.getTime())) {
@@ -39,6 +44,18 @@ export const UsageGraphTooltip: FunctionComponent<UsageGraphTooltipProps> = ({
     { label: 'Active time', value: formatStatsDuration(usage.activeTimeMs || 0) },
     { label: 'Invocations', value: (usage.invocationCount || 0).toLocaleString() },
   ] : [];
+  const stateCopy = state === 'pinned'
+    ? 'Pinned bucket'
+    : state === 'focused'
+      ? 'Focused bucket'
+      : 'Idle';
+  const dateCopy = visible ? formattedDate : 'No bucket selected';
+  const helperCopy = state === 'pinned'
+    ? 'Pinned from keyboard or range control. Exact values stay visible until focus changes.'
+    : state === 'focused'
+      ? 'Focused from pointer or keyboard inspection. Exact bucket values are shown below.'
+      : 'Hover a bucket, tab into the chart, or move the range slider to inspect exact values.';
+  const markerLeft = Math.min(92, Math.max(8, left));
 
   return (
     <div
@@ -50,17 +67,22 @@ export const UsageGraphTooltip: FunctionComponent<UsageGraphTooltipProps> = ({
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-label-color)]">{label || 'Focused bucket'}</div>
-          <div className="mt-1 text-sm font-black text-[var(--stats-value-color)]">{visible ? formattedDate : 'Hover or focus a bucket to inspect exact values.'}</div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--stats-label-color)]">{label || stateCopy}</div>
+          <div className="mt-1 text-sm font-black text-[var(--stats-value-color)]">{dateCopy}</div>
+          <div className="mt-1 text-xs leading-relaxed text-[var(--stats-detail-color)]">{helperCopy}</div>
         </div>
         <div className="shrink-0 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--stats-detail-color)] sm:text-right">
-          {visible ? 'Bucket values' : 'Idle'}
+          {visible ? stateCopy : 'Idle'}
         </div>
       </div>
-      <div className="mt-3 h-1 rounded-full bg-[color:var(--stats-quiet-track)]">
+      <div
+        className="mt-3 h-1 rounded-full bg-[color:var(--stats-quiet-track)]"
+        role="img"
+        aria-label={visible ? `${stateCopy} marker at ${Math.round(markerLeft)} percent of the visible chart window.` : 'Idle marker waiting for chart focus.'}
+      >
         <span
           className="block h-full w-3 rounded-full bg-[color:var(--stats-signal-text)]"
-          style={{ marginLeft: `${Math.min(92, Math.max(8, left))}%`, transform: 'translateX(-50%)' }}
+          style={{ marginLeft: `${markerLeft}%`, transform: 'translateX(-50%)' }}
         />
       </div>
       {visible && detailRows.length > 0 ? (
@@ -72,6 +94,10 @@ export const UsageGraphTooltip: FunctionComponent<UsageGraphTooltipProps> = ({
             </div>
           ))}
         </dl>
+      ) : visible ? (
+        <div className="mt-3 rounded-[0.85rem] border border-dashed border-[var(--stats-card-border)] px-3 py-4 text-sm leading-relaxed text-[var(--stats-detail-color)]">
+          This bucket has no usage totals available for the active series.
+        </div>
       ) : null}
       <div className="mt-3 grid gap-2">
         {visible && activeSeries.length > 0 ? activeSeries.map((series) => (
