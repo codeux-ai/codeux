@@ -12,7 +12,9 @@ import { useGsapInteractionTokens } from "./lib/motion/constants.js";
 import { useInteractionTokens } from "./lib/motion/tokens.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
 import { PageHeader } from "./components/layout/PageHeader.js";
+import { ConfirmDialog } from "./components/ui/ConfirmDialog.js";
 import { UnsavedChangesModal } from "./components/ui/UnsavedChangesModal.js";
+import { useConfirmDialog } from "./hooks/use-confirm-dialog.js";
 import { getSettingsSearchMatchPreview } from "./lib/settings-search-index.js";
 
 export function focusFirstInvalidSettingsControl(root: ParentNode): string | null {
@@ -70,6 +72,7 @@ export const SettingsPage: FunctionComponent = () => {
   const interactionTokens = useInteractionTokens();
   const [pendingCategory, setPendingCategory] = useState<typeof CATEGORIES[number]["id"] | null>(null);
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
+  const resetProjectConfirm = useConfirmDialog();
 
   const state = useSettingsPageState(CATEGORIES);
   const {
@@ -217,8 +220,29 @@ export const SettingsPage: FunctionComponent = () => {
     await handleSave();
   }, [focusFirstInvalidSetting, handleSave]);
 
+  const handleResetProjectRequest = useCallback(async (): Promise<void> => {
+    if (!selectedProject) {
+      return;
+    }
+    const confirmed = await resetProjectConfirm.requestConfirm({
+      title: "Reset Project Overrides",
+      body: `Clear saved settings overrides for "${selectedProject.name}" and inherit system defaults again? Project tasks, sprints, memories, and history will be kept.`,
+      confirmLabel: "Reset Project",
+      destructive: true,
+    });
+    if (confirmed) {
+      await handleResetProject();
+    }
+  }, [handleResetProject, resetProjectConfirm, selectedProject]);
+
   return (
     <PageContainer aria-label="Settings" padding="settings" className="gap-10">
+      <ConfirmDialog
+        isOpen={resetProjectConfirm.isOpen}
+        options={resetProjectConfirm.options}
+        onConfirm={resetProjectConfirm.handleConfirm}
+        onCancel={resetProjectConfirm.handleCancel}
+      />
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_-5%_-10%,rgba(0,224,160,0.04)_0%,transparent_60%)] dark:bg-[radial-gradient(ellipse_60%_50%_at_-5%_-10%,rgba(0,224,160,0.06)_0%,transparent_60%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_50%_40%_at_110%_110%,rgba(255,184,0,0.025)_0%,transparent_60%)] dark:bg-[radial-gradient(ellipse_50%_40%_at_110%_110%,rgba(255,184,0,0.04)_0%,transparent_60%)]" />
@@ -378,7 +402,7 @@ export const SettingsPage: FunctionComponent = () => {
             {activeScope === "project" ? (
               <ActionButton
                 label={resettingProject ? "Resetting Project" : "Reset Project"}
-                onClick={() => void handleResetProject()}
+                onClick={() => void handleResetProjectRequest()}
                 tone="danger"
                 busy={resettingProject}
                 disabled={!selectedProject}
