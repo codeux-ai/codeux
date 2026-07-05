@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 /// <reference types="@testing-library/jest-dom" />
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { render, cleanup, screen, waitFor } from "@testing-library/preact";
+import { render, cleanup, fireEvent, screen, waitFor } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import userEvent from "@testing-library/user-event";
 import { createContext } from "preact";
@@ -10,7 +10,7 @@ import { useProjectData, ProjectDataContext } from "../../context/project-data.j
 import { useSprints } from "../../../hooks/useSprints.js";
 import { useProjectTasks } from "../../hooks/use-project-tasks.js";
 import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-settings.js";
-import { deleteTask } from "../../lib/project-api.js";
+import { createTask, deleteTask } from "../../lib/project-api.js";
 import { createMockTask } from "../../components/tasks/__tests__/fixtures/tasks.fixture.js";
 
 expect.extend(matchers);
@@ -31,11 +31,15 @@ vi.mock("@tanstack/react-router", () => ({
 // Mock GSAP
 vi.mock("gsap", async (importOriginal) => {
   const actual = await importOriginal<any>();
+  const timeline = {
+    fromTo: vi.fn().mockReturnThis(),
+  };
   const mockGsap = {
     context: vi.fn((fn) => {
       if (fn) fn();
       return { revert: vi.fn() };
     }),
+    timeline: vi.fn(() => timeline),
     set: vi.fn(),
     to: vi.fn().mockImplementation((el, config) => {
       if (config?.onComplete) config.onComplete();
@@ -304,6 +308,59 @@ describe("TasksPage.cards Integration", () => {
     expect(screen.getByRole("button", { name: /Task sprint scope: CUX-2: Sprint Two/i })).toBeInTheDocument();
   });
 
+  it("supports legacy sprint query param as the scoped sprint route", () => {
+    routerState.searchStr = "?sprint=sprint_2";
+    const selectSprint = vi.fn();
+    (useProjectData as unknown as any).mockReturnValue({
+      projects: [{ id: "proj_1", name: "Project Alpha" }],
+      selectedProject: { id: "proj_1", name: "Project Alpha" },
+    });
+    (useSprints as unknown as any).mockReturnValue({
+      data: [
+        { id: "sprint_1", number: 1, name: "Sprint One", status: "idle", date: "Jan 1", tasksCount: 0, completion: 0, active: false },
+        { id: "sprint_2", number: 2, name: "Sprint Two", status: "running", date: "Jan 2", tasksCount: 1, completion: 0, active: true },
+      ],
+      loading: false,
+      selectedSprintId: "sprint_1",
+      selectSprint,
+      refetch: vi.fn(),
+    });
+    (useProjectTasks as any).mockReturnValue({
+      tasks: [
+        createMockTask({
+          recordId: "task_rec_2",
+          id: "T-200",
+          title: "Legacy Scoped Task",
+          status: "pending",
+          priority: "medium",
+          assignee: "Bob",
+          sprintId: "sprint_2",
+          dependsOnTaskIds: [],
+          executorType: "jules",
+        }),
+      ],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "proj_1", name: "Project Alpha" } as any], selectedProject: { id: "proj_1", name: "Project Alpha" } as any } as any}>
+        <TasksPage />
+      </ProjectDataContext.Provider>
+    );
+
+    expect(useProjectTasks).toHaveBeenCalledWith(
+      "proj_1",
+      [{ id: "proj_1", name: "Project Alpha" }],
+      expect.any(Array),
+      "sprint_2",
+    );
+    expect(selectSprint).toHaveBeenCalledWith("sprint_2");
+    expect(screen.getByText("Legacy Scoped Task")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Task sprint scope: SPR-2: Sprint Two/i })).toBeInTheDocument();
+  });
+
   it("supports keyboard operation in the sprint scope selector", async () => {
     const user = userEvent.setup();
     const selectSprint = vi.fn();
@@ -402,7 +459,7 @@ describe("TasksPage.cards Integration", () => {
 
     await user.click(screen.getByRole("tab", { name: "Done" }));
     await waitFor(() => expect(screen.getByText("Release Notes")).toBeInTheDocument());
-    expect(screen.queryByText("Foundation Setup")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Foundation Setup")).not.toBeInTheDocument());
     expect(screen.getByText(/Filtered to show completed status and any priority/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "All" }));
@@ -423,8 +480,10 @@ describe("TasksPage.cards Integration", () => {
 
     await user.click(screen.getByRole("button", { name: /Delete task T-100: Foundation Setup/i }));
     expect(screen.getByText(/Delete "Foundation Setup"/i)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Delete Task" }));
-    await waitFor(() => expect(deleteTask).toHaveBeenCalledWith("task_rec_1"));
+    const confirmDeleteButton = screen.getByRole("button", { name: "Hold to Delete Task" });
+    fireEvent.pointerDown(confirmDeleteButton);
+    await waitFor(() => expect(deleteTask).toHaveBeenCalledWith("task_rec_1"), { timeout: 1500 });
+    fireEvent.pointerUp(confirmDeleteButton);
     expect(refreshTasks).toHaveBeenCalled();
     expect(refreshSprints).toHaveBeenCalled();
   });
@@ -467,5 +526,61 @@ describe("TasksPage.cards Integration", () => {
     expect(card).toHaveClass("border-dashed");
     expect(card).toHaveClass("opacity-70");
     expect(card).toHaveTextContent("Saving task changes");
+  });
+
+  it("renders and rolls back an optimistic task while a create request is pending", async () => {
+    const user = userEvent.setup();
+    const refreshTasks = vi.fn().mockResolvedValue(undefined);
+    const refreshSprints = vi.fn().mockResolvedValue(undefined);
+    let resolveCreateTask: (value: unknown) => void = () => {};
+    const createTaskPromise = new Promise((resolve) => {
+      resolveCreateTask = resolve;
+    });
+
+    (createTask as unknown as any).mockReturnValue(createTaskPromise);
+    (useProjectData as unknown as any).mockReturnValue({
+      projects: [{ id: "proj_1", name: "Project Alpha" }],
+      selectedProject: { id: "proj_1", name: "Project Alpha" },
+    });
+    (useSprints as unknown as any).mockReturnValue({
+      data: [{ id: "sprint_1", number: 1, name: "Sprint One", status: "running", date: "Jan 1", tasksCount: 0, completion: 0, active: true }],
+      loading: false,
+      selectedSprintId: "sprint_1",
+      selectSprint: vi.fn(),
+      refetch: refreshSprints,
+    });
+    (useProjectTasks as any).mockReturnValue({
+      tasks: [],
+      loading: false,
+      error: null,
+      refresh: refreshTasks,
+    });
+
+    render(
+      <ProjectDataContext.Provider value={{ projects: [{ id: "proj_1", name: "Project Alpha" } as any], selectedProject: { id: "proj_1", name: "Project Alpha" } as any } as any}>
+        <TasksPage />
+      </ProjectDataContext.Provider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "New Task" }));
+    await user.type(screen.getByPlaceholderText("Fix navigation layout shift"), "Optimistic Created Task");
+    await user.type(screen.getByPlaceholderText("Summarize the intent and outcome."), "Create a task through the extracted controller.");
+    await user.type(screen.getByPlaceholderText("Detailed markdown instructions for the agent."), "Implement the task with tests.");
+    await user.click(screen.getByRole("button", { name: "Create Task" }));
+
+    await waitFor(() => expect(screen.getByText("Optimistic Created Task")).toBeInTheDocument());
+    expect(screen.getByText("Saving task changes")).toBeInTheDocument();
+    expect(createTask).toHaveBeenCalledWith("proj_1", expect.objectContaining({
+      sprintId: "sprint_1",
+      title: "Optimistic Created Task",
+    }));
+
+    resolveCreateTask({ id: "created_task_1" });
+
+    await waitFor(() => {
+      expect(refreshTasks).toHaveBeenCalled();
+      expect(refreshSprints).toHaveBeenCalled();
+      expect(screen.queryByText("Optimistic Created Task")).not.toBeInTheDocument();
+    });
   });
 });
