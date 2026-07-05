@@ -164,7 +164,7 @@ export const InstructionFileEditorPanel: FunctionComponent<{
           </div>
           <div className="flex min-w-0 flex-col gap-1">
             <div className="flex items-center gap-2">
-              <h2 className="truncate font-display text-xl font-black tracking-tight text-slate-900 dark:text-white">
+              <h2 className="truncate font-display text-lg font-semibold tracking-tight text-slate-900 dark:text-white">
                 {file.label}
               </h2>
               <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${status.cls}`}>
@@ -193,7 +193,7 @@ export const InstructionFileEditorPanel: FunctionComponent<{
                   aria-pressed={active}
                   className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.1em] transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 ${
                     active
-                      ? "bg-signal-500 text-void-900 shadow-[0_0_12px_rgba(0,224,160,0.25)]"
+                      ? "bg-signal-500 text-white dark:text-void-900 shadow-[0_0_12px_rgba(0,224,160,0.25)]"
                       : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white"
                   }`}
                 >
@@ -230,7 +230,7 @@ export const InstructionFileEditorPanel: FunctionComponent<{
             disabled={saving || !dirty}
             aria-disabled={saving || !dirty}
             aria-busy={saving}
-            className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-[12px] font-bold uppercase tracking-[0.12em] text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:scale-[1.03] hover:bg-signal-400 hover:shadow-[0_0_32px_rgba(0,224,160,0.36)] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none disabled:hover:scale-100 dark:disabled:bg-white/[0.05] dark:disabled:text-slate-500"
+            className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-[12px] font-bold uppercase tracking-[0.12em] text-white dark:text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:scale-[1.03] hover:bg-signal-400 hover:shadow-[0_0_32px_rgba(0,224,160,0.36)] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none disabled:hover:scale-100 dark:disabled:bg-white/[0.05] dark:disabled:text-slate-500"
           >
             {saving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2.4} /> : <Save className="h-3.5 w-3.5" strokeWidth={2.4} />}
             Save

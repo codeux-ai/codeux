@@ -91,7 +91,7 @@ export const QuicksprintEditorView: FunctionComponent<{
                 value={edName}
                 onInput={(e) => setEdName((e.target as HTMLInputElement).value)}
                 placeholder="API Integration Tests"
-                className="w-full rounded-[1rem] border border-black/[0.06] bg-transparent px-4 py-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:ring-4 focus:ring-signal-500/20 focus:border-signal-500 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem]"
+                className="w-full rounded-[1rem] border border-black/[0.06] bg-transparent px-4 py-3 font-display text-xl font-semibold leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:ring-4 focus:ring-signal-500/20 focus:border-signal-500 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem]"
                 autoFocus
               />
             </label>

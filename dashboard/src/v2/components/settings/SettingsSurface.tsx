@@ -127,7 +127,7 @@ export const SettingsHeader: FunctionComponent<{
         <Icon className="h-3.5 w-3.5" strokeWidth={2.3} />
         {eyebrow}
       </div>
-      <h2 className="mt-3 font-display text-4xl font-black tracking-tight text-slate-900 dark:text-white">
+      <h2 className="mt-3 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
         {title}
       </h2>
       <p className="mt-2 max-w-3xl text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">

@@ -119,7 +119,7 @@ export const GitTelemetryLedger: FunctionComponent<{
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--stats-label-color)]">{eyebrow}</div>
-            <div className="mt-2 text-2xl font-black tracking-tight text-[color:var(--stats-value-color)]">{title}</div>
+            <div className="mt-2 text-xl font-semibold tracking-tight text-[color:var(--stats-value-color)]">{title}</div>
             <div className="mt-2 text-sm text-[color:var(--stats-detail-color)]">
               Search, sort, and compare {kindLabel} by code churn, PRs opened, and changes merged.
             </div>
@@ -132,32 +132,32 @@ export const GitTelemetryLedger: FunctionComponent<{
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center text-center !p-4`}>
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Insertions</div>
-            <div className="mt-1 text-xl font-black tracking-tight text-[color:var(--stats-value-color)]">+{totalInsertions.toLocaleString()}</div>
+            <div className="mt-1 text-lg font-semibold tracking-tight text-[color:var(--stats-value-color)]">+{totalInsertions.toLocaleString()}</div>
             <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--stats-label-color)]">lines added</div>
           </div>
           <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center text-center !p-4`}>
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Deletions</div>
-            <div className="mt-1 text-xl font-black tracking-tight text-[color:var(--stats-value-color)]">-{totalDeletions.toLocaleString()}</div>
+            <div className="mt-1 text-lg font-semibold tracking-tight text-[color:var(--stats-value-color)]">-{totalDeletions.toLocaleString()}</div>
             <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--stats-label-color)]">lines removed</div>
           </div>
           <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center text-center !p-4`}>
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Files</div>
-            <div className="mt-1 text-xl font-black tracking-tight text-[color:var(--stats-value-color)]">{totalFiles.toLocaleString()}</div>
+            <div className="mt-1 text-lg font-semibold tracking-tight text-[color:var(--stats-value-color)]">{totalFiles.toLocaleString()}</div>
             <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--stats-label-color)]">changed</div>
           </div>
           <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center text-center !p-4`}>
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">PRs</div>
-            <div className="mt-1 text-xl font-black tracking-tight text-[color:var(--stats-value-color)]">{totalPRs.toLocaleString()}</div>
+            <div className="mt-1 text-lg font-semibold tracking-tight text-[color:var(--stats-value-color)]">{totalPRs.toLocaleString()}</div>
             <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--stats-label-color)]">opened</div>
           </div>
           <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center text-center !p-4`}>
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Merged</div>
-            <div className="mt-1 text-xl font-black tracking-tight text-[color:var(--stats-value-color)]">{mergedPRs.toLocaleString()}</div>
+            <div className="mt-1 text-lg font-semibold tracking-tight text-[color:var(--stats-value-color)]">{mergedPRs.toLocaleString()}</div>
             <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--stats-label-color)]">{formatPercent(mergeRate)} merge rate</div>
           </div>
           <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center text-center !p-4`}>
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Visible Churn</div>
-            <div className="mt-1 text-xl font-black tracking-tight text-[color:var(--stats-value-color)]">{totals.churn.toLocaleString()}</div>
+            <div className="mt-1 text-lg font-semibold tracking-tight text-[color:var(--stats-value-color)]">{totals.churn.toLocaleString()}</div>
             <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--stats-label-color)]">{formatPercent(filteredShare)} in view</div>
           </div>
         </div>
@@ -235,11 +235,11 @@ export const GitTelemetryLedger: FunctionComponent<{
                     <div className="flex flex-col gap-4">
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                         <div className="flex min-w-0 items-start gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--stats-card-border)] bg-[color:var(--stats-card-bg)] text-xs font-black text-[color:var(--stats-value-color)] shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[color:var(--stats-card-border)] bg-[color:var(--stats-card-bg)] text-xs font-semibold text-[color:var(--stats-value-color)] shadow-[var(--stats-subpanel-shadow)] backdrop-blur-xl">
                             {index + 1}
                           </div>
                           <div className="min-w-0">
-                            <div className="break-words text-base font-black tracking-tight text-[color:var(--stats-value-color)] [overflow-wrap:anywhere]">{item.label}</div>
+                            <div className="break-words text-base font-semibold tracking-tight text-[color:var(--stats-value-color)] [overflow-wrap:anywhere]">{item.label}</div>
                             <div className="mt-1.5 flex flex-wrap items-center gap-2">
                               {item.secondaryLabel ? (
                                 <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
@@ -255,7 +255,7 @@ export const GitTelemetryLedger: FunctionComponent<{
                         <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-3 xl:w-auto xl:min-w-[46rem] xl:grid-cols-6 xl:text-right">
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Code Churn</div>
-                            <div className="mt-1 flex items-center gap-3 text-lg font-black tracking-tight text-[color:var(--stats-value-color)] xl:justify-end text-[color:var(--stats-value-color)]">
+                            <div className="mt-1 flex items-center gap-3 text-base font-semibold tracking-tight text-[color:var(--stats-value-color)] xl:justify-end text-[color:var(--stats-value-color)]">
                               {itemChurn.toLocaleString()}
                               <div className="w-16 h-1.5">
                                 <ChurnFlowBar insertions={item.metrics.insertions} deletions={item.metrics.deletions} />
@@ -264,23 +264,23 @@ export const GitTelemetryLedger: FunctionComponent<{
                           </div>
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">PRs</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-[color:var(--stats-value-color)]">{item.metrics.prCount.toLocaleString()}</div>
+                            <div className="mt-1 text-base font-semibold tracking-tight text-[color:var(--stats-value-color)]">{item.metrics.prCount.toLocaleString()}</div>
                           </div>
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Merged</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-[color:var(--stats-value-color)]">{item.metrics.mergedCount.toLocaleString()}</div>
+                            <div className="mt-1 text-base font-semibold tracking-tight text-[color:var(--stats-value-color)]">{item.metrics.mergedCount.toLocaleString()}</div>
                           </div>
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Files</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-[color:var(--stats-value-color)]">{item.metrics.filesChanged.toLocaleString()}</div>
+                            <div className="mt-1 text-base font-semibold tracking-tight text-[color:var(--stats-value-color)]">{item.metrics.filesChanged.toLocaleString()}</div>
                           </div>
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Share</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-[color:var(--stats-value-color)]">{formatPercent(shareOfTotal)}</div>
+                            <div className="mt-1 text-base font-semibold tracking-tight text-[color:var(--stats-value-color)]">{formatPercent(shareOfTotal)}</div>
                           </div>
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Leader</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-[color:var(--stats-value-color)]">{formatPercent(shareOfLeader)}</div>
+                            <div className="mt-1 text-base font-semibold tracking-tight text-[color:var(--stats-value-color)]">{formatPercent(shareOfLeader)}</div>
                           </div>
                         </div>
                       </div>
@@ -345,7 +345,7 @@ const GitStatCard: FunctionComponent<{
       </div>
       <div>
         <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--stats-label-color)]">{label}</div>
-        <div className="mt-1 text-xl font-black tracking-tight text-[color:var(--stats-value-color)]">{value}</div>
+        <div className="mt-1 text-lg font-semibold tracking-tight text-[color:var(--stats-value-color)]">{value}</div>
       </div>
     </div>
     <div className="mt-3 text-[11px] font-medium text-[color:var(--stats-detail-color)]">{detail}</div>
@@ -395,7 +395,7 @@ const GitRankingPanel: FunctionComponent<{
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-sm font-black text-[color:var(--stats-value-color)]">{churn.toLocaleString()}</div>
+                      <div className="text-sm font-semibold text-[color:var(--stats-value-color)]">{churn.toLocaleString()}</div>
                       <div className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">churn</div>
                     </div>
                   </div>
@@ -474,7 +474,7 @@ export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSum
               <GitPullRequest className="h-3.5 w-3.5 text-[color:var(--stats-warning-text)]" strokeWidth={2.2} aria-hidden="true" />
               Git Operational Ledger
             </div>
-            <div className="mt-2 text-2xl font-black tracking-tight text-[color:var(--stats-value-color)]">
+            <div className="mt-2 text-xl font-semibold tracking-tight text-[color:var(--stats-value-color)]">
               Churn, pull requests, and merge pressure
             </div>
             <div className="mt-2 max-w-3xl text-sm text-[color:var(--stats-detail-color)]">
@@ -485,7 +485,7 @@ export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSum
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--stats-label-color)]">Total Churn</div>
-                <div className="mt-1 text-2xl font-black tracking-tight text-[color:var(--stats-value-color)]">{totalChurn.toLocaleString()}</div>
+                <div className="mt-1 text-xl font-semibold tracking-tight text-[color:var(--stats-value-color)]">{totalChurn.toLocaleString()}</div>
               </div>
               <div className={`inline-flex items-center gap-2 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--stats-detail-color)] ${CHIP_CLASS}`}>
                 <Hash className="h-3 w-3 text-[color:var(--stats-accent-cyan)]" strokeWidth={2.3} aria-hidden="true" />
@@ -598,7 +598,7 @@ export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSum
             >
               <Icon className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden="true" />
               <span className="truncate">{tab.label}</span>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-black tabular-nums ${CHIP_CLASS} ${isActive ? TAB_COUNT_ACTIVE_CLASS : TAB_COUNT_IDLE_CLASS}`}>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums ${CHIP_CLASS} ${isActive ? TAB_COUNT_ACTIVE_CLASS : TAB_COUNT_IDLE_CLASS}`}>
                 {tab.count.toLocaleString()}
               </span>
             </button>

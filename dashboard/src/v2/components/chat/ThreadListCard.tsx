@@ -103,7 +103,7 @@ export const ThreadListCard: FunctionComponent<{
                     </div>
 
                     {/* Title */}
-                    <h3 className="font-display text-lg font-black tracking-tight text-slate-900 dark:text-white leading-snug truncate">
+                    <h3 className="font-display text-base font-semibold tracking-tight text-slate-900 dark:text-white leading-snug truncate">
                       {thread.title}
                     </h3>
 

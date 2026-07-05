@@ -55,7 +55,7 @@ const RosterStat: FunctionComponent<RosterStatProps> = ({ label, value, accent, 
         <span className={`h-2 w-2 rounded-full ${tone.dot} ${tone.glow}`} />
       </div>
       <div className="mt-4 flex items-end justify-between">
-        <div className="font-display text-4xl font-black tracking-tighter text-slate-900 dark:text-white">
+        <div className="font-display text-2xl font-semibold tracking-tighter text-slate-900 dark:text-white">
           {value}
         </div>
         <Icon className={`h-5 w-5 ${tone.text}`} strokeWidth={1.8} />
@@ -591,7 +591,7 @@ export const AgentsPage: FunctionComponent = () => {
                       key={option.value}
                       className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-3 py-3 transition-colors ${
                         pushMode === option.value
-                          ? "border-signal-500/30 bg-signal-500/[0.08] text-slate-900 dark:bg-signal-500/10 dark:text-white"
+                          ? "border-signal-500/30 bg-signal-500/[0.08] text-white dark:bg-signal-500/10 dark:text-white"
                           : "border-black/[0.06] bg-white/70 text-slate-600 hover:bg-black/[0.02] dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.05]"
                       }`}
                     >
@@ -640,7 +640,7 @@ export const AgentsPage: FunctionComponent = () => {
                     type="button"
                     onClick={() => void submitPushAgents()}
                     disabled={pushing}
-                    className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.22)] transition-all hover:bg-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white dark:text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.22)] transition-all hover:bg-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {pushing ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.4} />
@@ -745,7 +745,7 @@ export const AgentsPage: FunctionComponent = () => {
           <h3 className="mb-2 font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">The Workshop Is Quiet</h3>
           <p className="max-w-sm text-sm leading-relaxed text-slate-500 dark:text-slate-400">Spin up your first specialist. Give it a name, a personality, an avatar — and operator-grade system instructions.</p>
           <div className="mt-4">
-            <button type="button" onClick={() => void handleCreate()} className="group inline-flex items-center gap-2 rounded-full bg-signal-500 px-6 py-3 text-sm font-bold text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:scale-[1.03] hover:bg-signal-400 hover:shadow-[0_0_32px_rgba(0,224,160,0.36)] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2">
+            <button type="button" onClick={() => void handleCreate()} className="group inline-flex items-center gap-2 rounded-full bg-signal-500 px-6 py-3 text-sm font-bold text-white dark:text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:scale-[1.03] hover:bg-signal-400 hover:shadow-[0_0_32px_rgba(0,224,160,0.36)] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2">
               <Plus className="h-4.5 w-4.5 transition-transform group-hover:rotate-90" strokeWidth={2.5} />
               Create First Agent
             </button>

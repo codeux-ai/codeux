@@ -57,7 +57,7 @@ export const EmbeddingModelCatalog: FunctionComponent<EmbeddingModelCatalogProps
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">
                 Local embeddings
               </p>
-              <h2 id="embedding-model-catalog-title" className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">
+              <h2 id="embedding-model-catalog-title" className="mt-1 text-base font-semibold tracking-tight text-slate-900 dark:text-white">
                 Embedding model catalog
               </h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">

@@ -68,7 +68,7 @@ export const EmptyChat: FunctionComponent<{
         <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-signal-500">
           {eyebrow || config.eyebrow}
         </div>
-        <h3 className="mt-3 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white md:text-4xl">
+        <h3 className="mt-3 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white md:text-4xl">
           {title || config.title}
         </h3>
         <p className="mx-auto mt-4 max-w-md text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">
@@ -125,7 +125,7 @@ export const ChatRailPlaceholder: FunctionComponent<{
       <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-signal-500/20 bg-signal-500/10 text-signal-500 shadow-[0_0_28px_rgba(0,224,160,0.14)]">
         <Sparkles className="h-5 w-5" strokeWidth={1.7} />
       </div>
-      <div className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</div>
+      <div className="font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">{title}</div>
       <p className="mt-2 text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">{message}</p>
       {actionTo ? (
         <Link

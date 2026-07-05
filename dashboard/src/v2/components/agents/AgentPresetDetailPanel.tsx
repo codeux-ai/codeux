@@ -274,7 +274,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
                   </span>
                   Agent Profile
                 </span>
-                <h2 className="font-display text-3xl font-black tracking-tight text-slate-900 md:text-4xl dark:text-white">
+                <h2 className="font-display text-2xl font-semibold tracking-tight text-slate-900 md:text-3xl dark:text-white">
                   {preset.name}
                 </h2>
                 {preset.description && (
@@ -286,7 +286,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
               <button
                 type="button"
                 onClick={onEdit}
-                className="inline-flex shrink-0 items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-sm font-bold text-slate-900 shadow-lg shadow-signal-500/15 transition-all hover:scale-[1.03] hover:bg-signal-400 hover:shadow-signal-500/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-void-900"
+                className="inline-flex shrink-0 items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-signal-500/15 transition-all hover:scale-[1.03] hover:bg-signal-400 hover:shadow-signal-500/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-void-900"
               >
                 <Edit2 className="h-4 w-4" strokeWidth={2.5} />
                 Edit

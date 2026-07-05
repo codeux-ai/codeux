@@ -201,7 +201,7 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
               <span className={`relative inline-flex rounded-full h-3 w-3 ${theme.pingBg2}`}></span>
             </span>
             <h3
-              className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white"
+              className="font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white"
               aria-live="polite"
             >
               {feedback.text}

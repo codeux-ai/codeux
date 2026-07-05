@@ -14,7 +14,7 @@ export const ChatRail: FunctionComponent<{
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{title}</h2>
-            <div className="mt-1 font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+            <div className="mt-1 font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
               {count}
             </div>
           </div>

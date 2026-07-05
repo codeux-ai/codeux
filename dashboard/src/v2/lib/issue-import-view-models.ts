@@ -65,7 +65,7 @@ const PROVIDER_METADATA: Record<IssueImportProvider, IssueImportProviderMetadata
     accent: {
       badgeClassName: "border-signal-500/20 bg-signal-500/10 text-signal-600 dark:text-signal-300",
       selectedCardClassName: "border-signal-500/30 bg-signal-500/[0.08] shadow-[0_14px_32px_rgba(0,224,160,0.08)] dark:border-signal-400/25 dark:bg-signal-400/[0.1]",
-      selectedIconClassName: "bg-signal-500 text-slate-950",
+      selectedIconClassName: "bg-signal-500 text-white dark:text-void-950",
       focusRingClassName: "focus-visible:ring-signal-500/30",
     },
   },

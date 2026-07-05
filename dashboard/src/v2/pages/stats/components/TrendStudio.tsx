@@ -33,7 +33,7 @@ const TrendSignalCard: FunctionComponent<{
     </div>
     <div className="min-w-0">
       <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-label-color)]">{label}</div>
-      <div className="mt-1 break-words text-lg font-black leading-tight text-[var(--stats-value-color)]">{value}</div>
+      <div className="mt-1 break-words text-base font-semibold leading-tight text-[var(--stats-value-color)]">{value}</div>
     </div>
   </div>
 );

@@ -537,7 +537,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
                   href={getSafeUrl(detectedLoginUrl)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-signal-500 px-4 py-2.5 text-xs font-bold text-void-950 hover:bg-signal-400 transition-all duration-200 shadow-[var(--elevation-raised)] cursor-pointer"
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-signal-500 px-4 py-2.5 text-xs font-bold text-white dark:text-void-950 hover:bg-signal-400 transition-all duration-200 shadow-[var(--elevation-raised)] cursor-pointer"
                 >
                   Authorize {providerName}
                 </a>
@@ -564,7 +564,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="mt-3 inline-flex items-center justify-center rounded-xl bg-signal-500 px-4 py-2 text-xs font-bold text-void-950 hover:bg-signal-400 transition-colors"
+                className="mt-3 inline-flex items-center justify-center rounded-xl bg-signal-500 px-4 py-2 text-xs font-bold text-white dark:text-void-950 hover:bg-signal-400 transition-colors"
               >
                 Done
               </button>

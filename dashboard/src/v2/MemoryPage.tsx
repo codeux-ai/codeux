@@ -1087,7 +1087,7 @@ export const MemoryPage: FunctionComponent = () => {
                 {!loading && memoryCount === 0 && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 pointer-events-none z-20">
                         <Brain className="w-12 h-12 text-signal-500/20" strokeWidth={1.5} />
-                        <p className="text-lg font-black font-display tracking-tight text-slate-400/60">
+                        <p className="text-base font-semibold font-display tracking-tight text-slate-400/60">
                             No memories yet
                         </p>
                         <p className="text-xs font-mono text-slate-400/50">

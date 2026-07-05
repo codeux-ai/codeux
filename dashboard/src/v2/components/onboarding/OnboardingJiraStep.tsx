@@ -24,7 +24,7 @@ export const OnboardingJiraStep: FunctionComponent<OnboardingJiraStepProps> = ({
             <JiraIcon className="h-5 w-5" />
           </span>
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-black text-slate-900 dark:text-white">Jira Integration (Optional)</h3>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Jira Integration (Optional)</h3>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               Link Code UX to your Jira Cloud instance to automatically import sprints and create agent tasks directly from Jira tickets.
             </p>

@@ -639,7 +639,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                 {state.isEditing ? (state.hasTasks ? "Edit Planned Sprint" : "Edit Draft Sprint") : "Sprint Composer"}
               </div>
               <div className="space-y-3">
-                <h2 className="font-display text-[2rem] font-black leading-none tracking-tight text-slate-900 dark:text-white sm:text-[2.35rem]">
+                <h2 className="font-display text-2xl font-semibold leading-none tracking-tight text-slate-900 dark:text-white sm:text-3xl">
                   {state.isEditing ? "Refine The Sprint." : "Compose The Next Sprint."}
                 </h2>
                 <p className="max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400 sm:text-[15px]">
@@ -668,7 +668,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                 value={state.sprintKeyOverride}
                 onInput={(e) => state.setSprintKeyOverride((e.target as HTMLInputElement).value)}
                 disabled={isBusy}
-                className="mt-2 w-full min-w-0 bg-transparent font-mono text-3xl font-black tracking-tight text-slate-900 outline-none transition-colors hover:bg-black/[0.03] focus:bg-white dark:text-white dark:hover:bg-white/[0.03] dark:focus:bg-transparent disabled:cursor-not-allowed"
+                className="mt-2 w-full min-w-0 bg-transparent font-mono text-2xl font-semibold tracking-tight text-slate-900 outline-none transition-colors hover:bg-black/[0.03] focus:bg-white dark:text-white dark:hover:bg-white/[0.03] dark:focus:bg-transparent disabled:cursor-not-allowed"
                 placeholder={defaultSprintKey}
                 aria-label="Sprint Key Override"
               />
@@ -767,7 +767,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                     disabled={isBusy}
                     aria-invalid={showNameError ? "true" : "false"}
                     placeholder="Runtime hardening"
-                    className={`w-full border-0 border-b-2 bg-transparent pb-3 font-display text-[1.65rem] font-black leading-none tracking-tight outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-50 sm:text-[1.9rem] ${
+                    className={`w-full border-0 border-b-2 bg-transparent pb-3 font-display text-xl font-semibold leading-none tracking-tight outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-50 sm:text-[1.9rem] ${
                       showNameError
                         ? "border-ember-500 text-ember-600 placeholder:text-ember-300 focus:border-ember-500 dark:border-ember-500 dark:text-ember-400 dark:placeholder:text-ember-800"
                         : "border-black/[0.08] text-slate-900 placeholder:text-slate-200 focus:border-signal-500 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700"
@@ -858,7 +858,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                             {IMPORTED_TASK_KIND_LABELS[task.kind]}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <h3 className="line-clamp-2 min-w-0 text-sm font-black leading-snug text-slate-900 dark:text-white">
+                            <h3 className="line-clamp-2 min-w-0 text-sm font-semibold leading-snug text-slate-900 dark:text-white">
                               {task.title}
                             </h3>
                             <div className="mt-2 grid gap-2 text-[11px] text-slate-500 dark:text-slate-400">

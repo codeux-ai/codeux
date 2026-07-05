@@ -92,7 +92,7 @@ export const AgentMcpManagePanel: FunctionComponent<{
             <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">
               MCP Access
             </div>
-            <h2 className="font-display text-lg font-black tracking-tight text-slate-900 dark:text-white">
+            <h2 className="font-display text-base font-semibold tracking-tight text-slate-900 dark:text-white">
               Connected Servers
             </h2>
           </div>
@@ -241,7 +241,7 @@ export const AgentMcpManagePanel: FunctionComponent<{
           type="button"
           onClick={onClose}
           disabled={disabled}
-          className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-[12px] font-bold uppercase tracking-[0.12em] text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:scale-[1.03] hover:bg-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-[12px] font-bold uppercase tracking-[0.12em] text-white dark:text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:scale-[1.03] hover:bg-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
           Done

@@ -292,19 +292,19 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
         </div>
 
         <div className="mt-4 flex w-full flex-col items-center justify-center gap-3 px-4 transition-transform duration-300 group-hover:-translate-y-3">
-          <h3 className="font-display text-2xl font-black leading-tight tracking-tight text-[var(--text-primary)]">
+          <h3 className="font-display text-xl font-semibold leading-tight tracking-tight text-[var(--text-primary)]">
             {sprint.name}
           </h3>
         </div>
 
         <div className="mt-6 flex items-center justify-center gap-7 text-center transition-transform duration-300 group-hover:-translate-y-3">
           <div className="flex flex-col items-center">
-            <div className="font-mono text-[2rem] font-black text-[var(--text-primary)]">{sprint.tasksCount}</div>
+            <div className="font-mono text-2xl font-semibold text-[var(--text-primary)]">{sprint.tasksCount}</div>
             <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Tasks</div>
           </div>
           <div className="h-10 w-px bg-black/[0.08] dark:bg-white/[0.08]" />
           <div className="flex flex-col items-center">
-            <div className="font-mono text-[2rem] font-black text-[var(--text-primary)]">{sprint.completion}%</div>
+            <div className="font-mono text-2xl font-semibold text-[var(--text-primary)]">{sprint.completion}%</div>
             <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Done</div>
           </div>
         </div>

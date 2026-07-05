@@ -26,7 +26,7 @@ export const OnboardingDefaultsStep: FunctionComponent<OnboardingDefaultsStepPro
         <div className="flex items-start gap-3">
           <Layers className="mt-0.5 h-5 w-5 shrink-0 text-signal-600 dark:text-signal-300" />
           <div>
-            <h3 className="text-sm font-black text-slate-900 dark:text-white">Default Configuration</h3>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Default Configuration</h3>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               Select which provider instances handle specific roles when new projects are created.
             </p>
@@ -84,7 +84,7 @@ export const OnboardingDefaultsStep: FunctionComponent<OnboardingDefaultsStepPro
                       <div className="flex min-w-0 items-center gap-3">
                         <ProviderBrandIcon id={provider.provider} />
                         <div className="min-w-0">
-                          <div className="truncate text-sm font-black text-slate-900 dark:text-white">{provider.name}</div>
+                          <div className="truncate text-sm font-semibold text-slate-900 dark:text-white">{provider.name}</div>
                           <div className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{getProviderTypeLabel(provider.provider)}</div>
                         </div>
                       </div>

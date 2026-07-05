@@ -67,7 +67,7 @@ export const OnboardingAppearanceStep: FunctionComponent<OnboardingAppearanceSte
           <h4 className="text-xs font-black uppercase tracking-[0.2em] text-signal-400">Environment</h4>
 
           <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-            <div className="text-sm font-black text-slate-900 dark:text-white">Background Mode</div>
+            <div className="text-sm font-semibold text-slate-900 dark:text-white">Background Mode</div>
             <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose between animated shaders or static colors.</div>
             <div className="mt-4">
               <PillChoiceGroup
@@ -83,7 +83,7 @@ export const OnboardingAppearanceStep: FunctionComponent<OnboardingAppearanceSte
 
           {typeof window !== "undefined" && Boolean(window.codeUxDesktop?.setZoom) && (
             <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-              <div className="text-sm font-black text-slate-900 dark:text-white">Zoom Level</div>
+              <div className="text-sm font-semibold text-slate-900 dark:text-white">Zoom Level</div>
               <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Scale the desktop interface size.</div>
               <div className="mt-4">
                 <SelectInput

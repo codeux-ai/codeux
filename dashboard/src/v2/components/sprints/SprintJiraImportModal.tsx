@@ -405,7 +405,7 @@ export const SprintJiraImportModal = ({
                         }
                       }}
                       placeholder="OPS"
-                      className="h-12 rounded-[1.1rem] border border-black/[0.07] bg-white px-4 text-sm font-black uppercase tracking-[0.08em] text-slate-700 outline-none transition-colors focus:border-[#0052CC] focus-visible:ring-2 focus-visible:ring-[#0052CC]/20 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-200"
+                      className="h-12 rounded-[1.1rem] border border-black/[0.07] bg-white px-4 text-sm font-semibold uppercase tracking-[0.08em] text-slate-700 outline-none transition-colors focus:border-[#0052CC] focus-visible:ring-2 focus-visible:ring-[#0052CC]/20 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-200"
                       aria-label="Jira project key"
                     />
                   </LabeledControl>
@@ -721,7 +721,7 @@ export const SprintJiraImportModal = ({
                     type="button"
                     onClick={() => { void handleImport(); }}
                     disabled={selectedIssues.length === 0 || importing}
-                    className="rounded-[1rem] bg-[#0052CC] px-5 py-3 text-sm font-black text-white shadow-[0_12px_28px_rgba(0,82,204,0.2)] transition-all hover:-translate-y-px hover:bg-[#0047b3] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#4C9AFF] dark:text-slate-900 dark:hover:bg-[#3b85e0]"
+                    className="rounded-[1rem] bg-[#0052CC] px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(0,82,204,0.2)] transition-all hover:-translate-y-px hover:bg-[#0047b3] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#4C9AFF] dark:text-slate-900 dark:hover:bg-[#3b85e0]"
                     aria-label={selectedIssues.length === 0 ? "Import issues disabled until Jira issues are selected" : "Import issues"}
                   >
                     {importing ? "Importing..." : "Import Issues"}

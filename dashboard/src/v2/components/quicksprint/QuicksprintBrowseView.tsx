@@ -297,7 +297,7 @@ export const QuicksprintBrowseView: FunctionComponent<{
             <h2
               ref={headingRef}
               tabIndex={-1}
-              className="font-display text-[2rem] font-black leading-none tracking-tight text-slate-900 outline-none dark:text-white sm:text-[2.35rem]"
+              className="font-display text-2xl font-semibold leading-none tracking-tight text-slate-900 outline-none dark:text-white sm:text-3xl"
             >
               Launch A Quicksprint.
             </h2>

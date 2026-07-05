@@ -35,7 +35,7 @@ export function AgentAvatarExpressionPicker({
               aria-pressed={selected}
               className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-[11px] font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed disabled:opacity-50 ${
                 selected
-                  ? "bg-signal-500 text-void-900 shadow-[0_0_14px_rgba(0,224,160,0.25)]"
+                  ? "bg-signal-500 text-white dark:text-void-900 shadow-[0_0_14px_rgba(0,224,160,0.25)]"
                   : "border border-black/[0.06] bg-white/55 text-slate-500 hover:border-signal-500/30 hover:bg-signal-500/[0.08] hover:text-signal-600 dark:border-white/[0.07] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:border-signal-500/30 dark:hover:text-signal-400"
               }`}
             >

@@ -484,7 +484,7 @@ export const GuidedDashboardTour: FunctionComponent = () => {
               {activeStep.id === "projects" ? <FolderOpen className="h-5 w-5" /> : activeStep.id === "docker" ? <Box className="h-5 w-5" /> : activeStep.id === "chat" ? <MessageCircle className="h-5 w-5" /> : activeStep.id === "schedule" ? <CalendarDays className="h-5 w-5" /> : activeStep.id === "files" ? <FolderTree className="h-5 w-5" /> : <Compass className="h-5 w-5" />}
             </div>
             <div>
-              <h2 id="dashboard-tour-title" className="font-display text-2xl font-black leading-none tracking-tight">{activeStep.title}</h2>
+              <h2 id="dashboard-tour-title" className="font-display text-xl font-semibold leading-none tracking-tight">{activeStep.title}</h2>
               <p id="dashboard-tour-description" className="mt-3 text-sm font-medium leading-relaxed text-slate-300">{activeStep.body}</p>
             </div>
           </div>

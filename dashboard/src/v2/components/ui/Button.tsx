@@ -26,7 +26,7 @@ const VARIANTS = {
   secondary: "border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] text-slate-600 hover:text-slate-900 hover:bg-[var(--surface-glass-hover)] dark:text-slate-300 dark:hover:text-white",
   danger: "border border-status-red/30 bg-status-red/[0.06] text-status-red hover:bg-status-red/[0.12]",
   ghost: "bg-transparent text-slate-600 hover:text-slate-900 hover:bg-[var(--fill-muted-hover)] dark:hover:text-slate-300",
-  signal: "bg-signal-500 hover:bg-signal-400 text-void-900 shadow-[var(--elevation-raised)] aria-disabled:shadow-none",
+  signal: "bg-signal-500 hover:bg-signal-400 text-white dark:text-void-900 shadow-[var(--elevation-raised)] aria-disabled:shadow-none",
 };
 
 const SIZES = {

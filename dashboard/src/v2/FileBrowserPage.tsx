@@ -695,7 +695,7 @@ const LaunchPanel: FunctionComponent<LaunchPanelProps> = ({
       </div>
       <div>
         <div class="text-[10px] font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-400">Workspace Snapshot</div>
-        <h2 id="file-browser-launch-title" class="mt-2 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+        <h2 id="file-browser-launch-title" class="mt-2 font-display text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
           {launching ? "Starting file browser…" : "Launch the file browser"}
         </h2>
         <p class="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
@@ -739,7 +739,7 @@ const LaunchPanel: FunctionComponent<LaunchPanelProps> = ({
           aria-busy={launching}
           aria-describedby={launchDisabledReason ? "file-browser-launch-status" : undefined}
           aria-label={launching ? "Starting file browser container" : "Open file browser"}
-          class="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-signal-500 px-6 text-sm font-bold text-void-950 shadow-[0_12px_30px_rgba(0,224,160,0.22)] transition hover:-translate-y-px hover:bg-signal-400 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600 disabled:shadow-none disabled:opacity-100 dark:disabled:bg-slate-700 dark:disabled:text-slate-300"
+          class="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-signal-500 px-6 text-sm font-bold text-white dark:text-void-950 shadow-[0_12px_30px_rgba(0,224,160,0.22)] transition hover:-translate-y-px hover:bg-signal-400 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600 disabled:shadow-none disabled:opacity-100 dark:disabled:bg-slate-700 dark:disabled:text-slate-300"
         >
           <Play class="h-4 w-4" strokeWidth={2.4} />
           Open file browser

@@ -97,7 +97,7 @@ const TaskScopePlaceholder: FunctionComponent<{
             ) : (
               <Link
                 to="/sprints"
-                className="inline-flex min-h-[44px] items-center gap-2.5 rounded-full bg-signal-500 px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-void-900 shadow-[0_10px_30px_rgba(0,224,160,0.22)] transition-all hover:-translate-y-px hover:bg-signal-400 focus-visible:ring-2 focus-visible:ring-signal-500/40"
+                className="inline-flex min-h-[44px] items-center gap-2.5 rounded-full bg-signal-500 px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white dark:text-void-900 shadow-[0_10px_30px_rgba(0,224,160,0.22)] transition-all hover:-translate-y-px hover:bg-signal-400 focus-visible:ring-2 focus-visible:ring-signal-500/40"
               >
                 <Plus className="h-3.5 w-3.5" strokeWidth={2.3} />
                 Plan Sprint
@@ -165,7 +165,7 @@ const SprintProgressCard: FunctionComponent<{
           <Target className="w-5 h-5 text-ember-500" strokeWidth={2} />
         </div>
         <div>
-          <h3 className="text-lg font-black font-display tracking-tight text-slate-900 dark:text-white">{sprint.name}</h3>
+          <h3 className="text-base font-semibold font-display tracking-tight text-slate-900 dark:text-white">{sprint.name}</h3>
           <p className="text-[10px] font-mono text-slate-400 uppercase tracking-[0.1em]">{sprint.date}</p>
         </div>
       </div>
@@ -190,7 +190,7 @@ const SprintProgressCard: FunctionComponent<{
           { label: "Queued", value: pending, color: "text-slate-400" },
         ].map(({ label, value, color }) => (
           <div key={label} className="flex flex-col items-center py-2.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.04]">
-            <span className={`text-xl font-black font-mono leading-none ${color}`}>{value}</span>
+            <span className={`text-lg font-semibold font-mono leading-none ${color}`}>{value}</span>
             <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400 mt-1">{label}</span>
           </div>
         ))}

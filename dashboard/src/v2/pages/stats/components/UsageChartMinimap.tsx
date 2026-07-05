@@ -18,7 +18,7 @@ export const UsageChartMinimap: FunctionComponent<{
   zoomRange: ChartZoomRange | null;
   onZoomChange: (range: ChartZoomRange | null) => void;
   accentHex?: string;
-}> = ({ buckets, zoomRange, onZoomChange, accentHex = "#00E0A0" }) => {
+}> = ({ buckets, zoomRange, onZoomChange, accentHex = "var(--stats-accent-signal)" }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dragStart, setDragStart] = useState<number | null>(null);
   const [dragCurrent, setDragCurrent] = useState<number | null>(null);

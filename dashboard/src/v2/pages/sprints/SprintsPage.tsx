@@ -106,7 +106,7 @@ const SprintsProjectPlaceholder: FunctionComponent<{
         <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-signal-500">
           Sprint Workspace Standby
         </div>
-        <h2 className="mt-3 max-w-3xl font-display text-4xl font-black leading-[0.98] tracking-tight text-slate-900 dark:text-white md:text-5xl">
+        <h2 className="mt-3 max-w-3xl font-display text-2xl font-semibold leading-[0.98] tracking-tight text-slate-900 dark:text-white md:text-5xl">
           Project scope comes first.
         </h2>
         <p className="mt-5 max-w-2xl text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400 md:text-base">
@@ -117,7 +117,7 @@ const SprintsProjectPlaceholder: FunctionComponent<{
           <button
             type="button"
             onClick={onAddProject}
-            className="inline-flex min-h-[44px] items-center gap-2.5 rounded-full bg-signal-500 px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-void-900 shadow-[0_10px_30px_rgba(0,224,160,0.22)] transition-all hover:-translate-y-px hover:bg-signal-400 focus-visible:ring-2 focus-visible:ring-signal-500/40"
+            className="inline-flex min-h-[44px] items-center gap-2.5 rounded-full bg-signal-500 px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white dark:text-void-900 shadow-[0_10px_30px_rgba(0,224,160,0.22)] transition-all hover:-translate-y-px hover:bg-signal-400 focus-visible:ring-2 focus-visible:ring-signal-500/40"
           >
             <Plus className="h-3.5 w-3.5" strokeWidth={2.3} />
             {hasProjects ? "Add Project" : "Add First Project"}
@@ -638,7 +638,7 @@ export const SprintsPage: FunctionComponent = () => {
               className={`inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
                 showCreateComposer
                   ? "border border-black/[0.06] bg-white/72 text-slate-600 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
-                  : "bg-signal-500 text-void-900 hover:-translate-y-px hover:bg-signal-400"
+                  : "bg-signal-500 text-white dark:text-void-900 hover:-translate-y-px hover:bg-signal-400"
               }`}
             >
               {(showCreateComposer || editingSprint) ? <X className="h-3.5 w-3.5" strokeWidth={2.3} /> : <Plus className="h-3.5 w-3.5" strokeWidth={2.3} />}

@@ -161,7 +161,7 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
             <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">
               Agents & Memory
             </div>
-            <h2 className="truncate font-display text-lg font-black tracking-tight text-slate-900 dark:text-white">
+            <h2 className="truncate font-display text-base font-semibold tracking-tight text-slate-900 dark:text-white">
               Memory Injection
             </h2>
           </div>
@@ -223,7 +223,7 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
                   disabled={disabled}
                   className={`inline-flex flex-1 items-center justify-center rounded-full px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.1em] transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 ${
                     active
-                      ? "bg-signal-500 text-void-900 shadow-[0_0_12px_rgba(0,224,160,0.25)]"
+                      ? "bg-signal-500 text-white dark:text-void-900 shadow-[0_0_12px_rgba(0,224,160,0.25)]"
                       : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white"
                   } disabled:cursor-not-allowed disabled:opacity-50`}
                   style={{

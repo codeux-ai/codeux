@@ -112,7 +112,7 @@ export const AddMemoryModal: FunctionComponent<{
                 onClick={e => e.stopPropagation()}
                 onSubmit={(event) => { void handleSubmit(event); }}
                 role="dialog" aria-modal="true" aria-labelledby="add-memory-title" aria-describedby="add-memory-status" aria-busy={saving}>
-                <h3 id="add-memory-title" className="text-lg font-black text-slate-900 dark:text-white font-display">Add Memory</h3>
+                <h3 id="add-memory-title" className="text-base font-semibold text-slate-900 dark:text-white font-display">Add Memory</h3>
                 <FieldWrapper label="Memory Content" htmlFor="memory-content" required forceTouch={showError} error={contentInvalid ? "Content is required" : undefined}>
                     <textarea id="memory-content" ref={contentRef} value={content}
                         aria-invalid={contentInvalid}
@@ -192,7 +192,7 @@ export const AddMemoryModal: FunctionComponent<{
                         aria-disabled={!content.trim() || saving}
                         disabled={saving}
                         className={`flex-1 py-2.5 rounded-xl text-xs font-bold
-                                   bg-signal-500 text-void-900 hover:bg-signal-400
+                                   bg-signal-500 text-white dark:text-void-900 hover:bg-signal-400
                                    shadow-[0_2px_12px_rgba(0,224,160,0.3)]
                                    transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800
                                    ${(!content.trim() || saving) ? "opacity-50 cursor-not-allowed" : ""}`}>

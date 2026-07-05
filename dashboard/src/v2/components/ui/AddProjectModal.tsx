@@ -57,7 +57,7 @@ type DirectoryPickerTarget = 'localPath' | 'cloneDir';
 
 const fieldLabelClass = "text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 group-focus-within/field:text-ember-600 dark:group-focus-within/field:text-ember-400 transition-colors";
 
-const projectNameInputClass = "mt-2.5 w-full rounded-[1.35rem] border border-black/[0.06] bg-black/[0.025] px-4 py-3.5 font-display text-[1.55rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-all duration-250 placeholder:text-slate-200 focus:border-ember-500/45 focus:bg-white focus:shadow-[0_0_0_1px_rgba(255,184,0,0.18),0_14px_34px_rgba(255,184,0,0.12)] focus-visible:outline-none dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-white dark:placeholder:text-slate-700 dark:focus:border-ember-500/50 dark:focus:bg-white/[0.055] dark:focus:shadow-[0_0_0_1px_rgba(255,184,0,0.22),0_16px_38px_rgba(255,184,0,0.1)] aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.14)]";
+const projectNameInputClass = "mt-2.5 w-full rounded-[1.35rem] border border-black/[0.06] bg-black/[0.025] px-4 py-3.5 font-display text-xl font-semibold leading-none tracking-tight text-slate-900 outline-none transition-all duration-250 placeholder:text-slate-200 focus:border-ember-500/45 focus:bg-white focus:shadow-[0_0_0_1px_rgba(255,184,0,0.18),0_14px_34px_rgba(255,184,0,0.12)] focus-visible:outline-none dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-white dark:placeholder:text-slate-700 dark:focus:border-ember-500/50 dark:focus:bg-white/[0.055] dark:focus:shadow-[0_0_0_1px_rgba(255,184,0,0.22),0_16px_38px_rgba(255,184,0,0.1)] aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.14)]";
 
 const detailInputSurfaceClass = "w-full rounded-[1.15rem] border border-black/[0.06] bg-black/[0.025] px-4 py-3 text-sm font-mono font-semibold text-slate-700 outline-none transition-all duration-250 placeholder:text-slate-300 focus:border-ember-500/45 focus:bg-white focus:shadow-[0_0_0_1px_rgba(255,184,0,0.16),0_12px_28px_rgba(255,184,0,0.1)] focus-visible:outline-none dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-300 dark:placeholder:text-slate-600 dark:focus:border-ember-500/50 dark:focus:bg-white/[0.055] aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.14)]";
 const detailInputClass = `mt-2.5 ${detailInputSurfaceClass}`;
@@ -388,7 +388,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                     </div>
                     <div className="relative z-10">
                         <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/25 font-mono mb-1.5">Source</div>
-                        <div className="text-lg font-black text-white font-mono tracking-tight leading-snug">
+                        <div className="text-base font-semibold text-white font-mono tracking-tight leading-snug">
                             {sourceType === 'new_project' ? 'New Project' : sourceType === 'git' ? 'Git Repo' : 'Local Project'}
                         </div>
                         <div className="mt-3 w-8 h-[2px] bg-ember-500/50" />
@@ -400,7 +400,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                     {/* Header */}
                     <div className="flex items-start justify-between shrink-0 p-5 sm:p-7 lg:px-8 lg:pt-8 lg:pb-6 border-b border-black/[0.04] dark:border-white/[0.04]">
                         <div>
-                            <h2 id="add-project-modal-title" className="text-[2rem] font-black text-slate-900 dark:text-white tracking-tight font-display leading-none">
+                            <h2 id="add-project-modal-title" className="text-2xl font-semibold text-slate-900 dark:text-white tracking-tight font-display leading-none">
                                 Add Project.
                             </h2>
                             <p className="text-xs font-medium text-slate-400 mt-2 tracking-wide">
@@ -610,7 +610,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                 className="sr-only"
                                             />
                                             <span className="min-w-0">
-                                                <span className="flex items-center gap-2 text-sm font-black text-slate-900 dark:text-white">
+                                                <span className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
                                                     <Sparkles className="h-4 w-4 text-ember-500" />
                                                     Initialize with Project Setup Agent
                                                 </span>
@@ -628,7 +628,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                     <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-ember-600 dark:text-ember-400">
                                                         Setup Scope
                                                     </div>
-                                                    <div className="mt-1 text-sm font-black text-slate-900 dark:text-white">
+                                                    <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
                                                         Choose project assets
                                                     </div>
                                                 </div>

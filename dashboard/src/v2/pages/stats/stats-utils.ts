@@ -184,7 +184,7 @@ export function createStatsSegments(stats: ProjectExecutionStatsSnapshot | null,
   const providerSegments = groupSegments(stats?.providers || [], {
     top: 5,
     colorPalette: [
-      "rgba(0,224,160,0.9)",
+      "rgb(var(--signal-rgb) / 0.9)",
       "rgba(255,184,0,0.88)",
       "rgba(0,170,255,0.9)",
       "rgba(251,113,133,0.88)",
@@ -197,7 +197,7 @@ export function createStatsSegments(stats: ProjectExecutionStatsSnapshot | null,
     label: entry.source,
     value: entry.count,
     color: [
-      "rgba(0,224,160,0.9)",
+      "rgb(var(--signal-rgb) / 0.9)",
       "rgba(255,184,0,0.9)",
       "rgba(248,113,113,0.88)",
       "rgba(148,163,184,0.8)",
@@ -214,7 +214,7 @@ export function createStatsSegments(stats: ProjectExecutionStatsSnapshot | null,
     {
       label: "Input",
       value: usage.inputTokens,
-      color: "rgba(0,224,160,0.9)",
+      color: "rgb(var(--signal-rgb) / 0.9)",
       textClassName: "text-signal-600 dark:text-signal-400",
     },
     {

@@ -82,7 +82,7 @@ export const IssueImportShell: FunctionComponent<IssueImportShellProps> = ({
               <ProviderIcon provider={provider} />
               {provider.importLabel}
             </div>
-            <h2 id="issue-import-title" className="mt-3 font-display text-2xl font-black leading-none text-slate-900 dark:text-white sm:text-3xl">
+            <h2 id="issue-import-title" className="mt-3 font-display text-xl font-semibold leading-none text-slate-900 dark:text-white sm:text-3xl">
               {title}
             </h2>
             <p id="issue-import-description" className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
