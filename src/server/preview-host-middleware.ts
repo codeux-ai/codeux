@@ -19,12 +19,15 @@ import {
   injectPreviewBridgeIntoHtml,
   isAllowedPreviewControlOrigin,
   mergePreviewCorsHeaders,
+  parseSelectedPreviewPortFromRequest,
   parsePreviewSessionIdFromHost,
   requestBufferedPreviewResponse,
+  resolvePreviewHostPort,
   rewritePreviewLocationHeader,
   sanitizePreviewDocumentHeaders,
   sendBufferedPreviewResponse,
   shouldAttemptPreviewSpaFallback,
+  stripPreviewPortSelectorFromPath,
 } from "./preview-host-utils.js";
 import type { SprintPreviewSession } from "../contracts/app-types.js";
 
@@ -100,7 +103,18 @@ export function createPreviewHostMiddleware(options: DashboardServerOptions): ex
       return;
     }
 
-    if (!session.hostPort) {
+    let selectedHostPort: number | null;
+    try {
+      selectedHostPort = resolvePreviewHostPort(
+        session,
+        parseSelectedPreviewPortFromRequest(req.originalUrl || req.url || "/", req.headers["x-code-ux-preview-port"]),
+      );
+    } catch (error) {
+      res.status(400).send(toErrorResponse(error, "Invalid sprint preview port selection").error);
+      return;
+    }
+
+    if (!selectedHostPort) {
       res.status(200).type("html").send(buildPreviewStandbyHtml({
         req,
         session,
@@ -109,20 +123,20 @@ export function createPreviewHostMiddleware(options: DashboardServerOptions): ex
       return;
     }
 
-    const upstreamHeaders = buildPreviewProxyRequestHeaders(req, session.hostPort);
-    const targetPath = req.originalUrl || req.url || "/";
+    const upstreamHeaders = buildPreviewProxyRequestHeaders(req, selectedHostPort);
+    const targetPath = stripPreviewPortSelectorFromPath(req.originalUrl || req.url || "/");
     if (shouldAttemptPreviewSpaFallback(req)) {
       try {
         const primaryResponse = await requestBufferedPreviewResponse({
           method: req.method,
-          upstreamPort: session.hostPort,
+          upstreamPort: selectedHostPort,
           targetPath,
           headers: upstreamHeaders,
         });
         const response = primaryResponse.statusCode === 404
           ? await requestBufferedPreviewResponse({
             method: req.method,
-            upstreamPort: session.hostPort,
+            upstreamPort: selectedHostPort,
             targetPath: "/",
             headers: upstreamHeaders,
           })
@@ -130,7 +144,7 @@ export function createPreviewHostMiddleware(options: DashboardServerOptions): ex
         sendBufferedPreviewResponse({
           req,
           res,
-          upstreamPort: session.hostPort,
+          upstreamPort: selectedHostPort,
           response,
         });
       } catch (error) {
@@ -146,7 +160,7 @@ export function createPreviewHostMiddleware(options: DashboardServerOptions): ex
     const proxyRequest = httpRequest({
       protocol: "http:",
       hostname: "127.0.0.1",
-      port: session.hostPort,
+      port: selectedHostPort,
       method: req.method,
       path: targetPath,
       headers: upstreamHeaders,
@@ -158,7 +172,7 @@ export function createPreviewHostMiddleware(options: DashboardServerOptions): ex
         const responseHeaders = { ...proxyResponse.headers };
         mergePreviewCorsHeaders(req, responseHeaders, false);
         if (typeof responseHeaders.location === "string") {
-          responseHeaders.location = rewritePreviewLocationHeader(responseHeaders.location, req, session.hostPort!);
+          responseHeaders.location = rewritePreviewLocationHeader(responseHeaders.location, req, selectedHostPort);
         }
         res.writeHead(proxyResponse.statusCode || 502, responseHeaders);
 
@@ -192,7 +206,7 @@ export function createPreviewHostMiddleware(options: DashboardServerOptions): ex
         sanitizePreviewDocumentHeaders(responseHeaders);
         mergePreviewCorsHeaders(req, responseHeaders, false);
         if (typeof responseHeaders.location === "string") {
-          responseHeaders.location = rewritePreviewLocationHeader(responseHeaders.location, req, session.hostPort!);
+          responseHeaders.location = rewritePreviewLocationHeader(responseHeaders.location, req, selectedHostPort);
         }
         res.writeHead(proxyResponse.statusCode || 502, responseHeaders);
         res.end(injected);

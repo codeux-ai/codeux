@@ -31,10 +31,10 @@ Key rules:
 - every sprint preview runs from a dedicated exported branch snapshot under the preview runtime root, not a registered git worktree
 - host runtime paths and in-container paths are kept separate for cross-platform Docker Desktop support: Windows/macOS/Linux host paths are mounted into the Linux container at `/code-ux-preview-runtime`, and preview `HOME`, `--workdir`, npm cache paths, and `SPRINT_PREVIEW_WORKSPACE` use POSIX container paths only
 - the preview container reuses the same Docker bootstrap and can reuse an already-built cached setup image, but preview startup no longer builds setup-cache images inline or runs the full worker setup script at runtime
-- the primary app inside the container listens on `sprintPreview.containerAppPort`; `sprintPreview.containerAppPorts` records the primary port first plus any additional container ports that a preview-aware worker may expose later
-- the host-facing port is allocated from `sprintPreview.hostPortRangeStart..hostPortRangeEnd`
+- the primary app inside the container listens on `sprintPreview.containerAppPort`; `sprintPreview.containerAppPorts` records the primary port first plus any additional container ports that a preview-aware worker may expose
+- one host-facing port is allocated from `sprintPreview.hostPortRangeStart..hostPortRangeEnd` for each configured container app port
 - host ports bind to `127.0.0.1` only
-- preview startup injects `HOST`, `PORT`, `DASHBOARD_HOST`, `DASHBOARD_PORT`, and `SPRINT_PREVIEW_WORKSPACE` so containerized apps can bind to the published preview port and boot from the exported snapshot directory
+- preview startup injects `HOST`, `PORT`, `DASHBOARD_HOST`, `DASHBOARD_PORT`, and `SPRINT_PREVIEW_WORKSPACE` so containerized apps can bind to the published preview port and boot from the exported snapshot directory. The primary compatibility variables still point at the first mapping, and `SPRINT_PREVIEW_CONTAINER_PORTS`, `SPRINT_PREVIEW_HOST_PORTS`, and `SPRINT_PREVIEW_PORT_MAPPINGS` expose the full routing list.
 - preview startup is serialized per `(projectId, sprintId)` so manual starts, rebuilds, and auto-start reconciliation cannot spawn duplicate session containers
 - if the previewed app still binds a loopback-only internal port, the generated preview bootstrap keeps a dedicated in-container bridge open on the published preview proxy port and forwards requests to the live app listener
 - containers are labeled with sprint-preview metadata so runtime reconciliation can rediscover them
@@ -150,7 +150,7 @@ Preview session records expose:
 - `hostPort` and `containerAppPort` for existing dashboard and API callers
 - `portMappings`, an ordered list of `{ containerPort, hostPort, label?, isPrimary? }` entries
 
-The primary mapping populates the legacy fields. Existing rows without `portMappings` are read as a single primary mapping from `hostPort` and `containerAppPort`, so older sessions keep serializing with the same single-port values. The current Docker startup path still creates one localhost-bound preview route; this contract change only makes the persisted session data ready for multiple routed container ports.
+The primary mapping populates the legacy fields. Existing rows without `portMappings` are read as a single primary mapping from `hostPort` and `containerAppPort`, so older sessions keep serializing with the same single-port values. Docker startup publishes every active mapping on `127.0.0.1`; the primary mapping still targets the in-container preview bridge port, while secondary mappings publish their configured container app ports directly. Preview host-origin requests and legacy path-proxy requests default to the primary mapping and may select another persisted mapping with a validated preview-port selector.
 
 Startup hygiene:
 - Docker session lifecycle management (such as `docker ps` parsing, lock acquisition for atomic container operations, container removal, and name sanitization) has been extracted to `DockerSessionLifecycle` in `src/services/docker-session-lifecycle.ts` so both preview and file-browser share identical mechanics without diverging.
