@@ -8,7 +8,9 @@ Run it with:
 pnpm run quality:guardrails
 ```
 
-The script is deterministic, uses only Node built-ins, and does not read build output or require network access. It scans production TypeScript and TSX under `src/`, `dashboard/src/`, and `scripts/`, while ignoring tests, `dist/`, coverage output, lockfiles, and generated dashboard build assets.
+The script is deterministic, uses only Node built-ins, and does not read build output or require network access. It scans production TypeScript and TSX under `src/`, `dashboard/src/`, and `scripts/`, while ignoring declaration files, tests, specs, fixtures, `dist/`, coverage output, lockfiles, generated dashboard build assets, and common cache or dependency directories. Backup artifact checks also scan `docs/` so rejected patch files and editor backups do not land in documentation.
+
+`pnpm run ci` now runs `pnpm run quality:guardrails` before audit, lint, tests, and build. The GitHub CI typecheck job also runs the same guardrail command before TypeScript checks, so local failures should be fixed before opening a PR.
 
 ## What It Checks
 
@@ -16,7 +18,7 @@ The script is deterministic, uses only Node built-ins, and does not read build o
 - Blocking: placeholder dependency wiring in `src/app/dependency-factory/**/*.ts`, including empty-object casts such as `{} as any`, `{} as unknown`, double casts through `any` or `unknown`, and empty objects cast directly to service-like dependency types.
 - Blocking: replayable persistence regressions for heavy dashboard snapshot events. The realtime event repository must only insert replayable events into `dashboard_realtime_events`, and snapshot publish tasks for `project.live.updated`, `project.execution.updated`, `project.runtime_status.updated`, `projects.updated`, and `overview.telemetry.updated` must publish with `replayable: false`.
 - Blocking: duplicate adjacent optimistic task insertion calls in `dashboard/src/v2/TasksPage.tsx` or the task board action helper. New task creation should insert one optimistic record and remove it after the confirmed refresh.
-- Blocking: substantial duplicate implementation blocks across production TypeScript and TSX. The duplicate scanner normalizes formatting, ignores imports and type-only declarations, and suppresses common JSX/Tailwind class fragments before comparing blocks.
+- Blocking: substantial duplicate implementation blocks across production TypeScript and TSX. The duplicate scanner normalizes implementation lines, strips comments and string contents, ignores imports, declarations, type/interface blocks, class field declarations, punctuation-only lines, and common JSX/Tailwind class fragments, then compares same-file and cross-file windows.
 - Advisory: production TypeScript or TSX files above the configured line threshold.
 - Advisory: broad `any` patterns such as `: any`, `as any`, `Array<any>`, and `Record<..., any>`.
 
@@ -29,6 +31,8 @@ Dependency factory wiring is allowed to use the typed `LateBoundDependency<T>` h
 Dashboard snapshot events are intentionally non-replayable because their payloads are large and quickly superseded by a fresh snapshot. Persisting those payloads in SQLite recreates the write-amplification problem that the realtime sequence watermark design removed.
 
 The Tasks page uses optimistic records to make task creation feel immediate before the backend confirms and refreshes the board. A duplicated adjacent insertion shows the same optimistic task twice and is easy to reintroduce during local edits, so the guardrail blocks that narrow pattern without scanning unrelated state updates.
+
+Duplicate implementation scanning is intentionally conservative. It only fails when two non-overlapping normalized windows meet both the line and token thresholds, then expands the matching block to report the largest actionable duplicate. The failure output includes the duplicate path, line, normalized size, source location, and remediation. Formatting-only edits, import lists, pure type declarations, and repeated Tailwind class fragments should not hide or create a blocking duplicate by themselves.
 
 ## Manual Regression Checks
 
