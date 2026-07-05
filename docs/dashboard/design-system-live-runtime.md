@@ -19,6 +19,13 @@ The dashboard's Live page and runtime components follow a distinct visual system
 
 - **Indexed Execution History:** To maintain linear performance in dashboard live runtime metrics over large execution sets, construct and pass down an `IndexedExecutionHistory` instead of repeatedly scanning full arrays with `Array.prototype.filter` ($O(T \times (D + E))$ vs $O(T + D + E)$). When retrieving records from the index, return an empty array if an entry doesn't exist rather than falling back to the unindexed array.
 
+## Live Task Card Boundary
+
+- `LiveTaskCard` owns task-level composition: status chrome, prompt expansion, runtime-feed toggles, PR links, rerun modal wiring, edit actions, and force-complete actions.
+- `live-session/LiveTaskTiming.tsx` owns the reusable timing badges used by task cards and dispatch rows. `QuotaCountdown` parses retry-after metadata and preserves the polite quota live region; `TaskDuration` derives visible elapsed time and only starts a ticking interval while the display is live.
+- `live-session/LiveTaskInvocationRow.tsx` owns the task-scoped invocation row visual language: purpose labels, provider/model fallbacks, token/duration chips, reduced-motion-safe running indicators, error snippets, and encoded transcript links.
+- Keep `QuotaCountdown` and `TaskDuration` re-exported from `LiveTaskCard.tsx` until downstream imports have migrated, because runtime panels still consume those compatibility exports.
+
 ## Operational State Hierarchy
 
 - **Idle**: Clean empty states with minimal animation, inviting the start of a sprint.
