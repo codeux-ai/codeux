@@ -1,5 +1,7 @@
 # Tasks Page Design System
 
+Task board implementation must also follow the pure dashboard view-model and rendering performance contracts in [Code Quality And Performance Contracts](../architecture/code-quality-performance-contracts.md).
+
 ## Core Aesthetic: Refined Production Board
 
 The Tasks page and Kanban board should feel like a 'Refined Production Board'. It prioritizes clear state scannability, exact layout, and reduced visual noise.
@@ -40,3 +42,4 @@ The Tasks page and Kanban board should feel like a 'Refined Production Board'. I
 *   **Motion:** Respect `isReducedMotion` or `prefers-reduced-motion` for hover elevations and transitions. Task cards use `controlFeedback` for local actions/status affordances and `listReorder` for card movement; reduced motion must retain static status badges, QA/dependency copy, edit/delete actions, PR/live metadata, and screen-reader drag-disabled guidance.
 *   **Responsiveness:** Use responsive wrapping (`flex-wrap`) on control bars and footers to ensure labels, metadata, controls, and PR links do not overlap or break layout on narrow viewports. Ensure dropdowns and text elements use `min-w-0` and `truncate` or `break-words` safely so they don't blow out the viewport or board layout. Kanban columns should collapse to a single column on phones and only switch to two columns on larger viewports when readable (e.g. `lg:grid-cols-2`).
 *   **Architecture (View Models):** Maintain a clear view-model boundary for task board rendering (e.g., using `buildTaskBoardViewModel`). Ensure filtering, enrichment, column counts, and card view-model construction are extracted into pure helpers rather than recalculating them piecemeal inside `TasksPage` components.
+*   **Architecture (Controller Hook):** `dashboard/src/v2/hooks/use-task-board-controller.ts` owns task-board orchestration for `TasksPage`: project/sprint/task data hooks, route sprint query synchronization (`sprintId` and legacy `sprint`), effective settings, agent presets, filters, list window state, optimistic create/update/drop state, refreshes, and rollback cleanup. `TasksPage` should consume the returned typed view model and callbacks, keeping only page layout, DOM refs, and GSAP effects local.

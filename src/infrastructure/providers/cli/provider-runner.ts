@@ -391,6 +391,9 @@ export class ProviderRunner implements IProviderRunner {
         ...(workflowSettings.executionMode === "HOST"
           ? { getAntigravityTranscriptMetadata: async (resolvedId: string) => this.readAntigravityTranscriptMetadata(resolvedId) }
           : {}),
+        ...(workflowSettings.executionMode === "HOST"
+          ? { getAntigravityDatabaseMetadata: async (resolvedId: string) => this.readAntigravityDatabaseMetadata(resolvedId) }
+          : {}),
         readAntigravityTranscript: async (resolvedId) => readAntigravityTranscript(cwd, resolvedId, workflowSettings.executionMode, this.dockerRunner),
         resolveAntigravityDatabase: async (resolvedId, destPath) => this.resolveAntigravityDatabase(cwd, resolvedId, workflowSettings.executionMode, destPath),
       });
@@ -765,6 +768,20 @@ export class ProviderRunner implements IProviderRunner {
       path.join(os.homedir(), ".gemini", "antigravity-cli", "brain", conversationId, ".system_generated", "logs", "overview.txt"),
       path.join(os.homedir(), ".gemini", "antigravity", "brain", conversationId, ".system_generated", "logs", "transcript.jsonl"),
       path.join(os.homedir(), ".gemini", "antigravity", "brain", conversationId, ".system_generated", "logs", "overview.txt"),
+    ];
+    for (const candidate of candidates) {
+      const metadata = await this.readFileMetadata(candidate);
+      if (metadata !== "missing") {
+        return metadata;
+      }
+    }
+    return "missing";
+  }
+
+  private async readAntigravityDatabaseMetadata(conversationId: string): Promise<string | null> {
+    const candidates = [
+      path.join(os.homedir(), ".gemini", "antigravity-cli", "conversations", `${conversationId}.db`),
+      path.join(os.homedir(), ".gemini", "antigravity", "conversations", `${conversationId}.db`),
     ];
     for (const candidate of candidates) {
       const metadata = await this.readFileMetadata(candidate);

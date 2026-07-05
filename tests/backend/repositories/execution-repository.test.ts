@@ -1590,7 +1590,7 @@ describe("ExecutionRepository", () => {
       return text.includes("FROM execution_invocations")
         && text.includes("WHERE execution_invocations.project_id = ?");
     });
-    expect(invocationSnapshotReads).toHaveLength(3);
+    expect(invocationSnapshotReads).toHaveLength(4);
     expect(usageTaskSpy).toHaveBeenCalledTimes(1);
     expect(usageSprintRunSpy).toHaveBeenCalledTimes(1);
     expect(wallTimeTaskSpy).toHaveBeenCalledTimes(1);
@@ -1723,7 +1723,7 @@ describe("ExecutionRepository", () => {
     expect(snapshot.recentEvents.some((event) => event.eventType === "provider_activity")).toBe(true);
   });
 
-  it("keeps full current sprint-run dispatch and event history for completed tasks", async () => {
+  it("keeps current sprint-run dispatches while bounding runtime event history", async () => {
     const { projectRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({
       name: "Current Sprint History Project",
@@ -1819,10 +1819,11 @@ describe("ExecutionRepository", () => {
 
     expect(snapshot.taskDispatches).toHaveLength(26);
     expect(snapshot.taskDispatches.some((dispatch) => dispatch.id === earlyDispatch.id)).toBe(true);
-    expect(snapshot.recentEvents.length).toBeGreaterThan(240);
+    expect(snapshot.recentEvents).toHaveLength(120);
     expect(snapshot.recentEvents.some((event) => (
       event.taskId === earlyTask.id && event.eventType === "cli_git_no_changes"
-    ))).toBe(true);
+    ))).toBe(false);
+    expect(snapshot.recentEvents.some((event) => event.sourceEventKey === "later-25-9")).toBe(true);
   });
 
   it("keeps full dispatch and event history for every active sprint run when sprints run in parallel", async () => {

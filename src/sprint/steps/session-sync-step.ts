@@ -1,5 +1,5 @@
 import type { JulesActivity, JulesSession, Subtask } from "../../contracts/app-types.js";
-import type { TaskRunRecord, TaskDispatchStatus, TaskRunState } from "../../contracts/execution-types.js";
+import type { TaskRunRecord } from "../../contracts/execution-types.js";
 import type { SessionSyncDependencies } from "../sprint-types.js";
 import { buildTaskRunKey, extractTaskRunKeyFromTitle } from "../../services/task-run-key.js";
 import { planSessionActivityFetches } from "../../domain/sprint/session-sync/activity-fetch-plan.js";
@@ -15,8 +15,13 @@ import {
   isQuotaCooldownActive,
   isRetryAfterActive,
 } from "../../shared/providers/provider-error-classifier.js";
-
-
+import {
+  mapSessionStateToTaskRunState,
+  mapTaskRunStateToDispatchStatus,
+  mapTaskRunStateToPlanningStatus,
+  mergeDispatchStatus,
+  resolveDispatchErrorMessage,
+} from "../../domain/sprint/session-sync/session-state-mapping.js";
 
 const extractGitMetrics = (session: JulesSession): Record<string, unknown> | null => {
   const pullRequestOutput = Array.isArray(session.outputs)
@@ -39,29 +44,6 @@ const extractGitMetrics = (session: JulesSession): Record<string, unknown> | nul
   };
 };
 
-const mapSessionStateToTaskRunState = (
-  sessionState: string | undefined,
-  isActionRequiredState: SessionSyncDependencies["isActionRequiredState"],
-  actionRequiredReplyPending = false,
-): TaskRunState => {
-  if (sessionState === "COMPLETED") {
-    return "COMPLETED";
-  }
-  if (sessionState === "FAILED" || sessionState === "CANCELLED") {
-    return "FAILED";
-  }
-  if (sessionState === "QUOTA") {
-    return "QUOTA";
-  }
-  if (sessionState === "RATE_LIMITED") {
-    return "QUOTA";
-  }
-  if (isActionRequiredState(sessionState)) {
-    return actionRequiredReplyPending ? "RUNNING" : "BLOCKED";
-  }
-  return "RUNNING";
-};
-
 const hasSubmittedReplyForActionRequiredState = (
   task: Subtask,
   sessionState: string | undefined,
@@ -74,76 +56,6 @@ const hasSubmittedReplyForActionRequiredState = (
     ...task,
     activities: activities ?? task.activities,
   });
-};
-
-const isCancelledSessionState = (sessionState: string | undefined): boolean => sessionState === "CANCELLED";
-
-const mapTaskRunStateToDispatchStatus = (
-  state: TaskRunState,
-  sessionState?: string,
-): TaskDispatchStatus => {
-  if (state === "FAILED" && isCancelledSessionState(sessionState)) {
-    return "cancelled";
-  }
-  switch (state) {
-    case "COMPLETED":
-      return "completed";
-    case "FAILED":
-      return "failed";
-    case "QUOTA":
-      return "quota";
-    case "BLOCKED":
-      return "blocked";
-    case "RUNNING":
-    case "PENDING":
-    default:
-      return "running";
-  }
-};
-
-const mapTaskRunStateToPlanningStatus = (state: TaskRunState): "pending" | "in_progress" | "coding_completed" => {
-  switch (state) {
-    case "COMPLETED":
-      return "coding_completed";
-    case "RUNNING":
-      return "in_progress";
-    case "FAILED":
-    case "BLOCKED":
-    case "PENDING":
-    default:
-      return "pending";
-  }
-};
-
-const mergeDispatchStatus = (
-  currentStatus: TaskDispatchStatus | null,
-  nextRunState: TaskRunState,
-  sessionState?: string,
-): TaskDispatchStatus => {
-  if (currentStatus === "cancel_requested" && nextRunState === "RUNNING") {
-    return "cancel_requested";
-  }
-  return mapTaskRunStateToDispatchStatus(nextRunState, sessionState);
-};
-
-const resolveDispatchErrorMessage = (
-  currentErrorMessage: string | null | undefined,
-  nextRunState: TaskRunState,
-  sessionState: string | undefined,
-): string | null => {
-  if (nextRunState === "FAILED" && isCancelledSessionState(sessionState)) {
-    return null;
-  }
-  if (nextRunState === "FAILED") {
-    return `Provider session ${sessionState || "FAILED"}`;
-  }
-  if (nextRunState === "BLOCKED") {
-    return `Provider session requires attention: ${sessionState || "ACTION_REQUIRED"}`;
-  }
-  if (nextRunState === "QUOTA") {
-    return currentErrorMessage || `Provider session ${sessionState || "QUOTA"}`;
-  }
-  return null;
 };
 
 const getActivityPreview = (activity: JulesActivity): string => {

@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { parseCodexRolloutJsonl } from "../../../../../src/infrastructure/providers/cli/provider-logs/codex-log-parser.js";
+import {
+  parseCodexExecStdout,
+  parseCodexRolloutJsonl,
+} from "../../../../../src/infrastructure/providers/cli/provider-logs/codex-log-parser.js";
 
 // ─── Test fixture helpers ────────────────────────────────────────────────────
 
@@ -36,8 +39,23 @@ describe("parseCodexRolloutJsonl", () => {
   it("returns null usage and empty conversation for empty input", () => {
     const result = parseCodexRolloutJsonl("");
     expect(result.usage).toBeNull();
+    expect(result.rawUsageJson).toBeNull();
     expect(result.conversation).toHaveLength(0);
     expect(result.nativeSessionId).toBeNull();
+  });
+
+  it("skips malformed JSON lines while preserving normalized empty/null fields", () => {
+    const result = parseCodexRolloutJsonl([
+      "not json",
+      "{\"type\":\"response_item\",",
+      userMessage("2026-06-01T10:00:00.000Z", "valid prompt"),
+    ].join("\n"));
+
+    expect(result.usage).toBeNull();
+    expect(result.rawUsageJson).toBeNull();
+    expect(result.conversation).toEqual([
+      { kind: "user", text: "valid prompt", timestampMs: Date.parse("2026-06-01T10:00:00.000Z") },
+    ]);
   });
 
   it("returns the raw cumulative usage when no sinceMs window is given (first run)", () => {
@@ -159,5 +177,33 @@ describe("parseCodexRolloutJsonl", () => {
     const jsonl = [sessionMeta("sess-abc-123"), userMessage("2026-06-01T10:00:00.000Z", "hi")].join("\n");
     const result = parseCodexRolloutJsonl(jsonl);
     expect(result.nativeSessionId).toBe("sess-abc-123");
+  });
+});
+
+describe("parseCodexExecStdout", () => {
+  it("returns null usage and empty conversation for empty stdout", () => {
+    const result = parseCodexExecStdout("");
+    expect(result).toEqual({
+      usage: null,
+      rawUsageJson: null,
+      nativeSessionId: null,
+      conversation: [],
+    });
+  });
+
+  it("parses usage-only records without synthesizing conversation turns", () => {
+    const result = parseCodexExecStdout(JSON.stringify({
+      type: "turn.completed",
+      usage: { input_tokens: 25, output_tokens: 9 },
+    }));
+
+    expect(result.usage).toEqual({
+      inputTokens: 25,
+      cachedInputTokens: 0,
+      outputTokens: 9,
+      reasoningOutputTokens: 0,
+    });
+    expect(result.rawUsageJson).toEqual({ input_tokens: 25, output_tokens: 9 });
+    expect(result.conversation).toEqual([]);
   });
 });

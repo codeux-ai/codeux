@@ -363,6 +363,43 @@ describe("KanbanTaskCard Integration", () => {
     expect(container).toBeInTheDocument();
   });
 
+  it("skips card rerender when stable view-model props are unchanged", () => {
+    let titleReads = 0;
+    const taskWithTrackedTitle = { ...mockViewModel.task };
+    Object.defineProperty(taskWithTrackedTitle, "title", {
+      configurable: true,
+      get: () => {
+        titleReads += 1;
+        return "Implement new feature";
+      },
+    });
+    const stableViewModel: TaskCardViewModel = {
+      ...mockViewModel,
+      task: taskWithTrackedTitle,
+    };
+    const stableOnEdit = vi.fn();
+    const stableOnDelete = vi.fn();
+
+    const { rerender } = render(
+      <KanbanTaskCard
+        viewModel={stableViewModel}
+        onEdit={stableOnEdit}
+        onDelete={stableOnDelete}
+      />
+    );
+
+    titleReads = 0;
+    rerender(
+      <KanbanTaskCard
+        viewModel={stableViewModel}
+        onEdit={stableOnEdit}
+        onDelete={stableOnDelete}
+      />
+    );
+
+    expect(titleReads).toBe(0);
+  });
+
   it("disables drag handlers and updates description text in reduced motion", async () => {
     // Override the mock to return true for this test
     const { useReducedMotion } = await import("../../../hooks/use-reduced-motion.js");
