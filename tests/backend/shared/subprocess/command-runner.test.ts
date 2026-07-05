@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import * as fsPromises from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -179,6 +179,17 @@ describe("CommandRunner", () => {
     expect(shaped.ok).toBe(false);
     expect(shaped.stdout).toBe("...hello world");
     expect(shaped.stderr).toBe("...big error\nCommand timed out after 100ms");
+  });
+
+  it("disposes the command spawner host when requested", () => {
+    const isolatedRunner = new CommandRunner();
+    const dispose = vi.fn();
+    (isolatedRunner as unknown as { spawner: { dispose: () => void } | null }).spawner = { dispose };
+
+    isolatedRunner.dispose();
+
+    expect(dispose).toHaveBeenCalledOnce();
+    expect((isolatedRunner as unknown as { spawner: unknown }).spawner).toBeNull();
   });
 
   it("should pass full lines to streaming callbacks even when stdout/stderr buffer is clipped", async () => {

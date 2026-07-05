@@ -207,6 +207,9 @@ export class JulesUsageService {
     const status = final ? "completed" : "running";
 
     let record = this.executionRepository.getLatestProviderInvocationUsageBySession(sessionId, "task_coding");
+    if (record && record.provider !== "jules") {
+      record = null;
+    }
     if (!record) {
       const createInput: CreateProviderInvocationUsageInput = {
         projectId,

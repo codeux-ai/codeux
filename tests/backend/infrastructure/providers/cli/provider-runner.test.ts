@@ -1055,6 +1055,7 @@ describe("ProviderRunner MCP config generation", () => {
   let runner: any;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     runner = new ProviderRunner();
     const mockMkdir = vi.spyOn(fs, 'mkdir');
     mockMkdir.mockResolvedValue(undefined);
@@ -1068,7 +1069,7 @@ describe("ProviderRunner MCP config generation", () => {
     runner.writeLocalMcpConfig(conn, cwd, provider, qwenSettings, customServers);
 
   const getWrittenContent = (filename: string): string | undefined => {
-    const call = vi.mocked(fs.writeFile).mock.calls.find(([target]) => String(target).endsWith(filename));
+    const call = vi.mocked(fs.writeFile).mock.calls.filter(([target]) => String(target).endsWith(filename)).at(-1);
     return call ? String(call[1]) : undefined;
   };
 
@@ -1125,6 +1126,27 @@ describe("ProviderRunner MCP config generation", () => {
     expect(toml).toContain('url = "http://127.0.0.1/mcp"');
     expect(toml).toContain('[mcp_servers.tool]');
     expect(toml).toContain('command = "cat"');
+  });
+
+  it("does not duplicate existing local codex mcp tables", async () => {
+    vi.mocked(fs.readFile).mockResolvedValueOnce([
+      'model = "gpt-5-codex"',
+      "[mcp_servers.playwright]",
+      'command = "npx"',
+      'args = ["@playwright/mcp@latest"]',
+      "",
+    ].join("\n") as any);
+
+    await writeConfig({ url: "http://127.0.0.1/mcp" }, "/tmp/cwd", "codex", undefined, [
+      { id: "playwright", name: "playwright", transport: "stdio", command: "npx", args: ["@playwright/mcp@latest"], enabled: true },
+      { id: "tool", name: "tool", transport: "stdio", command: "cat", enabled: true },
+    ]);
+
+    const toml = getWrittenContent(".codex/config.toml")!;
+    expect(toml.match(/\[mcp_servers\.playwright\]/g)).toHaveLength(1);
+    expect(toml).toContain('model = "gpt-5-codex"');
+    expect(toml).toContain("[mcp_servers.code-ux]");
+    expect(toml).toContain("[mcp_servers.tool]");
   });
 
   it("writes local antigravity config", async () => {

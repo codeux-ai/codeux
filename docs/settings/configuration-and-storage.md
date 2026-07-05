@@ -17,6 +17,7 @@ Additional startup config:
 - `JULES_DOCKER_HOST_WORKSPACE_ROOT` (optional path mapping for Docker-in-Docker/remote-daemon setups)
 - `JULES_DOCKER_HOST_HOME_ROOT` (optional home-dir path mapping for Docker credential mounts)
 - `CODE_UX_GIT_FETCH_TIMEOUT_MS` (optional timeout for mandatory Git remote refreshes; default `120000`, clamped between 10 seconds and 10 minutes)
+- `CODE_UX_ALLOW_MULTIPLE_RUNTIMES=1` (diagnostic only; bypasses the project-manager PID lock that normally prevents duplicate local runtimes from driving the same Docker/session state)
 
 External hint env keys used for dashboard import:
 - `JULES_API_KEY` / `JULES_KEY`
@@ -464,7 +465,7 @@ Container execution notes:
 - `enabled` (whether tool is visible in MCP `list_tools` and callable)
 - `isInternal` (reserved/internal metadata; currently all built-in tools are internal)
 
-`customMcpServers` contains user-configurable provider MCP servers. New and sanitized settings include a default enabled `playwright` stdio server (`npx @playwright/mcp@latest`) for local CLI providers. Settings resolution treats a user or project server with the same stable id or `playwright` name as the same seeded server, so custom edits replace the default instead of creating duplicates.
+`customMcpServers` contains user-configurable provider MCP servers. New and sanitized settings include a default enabled `playwright` stdio server (`npx @playwright/mcp@latest`) for local CLI providers. Settings resolution treats a user or project server with the same stable id or `playwright` name as the same seeded server, so custom edits replace the default instead of creating duplicates. Docker provider runs do not inherit arbitrary MCP servers from copied local provider config files; runtime strips local `mcpServers` / `mcp_servers.*` entries from mounted auth config and injects only the Code UX-managed MCP servers that are enabled on the MCP settings page.
 
 Repository demo script:
 - `.code-ux/container/setup.sh` is included as a baseline bootstrap script.
