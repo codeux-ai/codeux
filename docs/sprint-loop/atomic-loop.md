@@ -126,6 +126,7 @@ For `status` and `orchestrate`, each cycle can run:
   - open PR back to sprint feature branch
   - track state and activity in sqlite
 - CLI task dispatch carries two task identities through the runtime: the human task key (`T01`, `T02`, ...) stays in branch names, titles, prompts, and task-run tags, while repository/execution lookups use the persisted task record id (`record_id`). Workspace resume targets, task runs, dispatches, and provider invocations must use the record id so normal planned sprint tasks can resume from the correct Docker workspace volume after cancellation or restart.
+- CLI workspace patch export discovers untracked files with Git's `--exclude-standard` filtering, then intent-to-adds only those non-ignored paths in bounded batches before diffing. Ignored workspace caches such as `.pnpm-store`, provider runtime homes, and transient export indexes are export noise and must not turn a completed/no-change provider run into a failed dispatch.
 
 5. Build protocol instructions
 - `protocol-step.ts`

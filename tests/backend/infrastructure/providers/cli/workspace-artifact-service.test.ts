@@ -247,7 +247,8 @@ describe("WorkspaceArtifactService", () => {
     await runGit(hostRepoPath, ["config", "user.email", "code-ux@example.com"]);
     await runGit(hostRepoPath, ["checkout", "-b", "main"]);
     await fs.writeFile(path.join(hostRepoPath, "existing.txt"), "hello\n", "utf8");
-    await runGit(hostRepoPath, ["add", "existing.txt"]);
+    await fs.writeFile(path.join(hostRepoPath, ".gitignore"), ".pnpm-store\n", "utf8");
+    await runGit(hostRepoPath, ["add", "existing.txt", ".gitignore"]);
     await runGit(hostRepoPath, ["commit", "-m", "base"]);
     await runGit(hostRepoPath, ["push", "-u", "origin", "main"]);
 
@@ -325,7 +326,7 @@ describe("WorkspaceArtifactService", () => {
       .rejects.toThrow();
   });
 
-  it("lets git discover untracked export paths instead of passing them through argv", async () => {
+  it("batches git-discovered untracked export paths instead of passing them all through one argv", async () => {
     const untrackedPaths = Array.from({ length: 1_201 }, (_, index) => `src/generated/file-${index}.ts`);
     const gitCalls: string[][] = [];
 
@@ -337,6 +338,14 @@ describe("WorkspaceArtifactService", () => {
       ) => {
         if (command === "git") {
           gitCalls.push(args);
+        }
+        if (command === "git" && args[0] === "ls-files") {
+          return {
+            ok: true,
+            code: 0,
+            stdout: `${untrackedPaths.join("\0")}\0`,
+            stderr: "",
+          };
         }
         if (command === "git" && args[0] === "diff") {
           return {
@@ -359,11 +368,17 @@ describe("WorkspaceArtifactService", () => {
     const patchText = await service.exportBinaryPatch("workspace", "HEAD");
 
     expect(patchText).toContain("diff --git");
-    expect(gitCalls.some((args) => args[0] === "ls-files")).toBe(false);
-    const addCall = gitCalls.find((args) => args[0] === "add");
-    expect(addCall).toEqual(expect.arrayContaining(["add", "--intent-to-add", "--", "."]));
+    const lsFilesCall = gitCalls.find((args) => args[0] === "ls-files");
+    expect(lsFilesCall).toEqual(expect.arrayContaining(["ls-files", "--others", "--exclude-standard", "-z", "--", "."]));
+    const addCalls = gitCalls.filter((args) => args[0] === "add");
+    expect(addCalls).toHaveLength(5);
+    for (const addCall of addCalls) {
+      expect(addCall).toEqual(expect.arrayContaining(["add", "--intent-to-add", "--"]));
+      expect(addCall.length).toBeLessThanOrEqual(253);
+      expect(addCall).not.toContain(".");
+    }
     for (const untrackedPath of untrackedPaths) {
-      expect(addCall).not.toContain(untrackedPath);
+      expect(addCalls.some((args) => args.includes(untrackedPath))).toBe(true);
     }
   });
 
@@ -461,6 +476,7 @@ describe("WorkspaceArtifactService", () => {
     await fs.writeFile(path.join(workspaceRepoPath, "new-component.tsx"), "export const value = 1;\n", "utf8");
 
     const addArgs: string[][] = [];
+    const lsFilesArgs: string[][] = [];
     const workspaceManager = {
       runWorkspaceCommand: async (
         _worktreePath: string,
@@ -468,6 +484,9 @@ describe("WorkspaceArtifactService", () => {
         args: string[],
         options: WorkspaceCommandOptions = {},
       ) => {
+        if (command === "git" && args[0] === "ls-files") {
+          lsFilesArgs.push(args);
+        }
         if (command === "git" && args[0] === "add") {
           addArgs.push(args);
         }
@@ -481,9 +500,12 @@ describe("WorkspaceArtifactService", () => {
     const service = new WorkspaceArtifactService(workspaceManager);
     const patchText = await service.exportBinaryPatch("workspace", baseRef);
 
+    expect(lsFilesArgs).toHaveLength(1);
+    expect(lsFilesArgs[0]).toContain(":(exclude).code-ux-home");
+    expect(lsFilesArgs[0]).toContain(":(exclude).code-ux-home/**");
     expect(addArgs).toHaveLength(1);
-    expect(addArgs[0]).toContain(":(exclude).code-ux-home");
-    expect(addArgs[0]).toContain(":(exclude).code-ux-home/**");
+    expect(addArgs[0]).not.toContain(":(exclude).code-ux-home");
+    expect(addArgs[0]).not.toContain(":(exclude).code-ux-home/**");
 
     expect(patchText).toContain("diff --git a/new-component.tsx b/new-component.tsx");
     expect(patchText).not.toContain(".code-ux-home");
