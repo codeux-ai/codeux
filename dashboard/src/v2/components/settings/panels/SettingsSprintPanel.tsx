@@ -53,10 +53,7 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
     ...option,
     icon: () => <AgentSelectAvatarIcon avatarConfig={option.avatarConfig} seed={`${option.value}:${option.label}`} />,
   }));
-  const qaPresetOptions = [
-    { value: "", label: "Built-in QA agent", icon: () => <AgentSelectAvatarIcon seed="built-in:qa" /> },
-    ...projectAgentSelectOptions,
-  ];
+  const qaPresetOptions = projectAgentSelectOptions;
   const qaPresetSelectorsDisabled = !selectedProject || !projectSettings;
   const qaSectionBadge = selectedProject
     ? getBadgeHelper("project", projectSources, "agents", "agents.qualityAssurance")

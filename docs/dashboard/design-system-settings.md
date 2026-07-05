@@ -17,6 +17,7 @@ This document defines the visual patterns and rules for the Settings workspace. 
     *   Mutually exclusive Settings choices use `radiogroup` / `radio` semantics (or explicit pressed-state semantics for non-radio tool controls) so assistive technology reports the current selection. Provider-instance controls should include the provider instance name or config id in accessible names when the same action appears more than once.
     *   Provider-instance cards announce local action results in-card. Enable/disable, auth-mode changes, dashboard login, and remove affordances distinguish local unsaved changes from persisted state; destructive remove actions require a confirmation click before invoking the change.
     *   Pill choices and toggles use `controlFeedback` for focus, hover, active, and selected cues. Arrow keys move between pill radio choices and update the selected value. Reduced motion snaps the selected rail and color changes while preserving the checked state and visible label.
+    *   Quality Assurance trigger agent assignment uses checkbox-based multi-select groups with trigger-specific accessible names. Empty selection is a visible built-in QA fallback state and must not write placeholder preset ids.
 
 3.  **High-Risk Actions**:
     *   Destructive actions in the Danger Zone (`Wipe Project`, `Wipe Database`) use the `danger` tone, yielding clear semantic `bg-status-red text-white` presentation. Panels themselves hint at danger via red-tinted borders and backgrounds.
@@ -24,7 +25,7 @@ This document defines the visual patterns and rules for the Settings workspace. 
 4.  **Metadata and Hierarchy**:
     *   Metadata chips (`visible categories`, `unsaved edits`) and badges leverage standard tokens to maintain visual rhythm.
     *   Headers and contextual information (e.g., `SettingsHeader`) separate sections with thin borders (`--border-hairline`).
-    *   The Quality Assurance section belongs in `Settings > Sprint & Git`, directly below `Merge Gates & Autofix`, even though its persisted settings path remains `agents.qualityAssurance`.
+    *   The Quality Assurance section belongs in `Settings > Sprint & Git`, directly below `Merge Gates & Autofix`, even though its persisted settings path remains `agents.qualityAssurance`. QA-labeled project agents remain prominent in the selector ordering, and disabled project selectors still communicate that built-in QA routing remains available.
 
 5.  **Modals**:
     *   Modals launched from settings (e.g., `TerminalLoginModal`, `TokenPricingModal`) adhere strictly to `design-system-feedback-overlays.md`: `bg-white dark:bg-void-800`, `rounded-2xl`, `shadow-[var(--elevation-floating)]`, and `border-[var(--border-hairline)]`.
